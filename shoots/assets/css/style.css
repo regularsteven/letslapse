@@ -1,0 +1,90 @@
+
+*,
+html {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+html {
+    width: 100%;
+    height: 100%;
+}
+
+body {
+    width: 100%;
+    height: 100%;
+    position: relative;
+    background-color: rgb(236, 152, 42);
+}
+
+.center {
+    width: 100%;
+    height: 20%;
+    margin: 0;
+    position: absolute;
+    top: 15%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+    text-align: center;
+}
+
+h1 {
+    font-size: 64px;
+}
+
+p {
+    font-size: 38px;
+}
+
+
+div#player {
+    top: 200px;
+    position: relative;
+}
+
+
+div#player .viewer {
+    width: 720px;
+    height: 405px;
+    background-color: black;
+    margin: 0 auto;
+    background-size: contain;
+}
+
+
+
+
+#rangeValue {
+    position: relative;
+    display: block;
+    text-align: center;
+    font-size: 6em;
+    color: #999;
+    font-weight: 400;
+  }
+  .range {
+    width: 720px;
+    height: 25px;
+    -webkit-appearance: none;
+    background: white;
+    outline: none;
+    border-radius: 15px;
+    overflow: hidden;
+    /* box-shadow: inset 0 0 5px rgb(0 0 0); */
+    margin: 0 auto;
+    display: block;
+  }
+  .range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    background: #00fd0a;
+    cursor: pointer;
+    border: 4px solid #333;
+    box-shadow: -407px 0 0 400px #00fd0a;
+  }
+  
