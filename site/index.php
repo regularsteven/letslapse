@@ -7,7 +7,7 @@ if(isset($_REQUEST['action'])){
     switch ($action) {
         case "preview":
             echo "preview switch";
-            $resp = shell_exec("./preview.py");
+            $resp = shell_exec("python3 preview.py");
         
             $respArr = explode("\n", $resp);
         
