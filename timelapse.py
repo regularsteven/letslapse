@@ -1,7 +1,7 @@
 #from picamera import PiCamera
 from os import system
 from time import sleep
-from pydng.core import RPICAM2DNG
+#from pydng.core import RPICAM2DNG
 
 
 #camera = PiCamera()
@@ -11,14 +11,14 @@ from pydng.core import RPICAM2DNG
 #sleep(2)
 #camera.capture("demo/rawtest.yuv", 'yuv')
 #sleep(2)
-d=RPICAM2DNG()
+#d=RPICAM2DNG()
 #d.convert("demo/rawyuv.jpg")
 
 
-for i in range(50):
+for i in range(1200):
      print(i)
-     system("raspistill -r -o demo/testing_{0:04d}.jpg".format(i))
-     d.convert("demo/testing_{0:04d}.jpg".format(i))
+     system("raspistill -r -o /var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
+ #    d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
      sleep(1)
 
 
