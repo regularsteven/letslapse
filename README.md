@@ -65,6 +65,22 @@ shoot, edit, stream
     3: update the stream with the smaller versions
         - ffmpeg -loop 1 -i seq%d.jpg  -r .5 -vcodec mpeg4 -f mpegts udp://192.168.30.75:9099
 
+
+# ffmpeg resize 
+ffmpeg -i seq_%04d.jpg -vf scale=1920:-1 resize/small_%04d.jpg
+
+# ffmpeg create timelapse seq 
+ffmpeg -framerate 25 -pattern_type glob -i "*.jpg" -c:v libx264 -crf 0 output.mp4  -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+ffmpeg -r 24 -i small_%04d.jpg -vcodec libx264 -y -an video.mp4 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2"
+
+streaming idea 2: WORKING across network
+raspivid -t 0 -l -o tcp://192.168.30.76:3333 -w 640 -h 360
+raspivid -t 0 -l -o tcp://192.168.30.76:3333 -w 1280 -h 720
+vlc tcp/h264://192.168.30.76:3333
+OR
+tcp/h264://192.168.30.76:3333
+
+
 IDEA
 
 1) display most recent low-res image as poster frame in html img src
