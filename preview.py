@@ -2,14 +2,13 @@ from os import system
 from time import sleep
 #from pydng.core import RPICAM2DNG
 from datetime import datetime
-
+from decimal import Decimal
 import argparse
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
 
-
-parser.add_argument('pos_arg', type=str,
+parser.add_argument('ss_arg', type=str,
                     help='A required integer positional argument')
 
 parser.add_argument('iso_arg', type=int,
@@ -17,11 +16,9 @@ parser.add_argument('iso_arg', type=int,
                     
 args = parser.parse_args()
 
-
 now = datetime.now()
 
 current_time = now.strftime("%H_%M_%S")
-print("/previews/preview_"+current_time+"_time.jpg")
 
  
 #sleep(2)
@@ -40,9 +37,20 @@ print("/previews/preview_"+current_time+"_time.jpg")
 
 #print(args.pos_arg)
 
-expsureInput = int(float(args.pos_arg))
+exposureInput = Decimal(args.ss_arg)
+#print("Exposure INPUT Time: ")
+#print(Decimal(args.ss_arg))
 
-exposureTime = expsureInput * 1000000
 
+exposureTime = (exposureInput) * 1000000
 
-system("raspistill -r -t 1 -o /var/www/html/previews/preview_"+current_time+"_time.jpg -ISO "+str(args.iso_arg)+" -ex off -ss "+str(exposureTime)+" -w 800 -h 600")
+userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co 90 -br 70 "
+jpegDimensions = "-w 800 -h 600"
+
+#print("Exposure INPUT Time: "+str(exposureInput))
+
+outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso_arg)+".jpg"
+
+print("/"+outputPathAndFilename)
+
+system("raspistill --verbose -r -t 1 -o "+outputPathAndFilename+" "+userParams+jpegDimensions)
