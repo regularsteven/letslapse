@@ -1,6 +1,14 @@
 #from picamera import PiCamera
 from os import system
 from time import sleep
+
+
+from datetime import datetime
+
+now = datetime.now()
+
+hour_min = now.strftime("%H_%M")
+
 #from pydng.core import RPICAM2DNG
 
 
@@ -14,12 +22,13 @@ from time import sleep
 #d=RPICAM2DNG()
 #d.convert("demo/rawyuv.jpg")
 
-
-for i in range(1200):
-     print(i)
-     system("raspistill -r -o /var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
- #    d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
-     sleep(1)
+storagePath = "shoot/"
+for i in range(10):
+    thisFile = "seq_"+hour_min+"_{0:04d}.jpg".format(i)
+    print(i)
+    system("raspistill -t 1 -r -o "+storagePath+thisFile+ " -w 400 -h 300")
+    #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
+    sleep(3)
 
 
 #for i in range(200):
