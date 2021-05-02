@@ -6,11 +6,11 @@ from datetime import datetime
 now = datetime.now()
 
 current_time = now.strftime("%H_%M_%S")
-print("Current Time =", current_time)
+print("running live preview")
 
-
+ 
 #sleep(2)
-d=RPICAM2DNG()
+#d=RPICAM2DNG()
 
-
-system("raspistill -r -o /var/www/html/site/previews/"+current_time+"_{0:04d}.jpg".format(i))
+# -r = append raw file for later processing
+system("raspivid -t 0 -l -o tcp://192.168.169.76:3333 -w 1280 -h 720")
