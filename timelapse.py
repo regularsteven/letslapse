@@ -23,7 +23,7 @@ hour_min = now.strftime("%H_%M")
 #d.convert("demo/rawyuv.jpg")
 
 storagePath = "shoot/"
-for i in range(10):
+for i in range(1200):
     thisFile = "seq_"+hour_min+"_{0:04d}.jpg".format(i)
     print(i)
     system("raspistill -t 1 -r -o "+storagePath+thisFile+ " -w 400 -h 300")

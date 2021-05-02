@@ -1,3 +1,11 @@
+<?php 
+        if(isset($_REQUEST['action'])){
+            $action = $_REQUEST['action'];
+            if($action == "preview"){
+                $isPreview = true;
+            }
+        }
+    ?>
 <!DOCTYPE html>
 <html>
 <head>
@@ -66,6 +74,13 @@ button{
 img {
     max-width: 100%;
 }
+
+
+#previewControls{
+    display:none;
+    <?php if($isPreview){echo "display:block;";} ?>
+    
+}
 </style>
 
 <?php 
@@ -79,7 +94,7 @@ $iso = "100";
 
 if(isset($_REQUEST['action'])){
     
-    $action = $_REQUEST['action'];
+    
 
     $ss = $_REQUEST['ss'];
     $iso = $_REQUEST['iso'];
@@ -88,7 +103,7 @@ if(isset($_REQUEST['action'])){
         case "preview":
             $command = "python3 preview.py ".$_REQUEST['ss'] . " ".$_REQUEST['iso'];
             $resp = shell_exec($command); 
-            $outputHTML = $resp . "<br><img src='$resp' />";
+            $outputHTML = "<a href='?action=raw&rawPath=$resp' target='_blank'><img src='$resp' /><sub>Generate RAW</sub></a>";
             break;
         case "start":
             shell_exec("python3 timelapse.py"); 
@@ -96,6 +111,12 @@ if(isset($_REQUEST['action'])){
         case "live":
             $resp = shell_exec("python3 live.py"); 
             echo "<button onclick='window.close()'>Close Me</button>";
+            $killswitch = true;
+            break;
+        case "raw":
+            $fileForProcess = explode("/", $_REQUEST['rawPath']);
+            $resp = shell_exec("/usr/bin/python3 createRAW.py " . $fileForProcess[2] );
+            echo "<a href='/previews'>See converted</a><button onclick='window.close()'>DONE Me</button>";
             $killswitch = true;
             break;
     }
@@ -157,10 +178,25 @@ if($killswitch == true){
 
     }
 
+    function toggleControls(value){
+        document.getElementById("previewControls").style.display = value;
+    }
+
 </script>
 
 <?php echo $outputHTML ; ?>
 
+<form action="/" target="" id="mainForm">
+<h3>Actions</h3>
+
+<input onclick="toggleControls('none')" type="radio" id="live" name="action" value="live">
+<label for="live">Feed</label>
+<input onclick="toggleControls('block')" <?php if($isPreview){echo "checked";} ?> type="radio" id="preview" name="action" value="preview">
+<label for="preview">Photo</label>
+<input onclick="toggleControls('none')" type="radio" id="start" name="action" value="start">
+<label for="start">Timelapse</label>
+<br />
+<div id="previewControls">
 <h3>Presets</h3>
 <i>5 stops from open</i>
 <ul id="presets">
@@ -173,16 +209,6 @@ if($killswitch == true){
 </ul>
 
 
-<form action="/" target="" id="mainForm">
-<h3>Actions</h3>
-
-<input type="radio" id="live" name="action" value="live">
-<label for="live">Feed</label>
-<input checked type="radio" id="preview" name="action" value="preview">
-<label for="preview">Preview</label>
-<input type="radio" id="start" name="action" value="start">
-<label for="start">Timelapse</label>
-<br />
 <div class="splitCol">
 <h4>Shutter Speed</h4>
 <input id="ss" value="<?php echo $ss ?>" name="ss"></input>
@@ -196,6 +222,8 @@ if($killswitch == true){
   <option <?php if($iso == "800"){echo "selected";} ?>>800</option>
 </select>
 </div>
+
+</div> <!--  id="previewControls"-->
 
 <button type="submit" onclick="checkForm()">GO</button>
 </form>

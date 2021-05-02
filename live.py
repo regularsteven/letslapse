@@ -13,4 +13,4 @@ print("running live preview")
 #d=RPICAM2DNG()
 
 # -r = append raw file for later processing
-system("raspivid -t 0 -l -o tcp://192.168.30.76:3333 -w 1280 -h 720")
+system("raspivid -t 0 -l -o tcp://192.168.169.76:3333 -w 1280 -h 720")
