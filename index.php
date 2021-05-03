@@ -146,7 +146,7 @@ if($killswitch == true){
     function checkForm(){
         if(document.getElementById('live').checked === true){
             alert("Copy the following and paste to VLC");
-            alert("tcp/h264://192.168.30.76:3333");
+            alert("tcp/h264://"+window.location.host+":3333");
             document.getElementById("mainForm").target = "_blank";
         }else{
             document.getElementById("mainForm").target = "";
