@@ -109,7 +109,7 @@ if(isset($_REQUEST['action'])){
             shell_exec("python3 timelapse.py"); 
             break;
         case "live":
-            $resp = shell_exec("python3 live.py"); 
+            $resp = shell_exec("python3 live.py " . $_SERVER['REMOTE_ADDR']); 
             echo "<button onclick='window.close()'>Close Me</button>";
             $killswitch = true;
             break;

@@ -1,19 +1,28 @@
-import socket
+
 from os import system
 from time import sleep
-import socket
+
 #from pydng.core import RPICAM2DNG
 from datetime import datetime
 
 
 
 
+import argparse
 
+# Instantiate the parser
+parser = argparse.ArgumentParser(description='Optional app description')
+
+parser.add_argument('ip_arg', type=str,
+                    help='A required integer positional argument')
+
+
+args = parser.parse_args()
 
 now = datetime.now()
 
 current_time = now.strftime("%H_%M_%S")
-print("running live preview for " + socket.gethostbyname(socket.gethostname()))
+print("running live preview for " + args.ip_arg )
 
  
 #sleep(2)
