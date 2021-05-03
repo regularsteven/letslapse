@@ -33,4 +33,4 @@ print("running live preview for " + args.ip_arg )
 
 
 
-#system("raspivid -t 0 -l -o tcp://192.168.38.76:3333 -w 1280 -h 720")
+system("raspivid -t 0 -l -o tcp://"+args.ip_arg +":3333 -w 1280 -h 720")
