@@ -33,7 +33,7 @@ if(isset($_REQUEST['action'])){
 
     switch ($action) {
         case "preview":
-            $command = "python3 preview.py ".$_REQUEST['ss'] . " ".$_REQUEST['iso'];
+            $command = "python3 preview.py ".$_REQUEST['ss'] . " ".$_REQUEST['iso'] . " " .$_REQUEST['awbg'];
             $resp = shell_exec($command); 
             $outputHTML = "<a href='?action=raw&rawPath=$resp' target='_blank'><img src='$resp' /><sub>Generate RAW</sub></a>";
             break;

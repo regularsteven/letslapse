@@ -13,6 +13,9 @@ parser.add_argument('ss_arg', type=str,
 
 parser.add_argument('iso_arg', type=int,
                     help='A required integer positional argument')   
+
+parser.add_argument('awbg_arg', type=str,
+                    help='A required integer positional argument')   
                     
 args = parser.parse_args()
 
@@ -44,8 +47,14 @@ exposureInput = Decimal(args.ss_arg)
 
 exposureTime = (exposureInput) * 1000000
 
-userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co 90 -br 70 "
-jpegDimensions = "-w 800 -h 600"
+userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co 0"
+jpegDimensions = " -w 800 -h 600"
+
+whiteBalance = "" 
+# awbg : blue,red
+whiteBalance = " -awb off -awbg "+args.awbg_arg
+
+
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
@@ -53,4 +62,4 @@ outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInpu
 
 print("/"+outputPathAndFilename)
 
-system("raspistill --verbose -r -t 1 -o "+outputPathAndFilename+" "+userParams+jpegDimensions)
+system("raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance)
