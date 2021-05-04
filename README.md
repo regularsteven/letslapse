@@ -91,3 +91,7 @@ IDEA
 3b) 
 
 
+# troubleshooting
+sometimes the camera crashes - find it and kill it
+ps -A | grep raspi
+sudo kill 1599 

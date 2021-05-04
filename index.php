@@ -1,4 +1,5 @@
 <?php 
+$isPreview = "";
         if(isset($_REQUEST['action'])){
             $action = $_REQUEST['action'];
             if($action == "preview"){
@@ -11,75 +12,10 @@
 <head>
 <title>PiPic</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/pi.css">
 <style>
-html {
-    margin: 0;
-    padding: 0;
-    border: 0;
-}
-
-body{
-    font-family: "Trebuchet MS", Helvetica, sans-serif;
-}
-ul{
-    padding-left: 0;
-    text-align: center;
-    display: flex;
-    margin-left: -10px;
-}
-
-ul#presets li {
-
-    height: 80px;
-    border: 2px solid lightgray;
-    margin: 1.5%;
-    text-align: center;
-    display: inline-table;
-    list-style: none;
-    font-size: small;
-}
-
-ul#presets li.active{
-    border: 2px solid darkgreen;
-    color: darkgreen;
-    background-color: lightgrey;
-}
-
-#mainForm{
-    clear:both;
-}
-
-.splitCol {
-    width: 50%;
-    float: left;
-}
-
-
-button{
-    width: 100%;
-    padding: 10px;
-    font-size: larger;
-    margin-top: 20px;
-}
-.splitCol select{
-    width: 100%;
-    padding: 10px;
-    font-size: larger;
-}
-.splitCol input {
-    width: 80%;
-    padding: 10px;
-    font-size: larger;
-}
-img {
-    max-width: 100%;
-}
-
-
 #previewControls{
-    display:none;
     <?php if($isPreview){echo "display:block;";} ?>
-    
 }
 </style>
 
@@ -93,11 +29,7 @@ $iso = "100";
 
 
 if(isset($_REQUEST['action'])){
-    
-    
-
-    $ss = $_REQUEST['ss'];
-    $iso = $_REQUEST['iso'];
+    $ss = $_REQUEST['ss'];$iso = $_REQUEST['iso'];
 
     switch ($action) {
         case "preview":
@@ -109,7 +41,8 @@ if(isset($_REQUEST['action'])){
             shell_exec("python3 timelapse.py"); 
             break;
         case "live":
-            $resp = shell_exec("python3 live.py " . $_SERVER['REMOTE_ADDR']); 
+            $cmd = "python3 live.py " . $_SERVER['HTTP_HOST'];
+            $resp = shell_exec($cmd); 
             echo "<button onclick='window.close()'>Close Me</button>";
             $killswitch = true;
             break;
@@ -122,13 +55,9 @@ if(isset($_REQUEST['action'])){
     }
 }
 
-
 if($killswitch == true){
     die();
 }
-
-
-
 
 ?>
 
@@ -138,51 +67,7 @@ if($killswitch == true){
 
 <h1><a href="/">PiPic</a></h1>
 
-<script>
-
-    function openLink(url){
-        window.open(url, "_blank");
-    }
-    function checkForm(){
-        if(document.getElementById('live').checked === true){
-            alert("Copy the following and paste to VLC");
-            alert("tcp/h264://"+window.location.host+":3333");
-            document.getElementById("mainForm").target = "_blank";
-        }else{
-            document.getElementById("mainForm").target = "";
-        }
-    }
-
-    var presets = [];
-    presets["sunnyDay"] = {ss: .002, iso: 100};
-    presets["sunnyForrest"] = {ss: .05, iso: 100};
-    presets["sunset"] = {ss: 1, iso: 100};
-    presets["lastLight"] = {ss: 6, iso: 200};
-    presets["nightUrban"] = {ss: 10, iso: 400};
-    presets["nightNature"] = {ss: 30, iso: 400};
-
-    function setPreset(preset){
-        document.getElementById('ss').value = presets[preset].ss;
-        document.getElementById('iso').value = presets[preset].iso;
-
-        //clear the active filters
-        var presetsList = document.getElementById("presets");
-        var liTargets = presetsList.getElementsByTagName("li");
-        for(var n=0; n<liTargets.length; n++ ){
-            liTargets[n].className = "";
-        }
-
-        //add the active
-        var v = document.getElementById(preset);
-            v.className += "active";
-
-    }
-
-    function toggleControls(value){
-        document.getElementById("previewControls").style.display = value;
-    }
-
-</script>
+<script src="js/pi.js"></script>
 
 <?php echo $outputHTML ; ?>
 
@@ -196,6 +81,11 @@ if($killswitch == true){
 <input onclick="toggleControls('none')" type="radio" id="start" name="action" value="start">
 <label for="start">Timelapse</label>
 <br />
+<script>
+document.write("tcp/h264://"+window.location.host+":3333");
+</script>
+
+
 <div id="previewControls">
 <h3>Presets</h3>
 <i>5 stops from open</i>
@@ -222,7 +112,9 @@ if($killswitch == true){
   <option <?php if($iso == "800"){echo "selected";} ?>>800</option>
 </select>
 </div>
-
+<div class="newRow">
+<input type="checkbox" name="captureRaw" id="captureRaw" ></input><label for="captureRaw">Capture RAW image</label>
+</div>
 </div> <!--  id="previewControls"-->
 
 <button type="submit" onclick="checkForm()">GO</button>

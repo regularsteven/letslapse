@@ -1,0 +1,71 @@
+html {
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+body{
+    font-family: "Trebuchet MS", Helvetica, sans-serif;
+}
+ul{
+    padding-left: 0;
+    text-align: center;
+    display: flex;
+    margin-left: -10px;
+}
+
+ul#presets li {
+
+    height: 80px;
+    border: 2px solid lightgray;
+    margin: 1.5%;
+    text-align: center;
+    display: inline-table;
+    list-style: none;
+    font-size: small;
+}
+
+ul#presets li.active{
+    border: 2px solid darkgreen;
+    color: darkgreen;
+    background-color: lightgrey;
+}
+
+#mainForm{
+    clear:both;
+}
+
+.splitCol {
+    width: 50%;
+    float: left;
+}
+
+
+button{
+    width: 100%;
+    padding: 10px;
+    font-size: larger;
+    margin-top: 20px;
+}
+.splitCol select{
+    width: 100%;
+    padding: 10px;
+    font-size: larger;
+}
+.splitCol input {
+    width: 80%;
+    padding: 10px;
+    font-size: larger;
+}
+img {
+    max-width: 100%;
+}
+
+.newRow {
+    clear: both;
+}
+
+
+#previewControls{
+    display:none;
+}

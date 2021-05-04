@@ -22,7 +22,7 @@ args = parser.parse_args()
 now = datetime.now()
 
 current_time = now.strftime("%H_%M_%S")
-print("running live preview for " + args.ip_arg )
+print("tcp://"+args.ip_arg+":3333")
 
  
 #sleep(2)
@@ -33,4 +33,4 @@ print("running live preview for " + args.ip_arg )
 
 
 
-system("raspivid -t 0 -l -o tcp://"+args.ip_arg +":3333 -w 1280 -h 720")
+system("raspivid -t 0 -l -o tcp://"+args.ip_arg+":3333 -w 1280 -h 720")
