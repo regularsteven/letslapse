@@ -47,19 +47,24 @@ exposureInput = Decimal(args.ss_arg)
 
 exposureTime = (exposureInput) * 1000000
 
-userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co 0"
-jpegDimensions = " -w 800 -h 600"
+userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co -10"
+jpegDimensions = ""# -w 2400 -h 1800"
 
 whiteBalance = "" 
 # awbg : blue,red
 whiteBalance = " -awb off -awbg "+args.awbg_arg
+#1.7,1.5 = ok
 
 
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso_arg)+".jpg"
+outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso_arg)+"_awbg-"+args.awbg_arg+".jpg"
 
 print("/"+outputPathAndFilename)
 
-system("raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance)
+system("raspistill --verbose -r -t 1 -drc high -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance)
+
+
+#burst mode:
+#raspistill --verbose -t 10000 -tl 1000 -o image%04d.jpg -ISO 100 -ss 0.0008 -co -10 -drc high

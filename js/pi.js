@@ -12,7 +12,7 @@ function checkForm(){
 }
 
 var presets = [];
-presets["sunnyDay"] = {ss: .002, iso: 100};
+presets["sunnyDay"] = {ss: .0008, iso: 100};
 presets["sunnyForrest"] = {ss: .05, iso: 100};
 presets["sunset"] = {ss: 1, iso: 100};
 presets["lastLight"] = {ss: 6, iso: 200};

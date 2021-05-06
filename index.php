@@ -26,10 +26,12 @@ $killswitch = false;
 //defaults for no previous settings
 $ss = ".5";
 $iso = "100";
-
+$awbg = "1.7,1.5"; //seems to be a good colour grade for daylight
+  //3.5,1.7 for the pi hq
+  //1.7,1.5 for the webcam
 
 if(isset($_REQUEST['action'])){
-    $ss = $_REQUEST['ss'];$iso = $_REQUEST['iso'];
+    $ss = $_REQUEST['ss'];$iso = $_REQUEST['iso'];$awbg = $_REQUEST['awbg'];
 
     switch ($action) {
         case "preview":
@@ -111,6 +113,10 @@ document.write("tcp/h264://"+window.location.host+":3333");
   <option <?php if($iso == "400"){echo "selected";} ?>>400</option>
   <option <?php if($iso == "800"){echo "selected";} ?>>800</option>
 </select>
+</div>
+<div class="splitCol">
+    <h4>Red / Blue Colour</h4>
+    <input id="awbg" value="<?php echo $awbg ?>" name="awbg"></input>
 </div>
 <div class="newRow">
 <input type="checkbox" name="captureRaw" id="captureRaw" ></input><label for="captureRaw">Capture RAW image</label>
