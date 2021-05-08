@@ -45,78 +45,193 @@ iso = 100 #set 200 for twilight and to 400 for night
 
 #keyTimeStamps = []
 
-now = datetime.now()
+firstLight = "05:30:00" #dawnRamp below - this is the fist spot of light on in the sky
+dayBreak = "06:30:00" #sunrise below - when the sun is on the horizon
+dayFullStart = "07:30:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
+dayFullEnd = "17:30:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+nightBreak = "18:30:00" #sunset below - when the sun is on the horizon
+lastLight = "19:15:00" #duskRamp below - the moment it's the night sky
 
+
+#debug testing
+
+#testingInterval = 1 #minutes
+#testingStartHour = 13
+#testingStartMinute = 32
+#firstLight = str(testingStartHour)+":"+str(testingStartMinute)+":00" #dawnRamp below - this is the fist spot of light on in the sky
+#dayBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*1))+":00" #sunrise below - when the sun is on the horizon
+#dayFullStart = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*2))+":00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
+#dayFullEnd = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*3))+":00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+#nightBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*4))+":00" #sunset below - when the sun is on the horizon
+#lastLight = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*5))+":00" #duskRamp below - the moment it's the night sky
+
+
+
+
+
+#print("today: "+year_month_date)
+now = datetime.now()
 hour_min = now.strftime("%H_%M")
 year_month_date = now.strftime("%Y-%m-%d")
-
-print("today: "+year_month_date)
-
-dawnRamp = datetime.fromisoformat(year_month_date+' 05:30:00+07:00')
+tz = "+07:00" #timezone for Thailand
+dawnRamp = datetime.fromisoformat(year_month_date+' '+firstLight+tz)
 dawnRampTS = dawnRamp.timestamp()
 
-sunrise = datetime.fromisoformat(year_month_date+' 06:00:00+07:00')
+sunrise = datetime.fromisoformat(year_month_date+' '+dayBreak+tz)
 sunriseTS = sunrise.timestamp()
 
-sunriseRamp = datetime.fromisoformat(year_month_date+' 07:00:00+07:00')
+sunriseRamp = datetime.fromisoformat(year_month_date+' '+dayFullStart+tz)
 sunriseRampTS = sunriseRamp.timestamp()
 
 
-sunsetRamp = datetime.fromisoformat(year_month_date+' 08:10:00+07:00')
+sunsetRamp = datetime.fromisoformat(year_month_date+' '+dayFullEnd+tz)
 sunsetRampTS = sunsetRamp.timestamp()
 
-sunset = datetime.fromisoformat(year_month_date+' 18:30:00+07:00')
+sunset = datetime.fromisoformat(year_month_date+' '+nightBreak+tz)
 sunsetTS = sunset.timestamp()
 
-duskRamp = datetime.fromisoformat(year_month_date+' 17:30:00+07:00')
+duskRamp = datetime.fromisoformat(year_month_date+' '+lastLight+tz)
 duskRampTS = duskRamp.timestamp()
+
+
+def configureKeyTimes():
+    now = datetime.now()
+    hour_min = now.strftime("%H_%M")
+    year_month_date = now.strftime("%Y-%m-%d")
+    tz = "+07:00" #timezone for Thailand
+    dawnRamp = datetime.fromisoformat(year_month_date+' '+firstLight+tz)
+    dawnRampTS = dawnRamp.timestamp()
+
+    sunrise = datetime.fromisoformat(year_month_date+' '+dayBreak+tz)
+    sunriseTS = sunrise.timestamp()
+
+    sunriseRamp = datetime.fromisoformat(year_month_date+' '+dayFullStart+tz)
+    sunriseRampTS = sunriseRamp.timestamp()
+
+
+    sunsetRamp = datetime.fromisoformat(year_month_date+' '+dayFullEnd+tz)
+    sunsetRampTS = sunsetRamp.timestamp()
+
+    sunset = datetime.fromisoformat(year_month_date+' '+nightBreak+tz)
+    sunsetTS = sunset.timestamp()
+
+    duskRamp = datetime.fromisoformat(year_month_date+' '+lastLight+tz)
+    duskRampTS = duskRamp.timestamp()
+
+
+
 
 shutterSpeed = dayExposure
 
-
-
 print(calendar.timegm(time.gmtime()))
-
+variableExposure = 0 #if the exposure is a constant, this will be 0 (false). if we're in a transtion perioud, it's 1 (true)
+#initialize variables for use
+startTS = 0
+endTS = 0
+startExposure = 0
+endExposure = 0
+shootID = now.strftime("%Y_%m_%d_%H_%M")
+pauseBetweenShots = 6
 
 storagePath = "shoot/"
-for i in range(1200):
-    curTimeTS = calendar.timegm(time.gmtime())
-    thisFile = "seq_"+hour_min+"_{0:04d}.jpg".format(i)
-    
-    
-    
-    if(curTimeTS < dawnRampTS or curTimeTS > duskRampTS):
-        shutterSpeed = nightExposure
-    
-    if(curTimeTS > sunriseTS and curTimeTS < sunriseRampTS):
-        print("after sunrise AND before full daylight")
+for i in range(2400):
 
-    if(curTimeTS > sunsetRampTS and curTimeTS < sunsetTS):
+    configureKeyTimes()
+
+
+
+
+
+
+    variableExposure = 0
+    shutterSpeed = dayExposure
+    curTimeTS = calendar.timegm(time.gmtime())
+    
+    iso = 100
+    print(curTimeTS)
+    #print(dawnRampTS)
+    #print(duskRampTS)
+
+    print(str(sunriseRampTS) + " " + str(sunriseTS))
+
+    #default exposure is daylight exposure
+    #catch for the night
+    if(curTimeTS < dawnRampTS or curTimeTS > duskRampTS):
+        print("between dusk and dawn")
+        iso = 400
+        shutterSpeed = nightExposure
+
+
+    #fist light / sunrise ramp in
+    if(curTimeTS >= dawnRampTS and curTimeTS <= sunriseTS):
+        variableExposure = 1
+        print("between dawn ramp and sunrise")
+        iso = 200
+        #set up which variables we're using for variableExposure
+        startTS = dawnRampTS
+        endTS = sunriseTS
+        startExposure = nightExposure
+        endExposure = sunriseExposure
+    
+    if(curTimeTS >= sunriseTS and curTimeTS < sunriseRampTS):
+        variableExposure = 1
+        
+        print("between sunrise and full day light")
+        #set up which variables we're using for variableExposure
+        startTS = sunriseTS
+        endTS = sunriseRampTS
+        startExposure = sunriseExposure
+        endExposure = dayExposure
+
+
+    if(curTimeTS >= sunsetRampTS and curTimeTS <= sunsetTS):
+        variableExposure = 1
         print("between sunset ramp and sunset")
-        #calc percentage to sunset
-        differenceBetween = sunsetTS - sunsetRampTS #(sunset > sunsetRamp)
-        timeIntoMarker = curTimeTS - sunsetRampTS #(curTime > sunsetRampTS)
+        #set up which variables we're using for variableExposure
+        startTS = sunsetRampTS
+        endTS = sunsetTS
+        startExposure = dayExposure
+        endExposure = sunsetExposure
+    
+    if(curTimeTS >= sunsetTS and curTimeTS <= duskRampTS):
+        variableExposure = 1
+        print("between sunset and duskRamp")
+        iso = 200
+        #set up which variables we're using for variableExposure
+        startTS = sunsetTS
+        endTS = duskRampTS
+        startExposure = sunsetExposure
+        endExposure = nightExposure
+        
+    
+
+    if variableExposure == 1:
+        print("variable exposure case")
+        #calc percentage between start marker and end marker
+        differenceBetween = endTS - startTS #(sunset > sunsetRamp)
+        timeIntoMarker = curTimeTS - startTS #(curTime > sunsetRampTS)
         percentageIntoPeriod = (timeIntoMarker/differenceBetween)
 
         
-        endBaseSS = sunsetExposure - dayExposure #basline to zero 
-        calculatedSS = ((percentageIntoPeriod*endBaseSS))+dayExposure
+        endBaseSS = endExposure - startExposure #basline to zero 
+        calculatedSS = ((percentageIntoPeriod*endBaseSS))+startExposure
 
         shutterSpeed = calculatedSS
-        print("percentageIntoPeriod:")
-        print(percentageIntoPeriod)
-        print("shutterSpeed:")
-        print(shutterSpeed)
+        print("percentageIntoPeriod: " + str(percentageIntoPeriod))
+    else:
+        print("constant exposure case")
     
-    print(curTimeTS)
-    print(sunsetRampTS)
-    print(sunsetTS)
+    print("shutterSpeed: " +str(shutterSpeed))
+
+    
 
     #print("shutterSpeed: " + str(shutterSpeed))
     print()
-    #system("raspistill -t 1 -r -o "+storagePath+thisFile+ " -w 400 -h 300")
+    thisFile = "seq_"+shootID+"_{0:04d}.jpg".format(i)
+    pictureParams = "-ISO "+str(ISO)+" -ss "+str(shutterSpeed) + " -co -10 -w 4000 -h 3000"
+    system("raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams)
     #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
-    sleep(1)
+    sleep(pauseBetweenShots+shutterSpeed)
 
 
 #for i in range(200):
