@@ -29,8 +29,8 @@ from datetime import datetime
 dayExposure = .00001
 nightExposure = 30
 #for facing west
-sunsetExposure = 1
-sunriseExposure = 2
+sunsetExposure = .01
+sunriseExposure = .01
 
 iso = 100 #set 200 for twilight and to 400 for night
 
@@ -227,7 +227,7 @@ for i in range(2400):
 
     #print("shutterSpeed: " + str(shutterSpeed))
     print()
-    thisFile = "seq_"+shootID+"_{0:04d}.jpg".format(i)
+    thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(shutterSpeed)+"-iso_"+str(ISO)+"-time_"+hour_min+".jpg".format(i)
     pictureParams = "-ISO "+str(ISO)+" -ss "+str(shutterSpeed) + " -co -10" #-w 4000 -h 3000
     system("raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams)
     #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
