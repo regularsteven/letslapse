@@ -26,7 +26,7 @@ from datetime import datetime
 
 #setup 
 
-dayExposure = .00001
+dayExposure = (0.00001)
 nightExposure = 30
 #for facing west
 sunsetExposure = .01
@@ -221,15 +221,19 @@ for i in range(2400):
     else:
         print("constant exposure case")
     
-    print("shutterSpeed: " +str(shutterSpeed))
+
+    outputSS =f"{shutterSpeed:.5f}"
+    print("shutterSpeed: " +str(outputSS))
 
     
 
     #print("shutterSpeed: " + str(shutterSpeed))
     print()
-    thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(shutterSpeed)+"-iso_"+str(ISO)+"-time_"+hour_min+".jpg".format(i)
-    pictureParams = "-ISO "+str(ISO)+" -ss "+str(shutterSpeed) + " -co -10" #-w 4000 -h 3000
+    
+    thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+hour_min+".jpg".format(i)
+    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10" #-w 4000 -h 3000
     system("raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams)
+    #system()
     #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
     sleep(pauseBetweenShots+shutterSpeed)
 
