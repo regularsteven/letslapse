@@ -27,7 +27,7 @@ from datetime import datetime
 #setup 
 
 dayExposure = (0.00001)
-nightExposure = 30
+nightExposure = 5
 #for facing west
 sunsetExposure = .01
 sunriseExposure = .01
