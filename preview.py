@@ -52,7 +52,7 @@ jpegDimensions = ""# -w 2400 -h 1800"
 
 whiteBalance = "" 
 # awbg : blue,red
-#whiteBalance = " -awb off -awbg "+args.awbg_arg
+whiteBalance = " -awb off -awbg "+args.awbg_arg
 #1.7,1.5 = ok
 
 
@@ -63,7 +63,7 @@ outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInpu
 
 print("/"+outputPathAndFilename)
 
-system("raspistill --verbose -r -t 1 -drc high -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance)
+system("raspistill --verbose -t 1 -drc high -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance)
 
 
 #burst mode:
