@@ -55,15 +55,15 @@ lastLight = "19:15:00" #duskRamp below - the moment it's the night sky
 
 #debug testing
 
-#testingInterval = 1 #minutes
-#testingStartHour = 13
-#testingStartMinute = 32
-#firstLight = str(testingStartHour)+":"+str(testingStartMinute)+":00" #dawnRamp below - this is the fist spot of light on in the sky
-#dayBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*1))+":00" #sunrise below - when the sun is on the horizon
-#dayFullStart = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*2))+":00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
-#dayFullEnd = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*3))+":00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
-#nightBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*4))+":00" #sunset below - when the sun is on the horizon
-#lastLight = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*5))+":00" #duskRamp below - the moment it's the night sky
+testingInterval = 1 #minutes
+testingStartHour = 16
+testingStartMinute = 40
+firstLight = str(testingStartHour)+":"+str(testingStartMinute)+":00" #dawnRamp below - this is the fist spot of light on in the sky
+dayBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*1))+":00" #sunrise below - when the sun is on the horizon
+dayFullStart = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*2))+":00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
+dayFullEnd = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*3))+":00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+nightBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*4))+":00" #sunset below - when the sun is on the horizon
+lastLight = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*5))+":00" #duskRamp below - the moment it's the night sky
 
 
 
@@ -148,11 +148,11 @@ for i in range(2400):
     curTimeTS = calendar.timegm(time.gmtime())
     
     iso = 100
-    print(curTimeTS)
+    #print(curTimeTS)
     #print(dawnRampTS)
     #print(duskRampTS)
 
-    print(str(sunriseRampTS) + " " + str(sunriseTS))
+    #print(str(sunriseRampTS) + " " + str(sunriseTS))
 
     #default exposure is daylight exposure
     #catch for the night
@@ -206,7 +206,7 @@ for i in range(2400):
     
 
     if variableExposure == 1:
-        print("variable exposure case")
+        #print("variable exposure case")
         #calc percentage between start marker and end marker
         differenceBetween = endTS - startTS #(sunset > sunsetRamp)
         timeIntoMarker = curTimeTS - startTS #(curTime > sunsetRampTS)
@@ -218,8 +218,8 @@ for i in range(2400):
 
         shutterSpeed = calculatedSS
         print("percentageIntoPeriod: " + str(percentageIntoPeriod))
-    else:
-        print("constant exposure case")
+    #else:
+        #print("constant exposure case")
     
 
     outputSS =f"{shutterSpeed:.5f}"
@@ -228,14 +228,15 @@ for i in range(2400):
     
 
     #print("shutterSpeed: " + str(shutterSpeed))
-    print()
+    #print()
     
     thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+hour_min+".jpg".format(i)
-    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10" #-w 4000 -h 3000
+    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 800 -h 600"
     system("raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams)
     #system()
     #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
     sleep(pauseBetweenShots+shutterSpeed)
+    #pauseBetweenShots+shutterSpeed
 
 
 #for i in range(200):
