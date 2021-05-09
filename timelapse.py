@@ -235,7 +235,7 @@ for i in range(2400):
 
     cameraCommand = "raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams
     print(cameraCommand)
-    #system(cameraCommand)
+    system(cameraCommand)
     #system()
     #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
     pictureDelay = shutterSpeed
