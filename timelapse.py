@@ -27,7 +27,7 @@ from datetime import datetime
 #setup 
 
 dayExposure = (0.00001)
-nightExposure = 5
+nightExposure = 3 * 100000
 #for facing west
 sunsetExposure = .01
 sunriseExposure = .01
@@ -56,8 +56,8 @@ lastLight = "19:15:00" #duskRamp below - the moment it's the night sky
 #debug testing
 
 testingInterval = 1 #minutes
-testingStartHour = 16
-testingStartMinute = 40
+testingStartHour = 17
+testingStartMinute = 13
 firstLight = str(testingStartHour)+":"+str(testingStartMinute)+":00" #dawnRamp below - this is the fist spot of light on in the sky
 dayBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*1))+":00" #sunrise below - when the sun is on the horizon
 dayFullStart = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*2))+":00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
@@ -231,11 +231,18 @@ for i in range(2400):
     #print()
     
     thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+hour_min+".jpg".format(i)
-    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 800 -h 600"
-    system("raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams)
+    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 800 -h 600 -awb off -awbg 3,2"
+
+    cameraCommand = "raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams
+    print(cameraCommand)
+    #system(cameraCommand)
     #system()
     #d.convert("/var/www/html/site/shoot/seq_{0:04d}.jpg".format(i))
-    sleep(pauseBetweenShots+shutterSpeed)
+    pictureDelay = shutterSpeed
+    if (shutterSpeed > 1) :
+        pictureDelay = shutterSpeed/ 100000
+    
+    sleep(pauseBetweenShots + pictureDelay)
     #pauseBetweenShots+shutterSpeed
 
 
