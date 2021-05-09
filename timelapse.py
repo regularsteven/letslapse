@@ -31,7 +31,7 @@ dayISO = 10
 nightExposure = 30 * 100000
 nightISO = 400
 #for facing west
-sunsetExposure = 1000
+sunsetExposure = 5000
 sunriseExposure = 1000
 sunsetISO = 100
 sunriseISO = 100
