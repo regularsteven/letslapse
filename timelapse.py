@@ -27,12 +27,16 @@ from datetime import datetime
 #setup 
 
 dayExposure = (0.00001)
-nightExposure = 3 * 100000
+dayISO = 10
+nightExposure = 30 * 100000
+nightISO = 400
 #for facing west
 sunsetExposure = .01
 sunriseExposure = .01
+sunsetISO = 100
+sunriseISO = 100
 
-iso = 100 #set 200 for twilight and to 400 for night
+iso = dayISO #set 200 for twilight and to 400 for night
 
 
 # 1 get the current time
@@ -48,7 +52,7 @@ iso = 100 #set 200 for twilight and to 400 for night
 firstLight = "05:30:00" #dawnRamp below - this is the fist spot of light on in the sky
 dayBreak = "06:30:00" #sunrise below - when the sun is on the horizon
 dayFullStart = "07:30:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
-dayFullEnd = "17:30:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+dayFullEnd = "18:03:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
 nightBreak = "18:30:00" #sunset below - when the sun is on the horizon
 lastLight = "19:15:00" #duskRamp below - the moment it's the night sky
 
@@ -58,12 +62,12 @@ lastLight = "19:15:00" #duskRamp below - the moment it's the night sky
 testingInterval = 1 #minutes
 testingStartHour = 17
 testingStartMinute = 13
-firstLight = str(testingStartHour)+":"+str(testingStartMinute)+":00" #dawnRamp below - this is the fist spot of light on in the sky
-dayBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*1))+":00" #sunrise below - when the sun is on the horizon
-dayFullStart = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*2))+":00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
-dayFullEnd = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*3))+":00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
-nightBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*4))+":00" #sunset below - when the sun is on the horizon
-lastLight = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*5))+":00" #duskRamp below - the moment it's the night sky
+#firstLight = str(testingStartHour)+":"+str(testingStartMinute)+":00" #dawnRamp below - this is the fist spot of light on in the sky
+#dayBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*1))+":00" #sunrise below - when the sun is on the horizon
+#dayFullStart = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*2))+":00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
+#dayFullEnd = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*3))+":00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+#nightBreak = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*4))+":00" #sunset below - when the sun is on the horizon
+#lastLight = str(testingStartHour)+":"+str(testingStartMinute+(testingInterval*5))+":00" #duskRamp below - the moment it's the night sky
 
 
 
@@ -122,6 +126,7 @@ def configureKeyTimes():
 
 
 shutterSpeed = dayExposure
+iso = dayISO
 
 print(calendar.timegm(time.gmtime()))
 variableExposure = 0 #if the exposure is a constant, this will be 0 (false). if we're in a transtion perioud, it's 1 (true)
@@ -147,7 +152,7 @@ for i in range(2400):
     shutterSpeed = dayExposure
     curTimeTS = calendar.timegm(time.gmtime())
     
-    iso = 100
+    iso = dayISO
     #print(curTimeTS)
     #print(dawnRampTS)
     #print(duskRampTS)
@@ -158,7 +163,7 @@ for i in range(2400):
     #catch for the night
     if(curTimeTS < dawnRampTS or curTimeTS > duskRampTS):
         print("between dusk and dawn")
-        iso = 400
+        iso = nightISO
         shutterSpeed = nightExposure
 
 
@@ -166,12 +171,14 @@ for i in range(2400):
     if(curTimeTS >= dawnRampTS and curTimeTS <= sunriseTS):
         variableExposure = 1
         print("between dawn ramp and sunrise")
-        iso = 200
+        
         #set up which variables we're using for variableExposure
         startTS = dawnRampTS
         endTS = sunriseTS
         startExposure = nightExposure
         endExposure = sunriseExposure
+        startISO = nightISO
+        endISO = sunriseISO
     
     if(curTimeTS >= sunriseTS and curTimeTS < sunriseRampTS):
         variableExposure = 1
@@ -182,7 +189,8 @@ for i in range(2400):
         endTS = sunriseRampTS
         startExposure = sunriseExposure
         endExposure = dayExposure
-
+        startISO = sunriseISO
+        endISO = dayISO
 
     if(curTimeTS >= sunsetRampTS and curTimeTS <= sunsetTS):
         variableExposure = 1
@@ -192,6 +200,9 @@ for i in range(2400):
         endTS = sunsetTS
         startExposure = dayExposure
         endExposure = sunsetExposure
+        
+        startISO = dayISO
+        endISO = sunsetISO
     
     if(curTimeTS >= sunsetTS and curTimeTS <= duskRampTS):
         variableExposure = 1
@@ -202,6 +213,9 @@ for i in range(2400):
         endTS = duskRampTS
         startExposure = sunsetExposure
         endExposure = nightExposure
+
+        startISO = sunsetISO
+        endISO = nightISO
         
     
 
@@ -216,6 +230,11 @@ for i in range(2400):
         endBaseSS = endExposure - startExposure #basline to zero 
         calculatedSS = ((percentageIntoPeriod*endBaseSS))+startExposure
 
+        endBaseISO = endISO - startISO
+        calculatedISO = ((percentageIntoPeriod*endBaseISO))+startISO
+
+
+        iso = calculatedISO
         shutterSpeed = calculatedSS
         print("percentageIntoPeriod: " + str(percentageIntoPeriod))
     #else:
@@ -230,8 +249,11 @@ for i in range(2400):
     #print("shutterSpeed: " + str(shutterSpeed))
     #print()
     
-    thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+hour_min+".jpg".format(i)
-    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 800 -h 600 -awb off -awbg 3,2"
+    now = datetime.now()
+    curDHM = now.strftime("%s")
+
+    thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+curDHM+".jpg".format(i)
+    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 2400 -h 1800 -awb off -awbg 3,2"
 
     cameraCommand = "raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams
     print(cameraCommand)
