@@ -26,13 +26,13 @@ from datetime import datetime
 
 #setup 
 
-dayExposure = (0.00001)
+dayExposure = 100
 dayISO = 10
 nightExposure = 30 * 100000
 nightISO = 400
 #for facing west
-sunsetExposure = .01
-sunriseExposure = .01
+sunsetExposure = 1000
+sunriseExposure = 1000
 sunsetISO = 100
 sunriseISO = 100
 
