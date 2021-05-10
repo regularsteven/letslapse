@@ -43,7 +43,7 @@ if(isset($_REQUEST['action'])){
             shell_exec("python3 timelapse.py"); 
             break;
         case "live":
-            $cmd = "python3 live.py " . $_SERVER['HTTP_HOST'];
+            $cmd = "python3 live.py " . $_SERVER['SERVER_ADDR'];
             $resp = shell_exec($cmd); 
             echo "<button onclick='window.close()'>Close Me</button>";
             $killswitch = true;
@@ -84,7 +84,7 @@ if($killswitch == true){
 <label for="start">Timelapse</label>
 <br />
 <script>
-document.write("tcp/h264://"+window.location.host+":3333");
+document.write("tcp/h264://<?php echo $_SERVER['SERVER_ADDR']; ?>:3333");
 </script>
 
 
