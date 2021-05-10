@@ -2,42 +2,22 @@
 
 import calendar
 import time
-
-
 from os import system
 from time import sleep
-
 from datetime import datetime
 
-
-#from pydng.core import RPICAM2DNG
-
-
-#camera = PiCamera()
-#full resolution = 4056, 3040
-#camera.resolution = (4056, 3040)
-
-#sleep(2)
-#camera.capture("demo/rawtest.yuv", 'yuv')
-#sleep(2)
-#d=RPICAM2DNG()
-#d.convert("demo/rawyuv.jpg")
-
-
 #setup 
+#pkill -9 -f timelapse.py
 
-dayExposure = 100
+dayExposure = 1000
 dayISO = 10
-nightExposure = 30 * 100000
-nightISO = 400
+nightExposure = 60 * 100000
+nightISO = 800
 #for facing west
-sunsetExposure = 5000
-sunriseExposure = 1000
-sunsetISO = 100
-sunriseISO = 100
-
-iso = dayISO #set 200 for twilight and to 400 for night
-
+sunsetExposure = 2000
+sunriseExposure = 10000 #good
+sunsetISO = 100 #
+sunriseISO = 50 #good
 
 # 1 get the current time
 # get next transition (if before or after noon) either sunrise or sunset
@@ -45,16 +25,14 @@ iso = dayISO #set 200 for twilight and to 400 for night
 # from "midnight"
 # "start sunrise twilight)" > "sunrise" > "sunrise ramp" > "day" > "sunset ramp" > "sunset" > "end sunset twilight" 
 
-
-
 #keyTimeStamps = []
 
 firstLight = "05:30:00" #dawnRamp below - this is the fist spot of light on in the sky
-dayBreak = "06:30:00" #sunrise below - when the sun is on the horizon
-dayFullStart = "07:30:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
+dayBreak = "06:10:00" #sunrise below - when the sun is on the horizon
+dayFullStart = "06:50:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
 dayFullEnd = "18:03:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
 nightBreak = "18:30:00" #sunset below - when the sun is on the horizon
-lastLight = "19:15:00" #duskRamp below - the moment it's the night sky
+lastLight = "19:10:00" #duskRamp below - the moment it's the night sky
 
 
 #debug testing
@@ -255,7 +233,7 @@ for i in range(2400):
     thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+curDHM+".jpg".format(i)
     pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 2400 -h 1800 -awb off -awbg 3,2"
 
-    cameraCommand = "raspistill -t 1 -o "+storagePath+thisFile+ " "+pictureParams
+    cameraCommand = "raspistill -t 1 --latest latest.jpg -o "+storagePath+thisFile+ " "+pictureParams
     print(cameraCommand)
     system(cameraCommand)
     #system()
