@@ -24,7 +24,7 @@ $outputHTML = "";
 $killswitch = false;
 
 //defaults for no previous settings
-$ss = ".5";
+$ss = "100";
 $iso = "100";
 $awbg = "1.7,1.5"; //seems to be a good colour grade for daylight
   //3.5,1.7 for the pi hq

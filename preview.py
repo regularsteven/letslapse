@@ -45,14 +45,14 @@ exposureInput = Decimal(args.ss_arg)
 #print(Decimal(args.ss_arg))
 
 
-exposureTime = (exposureInput) * 1000000
+exposureTime = (exposureInput)
 
 userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co -10"
 jpegDimensions = " -w 2400 -h 1800"
 
 whiteBalance = "" 
 # awbg : blue,red
-whiteBalance = " -awb off -awbg "+args.awbg_arg
+#whiteBalance = " -awb off -awbg "+args.awbg_arg
 #1.7,1.5 = ok
 
 

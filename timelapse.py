@@ -9,14 +9,14 @@ from datetime import datetime
 #setup 
 #pkill -9 -f timelapse.py
 
-dayExposure = 1000
+dayExposure = 500
 dayISO = 10
 nightExposure = 60 * 100000
 nightISO = 800
 #for facing west
-sunsetExposure = 2000
+sunsetExposure = 5000
 sunriseExposure = 10000 #good
-sunsetISO = 100 #
+sunsetISO = 50 #
 sunriseISO = 50 #good
 
 # 1 get the current time
@@ -30,9 +30,9 @@ sunriseISO = 50 #good
 firstLight = "05:30:00" #dawnRamp below - this is the fist spot of light on in the sky
 dayBreak = "06:10:00" #sunrise below - when the sun is on the horizon
 dayFullStart = "06:50:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
-dayFullEnd = "18:03:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
-nightBreak = "18:30:00" #sunset below - when the sun is on the horizon
-lastLight = "19:10:00" #duskRamp below - the moment it's the night sky
+dayFullEnd = "18:10:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+nightBreak = "18:45:00" #sunset below - when the sun is on the horizon
+lastLight = "19:20:00" #duskRamp below - the moment it's the night sky
 
 
 #debug testing
@@ -230,8 +230,8 @@ for i in range(2400):
     now = datetime.now()
     curDHM = now.strftime("%s")
 
-    thisFile = "seq_"+shootID+"_{0:04d}-ss_"+str(outputSS)+"-iso_"+str(iso)+"-time_"+curDHM+".jpg".format(i)
-    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 2400 -h 1800 -awb off -awbg 3,2"
+    thisFile = "test_seq_{0:04d}-ss_.jpg".format(i)
+    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 1600 -h 1200"
 
     cameraCommand = "raspistill -t 1 --latest latest.jpg -o "+storagePath+thisFile+ " "+pictureParams
     print(cameraCommand)
