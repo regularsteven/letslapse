@@ -108,6 +108,8 @@ document.write("tcp/h264://<?php echo $_SERVER['SERVER_ADDR']; ?>:3333");
 <div class="splitCol">
 <h4>ISO</h4>
 <select id="iso" name="iso">
+  <option <?php if($iso == "10"){echo "selected";} ?>>10</option>
+  <option <?php if($iso == "50"){echo "selected";} ?>>50</option>
   <option <?php if($iso == "100"){echo "selected";} ?>>100</option>
   <option <?php if($iso == "200"){echo "selected";} ?>>200</option>
   <option <?php if($iso == "400"){echo "selected";} ?>>400</option>

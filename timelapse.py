@@ -9,14 +9,14 @@ from datetime import datetime
 #setup 
 #pkill -9 -f timelapse.py
 
-dayExposure = 500
+dayExposure = 100 #100 is fastest - 1/8800, 200 = 1/5300
 dayISO = 10
-nightExposure = 60 * 100000
+nightExposure = 10 * 100000
 nightISO = 800
 #for facing west
-sunsetExposure = 5000
+sunsetExposure = 20000
 sunriseExposure = 10000 #good
-sunsetISO = 50 #
+sunsetISO = 75 #
 sunriseISO = 50 #good
 
 # 1 get the current time
@@ -27,14 +27,19 @@ sunriseISO = 50 #good
 
 #keyTimeStamps = []
 
-firstLight = "05:30:00" #dawnRamp below - this is the fist spot of light on in the sky
+firstLight = "05:05:00" #dawnRamp below - this is the fist spot of light on in the sky
 dayBreak = "06:10:00" #sunrise below - when the sun is on the horizon
-dayFullStart = "06:50:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
+dayFullStart = "07:10:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
 dayFullEnd = "18:10:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
-nightBreak = "18:45:00" #sunset below - when the sun is on the horizon
-lastLight = "19:20:00" #duskRamp below - the moment it's the night sky
+nightBreak = "18:50:00" #sunset below - when the sun is on the horizon
+lastLight = "19:40:00" #duskRamp below - the moment it's the night sky
 
+#4000 images at 2400px wide = 11.3 GB @ pauseBetweenShots 6
 
+pauseBetweenShots = 6
+numberOfExposurers = 4000 
+imageWidth = 2400
+imageHeight = imageWidth * .75
 #debug testing
 
 testingInterval = 1 #minutes
@@ -114,10 +119,10 @@ endTS = 0
 startExposure = 0
 endExposure = 0
 shootID = now.strftime("%Y_%m_%d_%H_%M")
-pauseBetweenShots = 6
+
 
 storagePath = "shoot/"
-for i in range(2400):
+for i in range(numberOfExposurers):
 
     configureKeyTimes()
 
@@ -231,7 +236,7 @@ for i in range(2400):
     curDHM = now.strftime("%s")
 
     thisFile = "test_seq_{0:04d}-ss_.jpg".format(i)
-    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w 1600 -h 1200"
+    pictureParams = "-ISO "+str(iso)+" -ss "+str(outputSS) + " -co -10 -w "+str(imageWidth)+" -h "+str(imageHeight)
 
     cameraCommand = "raspistill -t 1 --latest latest.jpg -o "+storagePath+thisFile+ " "+pictureParams
     print(cameraCommand)

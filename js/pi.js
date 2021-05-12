@@ -12,12 +12,12 @@ function checkForm(){
 }
 
 var presets = [];
-presets["sunnyDay"] = {ss: .0008, iso: 100};
-presets["sunnyForrest"] = {ss: .05, iso: 100};
-presets["sunset"] = {ss: 1, iso: 100};
-presets["lastLight"] = {ss: 6, iso: 200};
-presets["nightUrban"] = {ss: 10, iso: 400};
-presets["nightNature"] = {ss: 30, iso: 400};
+presets["sunnyDay"] = {ss: 100, iso: 10};
+presets["sunnyForrest"] = {ss: 5000, iso: 10};
+presets["sunset"] = {ss: 20000, iso: 75};
+presets["night"] = {ss: 6 * 100000, iso: 800};
+presets["nightUrban"] = {ss: 2 * 100000, iso: 800};
+presets["nightNature"] = {ss: 6 * 100000, iso: 800};
 
 function setPreset(preset){
     document.getElementById('ss').value = presets[preset].ss;
