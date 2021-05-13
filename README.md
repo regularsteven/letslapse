@@ -95,3 +95,13 @@ IDEA
 sometimes the camera crashes - find it and kill it
 ps -A | grep raspi
 sudo kill 1599 
+
+
+# pillow for image analysis
+python3 -m pip install --upgrade pip
+python3 -m pip install --upgrade Pillow
+
+not required, but in docs:
+python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
+
+
