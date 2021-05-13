@@ -32,7 +32,7 @@ dayBreak = "06:10:00" #sunrise below - when the sun is on the horizon
 dayFullStart = "07:10:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
 dayFullEnd = "18:25:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
 nightBreak = "18:50:00" #sunset below - when the sun is on the horizon
-lastLight = "19:45:00" #duskRamp below - the moment it's the night sky
+lastLight = "19:40:00" #duskRamp below - the moment it's the night sky
 
 #4000 images at 2400px wide = 11.3 GB @ pauseBetweenShots 6
 
