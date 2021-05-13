@@ -11,12 +11,12 @@ from datetime import datetime
 
 dayExposure = 100 #100 is fastest - 1/8800, 200 = 1/5300
 dayISO = 10
-nightExposure = 10 * 100000
+nightExposure = 4 * 1000000 #(1000000 = 1 second... So, how many seconds...)
 nightISO = 800
 #for facing west
 sunsetExposure = 20000
 sunriseExposure = 10000 #good
-sunsetISO = 75 #
+sunsetISO = 100 #
 sunriseISO = 50 #good
 
 # 1 get the current time
@@ -30,14 +30,14 @@ sunriseISO = 50 #good
 firstLight = "05:05:00" #dawnRamp below - this is the fist spot of light on in the sky
 dayBreak = "06:10:00" #sunrise below - when the sun is on the horizon
 dayFullStart = "07:10:00" #sunriseRamp below - when the sun has hit an elevation for START full day-sky
-dayFullEnd = "18:10:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
+dayFullEnd = "18:25:00" #sunsetRamp below - when the sun has hit an elevation for END full day-sky
 nightBreak = "18:50:00" #sunset below - when the sun is on the horizon
-lastLight = "19:40:00" #duskRamp below - the moment it's the night sky
+lastLight = "19:45:00" #duskRamp below - the moment it's the night sky
 
 #4000 images at 2400px wide = 11.3 GB @ pauseBetweenShots 6
 
 pauseBetweenShots = 6
-numberOfExposurers = 4000 
+numberOfExposurers = 8000 
 imageWidth = 2400
 imageHeight = imageWidth * .75
 #debug testing
