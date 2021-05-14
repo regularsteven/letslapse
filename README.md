@@ -105,3 +105,6 @@ not required, but in docs:
 python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
 
 
+# for opencv and image processing
+python3 -m pip install --upgrade imutils
+python3 -m pip install opencv-contrib-python
