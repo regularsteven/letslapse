@@ -23,12 +23,14 @@ def brightnessPerceived ( img ):
     return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
 
 shutterSpeed = 0
-raspiDefaults = "raspistill -t 1 --ISO 10 -ex verylong" + resolution
+ISO = 10
+raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
 
-for i in range(2000):
+for i in range(8000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
+    raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
     filename = "auto/image"+str(i)+".jpg"
     fileOutput = " --latest latest.jpg -o "+filename
     if i == 0:
@@ -60,7 +62,7 @@ for i in range(2000):
         print("shutterSpeed: " + str(shutterSpeed))
     
     brightnessTarget = 100
-    brightnessRange = 30
+    brightnessRange = 10
 
     lowBrightness = brightnessTarget - brightnessRange #140
     highBrightness = brightnessTarget + brightnessRange #160
@@ -70,6 +72,12 @@ for i in range(2000):
         print("low brightness")
         brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
         shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
+        if(shutterSpeed > 8000000): #max shutterspeed of 8 seconds
+            shutterSpeed = 8000000
+            ISO = ISO + 50
+            if ISO > 800 : 
+                ISO = 800
+            print("too little light, hard coding shutter and making ISO dynamic")
         print("new shutterspeed: " + str(shutterSpeed))
         
     if brightnessScore > highBrightness :
@@ -80,6 +88,11 @@ for i in range(2000):
             brightnessTargetAccuracy = brightnessTargetAccuracy*2
         
         shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
+
+        if(shutterSpeed < 100): 
+            shutterSpeed = 100
+            print("too much light, hard coding shutter")
+        print("new shutterspeed: " + str(shutterSpeed))
 
         if(shutterSpeed < 100): 
             shutterSpeed = 100
