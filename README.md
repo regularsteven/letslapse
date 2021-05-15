@@ -107,4 +107,24 @@ python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-opt
 
 # for opencv and image processing
 python3 -m pip install --upgrade imutils
-python3 -m pip install opencv-contrib-python
+python3 -m pip3 install opencv-contrib-python
+python3 -m pip install opencv-python - this worked, not contrib version
+python3 -m pip install numpy
+
+
+# batching images for fake long exposures
+longexposure.py requires import os, numpy, PIL
+    > basically smashes all files in folder to one image
+    > need to batch this up in minute by minute / or 30 second blocks
+
+# deflicker
+Attempt 1: Not good enough with current flicker during sunset
+http://joegiampaoli.blogspot.com/2015/04/creating-time-lapse-videos-mostly-in.html
+ > requires PERL
+ > apt-get install libfile-type-perl libterm-progressbar-perl perlmagick libimage-exiftool-perl
+ > chmod +x timelapse-deflicker.pl
+
+Attempt 2:
+https://pypi.org/project/deflicker/
+ > running this against output from attemt 2 as first shot - 
+ > 

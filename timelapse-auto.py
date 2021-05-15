@@ -15,7 +15,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('--imageCount', help='number of images')
 args = parser.parse_args()
 
-print(args.imageCount)
+#print(args.imageCount)
 
 def brightnessPerceived ( img ):
     stat = ImageStat.Stat(img)
@@ -25,7 +25,7 @@ def brightnessPerceived ( img ):
 shutterSpeed = 0
 raspiDefaults = "raspistill -t 1 --ISO 10 -ex verylong" + resolution
 
-for i in range(args.imageCount):
+for i in range(2000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")

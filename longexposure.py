@@ -1,12 +1,11 @@
 import os, numpy, PIL
 from PIL import Image
 
-
-
-print(os.getcwd())
 # Access all PNG files in directory
 allfiles=os.listdir(os.getcwd())
-imlist=[filename for filename in allfiles if  filename[-4:] in [".jpg"]]
+print(allfiles)
+
+imlist=[filename for filename in allfiles if  filename[-4:] in [".jpg",".JPG"]]
 
 # Assuming all images are the same size, get dimensions of first image
 w,h=Image.open(imlist[0]).size
@@ -25,5 +24,5 @@ arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
 
 # Generate, save and preview final image
 out=Image.fromarray(arr,mode="RGB")
-out.save("Average.jpg")
-out.show()
+out.save("average.jpg")
+#out.show()

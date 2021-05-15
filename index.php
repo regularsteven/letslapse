@@ -40,7 +40,7 @@ if(isset($_REQUEST['action'])){
             $outputHTML = "<a href='?action=raw&rawPath=$resp' target='_blank'><img src='$resp' /><sub>Generate RAW</sub></a>";
             break;
         case "start":
-            shell_exec("python3 timelapse-auto.py"); 
+            shell_exec("nohup python3 timelapse-auto.py"); 
             break;
         case "live":
             $cmd = "python3 live.py " . $_SERVER['SERVER_ADDR'];
