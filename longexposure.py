@@ -41,7 +41,7 @@ groupByType = args.groupByType #images or seconds
     #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
 
 imagesToBatch = int(args.groupBy)
-fullImageSet = len(allfiles) / imagesToBatch
+fullImageSet = len(allfiles)
 #fullImageSet = 3
 startingTimestamp = 0
 
@@ -70,7 +70,7 @@ def blendGroupToOne(imlist, sequenceNo) :
     #out.show()
 
 if groupByType == "images" :
-    for a in range(int(fullImageSet)):
+    for a in range(int(fullImageSet) / imagesToBatch):
         imlist=[]
         for i in range(imagesToBatch):
             #print(i)
@@ -83,14 +83,16 @@ if groupByType == "images" :
 
         blendGroupToOne(imlist, a)
 else :
-    print("building up lists of images within certain timeranges")
+    print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
+    
     timerangeGroupIndex = 0
     imlist=[]
-    for a in range(int(fullImageSet)):
+    for a in range(int(fullImageSet)-10):
         
         filename = 'image'+str(a)+'.jpg'
+        #print(filename)
         thisTimestamp = getMeta( filename )
-        print(thisTimestamp)
+        
         
         if a == 0 : 
             startingTimestamp = thisTimestamp
@@ -100,10 +102,14 @@ else :
             imlist.append(filename)
         else: 
             
+            #print("blendGroupToOne: " + str(timerangeGroupIndex))
+            print("blending the following images")
+            print(imlist)
             blendGroupToOne(imlist, timerangeGroupIndex)
             timerangeGroupIndex = timerangeGroupIndex+1
             startingTimestamp = thisTimestamp
             imlist=[]
+            imlist.append(filename)
 
 
 
