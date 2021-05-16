@@ -23,7 +23,7 @@ print(allfiles)
 #['image0.jpg', 'image1.jpg', 'image2.jpg', 'image3.jpg', 'image4.jpg']
 
 imagesToBatch = int(args.imagesToBatch)
-fullImageSet = 1100 / imagesToBatch
+fullImageSet = len(allfiles) / imagesToBatch
 for a in range(int(fullImageSet)):
     imlist=[]
     for i in range(imagesToBatch):
