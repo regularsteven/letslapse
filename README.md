@@ -6,7 +6,7 @@ raspberry pi timelaps rig
 2) add wpa_supplicant.conf and 'ssh' files to boot root directory
  > ssh pi@raspberry.local / password raspberry
  > in some instances, this will fail if previously ssh'd to a same name or IP
- > edit C:\Users\user-name\.ssh
+ > edit C:\Users\user-name\.ssh on windows / "ssh-keygen -R pi.local" on ubuntu
  > remove the raspberrypi.local line, save and SSH again
 3) update user password / system
  > passwd
@@ -32,6 +32,12 @@ raspberry pi timelaps rig
  > sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
 
 
+
+# running app in python
+1) capture images
+
+2) convert group of images by timeframe (i.e. 60 seconds) to timelapse
+python3 ../longexposure.py --groupBy 60 --groupByType seconds --makeMP4 yes
 
 
 shoot, edit, stream
