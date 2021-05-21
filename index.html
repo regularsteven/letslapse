@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>PiPic</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="css/pi.css">
+<style>
+#previewControls{
+}
+</style>
+
+
+
+
+</head>
+<body>
+
+
+<h1><a href="/">PiPic</a></h1>
+
+<script src="js/pi.js"></script>
+
+<form action="/" target="" id="mainForm">
+<h3>Actions</h3>
+
+<input onclick="toggleControls('none')" type="radio" id="live" name="action" value="live">
+<label for="live">Feed</label>
+<input onclick="toggleControls('block')" type="radio" id="preview" name="action" value="preview">
+<label for="preview">Photo</label>
+<input onclick="toggleControls('none')" type="radio" id="start" name="action" value="start">
+<label for="start">Timelapse</label>
+<br />
+<script>
+document.write("tcp/h264://"+window.location.host+":3333");
+</script>
+
+
+<div id="previewControls">
+<h3>Presets</h3>
+<i>5 stops from open</i>
+<ul id="presets">
+    <li onclick="setPreset('sunnyDay');" id="sunnyDay">Sunny Day Open Sky</li>
+    <li onclick="setPreset('sunnyForrest');" id="sunnyForrest">Sunny Day Covered Forrest</li>
+    <li onclick="setPreset('sunset');" id="sunset">Sunset</li>
+    <li onclick="setPreset('night');" id="night">Dark Night</li>
+    <li onclick="setPreset('nightUrban');" id="nightUrban">Urban Night</li>
+    <li onclick="setPreset('nightNature');" id="nightNature">Nature at Night</li>
+</ul>
+
+
+<div class="splitCol">
+<h4>Shutter Speed</h4>
+<input id="ss" value="" name="ss"></input>
+</div>
+<div class="splitCol">
+<h4>ISO</h4>
+<select id="iso" name="iso">
+  <option>10</option>
+  <option>50</option>
+  <option>75</option>
+  <option>100</option>
+  <option>200</option>
+  <option>400</option>
+  <option>800</option>
+  <option>1600</option>
+</select>
+</div>
+<div class="splitCol">
+    <h4>Red / Blue Colour</h4>
+    <input id="awbg" value="3,2" name="awbg"></input>
+</div>
+<div class="newRow">
+<input type="checkbox" name="captureRaw" id="captureRaw" ></input><label for="captureRaw">Capture RAW image</label>
+</div>
+</div> <!--  id="previewControls"-->
+
+<button type="submit" onclick="checkForm()">GO</button>
+</form>
+
+
+</body>
+</html>
