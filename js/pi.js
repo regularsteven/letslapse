@@ -15,7 +15,7 @@ var presets = [];
 presets["sunnyDay"] = {ss: 100, iso: 10};
 presets["sunnyForrest"] = {ss: 5000, iso: 10};
 presets["sunset"] = {ss: 20000, iso: 75};
-presets["night"] = {ss: 6 * 100000, iso: 800};
+presets["night"] = {ss: 6 * 100000, iso: 1600};
 presets["nightUrban"] = {ss: 2 * 100000, iso: 800};
 presets["nightNature"] = {ss: 6 * 100000, iso: 800};
 
