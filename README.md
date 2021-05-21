@@ -1,6 +1,38 @@
 # pitime
 raspberry pi timelaps rig
 
+# configure device
+1) install raspbian
+2) add wpa_supplicant.conf and 'ssh' files to boot root directory
+ > ssh pi@raspberry.local / password raspberry
+ > in some instances, this will fail if previously ssh'd to a same name or IP
+ > edit C:\Users\user-name\.ssh
+ > remove the raspberrypi.local line, save and SSH again
+3) update user password / system
+ > passwd
+ > sudo apt update
+ > sudo apt upgrade
+4) enable the camera / change the device name if we wish
+ > sudo raspi-config
+ > interface > Camera
+5) install git / tools / apache webserver (or other) to allow for simple view / management of debug and testing tools
+ > sudo apt install git -y
+ > sudo apt install apache2 -y (option)
+ > sudo apt install php libapache2-mod-php -y (option)
+ > sudo apt install python3-pip -y
+6) boot and ssh, clone https://github.com/regularsteven/pitime into /var/www/html (if basic apache)
+ > git clone https://github.com/regularsteven/pitime.git
+ > need to remove everything inside the folder if installing to apache (sudo rm -R /var/www/html/*)
+ > OR install whereever
+7) Python and dependencies
+ > sudo apt install python3-pip
+ > python3 -m pip install --upgrade pip
+ > python3 -m pip install --upgrade Pillow
+ > python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
+ > sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
+
+
+
 
 shoot, edit, stream
 
@@ -102,7 +134,6 @@ python3 -m pip install --upgrade pip
 python3 -m pip install --upgrade Pillow
 
 not required, but in docs:
-python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
 
 
 # for opencv and image processing
