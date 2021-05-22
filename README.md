@@ -18,7 +18,7 @@ raspberry pi timelaps rig
 5) install git / tools / apache webserver (or other) to allow for simple view / management of debug and testing tools
  > sudo apt install git -y
  > sudo apt install apache2 -y (option)
- > sudo apt install php libapache2-mod-php -y (option)
+ > sudo apt remove php libapache2-mod-php -y (option)
  > sudo apt install python3-pip -y
 6) boot and ssh, clone https://github.com/regularsteven/pitime into /var/www/html (if basic apache)
  > git clone https://github.com/regularsteven/pitime.git
