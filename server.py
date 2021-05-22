@@ -7,7 +7,7 @@ from urllib.parse import urlparse
 from urllib.parse import parse_qs
 
 
-PORT = 8099
+PORT = 80
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 s.connect(("8.8.8.8", 80))
