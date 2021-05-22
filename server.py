@@ -8,7 +8,13 @@ from urllib.parse import parse_qs
 
 
 PORT = 8099
-hostIP = socket.gethostbyname(socket.gethostname())
+
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.connect(("8.8.8.8", 80))
+hostIP = s.getsockname()[0]
+s.close()
+
+#hostIP = socket.gethostbyname(socket.gethostname())
 print("Webserver running on "+ str(hostIP) + ":"+str(PORT))
 
 def liveFeed() :
