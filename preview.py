@@ -6,7 +6,7 @@ from decimal import Decimal
 import argparse
 
 #example usage:
-#ppython3 preview.py --ss 1000 --iso 100 --awbg 3,2
+#python3 preview.py --ss 1000 --iso 100 --awbg 3,2
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
