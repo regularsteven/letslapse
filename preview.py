@@ -55,8 +55,8 @@ jpegDimensions = " -w 2400 -h 1800"
 
 whiteBalance = "" 
 # awbg : blue,red
-if args.awbg !== "auto":
-whiteBalance = " -awb off -awbg "+args.awbg
+if args.awbg != "auto":
+    whiteBalance = " -awb off -awbg "+args.awbg
 #1.7,1.5 = ok
 
 
