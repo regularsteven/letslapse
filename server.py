@@ -14,7 +14,11 @@ def startTimelapse() :
     print("end startTimelapse")
     return "cool"
 
-
+def shootPreview() :
+    print("start shootPreview")
+    system("python3 preview.py --ss 1000 --iso 100 --awbg 3,2")
+    print("end shootPreview")
+    return
 
 class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
     def do_GET(self):
@@ -57,6 +61,7 @@ class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
             if actionVal == "timelapse" :
                 startTimelapse()
             if actionVal == "preview" :
+                shootPreview()
                 print("cool preview")
             print(actionVal)
              # Whenever using 'send_header', you also have to call 'end_headers'
