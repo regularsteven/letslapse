@@ -89,15 +89,17 @@ for i in range(8000):
         
         shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
 
-        if(shutterSpeed < 100): 
-            shutterSpeed = 100
-            print("too much light, hard coding shutter")
-        print("new shutterspeed: " + str(shutterSpeed))
+        if shutterSpeed < 2000000: #if we're getting faster than a 2 second exposure
+            ISO = ISO - 50
+            if ISO < 10 : 
+                ISO = 10
+
 
         if(shutterSpeed < 100): 
             shutterSpeed = 100
             print("too much light, hard coding shutter")
         print("new shutterspeed: " + str(shutterSpeed))
+
 
     
     sleep(1)
