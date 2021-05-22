@@ -8,14 +8,14 @@ import argparse
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
 
-parser.add_argument('ss_arg', type=str,
-                    help='A required integer positional argument')
+parser.add_argument('--ss', type=str,
+                    help='Shutter Speed')
 
-parser.add_argument('iso_arg', type=int,
-                    help='A required integer positional argument')   
+parser.add_argument('--iso', type=int,
+                    help='ISO')   
 
-parser.add_argument('awbg_arg', type=str,
-                    help='A required integer positional argument')   
+parser.add_argument('--awbg', type=str,
+                    help='blue and green values')   
                     
 args = parser.parse_args()
 
@@ -40,26 +40,26 @@ current_time = now.strftime("%H_%M_%S")
 
 #print(args.pos_arg)
 
-exposureInput = Decimal(args.ss_arg)
+exposureInput = Decimal(args.ss)
 #print("Exposure INPUT Time: ")
 #print(Decimal(args.ss_arg))
 
 
 exposureTime = (exposureInput)
 
-userParams = "-ISO "+str(args.iso_arg)+" -ss "+str(exposureTime) + " -co -10"
+userParams = "-ISO "+str(args.iso)+" -ss "+str(exposureTime) + " -co -10"
 jpegDimensions = " -w 2400 -h 1800"
 
 whiteBalance = "" 
 # awbg : blue,red
-#whiteBalance = " -awb off -awbg "+args.awbg_arg
+whiteBalance = " -awb off -awbg "+args.awbg
 #1.7,1.5 = ok
 
 
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso_arg)+"_awbg-"+args.awbg_arg+".jpg"
+outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso)+"_awbg-"+args.awbg+".jpg"
 
 print("/"+outputPathAndFilename)
 
