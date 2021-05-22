@@ -26,7 +26,8 @@ def liveFeed() :
 
 def startTimelapse() :
     print("start startTimelapse")
-    system('python3 timelapse-auto.py')
+    system('nohup python3 timelapse-auto.py &')
+
     print("end startTimelapse")
     return "cool"
 
@@ -78,7 +79,7 @@ class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
 
             if actionVal == "live" :
                 liveFeed()
-            if actionVal == "timelapse" :
+            if actionVal == "start" :
                 startTimelapse()
             if actionVal == "preview" :
                 ss = query_components["ss"][0]
