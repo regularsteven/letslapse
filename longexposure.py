@@ -4,6 +4,8 @@ from os import system
 import time
 import argparse
 from datetime import datetime
+import os.path
+from os import path
 
 
 parser = argparse.ArgumentParser()
@@ -12,9 +14,11 @@ parser.add_argument('--groupByType', help='images or seconds - group images as p
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy')
 args = parser.parse_args()
 
+# ****** EXAMPLE USE ***** # 
+#execute the following in the folder that requires the conversion
+#python3 /mnt/ssd/Clients/PiShots/longexposure.py --groupBy 10 --groupByType seconds --makeMP4 yes
 
-
-#system("rm blendedImage*")
+system("rm blendedImage*")
 
 #### Access all JPG files in directory
 allfiles=os.listdir(os.getcwd())
@@ -70,18 +74,24 @@ def blendGroupToOne(imlist, sequenceNo) :
     #out.show()
 
 if groupByType == "images" :
-    for a in range(int(fullImageSet) / imagesToBatch):
-        imlist=[]
-        for i in range(imagesToBatch):
-            #print(i)
-            if a == 0:
-                imlist.append('image'+str(i)+'.jpg')
-            else :
-                imlist.append('image'+str(i+(imagesToBatch*a))+'.jpg')
-        print("imlist")
-        print(imlist)
+    print(fullImageSet)
+    print(imagesToBatch)
+    
+    if imagesToBatch == 1:
+        print("no need to process these images, as we're just rendering them as one simple playback")
+    else :
+        for a in range(int((fullImageSet) / imagesToBatch) -1):
+            imlist=[]
+            for i in range(imagesToBatch):
+                #print(i)
+                if a == 0:
+                    imlist.append('image'+str(i)+'.jpg')
+                else :
+                    imlist.append('image'+str(i+(imagesToBatch*a))+'.jpg')
+            print("imlist")
+            print(imlist)
 
-        blendGroupToOne(imlist, a)
+            blendGroupToOne(imlist, a)
 else :
     print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
     
@@ -115,4 +125,12 @@ else :
 
 
 if args.makeMP4 == "yes" :
-    system("ffmpeg -i blendedImage%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 a_blendedVideo"+str(imagesToBatch)+".mp4")
+    if path.isdir('blended') == True :
+        print("directory already created")
+    else :
+        system("mkdir blended")
+
+    inputFile = "blendedImage"
+    if imagesToBatch == 1:
+        inputFile = "image"
+    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 blended/a_blendedVideo_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
