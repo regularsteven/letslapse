@@ -31,6 +31,43 @@ raspberry pi timelaps rig
  > python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
  > sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
 
+8) Enable PYTHON server to start on system boot
+ > enable CONSOLE AUTO login via sudo raspi-config (SYSTEM OPTIONS > BOOT)
+ > make the script executable: sudo chmod +x /home/pi/pitime/server.py
+ > add sudo python /home/pi/myscript.py at the bottom of sudo nano /etc/profile
+
+9) Install SAMBA for simple filesystem access
+
+10) Mounting for remote access of files with another pi
+ > sudo mkdir /media/share 
+ > nano /home/pi/.smbcredentials 
+    - username=smb_username
+    - password=smb_password
+ > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials //pi.local/pitime /media/sharePi
+ > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials_pi //pi.local/pitime /media/sharePi
+ > sudo nano /etc/fstab 
+   - to reconnect on reboot, add //pi.local/pitime /media/sharePi cifs _netdev,vers=3.0,credentials=/home/pi/.smbcredentials,uid=pi,gid=pi,x-systemd.automount 0 0
+
+11) Auto backup to second (non-shooting) pi device (my device is USB called pitimepics / msdos FAT)
+ > make director sudo mkdir /media/usb
+ > sudo mount /dev/sda1 /media/usb
+  - if unsure of /dev/name, run sudo fdisk -l
+  - if FAT, need to run sudo mount -t vfat /dev/sda1 /media/usb -o uid=1000,gid=1000,utf8,dmask=027,fmask=137
+ AUTO Mount on BOOT
+ > sudo pico /etc/fstab
+  > get UUID with sudo blkid
+  add: UUID=088E-FCEF /media/usb auto nosuid,nodev,nofail 0 0
+
+  > rsync from remote to loca
+   -- sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ --ignore-existing
+    ## copy on ubuntu system
+    ### mount the drive and open the remote SMB share in terminal
+    ### ensure the folder exists inside /mnt/ssd/Clients/PiShots/original/ + name    
+    rsync -h -v -r -P -t * /mnt/ssd/Clients/PiShots/originals/auto-monitor-knocked/ --ignore-existing
+   
+
+   sudo crontab -e
+   @reboot sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ 
 
 
 # running app in python
