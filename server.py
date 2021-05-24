@@ -26,7 +26,7 @@ def liveFeed() :
 
 def startTimelapse() :
     print("start startTimelapse")
-    system('nohup python3 timelapse-auto.py &')
+    system('python3 timelapse-auto.py')
 
     print("end startTimelapse")
     return "cool"
@@ -98,7 +98,7 @@ class MyHttpRequestHandler(http.server.SimpleHTTPRequestHandler):
             # Setting the header
             #self.send_header("Content-type", "text/html")
             if self.path == '/':
-                self.path = 'index.html'
+                self.path = '/home/pi/pitime/index.html'
 
             # Whenever using 'send_header', you also have to call 'end_headers'
             #self.end_headers()
