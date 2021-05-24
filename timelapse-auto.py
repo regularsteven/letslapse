@@ -30,7 +30,7 @@ for i in range(8000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
+    raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong" + resolution
     filename = "auto/image"+str(i)+".jpg"
     fileOutput = " --latest latest.jpg -o "+filename
     if i == 0:
@@ -61,7 +61,7 @@ for i in range(8000):
         print("first time shooting - will set shutter speed to this test shot")
         print("shutterSpeed: " + str(shutterSpeed))
     
-    brightnessTarget = 100
+    brightnessTarget = 120
     brightnessRange = 10
 
     lowBrightness = brightnessTarget - brightnessRange #140
@@ -72,8 +72,8 @@ for i in range(8000):
         print("low brightness")
         brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
         shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
-        if(shutterSpeed > 8000000): #max shutterspeed of 8 seconds
-            shutterSpeed = 8000000
+        if(shutterSpeed > 12000000): #max shutterspeed of 8 seconds
+            shutterSpeed = 12000000
             ISO = ISO + 50
             if ISO > 800 : 
                 ISO = 800
