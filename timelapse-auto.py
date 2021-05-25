@@ -10,7 +10,7 @@ from os import path
 
 
 
-width = 2400
+width = 4000
 height = width * .75
 resolution = " -w "+str(width)+" -h "+str(height)
 
@@ -38,7 +38,7 @@ else :
     system("mkdir auto")
 
 
-for i in range(8000):
+for i in range(20000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
