@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 #sudo kill -9 $(ps -A | grep python | awk '{print $1}')
 import http.server
 import socketserver
