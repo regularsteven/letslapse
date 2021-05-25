@@ -16,7 +16,8 @@ args = parser.parse_args()
 
 # ****** EXAMPLE USE ***** # 
 #execute the following in the folder that requires the conversion
-#python3 /mnt/ssd/Clients/PiShots/longexposure.py --groupBy 10 --groupByType seconds --makeMP4 yes
+#python3 /mnt/ssd/Clients/PiShots/longexposure.py --groupBy 60 --groupByType seconds --makeMP4 yes
+#python3 /home/steven/Documents/dev/pitime/longexposure.py /longexposure.py --groupBy 60 --groupByType seconds --makeMP4 yes
 
 system("rm blendedImage*")
 
