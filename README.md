@@ -202,3 +202,17 @@ Attempt 2:
 https://pypi.org/project/deflicker/
  > running this against output from attemt 2 as first shot - 
  > 
+
+
+
+
+
+ Observations
+ Using "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong -w 4000 -h 3000"
+  > Day light / high light: 10 to 12 images per 60 seconds (at 1/2315 sec or so - i.e. very fast exposure ISO 10)
+  > Night light / low light: 1 image per 60 seconds (at 7 sec i.e. 800)
+
+
+  Using "raspistill -t 1 -bm -ag 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong"
+  > Day light : 16 images per 60 second block
+  > Night light : 1 ... hmmmm
