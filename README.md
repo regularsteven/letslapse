@@ -213,6 +213,6 @@ https://pypi.org/project/deflicker/
   > Night light / low light: 1 image per 60 seconds (at 7 sec i.e. 800)
 
 
-  Using "raspistill -t 1 -bm -ag 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong"
+  Using "raspistill -t 1 -bm -ag 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong  -w 2400 -h 1800"
   > Day light : 16 images per 60 second block
   > Night light : 1 ... hmmmm
