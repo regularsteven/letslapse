@@ -14,6 +14,7 @@ width = 4000
 height = width * .75
 resolution = " -w "+str(width)+" -h "+str(height)
 
+awbgSettings = "3.484375,1.44921875"
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
@@ -44,7 +45,7 @@ for i in range(20000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 --ISO "+str(ISO)+" -awb off -awbg 3.5,1.8 -co -10 -ex off" + resolution
+    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 --ISO "+str(ISO)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
 
     if path.isdir("auto_"+args.folderName+"/group"+str(int(i/1000))) == False :
         system("mkdir auto_"+args.folderName+"/group"+str(int(i/1000)))
@@ -70,26 +71,17 @@ for i in range(20000):
     lastShotExposureTime = str(exif["ExposureTime"])
 
     #print("ExposureTime = "+ str(lastShotExposureTime))
-
-
     #print("ISOSpeedRatings = " + str(exif["ISOSpeedRatings"]))
     brightnessScore = brightnessPerceived(img)
     print("brightnessPerceived score: " + str(brightnessScore))
 
-
-    #if i == 0:
-#
-#        shutterSpeed = float(lastShotExposureTime) * 10000000
-#        print("first time shooting - will set shutter speed to this test shot")
-#        print("shutterSpeed: " + str(shutterSpeed))
-    
-    brightnessTarget = 120
+    brightnessTarget = 150
     brightnessRange = 10
 
     lowBrightness = brightnessTarget - brightnessRange #140
     highBrightness = brightnessTarget + brightnessRange #160
     
-    brightnessTargetAccuracy = 100 #if the light is 
+    #brightnessTargetAccuracy = 100 #if the light is 
     if brightnessScore < lowBrightness :
         print("low brightness")
         brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
