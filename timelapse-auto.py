@@ -14,8 +14,10 @@ width = 4000
 height = width * .75
 resolution = " -w "+str(width)+" -h "+str(height)
 
+awbgSettings = "3.484375,1.44921875"
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--folderName', help="name of folder to use")
 parser.add_argument('--imageCount', help='number of images')
 args = parser.parse_args()
 
@@ -26,69 +28,60 @@ def brightnessPerceived ( img ):
     r,g,b = stat.rms
     return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
 
-shutterSpeed = 0
+shutterSpeed = 1000
 ISO = 10
-raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
+maxISO = 800
+#raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
 
 
 
-if path.isdir("auto") == True :
+if path.isdir("auto_"+args.folderName) == True :
     print("directory already created")
 else :
-    system("mkdir auto")
+    system("mkdir auto_"+args.folderName)
 
 
 for i in range(20000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm -ag 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong" + resolution
+    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 --ISO "+str(ISO)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
 
-    if path.isdir("auto/group"+str(int(i/1000))) == True :
-        print("directory already created")
-    else :
-        system("mkdir auto/group"+str(int(i/1000)))
+    if path.isdir("auto_"+args.folderName+"/group"+str(int(i/1000))) == False :
+        system("mkdir auto_"+args.folderName+"/group"+str(int(i/1000)))
+        print("need to create group folder")
 
-    filename = "auto/group"+str(int(i/1000))+"/image"+str(i)+".jpg"
+    filename = "auto_"+args.folderName+"/group"+str(int(i/1000))+"/image"+str(i)+".jpg"
     
 
     
     fileOutput = " --latest latest.jpg -o "+filename
-    if i == 0:
-        raspiCommand = raspiDefaults + fileOutput
-    else: 
-        raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
-    #print(raspiCommand)
+    #if i == 0:
+    #    raspiCommand = raspiDefaults + fileOutput
+    #else: 
+    raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
+    print(raspiCommand)
     system(raspiCommand)
 
     #sleep(4)
     
     img = Image.open(filename)
     exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
-    #print("ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
+    print("ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
     lastShotExposureTime = str(exif["ExposureTime"])
 
     #print("ExposureTime = "+ str(lastShotExposureTime))
-
-
     #print("ISOSpeedRatings = " + str(exif["ISOSpeedRatings"]))
     brightnessScore = brightnessPerceived(img)
     print("brightnessPerceived score: " + str(brightnessScore))
 
-
-    if i == 0:
-
-        shutterSpeed = float(lastShotExposureTime) * 1000000
-        print("first time shooting - will set shutter speed to this test shot")
-        print("shutterSpeed: " + str(shutterSpeed))
-    
-    brightnessTarget = 120
+    brightnessTarget = 150
     brightnessRange = 10
 
     lowBrightness = brightnessTarget - brightnessRange #140
     highBrightness = brightnessTarget + brightnessRange #160
     
-    brightnessTargetAccuracy = 100 #if the light is 
+    #brightnessTargetAccuracy = 100 #if the light is 
     if brightnessScore < lowBrightness :
         print("low brightness")
         brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
@@ -96,8 +89,8 @@ for i in range(20000):
         if(shutterSpeed > 12000000): #max shutterspeed of 8 seconds
             shutterSpeed = 12000000
             ISO = ISO + 50
-            if ISO > 800 : 
-                ISO = 800
+            if ISO > maxISO : 
+                ISO = maxISO
             print("too little light, hard coding shutter and making ISO dynamic")
         print("new shutterspeed: " + str(shutterSpeed))
         
