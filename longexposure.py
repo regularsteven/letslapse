@@ -19,8 +19,17 @@ args = parser.parse_args()
 #python3 /home/steven/Documents/dev/pitime/longexposure.py --groupBy 60 --groupByType seconds --makeMP4 yes
 #python3 /home/steven/Documents/dev/pitime/longexposure.py --groupBy 10 --groupByType images --makeMP4 yes
 
+#windows - run from directory in with images
+#py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
 
-system("rm blendedImage*")
+
+if path.isdir('blended') == True :
+    print("directory already created")
+else :
+    system("mkdir blended")
+
+system("rm blended/blendedImage*")
+#system("rm blendedImage*")
 
 #### Access all JPG files in directory
 allfiles=os.listdir(os.getcwd())
@@ -70,7 +79,7 @@ def blendGroupToOne(imlist, sequenceNo) :
 
     #### Generate, save and preview final image
     out=Image.fromarray(arr,mode="RGB")
-    fileName = "blendedImage"+str(sequenceNo)+".jpg"
+    fileName = "blended/blendedImage"+str(sequenceNo)+".jpg"
     print(fileName)
     out.save(fileName)
     #out.show()
@@ -127,11 +136,6 @@ else :
 
 
 if args.makeMP4 == "yes" :
-    if path.isdir('blended') == True :
-        print("directory already created")
-    else :
-        system("mkdir blended")
-
     inputFile = "blendedImage"
     if imagesToBatch == 1:
         inputFile = "image"
