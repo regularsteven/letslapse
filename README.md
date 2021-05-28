@@ -216,3 +216,18 @@ https://pypi.org/project/deflicker/
   Using "raspistill -t 1 -bm -ag 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong  -w 2400 -h 1800"
   > Day light : 16 images per 60 second block
   > Night light : 1 ... hmmmm
+
+
+  12Mp images
+   Start: Tue, 25 May 2021  06:32:38
+   Image 100: 06:42:26
+   Image 200: 06:54:55
+
+   200 images = 1.2GB over 20 minutes
+   3.6GB images per hour
+   43Gb per 12 hours at 200 images per hour at high light
+   Much less for over night.... 
+
+
+
+
