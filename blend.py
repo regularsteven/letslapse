@@ -1,4 +1,5 @@
 import os, numpy, PIL
+import re
 from PIL import Image, ExifTags, ImageStat
 from os import system
 import time
@@ -14,10 +15,18 @@ parser.add_argument('--groupByType', help='images or seconds - group images as p
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy')
 args = parser.parse_args()
 
+
+
+cwd = os.getcwd()
+
+#this will allow for the first file in any folder grouped by 1000, as per capture
+thisFolderIndex = re.findall(r'\d+', cwd)
+
+
 # ****** EXAMPLE USE ***** # 
 #execute the following in the folder that requires the conversion
-#python3 /home/steven/Documents/dev/pitime/longexposure.py --groupBy 60 --groupByType seconds --makeMP4 yes
-#python3 /home/steven/Documents/dev/pitime/longexposure.py --groupBy 10 --groupByType images --makeMP4 yes
+#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 60 --groupByType seconds --makeMP4 yes
+#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 10 --groupByType images --makeMP4 yes
 
 #windows - run from directory in with images
 #py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
@@ -49,8 +58,6 @@ def getMeta ( filename ):
     
 
 
-#['image0.jpg', 'image1.jpg', 'image2.jpg', 'image3.jpg', 'image4.jpg']
-
 groupByType = args.groupByType #images or seconds
     #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
     #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
@@ -72,7 +79,10 @@ def blendGroupToOne(imlist, sequenceNo) :
 
     #### Build up average pixel intensities, casting each image as an array of floats
     for im in imlist:
-        imarr=numpy.array(Image.open(im),dtype=numpy.float)
+        thisImg = Image.open(im)
+        
+        print(im)
+        imarr=numpy.array(thisImg,dtype=numpy.float)
         arr=arr+imarr/N
     #### Round values in array and cast as 8-bit integer
     arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
@@ -110,7 +120,7 @@ else :
     imlist=[]
     for a in range(int(fullImageSet)-10):
         
-        filename = 'image'+str(a)+'.jpg'
+        filename = 'image'+str(int(thisFolderIndex[0])*1000+a)+'.jpg'
         #print(filename)
         thisTimestamp = getMeta( filename )
         
@@ -136,7 +146,7 @@ else :
 
 
 if args.makeMP4 == "yes" :
-    inputFile = "blendedImage"
+    inputFile = "blended/blendedImage"
     if imagesToBatch == 1:
         inputFile = "image"
-    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 blended/a_blendedVideo_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
+    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 blended/a_blendedVideo_"str(thisFolderIndex)+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
