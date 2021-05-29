@@ -10,7 +10,7 @@ from os import path
 
 
 
-width = 4000
+width = 2400
 height = width * .75
 resolution = " -w "+str(width)+" -h "+str(height)
 
@@ -75,7 +75,7 @@ for i in range(20000):
     brightnessScore = brightnessPerceived(img)
     print("brightnessPerceived score: " + str(brightnessScore))
 
-    brightnessTarget = 150
+    brightnessTarget = 130
     brightnessRange = 10
 
     lowBrightness = brightnessTarget - brightnessRange #140
@@ -88,6 +88,7 @@ for i in range(20000):
         shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
         if(shutterSpeed > 12000000): #max shutterspeed of 8 seconds
             shutterSpeed = 12000000
+        if shutterSpeed > 2000000 :
             ISO = ISO + 50
             if ISO > maxISO : 
                 ISO = maxISO
