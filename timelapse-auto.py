@@ -29,7 +29,7 @@ def brightnessPerceived ( img ):
     return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
 
 shutterSpeed = 1000
-ISO = 10
+ISO = 6
 maxISO = 800
 #raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
 
@@ -107,7 +107,7 @@ for i in range(20000):
         if shutterSpeed < 2000000: #if we're getting faster than a 2 second exposure
             ISO = ISO - 50
             if ISO < 10 : 
-                ISO = 10
+                ISO = 6
 
 
         if(shutterSpeed < 100): 
