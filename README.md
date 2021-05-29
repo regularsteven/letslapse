@@ -57,7 +57,7 @@ raspberry pi timelaps rig
  > sudo pico /etc/fstab
   > get UUID with sudo blkid
   add: UUID=088E-FCEF /media/usb auto nosuid,nodev,nofail 0 0
-
+  > cp group1 /media/usb -r --verbose -n
   > rsync from remote to loca
    -- sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ --ignore-existing
     ## copy on ubuntu system
@@ -231,3 +231,9 @@ https://pypi.org/project/deflicker/
 
 
 
+
+
+
+
+# test shots
+raspistill -t 1 --ISO 800 -co -15 -ex off -w 2400 -h 1800.0 -ss 147110.21692236557 --latest latest.jpg -o test.jpg -bm -ag 1 -sa -10 -awb off -awbg 3.484375,1.44921875 -co -15 -ex off 

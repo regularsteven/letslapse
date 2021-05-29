@@ -10,7 +10,7 @@ from os import path
 
 
 
-width = 2400
+width = 4000
 height = width * .75
 resolution = " -w "+str(width)+" -h "+str(height)
 
@@ -45,7 +45,7 @@ for i in range(20000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 --ISO "+str(ISO)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 --ISO "+str(ISO)+" -awb off -awbg "+awbgSettings+" -co -15 -ex night" + resolution
 
     if path.isdir("auto_"+args.folderName+"/group"+str(int(i/1000))) == False :
         system("mkdir auto_"+args.folderName+"/group"+str(int(i/1000)))
