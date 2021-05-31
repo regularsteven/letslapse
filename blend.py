@@ -149,4 +149,4 @@ if args.makeMP4 == "yes" :
     inputFile = "blended/blendedImage"
     if imagesToBatch == 1:
         inputFile = "image"
-    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 blended/a_blendedVideo_"str(thisFolderIndex)+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
+    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../a_blendedVideo_"+str(thisFolderIndex)+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
