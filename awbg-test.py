@@ -10,8 +10,8 @@ sleep(2)
 camera.shutter_speed = camera.exposure_speed
 camera.exposure_mode = 'off'
 g = camera.awb_gains
-camera.awb_mode = 'off'
-camera.awb_gains = (Fraction(223, 64), Fraction(371, 256))
 print(g)
+#camera.awb_mode = 'off'
+#camera.awb_gains = (Fraction(223, 64), Fraction(371, 256))
 # Finally, take several photos with the fixed settings
-camera.capture_sequence(['image%02d.jpg' % i for i in range(10)])
+camera.capture_sequence(['image%02d.jpg' % i for i in range(2)])
