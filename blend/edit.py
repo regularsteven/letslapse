@@ -1,10 +1,108 @@
+
 from PIL import Image, ImageEnhance
-
-
 import numpy as np
 import cv2
 
 
+
+
+
+
+
+# Automatic brightness and contrast optimization with optional histogram clipping
+def automatic_brightness_and_contrast(image, clip_hist_percent=25):
+    gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+    # Calculate grayscale histogram
+    hist = cv2.calcHist([gray],[0],None,[256],[0,256])
+    hist_size = len(hist)
+
+    # Calculate cumulative distribution from the histogram
+    accumulator = []
+    accumulator.append(float(hist[0]))
+    for index in range(1, hist_size):
+        accumulator.append(accumulator[index -1] + float(hist[index]))
+
+    # Locate points to clip
+    maximum = accumulator[-1]
+    clip_hist_percent *= (maximum/100.0)
+    clip_hist_percent /= 2.0
+
+    # Locate left cut
+    minimum_gray = 0
+    while accumulator[minimum_gray] < clip_hist_percent:
+        minimum_gray += 1
+
+    # Locate right cut
+    maximum_gray = hist_size -1
+    while accumulator[maximum_gray] >= (maximum - clip_hist_percent):
+        maximum_gray -= 1
+
+    # Calculate alpha and beta values
+    alpha = 255 / (maximum_gray - minimum_gray)
+    beta = -minimum_gray * alpha
+
+    '''
+    # Calculate new histogram with desired range and show histogram 
+    new_hist = cv2.calcHist([gray],[0],None,[256],[minimum_gray,maximum_gray])
+    plt.plot(hist)
+    plt.plot(new_hist)
+    plt.xlim([0,256])
+    plt.show()
+    '''
+
+    auto_result = cv2.convertScaleAbs(image, alpha=alpha, beta=beta)
+    return (auto_result, alpha, beta)
+
+image = cv2.imread('blended.jpg')
+auto_result, alpha, beta = automatic_brightness_and_contrast(image)
+#print('alpha', alpha)
+#print('beta', beta)
+#cv2.imshow('auto_result', auto_result)
+cv2.imwrite('auto_result.png', auto_result)
+#cv2.imshow('image', image)
+#cv2.waitKey()
+
+
+
+
+
+
+
+
+
+
+
+
+#from:
+#https://pythonexamples.org/python-pillow-adjust-image-contrast/
+#read the image
+im = Image.open("blended.jpg")
+
+#image brightness enhancer
+enhancer = ImageEnhance.Contrast(im)
+
+factor = 1 #gives original image
+im_output = enhancer.enhance(factor)
+im_output.save('original-image.png')
+
+factor = 0.5 #decrease constrast
+im_output = enhancer.enhance(factor)
+im_output.save('less-contrast-image.png')
+
+factor = 1.5 #increase contrast
+im_output = enhancer.enhance(factor)
+im_output.save('more-contrast-image.png')
+
+
+
+
+
+
+
+
+#from: 
+#https://gist.github.com/HViktorTsoi/8e8b0468a9fb07842669aa368382a7df
 def correction(
         img,
         shadow_amount_percent, shadow_tone_percent, shadow_radius,
@@ -96,11 +194,11 @@ def correction(
 
 
 
-w,h=Image.open("blended.jpg").size
+#w,h=Image.open("blended.jpg").size
 #### Create a numpy array of floats to store the average (assume RGB images)
-arr=np.zeros((h,w,3),np.float)
+#arr=np.zeros((h,w,3),np.float)
 
-outputImg = correction(arr, .5, .5, 1, .5, .5, 1, .5)
+#outputImg = correction(arr, .5, .5, 1, .5, .5, 1, .5)
 
 #img: input RGB image numpy array of shape (height, width, 3)
 #shadow_amount_percent [0.0 ~ 1.0]: Controls (separately for the highlight and shadow values in the image) how much of a correction to make.
@@ -116,7 +214,7 @@ outputImg = correction(arr, .5, .5, 1, .5, .5, 1, .5)
 #arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
 
 #### Generate, save and preview final image
-out=Image.fromarray(outputImg,mode="RGB")
-fileName = "___sample.jpg"
-print(fileName)
-out.save(fileName)
+#out=Image.fromarray(outputImg,mode="RGB")
+#fileName = "___sample.jpg"
+#print(fileName)
+#out.save(fileName)
