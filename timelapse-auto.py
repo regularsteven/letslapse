@@ -1,5 +1,6 @@
 from os import system
 from PIL import Image, ExifTags, ImageStat
+from picamera import PiCamera
 from time import sleep
 from decimal import Decimal
 import argparse
@@ -10,8 +11,8 @@ from os import path
 
 
 
-width = 4000
-height = width * .75
+width = 2400
+height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
 
 awbgSettings = "3.484375,1.44921875"
@@ -19,6 +20,11 @@ awbgSettings = "3.484375,1.44921875"
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
 parser.add_argument('--imageCount', help='number of images')
+parser.add_argument('--execMethod', help='shell or python')
+
+#example use:
+# python3 timelapse-auto --folderName demo --execMethod shell
+
 args = parser.parse_args()
 
 #print(args.imageCount)
@@ -26,7 +32,8 @@ args = parser.parse_args()
 def brightnessPerceived ( img ):
     stat = ImageStat.Stat(img)
     r,g,b = stat.rms
-    return math.sqrt(0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2))
+    return math.sqrt( 0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2) )
+
 
 shutterSpeed = 1000
 ISO = 6
@@ -40,6 +47,8 @@ if path.isdir("auto_"+args.folderName) == True :
 else :
     system("mkdir auto_"+args.folderName)
 
+if args.execMethod == "python" :
+    camera = PiCamera(resolution=(width, height), framerate=15)
 
 for i in range(20000):
     #print("")
@@ -56,18 +65,34 @@ for i in range(20000):
 
     
     fileOutput = " --latest latest.jpg -o "+filename
-    #if i == 0:
-    #    raspiCommand = raspiDefaults + fileOutput
-    #else: 
-    raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
-    print(raspiCommand)
-    system(raspiCommand)
 
+
+    raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
+    print("ShutterSpeed val:" + str(shutterSpeed))
+    if args.execMethod == "shell" : 
+        print(raspiCommand)
+        system(raspiCommand)
+    if args.execMethod == "python" :
+        camera.start_preview()
+        g = camera.awb_gains
+        print("Camera AWBG gains")
+        print(g)
+        camera.contrast = -15
+        camera.iso = ISO
+        camera.exposure_mode = 'off'
+        camera.shutter_speed = int(shutterSpeed)
+        camera.awb_mode = 'off'
+        camera.awb_gains = 1.18359375,2.97265625
+        #camera.analog_gain = 1
+        #sleep(2)
+        
+        camera.capture(filename)
+        camera.stop_preview()
     #sleep(4)
     
     img = Image.open(filename)
     exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
-    print("ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
+    print("Recorded EXIF ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
     lastShotExposureTime = str(exif["ExposureTime"])
 
     #print("ExposureTime = "+ str(lastShotExposureTime))
