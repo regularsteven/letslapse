@@ -40,7 +40,10 @@ ISO = 6
 maxISO = 800
 #raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
 
-
+#ISO doesn't seem to work with -ex night, so need to implement -dg value (1 > 8)
+DG = 1
+maxDG = 8
+DGIncrement = .5
 
 if path.isdir("auto_"+args.folderName) == True :
     print("directory already created")
@@ -50,11 +53,11 @@ else :
 if args.execMethod == "python" :
     camera = PiCamera(resolution=(width, height), framerate=15)
 
-for i in range(20000):
+for i in range(80000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 --ISO "+str(ISO)+" -awb off -awbg "+awbgSettings+" -co -15 -ex night" + resolution
+    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 -dg "+str(DG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
 
     if path.isdir("auto_"+args.folderName+"/group"+str(int(i/1000))) == False :
         system("mkdir auto_"+args.folderName+"/group"+str(int(i/1000)))
@@ -63,8 +66,9 @@ for i in range(20000):
     filename = "auto_"+args.folderName+"/group"+str(int(i/1000))+"/image"+str(i)+".jpg"
     
 
-    
-    fileOutput = " --latest latest.jpg -o "+filename
+    fileOutput = ""
+    fileOutput = " --latest latest.jpg " #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
+    fileOutput = fileOutput+ "-o "+filename
 
 
     raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
@@ -114,10 +118,14 @@ for i in range(20000):
         if(shutterSpeed > 12000000): #max shutterspeed of 8 seconds
             shutterSpeed = 12000000
         if shutterSpeed > 2000000 :
-            ISO = ISO + 50
-            if ISO > maxISO : 
-                ISO = maxISO
-            print("too little light, hard coding shutter and making ISO dynamic")
+            #ISO = ISO + 50
+            #if ISO > maxISO : 
+            #    ISO = maxISO
+            #print("too little light, hard coding shutter and making ISO dynamic")
+            print("increasing digital gain")
+            DG = DG + DGIncrement
+            if DG > maxDG : 
+                DG = maxDG
         print("new shutterspeed: " + str(shutterSpeed))
         
     if brightnessScore > highBrightness :
@@ -130,10 +138,12 @@ for i in range(20000):
         shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
 
         if shutterSpeed < 2000000: #if we're getting faster than a 2 second exposure
-            ISO = ISO - 50
-            if ISO < 10 : 
-                ISO = 6
-
+            #ISO = ISO - 50
+            #if ISO < 10 : 
+            #    ISO = 6
+            DG = DG - DGIncrement
+            if ISO < 1 : 
+                ISO = 1
 
         if(shutterSpeed < 100): 
             shutterSpeed = 100
@@ -142,6 +152,6 @@ for i in range(20000):
 
 
     
-    sleep(1)
+    sleep(2)
 
 print("end")
