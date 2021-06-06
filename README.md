@@ -237,3 +237,33 @@ https://pypi.org/project/deflicker/
 
 # test shots
 raspistill -t 1 --ISO 800 -co -15 -ex off -w 2400 -h 1800.0 -ss 147110.21692236557 --latest latest.jpg -o test.jpg -bm -ag 1 -sa -10 -awb off -awbg 3.484375,1.44921875 -co -15 -ex off 
+
+# test shoots for faster captures in low light
+raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 10000000 -dg 8 -o toilet-dg8_ss10000000.jpg
+
+ > takes 21 seconds
+
+raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -o toilet_dg12_ss_20000000.jpg
+
+ > takes 42
+ > good brightness
+
+ raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 --ISO 800 -o toilet_iso800_ss_20000000.jpg
+
+  > takes 42
+  > too dark
+  > iso marked as 6
+
+
+ raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex night -ss 20000000 --ISO 800 -o toilet-iso800-ss20000000-ex_night.jpg
+
+  > takes 2:22 (140 seconds | 7x on capture time)
+  > iso marked as 800
+  > similar results as dg12 20 seconds
+
+raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -ag 8 -o toilet2_dg12_ag8_ss_20000000.jpg
+  > Crazy overexpose
+
+
+raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -ag 2 -o toilet2_dg12_ag2_ss_20000000.jpg
+  

@@ -42,9 +42,14 @@ maxISO = 800
 #raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
 
 #ISO doesn't seem to work with -ex night, so need to implement -dg value (1 > 8)
-DG = 1
+DG = 1 #digital gain
 maxDG = 12
 DGIncrement = .5
+
+
+AG = 1 #analogue gain
+maxAG = 2
+AGIncrement = .1
 
 if path.isdir("auto_"+args.folderName) == True :
     print("directory already created")
@@ -55,7 +60,7 @@ for i in range(80000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 -dg "+str(DG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
 
     if path.isdir("auto_"+args.folderName+"/group"+str(int(i/1000))) == False :
         system("mkdir auto_"+args.folderName+"/group"+str(int(i/1000)))
@@ -65,7 +70,7 @@ for i in range(80000):
     
 
     fileOutput = ""
-    fileOutput = " --latest latest.jpg " #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
+    #fileOutput = " --latest latest.jpg " #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
     fileOutput = fileOutput+ "-o "+filename
 
 
@@ -106,6 +111,13 @@ for i in range(80000):
             DG = DG + DGIncrement
             if DG > maxDG : 
                 DG = maxDG
+
+        if shutterSpeed > 6000000 :
+            AG = AG + AGIncrement
+            if AG > maxAG : 
+                AG = maxAG
+            print("getting very dark, increment AG: "+str(AG))
+
         print("new shutterspeed: " + str(shutterSpeed))
         
     if brightnessScore > highBrightness :
@@ -124,6 +136,11 @@ for i in range(80000):
             DG = DG - DGIncrement
             if DG < 1 : 
                 DG = 1
+
+        if shutterSpeed < 6000000 :
+            AG = AG - AGIncrement
+            if AG < 1 : 
+                AG = 1
 
         if(shutterSpeed < 100): 
             shutterSpeed = 100
