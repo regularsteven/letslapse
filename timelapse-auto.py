@@ -20,10 +20,9 @@ awbgSettings = "3.484375,1.44921875"
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
 parser.add_argument('--imageCount', help='number of images')
-parser.add_argument('--execMethod', help='shell or python')
 
 #example use:
-# python3 timelapse-auto --folderName demo --execMethod shell
+# python3 timelapse-auto --folderName demo
 
 args = parser.parse_args()
 
@@ -70,8 +69,8 @@ for i in range(80000):
     
 
     fileOutput = ""
-    #fileOutput = " --latest latest.jpg " #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
-    fileOutput = fileOutput+ "-o "+filename
+    #fileOutput = " --latest latest.jpg" #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
+    fileOutput = fileOutput+ " -o "+filename
 
 
     raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
