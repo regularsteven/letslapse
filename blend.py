@@ -18,14 +18,30 @@ args = parser.parse_args()
 
 
 cwd = os.getcwd()
+thisDir = cwd.split("/")[len(cwd.split("/"))-1]
+thisDirLen = len(thisDir)
+
+thisFolderIndex = False
+if thisDir[thisDirLen-1].isnumeric() :
+    thisFolderIndex = int(thisDir[thisDirLen-1])
+
+if thisDir[thisDirLen-2].isnumeric() :
+    thisFolderIndex = int(thisDir[thisDirLen-2] + thisDir[thisDirLen-1])
+
+
+
+
 
 #this will allow for the first file in any folder grouped by 1000, as per capture
-thisFolderIndex = re.findall(r'\d+', cwd)
+#thisFolderIndex = re.findall(r'\d+', cwd)[1]
+
+print("thisFolderIndex: "+ str(thisFolderIndex))
+
 
 
 # ****** EXAMPLE USE ***** # 
 #execute the following in the folder that requires the conversion
-#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 60 --groupByType seconds --makeMP4 yes
+#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 90 --groupByType seconds --makeMP4 yes
 #python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 10 --groupByType images --makeMP4 yes
 
 #windows - run from directory in with images
@@ -119,9 +135,11 @@ else :
     timerangeGroupIndex = 0
     imlist=[]
     for a in range(int(fullImageSet)-10):
-        
-        filename = 'image'+str(int(thisFolderIndex[0])*1000+a)+'.jpg'
-        #print(filename)
+        if thisFolderIndex == False :
+            filename = 'image'+str(a)+'.jpg'
+        if thisFolderIndex != False :
+            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+        print(filename)
         thisTimestamp = getMeta( filename )
         
         
@@ -149,4 +167,8 @@ if args.makeMP4 == "yes" :
     inputFile = "blended/blendedImage"
     if imagesToBatch == 1:
         inputFile = "image"
-    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../a_blendedVideo_"+str(thisFolderIndex)+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
+    folderStrOutput = ""
+    if thisFolderIndex != False :
+        folderStrOutput = "_"+str(thisFolderIndex)
+    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
+    #fmpeg -i image%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../auto_hidden_beach_blendedVideo_90seconds.mp4
