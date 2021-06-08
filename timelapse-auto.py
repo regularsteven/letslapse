@@ -28,6 +28,7 @@ args = parser.parse_args()
 
 #print(args.imageCount)
 
+#logic from https://stackoverflow.com/a/3498247 (from https://stackoverflow.com/users/64313/cmcginty)
 def brightnessPerceived ( img ):
     stat = ImageStat.Stat(img)
     r,g,b = stat.rms
