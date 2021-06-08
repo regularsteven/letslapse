@@ -11,7 +11,7 @@ from os import path
 
 
 
-width = 2400
+width = 4000
 height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
 
@@ -36,19 +36,19 @@ def brightnessPerceived ( img ):
 
 
 shutterSpeed = 1000
-maxShutterSpeed = 20000000 #20 seconds in ver low light 
+maxShutterSpeed = 25000000 #20 seconds in ver low light 
 ISO = 6
 maxISO = 800
 #raspiDefaults = "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong" + resolution
 
 #ISO doesn't seem to work with -ex night, so need to implement -dg value (1 > 8)
 DG = 1 #digital gain
-maxDG = 12
+maxDG = 10
 DGIncrement = .5
 
 
 AG = 1 #analogue gain
-maxAG = 2
+maxAG = 1.8
 AGIncrement = .1
 
 if path.isdir("auto_"+args.folderName) == True :
