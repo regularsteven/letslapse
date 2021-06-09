@@ -3,14 +3,16 @@ from os import system
 from fractions import Fraction
 #from picamera import PiCamera
 from PIL import Image, ExifTags, ImageStat
+import argparse
+#sleep(2)
+
+parser = argparse.ArgumentParser()
+parser.add_argument('--img', help='image filename to test')
+args = parser.parse_args()
 
 
-#camera = PiCamera(resolution=(1600, 1200), framerate=30)
-# Set ISO to the desired value
-#camera.iso = 800
-# Wait for the automatic gain control to settle
-sleep(2)
 
+testType = "static" #or "capture"
 
 def scoreHistogram(histogram) :
     thisScore = 0
@@ -18,13 +20,20 @@ def scoreHistogram(histogram) :
         thisScore = thisScore + histogram[0]
     return thisScore
 
+if testType == "static" :
+    img = Image.open(args.img)
+    r, g, b = img.split()
+    #print(r.histogram())
+    #print(g.histogram())
+    #print(b.histogram())
 
-
-# Now fix the values
-#camera.shutter_speed = camera.exposure_speed
-#camera.exposure_mode = 'off'
-
-#autoGains = str(camera.awb_gains)
+    rInt = scoreHistogram(r.histogram())
+    gInt = scoreHistogram(g.histogram())
+    bInt = scoreHistogram(b.histogram())
+    total = rInt + gInt + bInt
+    print("RGB Histogram Scores: "+str(scoreHistogram(r.histogram())) + ","+str(scoreHistogram(g.histogram()))+","+str(scoreHistogram(b.histogram())))
+    print("RGB Percentages: "+str((rInt / total)*100) + ","+str((gInt / total)*100)+","+str((bInt / total)*100))
+    exit()
 
 location = "insideKohub"
 #camera.awb_mode = 'off'
@@ -38,7 +47,6 @@ gainIncrement = .5
 counter = 0
 for bFor in range(6):
     blueGain = bFor* gainIncrement
-
     for rFor in range(6):
         counter = counter + 1
         redGain = rFor* gainIncrement
@@ -64,11 +72,6 @@ for bFor in range(6):
         r, g, b = img.split()
         #len(r.histogram())
         ### 256 ###
-
-
-        #print("Red: " + str(scoreHistogram(r.histogram())))
-        #print("Green: " + str(scoreHistogram(g.histogram())))
-        #print("Blue: " + str(scoreHistogram(b.histogram())))
 
         print("RGB Readings :"+str(scoreHistogram(r.histogram())) + ","+str(scoreHistogram(g.histogram()))+","+str(scoreHistogram(b.histogram())))
         
