@@ -16,9 +16,33 @@ testType = "static" #or "capture"
 
 def scoreHistogram(histogram) :
     thisScore = 0
-    for i in range(len(histogram)):
-        thisScore = thisScore + histogram[0]
+    for i in range(32): #this looks at the darker areas of the image - of 256 values, the bottom (lows) tends to demonstrate the color offsets
+        thisScore = thisScore + histogram[i]
+        
     return thisScore
+
+
+def testImage(r,g,b) : 
+    rInt = scoreHistogram(r.histogram())
+    gInt = scoreHistogram(g.histogram())
+    bInt = scoreHistogram(b.histogram())
+    total = rInt + gInt + bInt
+
+    
+    print("RGB Histogram Scores: "+str(rInt) + ","+str(gInt)+","+str(bInt))
+    
+
+    rPc = (rInt / total)*100
+    gPc = (gInt / total)*100
+    bPc = (bInt / total)*100
+
+    colorThreshold = 10
+    
+    if rPc < colorThreshold or gPc < colorThreshold or bPc < colorThreshold :
+        print("looking like we've got an image that's not quite right")
+    
+    return "RGB Percentages: "+str(rPc) + ","+str(gPc)+","+str(bPc)
+
 
 if testType == "static" :
     img = Image.open(args.img)
@@ -26,13 +50,9 @@ if testType == "static" :
     #print(r.histogram())
     #print(g.histogram())
     #print(b.histogram())
-
-    rInt = scoreHistogram(r.histogram())
-    gInt = scoreHistogram(g.histogram())
-    bInt = scoreHistogram(b.histogram())
-    total = rInt + gInt + bInt
-    print("RGB Histogram Scores: "+str(scoreHistogram(r.histogram())) + ","+str(scoreHistogram(g.histogram()))+","+str(scoreHistogram(b.histogram())))
-    print("RGB Percentages: "+str((rInt / total)*100) + ","+str((gInt / total)*100)+","+str((bInt / total)*100))
+    print(testImage(r,g,b))
+    
+    
     exit()
 
 location = "insideKohub"
