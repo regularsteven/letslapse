@@ -1,1 +1,1 @@
-nohup python3 timelapse-auto.py --folderName default --execMethod shell &
+nohup python3 timelapse-auto.py --folderName default &
