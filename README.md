@@ -6,8 +6,9 @@ raspberry pi timelaps rig
 2) add wpa_supplicant.conf and 'ssh' files to boot root directory
  > ssh pi@raspberry.local / password raspberry
  > in some instances, this will fail if previously ssh'd to a same name or IP
- > edit C:\Users\user-name\.ssh on windows / "ssh-keygen -R pi.local" on ubuntu
+ > edit C:\Users\user-name\.ssh on windows / "ssh-keygen -R raspberrypi.local" on ubuntu
  > remove the raspberrypi.local line, save and SSH again
+ > can find devices and IPs of devices on linux with nmap -sP 192.168.1.0/24
 3) update user password / system
  > passwd
  > sudo apt update
@@ -150,8 +151,8 @@ ffmpeg -r 24 -i small_%04d.jpg -vcodec libx264 -y -an video.mp4 -vf "pad=ceil(iw
 
 streaming idea 2: WORKING across network
 raspivid -t 0 -l -o tcp://192.168.30.76:3333 -w 640 -h 360
-raspivid -t 0 -l -o tcp://192.168.30.76:3333 -w 1280 -h 720
-vlc tcp/h264://192.168.30.76:3333
+raspivid -t 0 -l -o tcp://192.168.1.11:3333 -w 1280 -h 720
+vlc tcp/h264://192.168.1.11:3333
 OR
 tcp/h264://192.168.30.76:3333
 
@@ -161,6 +162,12 @@ IDEA
 1) display most recent low-res image as poster frame in html img src
     Javascript to refresh to the image every minute
 2) behind this image, previous images and load up slider for scrobble player
+
+
+3) Take photos in alternative sequence - compare results
+    > A - Manual Settings, as defined by Steve
+    > B - Full AUTO, as captured by sensor
+
 
 
 3b) 
@@ -267,3 +274,37 @@ raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 2
 
 raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -ag 2 -o toilet2_dg12_ag2_ss_20000000.jpg
   
+# issues with performance
+ > https://www.raspberrypi.org/blog/sd-card-speed-test/
+  > cd /usr/share/agnostics/
+  > sudo sh /usr/share/agnostics/sdtest.sh
+
+
+
+
+# SD Card Speed tests
+test 1 - 256GB Card
+Run 1
+seq-write;0;0;10244;20
+rand-4k-write;0;0;1730;432
+rand-4k-read;6674;1668;0;0
+Sequential write speed 10244 KB/sec (target 10000) - PASS
+Random write speed 432 IOPS (target 500) - FAIL
+Random read speed 1668 IOPS (target 1500) - PASS
+Run 2
+prepare-file;0;0;9999;19
+seq-write;0;0;9863;19
+rand-4k-write;0;0;1763;440
+rand-4k-read;6565;1641;0;0
+Sequential write speed 9863 KB/sec (target 10000) - FAIL
+Note that sequential write speed declines over time as a card is used - your card may require reformatting
+Random write speed 440 IOPS (target 500) - FAIL
+Random read speed 1641 IOPS (target 1500) - PASS
+Run 3
+prepare-file;0;0;10556;20
+seq-write;0;0;10366;20
+rand-4k-write;0;0;1748;437
+rand-4k-read;6459;1614;0;0
+Sequential write speed 10366 KB/sec (target 10000) - PASS
+Random write speed 437 IOPS (target 500) - FAIL
+Random read speed 1614 IOPS (target 1500) - PASS

@@ -171,4 +171,4 @@ if args.makeMP4 == "yes" :
     if thisFolderIndex != False :
         folderStrOutput = "_"+str(thisFolderIndex)
     system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
-    #fmpeg -i image%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../auto_hidden_beach_blendedVideo_90seconds.mp4
+    #fmpeg -i blendedImage%d.jpg -b:v 500000k -vcodec mpeg4 -r 25 ../../70_auto_southcliff_90seconds.mp4
