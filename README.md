@@ -38,6 +38,18 @@ raspberry pi timelaps rig
  > add sudo python /home/pi/myscript.py at the bottom of sudo nano /etc/profile
 
 9) Install SAMBA for simple filesystem access
+    sudo apt-get install samba samba-common-bin 
+    # sudo apt-get remove samba samba-common-bin
+    sudo nano /etc/samba/smb.conf
+    * add to the bottom:
+            [pimylifeupshare]
+        path = /home/pi/shared
+        writeable=Yes
+        create mask=0777
+        directory mask=0777
+        public=no
+    sudo smbpasswd -a pi
+    sudo systemctl restart smbd 
 
 10) Mounting for remote access of files with another pi
  > sudo mkdir /media/share 
@@ -69,6 +81,32 @@ raspberry pi timelaps rig
 
    sudo crontab -e
    @reboot sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ 
+
+# remove bluetooth
+sudo pico /boot/config.txt
+
+Add below, save and close the file Permalink
+#Disable Bluetooth
+dtoverlay=disable-bt
+
+#or remove everything
+sudo apt-get purge bluez -y
+sudo apt-get autoremove -y
+
+# kill LED light on zero
+
+echo none | sudo tee /sys/class/leds/led0/trigger
+echo 1 | sudo tee /sys/class/leds/led0/brightness
+
+Add the following sudo /boot/config.txt
+dtparam=act_led_trigger=none
+dtparam=act_led_activelow=on
+
+
+#disable hdmi
+/usr/bin/tvservice -o
+sudo pico /etc/rc.local
+ > add /usr/bin/tvservice -o
 
 
 # running app in python
@@ -150,11 +188,15 @@ ffmpeg -framerate 25 -pattern_type glob -i "*.jpg" -c:v libx264 -crf 0 output.mp
 ffmpeg -r 24 -i small_%04d.jpg -vcodec libx264 -y -an video.mp4 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2"
 
 streaming idea 2: WORKING across network
-raspivid -t 0 -l -o tcp://192.168.30.76:3333 -w 640 -h 360
+raspivid -t 0 -l -o tcp://192.168.1.11:3333 -w 640 -h 360
 raspivid -t 0 -l -o tcp://192.168.1.11:3333 -w 1280 -h 720
+raspivid -t 0 -l -o tcp://pi.local:3333 -w 1280 -h 720
 vlc tcp/h264://192.168.1.11:3333
 OR
 tcp/h264://192.168.30.76:3333
+
+
+
 
 
 IDEA
@@ -191,6 +233,8 @@ python3 -m pip install --upgrade imutils
 python3 -m pip3 install opencv-contrib-python
 python3 -m pip install opencv-python - this worked, not contrib version
 python3 -m pip install numpy
+python3 -m pip install picamera
+
 
 
 # batching images for fake long exposures
