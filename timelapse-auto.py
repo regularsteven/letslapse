@@ -1,4 +1,4 @@
-noCameraTesting = True
+noCameraTesting = False
 
 from os import system
 from PIL import Image, ExifTags, ImageStat
