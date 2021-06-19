@@ -91,8 +91,8 @@ else :
     lineCount = 0
     # Strips the newline character
     preResetCount = int(Lines[0].strip())
-    folderName = (Lines[2].strip())
-
+    folderName = (Lines[1].strip())
+    shutterSpeed = int(Lines[2].strip())
     DG = int(Lines[3].strip())
     AG = int(Lines[4].strip())
     #for line in Lines:
