@@ -26,11 +26,15 @@ awbgSettings = "3.484375,1.44921875"
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
 parser.add_argument('--imageCount', help='number of images')
+parser.add_argument('--startup', help='flag for startup on boot, from reboot.sh')
 
 #example use:
 # python3 timelapse-auto --folderName demo
 
 args = parser.parse_args()
+
+
+
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG):
@@ -41,6 +45,12 @@ print(path.isfile("progress.txt"))
 
 preResetCount = 0 #this is the value that will be overriden in the even there was a crash or bad exit / restart / battery change
 
+if args.startup == None:
+    print("normal startup")
+else :
+    print("starting up from reboot.sh script, should occur on powerup")
+    system("touch rebootbreadcrumb.txt")
+    exit()
 
 
 shutterSpeed = 1000
@@ -60,11 +70,19 @@ maxAG = 1.8
 AGIncrement = .1
 
 
+folderName = "default"
+if args.folderName == None:
+    print("No folder name specified for project")
+else : 
+    folderName = args.folderName
+    print("normal operation")
+exit()
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, args.folderName, shutterSpeed, DG, AG)
-    print("no progress file, making one... ")
+    storeProgress (0, folderName, shutterSpeed, DG, AG)
+    print("New shoot, no progress file, making one... ")
+    
 else :
     print("progress.txt exists - need to get the captureCount from the previous session")
     print("START values:")
@@ -74,12 +92,13 @@ else :
     # Strips the newline character
     preResetCount = int(Lines[0].strip())
     folderName = (Lines[2].strip())
+
     DG = int(Lines[3].strip())
     AG = int(Lines[4].strip())
     #for line in Lines:
         #lineCount += 1
         #print((line.strip()))
-    print("END values")
+    #print("END values")
 #exit()
 
 
@@ -93,10 +112,10 @@ def brightnessPerceived ( img ):
     return math.sqrt( 0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2) )
 
 
-if path.isdir("auto_"+args.folderName) == True :
+if path.isdir("auto_"+folderName) == True :
     print("directory already created")
 else :
-    system("mkdir auto_"+args.folderName)
+    system("mkdir auto_"+folderName)
 
 for i in range(80000):
     actualIndex = i + preResetCount
@@ -105,11 +124,11 @@ for i in range(80000):
     #print("taking a photo")
     raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
 
-    if path.isdir("auto_"+args.folderName+"/group"+str(int(actualIndex/1000))) == False :
-        system("mkdir auto_"+args.folderName+"/group"+str(int(actualIndex/1000)))
+    if path.isdir("auto_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
+        system("mkdir auto_"+folderName+"/group"+str(int(actualIndex/1000)))
         print("need to create group folder")
 
-    filename = "auto_"+args.folderName+"/group"+str(int(actualIndex/1000))+"/image"+str(actualIndex)+".jpg"
+    filename = "auto_"+folderName+"/group"+str(int(actualIndex/1000))+"/image"+str(actualIndex)+".jpg"
     
 
     fileOutput = ""
@@ -126,7 +145,7 @@ for i in range(80000):
         system(raspiCommand)
 
     
-    storeProgress (actualIndex, args.folderName, shutterSpeed, DG, AG)
+    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG)
 
     if noCameraTesting == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")

@@ -8,7 +8,7 @@ raspberry pi timelaps rig
  > in some instances, this will fail if previously ssh'd to a same name or IP
  > edit C:\Users\user-name\.ssh on windows / "ssh-keygen -R raspberrypi.local" on ubuntu
  > remove the raspberrypi.local line, save and SSH again
- > can find devices and IPs of devices on linux with nmap -sP 192.168.1.0/24
+ > can find devices on network across IPs of devices on linux with nmap -sP 192.168.1.0/24
 3) update user password / system
  > passwd
  > sudo apt update
@@ -82,6 +82,9 @@ raspberry pi timelaps rig
    sudo crontab -e
    @reboot sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ 
 
+
+## POWER REDUCTION
+
 # remove bluetooth
 sudo pico /boot/config.txt
 
@@ -98,7 +101,7 @@ sudo apt-get autoremove -y
 echo none | sudo tee /sys/class/leds/led0/trigger
 echo 1 | sudo tee /sys/class/leds/led0/brightness
 
-Add the following sudo /boot/config.txt
+Add the following sudo pico /boot/config.txt
 dtparam=act_led_trigger=none
 dtparam=act_led_activelow=on
 
