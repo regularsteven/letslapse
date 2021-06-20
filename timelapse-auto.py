@@ -76,7 +76,7 @@ if args.folderName == None:
 else : 
     folderName = args.folderName
     print("normal operation")
-exit()
+#exit()
 
 
 if path.isfile("progress.txt") == False:
