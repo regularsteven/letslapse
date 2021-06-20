@@ -23,7 +23,7 @@ resolution = " -w "+str(width)+" -h "+str(height)
 
 
 awbgSettings = "3.484375,1.44921875" #for natural light, great in daylight and moonlight - too yellow in street artificial light
-
+#awbgSettings = "2.0352,2.8945" #for street lights
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
@@ -94,7 +94,7 @@ else :
     # Strips the newline character
     preResetCount = int(Lines[0].strip())
     folderName = (Lines[1].strip())
-    shutterSpeed = int(Lines[2].strip())
+    shutterSpeed = int(float(Lines[2].strip()))
     DG = int(float(Lines[3].strip()))
     AG = int(float(Lines[4].strip()))
     #for line in Lines:
