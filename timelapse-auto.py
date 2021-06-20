@@ -21,7 +21,9 @@ width = 4056
 height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
 
-awbgSettings = "3.484375,1.44921875"
+
+awbgSettings = "3.484375,1.44921875" #for natural light, great in daylight and moonlight - too yellow in street artificial light
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
@@ -38,7 +40,7 @@ args = parser.parse_args()
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG):
-    system("echo '"+str(index)+"\n"+folder+"\n"+str(shutterSpeed)+"\n"+str(DG)+"\n"+str(AG)+"' >progress.txt")
+    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"' >progress.txt")
 
 
 print(path.isfile("progress.txt"))
@@ -61,12 +63,12 @@ maxISO = 800
 
 #ISO doesn't seem to work with -ex night, so need to implement -dg value (1 > 8)
 DG = 1 #digital gain
-maxDG = 8
-DGIncrement = .5
+maxDG = 4
+DGIncrement = .25
 
 
 AG = 1 #analogue gain
-maxAG = 1.8
+maxAG = 3
 AGIncrement = .1
 
 
@@ -93,8 +95,8 @@ else :
     preResetCount = int(Lines[0].strip())
     folderName = (Lines[1].strip())
     shutterSpeed = int(Lines[2].strip())
-    DG = int(Lines[3].strip())
-    AG = int(Lines[4].strip())
+    DG = int(float(Lines[3].strip()))
+    AG = int(float(Lines[4].strip()))
     #for line in Lines:
         #lineCount += 1
         #print((line.strip()))
