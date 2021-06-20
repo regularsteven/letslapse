@@ -143,6 +143,8 @@ for i in range(80000):
         print(raspiCommand)
     else :
         system(raspiCommand)
+        print(raspiCommand)
+    
 
     
     storeProgress (actualIndex, folderName, shutterSpeed, DG, AG)
