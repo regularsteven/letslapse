@@ -54,6 +54,8 @@ system("rm blended/blendedImage*")
 
 #### Access all JPG files in directory
 allfiles=os.listdir(os.getcwd())
+
+
 print("allfiles")
 #print(allfiles)
 
@@ -130,15 +132,21 @@ else :
     
 
     #check that all expected files are in place
-    for a in range(int(fullImageSet)-10):
+    print("fullImageSet - number of files to process: " + str(fullImageSet))
+    foundMissingFiles = False
+    for a in range(int(fullImageSet)-17):
         filename = 'image'+str(a)+'.jpg'
         if path.isfile(filename) == False:
-            print(filename + " DOES NOT EXIST - aborting")
-            exit()
+            foundMissingFiles = True 
+            print(filename + " DOES NOT EXIST")
+            
+    if foundMissingFiles == True :
+        print("based on missing files, aborting process")
+        exit()
 
     timerangeGroupIndex = 0
     imlist=[]
-    for a in range(int(fullImageSet)-10):
+    for a in range(int(fullImageSet)-17):
         if thisFolderIndex == False :
             filename = 'image'+str(a)+'.jpg'
         if thisFolderIndex != False :

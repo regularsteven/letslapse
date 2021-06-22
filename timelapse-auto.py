@@ -13,17 +13,17 @@ import os.path
 from os import path
 
 
-
-
-
-
 width = 4056
 height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
 
 
 awbgSettings = "3.484375,1.44921875" #for natural light, great in daylight and moonlight - too yellow in street artificial light
-#awbgSettings = "2.0352,2.8945" #for street lights
+    #at a starting point, set the red and blue values to the above, but at the end of every photo, do a test to see how far we are off the white balance
+    #in a similar way to exposure, make minor adjustments - but only if there's two or more than 3 white balance readings that are out of range of the default
+    #white balance settings
+#awbgSettings = "2.0352,2.8945" #for street lights 
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
@@ -34,9 +34,6 @@ parser.add_argument('--startup', help='flag for startup on boot, from reboot.sh'
 # python3 timelapse-auto --folderName demo
 
 args = parser.parse_args()
-
-
-
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG):
@@ -70,6 +67,9 @@ DGIncrement = .25
 AG = 1 #analogue gain
 maxAG = 3
 AGIncrement = .1
+
+
+
 
 
 folderName = "default"
@@ -172,6 +172,7 @@ for i in range(80000):
         highBrightness = brightnessTarget + brightnessRange #160
         
         #brightnessTargetAccuracy = 100 #if the light is 
+        #start of brightness checks - first if it's too low, then if too high
         if brightnessScore < lowBrightness :
             print("low brightness")
             brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
@@ -222,9 +223,26 @@ for i in range(80000):
                 shutterSpeed = 100
                 print("too much light, hard coding shutter")
             print("new shutterspeed: " + str(shutterSpeed))
+        
+        #END of brightness checks - first if it's too low, then if too high
 
-
-    #if noCameraTesting != True:
-    sleep(2)
+    #here we test the auto-white balance using the camera auto settings
+    #the reliablity of this isnt great so at first we just log it to compare how close it is from the pre-defined awbg settings above
+    #in the event the readings of the auto values are off for 3 photos in a row, we can be confident that there's a real changed required
+    #note: ideally we would just analyse the captured image and measure how far off the blues and reds are - this would allow us to amplify or reduce the 
+    # reds and blues ()
+    camera = PiCamera(resolution=(1280, 720), framerate=30)
+    camera.iso = 400
+    camera.meter_mode = 'backlight'
+    sleep(1)
+    camera.shutter_speed = camera.exposure_speed
+    camera.exposure_mode = 'off'
+    g = camera.awb_gains
+    camera.awb_mode = 'off'
+    camera.awb_gains = g
+    print("awbgSettings was: "+ awbgSettings)
+    awbgSettings = str(float(g[0])) + "," + str(float(g[1]))
+    print("awbgSettings was: "+ awbgSettings)
+    #sleep(2)
 
 print("end")
