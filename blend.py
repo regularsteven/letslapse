@@ -29,19 +29,15 @@ if thisDir[thisDirLen-2].isnumeric() :
     thisFolderIndex = int(thisDir[thisDirLen-2] + thisDir[thisDirLen-1])
 
 
-
-
-
 #this will allow for the first file in any folder grouped by 1000, as per capture
 #thisFolderIndex = re.findall(r'\d+', cwd)[1]
 
 print("thisFolderIndex: "+ str(thisFolderIndex))
 
 
-
 # ****** EXAMPLE USE ***** # 
 #execute the following in the folder that requires the conversion
-#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 90 --groupByType seconds --makeMP4 yes
+#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 45 --groupByType seconds --makeMP4 yes
 #python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 10 --groupByType images --makeMP4 yes
 
 #windows - run from directory in with images
@@ -132,6 +128,14 @@ if groupByType == "images" :
 else :
     print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
     
+
+    #check that all expected files are in place
+    for a in range(int(fullImageSet)-10):
+        filename = 'image'+str(a)+'.jpg'
+        if path.isfile(filename) == False:
+            print(filename + " DOES NOT EXIST - aborting")
+            exit()
+
     timerangeGroupIndex = 0
     imlist=[]
     for a in range(int(fullImageSet)-10):
