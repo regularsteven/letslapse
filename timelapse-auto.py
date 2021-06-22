@@ -23,6 +23,7 @@ awbgSettings = "3.484375,1.44921875" #for natural light, great in daylight and m
     #in a similar way to exposure, make minor adjustments - but only if there's two or more than 3 white balance readings that are out of range of the default
     #white balance settings
 #awbgSettings = "2.0352,2.8945" #for street lights 
+#awbgSettings = "3.73828125,1.26951" #for cloud cover at night
 
 
 parser = argparse.ArgumentParser()
@@ -233,7 +234,7 @@ for i in range(80000):
     # reds and blues ()
     camera = PiCamera(resolution=(1280, 720), framerate=30)
     camera.iso = 400
-    camera.meter_mode = 'backlight'
+    camera.meter_mode = 'backlit'
     sleep(1)
     camera.shutter_speed = camera.exposure_speed
     camera.exposure_mode = 'off'
