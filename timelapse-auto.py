@@ -243,7 +243,9 @@ for i in range(80000):
     camera.awb_gains = g
     print("awbgSettings was: "+ awbgSettings)
     awbgSettings = str(float(g[0])) + "," + str(float(g[1]))
-    print("awbgSettings was: "+ awbgSettings)
+    print("awbgSettings now: "+ awbgSettings)
+    print("closing camera")
+    camera.close()
     #sleep(2)
 
 print("end")
