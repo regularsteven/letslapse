@@ -13,4 +13,4 @@ camera.exposure_mode = 'off'
 g = camera.awb_gains
 camera.awb_mode = 'off'
 camera.awb_gains = g
-print("Captured AWB at %r", g)
+print("Captured AWB at:", g)

@@ -274,6 +274,7 @@ for i in range(80000):
     #note: ideally we would just analyse the captured image and measure how far off the blues and reds are - this would allow us to amplify or reduce the 
     # reds and blues ()
     print("awbgSettings was: "+ awbgSettings)
+<<<<<<< HEAD
 
     if noCameraTesting == True:
         print("faking white balance changes, as we don't have the camera available")
@@ -297,5 +298,12 @@ for i in range(80000):
     manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
     print("awbgSettings is: "+ awbgSettings)
     
+=======
+    awbgSettings = str(float(g[0])) + "," + str(float(g[1]))
+    print("awbgSettings now: "+ awbgSettings)
+    print("closing camera")
+    camera.close()
+    #sleep(2)
+>>>>>>> 6af707379001a3129676665f00900b8dcf45c032
 
 print("end")

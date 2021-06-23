@@ -134,7 +134,7 @@ else :
     #check that all expected files are in place
     print("fullImageSet - number of files to process: " + str(fullImageSet))
     foundMissingFiles = False
-    for a in range(int(fullImageSet)-17):
+    for a in range(int(fullImageSet)-3): #-1 is based on the blended folder being in the folder - we want to exclude this
         filename = 'image'+str(a)+'.jpg'
         if path.isfile(filename) == False:
             foundMissingFiles = True 
@@ -146,7 +146,7 @@ else :
 
     timerangeGroupIndex = 0
     imlist=[]
-    for a in range(int(fullImageSet)-17):
+    for a in range(int(fullImageSet)-3): #-1 is based on the blended folder being in the folder - we want to exclude this
         if thisFolderIndex == False :
             filename = 'image'+str(a)+'.jpg'
         if thisFolderIndex != False :
