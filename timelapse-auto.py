@@ -18,7 +18,10 @@ height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
 
 
-awbgSettings = "3.484375,1.44921875" #for natural light, great in daylight and moonlight - too yellow in street artificial light
+blueGains = 3.484375
+redGains = 1.44921875
+
+awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in daylight and moonlight - too yellow in street artificial light
     #at a starting point, set the red and blue values to the above, but at the end of every photo, do a test to see how far we are off the white balance
     #in a similar way to exposure, make minor adjustments - but only if there's two or more than 3 white balance readings that are out of range of the default
     #white balance settings
@@ -115,6 +118,45 @@ def brightnessPerceived ( img ):
     return math.sqrt( 0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2) )
 
 
+
+gainsTolerance = .2 #this is how much difference can exist between gains before we change the gains settings 
+
+redGainsChangeOfSignificance = 1
+blueGainsChangeOfSignificance = 1
+
+def manageColorGainChanges (blueGains, redGains, measuredBlueGains, measuredRedGains) :
+    global redGainsChangeOfSignificance,blueGainsChangeOfSignificance,awbgSettings
+    print("manageColorGainChanges function: " + str(measuredRedGains) +" against " + str(redGains+gainsTolerance))
+
+    if measuredRedGains > (redGains+gainsTolerance) or  measuredRedGains < (redGains-gainsTolerance) : 
+        print("measured red gains outside range of current gains" + str(redGainsChangeOfSignificance))
+        redGainsChangeOfSignificance = redGainsChangeOfSignificance + 1
+    else :
+        print("red gains in range, no need to change")
+        redGainsChangeOfSignificance = 0
+
+    if measuredBlueGains > (blueGains+gainsTolerance) or  measuredBlueGains < (blueGains-gainsTolerance) : 
+        print("measured BLUE gains outside range of current gains")
+        blueGainsChangeOfSignificance = blueGainsChangeOfSignificance + 1
+    else :
+        print("blue gains in range, no need to change")
+        blueGainsChangeOfSignificance = 0
+    
+
+    if redGainsChangeOfSignificance > 3 :
+        print("red gains have been reading outside of range for 3 photos, time to change")
+        #if redGains were 2, and measuredRedGains are 3, then we need to gradually increase red gains until they are correct / as per measured values
+        # redGains (was 2) = 2 + ((3-2)/3)  - i.e. becomes 2.333
+        redGains = redGains + ((measuredRedGains - redGains)/2)
+
+    
+    if blueGainsChangeOfSignificance > 3 :
+        print("blue gains have been reading outside of range for 3 photos, time to change")
+        blueGains = blueGains + ((measuredBlueGains - blueGains)/2)
+
+    awbgSettings = str(blueGains) + "," + str(redGains)
+    print("awbgSettings inside manageColorGainChanges: "+awbgSettings)
+
 if path.isdir("auto_"+folderName) == True :
     print("directory already created")
 else :
@@ -140,7 +182,6 @@ for i in range(80000):
 
 
     raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
-    print("ShutterSpeed val:" + str(shutterSpeed))
     
     if noCameraTesting == True:
         print(raspiCommand)
@@ -232,18 +273,29 @@ for i in range(80000):
     #in the event the readings of the auto values are off for 3 photos in a row, we can be confident that there's a real changed required
     #note: ideally we would just analyse the captured image and measure how far off the blues and reds are - this would allow us to amplify or reduce the 
     # reds and blues ()
-    camera = PiCamera(resolution=(1280, 720), framerate=30)
-    camera.iso = 400
-    camera.meter_mode = 'backlit'
-    sleep(1)
-    camera.shutter_speed = camera.exposure_speed
-    camera.exposure_mode = 'off'
-    g = camera.awb_gains
-    camera.awb_mode = 'off'
-    camera.awb_gains = g
     print("awbgSettings was: "+ awbgSettings)
-    awbgSettings = str(float(g[0])) + "," + str(float(g[1]))
-    print("awbgSettings was: "+ awbgSettings)
-    #sleep(2)
+
+    if noCameraTesting == True:
+        print("faking white balance changes, as we don't have the camera available")
+        measuredBlueGains = 1.91015625
+        measuredRedGains = 3.02734375
+        sleep(5)
+    else :
+        camera = PiCamera(resolution=(1280, 720), framerate=30)
+        camera.iso = 400
+        camera.meter_mode = 'backlit'
+        sleep(1)
+        camera.shutter_speed = camera.exposure_speed
+        camera.exposure_mode = 'off'
+        g = camera.awb_gains
+        camera.awb_mode = 'off'
+        camera.awb_gains = g
+        measuredBlueGains = float(g[0])
+        measuredRedGains = float(g[1])
+        
+
+    manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
+    print("awbgSettings is: "+ awbgSettings)
+    
 
 print("end")
