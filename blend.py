@@ -43,21 +43,38 @@ print("thisFolderIndex: "+ str(thisFolderIndex))
 #windows - run from directory in with images
 #py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
 
-
-if path.isdir('blended') == True :
-    print("directory already created")
-else :
-    system("mkdir blended")
-
-system("rm blended/blendedImage*")
-#system("rm blendedImage*")
-
 #### Access all JPG files in directory
 allfiles=os.listdir(os.getcwd())
 
 
 print("allfiles")
 #print(allfiles)
+
+
+groupByType = args.groupByType #images or seconds
+    #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
+    #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
+
+groupBy = args.groupBy
+
+imagesToBatch = int(groupBy)
+fullImageSet = len(allfiles)
+#fullImageSet = 3
+startingTimestamp = 0
+
+
+
+
+
+if path.isdir("blended"+str(groupBy)+"_"+str(groupByType)) == True :
+    print("directory already created")
+else :
+    system("mkdir blended"+str(groupBy)+"_"+str(groupByType))
+
+system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/blendedImage*")
+#system("rm blendedImage*")
+
+
 
 #imlist=[filename for filename in allfiles if  filename[-4:] in [".jpg",".JPG"]]
 
@@ -70,16 +87,6 @@ def getMeta ( filename ):
     #dawnRamp = datetime.fromisoformat(d)
     return d.timestamp()
     
-
-
-groupByType = args.groupByType #images or seconds
-    #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
-    #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
-
-imagesToBatch = int(args.groupBy)
-fullImageSet = len(allfiles)
-#fullImageSet = 3
-startingTimestamp = 0
 
 
 
@@ -103,7 +110,7 @@ def blendGroupToOne(imlist, sequenceNo) :
 
     #### Generate, save and preview final image
     out=Image.fromarray(arr,mode="RGB")
-    fileName = "blended/blendedImage"+str(sequenceNo)+".jpg"
+    fileName = "blended"+str(groupBy)+"_"+str(groupByType)+"/blendedImage"+str(sequenceNo)+".jpg"
     print(fileName)
     out.save(fileName)
     #out.show()
@@ -132,18 +139,42 @@ else :
     
 
     #check that all expected files are in place
-    print("fullImageSet - number of files to process: " + str(fullImageSet))
+    #print("Checking to see if all expected images are here - testing for " + str(fullImageSet))
+    #print("Checking meta data to find the biggest gap between photos")
     foundMissingFiles = False
+    biggestGapBetweenPhotos = 0
+    lastPhotoTimestamp = 0
     for a in range(int(fullImageSet)-3): #-1 is based on the blended folder being in the folder - we want to exclude this
-        filename = 'image'+str(a)+'.jpg'
+        if thisFolderIndex == False :
+            filename = 'image'+str(a)+'.jpg'
+        if thisFolderIndex != False :
+            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+
         if path.isfile(filename) == False:
             foundMissingFiles = True 
             print(filename + " DOES NOT EXIST")
-            
+        #option to check all files in folder and find the greatest gap between them
+        #when shooting from day to night, the darkest of shots, this should be 59 seconds
+        #this isn't required, but could become useful if we need to merge all and maintain time-based even play back that matches the slowest / biggest shots 
+        #else : 
+
+        #    thisPhotoTimestamp = getMeta ( filename )
+        #    if a<1 :
+        #        lastPhotoTimestamp = thisPhotoTimestamp
+        #    else:
+        #        
+        #        gapBetweenThisAndLastPhoto = thisPhotoTimestamp - lastPhotoTimestamp
+        #        if gapBetweenThisAndLastPhoto > biggestGapBetweenPhotos :
+        #            biggestGapBetweenPhotos = gapBetweenThisAndLastPhoto
+        #            print(biggestGapBetweenPhotos)
+        #        
+        #        lastPhotoTimestamp = thisPhotoTimestamp
+
     if foundMissingFiles == True :
         print("based on missing files, aborting process")
         exit()
 
+    
     timerangeGroupIndex = 0
     imlist=[]
     for a in range(int(fullImageSet)-3): #-1 is based on the blended folder being in the folder - we want to exclude this
@@ -176,7 +207,7 @@ else :
 
 
 if args.makeMP4 == "yes" :
-    inputFile = "blended/blendedImage"
+    inputFile = "blended"+str(groupBy)+"_"+str(groupByType)+"/blendedImage"
     if imagesToBatch == 1:
         inputFile = "image"
     folderStrOutput = ""
