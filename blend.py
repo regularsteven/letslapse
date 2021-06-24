@@ -1,6 +1,7 @@
 import os, numpy, PIL
 import re
 from PIL import Image, ExifTags, ImageStat
+import piexif
 from os import system
 import time
 import argparse
@@ -20,6 +21,11 @@ args = parser.parse_args()
 cwd = os.getcwd()
 thisDir = cwd.split("/")[len(cwd.split("/"))-1]
 thisDirLen = len(thisDir)
+
+#check to see the number of folders inside this working directory - this can include blended output folders, which we want to exclude
+#from our total file length number below
+folderCount = (len(next(os.walk('.'))[1]))
+
 
 thisFolderIndex = False
 if thisDir[thisDirLen-1].isnumeric() :
@@ -71,8 +77,8 @@ if path.isdir("blended"+str(groupBy)+"_"+str(groupByType)) == True :
 else :
     system("mkdir blended"+str(groupBy)+"_"+str(groupByType))
 
-system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/blendedImage*")
-#system("rm blendedImage*")
+system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
+#system("rm image*")
 
 
 
@@ -98,6 +104,11 @@ def blendGroupToOne(imlist, sequenceNo) :
     #### Create a numpy array of floats to store the average (assume RGB images)
     arr=numpy.zeros((h,w,3),numpy.float)
 
+    # load exif data from the first image parsed in - we'll use this to put in the output image
+    im = Image.open( imlist[0])
+    exif_dict = piexif.load(im.info["exif"])
+    exif_bytes = piexif.dump(exif_dict)
+
     #### Build up average pixel intensities, casting each image as an array of floats
     for im in imlist:
         thisImg = Image.open(im)
@@ -110,9 +121,9 @@ def blendGroupToOne(imlist, sequenceNo) :
 
     #### Generate, save and preview final image
     out=Image.fromarray(arr,mode="RGB")
-    fileName = "blended"+str(groupBy)+"_"+str(groupByType)+"/blendedImage"+str(sequenceNo)+".jpg"
+    fileName = "blended"+str(groupBy)+"_"+str(groupByType)+"/image"+str(sequenceNo)+".jpg"
     print(fileName)
-    out.save(fileName)
+    out.save(fileName, exif=exif_bytes, quality=100, subsampling=0)
     #out.show()
 
 if groupByType == "images" :
@@ -138,13 +149,15 @@ else :
     print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
     
 
+    
+
     #check that all expected files are in place
     #print("Checking to see if all expected images are here - testing for " + str(fullImageSet))
     #print("Checking meta data to find the biggest gap between photos")
     foundMissingFiles = False
     biggestGapBetweenPhotos = 0
     lastPhotoTimestamp = 0
-    for a in range(int(fullImageSet)-3): #-1 is based on the blended folder being in the folder - we want to exclude this
+    for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
         if thisFolderIndex == False :
             filename = 'image'+str(a)+'.jpg'
         if thisFolderIndex != False :
@@ -177,7 +190,7 @@ else :
     
     timerangeGroupIndex = 0
     imlist=[]
-    for a in range(int(fullImageSet)-3): #-1 is based on the blended folder being in the folder - we want to exclude this
+    for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
         if thisFolderIndex == False :
             filename = 'image'+str(a)+'.jpg'
         if thisFolderIndex != False :
@@ -207,11 +220,11 @@ else :
 
 
 if args.makeMP4 == "yes" :
-    inputFile = "blended"+str(groupBy)+"_"+str(groupByType)+"/blendedImage"
+    inputFile = "blended"+str(groupBy)+"_"+str(groupByType)+"/image"
     if imagesToBatch == 1:
         inputFile = "image"
     folderStrOutput = ""
     if thisFolderIndex != False :
         folderStrOutput = "_"+str(thisFolderIndex)
     system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
-    #fmpeg -i blendedImage%d.jpg -b:v 500000k -vcodec mpeg4 -r 25 ../../70_auto_southcliff_90seconds.mp4
+    #fmpeg -i image%d.jpg -b:v 500000k -vcodec mpeg4 -r 25 ../../70_auto_southcliff_90seconds.mp4
