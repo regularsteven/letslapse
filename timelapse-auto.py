@@ -26,7 +26,7 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
     #in a similar way to exposure, make minor adjustments - but only if there's two or more than 3 white balance readings that are out of range of the default
     #white balance settings
 #awbgSettings = "2.0352,2.8945" #for street lights 
-#awbgSettings = "3.73828125,1.26951" #for cloud cover at night
+awbgSettings = "3.73828125,1.26951" #for cloud cover at night
 
 
 parser = argparse.ArgumentParser()
@@ -55,6 +55,8 @@ else :
     system("touch rebootbreadcrumb.txt")
     exit()
 
+
+updateGainsWithLivePreview = False
 
 shutterSpeed = 1000
 maxShutterSpeed = 25000000 #20 seconds in ver low light 
@@ -274,28 +276,30 @@ for i in range(80000):
     #note: ideally we would just analyse the captured image and measure how far off the blues and reds are - this would allow us to amplify or reduce the 
     # reds and blues ()
     print("awbgSettings was: "+ awbgSettings)
-
-    if noCameraTesting == True:
-        print("faking white balance changes, as we don't have the camera available")
-        measuredBlueGains = 1.91015625
-        measuredRedGains = 3.02734375
-        sleep(5)
-    else :
-        camera = PiCamera(resolution=(1280, 720), framerate=30)
-        camera.iso = 400
-        camera.meter_mode = 'backlit'
-        sleep(1)
-        camera.shutter_speed = camera.exposure_speed
-        camera.exposure_mode = 'off'
-        g = camera.awb_gains
-        camera.awb_mode = 'off'
-        camera.awb_gains = g
-        measuredBlueGains = float(g[0])
-        measuredRedGains = float(g[1])
-        
-    camera.close()
-    manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
-    print("awbgSettings is: "+ awbgSettings)
     
+
+    if updateGainsWithLivePreview = True :
+        if noCameraTesting == True:
+            print("faking white balance changes, as we don't have the camera available")
+            measuredBlueGains = 1.91015625
+            measuredRedGains = 3.02734375
+            sleep(5)
+        else :
+            camera = PiCamera(resolution=(1280, 720), framerate=30)
+            camera.iso = 400
+            camera.meter_mode = 'backlit'
+            sleep(1)
+            camera.shutter_speed = camera.exposure_speed
+            camera.exposure_mode = 'off'
+            g = camera.awb_gains
+            camera.awb_mode = 'off'
+            camera.awb_gains = g
+            measuredBlueGains = float(g[0])
+            measuredRedGains = float(g[1])
+            
+            camera.close()
+    #manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
+    print("awbgSettings is: "+ awbgSettings)
+    sleep(2)
 
 print("end")
