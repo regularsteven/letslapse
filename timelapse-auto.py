@@ -278,7 +278,7 @@ for i in range(80000):
     print("awbgSettings was: "+ awbgSettings)
     
 
-    if updateGainsWithLivePreview = True :
+    if updateGainsWithLivePreview == True :
         if noCameraTesting == True:
             print("faking white balance changes, as we don't have the camera available")
             measuredBlueGains = 1.91015625
