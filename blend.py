@@ -32,6 +32,12 @@ from os import path
 #py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
 
 
+#standard way to run this would be put all requred images inside a folder, then run:
+# python3 /home/steven/Documents/dev/pitime/blend.py --test full
+# from here, get the number - say it's 62 seconds. Then merge them all based on this timeframe
+# python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 62 --groupByType seconds --makeMP4 yes
+
+
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds')
@@ -122,6 +128,7 @@ def testFiles(testType) :
                     gapBetweenThisAndLastPhoto = thisPhotoTimestamp - lastPhotoTimestamp
                     if gapBetweenThisAndLastPhoto > biggestGapBetweenPhotos :
                         biggestGapBetweenPhotos = gapBetweenThisAndLastPhoto
+                        print("In Progress - new big gap between images found: " + str(biggestGapBetweenPhotos))
                         
                     
                     lastPhotoTimestamp = thisPhotoTimestamp
