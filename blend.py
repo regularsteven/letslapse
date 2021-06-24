@@ -10,10 +10,36 @@ import os.path
 from os import path
 
 
+
+
+
+# ****** EXAMPLE USE ***** # 
+#execute the following in the folder that requires the conversion
+
+# *************** TEST FOLDER TO ENSURE WERE READY **********************
+#python3 /home/steven/Documents/dev/pitime/blend.py --test full OR --test basic
+  # this will evaluate the folder to check all images are in place in basic (which also happens in the actual blend scripts)
+  # but will also check the meta-data of each image in FULL test to report the biggest gap between photos
+  # this is useful for overnight shoots where the compression of time is required for smooth playback
+
+# *************** Create image sequence based on images being GROUPED BY TIME **********************
+#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 45 --groupByType seconds --makeMP4 yes
+
+# *************** Create image sequence based on images being GROUPED BY IMAGE NUMBER **********************
+#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 10 --groupByType images --makeMP4 yes
+
+#windows - run from directory in with images
+#py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
+
+
+
 parser = argparse.ArgumentParser()
 parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds')
 parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy')
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy')
+
+parser.add_argument('--test', help='tests the folder satructure to ensure all images are in place, returns the largest gap between two images')
+
 args = parser.parse_args()
 
 
@@ -41,20 +67,79 @@ if thisDir[thisDirLen-2].isnumeric() :
 print("thisFolderIndex: "+ str(thisFolderIndex))
 
 
-# ****** EXAMPLE USE ***** # 
-#execute the following in the folder that requires the conversion
-#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 45 --groupByType seconds --makeMP4 yes
-#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 10 --groupByType images --makeMP4 yes
-
-#windows - run from directory in with images
-#py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
-
 #### Access all JPG files in directory
 allfiles=os.listdir(os.getcwd())
 
 
-print("allfiles")
-#print(allfiles)
+fullImageSet = len(allfiles)
+startingTimestamp = 0
+
+
+
+
+
+
+
+def getMeta ( filename ):
+    img = Image.open(filename)
+    exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
+    imageDateTime = exif["DateTimeDigitized"]
+    d = datetime.strptime(imageDateTime, "%Y:%m:%d %H:%M:%S")
+    #dawnRamp = datetime.fromisoformat(d)
+    return d.timestamp()
+    
+
+
+
+def testFiles(testType) :
+    print("TESTING STRUCTURE")
+
+    #check that all expected files are in place
+    #print("Checking to see if all expected images are here - testing for " + str(fullImageSet))
+    #print("Checking meta data to find the biggest gap between photos")
+    foundMissingFiles = False
+    biggestGapBetweenPhotos = 0
+    lastPhotoTimestamp = 0
+    for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
+        if thisFolderIndex == False :
+            filename = 'image'+str(a)+'.jpg'
+        if thisFolderIndex != False :
+            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+
+        if path.isfile(filename) == False:
+            foundMissingFiles = True 
+            print(filename + " DOES NOT EXIST")
+        #option to check all files in folder and find the greatest gap between them
+        #when shooting from day to night, the darkest of shots, this should be 59 seconds
+        #this isn't required, but could become useful if we need to merge all and maintain time-based even play back that matches the slowest / biggest shots 
+        else : 
+            if testType == "full" :
+                thisPhotoTimestamp = getMeta ( filename )
+                if a<1 :
+                    lastPhotoTimestamp = thisPhotoTimestamp
+                else:
+                    
+                    gapBetweenThisAndLastPhoto = thisPhotoTimestamp - lastPhotoTimestamp
+                    if gapBetweenThisAndLastPhoto > biggestGapBetweenPhotos :
+                        biggestGapBetweenPhotos = gapBetweenThisAndLastPhoto
+                        
+                    
+                    lastPhotoTimestamp = thisPhotoTimestamp
+    
+
+    if testType == "full" :
+        print("Biggest gap between images found: " + str(biggestGapBetweenPhotos))
+    
+    print("number of FOLDERS: " + str(folderCount) )
+    print("number of FILES: " + str(int(fullImageSet)-folderCount) )
+    print("Are any files missing: " + str(foundMissingFiles))
+    return foundMissingFiles
+
+if args.test == "basic" or args.test == "full" : 
+    testFiles(args.test)
+    exit()
+
+
 
 
 groupByType = args.groupByType #images or seconds
@@ -64,11 +149,6 @@ groupByType = args.groupByType #images or seconds
 groupBy = args.groupBy
 
 imagesToBatch = int(groupBy)
-fullImageSet = len(allfiles)
-#fullImageSet = 3
-startingTimestamp = 0
-
-
 
 
 
@@ -82,16 +162,7 @@ system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
 
 
 
-#imlist=[filename for filename in allfiles if  filename[-4:] in [".jpg",".JPG"]]
 
-
-def getMeta ( filename ):
-    img = Image.open(filename)
-    exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
-    imageDateTime = exif["DateTimeDigitized"]
-    d = datetime.strptime(imageDateTime, "%Y:%m:%d %H:%M:%S")
-    #dawnRamp = datetime.fromisoformat(d)
-    return d.timestamp()
     
 
 
@@ -149,40 +220,8 @@ else :
     print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
     
 
+    foundMissingFiles = testFiles("basic")
     
-
-    #check that all expected files are in place
-    #print("Checking to see if all expected images are here - testing for " + str(fullImageSet))
-    #print("Checking meta data to find the biggest gap between photos")
-    foundMissingFiles = False
-    biggestGapBetweenPhotos = 0
-    lastPhotoTimestamp = 0
-    for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
-        if thisFolderIndex == False :
-            filename = 'image'+str(a)+'.jpg'
-        if thisFolderIndex != False :
-            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
-
-        if path.isfile(filename) == False:
-            foundMissingFiles = True 
-            print(filename + " DOES NOT EXIST")
-        #option to check all files in folder and find the greatest gap between them
-        #when shooting from day to night, the darkest of shots, this should be 59 seconds
-        #this isn't required, but could become useful if we need to merge all and maintain time-based even play back that matches the slowest / biggest shots 
-        #else : 
-
-        #    thisPhotoTimestamp = getMeta ( filename )
-        #    if a<1 :
-        #        lastPhotoTimestamp = thisPhotoTimestamp
-        #    else:
-        #        
-        #        gapBetweenThisAndLastPhoto = thisPhotoTimestamp - lastPhotoTimestamp
-        #        if gapBetweenThisAndLastPhoto > biggestGapBetweenPhotos :
-        #            biggestGapBetweenPhotos = gapBetweenThisAndLastPhoto
-        #            print(biggestGapBetweenPhotos)
-        #        
-        #        lastPhotoTimestamp = thisPhotoTimestamp
-
     if foundMissingFiles == True :
         print("based on missing files, aborting process")
         exit()
