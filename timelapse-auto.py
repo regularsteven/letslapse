@@ -90,7 +90,7 @@ else :
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, A, blueGains, redGains)
+    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains)
     print("New shoot, no progress file, making one... ")
     
 else :
