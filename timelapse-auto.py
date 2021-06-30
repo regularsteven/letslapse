@@ -1,9 +1,11 @@
-noCameraTesting = False
+noCameraTesting = True
+updateGainsWithLivePreview = True
 
 from os import system
-from PIL import Image, ExifTags, ImageStat
+
 if noCameraTesting != True: 
     from picamera import PiCamera
+    from PIL import Image, ExifTags, ImageStat
 from time import sleep
 from decimal import Decimal
 import argparse
@@ -26,7 +28,7 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
     #in a similar way to exposure, make minor adjustments - but only if there's two or more than 3 white balance readings that are out of range of the default
     #white balance settings
 #awbgSettings = "2.0352,2.8945" #for street lights 
-awbgSettings = "3.73828125,1.26951" #for cloud cover at night
+#awbgSettings = "3.73828125,1.26951" #for cloud cover at night
 
 
 parser = argparse.ArgumentParser()
@@ -56,7 +58,7 @@ else :
     exit()
 
 
-updateGainsWithLivePreview = False
+
 
 shutterSpeed = 1000
 maxShutterSpeed = 25000000 #20 seconds in ver low light 
@@ -128,16 +130,16 @@ blueGainsChangeOfSignificance = 1
 
 def manageColorGainChanges (blueGains, redGains, measuredBlueGains, measuredRedGains) :
     global redGainsChangeOfSignificance,blueGainsChangeOfSignificance,awbgSettings
-    print("manageColorGainChanges function: " + str(measuredRedGains) +" against " + str(redGains+gainsTolerance))
+    print("blueGains: Prev: " + str(blueGains) +" measuredBlueGains " + str(measuredBlueGains))
 
-    if measuredRedGains > (redGains+gainsTolerance) or  measuredRedGains < (redGains-gainsTolerance) : 
-        print("measured red gains outside range of current gains" + str(redGainsChangeOfSignificance))
+    if measuredRedGains > (redGains+gainsTolerance) or measuredRedGains < (redGains-gainsTolerance) : 
+        #print("measured red gains outside range of current gains: " + str(redGainsChangeOfSignificance))
         redGainsChangeOfSignificance = redGainsChangeOfSignificance + 1
     else :
-        print("red gains in range, no need to change")
+        #print("red gains in range, no need to change")
         redGainsChangeOfSignificance = 0
 
-    if measuredBlueGains > (blueGains+gainsTolerance) or  measuredBlueGains < (blueGains-gainsTolerance) : 
+    if measuredBlueGains > (blueGains+gainsTolerance) or measuredBlueGains < (blueGains-gainsTolerance) : 
         print("measured BLUE gains outside range of current gains")
         blueGainsChangeOfSignificance = blueGainsChangeOfSignificance + 1
     else :
@@ -146,7 +148,7 @@ def manageColorGainChanges (blueGains, redGains, measuredBlueGains, measuredRedG
     
 
     if redGainsChangeOfSignificance > 3 :
-        print("red gains have been reading outside of range for 3 photos, time to change")
+        #print("red gains have been reading outside of range for 3 photos, time to change")
         #if redGains were 2, and measuredRedGains are 3, then we need to gradually increase red gains until they are correct / as per measured values
         # redGains (was 2) = 2 + ((3-2)/3)  - i.e. becomes 2.333
         redGains = redGains + ((measuredRedGains - redGains)/2)
@@ -298,7 +300,8 @@ for i in range(80000):
             measuredRedGains = float(g[1])
             
             camera.close()
-    #manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
+    
+    manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
     print("awbgSettings is: "+ awbgSettings)
     sleep(2)
 
