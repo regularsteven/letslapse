@@ -1,9 +1,9 @@
-noCameraTesting = True
+runWithoutCamera = False
 updateGainsWithLivePreview = True
 
 from os import system
 
-if noCameraTesting != True: 
+if runWithoutCamera != True: 
     from picamera import PiCamera
     from PIL import Image, ExifTags, ImageStat
 from time import sleep
@@ -187,7 +187,7 @@ for i in range(80000):
 
     raspiCommand = raspiDefaults + " -ss "+str(shutterSpeed) + fileOutput
     
-    if noCameraTesting == True:
+    if runWithoutCamera == True:
         print(raspiCommand)
     else :
         system(raspiCommand)
@@ -197,7 +197,7 @@ for i in range(80000):
     
     storeProgress (actualIndex, folderName, shutterSpeed, DG, AG)
 
-    if noCameraTesting == True:
+    if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
     else :
 
@@ -281,7 +281,7 @@ for i in range(80000):
     
 
     if updateGainsWithLivePreview == True :
-        if noCameraTesting == True:
+        if runWithoutCamera == True:
             print("faking white balance changes, as we don't have the camera available")
             measuredBlueGains = 1.91015625
             measuredRedGains = 3.02734375
