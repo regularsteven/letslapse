@@ -42,8 +42,8 @@ parser.add_argument('--startup', help='flag for startup on boot, from reboot.sh'
 args = parser.parse_args()
 
 
-def storeProgress (index, folder,shutterSpeed, DG, AG):
-    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"' >progress.txt")
+def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains):
+    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"' >progress.txt")
 
 
 print(path.isfile("progress.txt"))
@@ -90,7 +90,7 @@ else :
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, AG)
+    storeProgress (0, folderName, shutterSpeed, DG, A, blueGains, redGains)
     print("New shoot, no progress file, making one... ")
     
 else :
@@ -103,8 +103,12 @@ else :
     preResetCount = int(Lines[0].strip())
     folderName = (Lines[1].strip())
     shutterSpeed = int(float(Lines[2].strip()))
-    DG = int(float(Lines[3].strip()))
-    AG = int(float(Lines[4].strip()))
+    DG = float(Lines[3].strip())
+    AG = float(Lines[4].strip())
+    blueGains = float(Lines[5].strip())
+    redGains = float(Lines[6].strip())
+
+    awbgSettings = str(blueGains)+","+str(redGains)
     #for line in Lines:
         #lineCount += 1
         #print((line.strip()))
@@ -125,41 +129,46 @@ def brightnessPerceived ( img ):
 
 gainsTolerance = .2 #this is how much difference can exist between gains before we change the gains settings 
 
-redGainsChangeOfSignificance = 1
-blueGainsChangeOfSignificance = 1
+redGainsChangeOfSignificance = 0
+blueGainsChangeOfSignificance = 0
+brightnessChangeOfSignificance = 0
 
-def manageColorGainChanges (blueGains, redGains, measuredBlueGains, measuredRedGains) :
-    global redGainsChangeOfSignificance,blueGainsChangeOfSignificance,awbgSettings
-    print("blueGains: Prev: " + str(blueGains) +" measuredBlueGains " + str(measuredBlueGains))
+def manageColorGainChanges (measuredBlueGains, measuredRedGains) :
+    global redGainsChangeOfSignificance,blueGainsChangeOfSignificance,awbgSettings,blueGains, redGains
+    print("auto-measured gains: "+str(measuredBlueGains) + ", "+str(measuredRedGains))
+    #print("blueGains: " + str(blueGains) +" measuredBlueGains " + str(measuredBlueGains))
+
+    #print("redGains: " + str(redGains) +" measuredRedGains " + str(measuredRedGains))
 
     if measuredRedGains > (redGains+gainsTolerance) or measuredRedGains < (redGains-gainsTolerance) : 
-        #print("measured red gains outside range of current gains: " + str(redGainsChangeOfSignificance))
+        print("redGainsChangeOfSignificance = "+str(redGainsChangeOfSignificance))
         redGainsChangeOfSignificance = redGainsChangeOfSignificance + 1
     else :
         #print("red gains in range, no need to change")
         redGainsChangeOfSignificance = 0
 
     if measuredBlueGains > (blueGains+gainsTolerance) or measuredBlueGains < (blueGains-gainsTolerance) : 
-        print("measured BLUE gains outside range of current gains")
+        print("blueGainsChangeOfSignificance = "+str(blueGainsChangeOfSignificance))
         blueGainsChangeOfSignificance = blueGainsChangeOfSignificance + 1
     else :
-        print("blue gains in range, no need to change")
+        #print("blue gains in range, no need to change")
         blueGainsChangeOfSignificance = 0
     
 
     if redGainsChangeOfSignificance > 3 :
+        print("redGain CHANGE from sequential outside of range pictures")
         #print("red gains have been reading outside of range for 3 photos, time to change")
         #if redGains were 2, and measuredRedGains are 3, then we need to gradually increase red gains until they are correct / as per measured values
         # redGains (was 2) = 2 + ((3-2)/3)  - i.e. becomes 2.333
-        redGains = redGains + ((measuredRedGains - redGains)/2)
+        redGains = redGains - ((redGains - measuredRedGains)/5)
 
     
     if blueGainsChangeOfSignificance > 3 :
-        print("blue gains have been reading outside of range for 3 photos, time to change")
-        blueGains = blueGains + ((measuredBlueGains - blueGains)/2)
+        print("blueGain CHANGE from sequential outside of range pictures")
+        blueGains = blueGains - ((blueGains - measuredBlueGains)/5)
 
     awbgSettings = str(blueGains) + "," + str(redGains)
-    print("awbgSettings inside manageColorGainChanges: "+awbgSettings)
+    print("awbgSettings: "+awbgSettings)
 
 if path.isdir("auto_"+folderName) == True :
     print("directory already created")
@@ -195,7 +204,7 @@ for i in range(80000):
     
 
     
-    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG)
+    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains)
 
     if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
@@ -203,7 +212,7 @@ for i in range(80000):
 
         img = Image.open(filename)
         exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
-        print("Recorded EXIF ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
+        #print("Recorded EXIF ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
         lastShotExposureTime = str(exif["ExposureTime"])
 
         #print("ExposureTime = "+ str(lastShotExposureTime))
@@ -217,9 +226,23 @@ for i in range(80000):
         lowBrightness = brightnessTarget - brightnessRange #140
         highBrightness = brightnessTarget + brightnessRange #160
         
+        
+        if brightnessScore < 50 or brightnessScore > 200:
+            print("extreme low brightness, something")
+            brightnessChangeOfSignificance = brightnessChangeOfSignificance + 1
+            if brightnessChangeOfSignificance > 2 :
+                #we reset this counter, as there's been more than 2 images taken outside of the range, so changes should be made below
+                brightnessChangeOfSignificance = 0
+
+        else:
+            #we're back to normal
+            brightnessChangeOfSignificance = 0
         #brightnessTargetAccuracy = 100 #if the light is 
         #start of brightness checks - first if it's too low, then if too high
-        if brightnessScore < lowBrightness :
+        # we only want to make changes when brightnessChangeOfSignificance == 0 as this indicates we haven't had an unexpected flash or dim
+        # we don't want to blow out photos, for example, after a lightning photo
+        # equally the camera can have misfires and capture black - if this happens, we don't want horrible overexposed shots
+        if brightnessScore < lowBrightness and brightnessChangeOfSignificance == 0:
             print("low brightness")
             brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
             shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
@@ -242,8 +265,10 @@ for i in range(80000):
                 print("getting very dark, increment AG: "+str(AG))
 
             print("new shutterspeed: " + str(shutterSpeed))
-            
-        if brightnessScore > highBrightness :
+
+
+        if brightnessScore > highBrightness and brightnessChangeOfSignificance == 0:
+            brightnessChangeOfSignificance = brightnessChangeOfSignificance+1
             print("high brightness")
             brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
             if brightnessScore > 200 :
@@ -268,6 +293,8 @@ for i in range(80000):
             if(shutterSpeed < 100): 
                 shutterSpeed = 100
                 print("too much light, hard coding shutter")
+            
+            
             print("new shutterspeed: " + str(shutterSpeed))
         
         #END of brightness checks - first if it's too low, then if too high
@@ -277,7 +304,7 @@ for i in range(80000):
     #in the event the readings of the auto values are off for 3 photos in a row, we can be confident that there's a real changed required
     #note: ideally we would just analyse the captured image and measure how far off the blues and reds are - this would allow us to amplify or reduce the 
     # reds and blues ()
-    print("awbgSettings was: "+ awbgSettings)
+    #print("awbgSettings was: "+ awbgSettings)
     
 
     if updateGainsWithLivePreview == True :
@@ -301,8 +328,8 @@ for i in range(80000):
             
             camera.close()
     
-    manageColorGainChanges(blueGains, redGains, measuredBlueGains, measuredRedGains)
-    print("awbgSettings is: "+ awbgSettings)
+    manageColorGainChanges(measuredBlueGains, measuredRedGains)
+    #print("awbgSettings is: "+ awbgSettings)
     sleep(2)
 
 print("end")
