@@ -8,7 +8,11 @@ raspberry pi timelaps rig
  > in some instances, this will fail if previously ssh'd to a same name or IP
  > edit C:\Users\user-name\.ssh on windows / "ssh-keygen -R raspberrypi.local" on ubuntu
  > remove the raspberrypi.local line, save and SSH again
- > can find devices on network across IPs of devices on linux with nmap -sP 192.168.1.0/24
+ > can find devices on network across IPs of devices on linux with nmap -sP 192.168.88.0/24
+   > Additional ideas at https://raspberrypi.stackexchange.com/questions/13936/find-raspberry-pi-address-on-local-network
+   > nmap -sP 192.168.215.0/24 | awk '/^Nmap/{ip=$NF}/B8:27:EB/{print ip}'
+   > arp -na | grep -i b8:27:eb
+   > FOR Pi4B, need to search for dc:a6:32 MAC ID, eg arp -na | grep -i dc:a6:32
 3) update user password / system
  > passwd
  > sudo apt update
