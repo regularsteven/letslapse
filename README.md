@@ -287,8 +287,94 @@ https://pypi.org/project/deflicker/
    Much less for over night.... 
 
 
+# setting up Pi as HOTSPOT to host server / be the network
+1) update and upgrade
+sudo apt-get update
+sudo apt-get upgrade
+2) install the following:
+sudo apt-get install dnsmasq hostapd
+3) We need to configure the new services, so kill them for now
+sudo systemctl stop dnsmasq
+sudo systemctl stop hostapd
+4) Configure static and IP ranges
+sudo nano /etc/dhcpcd.conf
+ - add the following at the end
+interface wlan0
+static ip_address=10.0.0.1/24
+nohook wpa_supplicant
+
+6) configure DHCP server
+sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+
+sudo nano /etc/dnsmasq.conf
+ - add the following
+
+interface=wlan0 # Use the require wireless interface - usually wlan0
+dhcp-range=10.0.0.2,10.0.0.20,255.255.255.0,24h
+
+7) Configuring the Access Point Host Software (hostapd)
+sudo nano /etc/hostapd/hostapd.conf
+ - add the following
+
+interface=wlan0
+driver=nl80211
+ssid=LetsLapse
+hw_mode=g
+channel=7
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=Together
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+
+8) 
+sudo service dhcpcd restart
+
+sudo rfkill unblock wifi
+sudo systemctl unmask hostapd
+sudo systemctl enable hostapd
+sudo systemctl start hostapd
 
 
+10) restart services
+sudo service dhcpcd restart
+
+
+
+
+
+
+
+# making changes to exposure / gains
+--------------
+a few variables are in place to help maintain consistency of the shoot
+
+in some instances, the camera captured back images with no explanation - in this example, the output brightnessPerceived score was low
+brightnessPerceived score: 35.96887358252723
+
+When this happens, or the brightnessPerceived is below 50, the images taken right after shouldn't be brightened up as it's a dud image - without the brightnessChangeOfSignificance toggle, this would blow out (overexpose) following images
+
+----------------
+gains for blue and red are more complicated
+
+raspistill -t 1 -bm -ag 1 -sa -10 -dg 1.0 -ag 1.0 -awb off -awbg 1.7913023058720001,1.64491119408 -co -15 -ex off -w 4056 -h 3042 -ss 22589.645963694675 -o auto_default/group1/image1614.jpg
+brightnessPerceived score: 120.56416323374215
+auto-measured gains: 1.921875, 1.48828125
+awbgSettings: 1.7913023058720001,1.64491119408
+-----------------------------------------
+raspistill -t 1 -bm -ag 1 -sa -10 -dg 1.0 -ag 1.0 -awb off -awbg 1.7913023058720001,1.64491119408 -co -15 -ex off -w 4056 -h 3042 -ss 22589.645963694675 -o auto_default/group1/image1615.jpg
+brightnessPerceived score: 123.46989174755981
+auto-measured gains: 1.90234375, 1.4921875
+awbgSettings: 1.7913023058720001,1.64491119408
+-----------------------------------------
+raspistill -t 1 -bm -ag 1 -sa -10 -dg 1.0 -ag 1.0 -awb off -awbg 1.7913023058720001,1.64491119408 -co -15 -ex off -w 4056 -h 3042 -ss 22589.645963694675 -o auto_default/group1/image1616.jpg
+brightnessPerceived score: 120.47623420011236
+auto-measured gains: 1.90234375, 1.4921875
+awbgSettings: 1.7913023058720001,1.64491119408
 
 
 

@@ -11,8 +11,9 @@ from urllib.parse import parse_qs
 PORT = 80
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-s.connect(("8.8.8.8", 80))
-hostIP = s.getsockname()[0]
+#s.connect(("8.8.8.8", 80))
+#hostIP = socket.getsockname()[0]
+hostIP = "10.0.0.5"
 s.close()
 
 #hostIP = socket.gethostbyname(socket.gethostname())

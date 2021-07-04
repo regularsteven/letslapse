@@ -1,5 +1,6 @@
 import os, numpy, PIL
 import re
+import cv2 as cv
 from PIL import Image, ExifTags, ImageStat
 import piexif
 from os import system
@@ -175,9 +176,15 @@ system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
 
 
 def blendGroupToOne(imlist, sequenceNo) :
+
+    #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
+
+
+    # if blendAction = "process" #this is second, go through the text file and blend the actual images
+
     #### Assuming all images are the same size, get dimensions of first image
     w,h=Image.open(imlist[0]).size
-    N=len(imlist)
+    N=len(imlist)-1 #last value is a status of processed or not (0 or 1)
 
     #### Create a numpy array of floats to store the average (assume RGB images)
     arr=numpy.zeros((h,w,3),numpy.float)
@@ -186,6 +193,11 @@ def blendGroupToOne(imlist, sequenceNo) :
     im = Image.open( imlist[0])
     exif_dict = piexif.load(im.info["exif"])
     exif_bytes = piexif.dump(exif_dict)
+
+    exif = { ExifTags.TAGS[k]: v for k, v in im._getexif().items() if k in ExifTags.TAGS }
+    print((exif["ShutterSpeedValue"]))
+    #exit()
+    
 
     #### Build up average pixel intensities, casting each image as an array of floats
     for im in imlist:
@@ -201,7 +213,10 @@ def blendGroupToOne(imlist, sequenceNo) :
     out=Image.fromarray(arr,mode="RGB")
     fileName = "blended"+str(groupBy)+"_"+str(groupByType)+"/image"+str(sequenceNo)+".jpg"
     print(fileName)
-    out.save(fileName, exif=exif_bytes, quality=100, subsampling=0)
+    
+
+    
+    out.save(fileName, exif=exif_bytes, quality=90, subsampling=0)
     #out.show()
 
 if groupByType == "images" :
@@ -221,7 +236,7 @@ if groupByType == "images" :
                     imlist.append('image'+str(i+(imagesToBatch*a))+'.jpg')
             print("imlist")
             print(imlist)
-
+            #imlist.append(1)
             blendGroupToOne(imlist, a)
 else :
     print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
@@ -236,7 +251,7 @@ else :
     
     timerangeGroupIndex = 0
     imlist=[]
-    for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
+    for a in range(int(fullImageSet)-folderCount): #exclude folders from the count
         if thisFolderIndex == False :
             filename = 'image'+str(a)+'.jpg'
         if thisFolderIndex != False :
@@ -252,7 +267,7 @@ else :
         if(thisTimestamp < (startingTimestamp + imagesToBatch)) :
             imlist.append(filename)
         else: 
-            
+            #imlist.append(0)
             #print("blendGroupToOne: " + str(timerangeGroupIndex))
             print("blending the following images")
             print(imlist)
