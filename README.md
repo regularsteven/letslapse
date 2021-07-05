@@ -203,6 +203,9 @@ OR
 tcp/h264://192.168.30.76:3333
 
 
+MJPEG Stream
+https://desertbot.io/blog/how-to-stream-the-picamera - works but requires its own dependencies
+
 
 
 

@@ -1,4 +1,5 @@
-#run sudo sh install.sh 
+#1 git clone https://github.com/regularsteven/pitime.git
+#2 sudo sh install.sh 
 
 echo "1 Running updates"
 sudo apt-get update

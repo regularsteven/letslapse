@@ -4,6 +4,7 @@ from time import sleep
 from datetime import datetime
 from decimal import Decimal
 import argparse
+from os import path
 
 #example usage:
 #python3 preview.py --ss 1000 --iso 100 --awbg 3,2
@@ -26,6 +27,11 @@ now = datetime.now()
 
 current_time = now.strftime("%H_%M_%S")
 
+
+if path.isdir("previews") == True :
+    print("preview directory created")
+else :
+    system("mkdir previews")
  
 #sleep(2)
 #d=RPICAM2DNG()
