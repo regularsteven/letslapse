@@ -28,7 +28,7 @@ def liveFeed() :
 
 def startTimelapse() :
     print("start startTimelapse")
-    system('python3 timelapse-auto.py')
+    system('./go.sh')
 
     print("end startTimelapse")
     return "cool"
