@@ -50,6 +50,8 @@ echo 'gpu_mem=128' | sudo tee -a /boot/config.txt
 echo 'dtoverlay=disable-bt' | sudo tee -a /boot/config.txt
 echo 'disable_camera_led=1' | sudo tee -a /boot/config.txt
 
+echo "16 Start server on boot - Updating /etc/default/hostapd"
+echo 'sudo python /home/pi/pitime/server.py' | sudo tee -a /etc/profile
 
 
 echo "Finished. On reboot, if no network is found, a hotspot will be created."

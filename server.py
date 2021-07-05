@@ -3,12 +3,15 @@
 import http.server
 import socketserver
 import socket
+import os
 from os import system
 from urllib.parse import urlparse
 from urllib.parse import parse_qs
 
 
 PORT = 80
+
+os.chdir("/home/pi/pitime/")
 
 s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 #s.connect(("8.8.8.8", 80))
