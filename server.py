@@ -93,6 +93,8 @@ class StreamingOutput(object):
         return self.buffer.write(buf)
 
 class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
+    processThread = threading.Thread(target=thread_second)
+    processThread.start()
     def do_GET(self):
         print(urlparse(self.path))
         query_components = parse_qs(urlparse(self.path).query)
