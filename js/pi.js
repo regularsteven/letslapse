@@ -21,12 +21,12 @@ function toggleControls(value){
 
 
 var presets = [];
-presets["sunnyDay"] = {ss: 100, iso: 10, awbg: '3, 2'};
-presets["sunnyForrest"] = {ss: 5000, iso: 10, awbg: '3, 2'};
-presets["sunset"] = {ss: 20000, iso: 75, awbg: '3, 2'};
-presets["night"] = {ss: 6 * 100000, iso: 1600, awbg: '3, 2'};
-presets["nightUrban"] = {ss: 2 * 100000, iso: 800, awbg: '3, 2'};
-presets["nightNature"] = {ss: 6 * 100000, iso: 800, awbg: '3, 2'};
+presets["sunnyDay"] = {ss: 100, iso: 10, awbg: '3,2'};
+presets["sunnyForrest"] = {ss: 5000, iso: 10, awbg: '3,2'};
+presets["sunset"] = {ss: 20000, iso: 75, awbg: '3,2'};
+presets["night"] = {ss: 6 * 100000, iso: 1600, awbg: '3,2'};
+presets["nightUrban"] = {ss: 2 * 100000, iso: 800, awbg: '3,2'};
+presets["nightNature"] = {ss: 6 * 100000, iso: 800, awbg: '3,2'};
 
 function setPreset(){
     preset = $("#presets").val();
