@@ -49,7 +49,7 @@ function streamManager(startOrStop){
             console.log("local testing, see if the device is on the network")
             stream += "http://10.3.141.212:8081"
         }else{
-            stream += "http://"+window.location.host;
+            stream += "http://"+window.location.host+":8081";
         }
         stream += "/stream.mjpg"
         document.getElementById("imageViewport").style.backgroundImage = "url('"+stream+"')";
