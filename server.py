@@ -75,7 +75,7 @@ def shootPreview(query_components) :
 
     now = datetime.now()
     current_time = now.strftime("%H_%M_%S")
-    filename = "img_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso)+"_awbg-"+args.awbg+".jpg"
+    filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+".jpg"
 
     print("start shootPreview")
     sysCommand = "python3 preview.py --ss "+ss+" --iso "+iso+" --awbg "+awbg + "--filename "+filename
