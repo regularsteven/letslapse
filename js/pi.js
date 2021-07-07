@@ -69,20 +69,13 @@ window.addEventListener("load", function(){
 /* V.1 Release */ 
 
 function takeStill(){
-    var apiCall = "?action=preview&ss=8000&iso=400&awbg=3,2";
-    $.getJSON( apiCall, {
-        tags: "mount rainier",
-        tagmode: "any",
-        format: "json"
-      })
-        .done(function( data ) {
-          console.log(data);
-          /*  $.each( data.items, function( i, item ) {
-            $( "<img>" ).attr( "src", item.media.m ).appendTo( "#images" );
-            if ( i === 3 ) {
-              return false;
-            }
-          });
-          */
-        });
+    $.getJSON( apiCall)
+        .done(function( json ) {
+            console.log( "JSON Data: " + json );
+            streamManager("start");
+        })
+        .fail(function( jqxhr, textStatus, error ) {
+            var err = textStatus + ", " + error;
+            console.log( "Request Failed: " + err );
+  });
 }
