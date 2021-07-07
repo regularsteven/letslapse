@@ -11,30 +11,6 @@ function checkForm(){
     }
 }
 
-var presets = [];
-presets["sunnyDay"] = {ss: 100, iso: 10};
-presets["sunnyForrest"] = {ss: 5000, iso: 10};
-presets["sunset"] = {ss: 20000, iso: 75};
-presets["night"] = {ss: 6 * 100000, iso: 1600};
-presets["nightUrban"] = {ss: 2 * 100000, iso: 800};
-presets["nightNature"] = {ss: 6 * 100000, iso: 800};
-
-function setPreset(preset){
-    document.getElementById('ss').value = presets[preset].ss;
-    document.getElementById('iso').value = presets[preset].iso;
-
-    //clear the active filters
-    var presetsList = document.getElementById("presets");
-    var liTargets = presetsList.getElementsByTagName("li");
-    for(var n=0; n<liTargets.length; n++ ){
-        liTargets[n].className = "";
-    }
-
-    //add the active
-    var v = document.getElementById(preset);
-        v.className += "active";
-
-}
 
 function toggleControls(value){
     document.getElementById("previewControls").style.display = value;
@@ -42,6 +18,30 @@ function toggleControls(value){
 
 
 /* V.1 Release */ 
+
+
+var presets = [];
+presets["sunnyDay"] = {ss: 100, iso: 10, awbg: '3, 2'};
+presets["sunnyForrest"] = {ss: 5000, iso: 10, awbg: '3, 2'};
+presets["sunset"] = {ss: 20000, iso: 75, awbg: '3, 2'};
+presets["night"] = {ss: 6 * 100000, iso: 1600, awbg: '3, 2'};
+presets["nightUrban"] = {ss: 2 * 100000, iso: 800, awbg: '3, 2'};
+presets["nightNature"] = {ss: 6 * 100000, iso: 800, awbg: '3, 2'};
+
+function setPreset(){
+    preset = $("#presets").val();
+    document.getElementById('ss').value = presets[preset].ss;
+    document.getElementById('iso').value = presets[preset].iso;
+    document.getElementById('awbg').value = presets[preset].awbg;
+
+    //clear the active filters
+    var presetsList = document.getElementById("presets");
+    var liTargets = presetsList.getElementsByTagName("li");
+    for(var n=0; n<liTargets.length; n++ ){
+        liTargets[n].className = "";
+    }
+}
+
 
 function streamManager(startOrStop){
     if(startOrStop == "start"){
@@ -67,6 +67,7 @@ function streamManager(startOrStop){
 window.addEventListener("load", function(){
     console.log("document loaded");
     streamManager("start");
+    setPreset();
 });
 
 
@@ -86,7 +87,7 @@ function takeStill(){
         //shotting in auto mode
         apiCall += "&mode=auto";
     }else{
-        apiCall += "&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
+        apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
     }
 
     

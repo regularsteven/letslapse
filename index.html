@@ -79,7 +79,7 @@
             <a class="nav-link active" id="photo-tab" data-toggle="tab" href="#photo" role="tab" aria-controls="photo" aria-selected="true"><span class="oi oi-camera-slr" title="icon name" aria-hidden="true"></span> Still</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" id="timelapse-tab" data-toggle="tab" href="#timelapse" role="tab" aria-controls="timelapse" aria-selected="false"><span class="oi oi-loop-circular" title="icon name" aria-hidden="true"></span> Interval</a>
+            <a class="nav-link" id="timelapse-tab" data-toggle="tab" href="#timelapse" role="tab" aria-controls="timelapse" aria-selected="false"><span class="oi oi-loop-circular" title="icon name" aria-hidden="true"></span> Timelapse</a>
           </li>
           <li class="nav-item">
             <a class="nav-link" id="gallery-tab" data-toggle="tab" href="#gallery" role="tab" aria-controls="gallery" aria-selected="false"><span class="oi oi-image" title="icon name" aria-hidden="true"></span> Gallery</a>
@@ -112,13 +112,13 @@
                 <div class="container">
                   <div class="row mb-2">
                     <div class="col">
-                      <select id="presets" class="form-control" >
-                        <option onclick="setPreset('sunnyDay');" id="sunnyDay">Sunny Day Open Sky</option>
-                        <option onclick="setPreset('sunnyForrest');" id="sunnyForrest">Sunny Day Covered Forrest</option>
-                        <option onclick="setPreset('sunset');" id="sunset">Sunset</option>
-                        <option onclick="setPreset('night');" id="night">Dark Night</option>
-                        <option onclick="setPreset('nightUrban');" id="nightUrban">Urban Night</option>
-                        <option onclick="setPreset('nightNature');" id="nightNature">Nature at Night</option>
+                      <select id="presets" class="form-control" onchange="setPreset();" >
+                        <option value="sunnyDay">Sunny Day Open Sky</option>
+                        <option value="sunnyForrest">Sunny Day Covered Forrest</option>
+                        <option value="sunset">Sunset</option>
+                        <option value="night">Dark Night</option>
+                        <option value="nightUrban">Urban Night</option>
+                        <option value="nightNature">Nature at Night</option>
                       </select>
                       <sub>Preset for preconfigured still image values</sub>
                     </div>
