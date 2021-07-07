@@ -43,7 +43,7 @@ function toggleControls(value){
 
 function streamManager(startOrStop){
     if(startOrStop == "start"){
-        document.getElementById("imageViewport").style.backgroundImage = "none";
+        
         stream = ""
         if(window.location.host == "127.0.0.1"){
             console.log("local testing, see if the device is on the network")
@@ -51,11 +51,11 @@ function streamManager(startOrStop){
         }else{
             stream += "http://"+window.location.host+":8081";
         }
-        stream += "/stream.mjpg"
+        stream += "/stream.mjpg?cachebuster"+Math.random(100);
         document.getElementById("imageViewport").style.backgroundImage = "url('"+stream+"')";
     }else{
         window.stop();
-        
+        document.getElementById("imageViewport").style.backgroundImage = "none";
     }
 
 }
@@ -70,10 +70,11 @@ window.addEventListener("load", function(){
 
 function takeStill(){
     var apiCall = "?action=preview&ss=8000&iso=400&awbg=3,2";
+    streamManager("stop");
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
-            streamManager("start");
+            window.setTimeout('streamManager("start");', 1000);
         })
         .fail(function( jqxhr, textStatus, error ) {
             var err = textStatus + ", " + error;
