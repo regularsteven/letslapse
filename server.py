@@ -69,6 +69,7 @@ def shootPreview(query_components) :
     settings = ""
     if mode == "auto": 
         filename = "img_"+current_time+"_auto.jpg"
+        settings = " --mode auto"
     else : 
         ss = query_components["ss"][0]
         iso = query_components["iso"][0]
