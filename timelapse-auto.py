@@ -190,7 +190,7 @@ for i in range(80000):
     
 
     fileOutput = ""
-    #fileOutput = " --latest latest.jpg" #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
+    fileOutput = " --latest latest.jpg" #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
     fileOutput = fileOutput+ " -o "+filename
 
 
