@@ -1,3 +1,4 @@
+import threading, os, signal
 from os import system
 from time import sleep
 #from pydng.core import RPICAM2DNG
@@ -69,11 +70,14 @@ if args.awbg != "auto":
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso)+"_awbg-"+args.awbg+".jpg"
+outputPathAndFilename = "/home/pi/pitime/previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso)+"_awbg-"+args.awbg+".jpg"
 
-print("/"+outputPathAndFilename)
+#print("/"+outputPathAndFilename)
 
-system("raspistill --verbose -t 1 -drc high -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance)
+raspistillCommand = "raspistill --verbose -t 1 -drc high -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance
+
+print(raspistillCommand)
+system(raspistillCommand)
 
 
 #burst mode:
