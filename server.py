@@ -78,7 +78,7 @@ def shootPreview(query_components) :
     filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+".jpg"
 
     print("start shootPreview")
-    sysCommand = "python3 preview.py --ss "+ss+" --iso "+iso+" --awbg "+awbg + "--filename "+filename
+    sysCommand = "python3 preview.py --ss "+ss+" --iso "+iso+" --awbg "+awbg + " --filename "+filename
     print(sysCommand)
     system(sysCommand)
     print("end shootPreview")
