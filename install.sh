@@ -52,6 +52,7 @@ echo 'disable_camera_led=1' | sudo tee -a /boot/config.txt
 
 echo "16 Start server on boot - Updating /etc/default/hostapd"
 echo 'sudo python3 /home/pi/pitime/server.py' | sudo tee -a /etc/profile
+echo 'sudo python3 /home/pi/pitime/streamer.py' | sudo tee -a /etc/profile
 
 
 echo "Finished. On reboot, if no network is found, a hotspot will be created."
