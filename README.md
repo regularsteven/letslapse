@@ -39,7 +39,7 @@ raspberry pi timelaps rig
 8) Enable PYTHON server to start on system boot
  > enable CONSOLE AUTO login via sudo raspi-config (SYSTEM OPTIONS > BOOT)
  > make the script executable: sudo chmod +x /home/pi/pitime/server.py
- > add sudo python /home/pi/myscript.py at the bottom of sudo nano /etc/profile
+ > add sudo python /home/pi/pitime/server.py at the bottom of sudo nano /etc/profile
 
 9) Install SAMBA for simple filesystem access
     sudo apt-get install samba samba-common-bin 

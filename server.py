@@ -54,12 +54,6 @@ def check_kill_process(pstring):
         pid = fields[0]
         os.kill(int(pid), signal.SIGKILL)
 
-def liveFeed() :
-    print("START liveFeed()")
-    sysCommand = "python3 live.py "+str(hostIP)
-    print(sysCommand)
-    system(sysCommand)
-    return "END liveFeed()"
 
 def startTimelapse() :
     print("start startTimelapse")
@@ -69,16 +63,22 @@ def startTimelapse() :
     return "cool"
 
 def shootPreview(query_components) :
-    ss = query_components["ss"][0]
-    iso = query_components["iso"][0]
-    awbg = query_components["awbg"][0]
-
+    mode = query_components["mode"][0]
     now = datetime.now()
     current_time = now.strftime("%H_%M_%S")
-    filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+".jpg"
+    settings = ""
+    if mode == "auto": 
+        filename = "img_"+current_time+"_auto.jpg"
+    else : 
+        ss = query_components["ss"][0]
+        iso = query_components["iso"][0]
+        awbg = query_components["awbg"][0]
+        settings = " --ss "+ss+" --iso "+iso+" --awbg "+awbg
+        filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+"_manual.jpg"
+
 
     print("start shootPreview")
-    sysCommand = "python3 preview.py --ss "+ss+" --iso "+iso+" --awbg "+awbg + " --filename "+filename
+    sysCommand = "python3 preview.py --filename "+filename + settings
     print(sysCommand)
     system(sysCommand)
     print("end shootPreview")

@@ -11,6 +11,9 @@ from os import path
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
 
+parser.add_argument('--mode', type=str,
+                    help='Auto mode')
+
 parser.add_argument('--ss', type=str,
                     help='Shutter Speed')
 
@@ -50,23 +53,28 @@ else :
 
 #print(args.pos_arg)
 
-exposureInput = Decimal(args.ss)
-#print("Exposure INPUT Time: ")
-#print(Decimal(args.ss_arg))
+userInputs = ""
+if args.mode == "auto":
+    print("capture in auto mode")
+else :
+
+    exposureInput = Decimal(args.ss)
+    #print("Exposure INPUT Time: ")
+    #print(Decimal(args.ss_arg))
 
 
-exposureTime = (exposureInput)
+    exposureTime = (exposureInput)
 
-userParams = "-ISO "+str(args.iso)+" -ss "+str(exposureTime) + " -co -10"
-jpegDimensions = " -w 2400 -h 1800"
+    userParams = "-ISO "+str(args.iso)+" -ss "+str(exposureTime) + " -co -10"
+    jpegDimensions = " -w 2400 -h 1800"
 
-whiteBalance = "" 
-# awbg : blue,red
-if args.awbg != "auto":
-    whiteBalance = " -awb off -awbg "+args.awbg
-#1.7,1.5 = ok
+    whiteBalance = "" 
+    # awbg : blue,red
+    if args.awbg != "auto":
+        whiteBalance = " -awb off -awbg "+args.awbg
+    #1.7,1.5 = ok
 
-
+    userInputs = userParams+jpegDimensions + whiteBalance
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
@@ -74,7 +82,7 @@ outputPathAndFilename = "/home/pi/pitime/previews/"+args.filename
 
 #print("/"+outputPathAndFilename)
 
-raspistillCommand = "raspistill --verbose -t 1 -drc high -o "+outputPathAndFilename+" "+userParams+jpegDimensions + whiteBalance
+raspistillCommand = "raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+userInputs
 
 print(raspistillCommand)
 system(raspistillCommand)

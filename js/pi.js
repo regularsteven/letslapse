@@ -80,7 +80,17 @@ function clickViewport(){
 }
 
 function takeStill(){
-    var apiCall = "?action=preview&ss=8000&iso=400&awbg=3,2";
+    var apiCall = "?action=preview";
+
+    if($("#customSwitch1").hasClass("collapsed")){
+        //shotting in auto mode
+        apiCall += "&mode=auto";
+    }else{
+        apiCall += "&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
+    }
+
+    
+
     streamManager("stop");
     $.getJSON( apiCall)
         .done(function( json ) {
