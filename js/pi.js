@@ -74,7 +74,9 @@ function takeStill(){
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
-            window.setTimeout('streamManager("start");', 1000);
+            window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+            window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+            window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
         })
         .fail(function( jqxhr, textStatus, error ) {
             var err = textStatus + ", " + error;
