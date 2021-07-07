@@ -66,3 +66,23 @@ window.addEventListener("load", function(){
     console.log("document loaded");
     streamManager("start");
 });
+/* V.1 Release */ 
+
+function takeStill(){
+    var apiCall = "?action=preview&ss=8000&iso=400&awbg=3,2";
+    $.getJSON( apiCall, {
+        tags: "mount rainier",
+        tagmode: "any",
+        format: "json"
+      })
+        .done(function( data ) {
+          console.log(data);
+          /*  $.each( data.items, function( i, item ) {
+            $( "<img>" ).attr( "src", item.media.m ).appendTo( "#images" );
+            if ( i === 3 ) {
+              return false;
+            }
+          });
+          */
+        });
+}
