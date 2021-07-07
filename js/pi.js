@@ -69,6 +69,7 @@ window.addEventListener("load", function(){
 /* V.1 Release */ 
 
 function takeStill(){
+    var apiCall = "?action=preview&ss=8000&iso=400&awbg=3,2";
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
