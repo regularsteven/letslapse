@@ -154,6 +154,6 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 handler_object = MyHttpRequestHandler
 
 my_server = socketserver.TCPServer(("", PORT), handler_object)
-
+print("my_server running on PORT" + str(PORT))
 # Star the server
 my_server.serve_forever()
