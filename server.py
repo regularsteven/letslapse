@@ -69,11 +69,12 @@ def startTimelapse() :
 
 def shootPreview(ss, iso, awbg) :
     print("start shootPreview")
-    sysCommand = "nohup python3 preview.py --ss "+ss+" --iso "+iso+" --awbg "+awbg + " &"
+    sysCommand = "python3 preview.py --ss "+ss+" --iso "+iso+" --awbg "+awbg
     print(sysCommand)
     system(sysCommand)
     print("end shootPreview")
-
+    processThread = threading.Thread(target=thread_second)
+    processThread.start()
     return "end"
 
 
