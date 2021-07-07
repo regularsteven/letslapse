@@ -83,7 +83,7 @@ function clickViewport(){
 function takeStill(){
     var apiCall = "?action=preview";
 
-    if($("#customSwitch1").hasClass("collapsed")){
+    if($("#manualSwitch1").hasClass("collapsed")){
         //shotting in auto mode
         apiCall += "&mode=auto";
     }else{
@@ -106,6 +106,34 @@ function takeStill(){
             console.log( "Request Failed: " + err );
   });
 }
+
+
+function startTimelapse(){
+    var apiCall = "?action=timelapse";
+
+    if($("#manualSwitch1").hasClass("collapsed")){
+        //shotting in auto mode
+        apiCall += "&mode=auto";
+    }else{
+        apiCall += "&mode=manual"; //&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
+    }
+
+    streamManager("stop");
+    $.getJSON( apiCall)
+        .done(function( json ) {
+            console.log( "JSON Data: " + json );
+            displayStill(json.filename)
+            //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+            //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+            //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+        })
+        .fail(function( jqxhr, textStatus, error ) {
+            var err = textStatus + ", " + error;
+            console.log( "Request Failed: " + err );
+  });
+}
+
+
 
 function displayStill(filename){
     var capturedImage = filename;

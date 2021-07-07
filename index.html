@@ -89,94 +89,121 @@
           </li>
         </ul>
         <div class="tab-content" id="myTabContent">
+
+          <!-- START of stills tab-->
           <div class="tab-pane fade show active" id="photo" role="tabpanel" aria-labelledby="photo-tab">
             
         
             <div class="container">
               <!-- Content here -->
               <div class="form-group">
-              <div class="row text-center">
-                <div class="col-sm">
-                  <button type="button" class="btn btn-lg btn-primary m-3" onclick="takeStill()">Take Still Image</button>
+                <div class="row text-center">
+                  <div class="col-sm">
+                    <button type="button" class="btn btn-lg btn-primary m-3" onclick="takeStill()">Take Still Image</button>
+                  </div>
                 </div>
-              </div>
-        
-              <div class="custom-control custom-switch text-center mb-2 ">
-                <input type="checkbox" class="custom-control-input collapsed" id="customSwitch1" data-toggle="collapse" href="#collapseExample" role="button" aria-expanded="false" aria-controls="collapseExample">
-                <label class="custom-control-label" for="customSwitch1">Manual Control</label>
-              </div>
-        
-        
-        
-              <div class="collapse" id="collapseExample">
-                <div class="container">
-                  <div class="row mb-2">
-                    <div class="col">
-                      <select id="presets" class="form-control" onchange="setPreset();" >
-                        <option value="sunnyDay">Sunny Day Open Sky</option>
-                        <option value="sunnyForrest">Sunny Day Covered Forrest</option>
-                        <option value="sunset">Sunset</option>
-                        <option value="night">Dark Night</option>
-                        <option value="nightUrban">Urban Night</option>
-                        <option value="nightNature">Nature at Night</option>
-                      </select>
-                      <sub>Preset for preconfigured still image values</sub>
-                    </div>
-                  </div>
-        
-                  <div class="row">
-                    <div class="col-4">
-                      <strong>Shutter:</strong>
-                      <input id="ss" value="" name="ss" class="form-control" placeholder="e.g. 1000 for 1/100th"></input>
-                      <sub>Shutter-speed in micro seconds. 1000000 = 1 second</sub>
-                    </div>
-                    <div class="col-4">
-                      <strong>ISO:</strong>
-                      <select id="iso" name="iso" class="form-control" >
-                        <option>10</option>
-                        <option>50</option>
-                        <option>75</option>
-                        <option>100</option>
-                        <option>200</option>
-                        <option>400</option>
-                        <option>800</option>
-                        <option>1600</option>
-                      </select>
-                      <sub>Approximated values based on analogue and digital gains of sensor</sub>
-                    </div>
-                    <div class="col-4">
-                      <strong>AWBG:</strong>
-                      <input id="awbg" name="awbg" class="form-control" placeholder="e.g. 3,2"></input>
-                      <sub>Gain values from sensor for ble and red channels</sub>
-                    </div>
-                  </div>
-        
-                  <div class="row">
-                    <div class="col-12">
-                      <div class="input-group input-group-md form-control-lg">
-                        <input type="checkbox" id="captureRaw" value="0" />
-                        <label class="checkbox-inline" aria-describedby="captureRaw" id="captureRaw" for="captureRaw"> Capture RAW image</label>
+          
+                <div class="custom-control custom-switch text-center mb-2 ">
+                  <input type="checkbox" class="custom-control-input collapsed" id="manualSwitch1" data-toggle="collapse" href="#manualControls1" role="button" aria-expanded="false" aria-controls="manualControls1">
+                  <label class="custom-control-label" for="manualSwitch1">Manual Control</label>
+                </div>
+          
+          
+          
+                <div class="collapse" id="manualControls1">
+                  <div class="container">
+                    <div class="row mb-2">
+                      <div class="col">
+                        <select id="presets" class="form-control" onchange="setPreset();" >
+                          <option value="sunnyDay">Sunny Day Open Sky</option>
+                          <option value="sunnyForrest">Sunny Day Covered Forrest</option>
+                          <option value="sunset">Sunset</option>
+                          <option value="night">Dark Night</option>
+                          <option value="nightUrban">Urban Night</option>
+                          <option value="nightNature">Nature at Night</option>
+                        </select>
+                        <sub>Preset for preconfigured still image values</sub>
                       </div>
                     </div>
+          
+                    <div class="row">
+                      <div class="col-4">
+                        <strong>Shutter:</strong>
+                        <input id="ss" value="" name="ss" class="form-control" placeholder="e.g. 1000 for 1/100th"></input>
+                        <sub>Shutter-speed in micro seconds. 1000000 = 1 second</sub>
+                      </div>
+                      <div class="col-4">
+                        <strong>ISO:</strong>
+                        <select id="iso" name="iso" class="form-control" >
+                          <option>10</option>
+                          <option>50</option>
+                          <option>75</option>
+                          <option>100</option>
+                          <option>200</option>
+                          <option>400</option>
+                          <option>800</option>
+                          <option>1600</option>
+                        </select>
+                        <sub>Approximated values based on analogue and digital gains of sensor</sub>
+                      </div>
+                      <div class="col-4">
+                        <strong>AWBG:</strong>
+                        <input id="awbg" name="awbg" class="form-control" placeholder="e.g. 3,2"></input>
+                        <sub>Gain values from sensor for ble and red channels</sub>
+                      </div>
+                    </div>
+          
+                    <div class="row">
+                      <div class="col-12">
+                        <div class="input-group input-group-md form-control-lg">
+                          <input type="checkbox" id="captureRaw" value="0" />
+                          <label class="checkbox-inline" aria-describedby="captureRaw" id="captureRaw" for="captureRaw"> Capture RAW image</label>
+                        </div>
+                      </div>
+                    </div>
+          
                   </div>
-        
+          
+          
+                
+                
+                  </div>
                 </div>
-        
-        
-              
-              
-                </div>
-              </div>
               
         
                 </div>
         
             </div>
         
+          <!-- END of still tab-->
         
+          <!-- start of timelapse tab-->
+          <div class="tab-pane fade" id="timelapse" role="tabpanel" aria-labelledby="timelapse-tab">
+            
+            <div class="form-group">
+              <div class="row text-center">
+                <div class="col-sm">
+                  <button type="button" class="btn btn-lg btn-primary m-3" onclick="startTimelapse()">Start Time-lapse Sequence</button>
+                </div>
+              </div>
         
+              <div class="custom-control custom-switch text-center mb-2 ">
+                <input type="checkbox" class="custom-control-input collapsed" id="manualSwitch2" data-toggle="collapse" href="#manualControls2" role="button" aria-expanded="false" aria-controls="manualControls2">
+                <label class="custom-control-label" for="manualSwitch2">Manual Control</label>
+              </div>
+
+              <div class="collapse" id="manualControls2">
+                further controls coming
+              </div>
+
+            </div>
+
+          </div>
+
+
+          <!-- END of timelapse tab-->
         
-          <div class="tab-pane fade" id="timelapse" role="tabpanel" aria-labelledby="timelapse-tab">timelapse</div>
+          <!-- start of GALLERY tab-->
           <div class="tab-pane fade" id="gallery" role="tabpanel" aria-labelledby="gallery-tab">
             
             <div class="btn-group btn-group-toggle" data-toggle="buttons">
@@ -190,7 +217,17 @@
           
           
           </div>
+
+          <!-- END of TIMELAPSE tab-->
+        
+          <!-- start of settings tab-->
+
+
           <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">settings</div>
+
+
+          <!-- END of settings tab-->
+
         </div>
         
         

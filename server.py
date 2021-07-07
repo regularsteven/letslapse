@@ -122,7 +122,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             jsonResp += '"completedAction":"'+actionVal+'"'
             
 
-            if actionVal == "start" :
+            if actionVal == "timelapse" :
                 startTimelapse()
             if actionVal == "preview" :
                 check_kill_process("streamer.py")
