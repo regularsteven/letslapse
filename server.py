@@ -40,12 +40,12 @@ os.chdir(siteRoot+"/")
 
 
 #start up the streamer, this will run as a child on a different port
-system("python3 streamer.py")
+#system("python3 streamer.py")
 
-#ipath = "/home/pi/Documents/mouse.py"    #CHANGE PATH TO LOCATION OF mouse.py
+ipath = siteRoot+"/streamer.py"    #CHANGE PATH TO LOCATION OF mouse.py
 
-#def thread_second():
-#    call(["python3", ipath])
+def thread_second():
+    call(["python3", ipath])
 
 def check_kill_process(pstring):
     for line in os.popen("ps ax | grep " + pstring + " | grep -v grep"):
