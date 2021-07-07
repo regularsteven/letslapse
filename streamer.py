@@ -20,7 +20,12 @@ parser = argparse.ArgumentParser(description='Optional app description')
 
 parser.add_argument('--testing', type=str,
                     help='Local development testing')
-                    
+
+#we need to check the status of progress.txt
+#if this file exists, then we are in the process of a shoot and we don't want to run anything that touches the camera
+
+
+
 args = parser.parse_args()
 import picamera
 

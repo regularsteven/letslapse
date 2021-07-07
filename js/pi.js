@@ -21,10 +21,10 @@ function toggleControls(value){
 
 
 var presets = [];
-presets["sunnyDay"] = {ss: 100, iso: 10, awbg: '3,2'};
+presets["sunnyDay"] = {ss: 100, iso: 10, awbg: '1.76,2.1'};
 presets["sunnyForrest"] = {ss: 5000, iso: 10, awbg: '3,2'};
 presets["sunset"] = {ss: 20000, iso: 75, awbg: '3,2'};
-presets["night"] = {ss: 6 * 100000, iso: 1600, awbg: '3,2'};
+presets["nightIndoor"] = {ss: 6 * 100000, iso: 800, awbg: '1.8,2.9'};
 presets["nightUrban"] = {ss: 2 * 100000, iso: 800, awbg: '3,2'};
 presets["nightNature"] = {ss: 6 * 100000, iso: 800, awbg: '3,2'};
 
@@ -119,6 +119,7 @@ function startTimelapse(){
     }
 
     streamManager("stop");
+    alert("Timelapse about to start.")
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
