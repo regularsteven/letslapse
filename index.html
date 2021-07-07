@@ -1,87 +1,207 @@
-<!DOCTYPE html>
-<html>
-<head>
-<title>PiPic</title>
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="stylesheet" href="css/pi.css">
-<style>
-#previewControls{
-}
-</style>
-
-
-
-
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="">
+    <!-- Bootstrap core CSS -->
+    <link href="/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/pi.css">
+    <link href="/css/open-iconic-bootstrap.css" rel="stylesheet">
 </head>
 <body>
 
 
-<h1><a href="/">PiPic</a></h1>
-
-<script src="js/pi.js"></script>
-
-<form action="/" target="" id="mainForm">
-<h3>Actions</h3>
-
-<a href="/previews/">See Previews</a> </br>
-<a href="/auto/">See Timelapse Shots</a> </br>
-<a href="/latest.jpg">See Lastest Timelapse Shot</a> </br>
+<script src="js/jquery-3.6.0.min.js"></script>
+<script src="/js/pi.js"></script>
 
 
-<input onclick="toggleControls('none')" type="radio" id="live" name="action" value="live">
-<label for="live">Feed</label>
-<input onclick="toggleControls('block')" type="radio" id="preview" name="action" value="preview">
-<label for="preview">Photo</label>
-<input onclick="toggleControls('none')" type="radio" id="start" name="action" value="start">
-<label for="start">Timelapse</label>
-<br />
-<script>
-document.write("tcp/h264://"+window.location.host+":3333");
-</script>
+<script src="/js/bootstrap.min.js"></script>
+<script src="/js/util.js"></script>
 
 
-<div id="previewControls">
-<h3>Presets</h3>
-<i>5 stops from open</i>
-<ul id="presets">
-    <li onclick="setPreset('sunnyDay');" id="sunnyDay">Sunny Day Open Sky</li>
-    <li onclick="setPreset('sunnyForrest');" id="sunnyForrest">Sunny Day Covered Forrest</li>
-    <li onclick="setPreset('sunset');" id="sunset">Sunset</li>
-    <li onclick="setPreset('night');" id="night">Dark Night</li>
-    <li onclick="setPreset('nightUrban');" id="nightUrban">Urban Night</li>
-    <li onclick="setPreset('nightNature');" id="nightNature">Nature at Night</li>
-</ul>
+
+  <!-- main nav at header-->
+
+  <nav class="navbar navbar-expand-md navbar-dark bg-dark">
+    <div id="header">
+      <a href="/"><img src="/img/square-logo-fit-circle.png" alt=""></a>
+    </div>
+    <button class="navbar-toggler collapsed" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
+      <span class="navbar-toggler-icon"></span>
+    </button>
+
+    <div class="navbar-collapse collapse" id="navbarsExampleDefault" >
+      <ul class="navbar-nav mr-auto">
+        <li class="nav-item active">
+          <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link" href="#">Link</a>
+        </li>
+        <li class="nav-item">
+          <a class="nav-link disabled" href="#">Disabled</a>
+        </li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="http://example.com" id="dropdown01" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Dropdown</a>
+          <div class="dropdown-menu" aria-labelledby="dropdown01">
+            <a class="dropdown-item" href="#">Action</a>
+            <a class="dropdown-item" href="#">Another action</a>
+            <a class="dropdown-item" href="#">Something else here</a>
+          </div>
+        </li>
+      </ul>
+      <form class="form-inline my-2 my-lg-0">
+        <input class="form-control mr-sm-2" type="text" placeholder="Search" aria-label="Search">
+        <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
+      </form>
+    </div>
+  </nav>
 
 
-<div class="splitCol">
-<h4>Shutter Speed</h4>
-<input id="ss" value="" name="ss"></input>
-</div>
-<div class="splitCol">
-<h4>ISO</h4>
-<select id="iso" name="iso">
-  <option>10</option>
-  <option>50</option>
-  <option>75</option>
-  <option>100</option>
-  <option>200</option>
-  <option>400</option>
-  <option>800</option>
-  <option>1600</option>
-</select>
-</div>
-<div class="splitCol">
-    <h4>Red / Blue Colour</h4>
-    <input id="awbg" value="auto" name="awbg"></input><br />
-    <sub>3,2 for daylight</sub>
-</div>
-<div class="newRow">
-<input type="checkbox" name="captureRaw" id="captureRaw" ></input><label for="captureRaw">Capture RAW image</label>
-</div>
-</div> <!--  id="previewControls"-->
+  <!-- main viewer compontent-->
 
-<button type="submit" onclick="checkForm()">GO</button>
-</form>
+  <div class="row reverseWhenBig">
+    <div class="col-md-6 viewportCol">
+
+      <div id="imageViewport">
+    
+      </div>
+    
+    </div>
+    <div class="col-md-6 controlCol">
+      <form action="/" target="" id="mainForm">
+
+
+
+        <ul class="nav nav-tabs" id="myTab" role="tablist">
+          <li class="nav-item">
+            <a class="nav-link active" id="photo-tab" data-toggle="tab" href="#photo" role="tab" aria-controls="photo" aria-selected="true"><span class="oi oi-camera-slr" title="icon name" aria-hidden="true"></span> Still</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="timelapse-tab" data-toggle="tab" href="#timelapse" role="tab" aria-controls="timelapse" aria-selected="false"><span class="oi oi-loop-circular" title="icon name" aria-hidden="true"></span> Interval</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="gallery-tab" data-toggle="tab" href="#gallery" role="tab" aria-controls="gallery" aria-selected="false"><span class="oi oi-image" title="icon name" aria-hidden="true"></span> Gallery</a>
+          </li>
+          <li class="nav-item">
+            <a class="nav-link" id="settings-tab" data-toggle="tab" href="#settings" role="tab" aria-controls="settings" aria-selected="false"><span class="oi oi-cog" title="icon name" aria-hidden="true"></span> Config</a>
+          </li>
+        </ul>
+        <div class="tab-content" id="myTabContent">
+          <div class="tab-pane fade show active" id="photo" role="tabpanel" aria-labelledby="photo-tab">
+            
+        
+            <div class="container">
+              <!-- Content here -->
+              <div class="form-group">
+              <div class="row text-center">
+                <div class="col-sm">
+                  <button type="button" class="btn btn-lg btn-primary m-3" onclick="checkForm()">Take Still Image</button>
+                </div>
+              </div>
+        
+              <div class="custom-control custom-switch text-center mb-2 ">
+                <input type="checkbox" class="custom-control-input" id="customSwitch1" data-toggle="collapse" href="#collapseExample" role="button" aria-expanded="false" aria-controls="collapseExample">
+                <label class="custom-control-label" for="customSwitch1">Manual Control</label>
+              </div>
+        
+        
+        
+              <div class="collapse" id="collapseExample">
+                <div class="container">
+                  <div class="row mb-2">
+                    <div class="col">
+                      <select id="presets" class="form-control" >
+                        <option onclick="setPreset('sunnyDay');" id="sunnyDay">Sunny Day Open Sky</option>
+                        <option onclick="setPreset('sunnyForrest');" id="sunnyForrest">Sunny Day Covered Forrest</option>
+                        <option onclick="setPreset('sunset');" id="sunset">Sunset</option>
+                        <option onclick="setPreset('night');" id="night">Dark Night</option>
+                        <option onclick="setPreset('nightUrban');" id="nightUrban">Urban Night</option>
+                        <option onclick="setPreset('nightNature');" id="nightNature">Nature at Night</option>
+                      </select>
+                      <sub>Preset for preconfigured still image values</sub>
+                    </div>
+                  </div>
+        
+                  <div class="row">
+                    <div class="col-4">
+                      <strong>Shutter:</strong>
+                      <input id="ss" value="" name="ss" class="form-control" placeholder="e.g. 1000 for 1/100th"></input>
+                      <sub>Shutter-speed in micro seconds. 1000000 = 1 second</sub>
+                    </div>
+                    <div class="col-4">
+                      <strong>ISO:</strong>
+                      <select id="iso" name="iso" class="form-control" >
+                        <option>10</option>
+                        <option>50</option>
+                        <option>75</option>
+                        <option>100</option>
+                        <option>200</option>
+                        <option>400</option>
+                        <option>800</option>
+                        <option>1600</option>
+                      </select>
+                      <sub>Approximated values based on analogue and digital gains of sensor</sub>
+                    </div>
+                    <div class="col-4">
+                      <strong>AWBG:</strong>
+                      <input id="awbg" name="awbg" class="form-control" placeholder="e.g. 3,2"></input>
+                      <sub>Gain values from sensor for ble and red channels</sub>
+                    </div>
+                  </div>
+        
+                  <div class="row">
+                    <div class="col-12">
+                      <div class="input-group input-group-md form-control-lg">
+                        <input type="checkbox" id="captureRaw" value="0" />
+                        <label class="checkbox-inline" aria-describedby="captureRaw" id="captureRaw" for="captureRaw"> Capture RAW image</label>
+                      </div>
+                    </div>
+                  </div>
+        
+                </div>
+        
+        
+              
+              
+                </div>
+              </div>
+              
+        
+                </div>
+        
+            </div>
+        
+        
+        
+        
+          <div class="tab-pane fade" id="timelapse" role="tabpanel" aria-labelledby="timelapse-tab">timelapse</div>
+          <div class="tab-pane fade" id="gallery" role="tabpanel" aria-labelledby="gallery-tab">
+            
+            <div class="btn-group btn-group-toggle" data-toggle="buttons">
+              <label class="btn btn-secondary active">
+                <input type="radio" name="options" id="option1" autocomplete="off" checked> Still Gallery
+              </label>
+              <label class="btn btn-secondary">
+                <input type="radio" name="options" id="option2" autocomplete="off"> Timelapse Gallery
+              </label>
+            </div>
+          
+          
+          </div>
+          <div class="tab-pane fade" id="settings" role="tabpanel" aria-labelledby="settings-tab">settings</div>
+        </div>
+        
+        
+        
+        
+        
+        </form>
+    </div>
+  </div>
+
+
 
 
 </body>

@@ -1,71 +1,42 @@
-html {
-    margin: 0;
-    padding: 0;
-    border: 0;
+body {
+    overflow-x: hidden;
 }
 
-body{
-    font-family: "Trebuchet MS", Helvetica, sans-serif;
-}
-ul{
-    padding-left: 0;
-    text-align: center;
-    display: flex;
-    margin-left: -10px;
+div#header {
+    background-color: white;
+    border-radius: 50px;
+    overflow: hidden;
+
 }
 
-ul#presets li {
+#header img{
+    width:30px;
+    height:auto;
 
-    height: 80px;
-    border: 2px solid lightgray;
-    margin: 1.5%;
-    text-align: center;
-    display: inline-table;
-    list-style: none;
-    font-size: small;
-}
-
-ul#presets li.active{
-    border: 2px solid darkgreen;
-    color: darkgreen;
-    background-color: lightgrey;
-}
-
-#mainForm{
-    clear:both;
-}
-
-.splitCol {
-    width: 32%;
-    float: left;
 }
 
 
-button{
+
+.row.reverseWhenBig {
+    flex-direction: row-reverse;
+}
+
+
+#imageViewport{
+    background-color: black;
+    padding-bottom: 75%;
     width: 100%;
-    padding: 10px;
-    font-size: larger;
-    margin-top: 20px;
+    background-size: contain;
 }
-.splitCol select{
-    width: 100%;
-    padding: 10px;
-    font-size: larger;
-}
-.splitCol input {
-    width: 80%;
-    padding: 10px;
-    font-size: larger;
-}
-img {
-    max-width: 100%;
-}
-
-.newRow {
-    clear: both;
+#imageViewport img{
+    width:100%;
+    height:auto;
 }
 
 
-#previewControls{
-    display:none;
+
+input#captureRaw {
+    width: 20px;
+    height: 27px;
+    margin-right: 10px;
 }
