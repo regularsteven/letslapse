@@ -109,6 +109,13 @@ function takeStill(){
 
 
 function startTimelapse(){
+
+    streamManager("stop");
+    alert("Timelapse about to start.")
+    window.setTimeout("startTimelapseDelay()", 2000);
+}
+
+function startTimelapseDelay(){
     var apiCall = "?action=timelapse";
 
     if($("#manualSwitch1").hasClass("collapsed")){
@@ -117,22 +124,19 @@ function startTimelapse(){
     }else{
         apiCall += "&mode=manual"; //&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
     }
-
-    streamManager("stop");
-    alert("Timelapse about to start.")
     $.getJSON( apiCall)
-        .done(function( json ) {
-            console.log( "JSON Data: " + json );
-            alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
-            displayStill("latest.jpg");
-            //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
-            //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
-            //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
-        })
-        .fail(function( jqxhr, textStatus, error ) {
-            var err = textStatus + ", " + error;
-            console.log( "Request Failed: " + err );
-  });
+    .done(function( json ) {
+        console.log( "JSON Data: " + json );
+        alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
+        displayStill("latest.jpg");
+        //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+        //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+        //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+});
 }
 
 
