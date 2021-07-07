@@ -41,6 +41,8 @@ function toggleControls(value){
 }
 
 
+/* V.1 Release */ 
+
 function streamManager(startOrStop){
     if(startOrStop == "start"){
         
@@ -66,7 +68,16 @@ window.addEventListener("load", function(){
     console.log("document loaded");
     streamManager("start");
 });
-/* V.1 Release */ 
+
+
+function clickViewport(){
+    if(document.getElementById("imageViewport").style.backgroundImage == "none"){
+        streamManager("start");
+    }else{
+        streamManager("stop");
+    }
+    
+}
 
 function takeStill(){
     var apiCall = "?action=preview&ss=8000&iso=400&awbg=3,2";
@@ -74,12 +85,18 @@ function takeStill(){
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
-            window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
-            window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
-            window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+            displayStill(json.filename)
+            //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+            //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+            //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
         })
         .fail(function( jqxhr, textStatus, error ) {
             var err = textStatus + ", " + error;
             console.log( "Request Failed: " + err );
   });
+}
+
+function displayStill(filename){
+    var capturedImage = filename;
+    document.getElementById("imageViewport").style.backgroundImage = "url('/previews/"+capturedImage+"')";
 }

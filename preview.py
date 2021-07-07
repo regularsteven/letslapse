@@ -1,8 +1,6 @@
 import threading, os, signal
 from os import system
 from time import sleep
-#from pydng.core import RPICAM2DNG
-from datetime import datetime
 from decimal import Decimal
 import argparse
 from os import path
@@ -21,12 +19,14 @@ parser.add_argument('--iso', type=int,
 
 parser.add_argument('--awbg', type=str,
                     help='blue and green values')   
+
+
+parser.add_argument('--filename', type=str,
+                    help='name of file to output')   
                     
 args = parser.parse_args()
 
-now = datetime.now()
 
-current_time = now.strftime("%H_%M_%S")
 
 
 if path.isdir("previews") == True :
@@ -70,7 +70,7 @@ if args.awbg != "auto":
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "/home/pi/pitime/previews/preview_"+current_time+"_ss-"+str(exposureInput)+"_iso-"+str(args.iso)+"_awbg-"+args.awbg+".jpg"
+outputPathAndFilename = "/home/pi/pitime/previews/"+args.filename
 
 #print("/"+outputPathAndFilename)
 

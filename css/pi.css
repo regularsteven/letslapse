@@ -22,6 +22,8 @@ div#header {
 }
 
 
+
+
 #imageViewport{
     background-color: black;
     padding-bottom: 75%;
@@ -33,6 +35,10 @@ div#header {
     height:auto;
 }
 
+
+ul#myTab li a {
+    padding: 12px 10px;
+}
 
 
 input#captureRaw {
