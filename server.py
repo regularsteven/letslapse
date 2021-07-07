@@ -111,6 +111,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             if actionVal == "start" :
                 startTimelapse()
             if actionVal == "preview" :
+                check_kill_process("streamer.py")
                 ss = query_components["ss"][0]
                 iso = query_components["iso"][0]
                 awbg = query_components["awbg"][0]
