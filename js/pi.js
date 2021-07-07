@@ -44,7 +44,12 @@ function toggleControls(value){
 function streamManager(startOrStop){
     if(startOrStop == "start"){
         document.getElementById("imageViewport").style.backgroundImage = "none";
-        stream = "http://10.3.141.212:8081/stream.mjpg"
+        stream = ""
+        if(window.location.host == "127.0.0.1"){
+            console.log("local testing, see if the device is on the network")
+            stream += "http://10.3.141.212"
+        }
+        stream = "/stream.mjpg"
         document.getElementById("imageViewport").style.backgroundImage = "url('"+stream+"')";
     }else{
         window.stop();
