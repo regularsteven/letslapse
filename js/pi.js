@@ -107,6 +107,19 @@ function takeStill(){
   });
 }
 
+var progressTxt = null;
+function parseProgress(){
+    jQuery.get('progress.txt', function(data) {
+        progressTxt = (data).split("\n");
+        var progressIndex = parseInt(progressTxt[0]);
+        var progressName = progressTxt[1];
+        var folderNum = Math.ceil((progressIndex+1)/1000)-1
+        var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
+        displayStill(latestImage);
+    });
+}
+
+
 function timelapseMode(startOrStop){
     if (startOrStop == "start"){
         $("#photo-tab").addClass("disabled");
@@ -171,6 +184,7 @@ function startTimelapseDelay(){
         console.log( "JSON Data: " + json );
         //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
         //displayStill("latest.jpg");
+        parseProgress();
         timelapseMode("start");
         //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
         //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
