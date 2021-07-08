@@ -123,6 +123,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             
 
             if actionVal == "timelapse" :
+                check_kill_process("streamer.py")
                 startTimelapse()
             if actionVal == "preview" :
                 check_kill_process("streamer.py")
