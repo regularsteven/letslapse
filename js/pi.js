@@ -112,14 +112,14 @@ function timelapseMode(startOrStop){
         $("#photo-tab").addClass("disabled");
         $("#timelapse .custom-switch").addClass("d-none");
         
-        $("#timelapse .startButton").addClass("d-none");
-        $("#timelapse .stopButton").removeClass("d-none");    
+        $("#timelapse .startBtn").addClass("d-none");
+        $("#timelapse .stopBtn").removeClass("d-none");    
     }else{
-        $("#photo-tab").addClass("enabled");
+        $("#photo-tab").removeClass("disabled");
         $("#timelapse .custom-switch").removeClass("d-none");
         
-        $("#timelapse .startButton").removeClass("d-none");
-        $("#timelapse .stopButton").addClass("d-none");
+        $("#timelapse .startBtn").removeClass("d-none");
+        $("#timelapse .stopBtn").addClass("d-none");
     }
     
 }
