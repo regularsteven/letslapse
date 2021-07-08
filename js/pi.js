@@ -107,12 +107,20 @@ function takeStill(){
   });
 }
 
-function timelapseMode(){
-    $("#photo-tab").addClass("disabled");
-    $("#timelapse .custom-switch").addClass("d-none");
-    
-    $("#timelapse .startButton").addClass("d-none");
-    $("#timelapse .startButton").removeClass("d-none");
+function timelapseMode(startOrStop){
+    if (startOrStop == "start"){
+        $("#photo-tab").addClass("disabled");
+        $("#timelapse .custom-switch").addClass("d-none");
+        
+        $("#timelapse .startButton").addClass("d-none");
+        $("#timelapse .stopButton").removeClass("d-none");    
+    }else{
+        $("#photo-tab").addClass("enabled");
+        $("#timelapse .custom-switch").removeClass("d-none");
+        
+        $("#timelapse .startButton").removeClass("d-none");
+        $("#timelapse .stopButton").addClass("d-none");
+    }
     
 }
 
@@ -121,9 +129,24 @@ function stopTimelapse(){
     var txt;
     var r = confirm("Stop timelapse shoot?");
     if (r == true) {
-        txt = "You pressed OK!";
+        console.log("You pressed OK!");
+        var apiCall = "?action=killtimelapse";
+        $.getJSON( apiCall)
+            .done(function( json ) {
+                console.log(json );
+                //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
+                //displayStill("latest.jpg");
+                timelapseMode("stop");
+                //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+                //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+                //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+            })
+            .fail(function( jqxhr, textStatus, error ) {
+                var err = textStatus + ", " + error;
+                console.log( "Request Failed: " + err );
+            });
     } else {
-        txt = "You pressed Cancel!";
+        console.log("You pressed Cancel!");
     }
 }
 
@@ -148,7 +171,7 @@ function startTimelapseDelay(){
         console.log( "JSON Data: " + json );
         //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
         //displayStill("latest.jpg");
-        timelapseMode()
+        timelapseMode("start");
         //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
         //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
         //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
@@ -156,7 +179,7 @@ function startTimelapseDelay(){
     .fail(function( jqxhr, textStatus, error ) {
         var err = textStatus + ", " + error;
         console.log( "Request Failed: " + err );
-});
+    });
 }
 
 

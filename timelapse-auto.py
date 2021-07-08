@@ -1,5 +1,12 @@
 runWithoutCamera = False
 updateGainsWithLivePreview = True
+import os
+instanceCount = 0
+for line in os.popen("ps -f -C python3 | grep timelapse-auto.py"):
+    instanceCount = instanceCount + 1
+    if instanceCount > 1:
+        print("timelapse-auto.py: Instance already running - exiting now")
+        exit()
 
 from os import system
 
@@ -190,7 +197,7 @@ for i in range(80000):
     
 
     fileOutput = ""
-    fileOutput = " --latest latest.jpg" #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
+    #fileOutput = " --latest latest.jpg" #comment this out if we don't want the latest image - might add overhead in terms of IO, so potentially kill it
     fileOutput = fileOutput+ " -o "+filename
 
 

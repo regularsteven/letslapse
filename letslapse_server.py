@@ -113,8 +113,6 @@ class StreamingOutput(object):
         return self.buffer.write(buf)
 
 class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
-    
-    
     def do_GET(self):
         print(urlparse(self.path))
         query_components = parse_qs(urlparse(self.path).query)
@@ -134,6 +132,8 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 startTimelapse()
             elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
+            elif actionVal == "killtimelapse" :
+                check_kill_process("timelapse-auto.py")
             elif actionVal == "killstreamer" :
                 check_kill_process("letslapse_streamer.py")
             elif actionVal == "startstreamer" :
