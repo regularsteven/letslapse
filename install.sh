@@ -1,3 +1,4 @@
+#copy wpa_supplication.conf to /boot & touch ssh
 #1 git clone https://github.com/regularsteven/pitime.git
 #2 sudo sh install.sh 
 
@@ -44,15 +45,19 @@ echo "14 installing python dependencies"
 sudo apt install python3-pip
 python3 -m pip install --upgrade pip
 python3 -m pip install --upgrade Pillow
-echo "15 Enable Camera / Disable Bluetooth - Updating /etc/default/hostapd"
+echo "15 System Stuff - Enable Camera / Disable Bluetooth - Updating /etc/default/hostapd"
 echo 'start_x=1' | sudo tee -a /boot/config.txt
 echo 'gpu_mem=128' | sudo tee -a /boot/config.txt
 echo 'dtoverlay=disable-bt' | sudo tee -a /boot/config.txt
 echo 'disable_camera_led=1' | sudo tee -a /boot/config.txt
 
+#ideally disable HDMI - need to add this before exit 0 though, not at the end
+#echo '/usr/bin/tvservice -o' | sudo tee -a /etc/rc.local
+
 echo "16 Start server on boot - Updating /etc/default/hostapd"
-echo 'sudo python3 /home/pi/pitime/server.py' | sudo tee -a /etc/profile
-echo 'sudo python3 /home/pi/pitime/streamer.py' | sudo tee -a /etc/profile
+echo 'sudo python3 /home/pi/pitime/letslapse_server.py' | sudo tee -a /etc/profile
+#initially considered loading the streamer on start-up, but this adds overhead and should only be called when required
+#echo 'sudo python3 /home/pi/pitime/streamer.py' | sudo tee -a /etc/profile
 
 
 echo "Finished. On reboot, if no network is found, a hotspot will be created."

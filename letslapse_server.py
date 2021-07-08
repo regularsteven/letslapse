@@ -1,14 +1,23 @@
 #!/usr/bin/python3
-import io
+import os
+instanceCount = 0
+for line in os.popen("ps -f -C python3 | grep letslapse_server.py"):
+    instanceCount = instanceCount + 1
+    if instanceCount > 1:
+        print("letslapse_server.py: Instance already running - exiting now")
+        exit()
 
+
+import subprocess
+import io
 import logging
 import socketserver
 from datetime import datetime
 from threading import Condition
 from http import server
-import threading, os, signal
+import threading, signal
 from os import system
-import subprocess
+
 from subprocess import check_call, call
 import sys
 from urllib.parse import urlparse, parse_qs
@@ -41,12 +50,12 @@ os.chdir(siteRoot+"/")
 
 
 #start up the streamer, this will run as a child on a different port
-#system("python3 streamer.py")
+#system("python3 letslapse_streamer.py")
 
-ipath = siteRoot+"/streamer.py"    #CHANGE PATH TO LOCATION OF mouse.py
+letslapse_streamerPath = siteRoot+"/letslapse_streamer.py"    #CHANGE PATH TO LOCATION OF letslapse_streamer.py
 
 def thread_second():
-    call(["python3", ipath])
+    call(["python3", letslapse_streamerPath])
 
 def check_kill_process(pstring):
     for line in os.popen("ps ax | grep " + pstring + " | grep -v grep"):
@@ -105,8 +114,7 @@ class StreamingOutput(object):
 
 class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
     
-    #processThread = threading.Thread(target=thread_second)
-    #processThread.start()
+    
     def do_GET(self):
         print(urlparse(self.path))
         query_components = parse_qs(urlparse(self.path).query)
@@ -121,16 +129,17 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             jsonResp = '{'
             jsonResp += '"completedAction":"'+actionVal+'"'
             
-
             if actionVal == "timelapse" :
-                check_kill_process("streamer.py")
+                check_kill_process("letslapse_streamer.py")
                 startTimelapse()
-            if actionVal == "preview" :
-                check_kill_process("streamer.py")
+            elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
-               
-            
-            
+            elif actionVal == "killstreamer" :
+                check_kill_process("letslapse_streamer.py")
+            elif actionVal == "startstreamer" :
+                processThread = threading.Thread(target=thread_second)
+                processThread.start()
+
             jsonResp += '}'
             print(actionVal)
              # Whenever using 'send_header', you also have to call 'end_headers'

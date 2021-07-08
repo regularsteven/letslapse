@@ -147,7 +147,7 @@ function startTimelapseDelay(){
     .done(function( json ) {
         console.log( "JSON Data: " + json );
         //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
-        displayStill("latest.jpg");
+        //displayStill("latest.jpg");
         timelapseMode()
         //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
         //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);

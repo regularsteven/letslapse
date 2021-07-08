@@ -1,6 +1,12 @@
 #!/usr/bin/python3
+import os
+instanceCount = 0
+for line in os.popen("ps -f -C python3 | grep letslapse_streamer.py"):
+    instanceCount = instanceCount + 1
+    if instanceCount > 1:
+        print("letslapse_streamer.py: Instance already running - exiting now")
+        exit()
 import io
-
 import logging
 import socketserver
 from threading import Condition
