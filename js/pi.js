@@ -161,7 +161,7 @@ function pollUptime(){
     
     }else{
         //console.log("pollUptime fake");
-        
+        realUptimeLatest++
         if(currentStatus == "isRestarting"){
             if(realUptimeIndex > 1){
                 realUptimeIndex = -10;
