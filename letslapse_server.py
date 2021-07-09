@@ -64,9 +64,9 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse() :
+def startTimelapse(shootName) :
     print("start startTimelapse")
-    system('./go.sh')
+    system('nohup python3 timelapse-auto.py --folderName default &')
 
     print("end startTimelapse")
     return "cool"
@@ -129,7 +129,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             
             if actionVal == "timelapse" :
                 check_kill_process("letslapse_streamer.py")
-                startTimelapse()
+                startTimelapse(query_components["shootName"][0])
             elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :

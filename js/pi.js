@@ -18,7 +18,23 @@ function toggleControls(value){
 
 
 /* V.1 Release */ 
+function power(resetOrOff){
+    if(resetOrOff == "reset"){
 
+    }else{
+
+    }
+    streamManager("stop");
+    $.getJSON( apiCall)
+        .done(function( json ) {
+           //this should be a response to indicate process is about to happen
+           alert("device about to " + resetOrOff);
+        })
+        .fail(function( jqxhr, textStatus, error ) {
+            var err = textStatus + ", " + error;
+            console.log( "Request Failed: " + err );
+  });
+}
 
 var presets = [];
 presets["sunnyDay"] = {ss: 100, iso: 10, awbg: '1.76,2.1'};
@@ -172,13 +188,17 @@ function startTimelapse(){
 
 function startTimelapseDelay(){
     var apiCall = "?action=timelapse";
-
-    if($("#manualSwitch1").hasClass("collapsed")){
+    var shootName = "default";
+    if($("#manualSwitch2").hasClass("collapsed")){
         //shotting in auto mode
         apiCall += "&mode=auto";
     }else{
         apiCall += "&mode=manual"; //&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
+        if ($("#shootName").val() !== ""){
+            shootName = $("#shootName").val();
+        }
     }
+    apiCall += "&shootName="+shootName;
     $.getJSON( apiCall)
     .done(function( json ) {
         console.log( "JSON Data: " + json );

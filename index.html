@@ -22,39 +22,43 @@
 
 
   <!-- main nav at header-->
+  
+
+
+
 
   <nav class="navbar navbar-expand-md navbar-dark bg-dark">
     <div id="header">
-      <a href="/"><img src="/img/square-logo-fit-circle.png" alt=""></a>
+      <a href="/"><img src="/img/square-logo-bw-trans.png" alt=""></a>      
     </div>
+    <div id="status" class="ml-2">
+      <div class="isReady">
+        <span class="oi oi-circle-check" title="icon reload" aria-hidden="false"></span> Ready
+      </div>
+      <div class="isShooting d-none">
+        <span class="oi oi-clock" title="icon clock" aria-hidden="false"></span> Shooting <span class="extraInfo"></span>
+      </div>
+      <div class="isRestarting d-none">
+        <span class="oi oi-reload" title="icon reload" aria-hidden="false"></span> Restarting
+      </div>
+      <div class="isWarning d-none">
+        <span class="oi oi-warning" title="icon reload" aria-hidden="false"></span> Issue <span class="extraInfo"></span>
+      </div>
+    </div>
+
     <button class="navbar-toggler collapsed" type="button" data-toggle="collapse" data-target="#navbarsExampleDefault" aria-controls="navbarsExampleDefault" aria-expanded="false" aria-label="Toggle navigation">
       <span class="navbar-toggler-icon"></span>
     </button>
 
     <div class="navbar-collapse collapse" id="navbarsExampleDefault" >
-      <ul class="navbar-nav mr-auto">
-        <li class="nav-item active">
-          <a class="nav-link" href="#">Home <span class="sr-only">(current)</span></a>
+      <ul class="navbar-nav ml-auto">
+        <li class="nav-item  ml-auto mr-auto">
+          <a class="nav-link" href="javascript:power('reset')"><span class="oi oi-reload" title="icon reload" aria-hidden="false"></span> Reset</a>
         </li>
-        <li class="nav-item">
-          <a class="nav-link" href="#">Link</a>
-        </li>
-        <li class="nav-item">
-          <a class="nav-link disabled" href="#">Disabled</a>
-        </li>
-        <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle" href="http://example.com" id="dropdown01" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">Dropdown</a>
-          <div class="dropdown-menu" aria-labelledby="dropdown01">
-            <a class="dropdown-item" href="#">Action</a>
-            <a class="dropdown-item" href="#">Another action</a>
-            <a class="dropdown-item" href="#">Something else here</a>
-          </div>
+        <li class="nav-item ml-auto mr-auto">
+          <a class="nav-link" href="javascript:power('shutdown')"><span class="oi oi-power-standby" title="icon power-standby" aria-hidden="false"></span>Shutdown</a>
         </li>
       </ul>
-      <form class="form-inline my-2 my-lg-0">
-        <input class="form-control mr-sm-2" type="text" placeholder="Search" aria-label="Search">
-        <button class="btn btn-outline-success my-2 my-sm-0" type="submit">Search</button>
-      </form>
     </div>
   </nav>
 
@@ -79,7 +83,7 @@
             <a class="nav-link active" id="photo-tab" data-toggle="tab" href="#photo" role="tab" aria-controls="photo" aria-selected="true"><span class="oi oi-camera-slr" title="icon name" aria-hidden="true"></span> Still</a>
           </li>
           <li class="nav-item">
-            <a class="nav-link" id="timelapse-tab" data-toggle="tab" href="#timelapse" role="tab" aria-controls="timelapse" aria-selected="false"><span class="oi oi-loop-circular" title="icon name" aria-hidden="true"></span> Timelapse</a>
+            <a class="nav-link" id="timelapse-tab" data-toggle="tab" href="#timelapse" role="tab" aria-controls="timelapse" aria-selected="false"><span class="oi oi-timer" title="icon name" aria-hidden="true"></span> Timelapse</a>
           </li>
           <li class="nav-item">
             <a class="nav-link" id="gallery-tab" data-toggle="tab" href="#gallery" role="tab" aria-controls="gallery" aria-selected="false"><span class="oi oi-image" title="icon name" aria-hidden="true"></span> Gallery</a>
@@ -194,7 +198,10 @@
               </div>
 
               <div class="collapse" id="manualControls2">
-                further controls coming
+                <div class="container">
+                  <label for="shootName">Shoot Name</label>
+                  <input type="text" id="shootName" placeholder="Streets of Prague" class="form-control">
+                </div>
               </div>
 
             </div>

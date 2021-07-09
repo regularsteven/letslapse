@@ -324,7 +324,7 @@ for i in range(80000):
             camera = PiCamera(resolution=(1280, 720), framerate=30)
             camera.iso = 400
             camera.meter_mode = 'backlit'
-            sleep(1)
+            sleep(2)
             camera.shutter_speed = camera.exposure_speed
             camera.exposure_mode = 'off'
             g = camera.awb_gains

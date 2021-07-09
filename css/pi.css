@@ -2,15 +2,8 @@ body {
     overflow-x: hidden;
 }
 
-div#header {
-    background-color: white;
-    border-radius: 50px;
-    overflow: hidden;
-
-}
-
 #header img{
-    width:30px;
+    width:40px;
     height:auto;
 
 }
@@ -45,4 +38,21 @@ input#captureRaw {
     width: 20px;
     height: 27px;
     margin-right: 10px;
+}
+
+
+#status{
+    color: white;
+}
+#status .isReady .oi{
+    color: green;
+}
+#status .isShooting .oi{
+    color: orange;
+}
+#status .isRestarting .oi{
+    color: darkred;
+}
+#status .isWarning .oi{
+    color: pink;
 }
