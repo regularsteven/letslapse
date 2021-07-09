@@ -54,8 +54,17 @@ echo 'disable_camera_led=1' | sudo tee -a /boot/config.txt
 #ideally disable HDMI - need to add this before exit 0 though, not at the end
 #echo '/usr/bin/tvservice -o' | sudo tee -a /etc/rc.local
 
-echo "16 Start server on boot - Updating /etc/default/hostapd"
-echo 'sudo python3 /home/pi/pitime/letslapse_server.py' | sudo tee -a /etc/profile
+
+echo "16 Copy letslapse.service"
+sudo cp install/letslapse.service /etc/systemd/system/
+sudo chmod u+rwx /etc/systemd/system/letslapse.service
+echo "11 Starting and enable letslapse.service"
+sudo systemctl enable letslapse.service
+sudo systemctl start letslapse.service
+echo "See /var/log/syslog for error messages"
+
+#echo "16 Start server on boot - Updating /etc/default/hostapd"
+#echo 'sudo python3 /home/pi/pitime/letslapse_server.py' | sudo tee -a /etc/profile
 #initially considered loading the streamer on start-up, but this adds overhead and should only be called when required
 #echo 'sudo python3 /home/pi/pitime/streamer.py' | sudo tee -a /etc/profile
 

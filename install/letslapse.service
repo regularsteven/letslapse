@@ -1,0 +1,12 @@
+[Service]
+WorkingDirectory=/home/pi/pitime
+ExecStart=python3 /home/pi/pitime/letslapse_server.py
+Restart=always
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=letslapse
+User=root
+Group=root
+Environment=NODE_ENV=production
+[Install]
+WantedBy=multi-user.target
