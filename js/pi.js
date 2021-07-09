@@ -127,14 +127,13 @@ var realUptimeCheckEvery=9;
 var realUptimeLatest=-1;
 function pollUptime(){
 
-    
+    console.log("pollUptime: "+ realUptimeIndex);
 
 
     realUptimeIndex++;
     if (realUptimeIndex == 1){
         //console.log("pollUptime REAL");
-        var apiCall = "/?action=uptime";
-        $.getJSON( apiCall)
+        $.getJSON( "/?action=uptime")
             .done(function( json ) {
                 //console.log( Number(json.seconds));
                 realUptimeLatest = json.seconds;
@@ -155,24 +154,24 @@ function pollUptime(){
                     
                     window.setTimeout(pollUptime, 1000);
                 }else{
-                    alert("Uptime error");
+                    alert("Issue with camera - is it working?");
                 }
                 console.log( "Request Failed: " + err );
       });
     
     }else{
         //console.log("pollUptime fake");
-        realUptimeLatest++;
-
+        
         if(currentStatus == "isRestarting"){
-            $("footer").html("Device currently restarting, checking again in " + (0 - realUptimeIndex));
-            realUptimeIndex = -10; //this will force a poll in 10 seconds
-            window.setTimeout(pollUptime, 1000);
+            if(realUptimeIndex > 1){
+                realUptimeIndex = -10;
+            }
+            $("footer").html("Device currently restarting, checking again in " + (0 - realUptimeIndex));            
         }else{
             $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
-            if (realUptimeIndex > realUptimeCheckEvery){
-                realUptimeIndex = 0;
-            }
+        }
+        if (realUptimeIndex > realUptimeCheckEvery){
+            realUptimeIndex = 0;
         }
         window.setTimeout(pollUptime, 1000);
     }
@@ -324,7 +323,7 @@ function displayStill(filename){
     var capturedImage = filename;
     document.getElementById("imageViewport").style.backgroundImage = "url('"+capturedImage+"')";
 }
-var currentStatus;
+var currentStatus = "isReady";
 function displayStatus(which){
     currentStatus = which;
     $("#status .statusMessage").addClass("d-none");
