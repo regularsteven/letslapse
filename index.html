@@ -32,16 +32,16 @@
       <a href="/"><img src="/img/square-logo-bw-trans.png" alt=""></a>      
     </div>
     <div id="status" class="ml-2">
-      <div class="isReady">
+      <div class="isReady statusMessage">
         <span class="oi oi-circle-check" title="icon reload" aria-hidden="false"></span> Ready
       </div>
-      <div class="isShooting d-none">
+      <div class="isShooting d-none statusMessage">
         <span class="oi oi-clock" title="icon clock" aria-hidden="false"></span> Shooting <span class="extraInfo"></span>
       </div>
-      <div class="isRestarting d-none">
+      <div class="isRestarting d-none statusMessage">
         <span class="oi oi-reload" title="icon reload" aria-hidden="false"></span> Restarting
       </div>
-      <div class="isWarning d-none">
+      <div class="isWarning d-none statusMessage">
         <span class="oi oi-warning" title="icon reload" aria-hidden="false"></span> Issue <span class="extraInfo"></span>
       </div>
     </div>
@@ -73,11 +73,8 @@
         </div>
       
       </div>
-      <div class="col-md-6 controlCol">
+      <div class="col-md-6 controlCol p-0">
         <form action="/" target="" id="mainForm">
-
-
-
           <ul class="nav nav-tabs" id="myTab" role="tablist">
             <li class="nav-item">
               <a class="nav-link active" id="photo-tab" data-toggle="tab" href="#photo" role="tab" aria-controls="photo" aria-selected="true"><span class="oi oi-camera-slr" title="icon name" aria-hidden="true"></span> Still</a>
@@ -115,7 +112,7 @@
             
             
                   <div class="collapse" id="manualControls1">
-                    <div class="container">
+                    <div class="container p-0">
                       <div class="row mb-2">
                         <div class="col">
                           <select id="presets" class="form-control" onchange="setPreset();" >

@@ -19,21 +19,33 @@ function toggleControls(value){
 
 /* V.1 Release */ 
 function power(resetOrOff){
+    var confirmMessage = "";
     if(resetOrOff == "reset"){
-
+        confirmMessage = "Reset LetsLapse? Restart will take a minute.";
     }else{
-
+        confirmMessage = "Shutdown LetsLapse? Pysical power will need to be reconnected to turn on.";
     }
-    streamManager("stop");
-    $.getJSON( apiCall)
-        .done(function( json ) {
-           //this should be a response to indicate process is about to happen
-           alert("device about to " + resetOrOff);
-        })
-        .fail(function( jqxhr, textStatus, error ) {
-            var err = textStatus + ", " + error;
-            console.log( "Request Failed: " + err );
-  });
+
+    var r = confirm(confirmMessage);
+    if (r == true) {
+        var apiCall = "/?action="+resetOrOff;
+        streamManager("stop");
+        $.getJSON( apiCall)
+            .done(function( json ) {
+               //this should be a response to indicate process is about to happen
+               alert("device about to " + resetOrOff);
+               if(resetOrOff == "reset"){
+                   displayStatus("isRestarting");
+               }else{
+                displayStatus("isPowerOff");
+
+               }
+            })
+            .fail(function( jqxhr, textStatus, error ) {
+                var err = textStatus + ", " + error;
+                console.log( "Request Failed: " + err );
+      });
+    }
 }
 
 var presets = [];
@@ -61,7 +73,7 @@ function setPreset(){
 
 function streamManager(startOrStop){
     if(startOrStop == "start"){
-        
+        displayStatus("isStreaming");
         stream = ""
         if(window.location.host == "127.0.0.1"){
             console.log("local testing, see if the device is on the network")
@@ -73,6 +85,7 @@ function streamManager(startOrStop){
         document.getElementById("imageViewport").style.backgroundImage = "url('"+stream+"')";
     }else{
         window.stop();
+        displayStatus("isReady");
         document.getElementById("imageViewport").style.backgroundImage = "none";
     }
 
@@ -114,13 +127,12 @@ var realUptimeCheckEvery=9;
 var realUptimeLatest=-1;
 function pollUptime(){
     realUptimeIndex++;
-    console.log(realUptimeIndex);
     if (realUptimeIndex == 1){
-        console.log("pollUptime REAL");
+        //console.log("pollUptime REAL");
         var apiCall = "/?action=uptime";
         $.getJSON( apiCall)
             .done(function( json ) {
-                console.log( Number(json.seconds));
+                //console.log( Number(json.seconds));
                 realUptimeLatest = json.seconds;
                 $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
                 window.setTimeout(pollUptime, 1000);
@@ -132,7 +144,7 @@ function pollUptime(){
       });
     
     }else{
-        console.log("pollUptime fake");
+        //console.log("pollUptime fake");
         realUptimeLatest++;
         $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
         if (realUptimeIndex > realUptimeCheckEvery){
@@ -145,12 +157,15 @@ function pollUptime(){
 
 
 function clickViewport(){
-    if(document.getElementById("imageViewport").style.backgroundImage == "none"){
-        streamManager("start");
-    }else{
-        streamManager("stop");
+    if(currentStatus == "isShooting"){
+        parseProgress(true);
+    }else if(currentStatus == "isReady"){
+        if(document.getElementById("imageViewport").style.backgroundImage == "none"){
+            streamManager("start");
+        }else{
+            streamManager("stop");
+        }   
     }
-    
 }
 
 function takeStill(){
@@ -163,13 +178,14 @@ function takeStill(){
         apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
     }
 
-    
+    displayStatus("isShooting");
 
     streamManager("stop");
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
-            displayStill("/previews/"+json.filename)
+            displayStill("/previews/"+json.filename);
+            displayStatus("isReady");
             //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
             //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
             //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
@@ -181,26 +197,35 @@ function takeStill(){
 }
 
 var progressTxt = null;
-function parseProgress(){
+function parseProgress(displayLatest){
     jQuery.get('progress.txt', function(data) {
         progressTxt = (data).split("\n");
         var progressIndex = parseInt(progressTxt[0]);
         var progressName = progressTxt[1];
         var folderNum = Math.ceil((progressIndex+1)/1000)-1
         var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
-        displayStill(latestImage);
+        
+        if (displayLatest){
+            console.log(latestImage);
+            displayStill(latestImage);
+        }
+        $("#status .isShooting .extraInfo").html(" | Images: "+  progressTxt[0]);
     });
 }
 
 
 function timelapseMode(startOrStop){
     if (startOrStop == "start"){
+        displayStatus("isShooting");
         $("#photo-tab").addClass("disabled");
         $("#timelapse .custom-switch").addClass("d-none");
         
         $("#timelapse .startBtn").addClass("d-none");
-        $("#timelapse .stopBtn").removeClass("d-none");    
+        $("#timelapse .stopBtn").removeClass("d-none");
+
+        parseProgress(true);
     }else{
+        displayStatus("isReady");
         $("#photo-tab").removeClass("disabled");
         $("#timelapse .custom-switch").removeClass("d-none");
         
@@ -237,10 +262,8 @@ function stopTimelapse(){
 }
 
 function startTimelapse(){
-
     streamManager("stop");
-    alert("Timelapse about to start.")
-    window.setTimeout("startTimelapseDelay()", 2000);
+    window.setTimeout("startTimelapseDelay()", 1000);
 }
 
 function startTimelapseDelay(){
@@ -261,7 +284,6 @@ function startTimelapseDelay(){
         console.log( "JSON Data: " + json );
         //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
         //displayStill("latest.jpg");
-        parseProgress();
         timelapseMode("start");
         //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
         //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
@@ -278,4 +300,10 @@ function startTimelapseDelay(){
 function displayStill(filename){
     var capturedImage = filename;
     document.getElementById("imageViewport").style.backgroundImage = "url('"+capturedImage+"')";
+}
+var currentStatus;
+function displayStatus(which){
+    currentStatus = which;
+    $("#status .statusMessage").addClass("d-none");
+    $("#status ."+which).removeClass("d-none");
 }
