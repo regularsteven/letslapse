@@ -139,7 +139,14 @@ function pollUptime(){
             })
             .fail(function( jqxhr, textStatus, error ) {
                 var err = textStatus + ", " + error;
-                alert("Uptime error");
+                if(currentStatus == "isRestarting"){
+                    console.log("Device in restart state, need to check again")
+                    $("footer").html("Device currently restarting, please wait.");
+                    realUptimeIndex = 0;
+                    window.setTimeout(pollUptime, 1000);
+                }else{
+                    alert("Uptime error");
+                }
                 console.log( "Request Failed: " + err );
       });
     
@@ -151,7 +158,7 @@ function pollUptime(){
             realUptimeIndex = 0;
         }
 
-        window.setTimeout(pollUptime, 1000)
+        window.setTimeout(pollUptime, 1000);
     }
 }
 
