@@ -222,16 +222,20 @@ var progressTxt = null;
 function parseProgress(displayLatest){
     jQuery.get('progress.txt', function(data) {
         progressTxt = (data).split("\n");
-        var progressIndex = parseInt(progressTxt[0]);
-        var progressName = progressTxt[1];
-        var folderNum = Math.ceil((progressIndex+1)/1000)-1
-        var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
-        
-        if (displayLatest){
-            console.log(latestImage);
-            displayStill(latestImage);
+        if(progressTxt.length>0){
+            var progressIndex = parseInt(progressTxt[0]);
+            var progressName = progressTxt[1];
+            var folderNum = Math.ceil((progressIndex+1)/1000)-1
+            var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
+            
+            if (displayLatest){
+                console.log(latestImage);
+                displayStill(latestImage);
+            }
+            $("#status .isShooting .extraInfo").html(" | Images: "+  progressTxt[0]);
+        }else{
+            window.setTimeout("parseProgress(true)", 2000);
         }
-        $("#status .isShooting .extraInfo").html(" | Images: "+  progressTxt[0]);
     });
 }
 
