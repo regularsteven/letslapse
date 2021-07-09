@@ -57,7 +57,7 @@ echo 'disable_camera_led=1' | sudo tee -a /boot/config.txt
 
 echo "16 Copy letslapse.service"
 sudo cp install/letslapse.service /etc/systemd/system/
-sudo chmod u+rwx /etc/systemd/system/letslapse.service
+sudo chmod u+rw /etc/systemd/system/letslapse.service
 echo "11 Starting and enable letslapse.service"
 sudo systemctl enable letslapse.service
 sudo systemctl start letslapse.service
