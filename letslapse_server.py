@@ -159,7 +159,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 check_kill_process("timelapse-auto.py")
                 check_kill_process("letslapse_streamer.py")
                 system("sudo shutdown now")
-            elif actionVal == "restart" :
+            elif actionVal == "reset" :
                 check_kill_process("timelapse-auto.py")
                 check_kill_process("letslapse_streamer.py")
                 system("sudo restart now")
