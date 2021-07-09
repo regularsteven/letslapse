@@ -25,7 +25,7 @@ import argparse
 
 
 
-PORT = 80
+PORT = 81
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
@@ -139,6 +139,10 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "startstreamer" :
                 processThread = threading.Thread(target=thread_second)
                 processThread.start()
+            elif actionVal == "uptime" :
+                uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
+                print(float(uptime))
+                jsonResp += ',"seconds":"'+str(float(uptime))+'"'
 
             jsonResp += '}'
             print(actionVal)
@@ -146,6 +150,20 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
             # Writing the HTML contents with UTF-8
             self.wfile.write(bytes(jsonResp, "utf8"))
+
+            if actionVal == "exit" :
+                check_kill_process("timelapse-auto.py")
+                check_kill_process("letslapse_streamer.py")
+                exit()
+            if actionVal == "shutdown" :
+                check_kill_process("timelapse-auto.py")
+                check_kill_process("letslapse_streamer.py")
+                system("sudo shutdown now")
+            elif actionVal == "restart" :
+                check_kill_process("timelapse-auto.py")
+                check_kill_process("letslapse_streamer.py")
+                system("sudo restart now")
+            
             return
         elif self.path == '/':
             self.send_response(301)

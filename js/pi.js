@@ -82,9 +82,66 @@ function streamManager(startOrStop){
 
 window.addEventListener("load", function(){
     console.log("document loaded");
-    streamManager("start");
+    pollUptime();
+    //streamManager("start");
     setPreset();
 });
+
+
+function secondsToDhms(seconds) {
+    var d = Math.floor(seconds / (3600*24));
+    var h = Math.floor(seconds % (3600*24) / 3600);
+    var m = Math.floor(seconds % 3600 / 60);
+    var s = Math.floor(seconds % 60);
+    
+    var dDisplay = d > 0 ? d + (d == 1 ? " day, " : " days, ") : "";
+    var hDisplay = h + ":";
+    var mDisplay = m+":";
+    if (m < 10){
+        mDisplay = "0"+m+":"
+    }
+    var sDisplay = s;
+    if (s < 10){
+        sDisplay = "0"+s;
+    }
+
+    return dDisplay + hDisplay + mDisplay + sDisplay;
+    }
+
+
+var realUptimeIndex=0;
+var realUptimeCheckEvery=9;
+var realUptimeLatest=-1;
+function pollUptime(){
+    realUptimeIndex++;
+    console.log(realUptimeIndex);
+    if (realUptimeIndex == 1){
+        console.log("pollUptime REAL");
+        var apiCall = "/?action=uptime";
+        $.getJSON( apiCall)
+            .done(function( json ) {
+                console.log( Number(json.seconds));
+                realUptimeLatest = json.seconds;
+                $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
+                window.setTimeout(pollUptime, 1000);
+            })
+            .fail(function( jqxhr, textStatus, error ) {
+                var err = textStatus + ", " + error;
+                alert("Uptime error");
+                console.log( "Request Failed: " + err );
+      });
+    
+    }else{
+        console.log("pollUptime fake");
+        realUptimeLatest++;
+        $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
+        if (realUptimeIndex > realUptimeCheckEvery){
+            realUptimeIndex = 0;
+        }
+
+        window.setTimeout(pollUptime, 1000)
+    }
+}
 
 
 function clickViewport(){
