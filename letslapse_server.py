@@ -25,7 +25,7 @@ import argparse
 
 
 
-PORT = 81
+PORT = 80
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
