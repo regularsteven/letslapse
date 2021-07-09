@@ -33,13 +33,13 @@ function power(resetOrOff){
         $.getJSON( apiCall)
             .done(function( json ) {
                //this should be a response to indicate process is about to happen
-               alert("device about to " + resetOrOff);
+               //alert("device about to " + resetOrOff);
                if(resetOrOff == "reset"){
                    displayStatus("isRestarting");
                }else{
-                displayStatus("isPowerOff");
-
+                    displayStatus("isPowerOff");
                }
+               $(".navbar-toggler").click();
             })
             .fail(function( jqxhr, textStatus, error ) {
                 var err = textStatus + ", " + error;
@@ -126,6 +126,10 @@ var realUptimeIndex=0;
 var realUptimeCheckEvery=9;
 var realUptimeLatest=-1;
 function pollUptime(){
+
+    
+
+
     realUptimeIndex++;
     if (realUptimeIndex == 1){
         //console.log("pollUptime REAL");
@@ -135,14 +139,20 @@ function pollUptime(){
                 //console.log( Number(json.seconds));
                 realUptimeLatest = json.seconds;
                 $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
+
+                if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
+                    displayStatus("isReady");
+                }
+
                 window.setTimeout(pollUptime, 1000);
             })
             .fail(function( jqxhr, textStatus, error ) {
                 var err = textStatus + ", " + error;
                 if(currentStatus == "isRestarting"){
                     console.log("Device in restart state, need to check again")
-                    $("footer").html("Device currently restarting, please wait.");
-                    realUptimeIndex = 0;
+                    realUptimeIndex = -10; //this will force a poll in 10 seconds
+                    $("footer").html("Device currently restarting, checking again in " + (0 - realUptimeIndex));
+                    
                     window.setTimeout(pollUptime, 1000);
                 }else{
                     alert("Uptime error");
@@ -153,11 +163,17 @@ function pollUptime(){
     }else{
         //console.log("pollUptime fake");
         realUptimeLatest++;
-        $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
-        if (realUptimeIndex > realUptimeCheckEvery){
-            realUptimeIndex = 0;
-        }
 
+        if(currentStatus == "isRestarting"){
+            $("footer").html("Device currently restarting, checking again in " + (0 - realUptimeIndex));
+            realUptimeIndex = -10; //this will force a poll in 10 seconds
+            window.setTimeout(pollUptime, 1000);
+        }else{
+            $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
+            if (realUptimeIndex > realUptimeCheckEvery){
+                realUptimeIndex = 0;
+            }
+        }
         window.setTimeout(pollUptime, 1000);
     }
 }
