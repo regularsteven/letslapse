@@ -74,7 +74,7 @@ function setPreset(){
 function streamManager(startOrStop){
     if(startOrStop == "start"){
         displayStatus("isStreaming");
-        $.getJSON( "/?action=startstreamer")
+        $.getJSON( "/?action=startstreamer&cachebuster"+Math.random(100))
             .done(function( json ) {
                 stream = ""
                 if(window.location.host == "127.0.0.1"){ //for home testing
