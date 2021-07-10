@@ -137,8 +137,8 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "killstreamer" :
                 check_kill_process("letslapse_streamer.py")
             elif actionVal == "startstreamer" :
-                processThread = threading.Thread(target=thread_second)
-                processThread.start()
+                #processThread = threading.Thread(target=thread_second)
+                #processThread.start()
                 uptime = subprocess.check_output("python3 letslapse_streamer.py", shell=True)
                 #sleep(4) #ideally this would wait for a callback, but this allows the camera to start
             elif actionVal == "uptime" :
