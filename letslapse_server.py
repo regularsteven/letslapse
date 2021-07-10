@@ -7,7 +7,7 @@ for line in os.popen("ps -f -C python3 | grep letslapse_server.py"):
         print("letslapse_server.py: Instance already running - exiting now")
         exit()
 
-
+from time import sleep
 import subprocess
 import io
 import logging
@@ -139,6 +139,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "startstreamer" :
                 processThread = threading.Thread(target=thread_second)
                 processThread.start()
+                sleep(2)
             elif actionVal == "uptime" :
                 uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
                 print(float(uptime))
