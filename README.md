@@ -36,6 +36,10 @@ raspberry pi timelaps rig
  > python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
  > sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
 
+ On device, to run blend scripts:
+    sudo pip3 install opencv
+    sudo apt-get install libatlas-base-dev
+
 8) Enable PYTHON server to start on system boot
  > enable CONSOLE AUTO login via sudo raspi-config (SYSTEM OPTIONS > BOOT)
  > make the script executable: sudo chmod +x /home/pi/pitime/server.py
@@ -448,3 +452,13 @@ rand-4k-read;6459;1614;0;0
 Sequential write speed 10366 KB/sec (target 10000) - PASS
 Random write speed 437 IOPS (target 500) - FAIL
 Random read speed 1614 IOPS (target 1500) - PASS
+
+
+
+
+# stripping back raspbian for ligher use
+aplay - remove
+pulseaudio
+
+xserver related
+

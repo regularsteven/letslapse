@@ -148,12 +148,12 @@ var realUptimeCheckEvery=9;
 var realUptimeLatest=-1;
 function pollUptime(){
 
-    console.log("pollUptime: "+ realUptimeIndex);
+    //console.log("pollUptime: "+ realUptimeIndex);
 
 
     realUptimeIndex++;
     if (realUptimeIndex == 1){
-        //console.log("pollUptime REAL");
+        console.log("pollUptime REAL");
         $.getJSON( "/?action=uptime")
             .done(function( json ) {
                 //console.log( Number(json.seconds));
@@ -345,9 +345,26 @@ function startTimelapseDelay(){
 
 
 function displayStill(filename){
+
     var capturedImage = filename;
+    //ideally check the image is there, to work around the issue for streaming not being ready yet - but CORS is an issue, so don't bother... 
+    /*$.ajax({
+        url: filename,
+        error: function() 
+        {
+            console.log("file is not good");
+        },
+        success: function() 
+        {
+            console.log("file is good");
+            
+        }
+    });
+    */
     document.getElementById("imageViewport").style.backgroundImage = "url('"+capturedImage+"')";
 }
+
+
 var currentStatus = "isReady";
 function displayStatus(which){
     currentStatus = which;
