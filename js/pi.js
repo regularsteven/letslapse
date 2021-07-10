@@ -203,9 +203,9 @@ function clickViewport(){
     if(currentStatus == "isShooting"){
         parseProgress(true);
     }else if(currentStatus == "isReady"){
-        if(document.getElementById("imageViewport").style.backgroundImage == "none"){
-            streamManager("start");
-        }
+        //if(document.getElementById("imageViewport").style.backgroundImage == "none"){
+        streamManager("start");
+        //}
     }else if(currentStatus == "isStreaming"){
         streamManager("stop");
     }
