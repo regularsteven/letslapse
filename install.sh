@@ -71,5 +71,8 @@ echo "See /var/log/syslog for error messages"
 
 echo "Finished. On reboot, if no network is found, a hotspot will be created."
 
+echo "In some instances, crashes will take place. Try "
+echo "sudo rpi-update"
+
 
 

@@ -74,22 +74,43 @@ function setPreset(){
 function streamManager(startOrStop){
     if(startOrStop == "start"){
         displayStatus("isStreaming");
-        stream = ""
-        if(window.location.host == "127.0.0.1"){
-            console.log("local testing, see if the device is on the network")
-            stream += "http://10.3.141.212:8081"
-        }else{
-            stream += "http://"+window.location.host+":8081";
-        }
-        stream += "/stream.mjpg?cachebuster"+Math.random(100);
-        document.getElementById("imageViewport").style.backgroundImage = "url('"+stream+"')";
+        $.getJSON( "/?action=startstreamer")
+            .done(function( json ) {
+                stream = ""
+                if(window.location.host == "127.0.0.1"){ //for home testing
+                    console.log("local testing, see if the device is on the network")
+                    stream += "http://10.3.141.212:8081" //suspected IP of PiZero on home testing network via RaspAP
+                }else{
+                    stream += "http://"+window.location.host+":8081";
+                }
+                stream += "/stream.mjpg?cachebuster"+Math.random(100);
+                displayStill(stream);
+                })
+            .fail(function( jqxhr, textStatus, error ) {
+                var err = textStatus + ", " + error;
+                alert("Issue with streaming - is it working?");
+                displayStatus("isWarning");
+                console.log( "Request Failed: " + err );
+            });
+
     }else{
         window.stop();
-        displayStatus("isReady");
+        
         document.getElementById("imageViewport").style.backgroundImage = "none";
+        $.getJSON( "/?action=killstreamer")
+            .done(function( json ) {
+                displayStatus("isReady");
+            })
+            .fail(function( jqxhr, textStatus, error ) {
+                var err = textStatus + ", " + error;
+                alert("Issue with stopping streaming");
+                displayStatus("isWarning");
+                console.log( "Request Failed: " + err );
+            });
     }
 
 }
+
 
 
 
@@ -184,9 +205,9 @@ function clickViewport(){
     }else if(currentStatus == "isReady"){
         if(document.getElementById("imageViewport").style.backgroundImage == "none"){
             streamManager("start");
-        }else{
-            streamManager("stop");
-        }   
+        }
+    }else if(currentStatus == "isStreaming"){
+        streamManager("stop");
     }
 }
 

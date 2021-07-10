@@ -58,6 +58,7 @@ input#captureRaw {
 #status .isReady .oi{
     color: green;
 }
+#status .isStreaming .oi,
 #status .isShooting .oi{
     color: orange;
 }
