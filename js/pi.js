@@ -74,7 +74,7 @@ function setPreset(){
 function streamManager(startOrStop){
     if(startOrStop == "start"){
         displayStatus("isStreaming");
-        $.getJSON( "/?action=startstreamer&cachebuster"+Math.random(100))
+        $.getJSON( "/?action=startstreamer&cachebuster="+Math.random(100))
             .done(function( json ) {
                 stream = ""
                 if(window.location.host == "127.0.0.1"){ //for home testing
@@ -83,7 +83,7 @@ function streamManager(startOrStop){
                 }else{
                     stream += "http://"+window.location.host+":8081";
                 }
-                stream += "/stream.mjpg?cachebuster"+Math.random(100);
+                stream += "/stream.mjpg?cachebuster="+Math.random(100);
                 displayStill(stream);
                 })
             .fail(function( jqxhr, textStatus, error ) {
