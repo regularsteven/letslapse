@@ -145,6 +145,10 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
                 print(float(uptime))
                 jsonResp += ',"seconds":"'+str(float(uptime))+'"'
+            elif actionVal == "updatecode" :
+                uptime = subprocess.check_output("git --git-dir=/home/pi/pitime/.git pull", shell=True)
+                print(float(uptime))
+                jsonResp += ',"seconds":"'+str(float(uptime))+'"'
 
             jsonResp += '}'
             print(actionVal)
