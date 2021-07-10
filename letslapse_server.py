@@ -146,9 +146,9 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 print(float(uptime))
                 jsonResp += ',"seconds":"'+str(float(uptime))+'"'
             elif actionVal == "updatecode" :
-                uptime = subprocess.check_output("git --git-dir=/home/pi/pitime/.git pull", shell=True)
-                print(float(uptime))
-                jsonResp += ',"seconds":"'+str(float(uptime))+'"'
+                updatecode = subprocess.check_output("git --git-dir=/home/pi/pitime/.git pull", shell=True)
+                print(updatecode)
+                jsonResp += ',"seconds":"'+str(updatecode)+'"'
 
             jsonResp += '}'
             print(actionVal)
