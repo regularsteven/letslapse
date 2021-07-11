@@ -334,7 +334,7 @@ function stopTimelapse(){
                 if($("#pauseOrKill").is(':checked')){
                     console.log("timelapse killed");
                     progressTxt = null;
-                    $("#pauseOrKillWarning").addClass("d-none")
+                    $("#pauseOrKillWarning").addClass("d-none");
                     $("#shootName").prop( "disabled", false );
                     if($("#manualSwitch2").is(":checked")){
                         //nothing
@@ -389,7 +389,12 @@ function startTimelapseDelay(){
             }
             $("#shootName").prop( "disabled", false );
             $("#shootName").focus();
+            $("#newNameRequired").removeClass("d-none");
+            $("#newNameRequired .shootName").html('"'+json.shootName+'"');
+            
         }else{
+            $("#newNameRequired").addClass("d-none");
+           
             timelapseMode("start");
         }
         
