@@ -39,6 +39,8 @@ raspberry pi timelaps rig
  On device, to run blend scripts:
     sudo pip3 install opencv
     sudo apt-get install libatlas-base-dev
+    sudo pip3 install piexif
+
 
 8) Enable PYTHON server to start on system boot
  > enable CONSOLE AUTO login via sudo raspi-config (SYSTEM OPTIONS > BOOT)
@@ -190,6 +192,8 @@ shoot, edit, stream
     3: update the stream with the smaller versions
         - ffmpeg -loop 1 -i seq%d.jpg  -r .5 -vcodec mpeg4 -f mpegts udp://192.168.30.75:9099
 
+
+    update camera for libcamera use - could eb a better option for low light / blue hour usage
 
 # ffmpeg resize 
 ffmpeg -i seq_%04d.jpg -vf scale=1920:-1 resize/small_%04d.jpg
