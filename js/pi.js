@@ -263,7 +263,10 @@ function parseProgress(displayLatest, execOnStartup){
             $("#shootName").prop( "disabled", true );
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
             var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
-            $("#manualSwitch2").click();
+            if($("#manualSwitch2").is(":checked") == false){
+                $("#manualSwitch2").click();
+            }
+            
             if (displayLatest){
                 console.log(latestImage);
                 displayStill(latestImage);
@@ -283,6 +286,7 @@ function timelapseMode(startOrStop){
     if (startOrStop == "start"){
         displayStatus("isShooting");
         $("#photo-tab").addClass("disabled");
+        $("#timelapse-tab").click();
         $("#timelapse .custom-switch").addClass("d-none");
         
         $("#timelapse .startBtn").addClass("d-none");
@@ -328,6 +332,13 @@ function stopTimelapse(){
                 if($("#pauseOrKill").is(':checked')){
                     progressTxt = null;
                     $("#shootName").prop( "disabled", false );
+                    if($("#manualSwitch2").is(":checked")){
+                        //nothing
+                    }else{
+                        $("#manualSwitch2").click();
+                    }
+
+                    
                 }
                 timelapseMode("stop");
                 //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
@@ -369,7 +380,8 @@ function startTimelapseDelay(){
         
         if(json.error){
             console.log("focus on input, show the manual controls")
-            $("#manualSwitch2").click();
+            $("#manualSwitch2").prop();
+            $("#shootName").prop( "disabled", false );
             $("#shootName").focus();
         }else{
             timelapseMode("start");
