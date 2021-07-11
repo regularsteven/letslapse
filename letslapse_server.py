@@ -141,6 +141,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     jsonResp += ',"error":true'
                     jsonResp += ',"message":"used"'
                 else: 
+                    #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
                     startTimelapse(shootName)
@@ -161,8 +162,10 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 sleep(4) #ideally this would wait for a callback, but this allows the camera to start
             elif actionVal == "uptime" :
                 uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
+                hostname = os.uname()[1]
                 print(float(uptime))
                 jsonResp += ',"seconds":"'+str(float(uptime))+'"'
+                jsonResp += ',"hostname":"'+str(hostname)+'"'
             elif actionVal == "updatecode" :
                 myhost = os.uname()[1]
                 jsonResp += ',"hostname":"'+myhost+'"'
@@ -173,8 +176,13 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 #updateCodeResp.split()
                 jsonResp += ',"updateCodeResp":"'+str(updateCodeResp.decode('utf-8'))+'"'
                 #print(updatecode)
+            elif actionVal == "listshoots":
+                #for display of projects and still shots
+                print("tbc")
+                folderLen = (len(next(os.walk('.'))[1]))
                 
-            if actionVal == "systemstatus" :
+
+            elif actionVal == "systemstatus" :
                 #pull all system status for simple startup script
                 #diskspace / free space on device ######## df
                 #device name ######## os.uname()[1]
@@ -183,7 +191,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 print(actionVal)
                 #check_kill_process("letslapse_streamer.py")
                 #startTimelapse(query_components["shootName"][0])
-            if actionVal == "quit" :
+            elif actionVal == "quit" :
                 exit()
 
             jsonResp += '}'

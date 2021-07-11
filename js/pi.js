@@ -156,6 +156,7 @@ function secondsToDhms(seconds) {
 var realUptimeIndex=0;
 var realUptimeCheckEvery=59;
 var realUptimeLatest=-1;
+var hostName = null;
 function pollUptime(){
     //console.log("pollUptime: "+ realUptimeIndex);
 
@@ -166,7 +167,8 @@ function pollUptime(){
             .done(function( json ) {
                 //console.log( Number(json.seconds));
                 realUptimeLatest = json.seconds;
-                $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
+                hostName = json.hostname;
+                $("footer").html(hostName +" up "+ secondsToDhms(realUptimeLatest));
                 log("Uptime Seconds: "+realUptimeLatest+"\n");
                 if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
                     displayStatus("isReady");
@@ -180,7 +182,7 @@ function pollUptime(){
                 if(currentStatus == "isRestarting"){
                     console.log("Device in restart state, need to check again")
                     realUptimeIndex = -10; //this will force a poll in 10 seconds
-                    $("footer").html("Device currently restarting, checking again in " + (0 - realUptimeIndex));
+                    $("footer").html(hostName+" currently restarting, checking again in " + (0 - realUptimeIndex));
                     
                     window.setTimeout(pollUptime, 1000);
                 }else{
@@ -196,9 +198,9 @@ function pollUptime(){
             if(realUptimeIndex > 1){
                 realUptimeIndex = -10;
             }
-            $("footer").html("Device currently restarting, checking again in " + (0 - realUptimeIndex));            
+            $("footer").html(hostName+" currently restarting, checking again in " + (0 - realUptimeIndex));            
         }else{
-            $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
+            $("footer").html(hostName+" up "+ secondsToDhms(realUptimeLatest));
         }
         if (realUptimeIndex > realUptimeCheckEvery){
             realUptimeIndex = 0;
@@ -253,7 +255,11 @@ function parseProgress(displayLatest, execOnStartup){
     jQuery.get('progress.txt', function(data) {
         console.log("data start");
         if (data == ""){
-            console.log("no progress.txt in place, indicating this is brand new");
+            log("parseProgress: No progress.txt, indicating this is brand new");
+            if(execOnStartup == false){
+                log("parseProgress: Try again in one second");
+                window.setTimeout("parseProgress(true, false)", 1000);
+            }
         }else{
             progressTxt = (data).split("\n");
             var progressIndex = parseInt(progressTxt[0]);
