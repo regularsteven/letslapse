@@ -263,7 +263,7 @@ function parseProgress(displayLatest, execOnStartup){
             $("#shootName").prop( "disabled", true );
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
             var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
-            
+            $("#manualControls2").addClass("show");
             if (displayLatest){
                 console.log(latestImage);
                 displayStill(latestImage);
