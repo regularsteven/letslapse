@@ -224,10 +224,10 @@ function takeStill(){
     var apiCall = "?action=preview";
 
     if($("#manualSwitch1").is(":checked")){
+        apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();        
+    }else{
         //shotting in auto mode
         apiCall += "&mode=auto";
-    }else{
-        apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
     }
 
     displayStatus("isShooting");
@@ -260,6 +260,7 @@ function parseProgress(displayLatest, execOnStartup){
             var progressName = progressTxt[1];
             //put the current shoot name inside the input box
             $("#shootName").val(progressName);
+            $("#shootName").prop( "disabled", true );
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
             var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
             
@@ -324,7 +325,10 @@ function stopTimelapse(){
                 console.log(json );
                 //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
                 //displayStill("latest.jpg");
-                progressTxt = null;
+                if($("#pauseOrKill").is(':checked')){
+                    progressTxt = null;
+                    $("#shootName").prop( "disabled", false );
+                }
                 timelapseMode("stop");
                 //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
                 //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
