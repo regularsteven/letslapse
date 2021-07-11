@@ -26,14 +26,40 @@ window.addEventListener("load", function(){
     //streamManager("start");
     setPreset();
     parseProgress(true, true);
+    forceCharacterValidationOnInput();
 });
 
 
+function forceCharacterValidationOnInput(){
+    $('input').on('keypress', function (event) {
+        var regex = new RegExp("^[a-zA-Z0-9]+$");
+        var key = String.fromCharCode(!event.charCode ? event.which : event.charCode);
+        if (!regex.test(key)) {
+           event.preventDefault();
+           return false;
+        }
+    });
+}
 
 function log(msg){
     $("#systemLog").prepend(msg+"\n")
 }
+function validateInput(e) {
+	var keyCode = e.keyCode || e.which;
+	var errorMsg = document.getElementById("lblErrorMsg");
+	errorMsg.innerHTML = "";
 
+	//Regex to allow only Alphabets Numbers Dash Underscore and Space
+	var pattern = /^[a-z\d\-_\s]+$/i;
+
+	//Validating the textBox value against our regex pattern.
+	var isValid = pattern.test(String.fromCharCode(keyCode));
+	if (!isValid) {
+		errorMsg.innerHTML = "Invalid Attempt, only alphanumeric, dash , underscore and space are allowed.";
+	}
+
+	return isValid;
+}
 function power(resetOrOff){
     var confirmMessage = "";
     if(resetOrOff == "reset"){
