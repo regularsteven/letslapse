@@ -1,4 +1,4 @@
-# pitime
+# letslapse
 raspberry pi timelaps rig
 
 # configure device
@@ -25,8 +25,8 @@ raspberry pi timelaps rig
  > sudo apt install apache2 -y (option)
  > sudo apt remove php libapache2-mod-php -y (option)
  > sudo apt install python3-pip -y
-6) boot and ssh, clone https://github.com/regularsteven/pitime into /var/www/html (if basic apache)
- > git clone https://github.com/regularsteven/pitime.git
+6) boot and ssh, clone https://github.com/regularsteven/letslapse into /var/www/html (if basic apache)
+ > git clone https://github.com/regularsteven/letslapse.git
  > need to remove everything inside the folder if installing to apache (sudo rm -R /var/www/html/*)
  > OR install whereever
 7) Python and dependencies
@@ -44,8 +44,8 @@ raspberry pi timelaps rig
 
 8) Enable PYTHON server to start on system boot
  > enable CONSOLE AUTO login via sudo raspi-config (SYSTEM OPTIONS > BOOT)
- > make the script executable: sudo chmod +x /home/pi/pitime/server.py
- > add sudo python /home/pi/pitime/server.py at the bottom of sudo nano /etc/profile
+ > make the script executable: sudo chmod +x /home/pi/letslapse/server.py
+ > add sudo python /home/pi/letslapse/server.py at the bottom of sudo nano /etc/profile
 
 9) Install SAMBA for simple filesystem access
     sudo apt-get install samba samba-common-bin 
@@ -66,12 +66,12 @@ raspberry pi timelaps rig
  > nano /home/pi/.smbcredentials 
     - username=smb_username
     - password=smb_password
- > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials //pi.local/pitime /media/sharePi
- > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials_pi //pi.local/pitime /media/sharePi
+ > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials //pi.local/letslapse /media/sharePi
+ > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials_pi //pi.local/letslapse /media/sharePi
  > sudo nano /etc/fstab 
-   - to reconnect on reboot, add //pi.local/pitime /media/sharePi cifs _netdev,vers=3.0,credentials=/home/pi/.smbcredentials,uid=pi,gid=pi,x-systemd.automount 0 0
+   - to reconnect on reboot, add //pi.local/letslapse /media/sharePi cifs _netdev,vers=3.0,credentials=/home/pi/.smbcredentials,uid=pi,gid=pi,x-systemd.automount 0 0
 
-11) Auto backup to second (non-shooting) pi device (my device is USB called pitimepics / msdos FAT)
+11) Auto backup to second (non-shooting) pi device (my device is USB called letslapsepics / msdos FAT)
  > make director sudo mkdir /media/usb
  > sudo mount /dev/sda1 /media/usb
   - if unsure of /dev/name, run sudo fdisk -l

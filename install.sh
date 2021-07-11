@@ -1,5 +1,5 @@
 #copy wpa_supplication.conf to /boot & touch ssh
-#1 git clone https://github.com/regularsteven/pitime.git
+#1 git clone https://github.com/regularsteven/letslapse.git
 #2 sudo sh install.sh 
 
 echo "1 Running updates"
@@ -64,9 +64,9 @@ sudo systemctl start letslapse.service
 echo "See /var/log/syslog for error messages"
 
 #echo "16 Start server on boot - Updating /etc/default/hostapd"
-#echo 'sudo python3 /home/pi/pitime/letslapse_server.py' | sudo tee -a /etc/profile
+#echo 'sudo python3 /home/pi/letslapse/letslapse_server.py' | sudo tee -a /etc/profile
 #initially considered loading the streamer on start-up, but this adds overhead and should only be called when required
-#echo 'sudo python3 /home/pi/pitime/streamer.py' | sudo tee -a /etc/profile
+#echo 'sudo python3 /home/pi/letslapse/streamer.py' | sudo tee -a /etc/profile
 
 
 echo "Finished. On reboot, if no network is found, a hotspot will be created."

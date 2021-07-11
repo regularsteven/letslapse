@@ -1,6 +1,6 @@
 [Service]
-WorkingDirectory=/home/pi/pitime
-ExecStart=python3 /home/pi/pitime/letslapse_server.py
+WorkingDirectory=/home/pi/letslapse
+ExecStart=python3 /home/pi/letslapse/letslapse_server.py
 Restart=always
 StandardOutput=syslog
 StandardError=syslog

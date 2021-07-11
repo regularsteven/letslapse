@@ -18,25 +18,25 @@ from os import path
 #execute the following in the folder that requires the conversion
 
 # *************** TEST FOLDER TO ENSURE WERE READY **********************
-#python3 /home/steven/Documents/dev/pitime/blend.py --test full OR --test basic
+#python3 /home/steven/Documents/dev/letslapse/blend.py --test full OR --test basic
   # this will evaluate the folder to check all images are in place in basic (which also happens in the actual blend scripts)
   # but will also check the meta-data of each image in FULL test to report the biggest gap between photos
   # this is useful for overnight shoots where the compression of time is required for smooth playback
 
 # *************** Create image sequence based on images being GROUPED BY TIME **********************
-#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 45 --groupByType seconds --makeMP4 yes
+#python3 /home/steven/Documents/dev/letslapse/blend.py --groupBy 45 --groupByType seconds --makeMP4 yes
 
 # *************** Create image sequence based on images being GROUPED BY IMAGE NUMBER **********************
-#python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 10 --groupByType images --makeMP4 yes
+#python3 /home/steven/Documents/dev/letslapse/blend.py --groupBy 10 --groupByType images --makeMP4 yes
 
 #windows - run from directory in with images
-#py -3 E:\Clients\pitime\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
+#py -3 E:\Clients\letslapse\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
 
 
 #standard way to run this would be put all requred images inside a folder, then run:
-# python3 /home/steven/Documents/dev/pitime/blend.py --test full
+# python3 /home/steven/Documents/dev/letslapse/blend.py --test full
 # from here, get the number - say it's 62 seconds. Then merge them all based on this timeframe
-# python3 /home/steven/Documents/dev/pitime/blend.py --groupBy 62 --groupByType seconds --makeMP4 yes
+# python3 /home/steven/Documents/dev/letslapse/blend.py --groupBy 62 --groupByType seconds --makeMP4 yes
 
 
 
