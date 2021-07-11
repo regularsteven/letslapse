@@ -17,7 +17,7 @@ from threading import Condition
 from http import server
 import threading, signal
 from os import system, path
-
+import json
 from subprocess import check_call, call
 import sys
 from urllib.parse import urlparse, parse_qs
@@ -174,7 +174,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     updatecode = "git --git-dir=/home/steven/Documents/dev/pitime/.git pull"
                 updateCodeResp = subprocess.check_output(updatecode, shell=True).strip()
                 #updateCodeResp.split()
-                jsonResp += ',"updateCodeResp":"'+str(updateCodeResp.decode('utf-8'))+'"'
+                jsonResp += ',"updateCodeResp":'+str(json.dumps(updateCodeResp.decode('utf-8')))
                 #print(updatecode)
             elif actionVal == "listshoots":
                 #for display of projects and still shots
