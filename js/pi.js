@@ -286,6 +286,7 @@ function timelapseMode(startOrStop){
     if (startOrStop == "start"){
         displayStatus("isShooting");
         $("#photo-tab").addClass("disabled");
+        $("#shootName").prop( "disabled", true );
         $("#timelapse-tab").click();
         $("#timelapse .custom-switch").addClass("d-none");
         
@@ -380,7 +381,9 @@ function startTimelapseDelay(){
         
         if(json.error){
             console.log("focus on input, show the manual controls")
-            $("#manualSwitch2").prop();
+            if($("#manualSwitch2").is(":checked") == false){
+                $("#manualSwitch2").click();
+            }
             $("#shootName").prop( "disabled", false );
             $("#shootName").focus();
         }else{
