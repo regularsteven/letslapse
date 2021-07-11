@@ -157,6 +157,11 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 #print(updatecode)
                 
             if actionVal == "systemstatus" :
+                #pull all system status for simple startup script
+                #diskspace / free space on device ######## df
+                #device name ######## os.uname()[1]
+                #timelapse in progress ######## ps -f -C python3 | grep timelapse-auto.py
+                
                 print(actionVal)
                 #check_kill_process("letslapse_streamer.py")
                 #startTimelapse(query_components["shootName"][0])

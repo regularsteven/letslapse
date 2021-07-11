@@ -124,6 +124,7 @@ window.addEventListener("load", function(){
     pollUptime();
     //streamManager("start");
     setPreset();
+    parseProgress(true, true);
 });
 
 
@@ -204,7 +205,7 @@ function pollUptime(){
 
 function clickViewport(){
     if(currentStatus == "isShooting"){
-        parseProgress(true);
+        parseProgress(true, false);
     }else if(currentStatus == "isReady"){
         //if(document.getElementById("imageViewport").style.backgroundImage == "none"){
         streamManager("start");
@@ -243,10 +244,13 @@ function takeStill(){
 }
 
 var progressTxt = null;
-function parseProgress(displayLatest){
+function parseProgress(displayLatest, execOnStartup){
     jQuery.get('progress.txt', function(data) {
-        progressTxt = (data).split("\n");
-        if(progressTxt.length>0){
+        console.log("data start");
+        if (data == ""){
+            console.log("no progress.txt in place, indicating this is brand new");
+        }else{
+            progressTxt = (data).split("\n");
             var progressIndex = parseInt(progressTxt[0]);
             var progressName = progressTxt[1];
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
@@ -257,8 +261,11 @@ function parseProgress(displayLatest){
                 displayStill(latestImage);
             }
             $("#status .isShooting .extraInfo").html(" | Images: "+  progressTxt[0]);
-        }else{
-            window.setTimeout("parseProgress(true)", 2000);
+
+            if(execOnStartup){
+                startTimelapseDelay();
+            }
+
         }
     });
 }
@@ -273,7 +280,7 @@ function timelapseMode(startOrStop){
         $("#timelapse .startBtn").addClass("d-none");
         $("#timelapse .stopBtn").removeClass("d-none");
 
-        parseProgress(true);
+        parseProgress(true, false);
     }else{
         displayStatus("isReady");
         $("#photo-tab").removeClass("disabled");
