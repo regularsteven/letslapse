@@ -133,16 +133,22 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             if actionVal == "timelapse" :
                 #check to see if this timelapse project is already in place - don't make a new one, if so
                 shootName = query_components["shootName"][0]
-                jsonResp += ',"error":'+str(path.isdir("auto_"+shootName))
-
+                
+                jsonResp += ',"shootName":"'+shootName+'"'
                 if path.isfile("progress.txt") == True:
+                    jsonResp += ',"error":false'
+                    
+                    jsonResp += ',"message":"resuming"'
                     #must be continuing the shoot
                     startTimelapse(shootName)
 
                 elif path.isdir("auto_"+shootName) == True :
                     print("project with the same name already in use")
-                    jsonResp += ',"message":"'+shootName+' already used, please enter a unique shoot name"'
+                    jsonResp += ',"error":true'
+                    jsonResp += ',"message":"used"'
                 else: 
+                    jsonResp += ',"error":false'
+                    jsonResp += ',"message":"starting"'
                     startTimelapse(shootName)
 
                 

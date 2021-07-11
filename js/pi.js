@@ -258,6 +258,8 @@ function parseProgress(displayLatest, execOnStartup){
             progressTxt = (data).split("\n");
             var progressIndex = parseInt(progressTxt[0]);
             var progressName = progressTxt[1];
+            //put the current shoot name inside the input box
+            $("#shootName").val(progressName);
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
             var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
             
@@ -322,6 +324,7 @@ function stopTimelapse(){
                 console.log(json );
                 //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
                 //displayStill("latest.jpg");
+                progressTxt = null;
                 timelapseMode("stop");
                 //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
                 //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
@@ -357,13 +360,17 @@ function startTimelapseDelay(){
     apiCall += "&shootName="+shootName;
     $.getJSON( apiCall)
     .done(function( json ) {
-        console.log( "JSON Data: " + json );
-        //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
-        //displayStill("latest.jpg");
-        timelapseMode("start");
-        //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
-        //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
-        //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+        console.log( json );
+        log("timelapse: "+json.shootName + " - " + json.message);
+        
+        if(json.error){
+            console.log("focus on input, show the manual controls")
+            $("#manualSwitch2").click();
+            $("#shootName").focus();
+        }else{
+            timelapseMode("start");
+        }
+        
     })
     .fail(function( jqxhr, textStatus, error ) {
         var err = textStatus + ", " + error;
