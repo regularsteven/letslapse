@@ -219,7 +219,7 @@ function clickViewport(){
 function takeStill(){
     var apiCall = "?action=preview";
 
-    if($("#manualSwitch1").hasClass("collapsed")){
+    if($("#manualSwitch1").is(":checked")){
         //shotting in auto mode
         apiCall += "&mode=auto";
     }else{
@@ -281,6 +281,8 @@ function timelapseMode(startOrStop){
         $("#timelapse .startBtn").addClass("d-none");
         $("#timelapse .stopBtn").removeClass("d-none");
 
+        $("#timelapse .pauseOrKillContainer").removeClass("d-none"); 
+
         parseProgress(true, false);
     }else{
         displayStatus("isReady");
@@ -289,6 +291,9 @@ function timelapseMode(startOrStop){
         
         $("#timelapse .startBtn").removeClass("d-none");
         $("#timelapse .stopBtn").addClass("d-none");
+
+        
+        $("#timelapse .pauseOrKillContainer").addClass("d-none"); 
     }
     
 }
@@ -300,6 +305,14 @@ function stopTimelapse(){
     if (r == true) {
         console.log("You pressed OK!");
         var apiCall = "?action=killtimelapse";
+        if($("#pauseOrKill").is(':checked')){
+            apiCall += "&pauseOrKill=kill";
+            $("#pauseOrKill").click();
+        }else{
+            apiCall += "&pauseOrKill=pause";
+        }
+
+
         $.getJSON( apiCall)
             .done(function( json ) {
                 console.log(json );
@@ -327,7 +340,7 @@ function startTimelapse(){
 function startTimelapseDelay(){
     var apiCall = "?action=timelapse";
     var shootName = "default";
-    if($("#manualSwitch2").hasClass("collapsed")){
+    if($("#manualSwitch2").is(":checked")){
         //shotting in auto mode
         apiCall += "&mode=auto";
     }else{

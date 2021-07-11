@@ -166,7 +166,6 @@
                           </div>
                         </div>
                       </div>
-            
                     </div>
             
             
@@ -189,7 +188,17 @@
                 <div class="row text-center">
                   <div class="col-sm">
                     <button type="button" class="btn btn-lg btn-primary m-3 startBtn" onclick="startTimelapse()">Start Time-lapse Sequence</button>
+
                     <button type="button" class="btn btn-lg btn-primary m-3 stopBtn d-none" onclick="stopTimelapse()">Stop Time-lapse Sequence</button>
+                    <div class="custom-control custom-switch text-center mb-2 d-none pauseOrKillContainer">
+                      <input type="checkbox" class="custom-control-input d-none" id="pauseOrKill" data-toggle="collapse" href="#pauseOrKillWarning" role="button" aria-expanded="false" aria-controls="pauseOrKillWarning">
+                      <label class="custom-control-label" for="pauseOrKill">Stop and Finalise</label>
+                    </div>
+                    <div class="collapse" id="pauseOrKillWarning">
+                      <div class="alert alert-warning alert-dismissible fade show" role="alert">
+                        <strong>Heads-up!</strong> <br>Stop and Finalise indicates you do not plan to resume the shoot and this time-lapse is finshed.
+                      </div>
+                    </div>
                   </div>
                 </div>
           
