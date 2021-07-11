@@ -295,7 +295,7 @@ function timelapseMode(startOrStop){
 
         $("#timelapse .pauseOrKillContainer").removeClass("d-none"); 
 
-        window.setTimeout("parseProgress(true, false);", 1000);
+        parseProgress(true, false);
     }else{
         displayStatus("isReady");
         $("#photo-tab").removeClass("disabled");

@@ -65,14 +65,8 @@ def check_kill_process(pstring):
 
 
 def startTimelapse(shootName) :
-    print("start startTimelapse")
-    
-    #check_kill_process("letslapse_streamer.py") #unsure if we need this - letslapse_streamer should auto quit if it's already running but ideally we wouldn't even start if we know it's running
-
     system('nohup python3 timelapse-auto.py --folderName '+shootName+' &')
-
-    print("end startTimelapse")
-    return "cool"
+    return "startTimelapse function complete"
 
 def shootPreview(query_components) :
     mode = query_components["mode"][0]
@@ -150,7 +144,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
                     startTimelapse(shootName)
-
+                sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
