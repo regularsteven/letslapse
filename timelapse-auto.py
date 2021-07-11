@@ -53,7 +53,6 @@ def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains):
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"' >progress.txt")
 
 
-print(path.isfile("progress.txt"))
 
 preResetCount = 0 #this is the value that will be overriden in the even there was a crash or bad exit / restart / battery change
 

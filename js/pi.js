@@ -19,6 +19,17 @@ function toggleControls(value){
 
 /* V.1 Release */ 
 
+
+window.addEventListener("load", function(){
+    console.log("document loaded");
+    pollUptime();
+    //streamManager("start");
+    setPreset();
+    parseProgress(true, true);
+});
+
+
+
 function log(msg){
     $("#systemLog").prepend(msg+"\n")
 }
@@ -119,13 +130,6 @@ function streamManager(startOrStop){
 
 
 
-window.addEventListener("load", function(){
-    console.log("document loaded");
-    pollUptime();
-    //streamManager("start");
-    setPreset();
-    parseProgress(true, true);
-});
 
 
 function secondsToDhms(seconds) {
@@ -150,7 +154,7 @@ function secondsToDhms(seconds) {
 
 
 var realUptimeIndex=0;
-var realUptimeCheckEvery=9;
+var realUptimeCheckEvery=59;
 var realUptimeLatest=-1;
 function pollUptime(){
     //console.log("pollUptime: "+ realUptimeIndex);
@@ -341,13 +345,14 @@ function startTimelapseDelay(){
     var apiCall = "?action=timelapse";
     var shootName = "default";
     if($("#manualSwitch2").is(":checked")){
-        //shotting in auto mode
-        apiCall += "&mode=auto";
-    }else{
         apiCall += "&mode=manual"; //&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();
         if ($("#shootName").val() !== ""){
             shootName = $("#shootName").val();
         }
+    }else{
+        //shotting in auto mode
+        
+        apiCall += "&mode=auto";
     }
     apiCall += "&shootName="+shootName;
     $.getJSON( apiCall)

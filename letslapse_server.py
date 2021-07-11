@@ -16,7 +16,7 @@ from datetime import datetime
 from threading import Condition
 from http import server
 import threading, signal
-from os import system
+from os import system, path
 
 from subprocess import check_call, call
 import sys
@@ -66,7 +66,10 @@ def check_kill_process(pstring):
 
 def startTimelapse(shootName) :
     print("start startTimelapse")
-    system('nohup python3 timelapse-auto.py --folderName default &')
+    
+    #check_kill_process("letslapse_streamer.py") #unsure if we need this - letslapse_streamer should auto quit if it's already running but ideally we wouldn't even start if we know it's running
+
+    system('nohup python3 timelapse-auto.py --folderName '+shootName+' &')
 
     print("end startTimelapse")
     return "cool"
@@ -128,8 +131,21 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             jsonResp += '"completedAction":"'+actionVal+'"'
             
             if actionVal == "timelapse" :
-                check_kill_process("letslapse_streamer.py")
-                startTimelapse(query_components["shootName"][0])
+                #check to see if this timelapse project is already in place - don't make a new one, if so
+                shootName = query_components["shootName"][0]
+                jsonResp += ',"error":'+str(path.isdir("auto_"+shootName))
+
+                if path.isfile("progress.txt") == True:
+                    #must be continuing the shoot
+                    startTimelapse(shootName)
+
+                elif path.isdir("auto_"+shootName) == True :
+                    print("project with the same name already in use")
+                    jsonResp += ',"message":"'+shootName+' already used, please enter a unique shoot name"'
+                else: 
+                    startTimelapse(shootName)
+
+                
             elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :
