@@ -151,7 +151,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 updatecode = "git --git-dir=/home/pi/pitime/.git pull"
                 if(myhost == "gs66"):
                     updatecode = "git --git-dir=/home/steven/Documents/dev/pitime/.git pull"
-                updateCodeResp = subprocess.check_output(updatecode, shell=True) #.strip()
+                updateCodeResp = subprocess.check_output(updatecode, shell=True).strip()
                 #updateCodeResp.split()
                 jsonResp += ',"updateCodeResp":"'+str(updateCodeResp.decode('utf-8'))+'"'
                 #print(updatecode)
@@ -161,7 +161,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 #diskspace / free space on device ######## df
                 #device name ######## os.uname()[1]
                 #timelapse in progress ######## ps -f -C python3 | grep timelapse-auto.py
-
+                
                 print(actionVal)
                 #check_kill_process("letslapse_streamer.py")
                 #startTimelapse(query_components["shootName"][0])
