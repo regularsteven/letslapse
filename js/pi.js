@@ -166,6 +166,7 @@ function pollUptime(){
                 log("Uptime Seconds: "+realUptimeLatest+"\n");
                 if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
                     displayStatus("isReady");
+                    parseProgress(true, true);
                 }
 
                 window.setTimeout(pollUptime, 1000);
