@@ -319,7 +319,7 @@ function stopTimelapse(){
         var apiCall = "?action=killtimelapse";
         if($("#pauseOrKill").is(':checked')){
             apiCall += "&pauseOrKill=kill";
-            $("#pauseOrKill").click();
+            
         }else{
             apiCall += "&pauseOrKill=pause";
         }
@@ -330,7 +330,9 @@ function stopTimelapse(){
                 console.log(json );
                 //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
                 //displayStill("latest.jpg");
+                console.log("timelapse stoped");
                 if($("#pauseOrKill").is(':checked')){
+                    console.log("timelapse killed");
                     progressTxt = null;
                     $("#shootName").prop( "disabled", false );
                     if($("#manualSwitch2").is(":checked")){
