@@ -68,3 +68,7 @@ input#captureRaw {
 #status .isWarning .oi{
     color: pink;
 }
+
+#status .isUpdating .oi{
+    color: cornflowerblue;
+}

@@ -146,9 +146,22 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 print(float(uptime))
                 jsonResp += ',"seconds":"'+str(float(uptime))+'"'
             elif actionVal == "updatecode" :
-                updatecode = subprocess.check_output("git --git-dir=/home/pi/pitime/.git pull", shell=True)
-                print(updatecode)
-                jsonResp += ',"seconds":"'+str(updatecode)+'"'
+                myhost = os.uname()[1]
+                jsonResp += ',"hostname":"'+myhost+'"'
+                updatecode = "git --git-dir=/home/pi/pitime/.git pull"
+                if(myhost == "gs66"):
+                    updatecode = "git --git-dir=/home/steven/Documents/dev/pitime/.git pull"
+                updateCodeResp = subprocess.check_output(updatecode, shell=True).strip()
+                #updateCodeResp.split()
+                jsonResp += ',"updateCodeResp":"'+str(updateCodeResp.decode('utf-8'))+'"'
+                #print(updatecode)
+                
+            if actionVal == "systemstatus" :
+                print(actionVal)
+                #check_kill_process("letslapse_streamer.py")
+                #startTimelapse(query_components["shootName"][0])
+            if actionVal == "quit" :
+                exit()
 
             jsonResp += '}'
             print(actionVal)

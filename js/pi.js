@@ -18,6 +18,11 @@ function toggleControls(value){
 
 
 /* V.1 Release */ 
+
+function log(msg){
+    $("#systemLog").prepend(msg+"\n")
+}
+
 function power(resetOrOff){
     var confirmMessage = "";
     if(resetOrOff == "reset"){
@@ -147,9 +152,7 @@ var realUptimeIndex=0;
 var realUptimeCheckEvery=9;
 var realUptimeLatest=-1;
 function pollUptime(){
-
     //console.log("pollUptime: "+ realUptimeIndex);
-
 
     realUptimeIndex++;
     if (realUptimeIndex == 1){
@@ -159,7 +162,7 @@ function pollUptime(){
                 //console.log( Number(json.seconds));
                 realUptimeLatest = json.seconds;
                 $("footer").html("Running "+ secondsToDhms(realUptimeLatest));
-
+                log("Uptime Seconds: "+realUptimeLatest+"\n");
                 if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
                     displayStatus("isReady");
                 }
@@ -364,6 +367,24 @@ function displayStill(filename){
     document.getElementById("imageViewport").style.backgroundImage = "url('"+capturedImage+"')";
 }
 
+function updateCode(){
+    apiCall = "?action=updatecode";
+    $.getJSON( apiCall)
+    .done(function( json ) {
+        console.log( "JSON Data: " + json );
+        //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
+        //displayStill("latest.jpg");
+        log("Update Code: "+ json.updateCodeResp)
+        //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+        //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+        //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+        log("Update Code ERROR: "+ error)
+    });
+}
 
 var currentStatus = "isReady";
 function displayStatus(which){
