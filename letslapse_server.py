@@ -41,9 +41,9 @@ if args.testing == "True":
 
 if localDev:
     print("Running in testing mode for localhost development")
-    siteRoot = "/home/steven/Documents/dev/pitime"
+    siteRoot = "/home/steven/Documents/dev/letslapse"
 else: 
-    siteRoot = "/home/pi/pitime"
+    siteRoot = "/home/pi/letslapse"
     
 
 os.chdir(siteRoot+"/")
@@ -169,9 +169,9 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "updatecode" :
                 myhost = os.uname()[1]
                 jsonResp += ',"hostname":"'+myhost+'"'
-                updatecode = "git --git-dir=/home/pi/pitime/.git pull"
+                updatecode = "git --git-dir=/home/pi/letslapse/.git pull"
                 if(myhost == "gs66"):
-                    updatecode = "git --git-dir=/home/steven/Documents/dev/pitime/.git pull"
+                    updatecode = "git --git-dir=/home/steven/Documents/dev/letslapse/.git pull"
                 updateCodeResp = subprocess.check_output(updatecode, shell=True).strip()
                 #updateCodeResp.split()
                 jsonResp += ',"updateCodeResp":'+str(json.dumps(updateCodeResp.decode('utf-8')))
