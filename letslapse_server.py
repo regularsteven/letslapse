@@ -134,6 +134,8 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :
                 check_kill_process("timelapse-auto.py")
+                if query_components["pauseOrKill"][0] == "kill":
+                    system("rm progress.txt")
             elif actionVal == "killstreamer" :
                 check_kill_process("letslapse_streamer.py")
             elif actionVal == "startstreamer" :
