@@ -23,8 +23,6 @@ import sys
 from urllib.parse import urlparse, parse_qs
 import argparse
 
-
-
 PORT = 80
 
 # Instantiate the parser
@@ -41,7 +39,7 @@ if args.testing == "True":
 
 if localDev:
     print("Running in testing mode for localhost development")
-    siteRoot = "/home/steven/Documents/dev/letslapse"
+    siteRoot = os.getcwd()
 else: 
     siteRoot = "/home/pi/letslapse"
     
@@ -172,7 +170,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 jsonResp += ',"hostname":"'+myhost+'"'
                 updatecode = "git --git-dir=/home/pi/letslapse/.git pull"
                 if(myhost == "gs66"):
-                    updatecode = "git --git-dir=/home/steven/Documents/dev/letslapse/.git pull"
+                    updatecode = "git --git-dir="+siteRoot+"/.git pull"
                 updateCodeResp = subprocess.check_output(updatecode, shell=True).strip()
                 #updateCodeResp.split()
                 jsonResp += ',"updateCodeResp":'+str(json.dumps(updateCodeResp.decode('utf-8')))
