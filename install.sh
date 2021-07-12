@@ -1,4 +1,9 @@
 #copy wpa_supplication.conf to /boot & touch ssh
+
+#prep work requires git, bc, a few other tools if not found
+# sudo apt install bc
+# sudo apt install git
+
 #1 git clone https://github.com/regularsteven/letslapse.git
 #2 sudo sh install.sh 
 
@@ -41,16 +46,17 @@ sudo cp install/autohotspot /usr/bin/
 echo "13 Make autohotspot script executable"
 sudo chmod +x /usr/bin/autohotspot
 echo "-------------------------------------"
-echo "14 installing python dependencies"
+echo "14 installing python / camera dependencies"
 sudo apt install python3-pip
 python3 -m pip install --upgrade pip
 python3 -m pip install --upgrade Pillow
+sudo apt-get install python-picamera python3-picamera -y
 echo "15 System Stuff - Enable Camera / Disable Bluetooth - Updating /etc/default/hostapd"
 echo 'start_x=1' | sudo tee -a /boot/config.txt
 echo 'gpu_mem=128' | sudo tee -a /boot/config.txt
 echo 'dtoverlay=disable-bt' | sudo tee -a /boot/config.txt
 echo 'disable_camera_led=1' | sudo tee -a /boot/config.txt
-
+sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools -y
 #ideally disable HDMI - need to add this before exit 0 though, not at the end
 #echo '/usr/bin/tvservice -o' | sudo tee -a /etc/rc.local
 
@@ -61,7 +67,9 @@ sudo chmod u+rw /etc/systemd/system/letslapse.service
 echo "11 Starting and enable letslapse.service"
 sudo systemctl enable letslapse.service
 sudo systemctl start letslapse.service
-echo "See /var/log/syslog for error messages"
+echo "See the following logs for further detail:"
+echo "tail -f /var/log/syslog for error messages"
+echo ""
 
 #echo "16 Start server on boot - Updating /etc/default/hostapd"
 #echo 'sudo python3 /home/pi/letslapse/letslapse_server.py' | sudo tee -a /etc/profile

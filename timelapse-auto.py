@@ -22,7 +22,7 @@ import os.path
 from os import path
 
 
-width = 1600 #4056
+width = 4056
 height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
 

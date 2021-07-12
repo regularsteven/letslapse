@@ -214,7 +214,7 @@ function pollUptime(){
                     
                     window.setTimeout(pollUptime, 1000);
                 }else{
-                    alert("Issue with camera - is it working?");
+                    alert("Issue with uptime poll - is camera working?");
                 }
                 console.log( "Request Failed: " + err );
       });
