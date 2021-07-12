@@ -132,7 +132,7 @@ function streamManager(startOrStop){
                 })
             .fail(function( jqxhr, textStatus, error ) {
                 var err = textStatus + ", " + error;
-                alert("Issue with streaming - is it working?");
+                //alert("Issue with streaming - is it working?");
                 displayStatus("isWarning");
                 console.log( "Request Failed: " + err );
             });
