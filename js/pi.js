@@ -258,6 +258,7 @@ function takeStill(){
         apiCall += "&mode=auto";
     }
 
+    $("#status .isShooting .extraInfo").html("");
     displayStatus("isShooting");
 
     streamManager("stop");
