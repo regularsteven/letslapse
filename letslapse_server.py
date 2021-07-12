@@ -54,7 +54,7 @@ os.chdir(siteRoot+"/")
 
 letslapse_streamerPath = siteRoot+"/letslapse_streamer.py"    #CHANGE PATH TO LOCATION OF letslapse_streamer.py
 
-def thread_second():
+def letslapse_streamer_thread():
     call(["python3", letslapse_streamerPath])
 
 def check_kill_process(pstring):
@@ -89,8 +89,8 @@ def shootPreview(query_components) :
     print(sysCommand)
     system(sysCommand)
     print("end shootPreview")
-    processThread = threading.Thread(target=thread_second)
-    processThread.start()
+    #processThread = threading.Thread(target=letslapse_streamer_thread)
+    #processThread.start()
     return filename
 
 
@@ -156,7 +156,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "killstreamer" :
                 check_kill_process("letslapse_streamer.py")
             elif actionVal == "startstreamer" :
-                processThread = threading.Thread(target=thread_second)
+                processThread = threading.Thread(target=letslapse_streamer_thread)
                 processThread.start()
                 #shellResp = subprocess.check_output("python3 letslapse_streamer.py", shell=True)
                 sleep(4) #ideally this would wait for a callback, but this allows the camera to start
