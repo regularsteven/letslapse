@@ -140,7 +140,7 @@ function streamManager(startOrStop){
     }else{
         window.stop();
         
-        document.getElementById("imageViewport").style.backgroundImage = "none";
+        document.getElementById("imageViewport").style.backgroundImage = "url(/img/square-logo-bw-trans.png)";
         $.getJSON( "/?action=killstreamer")
             .done(function( json ) {
                 displayStatus("isReady");
