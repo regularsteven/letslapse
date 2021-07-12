@@ -304,7 +304,7 @@ function parseProgress(displayLatest, execOnStartup){
             
             if (displayLatest){
                 log("latestImage: "+latestImage);
-                $("#messageViewport .isShootingTimelapse .extraInfo").attr("href", latestImage);
+                $("#messageViewport .isShootingTimelapse .imageOpen").attr("href", latestImage);
                 
                 displayStill(latestImage);
             }
