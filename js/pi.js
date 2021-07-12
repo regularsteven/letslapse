@@ -303,15 +303,16 @@ function parseProgress(displayLatest, execOnStartup){
             }
             
             if (displayLatest){
-                console.log(latestImage);
+                log("latestImage: "+latestImage);
+                $("#messageViewport .isShootingTimelapse .extraInfo").attr("href", latestImage);
+                
                 displayStill(latestImage);
             }
-            $("#status .isShooting .extraInfo").html(" | Images: "+  progressTxt[0]);
-
+            $("#status .isShootingTimelapse .extraInfo").html(" | Images: "+  progressTxt[0]);
+            
             if(execOnStartup){
                 startTimelapseDelay();
             }
-
         }
     });
 }

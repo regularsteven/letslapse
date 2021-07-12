@@ -59,6 +59,7 @@ input#captureRaw {
     color: green;
 }
 #status .isStreaming .oi,
+#status .isShootingTimelapse .oi,
 #status .isShooting .oi{
     color: orange;
 }
@@ -74,9 +75,9 @@ input#captureRaw {
 }
 
 div#messageViewport {
-    background-color: rgba(0,0,0,.3);
-    color: white;
-    margin-top: -32px;
+    width: 100%;
+    bottom: 0px;
+    position: absolute;
 }
 
 
