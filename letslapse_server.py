@@ -125,6 +125,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             jsonResp += '"completedAction":"'+actionVal+'"'
             
             if actionVal == "timelapse" :
+                check_kill_process("letslapse_streamer.py")
                 #check to see if this timelapse project is already in place - don't make a new one, if so
                 shootName = query_components["shootName"][0]
                 
