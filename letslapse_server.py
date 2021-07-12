@@ -245,6 +245,15 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 
 
 
+#on strartup, if progress.txt is in place, then a boot has happened and the shoot should restart
+if path.isfile("progress.txt") == True:
+    file1 = open('progress.txt', 'r')
+    Lines = file1.readlines()
+    shootName = (Lines[1].strip())
+    print("System restarted - progress.txt indicated shoot in progress")
+    startTimelapse(shootName)
+
+
 # Create an object of the above class
 handler_object = MyHttpRequestHandler
 
@@ -252,3 +261,5 @@ my_server = socketserver.TCPServer(("", PORT), handler_object)
 print("my_server running on PORT" + str(PORT))
 # Star the server
 my_server.serve_forever()
+
+
