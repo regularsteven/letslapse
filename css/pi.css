@@ -73,6 +73,11 @@ input#captureRaw {
     color: cornflowerblue;
 }
 
+div#messageViewport {
+    background-color: rgba(0,0,0,.3);
+    color: white;
+    margin-top: -32px;
+}
 
 
 textarea#systemLog {
