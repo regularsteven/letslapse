@@ -72,3 +72,10 @@ input#captureRaw {
 #status .isUpdating .oi{
     color: cornflowerblue;
 }
+
+
+
+textarea#systemLog {
+    width: 100%;
+    height: 150px;
+  }
