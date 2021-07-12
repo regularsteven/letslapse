@@ -19,9 +19,11 @@ function toggleControls(value){
 
 /* V.1 Release */ 
 
+var currentStatus = "isReady";
 
 window.addEventListener("load", function(){
     console.log("document loaded");
+    displayStatus(currentStatus);
     pollUptime();
     //streamManager("start");
     setPreset();
@@ -237,7 +239,7 @@ function pollUptime(){
 
 
 function clickViewport(){
-    if(currentStatus == "isShooting"){
+    if(currentStatus == "isShootingTimelapse"){
         parseProgress(true, false);
     }else if(currentStatus == "isReady"){
         //if(document.getElementById("imageViewport").style.backgroundImage == "none"){
@@ -258,7 +260,7 @@ function takeStill(){
         apiCall += "&mode=auto";
     }
 
-    $("#status .isShooting .extraInfo").html("");
+    
     displayStatus("isShooting");
 
     streamManager("stop");
@@ -317,7 +319,7 @@ function parseProgress(displayLatest, execOnStartup){
 
 function timelapseMode(startOrStop){
     if (startOrStop == "start"){
-        displayStatus("isShooting");
+        displayStatus("isShootingTimelapse");
         $("#photo-tab").addClass("disabled");
         $("#shootName").prop( "disabled", true );
         $("#timelapse-tab").click();
@@ -479,9 +481,14 @@ function updateCode(){
     });
 }
 
-var currentStatus = "isReady";
+
 function displayStatus(which){
     currentStatus = which;
+
+    $("#messageViewport .statusMessage").addClass("d-none");
+    $("#messageViewport ."+which).removeClass("d-none");
+
+
     $("#status .statusMessage").addClass("d-none");
     $("#status ."+which).removeClass("d-none");
 }

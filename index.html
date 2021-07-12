@@ -36,6 +36,9 @@
         <span class="oi oi-circle-check" title="icon reload" aria-hidden="false"></span> Ready
       </div>
       <div class="isShooting d-none statusMessage">
+        <span class="oi oi-clock" title="icon clock" aria-hidden="false"></span> Shooting
+      </div>
+      <div class="isShootingTimelapse d-none statusMessage">
         <span class="oi oi-clock" title="icon clock" aria-hidden="false"></span> Shooting <span class="extraInfo"></span>
       </div>
       <div class="isRestarting d-none statusMessage">
@@ -75,7 +78,21 @@
         <div id="imageViewport" onclick="clickViewport()" style="background-image: url(/img/square-logo-bw-trans.png);">
           <!--img src="/img/square-logo-bw-trans.png" alt="image loading"-->
         </div>
-      
+        <div id="messageViewport">
+          <div class="alert alert-info text-center statusMessage isReady p-1" role="alert">
+            See video stream
+          </div>
+          <div class="alert alert-info text-center statusMessage isStreaming p-1" role="alert">
+            Stop video stream
+          </div>
+          <div class="alert alert-info text-center statusMessage isShooting p-1" role="alert">
+            Taking still image
+          </div>
+          <div class="alert alert-info text-center statusMessage isShootingTimelapse p-1" role="alert">
+            Display latest timelapse
+          </div>
+          
+        </div>
       </div>
       <div class="col-md-6 controlCol p-0">
         <form action="/" target="" id="mainForm">
