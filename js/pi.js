@@ -315,11 +315,11 @@ function parseProgress(displayLatest, execOnStartup){
             
             if (displayLatest){
                 log("latestImage: "+latestImage);
-                $("#messageViewport .isShootingTimelapse .imageOpen").attr("href", latestImage);
+                $("#messageViewport .isShootingTimelapse .imageOpen").attr("onclick", 'window.open("'+latestImage+'", "_blank")');
                 
                 displayStill(makeThumb(latestImage));
             }
-            $("#status .isShootingTimelapse .extraInfo").html(" | Images: "+  progressTxt[0]);
+            $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressTxt[0]);
             
             if(execOnStartup){
                 startTimelapseDelay();
