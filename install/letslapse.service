@@ -5,8 +5,8 @@ Restart=always
 StandardOutput=syslog
 StandardError=syslog
 SyslogIdentifier=letslapse
-User=pi
-Group=pi
+User=root
+Group=root
 Environment=NODE_ENV=production
 [Install]
 WantedBy=multi-user.target
