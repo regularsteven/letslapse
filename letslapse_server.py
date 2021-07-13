@@ -242,10 +242,9 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     
                     exifProcess = subprocess.check_output(exifCommand, shell=True)
                 
-            if self.path =="/progress.txt":
-                if path.isfile(siteRoot+self.path) == False:
-                    self.send_error(404)
-            
+            if self.path =="/progress.txt" and path.isfile(siteRoot+self.path) == False:
+                self.send_error(404)
+                
             else:
 
                 self.send_response(200)
