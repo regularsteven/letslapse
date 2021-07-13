@@ -60,6 +60,7 @@ sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools -y
 #ideally disable HDMI - need to add this before exit 0 though, not at the end
 #echo '/usr/bin/tvservice -o' | sudo tee -a /etc/rc.local
 
+sudo apt install -y libimage-exiftool-perl
 
 echo "16 Copy letslapse.service"
 sudo cp install/letslapse.service /etc/systemd/system/

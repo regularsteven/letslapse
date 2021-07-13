@@ -207,6 +207,9 @@ for i in range(80000):
     else :
         system(raspiCommand)
         print(raspiCommand)
+
+        exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
+        exifProcess = subprocess.check_output(exifCommand, shell=True)
     
 
     

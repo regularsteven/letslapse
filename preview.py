@@ -84,6 +84,12 @@ outputPathAndFilename = "/home/pi/letslapse/previews/"+args.filename+" --thumb 6
 
 raspistillCommand = "raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+userInputs
 
+
+#pull out the thumbnail for more efficient usage
+exifCommand = "exiftool -b -ThumbnailImage "+outputPathAndFilename+" > "+outputPathAndFilename.replace(".jpg", "_thumb.jpg")
+exifProcess = subprocess.check_output(exifCommand, shell=True)
+
+
 print(raspistillCommand)
 system(raspistillCommand)
 
