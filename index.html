@@ -33,7 +33,10 @@
       <a href="/"><img src="/img/square-logo-bw-trans.png" alt=""></a>      
     </div>
     <div id="status" class="ml-2">
-      <div class="isReady statusMessage">
+      <div class="isLoading statusMessage">
+        <span class="oi oi-project" title="icon reload" aria-hidden="false"></span> Loading
+      </div>
+      <div class="isReady statusMessage  d-none">
         <span class="oi oi-circle-check" title="icon reload" aria-hidden="false"></span> Ready
       </div>
       <div class="isShooting d-none statusMessage">
@@ -79,7 +82,16 @@
         <div id="imageViewport" onclick="clickViewport()" style="background-image: url(/img/square-logo-bw-trans.png);">
           <!--img src="/img/square-logo-bw-trans.png" alt="image loading"-->
           <div id="messageViewport" >
-            <div class="text-center statusMessage isReady p-1" role="alert">
+            <div class="text-center statusMessage isLoading p-1" role="alert">
+              
+
+              <a class="btn btn-secondary btn-sm active pt-1 pb-1" >
+                <span class="oi oi-project"></span>
+                Loading
+              </a>
+
+            </div>
+            <div class="text-center statusMessage isReady p-1 d-none" role="alert">
               
 
               <a href="javascript:clickViewport()" class="btn btn-secondary btn-sm active pt-1 pb-1" >
@@ -88,19 +100,19 @@
               </a>
 
             </div>
-            <div class="text-center statusMessage isStreaming p-1" role="alert">
+            <div class="text-center statusMessage isStreaming p-1  d-none" role="alert">
               <a href="javascript:clickViewport()" class="btn btn-secondary btn-sm active pt-1 pb-1" >
                 <span class="oi oi-media-stop"></span>
                 Stop video stream
               </a>
             </div>
-            <div class="text-center statusMessage isShooting p-1" role="alert">
+            <div class="text-center statusMessage isShooting p-1  d-none" role="alert">
               <a href="#" class="btn btn-secondary btn-sm active pt-1 pb-1" >
                 <span class="oi oi-aperture"></span>
                 Taking still image
               </a>
             </div>
-            <div class="text-center statusMessage isShootingTimelapse p-1" role="alert">
+            <div class="text-center statusMessage isShootingTimelapse p-1 d-none" role="alert">
               <a href="javascript:clickViewport()" class="btn btn-secondary btn-sm active pt-1 pb-1" >
                 <span class="oi oi-loop-circular"></span>
                 Refresh
@@ -112,14 +124,14 @@
             </div>
 
 
-            <div class="text-center statusMessage isRestarting p-1" role="alert">
+            <div class="text-center statusMessage isRestarting p-1 d-none" role="alert">
               <a href="#" class="btn btn-secondary btn-sm active pt-1 pb-1" >
                 <span class="oi oi-loop-reload"></span>
                 Restarting now
               </a>
             </div>
 
-            <div class="text-center statusMessage isWarning p-1" role="alert">
+            <div class="text-center statusMessage isWarning p-1 d-none" role="alert">
               <a href="#" class="btn btn-warning btn-sm active pt-1 pb-1" >
                 <span class="oi oi-loop-reload"></span>
                 Something's wrong :/

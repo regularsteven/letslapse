@@ -19,21 +19,24 @@ function toggleControls(value){
 
 /* V.1 Release */ 
 
-var currentStatus = "isReady";
+var currentStatus = "isLoading";
 
 window.addEventListener("load", function(){
     console.log("document loaded");
-    displayStatus(currentStatus);
     pollUptime();
     //streamManager("start");
     setPreset();
     parseProgress(true, true);
     forceCharacterValidationOnInput();
+    //stop clicks from passing through links:
+    $("a").click(function(e) {
+        e.preventDefault();
+      });
 });
 
 
 function forceCharacterValidationOnInput(){
-    $('input').on('keypress', function (event) {
+    $('input.shootName').on('keypress', function (event) {
         var regex = new RegExp("^[a-zA-Z0-9]+$");
         var key = String.fromCharCode(!event.charCode ? event.which : event.charCode);
         if (!regex.test(key)) {
@@ -201,7 +204,10 @@ function pollUptime(){
                 if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
                     displayStatus("isReady");
                     parseProgress(true, true);
+                }else if(currentStatus == "isLoading"){
+                    displayStatus("isReady");
                 }
+                
 
                 window.setTimeout(pollUptime, 1000);
             })
@@ -239,6 +245,8 @@ function pollUptime(){
 
 
 function clickViewport(){
+    if(currentStatus == "isLoading")return false;
+
     if(currentStatus == "isShootingTimelapse"){
         parseProgress(true, false);
     }else if(currentStatus == "isReady"){
