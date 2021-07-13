@@ -514,6 +514,7 @@ function getShoots(filter){
     });
 }
 
+var galleryApp = null;
 function displayShoots(gallery){
     $("#stillsApp").addClass("d-none");
     $("#galleryApp").removeClass("d-none");
@@ -525,12 +526,16 @@ function displayShoots(gallery){
         shoots.push(thisShoot);
     }
     console.log(shoots);
-    var galleryApp = new Vue({
-        el: '#galleryApp',
-        data: {
-            shoots:shoots
-        }
-      });
+    if(galleryApp == null){
+        galleryApp = new Vue({
+            el: '#galleryApp',
+            data: {
+                shoots:shoots
+            }
+        });
+    }else{
+        galleryApp.shoots = shoots;
+    }
 }
 
 function getStills(){
@@ -548,16 +553,19 @@ function getStills(){
         log("getStills ERROR: "+ error)
     });
 }
-
+var stillsApp = null;
 function displayStills(stills){
     $("#stillsApp").removeClass("d-none");
     $("#galleryApp").addClass("d-none");
     console.log(stills);
-    var stillsApp = new Vue({
-        el: '#stillsApp',
-        data: {
-            stills:stills
-        }
-    });
-
+    if(stillsApp == null){
+        stillsApp = new Vue({
+            el: '#stillsApp',
+            data: {
+                stills:stills
+            }
+        });
+    }else{
+        stillsApp.stills = stills;
+    }
 }
