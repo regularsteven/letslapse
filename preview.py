@@ -87,7 +87,7 @@ raspistillCommand = "raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+us
 
 #pull out the thumbnail for more efficient usage
 exifCommand = "exiftool -b -ThumbnailImage "+outputPathAndFilename+" > "+outputPathAndFilename.replace(".jpg", "_thumb.jpg")
-exifProcess = subprocess.check_output(exifCommand, shell=True)
+system(exifCommand)
 
 
 print(raspistillCommand)
