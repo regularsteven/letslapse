@@ -326,7 +326,7 @@ for i in range(80000):
             camera = PiCamera(resolution=(1280, 720), framerate=30)
             camera.iso = 400
             camera.meter_mode = 'backlit'
-            sleep(2)
+            sleep(1)
             camera.shutter_speed = camera.exposure_speed
             camera.exposure_mode = 'off'
             g = camera.awb_gains
@@ -339,6 +339,6 @@ for i in range(80000):
     
     manageColorGainChanges(measuredBlueGains, measuredRedGains)
     #print("awbgSettings is: "+ awbgSettings)
-    sleep(2)
+    sleep(1)
 
 print("end")
