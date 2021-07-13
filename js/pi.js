@@ -29,7 +29,7 @@ window.addEventListener("load", function(){
     parseProgress(true, true);
     forceCharacterValidationOnInput();
     //stop clicks from passing through links:
-    $("a").click(function(e) {
+    $("#messageViewport a").click(function(e) {
         e.preventDefault();
       });
 });
