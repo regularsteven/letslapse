@@ -11,6 +11,7 @@
 </head>
 <body>
 
+<script src="/js/vue.min.js"></script>
 
 <script src="js/jquery-3.6.0.min.js"></script>
 <script src="/js/pi.js"></script>
@@ -292,7 +293,7 @@
                     <label class="btn btn-secondary active">
                       <input type="radio" name="options" id="option1" autocomplete="off" checked> Still Gallery
                     </label>
-                    <label class="btn btn-secondary">
+                    <label class="btn btn-secondary" onclick="getShoots();">
                       <input type="radio" name="options" id="option2" autocomplete="off"> Timelapse Gallery
                     </label>
                   </div>
@@ -300,6 +301,20 @@
                 </div>
               </div>
               
+              <div id="galleryApp" >
+                <div class="container" v-for="shoot in shoots">
+                <div class="row shootName" >
+                  <div class="col theLabel">{{ shoot.shootName }}</div>
+                </div>
+                <div class="row shootImages">
+                  <div class="col col-4 p-0" v-for="image in shoot.shootImages">
+                    <a v-bind:href="'/'+shoot.shootName+'/group'+image+'.jpg'" target="_blank">
+                      <img v-bind:src="'/'+shoot.shootName+'/group'+image+'_thumb.jpg'" class="theImage" />
+                    </a>
+                  </div>
+                </div>
+              </div>
+              </div>
             
             
             </div>

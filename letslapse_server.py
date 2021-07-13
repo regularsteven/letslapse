@@ -23,6 +23,10 @@ import sys
 from urllib.parse import urlparse, parse_qs
 import argparse
 
+#my own custom utilities extracted for simpler structure 
+import browser
+
+
 PORT = 80
 
 # Instantiate the parser
@@ -179,7 +183,11 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 #for display of projects and still shots
                 print("tbc")
                 folderLen = (len(next(os.walk('.'))[1]))
+            
+            elif actionVal == "getShoots":
                 
+                jsonResp += ',"gallery":'+str( json.dumps( browser.getShoots("0.jpg") ) )
+                #print(browser.getShoots("0.jpg"))
 
             elif actionVal == "systemstatus" :
                 #pull all system status for simple startup script
@@ -220,6 +228,17 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             self.end_headers()
         
         else :
+
+            #if an image is requested that doesn't exist, it's probably a thumbnail request - in this event, extract it from the image and save it
+            if self.path.endswith('_thumb.jpg'):
+                print("-----------------------------------")
+                if path.isfile(siteRoot+self.path) == False:
+                    exifCommand = "exiftool -b -ThumbnailImage "+siteRoot+self.path.replace("_thumb", "")+" > "+siteRoot+self.path
+                    
+                    exifProcess = subprocess.check_output(exifCommand, shell=True)
+                
+
+
             self.send_response(200)
             if self.path.endswith('.svg'):
                 self.send_header('Content-Type', 'image/svg+xml')

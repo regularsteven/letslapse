@@ -493,3 +493,50 @@ function displayStatus(which){
     $("#status .statusMessage").addClass("d-none");
     $("#status ."+which).removeClass("d-none");
 }
+
+
+
+function getShoots(filter){
+    var apiCall = "/?action=getShoots";
+    $.getJSON( apiCall)
+    .done(function( json ) {
+        console.log( "JSON Data: ");
+        console.log(json);
+
+        //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
+        //displayStill("latest.jpg");
+        log("Update Code: "+ json.updateCodeResp);
+        displayShoots(json.gallery);
+        //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
+        //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
+        //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+        log("getShoots ERROR: "+ error)
+    });
+}
+
+function displayShoots(gallery){
+
+    
+    var shoots = []
+    for(var n=0; n<gallery.length; n++){
+        var thisShoot = new Object();
+        thisShoot.shootName = gallery[n][0];
+        thisShoot.shootImages = gallery[n][1];
+
+        shoots.push(thisShoot);
+    }
+
+    console.log(shoots);
+
+    var galleryApp = new Vue({
+        el: '#galleryApp',
+        data: {
+            shoots:shoots
+        }
+      });
+
+}

@@ -78,7 +78,7 @@ else :
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "/home/pi/letslapse/previews/"+args.filename
+outputPathAndFilename = "/home/pi/letslapse/previews/"+args.filename+" --thumb 640:480:40"
 
 #print("/"+outputPathAndFilename)
 
