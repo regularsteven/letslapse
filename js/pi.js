@@ -319,7 +319,7 @@ function parseProgress(displayLatest, execOnStartup){
                 
                 displayStill(makeThumb(latestImage));
 
-                if(progressIndex == 0){ //first image is pesky, so we double load it just in case
+                if(progressIndex <10){ //first image is pesky, so we double load it just in case - this will actually display the first 10
                     window.setTimeout("parseProgress(true, false)", 2000);
                 }
             }
