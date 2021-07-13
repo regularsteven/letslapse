@@ -4,7 +4,6 @@ from time import sleep
 from decimal import Decimal
 import argparse
 from os import path
-import subprocess
 
 #example usage:
 #python3 preview.py --ss 1000 --iso 100 --awbg 3,2
@@ -79,11 +78,11 @@ else :
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "/home/pi/letslapse/previews/"+args.filename+" --thumb 640:480:40"
+outputPathAndFilename = "/home/pi/letslapse/previews/"+args.filename
 
 #print("/"+outputPathAndFilename)
 
-raspistillCommand = "raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+userInputs
+raspistillCommand = "raspistill --verbose -t 1 --thumb 640:480:40 -o "+outputPathAndFilename+" "+userInputs
 
 print(raspistillCommand)
 system(raspistillCommand)
@@ -91,7 +90,8 @@ system(raspistillCommand)
 
 #pull out the thumbnail for more efficient usage
 exifCommand = "exiftool -b -ThumbnailImage "+outputPathAndFilename+" > "+outputPathAndFilename.replace(".jpg", "_thumb.jpg")
-exifProcess = subprocess.check_output(exifCommand, shell=True)
+#exifProcess = subprocess.check_output(exifCommand, shell=True)
+system(exifCommand)
 
 
 
