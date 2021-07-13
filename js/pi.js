@@ -267,7 +267,10 @@ function takeStill(){
     $.getJSON( apiCall)
         .done(function( json ) {
             console.log( "JSON Data: " + json );
-            displayStill("/previews/"+json.filename);
+
+
+
+            displayStill("/previews/"+makeThumb(json.filename));
             displayStatus("isReady");
             //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
             //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
@@ -306,7 +309,7 @@ function parseProgress(displayLatest, execOnStartup){
                 log("latestImage: "+latestImage);
                 $("#messageViewport .isShootingTimelapse .imageOpen").attr("href", latestImage);
                 
-                displayStill(latestImage);
+                displayStill(makeThumb(latestImage));
             }
             $("#status .isShootingTimelapse .extraInfo").html(" | Images: "+  progressTxt[0]);
             
@@ -442,6 +445,9 @@ function startTimelapseDelay(){
 }
 
 
+function makeThumb(url){ 
+    return url.split(".jpg")[0]+"_thumb.jpg";
+}
 
 function displayStill(filename){
 
@@ -460,6 +466,7 @@ function displayStill(filename){
         }
     });
     */
+   
     document.getElementById("imageViewport").style.backgroundImage = "url('"+capturedImage+"')";
 }
 
