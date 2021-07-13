@@ -4,6 +4,7 @@ from time import sleep
 from decimal import Decimal
 import argparse
 from os import path
+import subprocess
 
 #example usage:
 #python3 preview.py --ss 1000 --iso 100 --awbg 3,2
@@ -87,7 +88,7 @@ raspistillCommand = "raspistill --verbose -t 1 -o "+outputPathAndFilename+" "+us
 
 #pull out the thumbnail for more efficient usage
 exifCommand = "exiftool -b -ThumbnailImage "+outputPathAndFilename+" > "+outputPathAndFilename.replace(".jpg", "_thumb.jpg")
-system(exifCommand)
+exifProcess = subprocess.check_output(exifCommand, shell=True)
 
 
 print(raspistillCommand)
