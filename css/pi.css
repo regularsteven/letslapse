@@ -33,6 +33,7 @@ footer{
     background-repeat: no-repeat;
     background-size: contain;
     background-position: center;
+    position: relative;
 }
 #imageViewport img{
     width:100%;

@@ -502,14 +502,10 @@ function getShoots(filter){
     .done(function( json ) {
         console.log( "JSON Data: ");
         console.log(json);
-
-        //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
         //displayStill("latest.jpg");
-        log("Update Code: "+ json.updateCodeResp);
+        //log("getShoots: "+ json.gallery);
         displayShoots(json.gallery);
-        //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
-        //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
-        //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+
     })
     .fail(function( jqxhr, textStatus, error ) {
         var err = textStatus + ", " + error;
@@ -519,24 +515,49 @@ function getShoots(filter){
 }
 
 function displayShoots(gallery){
-
-    
+    $("#stillsApp").addClass("d-none");
+    $("#galleryApp").removeClass("d-none");
     var shoots = []
     for(var n=0; n<gallery.length; n++){
         var thisShoot = new Object();
         thisShoot.shootName = gallery[n][0];
         thisShoot.shootImages = gallery[n][1];
-
         shoots.push(thisShoot);
     }
-
     console.log(shoots);
-
     var galleryApp = new Vue({
         el: '#galleryApp',
         data: {
             shoots:shoots
         }
       });
+}
+
+function getStills(){
+    var apiCall = "/?action=getStills";
+    $.getJSON( apiCall)
+    .done(function( json ) {
+        console.log( "JSON Data: ");
+        console.log(json);
+        //log("getStills: "+ json.stills);
+        displayStills(json.stills);
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+        log("getStills ERROR: "+ error)
+    });
+}
+
+function displayStills(stills){
+    $("#stillsApp").removeClass("d-none");
+    $("#galleryApp").addClass("d-none");
+    console.log(stills);
+    var stillsApp = new Vue({
+        el: '#stillsApp',
+        data: {
+            stills:stills
+        }
+    });
 
 }

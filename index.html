@@ -138,7 +138,7 @@
               <a class="nav-link" id="timelapse-tab" data-toggle="tab" href="#timelapse" role="tab" aria-controls="timelapse" aria-selected="false"><span class="oi oi-timer" title="icon name" aria-hidden="true"></span> Timelapse</a>
             </li>
             <li class="nav-item">
-              <a class="nav-link" id="gallery-tab" data-toggle="tab" href="#gallery" role="tab" aria-controls="gallery" aria-selected="false"><span class="oi oi-image" title="icon name" aria-hidden="true"></span> Gallery</a>
+              <a class="nav-link" id="gallery-tab" data-toggle="tab" href="#gallery" onclick="getStills()" role="tab" aria-controls="gallery" aria-selected="false"><span class="oi oi-image" title="icon name" aria-hidden="true"></span> Gallery</a>
             </li>
             <li class="nav-item">
               <a class="nav-link" id="settings-tab" data-toggle="tab" href="#settings" role="tab" aria-controls="settings" aria-selected="false"><span class="oi oi-cog" title="icon name" aria-hidden="true"></span> Config</a>
@@ -290,7 +290,7 @@
                 <div class="col">
 
                   <div class="btn-group btn-group-toggle  m-3 " data-toggle="buttons">
-                    <label class="btn btn-secondary active">
+                    <label class="btn btn-secondary active" onclick="getStills();">
                       <input type="radio" name="options" id="option1" autocomplete="off" checked> Still Gallery
                     </label>
                     <label class="btn btn-secondary" onclick="getShoots();">
@@ -301,19 +301,31 @@
                 </div>
               </div>
               
-              <div id="galleryApp" >
+              <div id="galleryApp" class="d-none" >
                 <div class="container" v-for="shoot in shoots">
-                <div class="row shootName" >
-                  <div class="col theLabel">{{ shoot.shootName }}</div>
-                </div>
-                <div class="row shootImages">
-                  <div class="col col-4 p-0" v-for="image in shoot.shootImages">
-                    <a v-bind:href="'/'+shoot.shootName+'/group'+image+'.jpg'" target="_blank">
-                      <img v-bind:src="'/'+shoot.shootName+'/group'+image+'_thumb.jpg'" class="theImage" />
-                    </a>
+                  <div class="row shootName" >
+                    <div class="col theLabel">{{ shoot.shootName }}</div>
+                  </div>
+                  <div class="row shootImages">
+                    <div class="col col-4 p-0" v-for="image in shoot.shootImages">
+                      <a v-bind:href="'/'+shoot.shootName+'/group'+image+'.jpg'" target="_blank">
+                        <img v-bind:src="'/'+shoot.shootName+'/group'+image+'_thumb.jpg'" class="theImage" />
+                      </a>
+                    </div>
                   </div>
                 </div>
               </div>
+              <div id="stillsApp" class="d-none" >
+                <div class="container" >
+
+                  <div class="row stillImages">
+                    <div class="col col-4 p-0" v-for="still in stills">
+                      <a v-bind:href="'/previews/'+still+'.jpg'" target="_blank">
+                        <img v-bind:src="'/previews/'+still+'_thumb.jpg'" class="theImage" />
+                      </a>
+                    </div>
+                  </div>
+                </div>
               </div>
             
             

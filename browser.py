@@ -36,3 +36,16 @@ def getShoots(filterBy):
 
     return shootFolders
 
+def getStills():
+    siteRoot = os.getcwd()
+    topLevel = sorted(os.listdir(siteRoot+"/previews/"))
+    jpegs = []
+    for t in range(len(topLevel)):
+        #look in each and and find the auto_ folders - these are the shoot folders
+        if 'thumb' in topLevel[t]:
+            print("not adding this to display")
+        else: 
+            jpegs.append(topLevel[t].replace('.jpg',''))
+
+    return jpegs
+

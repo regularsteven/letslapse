@@ -184,6 +184,11 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 print("tbc")
                 folderLen = (len(next(os.walk('.'))[1]))
             
+            elif actionVal == "getStills":
+                
+                jsonResp += ',"stills":'+str( json.dumps( browser.getStills() ) )
+                #print(browser.getShoots("0.jpg"))
+            
             elif actionVal == "getShoots":
                 
                 jsonResp += ',"gallery":'+str( json.dumps( browser.getShoots("0.jpg") ) )
@@ -237,29 +242,37 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     
                     exifProcess = subprocess.check_output(exifCommand, shell=True)
                 
-
-
-            self.send_response(200)
-            if self.path.endswith('.svg'):
-                self.send_header('Content-Type', 'image/svg+xml')
-            if self.path.endswith('.css'):
-                self.send_header('Content-Type', 'text/css')
-            if self.path.endswith('.js'):
-                self.send_header('Content-Type', 'application/javascript')
-            if self.path.endswith('.jpg'):
-                self.send_header('Content-Type', 'image/jpeg')
+            if self.path =="/progress.txt":
+                if path.isfile(siteRoot+self.path) == False:
+                    self.send_error(404)
+            
             else:
-                self.send_header('Content-Type', 'text/html')
-            self.end_headers()
-            with open(siteRoot+self.path, 'rb') as file: 
-                self.wfile.write(file.read())
+
+                self.send_response(200)
+                
+                if self.path.endswith('.svg'):
+                    self.send_header('Content-Type', 'image/svg+xml')
+                if self.path.endswith('.css'):
+                    self.send_header('Content-Type', 'text/css')
+                if self.path.endswith('.js'):
+                    self.send_header('Content-Type', 'application/javascript')
+                if self.path.endswith('.jpg'):
+                    self.send_header('Content-Type', 'image/jpeg')
+                else:
+                    self.send_header('Content-Type', 'text/html')
+
+                
+                
+                
+                self.end_headers()
+                with open(siteRoot+self.path, 'rb') as file: 
+                    self.wfile.write(file.read())
             
             #self.send_response(200)
             #self.send_header('Content-Type', 'text/html')
             #return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
-        #self.send_error(404)
-        #self.end_headers()
+        #
 
 
 
