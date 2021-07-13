@@ -42,10 +42,7 @@ def getStills():
     jpegs = []
     for t in range(len(topLevel)):
         #look in each and and find the auto_ folders - these are the shoot folders
-        if 'thumb' in topLevel[t]:
-            print("not adding this to display")
-        else: 
+        if 'thumb' not in topLevel[t]:
             jpegs.append(topLevel[t].replace('.jpg',''))
 
     return jpegs
-
