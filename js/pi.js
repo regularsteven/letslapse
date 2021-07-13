@@ -318,6 +318,10 @@ function parseProgress(displayLatest, execOnStartup){
                 $("#messageViewport .isShootingTimelapse .imageOpen").attr("onclick", 'window.open("'+latestImage+'", "_blank")');
                 
                 displayStill(makeThumb(latestImage));
+
+                if(progressIndex == 0){ //first image is pesky, so we double load it just in case
+                    window.setTimeout("parseProgress(true, false)", 2000);
+                }
             }
             $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressTxt[0]);
             
