@@ -412,7 +412,8 @@ function stopTimelapse(){
 
 function startTimelapse(){
     streamManager("stop");
-    window.setTimeout("startTimelapseDelay()", 1000);
+    startTimelapseDelay()
+    //window.setTimeout("", 1000); - unsure we really need this... 
 }
 
 function startTimelapseDelay(){
