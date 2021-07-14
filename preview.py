@@ -26,6 +26,8 @@ parser.add_argument('--awbg', type=str,
 
 parser.add_argument('--filename', type=str,
                     help='name of file to output')   
+
+parser.add_argument('--raw', type=str, help='capture raw image in JPEG')   
                     
 args = parser.parse_args()
 
@@ -67,6 +69,10 @@ else :
 
     userParams = "-ISO "+str(args.iso)+" -ss "+str(exposureTime) + " -co -10"
     jpegDimensions = " -w 2400 -h 1800"
+    includeRaw = ""
+    if args.raw == "true":
+        includeRaw = " -r "
+
 
     whiteBalance = "" 
     # awbg : blue,red
@@ -74,7 +80,7 @@ else :
         whiteBalance = " -awb off -awbg "+args.awbg
     #1.7,1.5 = ok
 
-    userInputs = userParams+jpegDimensions + whiteBalance
+    userInputs = userParams+jpegDimensions + whiteBalance + includeRaw
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 

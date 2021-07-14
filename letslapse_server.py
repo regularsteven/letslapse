@@ -82,7 +82,8 @@ def shootPreview(query_components) :
         ss = query_components["ss"][0]
         iso = query_components["iso"][0]
         awbg = query_components["awbg"][0]
-        settings = " --ss "+ss+" --iso "+iso+" --awbg "+awbg
+        raw = query_components["raw"][0]
+        settings = " --ss "+ss+" --iso "+iso+" --awbg "+awbg + " --raw"+raw
         filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+"_manual.jpg"
 
 

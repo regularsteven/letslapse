@@ -262,7 +262,7 @@ function takeStill(){
     var apiCall = "?action=preview";
 
     if($("#manualSwitch1").is(":checked")){
-        apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val();        
+        apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val()+"&raw="+$("#captureRaw").is(":checked");
     }else{
         //shotting in auto mode
         apiCall += "&mode=auto";
