@@ -558,19 +558,28 @@ function displayShoots(gallery){
 }
 
 function getStills(){
-    var apiCall = "/?action=getStills";
-    $.getJSON( apiCall)
-    .done(function( json ) {
-        console.log( "JSON Data: ");
-        console.log(json);
-        //log("getStills: "+ json.stills);
-        displayStills(json.stills);
-    })
-    .fail(function( jqxhr, textStatus, error ) {
-        var err = textStatus + ", " + error;
-        console.log( "Request Failed: " + err );
-        log("getStills ERROR: "+ error)
-    });
+
+    //$(".stillGalleryBtn").removeClass("active");
+    if($(".timelapseGalleryBtn").hasClass("active")){
+        getShoots();
+    }else{
+
+
+        var apiCall = "/?action=getStills";
+        $.getJSON( apiCall)
+        .done(function( json ) {
+            console.log( "JSON Data: ");
+            console.log(json);
+            //log("getStills: "+ json.stills);
+            displayStills(json.stills);
+        })
+        .fail(function( jqxhr, textStatus, error ) {
+            var err = textStatus + ", " + error;
+            console.log( "Request Failed: " + err );
+            log("getStills ERROR: "+ error)
+        });
+    }
+
 }
 var stillsApp = null;
 function displayStills(stills){
