@@ -41,7 +41,7 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
 parser.add_argument('--imageCount', help='number of images')
-parser.add_argument('--startup', help='flag for startup on boot, from reboot.sh')
+
 
 #example use:
 # python3 timelapse-auto --folderName demo
@@ -55,14 +55,6 @@ def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains):
 
 
 preResetCount = 0 #this is the value that will be overriden in the even there was a crash or bad exit / restart / battery change
-
-if args.startup == None:
-    print("normal startup")
-else :
-    print("starting up from reboot.sh script, should occur on powerup")
-    system("touch rebootbreadcrumb.txt")
-    exit()
-
 
 
 
