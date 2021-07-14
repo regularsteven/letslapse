@@ -297,7 +297,9 @@ function parseProgress(displayLatest, execOnStartup){
             log("parseProgress: No progress.txt, indicating this is brand new");
             if(execOnStartup == false){
                 log("parseProgress: Try again in one second");
-                window.setTimeout("parseProgress(true, false)", 1000);
+                if(currentStatus == "isShooting"){
+                    window.setTimeout("parseProgress(true, false)", 1000);
+                }
             }
             if(currentStatus == "isLoading"){
                 displayStatus("isReady");
