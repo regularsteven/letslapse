@@ -163,7 +163,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 processThread = threading.Thread(target=letslapse_streamer_thread)
                 processThread.start()
                 #shellResp = subprocess.check_output("python3 letslapse_streamer.py", shell=True)
-                sleep(4) #ideally this would wait for a callback, but this allows the camera to start
+                #sleep(4) #ideally this would wait for a callback, but this allows the camera to start
             elif actionVal == "uptime" :
                 uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
                 hostname = os.uname()[1]
@@ -274,7 +274,6 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 
                 
                 self.end_headers()
-                
                 
                 with open(siteRoot+self.path, 'rb') as file: 
                     self.wfile.write(file.read())
