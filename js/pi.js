@@ -202,6 +202,7 @@ function pollUptime(){
                 $("footer").html(hostName +" up "+ secondsToDhms(realUptimeLatest));
                 log("Uptime Seconds: "+realUptimeLatest+"\n");
                 if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
+
                     displayStatus("isReady");
                     parseProgress(true, true);
                 }
@@ -491,10 +492,13 @@ function updateCode(){
         console.log( "JSON Data: " + json );
         //alert("Timelapse in action. This is time consuming and heavy on the system. Doing too much, the system will crash.");
         //displayStill("latest.jpg");
-        log("Update Code: "+ json.updateCodeResp)
-        //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
-        //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
-        //window.setTimeout('streamManager("start");console.log("6 second attempt");', 6000);
+        log("Update Code: "+ json.updateCodeResp);
+        if(json.updateCodeResp.match(".py")){
+            alert("LetsLapse requires a reset, please do so ASAP");
+        }else{
+            location.reload();
+        }
+
     })
     .fail(function( jqxhr, textStatus, error ) {
         var err = textStatus + ", " + error;
