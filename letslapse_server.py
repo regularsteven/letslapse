@@ -237,21 +237,28 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 
             #if an image is requested that doesn't exist, it's probably a thumbnail request - in this event, extract it from the image and save it
             if self.path.endswith('_thumb.jpg'):
-                print("-----------------------------------")
                 if path.isfile(siteRoot+self.path) == False:
+                    print("Extract the thum - it's not available. Temp function, should kill this")
                     exifCommand = "exiftool -b -ThumbnailImage "+siteRoot+self.path.replace("_thumb", "")+" > "+siteRoot+self.path
                     
                     exifProcess = subprocess.check_output(exifCommand, shell=True)
                 
-            if self.path =="/progress.txt" and path.isfile(siteRoot+self.path) == False:
-                self.send_response(200)
-                self.send_header('Content-Type', 'text/html')
-                self.end_headers()
-                self.wfile.write("")
-                #self.send_error(200)
-                #self.end_headers()
-            else:
+            if self.path == "/progress.txt":
+                print("LOOKING FOR PATH")
+                if path.isfile(siteRoot+self.path) == False:
+                    print("PROGRESS.txt NOT FOUND CASE")
+                    self.send_response(200)
+                    self.send_header('Content-Type', 'text/html')
+                    self.end_headers()
+                    self.wfile.write(bytes("", "utf8"))
+                else :
+                    self.send_response(200)
+                    self.end_headers()
+                    with open(siteRoot+self.path, 'rb') as file: 
+                        self.wfile.write(file.read())
 
+            else:
+                print("General FILE serving")
                 self.send_response(200)
                 
                 if self.path.endswith('.svg'):
@@ -266,12 +273,13 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     self.send_header('Content-Type', 'text/html')
 
                 
-                
-                
                 self.end_headers()
+                
+                
                 with open(siteRoot+self.path, 'rb') as file: 
                     self.wfile.write(file.read())
             
+                
             #self.send_response(200)
             #self.send_header('Content-Type', 'text/html')
             #return http.server.SimpleHTTPRequestHandler.do_GET(self)
