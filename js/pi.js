@@ -204,8 +204,6 @@ function pollUptime(){
                 if(currentStatus == "isRestarting"){ //we're basically checking to see if the divice has come back to life
                     displayStatus("isReady");
                     parseProgress(true, true);
-                }else if(currentStatus == "isLoading"){
-                    displayStatus("isReady");
                 }
                 
 
@@ -299,6 +297,9 @@ function parseProgress(displayLatest, execOnStartup){
             if(execOnStartup == false){
                 log("parseProgress: Try again in one second");
                 window.setTimeout("parseProgress(true, false)", 1000);
+            }
+            if(currentStatus == "isLoading"){
+                displayStatus("isReady");
             }
         }else{
             progressTxt = (data).split("\n");
