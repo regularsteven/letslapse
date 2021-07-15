@@ -204,7 +204,7 @@ for i in range(20):
         print(raspiCommand)
 
         exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
-        system(exifCommand)
+        #system(exifCommand)
     
 
     
@@ -339,7 +339,14 @@ for i in range(20):
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
 
-
+#------Group A ------
 #test 1: 206.7581 (daylight) 10.3 per image
 #test 2: 205.73247718811035 (7:30pm) 
 #test 3:  205.3529450893402 (7:34pm)
+#------Group B ------ - Removed 1 second sleep at end of loop
+#test 4: 186.32252311706543
+#test 5:185.76070308685303
+#test 6: 
+
+#------Group C ------ - Removed exif extraction
+
