@@ -203,8 +203,8 @@ for i in range(20):
         system(raspiCommand)
         print(raspiCommand)
 
-        exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
-        #system(exifCommand)
+        exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
+        system(exifCommand)
     
 
     
@@ -346,7 +346,15 @@ print("END time: "+str(totalTime))
 #------Group B ------ - Removed 1 second sleep at end of loop
 #test 4: 186.32252311706543
 #test 5:185.76070308685303
-#test 6: 
+#test 6: 187.51620602607727
 
 #------Group C ------ - Removed exif extraction
+#test 7: 139.24690413475037
+#test 8: 141.42937898635864
+#test 9: 
 
+
+#------Group D ------ - Exif extraction via nuhup
+#test 10: 
+#test 11: 
+#test 12: 
