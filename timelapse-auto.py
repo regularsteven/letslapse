@@ -181,8 +181,8 @@ for i in range(20):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
-    #--thumb 640:480:40 
+    raspiDefaults = "raspistill -t 1 -bm thumb 600:440:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    #--
     if path.isdir("auto_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
         system("mkdir auto_"+folderName+"/group"+str(int(actualIndex/1000)))
         print("need to create group folder")
@@ -204,7 +204,7 @@ for i in range(20):
         print(raspiCommand)
 
         exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
-        system(exifCommand)
+        #system(exifCommand)
     
 
     
@@ -360,7 +360,12 @@ print("END time: "+str(totalTime))
 #test 12: 189.88408708572388
 
 #------Group D ------ - Exif extraction via nuhup with no thumbail size set
-#test 13: 
-#test 14: 
+#test 13: 189.375629901886
+#test 14: 196.02005195617676
 #test 15: 
+
+#------Group D ------ - Removed exif extraction with small thumbnail
+#test 13: 189.375629901886
+#test 14: 196.02005195617676
+#test 15: 190.6642289161682
 
