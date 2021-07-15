@@ -334,7 +334,12 @@ for i in range(20):
     
     manageColorGainChanges(measuredBlueGains, measuredRedGains)
     #print("awbgSettings is: "+ awbgSettings)
-    sleep(1)
+    #sleep(1)
 
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
+
+
+#test 1: 206.7581 (daylight) 10.3 per image
+#test 2: 205.73247718811035 (7:30pm) 
+#test 3:  205.3529450893402 (7:34pm)
