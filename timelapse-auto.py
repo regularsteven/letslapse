@@ -181,7 +181,7 @@ for i in range(20):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm thumb 600:450:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    raspiDefaults = "raspistill -t 1 -bm --thumb 600:450:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
     #--
     if path.isdir("auto_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
         system("mkdir auto_"+folderName+"/group"+str(int(actualIndex/1000)))
