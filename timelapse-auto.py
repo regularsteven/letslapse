@@ -14,6 +14,7 @@ if runWithoutCamera != True:
     from picamera import PiCamera
     from PIL import Image, ExifTags, ImageStat
 from time import sleep
+import datetime
 from decimal import Decimal
 import argparse
 import math
