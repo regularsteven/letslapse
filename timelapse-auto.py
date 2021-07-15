@@ -173,7 +173,9 @@ if path.isdir("auto_"+folderName) == True :
 else :
     system("mkdir auto_"+folderName)
 
-for i in range(80000):
+ts = datetime.datetime.now().timestamp()
+print("start time: "+str(ts))
+for i in range(20):
     actualIndex = i + preResetCount
     #print("")
     print("-----------------------------------------")
@@ -333,4 +335,5 @@ for i in range(80000):
     #print("awbgSettings is: "+ awbgSettings)
     sleep(1)
 
-print("end")
+ts = datetime.datetime.now().timestamp()
+print("END time: "+str(ts))

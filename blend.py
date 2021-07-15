@@ -41,6 +41,7 @@ from os import path
 
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--video', help='specify video to convert to images then blend to image')
 parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds')
 parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy')
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy')
@@ -109,7 +110,8 @@ def testFiles(testType) :
     lastPhotoTimestamp = 0
     for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
         if thisFolderIndex == False :
-            filename = 'image'+str(a)+'.jpg'
+            if path.isfile('image'+str(a)+'.jpg') == True:
+                filename = 'image'+str(a)+'.jpg'
         if thisFolderIndex != False :
             filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
 
@@ -149,25 +151,31 @@ if args.test == "basic" or args.test == "full" :
 
 
 
+if args.video == None:
+    print("NOT A VIDEO")
+    groupByType = args.groupByType #images or seconds
+        #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
+        #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
 
-groupByType = args.groupByType #images or seconds
-    #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
-    #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
+    groupBy = args.groupBy
 
-groupBy = args.groupBy
+    imagesToBatch = int(groupBy)
+    
+    if path.isdir("blended"+str(groupBy)+"_"+str(groupByType)) == True :
+        print("directory already created")
+    else :
+        system("mkdir blended"+str(groupBy)+"_"+str(groupByType))
 
-imagesToBatch = int(groupBy)
+    system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
+    #system("rm image*")
 
 
-
-if path.isdir("blended"+str(groupBy)+"_"+str(groupByType)) == True :
-    print("directory already created")
-else :
-    system("mkdir blended"+str(groupBy)+"_"+str(groupByType))
-
-system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
-#system("rm image*")
-
+else:
+    system("mkdir "+str(args.video)+"_blended")
+    system("ffmpeg -i "+str(args.video) +" -qscale:v 1 " +str(args.video)+"_blended/image%d.jpg" )
+    
+    exit()
+    
 
 
 
@@ -176,6 +184,8 @@ system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
 
 
 def blendGroupToOne(imlist, sequenceNo) :
+    # ref to https://stackoverflow.com/questions/17291455/how-to-get-an-average-picture-from-100-pictures-using-pil 
+
 
     #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
 
@@ -184,18 +194,25 @@ def blendGroupToOne(imlist, sequenceNo) :
 
     #### Assuming all images are the same size, get dimensions of first image
     w,h=Image.open(imlist[0]).size
-    N=len(imlist)-1 #last value is a status of processed or not (0 or 1)
+    N=len(imlist)
 
     #### Create a numpy array of floats to store the average (assume RGB images)
     arr=numpy.zeros((h,w,3),numpy.float)
 
     # load exif data from the first image parsed in - we'll use this to put in the output image
     im = Image.open( imlist[0])
-    exif_dict = piexif.load(im.info["exif"])
-    exif_bytes = piexif.dump(exif_dict)
+    print("im.info:")
 
-    exif = { ExifTags.TAGS[k]: v for k, v in im._getexif().items() if k in ExifTags.TAGS }
-    print((exif["ShutterSpeedValue"]))
+
+    useExif = True
+    if args.video == None:
+        useExif = True
+    if useExif == True:
+        exif_dict = piexif.load(im.info["exif"])
+        exif_bytes = piexif.dump(exif_dict)
+
+        exif = { ExifTags.TAGS[k]: v for k, v in im._getexif().items() if k in ExifTags.TAGS }
+        print((exif["ShutterSpeedValue"]))
     #exit()
     
 
@@ -215,8 +232,10 @@ def blendGroupToOne(imlist, sequenceNo) :
     print(fileName)
     
 
-    
-    out.save(fileName, exif=exif_bytes, quality=90, subsampling=0)
+    if useExif == True:
+        out.save(fileName, exif=exif_bytes, quality=90, subsampling=0)
+    else: 
+        out.save(fileName)
     #out.show()
 
 if groupByType == "images" :
@@ -231,7 +250,9 @@ if groupByType == "images" :
             for i in range(imagesToBatch):
                 #print(i)
                 if a == 0:
-                    imlist.append('image'+str(i)+'.jpg')
+                    #in some instances, images start at index 1 - if so, don't add it.
+                    if path.isfile('image'+str(i)+'.jpg') == True:
+                        imlist.append('image'+str(i)+'.jpg')
                 else :
                     imlist.append('image'+str(i+(imagesToBatch*a))+'.jpg')
             print("imlist")
