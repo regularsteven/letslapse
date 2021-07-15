@@ -181,8 +181,8 @@ for i in range(20):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 --thumb 640:480:40 -bm -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
-
+    raspiDefaults = "raspistill -t 1 -bm -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    #--thumb 640:480:40 
     if path.isdir("auto_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
         system("mkdir auto_"+folderName+"/group"+str(int(actualIndex/1000)))
         print("need to create group folder")
@@ -351,10 +351,16 @@ print("END time: "+str(totalTime))
 #------Group C ------ - Removed exif extraction
 #test 7: 139.24690413475037
 #test 8: 141.42937898635864
-#test 9: 
+#test 9: 141.65500903129578
 
 
 #------Group D ------ - Exif extraction via nuhup
-#test 10: 
-#test 11: 
-#test 12: 
+#test 10: 194.60327076911926
+#test 11: 191.37261486053467
+#test 12: 189.88408708572388
+
+#------Group D ------ - Exif extraction via nuhup with no thumbail size set
+#test 13: 
+#test 14: 
+#test 15: 
+
