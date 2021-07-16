@@ -184,7 +184,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 checkStreamerIsRunningCount = 0
                 
                 while isStreamerRunning == False :
-                    sleep(3)
+                    sleep(4)
                     isStreamerRunning = checkStreamerIsRunning()
                     checkStreamerIsRunningCount = checkStreamerIsRunningCount+1
                     print(isStreamerRunning)
