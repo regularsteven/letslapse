@@ -267,7 +267,7 @@ for i in range(80000):
         lowBrightness = brightnessTarget - brightnessRange #140
         highBrightness = brightnessTarget + brightnessRange #160
         
-        print("brightness target: " + str(brightnessScore))
+        print("brightness target: " + str(brightnessTarget))
         if brightnessScore < 50 or brightnessScore > 200:
             print("extreme low brightness, something")
             brightnessChangeOfSignificance = brightnessChangeOfSignificance + 1
