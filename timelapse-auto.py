@@ -42,12 +42,18 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 parser = argparse.ArgumentParser()
 parser.add_argument('--folderName', help="name of folder to use")
 parser.add_argument('--imageCount', help='number of images')
+parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg')
+parser.add_argument('--nightMode', help='nature or streets for brightness offset in low light')
 
 
 #example use:
 # python3 timelapse-auto --folderName demo
 
 args = parser.parse_args()
+
+includeRaw = " -r "
+if args.raw == None:
+    includeRaw = ""
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains):
@@ -181,7 +187,7 @@ for i in range(20):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 -bm --thumb 600:450:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm --thumb 600:450:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
     #--
     if path.isdir("auto_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
         system("mkdir auto_"+folderName+"/group"+str(int(actualIndex/1000)))
@@ -226,6 +232,18 @@ for i in range(20):
 
         brightnessTarget = 130
         brightnessRange = 10
+
+        #if we're at night, we want he pictures to be a bit darker if shooting in the city
+        if args.nightMode == "city":
+            if shutterSpeed > 1000000:
+                brightnessTarget = brightnessTarget-2
+                if brightnessTarget < 100:
+                    brightnessTarget = 100
+            else:
+                brightnessTarget = brightnessTarget+2
+                if brightnessTarget > 130:
+                    brightnessTarget = 130
+
 
         lowBrightness = brightnessTarget - brightnessRange #140
         highBrightness = brightnessTarget + brightnessRange #160
@@ -362,10 +380,12 @@ print("END time: "+str(totalTime))
 #------Group D ------ - Exif extraction via nuhup with no thumbail size set
 #test 13: 189.375629901886
 #test 14: 196.02005195617676
-#test 15: 
+#test 15: 190.6642289161682
 
 #------Group D ------ - Removed exif extraction with small thumbnail
-#test 13: 189.375629901886
-#test 14: 196.02005195617676
-#test 15: 190.6642289161682
+#test 13: 142.09371709823608
+#test 14: 149.758474111557
+#test 15: 143.14420294761658
+
+
 
