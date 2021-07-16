@@ -374,7 +374,7 @@ for i in range(80000):
                 measuredRedGains = float(g[1])
                 camera.close()
         
-        manageColorGainChanges(measuredBlueGains, measuredRedGains)
+    manageColorGainChanges(measuredBlueGains, measuredRedGains)
     
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
