@@ -126,7 +126,7 @@ else :
     blueGains = float(Lines[5].strip())
     redGains = float(Lines[6].strip())
 
-    includeRaw = float(Lines[7].strip())
+    includeRaw = str(Lines[7].strip())
     nightMode = str(Lines[8].strip())
 
     awbgSettings = str(blueGains)+","+str(redGains)
