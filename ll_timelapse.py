@@ -58,7 +58,7 @@ args = parser.parse_args()
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode):
-    filename = "timelapse_"+str(folder)"/timelapse.log"
+    filename = "timelapse_"+str(folder)+"/timelapse.log"
     if path.isfile(filename) == False:
         f = open(filename, "a")
     else:
