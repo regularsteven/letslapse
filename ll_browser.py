@@ -40,6 +40,9 @@ def getShoots(filterBy):
     return shootFolders
 
 def getStills():
+    if path.isdir("stills") == False :
+        system("mkdir stills")
+
     siteRoot = os.getcwd()
     topLevel = sorted(os.listdir(siteRoot+"/stills/"))
     jpegs = []
