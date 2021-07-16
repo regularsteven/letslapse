@@ -83,6 +83,10 @@ maxAG = 3
 AGIncrement = .1
 
 
+#the bigger brightnessTarget, the brighter the image
+brightnessTarget = 130
+#the bigger brightnessRange, the less changes will take place
+brightnessRange = 10
 
 
 
@@ -227,8 +231,8 @@ for i in range(80000):
     else :
         system(raspiCommand)
         print(raspiCommand)
-        if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
-            exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
+        #if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
+        exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
         #system(exifCommand)
     
 
@@ -239,7 +243,8 @@ for i in range(80000):
         print("normally, analysis of the image happens here, but in this testing, we don't")
     else :
 
-        img = Image.open(filename)
+        #analyse the thumbnail as this is a smaller file, should be faster - however, we need to now make a thumbnail for every image - which might make things slower
+        img = Image.open(filename.replace(".jpg", "_thumb.jpg") 
         exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
         #print("Recorded EXIF ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
         lastShotExposureTime = str(exif["ExposureTime"])
@@ -249,8 +254,7 @@ for i in range(80000):
         brightnessScore = brightnessPerceived(img)
         print("brightnessPerceived score: " + str(brightnessScore))
 
-        brightnessTarget = 130
-        brightnessRange = 10
+        
 
         #if we're at night, we want he pictures to be a bit darker if shooting in the city
         if nightMode == "city":
