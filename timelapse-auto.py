@@ -349,7 +349,7 @@ for i in range(80000):
 
     #we only want to run this every 10 images, it takes a lot of time and we don't need to do this every image - or when we first start
     timeToUpdateGains = False
-    if actualIndex%10 == 0:
+    if actualIndex%10 == 0 or i == 0:
         timeToUpdateGains = True
 
 
