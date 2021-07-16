@@ -232,7 +232,7 @@ for i in range(80000):
         system(raspiCommand)
         print(raspiCommand)
         #if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
-        exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
+        exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
         #system(exifCommand)
     
 
