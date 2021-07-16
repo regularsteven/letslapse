@@ -166,7 +166,7 @@ if args.video == None:
     else :
         system("mkdir blended"+str(groupBy)+"_"+str(groupByType))
 
-    system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
+    #system("rm blended"+str(groupBy)+"_"+str(groupByType)+"/image*")
     #system("rm image*")
 
 
@@ -263,18 +263,18 @@ else :
     print("building up lists of images within certain timeranges - seconds: " + str(imagesToBatch))
     
 
-    foundMissingFiles = testFiles("basic")
+    #foundMissingFiles = testFiles("basic")
     
-    if foundMissingFiles == True :
-        print("based on missing files, aborting process")
-        exit()
+    #if foundMissingFiles == True :
+    #    print("based on missing files, aborting process")
+    #    exit()
 
     
     timerangeGroupIndex = 0
     imlist=[]
     for a in range(int(fullImageSet)-folderCount): #exclude folders from the count
         if thisFolderIndex == False :
-            filename = 'image'+str(a)+'.jpg'
+            filename = 'image'+str(a+14095)+'.jpg'
         if thisFolderIndex != False :
             filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
         print(filename)
@@ -292,7 +292,7 @@ else :
             #print("blendGroupToOne: " + str(timerangeGroupIndex))
             print("blending the following images")
             print(imlist)
-            blendGroupToOne(imlist, timerangeGroupIndex)
+            blendGroupToOne(imlist, timerangeGroupIndex+4114)
             timerangeGroupIndex = timerangeGroupIndex+1
             startingTimestamp = thisTimestamp
             imlist=[]
@@ -309,4 +309,4 @@ if args.makeMP4 == "yes" :
     if thisFolderIndex != False :
         folderStrOutput = "_"+str(thisFolderIndex)
     system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBatch)+".mp4")
-    #fmpeg -i image%d.jpg -b:v 500000k -vcodec mpeg4 -r 25 ../../70_auto_southcliff_90seconds.mp4
+    #fmpeg -i image%d.jpg -b:v 500000k -vcodec mpeg4 -r 25 auto_Wojtek_blendedVideo_seconds30.mp4

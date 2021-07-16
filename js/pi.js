@@ -432,6 +432,9 @@ function startTimelapseDelay(){
         
         apiCall += "&mode=auto";
     }
+
+    apiCall += "&raw=false&nightMode=normal";
+
     apiCall += "&shootName="+shootName;
     $.getJSON( apiCall)
     .done(function( json ) {

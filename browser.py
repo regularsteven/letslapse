@@ -25,7 +25,10 @@ def getShoots(filterBy):
                 #print("--"+thisGroup)
                 groupLevel = sorted(os.listdir(siteRoot+"/"+thisShoot + "/"+thisGroup))
                 for f in range(len(groupLevel)):
-                    if filterBy in groupLevel[f]:
+                    #need to include the first image as this wont be met by the filter
+                    if f == 0:
+                        shootImages.append(thisGroup.replace('group','')+"/"+groupLevel[f].replace('.jpg',''))
+                    elif filterBy in groupLevel[f]:
                         #print("---"+groupLevel[f])
                         shootImages.append(thisGroup.replace('group','')+"/"+groupLevel[f].replace('.jpg',''))
                 #

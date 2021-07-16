@@ -59,6 +59,17 @@ letslapse_streamerPath = siteRoot+"/letslapse_streamer.py"    #CHANGE PATH TO LO
 def letslapse_streamer_thread():
     call(["python3", letslapse_streamerPath])
 
+
+def checkStreamerIsRunning():
+    instanceCount = 0
+    for line in os.popen("ps -f -C python3 | grep letslapse_streamer.py"):
+        print(line)
+        instanceCount = instanceCount + 1
+        if instanceCount > 0:
+            return True
+        else: 
+            return False
+
 def check_kill_process(pstring):
     for line in os.popen("ps ax | grep " + pstring + " | grep -v grep"):
         fields = line.split()
@@ -66,8 +77,8 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse(shootName) :
-    system('nohup python3 timelapse-auto.py --folderName '+shootName+' &')
+def startTimelapse(shootName, includeRaw, nightMode) :
+    system('nohup python3 timelapse-auto.py --folderName '+shootName+' --raw '+includeRaw+' --nightMode '+nightMode+' &')
     return "startTimelapse function complete"
 
 def shootPreview(query_components) :
@@ -131,6 +142,10 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 check_kill_process("letslapse_streamer.py")
                 #check to see if this timelapse project is already in place - don't make a new one, if so
                 shootName = query_components["shootName"][0]
+
+                includeRaw = query_components["raw"][0]
+                nightMode = query_components["nightMode"][0]
+
                 
                 jsonResp += ',"shootName":"'+shootName+'"'
                 if path.isfile("progress.txt") == True:
@@ -138,7 +153,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     
                     jsonResp += ',"message":"resuming"'
                     #must be continuing the shoot
-                    startTimelapse(shootName)
+                    startTimelapse(shootName, includeRaw, nightMode)
 
                 elif path.isdir("auto_"+shootName) == True :
                     print("project with the same name already in use")
@@ -148,7 +163,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
-                    startTimelapse(shootName)
+                    startTimelapse(shootName, includeRaw, nightMode)
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :
@@ -162,8 +177,20 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "startstreamer" :
                 processThread = threading.Thread(target=letslapse_streamer_thread)
                 processThread.start()
-                #shellResp = subprocess.check_output("python3 letslapse_streamer.py", shell=True)
-                #sleep(4) #ideally this would wait for a callback, but this allows the camera to start
+                sleep(1) #ideally this would wait for a callback, but this allows the camera to start
+                isStreamerRunning = checkStreamerIsRunning()
+                print("isStreamerRunning - TEST 1")
+                print(isStreamerRunning)
+                checkStreamerIsRunningCount = 0
+                
+                while isStreamerRunning == False :
+                    sleep(3)
+                    isStreamerRunning = checkStreamerIsRunning()
+                    checkStreamerIsRunningCount = checkStreamerIsRunningCount+1
+                    print(isStreamerRunning)
+                    print("checkStreamerIsRunningCount" + str(checkStreamerIsRunningCount))
+                
+
             elif actionVal == "uptime" :
                 uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
                 hostname = os.uname()[1]
@@ -192,7 +219,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             
             elif actionVal == "getShoots":
                 
-                jsonResp += ',"gallery":'+str( json.dumps( browser.getShoots("0.jpg") ) )
+                jsonResp += ',"gallery":'+str( json.dumps( browser.getShoots("00.jpg") ) )
                 #print(browser.getShoots("0.jpg"))
 
             elif actionVal == "systemstatus" :
@@ -292,8 +319,12 @@ if path.isfile("progress.txt") == True:
     file1 = open('progress.txt', 'r')
     Lines = file1.readlines()
     shootName = (Lines[1].strip())
+
+    includeRaw = (Lines[6].strip())
+    nightMode = (Lines[7].strip())
+
     print("System restarted - progress.txt indicated shoot in progress")
-    startTimelapse(shootName)
+    startTimelapse(shootName, includeRaw, nightMode)
 
 
 # Create an object of the above class

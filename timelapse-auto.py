@@ -51,13 +51,11 @@ parser.add_argument('--nightMode', help='nature or streets for brightness offset
 
 args = parser.parse_args()
 
-includeRaw = " -r "
-if args.raw == None:
-    includeRaw = ""
 
 
-def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains):
-    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"' >progress.txt")
+
+def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode):
+    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
 
 
@@ -91,11 +89,26 @@ if args.folderName == None:
 else : 
     folderName = args.folderName
     print("normal operation")
+
+
+
+includeRaw = " -r "
+if args.raw == None:
+    includeRaw = ""
+elif args.raw == "false":
+    includeRaw = ""
+
+if args.nightMode == None:
+    nightMode = ""
+else:
+    nightMode = args.nightMode
+    
+
 #exit()
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains)
+    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode)
     print("New shoot, no progress file, making one... ")
     
 else :
@@ -112,6 +125,9 @@ else :
     AG = float(Lines[4].strip())
     blueGains = float(Lines[5].strip())
     redGains = float(Lines[6].strip())
+
+    includeRaw = float(Lines[7].strip())
+    nightMode = str(Lines[8].strip())
 
     awbgSettings = str(blueGains)+","+str(redGains)
     #for line in Lines:
@@ -182,7 +198,7 @@ else :
 
 startTime = datetime.datetime.now().timestamp()
 print("start time: "+str(startTime))
-for i in range(20):
+for i in range(80000):
     actualIndex = i + preResetCount
     #print("")
     print("-----------------------------------------")
@@ -208,13 +224,13 @@ for i in range(20):
     else :
         system(raspiCommand)
         print(raspiCommand)
-
-        exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
+        if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
+            exifCommand = "nohup exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg &")
         #system(exifCommand)
     
 
     
-    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains)
+    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode)
 
     if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
@@ -234,7 +250,7 @@ for i in range(20):
         brightnessRange = 10
 
         #if we're at night, we want he pictures to be a bit darker if shooting in the city
-        if args.nightMode == "city":
+        if nightMode == "city":
             if shutterSpeed > 1000000:
                 brightnessTarget = brightnessTarget-2
                 if brightnessTarget < 100:
@@ -329,31 +345,35 @@ for i in range(20):
     #print("awbgSettings was: "+ awbgSettings)
     
 
-    if updateGainsWithLivePreview == True :
-        if runWithoutCamera == True:
-            print("faking white balance changes, as we don't have the camera available")
-            measuredBlueGains = 1.91015625
-            measuredRedGains = 3.02734375
-            sleep(5)
-        else :
-            camera = PiCamera(resolution=(1280, 720), framerate=30)
-            camera.iso = 400
-            camera.meter_mode = 'backlit'
-            sleep(1)
-            camera.shutter_speed = camera.exposure_speed
-            camera.exposure_mode = 'off'
-            g = camera.awb_gains
-            camera.awb_mode = 'off'
-            camera.awb_gains = g
-            measuredBlueGains = float(g[0])
-            measuredRedGains = float(g[1])
-            
-            camera.close()
-    
-    manageColorGainChanges(measuredBlueGains, measuredRedGains)
-    #print("awbgSettings is: "+ awbgSettings)
-    #sleep(1)
+    #we only want to run this every 10 images, it takes a lot of time and we don't need to do this every image - or when we first start
+    timeToUpdateGains = False
+    if actualIndex%10 == 0:
+        timeToUpdateGains = True
 
+
+    if timeToUpdateGains:
+        if updateGainsWithLivePreview == True :
+            if runWithoutCamera == True:
+                print("faking white balance changes, as we don't have the camera available")
+                measuredBlueGains = 1.91015625
+                measuredRedGains = 3.02734375
+                sleep(5)
+            else :
+                camera = PiCamera(resolution=(1280, 720), framerate=30)
+                camera.iso = 400
+                camera.meter_mode = 'backlit'
+                sleep(1)
+                camera.shutter_speed = camera.exposure_speed
+                camera.exposure_mode = 'off'
+                g = camera.awb_gains
+                camera.awb_mode = 'off'
+                camera.awb_gains = g
+                measuredBlueGains = float(g[0])
+                measuredRedGains = float(g[1])
+                camera.close()
+        
+        manageColorGainChanges(measuredBlueGains, measuredRedGains)
+    
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
 
