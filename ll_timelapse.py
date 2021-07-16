@@ -54,7 +54,8 @@ parser.add_argument('--nightMode', help='nature or streets for brightness offset
 
 args = parser.parse_args()
 
-
+print("args")
+print(args)
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode):
@@ -63,7 +64,7 @@ def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw,
         f = open(filename, "a")
     else:
         f = open(filename, "w")
-    f.write( + ", image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode))
+    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode))
     f.close()
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
