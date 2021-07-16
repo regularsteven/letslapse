@@ -24,7 +24,7 @@ from urllib.parse import urlparse, parse_qs
 import argparse
 
 #my own custom utilities extracted for simpler structure 
-import browser
+import src/browser
 
 
 PORT = 80

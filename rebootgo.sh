@@ -1,1 +1,0 @@
-nohup python3 timelapse-auto.py --startup reset &
