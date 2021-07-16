@@ -321,6 +321,8 @@ if path.isfile("progress.txt") == True:
     shootName = (Lines[1].strip())
 
     includeRaw = (Lines[7].strip())
+    if includeRaw == "":
+        includeRaw = "false"
     nightMode = (Lines[8].strip())
 
     print("System restarted - progress.txt indicated shoot in progress")
