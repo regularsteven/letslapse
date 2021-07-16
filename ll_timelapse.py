@@ -58,13 +58,13 @@ print("args")
 print(args)
 
 
-def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget):
+def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
     filename = "timelapse_"+str(folder)+"/timelapse.log"
     if path.isfile(filename) == False:
         f = open(filename, "w")
     else:
         f = open(filename, "a")
-    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+"\n")
+    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
     f.close()
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
@@ -123,7 +123,7 @@ else:
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget)
+    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, -1)
     print("New shoot, no progress file, making one... ")
     
 else :
@@ -245,7 +245,7 @@ for i in range(80000):
     
 
     
-    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget)
+    
 
     if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
@@ -257,7 +257,7 @@ for i in range(80000):
         brightnessScore = brightnessPerceived(img)
         print("brightnessPerceived score: " + str(brightnessScore))
 
-        
+        storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, brightnessScore)
 
         #if we're at night, we want he pictures to be a bit darker if shooting in the city
         if nightMode == "city":
