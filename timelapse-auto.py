@@ -245,12 +245,7 @@ for i in range(80000):
 
         #analyse the thumbnail as this is a smaller file, should be faster - however, we need to now make a thumbnail for every image - which might make things slower
         img = Image.open(filename.replace(".jpg", "_thumb.jpg")) 
-        exif = { ExifTags.TAGS[k]: v for k, v in img._getexif().items() if k in ExifTags.TAGS }
-        #print("Recorded EXIF ShutterSpeedValue = "+ str(exif["ShutterSpeedValue"]))
-        lastShotExposureTime = str(exif["ExposureTime"])
-
-        #print("ExposureTime = "+ str(lastShotExposureTime))
-        #print("ISOSpeedRatings = " + str(exif["ISOSpeedRatings"]))
+        
         brightnessScore = brightnessPerceived(img)
         print("brightnessPerceived score: " + str(brightnessScore))
 
