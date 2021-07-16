@@ -177,7 +177,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "startstreamer" :
                 processThread = threading.Thread(target=letslapse_streamer_thread)
                 processThread.start()
-                sleep(1) #ideally this would wait for a callback, but this allows the camera to start
+                sleep(2) #ideally this would wait for a callback, but this allows the camera to start
                 isStreamerRunning = checkStreamerIsRunning()
                 print("isStreamerRunning - TEST 1")
                 print(isStreamerRunning)
