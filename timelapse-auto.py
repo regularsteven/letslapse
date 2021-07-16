@@ -48,6 +48,9 @@ parser.add_argument('--nightMode', help='nature or streets for brightness offset
 
 #example use:
 # python3 timelapse-auto --folderName demo
+# python3 timelapse-auto.py --folderName testing --raw false --nightMode normal
+
+
 
 args = parser.parse_args()
 
@@ -264,7 +267,7 @@ for i in range(80000):
         lowBrightness = brightnessTarget - brightnessRange #140
         highBrightness = brightnessTarget + brightnessRange #160
         
-        
+        print("brightness target: " + str(brightnessScore))
         if brightnessScore < 50 or brightnessScore > 200:
             print("extreme low brightness, something")
             brightnessChangeOfSignificance = brightnessChangeOfSignificance + 1
