@@ -1,468 +1,284 @@
-# letslapse
-raspberry pi timelaps rig
+# LetsLapse
+### A DIY time-lapse system, built around Raspberry Pi hardware
 
-# configure device
-1) install raspbian
-2) add wpa_supplicant.conf and 'ssh' files to boot root directory
- > ssh pi@raspberry.local / password raspberry
- > in some instances, this will fail if previously ssh'd to a same name or IP
- > edit C:\Users\user-name\.ssh on windows / "ssh-keygen -R raspberrypi.local" on ubuntu
- > remove the raspberrypi.local line, save and SSH again
- > can find devices on network across IPs of devices on linux with nmap -sP 192.168.88.0/24
-   > Additional ideas at https://raspberrypi.stackexchange.com/questions/13936/find-raspberry-pi-address-on-local-network
-   > nmap -sP 192.168.215.0/24 | awk '/^Nmap/{ip=$NF}/B8:27:EB/{print ip}'
-   > arp -na | grep -i b8:27:eb
-   > FOR Pi4B, need to search for dc:a6:32 MAC ID, eg arp -na | grep -i dc:a6:32
-3) update user password / system
- > passwd
- > sudo apt update
- > sudo apt upgrade
-4) enable the camera / change the device name if we wish
- > sudo raspi-config
- > interface > Camera
-5) install git / tools / apache webserver (or other) to allow for simple view / management of debug and testing tools
- > sudo apt install git -y
- > sudo apt install apache2 -y (option)
- > sudo apt remove php libapache2-mod-php -y (option)
- > sudo apt install python3-pip -y
-6) boot and ssh, clone https://github.com/regularsteven/letslapse into /var/www/html (if basic apache)
- > git clone https://github.com/regularsteven/letslapse.git
- > need to remove everything inside the folder if installing to apache (sudo rm -R /var/www/html/*)
- > OR install whereever
-7) Python and dependencies
- > sudo apt install python3-pip
- > python3 -m pip install --upgrade pip
- > python3 -m pip install --upgrade Pillow
- > python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
- > sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
+LetsLapse allows you to capture day to night time-lapses sequences on affordable hardare, while producing outstanding results.
 
- On device, to run blend scripts:
-    sudo pip3 install opencv
-    sudo apt-get install libatlas-base-dev
-    sudo pip3 install piexif
+To get started, you will need a Raspberry Pi device, a compatible camera, MicroSD card and power source. As for specifics, you can run this from a Pi 3, 4, 4B or Pi Zero W, with a range of cameras.
 
+LetsLapse has been developed with Pi Zero W and HQ Camera Module in mind, for compact size and low power requiremens allowing for long shoots.
 
-8) Enable PYTHON server to start on system boot
- > enable CONSOLE AUTO login via sudo raspi-config (SYSTEM OPTIONS > BOOT)
- > make the script executable: sudo chmod +x /home/pi/letslapse/server.py
- > add sudo python /home/pi/letslapse/server.py at the bottom of sudo nano /etc/profile
+To proceed, you **must have a Pi and Camera connected**. See the first three pages of https://projects.raspberrypi.org/en/projects/getting-started-with-picamera, until it says "Start up your Raspberry Pi". You don't need to do this yet for this process.
 
-9) Install SAMBA for simple filesystem access
-    sudo apt-get install samba samba-common-bin 
-    # sudo apt-get remove samba samba-common-bin
-    sudo nano /etc/samba/smb.conf
-    * add to the bottom:
-            [pimylifeupshare]
-        path = /home/pi/shared
-        writeable=Yes
-        create mask=0777
-        directory mask=0777
-        public=no
-    sudo smbpasswd -a pi
-    sudo systemctl restart smbd 
+# Install Guide
+### 1) Install Raspberry Pi OS 
+See https://www.raspberrypi.org/software/ for the **Raspberry Pi Imager**. A fast SD card is required, and the bigger the better.
 
-10) Mounting for remote access of files with another pi
- > sudo mkdir /media/share 
- > nano /home/pi/.smbcredentials 
-    - username=smb_username
-    - password=smb_password
- > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials //pi.local/letslapse /media/sharePi
- > sudo mount -t cifs -o rw,vers=3.0,credentials=/home/pi/.smbcredentials_pi //pi.local/letslapse /media/sharePi
- > sudo nano /etc/fstab 
-   - to reconnect on reboot, add //pi.local/letslapse /media/sharePi cifs _netdev,vers=3.0,credentials=/home/pi/.smbcredentials,uid=pi,gid=pi,x-systemd.automount 0 0
+ > Recommend **Raspberry Pi OS Lite**, as this has the smallest footprint and excudes stuff that can slow the device down - like a pretty operating system which isn't required.
 
-11) Auto backup to second (non-shooting) pi device (my device is USB called letslapsepics / msdos FAT)
- > make director sudo mkdir /media/usb
- > sudo mount /dev/sda1 /media/usb
-  - if unsure of /dev/name, run sudo fdisk -l
-  - if FAT, need to run sudo mount -t vfat /dev/sda1 /media/usb -o uid=1000,gid=1000,utf8,dmask=027,fmask=137
- AUTO Mount on BOOT
- > sudo pico /etc/fstab
-  > get UUID with sudo blkid
-  add: UUID=088E-FCEF /media/usb auto nosuid,nodev,nofail 0 0
-  > cp group1 /media/usb -r --verbose -n
-  > rsync from remote to loca
-   -- sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ --ignore-existing
-    ## copy on ubuntu system
-    ### mount the drive and open the remote SMB share in terminal
-    ### ensure the folder exists inside /mnt/ssd/Clients/PiShots/original/ + name    
-    rsync -h -v -r -P -t * /mnt/ssd/Clients/PiShots/originals/auto-monitor-knocked/ --ignore-existing
-   
+Follow the instructions to ensure the process is verified.
 
-   sudo crontab -e
-   @reboot sudo rsync -h -v -r -P -t /media/sharePi/auto/ /media/usb/ 
+### 2) Set up Raspberry Pi WiFi and system access
+See https://github.com/regularsteven/letslapse/. We need to put settings on the MicroSD card to configure wireless network and access to the OS.
 
+1) Place wpa_supplicant.conf to the SD card partition called "Boot" of your newly formatted MicroSD card
+     > Edit the file to put your own WiFi credentials in this file. The formatting matters - so put your wireless network(s) inside the "quotations". If you have a mobile phone hotspot, you can add this and your home network. The Pi will connect to whatever it see's first, in order of their placement.
+2) Create an empty file called 'ssh' in the same "Boot" partition. This file tells the Pi OS to allow 'SSH' (logging in remote) to occur.
+    > This can be called ssh.txt or just 'ssh'. 
 
-## POWER REDUCTION
+### 3) Start and find the Pi on your network 
+Plug the MicroSD card to the Pi and plug in power. Depending on the device, it can take some time to boot up. We will be running the install with no screen plugged in, so we need to wait for the device to be on the network.
 
-# remove bluetooth
-sudo pico /boot/config.txt
+If you're in luck, you can access the device via 'raspberrypi.local' on your network. However, not all routers support this, so it might be a little more work to know the Pi's 'address' on your network.
 
-Add below, save and close the file Permalink
-#Disable Bluetooth
-dtoverlay=disable-bt
+In a Terminal window (MacOS / Linux) or Command Shell (Windows), type:
+```
+ ping raspberrypi.local 
+```
 
-#or remove everything
-sudo apt-get purge bluez -y
-sudo apt-get autoremove -y
+If you're lucky, you'll see "64 bytes from raspberrypi (10.3.141.212): icmp_seq=1 ttl=64 time=0.265 ms", or similar.
 
-# kill LED light on zero
+In this event, you don't need to worry about IP addresses. You can jump to step 4.
 
-echo none | sudo tee /sys/class/leds/led0/trigger
-echo 1 | sudo tee /sys/class/leds/led0/brightness
+If you're not a lucky person, we need to **find the IP address**. This can be found a number of ways.
 
-Add the following sudo pico /boot/config.txt
-dtparam=act_led_trigger=none
-dtparam=act_led_activelow=on
+1) Get it from your router (if you know it) or WiFi Hotspot.
+   > Logging into your router should show you DHCP connections, along with IP addresses and names. Look for 'raspberrypi', and then you will have your IP address. Many Android and iOS devices with a HotSpot will show connections. Many devices (iPhone's / Samsung Galaxy's) will show the IP addresses.
+2) In a Terminal window or Command Shell, scan the network, and take note of the output message. You're looking for something like "10.1.2.9" or "192.168.1.9".
+    > This runs a scan across the network you're own and loks for the hardware of the network adapter, which is unique to the Pi Zero or Pi4
+    
+    a) MacOS / Linux, looking for Pi Zero:
+    ```
+    arp -na | grep -i b8:27:eb
+    ```
+    b) MacOS / Linux, looking for Pi4 (has a different MAC ID):
+    ```
+    arp -na | grep -i dc:a6:32
+    ```
+    c) Windows: 
+    ```
+    nslookup raspberrypi 
+    ```
+Take note of the IP address - this is how you need to connect and configure the device. Once you've got the IP, you can ping to test the connectivity like above, only with the IP and not the name. For example:
 
+```
+ ping 192.168.0.9 
+```
 
-#disable hdmi
-/usr/bin/tvservice -o
-sudo pico /etc/rc.local
- > add /usr/bin/tvservice -o
+### 4) Log in with SSH
 
+MacOS and Linux can use Terminal, but Windows may require extra configuration. 
 
-# running app in python
-1) capture images
+> This step is about 'SSH-ing' into the device. SSH is a protocol, like HTTP or FTP, that allows you to log in to the device. We need to SSH in to run some updates and set up the device. 
 
-2) convert group of images by timeframe (i.e. 60 seconds) to timelapse
-python3 ../longexposure.py --groupBy 60 --groupByType seconds --makeMP4 yes
+#### MacOS / Linux
+If you're the lucky one with raspberrypi.local found in step 3, you don't need the 'IP' (192.168.0.9).
 
-
-shoot, edit, stream
-
-"local internal" = internal storage
-"local storage" = SD or HDD storage
-
-## to do
-1) capture image - at interval
-    from pi hq camera
-    or from sony (gphoto2)
-    or from fake source (i.e. folder one by one)
-    &
-    place image inside 'drop' local storage folder if available
-        - else wait until it's back (might have been disconnected for transfer to backup / delete)
-2) watch 'drop' folder for new files
-    extract JPEG if possible (exiftool)
-    or create JPEG if not possible
-    & 
-    extract to 'processed' local storage folder
-3a) Option A - Simple Local Stream (ffmpeg)
-    processed folder sorts by most recent
-
-    //options:
-    ffmpeg -loop 1 -i BangkokSky-%d.jpg -vf scale=320:240 -r 10 -vcodec mpeg4 -f mpegts udp://127.0.0.1:554
-
-    resize: 
-    ffmpeg -loop 1 -i BangkokSky-%d.jpg -vf scale=320:240 -r .5 -vcodec mpeg4 -f mpegts udp://192.168.30.75:9099
-
-   test stream:
-   ffprobe udp://192.168.30.75:9099
-
-    ffmpeg -loop 1 -re -f lavfi -i BangkokSky-%d.jpg -vf scale=320:240 -r .5 -f rtp rtp://192.168.56.75:9099
-
-
-
-
-    ffmpeg -y -i rtsp://admin:admin@192.168.56.75:554/live -vframes 1 BangkokSky-1.jpg
-
-
-    # local video - is working: 
-    ## ffmpeg -i melbourne.mp4 -f mpegts udp://127.0.0.1:9099
-    ## open in vlc: udp://@127.0.0.1:9099
-    ## ffmpeg -i melbourne.mp4 -f mpegts udp://192.168.30.75:9099
-    ## open local: udp://@192.168.30.75:9099
-
-    #local image -  is working:
-    ##ffmpeg -loop 1 -i BangkokSky-%d.jpg -vf scale=320:240 -r .5 -vcodec mpeg4 -f mpegts udp://192.168.30.75:9099
-    ## open local udp://@192.168.30.75:9099
-
-    //ffmpeg -i melbourne.mp4 -f rtp rtp://192.168.30.75:9099
-    //ffmpeg -i melbourne.mp4 -vf scale=320:240 -r .5 -f rtp rtp://192.168.30.75:9099
-
-
-
-    # resize all images - is working
-    ## ffmpeg -i BangkokSky-%d.jpg -vf scale="720:-1" resize%d.jpg
-
-
-    1: Get full image
-    2: convert image to small version
-        - ffmpeg -i BangkokSky-%d.jpg -vf scale="720:-1" resize/seq%d.jpg
-    3: update the stream with the smaller versions
-        - ffmpeg -loop 1 -i seq%d.jpg  -r .5 -vcodec mpeg4 -f mpegts udp://192.168.30.75:9099
-
-
-    update camera for libcamera use - could eb a better option for low light / blue hour usage
-
-# ffmpeg resize 
-ffmpeg -i seq_%04d.jpg -vf scale=1920:-1 resize/small_%04d.jpg
-
-# ffmpeg create timelapse seq 
-ffmpeg -framerate 25 -pattern_type glob -i "*.jpg" -c:v libx264 -crf 0 output.mp4  -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2"
-ffmpeg -r 24 -i small_%04d.jpg -vcodec libx264 -y -an video.mp4 -vf "pad=ceil(iw/2)*2:ceil(ih/2)*2"
-
-streaming idea 2: WORKING across network
-raspivid -t 0 -l -o tcp://192.168.1.11:3333 -w 640 -h 360
-raspivid -t 0 -l -o tcp://192.168.1.11:3333 -w 1280 -h 720
-raspivid -t 0 -l -o tcp://pi.local:3333 -w 1280 -h 720
-vlc tcp/h264://192.168.1.11:3333
+```
+ssh pi@192.168.0.9
+```
 OR
-tcp/h264://192.168.30.76:3333
+```
+ssh pi@raspberrypi.local
+```
+
+You'll be asked for the password. Because this is brand-new, the **password is _raspberry_** 
+
+> Note: If you've done this before, you might be rejected. In this instance,run
+
+```
+ssh-keygen -R raspberrypi.local
+```
+
+#### Windows
+Open Power Shell and type 'ssh pi@192.168.0.9', where 192.168.0.9 is the IP of your device as identified in step 3. If it works, great. If not, I suggest a tool called Putty - it's a simple SSH client which allows for remote connections. See https://www.putty.org/ and find the Download link. In most instances, you want "MSI (‘Windows Installer’) 64-bit x86". Download and install. Once installed, open up. 
+
+In here, you can enter the IP, username and password. 
+
+Username: **pi**
+
+Password: **raspberry**
+
+Address: **IP as found in step three.**
+
+### Install LetsLapse / Update the Pi OS
 
 
-MJPEG Stream
-https://desertbot.io/blog/how-to-stream-the-picamera - works but requires its own dependencies
+1) Ideally, you should update your password. Do, or don't. But ideally you do. Type the following and follow prompts:
+
+    ```
+    passwd
+    ```
+2) Update the OS / Software with latest from Raspbbery Pi
+
+    ```
+    sudo apt update
+    sudo apt upgrade
+    ```
+3) Install 'git'. This allows us to 'clone' LetsLapse code, and BC.
+
+    ```
+    sudo apt install git -y
+    sudo apt install bc -y
+    ```
+
+4) Clone LetsLapse
+
+    ```
+    git clone https://github.com/regularsteven/letslapse
+    ```
+
+5) Run install script
+
+    ```
+    cd letslapse
+    sudo sh install.sh 
+    ```
+    > This may take some time, and will install a number of 'dependencies', as well as configure your device to talk / communicate with your camera. Once installed, you will need to restart. You may wish to set up some other aspects of Raspberry Pi, such as the timezone, location settings, and so on. You can do this with "sudo raspi-config" (in the terminal), but this isn't mandatory.
+
+6) Reboot and wait...
+
+## Run LetsLapse
+
+If everything above worked, LetsLapse is installed. In a browser on your network, type the IP address or raspberrypi.local into your browser. If we've got this far, it's good to go.
+
+
+## What have we done? What's LetsLapse
 
 
 
+## Additional Notes 
+For, um, cleaning up... 
 
-IDEA
-
-1) display most recent low-res image as poster frame in html img src
-    Javascript to refresh to the image every minute
-2) behind this image, previous images and load up slider for scrobble player
-
-
-3) Take photos in alternative sequence - compare results
-    > A - Manual Settings, as defined by Steve
-    > B - Full AUTO, as captured by sensor
-
-
-
-3b) 
-
-
-# troubleshooting
-sometimes the camera crashes - find it and kill it
-ps -A | grep raspi
-sudo kill 1599 
-
-
-# pillow for image analysis
+### Possible depencies 
+```
+sudo apt install python3-pip -y
+sudo apt install python3-pip
 python3 -m pip install --upgrade pip
 python3 -m pip install --upgrade Pillow
+python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
+sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
+```
 
-not required, but in docs:
+#### Additional requirements to run blending tools
+```
+sudo pip3 install opencv
+sudo apt-get install libatlas-base-dev
+sudo pip3 install piexif
+```
 
+#### For opencv and image processing
 
-# for opencv and image processing
+```
 python3 -m pip install --upgrade imutils
 python3 -m pip3 install opencv-contrib-python
 python3 -m pip install opencv-python - this worked, not contrib version
 python3 -m pip install numpy
 python3 -m pip install picamera
+```
 
 
+### Windows / File Access
 
-# batching images for fake long exposures
-longexposure.py requires import os, numpy, PIL
-    > basically smashes all files in folder to one image
-    > need to batch this up in minute by minute / or 30 second blocks
+Install SAMBA for simple filesystem access
+```
+sudo apt-get install samba samba-common-bin 
+```
 
-# deflicker
-Attempt 1: Not good enough with current flicker during sunset
-http://joegiampaoli.blogspot.com/2015/04/creating-time-lapse-videos-mostly-in.html
- > requires PERL
- > apt-get install libfile-type-perl libterm-progressbar-perl perlmagick libimage-exiftool-perl
- > chmod +x timelapse-deflicker.pl
+```
+sudo nano /etc/samba/smb.conf
+```
 
-Attempt 2:
-https://pypi.org/project/deflicker/
- > running this against output from attemt 2 as first shot - 
- > 
+Add the following to the bottom:
+```
+[mypishare]
+        path = /home/pi/letslapse
+        writeable=Yes
+        create mask=0777
+        directory mask=0777
+        public=no
+```
+Create a user for SAMBA access
 
-
-
-
-
- Observations
- Using "raspistill -t 1 --ISO "+str(ISO)+" -ex verylong -w 4000 -h 3000"
-  > Day light / high light: 10 to 12 images per 60 seconds (at 1/2315 sec or so - i.e. very fast exposure ISO 10)
-  > Night light / low light: 1 image per 60 seconds (at 7 sec i.e. 800)
-
-
-  Using "raspistill -t 1 -bm -ag 1 --ISO "+str(ISO)+" -awb off -awbg 3,2 -co -10 -ex verylong  -w 2400 -h 1800"
-  > Day light : 16 images per 60 second block
-  > Night light : 1 ... hmmmm
+```
+sudo smbpasswd -a pi
+sudo systemctl restart smbd 
+```
 
 
-  12Mp images
-   Start: Tue, 25 May 2021  06:32:38
-   Image 100: 06:42:26
-   Image 200: 06:54:55
+### POWER REDUCTION
+Much of the following is automated inside the install script, but noted for reference
 
-   200 images = 1.2GB over 20 minutes
-   3.6GB images per hour
-   43Gb per 12 hours at 200 images per hour at high light
-   Much less for over night.... 
+#### Remove bluetooth
+```
+sudo pico /boot/config.txt
+```
 
+Add below, save and close the file Permalink
+```
+#Disable Bluetooth
+dtoverlay=disable-bt
+```
+ > or remove everything
+```
+sudo apt-get purge bluez -y
+sudo apt-get autoremove -y
+```
 
-# setting up Pi as HOTSPOT to host server / be the network
-1) update and upgrade
-sudo apt-get update
-sudo apt-get upgrade
-2) install the following:
-sudo apt-get install dnsmasq hostapd
-3) We need to configure the new services, so kill them for now
-sudo systemctl stop dnsmasq
-sudo systemctl stop hostapd
-4) Configure static and IP ranges
-sudo nano /etc/dhcpcd.conf
- - add the following at the end
-interface wlan0
-static ip_address=10.0.0.1/24
-nohook wpa_supplicant
+#### Kill LED light on zero
 
-6) configure DHCP server
-sudo mv /etc/dnsmasq.conf /etc/dnsmasq.conf.orig
+```
+echo none | sudo tee /sys/class/leds/led0/trigger
+echo 1 | sudo tee /sys/class/leds/led0/brightness
+```
 
-sudo nano /etc/dnsmasq.conf
- - add the following
+Add the following to config:
+```
+sudo pico /boot/config.txt
+```
 
-interface=wlan0 # Use the require wireless interface - usually wlan0
-dhcp-range=10.0.0.2,10.0.0.20,255.255.255.0,24h
+```
+dtparam=act_led_trigger=none
+dtparam=act_led_activelow=on
+```
 
-7) Configuring the Access Point Host Software (hostapd)
-sudo nano /etc/hostapd/hostapd.conf
- - add the following
+#### Disable hdmi
+```
+/usr/bin/tvservice -o
+sudo pico /etc/rc.local
+```
 
-interface=wlan0
-driver=nl80211
-ssid=LetsLapse
-hw_mode=g
-channel=7
-wmm_enabled=0
-macaddr_acl=0
-auth_algs=1
-ignore_broadcast_ssid=0
-wpa=2
-wpa_passphrase=Together
-wpa_key_mgmt=WPA-PSK
-wpa_pairwise=TKIP
-rsn_pairwise=CCMP
-
-8) 
-sudo service dhcpcd restart
-
-sudo rfkill unblock wifi
-sudo systemctl unmask hostapd
-sudo systemctl enable hostapd
-sudo systemctl start hostapd
+Add the following to the bottom:
+```
+ f /usr/bin/tvservice -o
+```
 
 
-10) restart services
-sudo service dhcpcd restart
+## Troubleshooting notes
+sometimes the camera crashes - find it and kill it
+```
+ps -A | grep raspi
+sudo kill 1599 
+```
 
 
+## Issues with performance
+Issues have been found with slow SD cards. If there's an issue that's hard to explain, verify the SD card can work at reasonable performance.
 
-
-
-
-
-# making changes to exposure / gains
---------------
-a few variables are in place to help maintain consistency of the shoot
-
-in some instances, the camera captured back images with no explanation - in this example, the output brightnessPerceived score was low
-brightnessPerceived score: 35.96887358252723
-
-When this happens, or the brightnessPerceived is below 50, the images taken right after shouldn't be brightened up as it's a dud image - without the brightnessChangeOfSignificance toggle, this would blow out (overexpose) following images
-
-----------------
-gains for blue and red are more complicated
-
-raspistill -t 1 -bm -ag 1 -sa -10 -dg 1.0 -ag 1.0 -awb off -awbg 1.7913023058720001,1.64491119408 -co -15 -ex off -w 4056 -h 3042 -ss 22589.645963694675 -o auto_default/group1/image1614.jpg
-brightnessPerceived score: 120.56416323374215
-auto-measured gains: 1.921875, 1.48828125
-awbgSettings: 1.7913023058720001,1.64491119408
------------------------------------------
-raspistill -t 1 -bm -ag 1 -sa -10 -dg 1.0 -ag 1.0 -awb off -awbg 1.7913023058720001,1.64491119408 -co -15 -ex off -w 4056 -h 3042 -ss 22589.645963694675 -o auto_default/group1/image1615.jpg
-brightnessPerceived score: 123.46989174755981
-auto-measured gains: 1.90234375, 1.4921875
-awbgSettings: 1.7913023058720001,1.64491119408
------------------------------------------
-raspistill -t 1 -bm -ag 1 -sa -10 -dg 1.0 -ag 1.0 -awb off -awbg 1.7913023058720001,1.64491119408 -co -15 -ex off -w 4056 -h 3042 -ss 22589.645963694675 -o auto_default/group1/image1616.jpg
-brightnessPerceived score: 120.47623420011236
-auto-measured gains: 1.90234375, 1.4921875
-awbgSettings: 1.7913023058720001,1.64491119408
-
-
-
-
-# test shots
-raspistill -t 1 --ISO 800 -co -15 -ex off -w 2400 -h 1800.0 -ss 147110.21692236557 --latest latest.jpg -o test.jpg -bm -ag 1 -sa -10 -awb off -awbg 3.484375,1.44921875 -co -15 -ex off 
-
-# test shoots for faster captures in low light
-raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 10000000 -dg 8 -o toilet-dg8_ss10000000.jpg
-
- > takes 21 seconds
-
-raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -o toilet_dg12_ss_20000000.jpg
-
- > takes 42
- > good brightness
-
- raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 --ISO 800 -o toilet_iso800_ss_20000000.jpg
-
-  > takes 42
-  > too dark
-  > iso marked as 6
-
-
- raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex night -ss 20000000 --ISO 800 -o toilet-iso800-ss20000000-ex_night.jpg
-
-  > takes 2:22 (140 seconds | 7x on capture time)
-  > iso marked as 800
-  > similar results as dg12 20 seconds
-
-raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -ag 8 -o toilet2_dg12_ag8_ss_20000000.jpg
-  > Crazy overexpose
-
-
-raspistill -t 1 -w 2400 -h 1800 -awb off -awbg 3.484375,1.44921875 -ex off -ss 20000000 -dg 12 -ag 2 -o toilet2_dg12_ag2_ss_20000000.jpg
-  
-# issues with performance
  > https://www.raspberrypi.org/blog/sd-card-speed-test/
   > cd /usr/share/agnostics/
   > sudo sh /usr/share/agnostics/sdtest.sh
 
 
+### Update Pi Firmware
 
+Some older devices may need a real update. In the instance things just aren't right, run the following to update
 
-# SD Card Speed tests
-test 1 - 256GB Card
-Run 1
-seq-write;0;0;10244;20
-rand-4k-write;0;0;1730;432
-rand-4k-read;6674;1668;0;0
-Sequential write speed 10244 KB/sec (target 10000) - PASS
-Random write speed 432 IOPS (target 500) - FAIL
-Random read speed 1668 IOPS (target 1500) - PASS
-Run 2
-prepare-file;0;0;9999;19
-seq-write;0;0;9863;19
-rand-4k-write;0;0;1763;440
-rand-4k-read;6565;1641;0;0
-Sequential write speed 9863 KB/sec (target 10000) - FAIL
-Note that sequential write speed declines over time as a card is used - your card may require reformatting
-Random write speed 440 IOPS (target 500) - FAIL
-Random read speed 1641 IOPS (target 1500) - PASS
-Run 3
-prepare-file;0;0;10556;20
-seq-write;0;0;10366;20
-rand-4k-write;0;0;1748;437
-rand-4k-read;6459;1614;0;0
-Sequential write speed 10366 KB/sec (target 10000) - PASS
-Random write speed 437 IOPS (target 500) - FAIL
-Random read speed 1614 IOPS (target 1500) - PASS
-
-
-
-
-# stripping back raspbian for ligher use
-aplay - remove
-pulseaudio
-
-xserver related
+```
+sudo rpi-update
+```
+### Additional tools to remove - potential speed optimisations
+Can the following be removed?
+* aplay
+* pulseaudio
+* xserver related
 
