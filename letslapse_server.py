@@ -320,8 +320,8 @@ if path.isfile("progress.txt") == True:
     Lines = file1.readlines()
     shootName = (Lines[1].strip())
 
-    includeRaw = (Lines[6].strip())
-    nightMode = (Lines[7].strip())
+    includeRaw = (Lines[7].strip())
+    nightMode = (Lines[8].strip())
 
     print("System restarted - progress.txt indicated shoot in progress")
     startTimelapse(shootName, includeRaw, nightMode)
