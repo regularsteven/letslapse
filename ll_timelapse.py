@@ -58,13 +58,13 @@ print("args")
 print(args)
 
 
-def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode):
+def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget):
     filename = "timelapse_"+str(folder)+"/timelapse.log"
     if path.isfile(filename) == False:
         f = open(filename, "w")
     else:
         f = open(filename, "a")
-    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+"\n")
+    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+"\n")
     f.close()
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
@@ -123,7 +123,7 @@ else:
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode)
+    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget)
     print("New shoot, no progress file, making one... ")
     
 else :
@@ -245,7 +245,7 @@ for i in range(80000):
     
 
     
-    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode)
+    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget)
 
     if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
