@@ -24,7 +24,7 @@ from urllib.parse import urlparse, parse_qs
 import argparse
 
 #my own custom utilities extracted for simpler structure 
-import src/browser
+import ll_browser
 
 
 PORT = 80
@@ -52,9 +52,9 @@ os.chdir(siteRoot+"/")
 
 
 #start up the streamer, this will run as a child on a different port
-#system("python3 letslapse_streamer.py")
+#system("python3 ll_streamer.py")
 
-letslapse_streamerPath = siteRoot+"/letslapse_streamer.py"    #CHANGE PATH TO LOCATION OF letslapse_streamer.py
+letslapse_streamerPath = siteRoot+"/ll_streamer.py"    #CHANGE PATH TO LOCATION OF ll_streamer.py
 
 def letslapse_streamer_thread():
     call(["python3", letslapse_streamerPath])
@@ -62,7 +62,7 @@ def letslapse_streamer_thread():
 
 def checkStreamerIsRunning():
     instanceCount = 0
-    for line in os.popen("ps -f -C python3 | grep letslapse_streamer.py"):
+    for line in os.popen("ps -f -C python3 | grep ll_streamer.py"):
         print(line)
         instanceCount = instanceCount + 1
         if instanceCount > 0:
@@ -78,7 +78,7 @@ def check_kill_process(pstring):
 
 
 def startTimelapse(shootName, includeRaw, nightMode) :
-    system('nohup python3 timelapse-auto.py --folderName '+shootName+' --raw '+includeRaw+' --nightMode '+nightMode+' &')
+    system('nohup python3 ll_timelapse.py --folderName '+shootName+' --raw '+includeRaw+' --nightMode '+nightMode+' &')
     return "startTimelapse function complete"
 
 def shootPreview(query_components) :
@@ -99,7 +99,7 @@ def shootPreview(query_components) :
 
 
     print("start shootPreview")
-    sysCommand = "python3 preview.py --filename "+filename + settings
+    sysCommand = "python3 ll_still.py --filename "+filename + settings
     print(sysCommand)
     system(sysCommand)
     print("end shootPreview")
@@ -139,7 +139,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             jsonResp += '"completedAction":"'+actionVal+'"'
             
             if actionVal == "timelapse" :
-                check_kill_process("letslapse_streamer.py")
+                check_kill_process("ll_streamer.py")
                 #check to see if this timelapse project is already in place - don't make a new one, if so
                 shootName = query_components["shootName"][0]
 
@@ -169,11 +169,11 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :
-                check_kill_process("timelapse-auto.py")
+                check_kill_process("ll_timelapse.py")
                 if query_components["pauseOrKill"][0] == "kill":
                     system("rm progress.txt")
             elif actionVal == "killstreamer" :
-                check_kill_process("letslapse_streamer.py")
+                check_kill_process("ll_streamer.py")
             elif actionVal == "startstreamer" :
                 processThread = threading.Thread(target=letslapse_streamer_thread)
                 processThread.start()
@@ -214,22 +214,22 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             
             elif actionVal == "getStills":
                 
-                jsonResp += ',"stills":'+str( json.dumps( browser.getStills() ) )
+                jsonResp += ',"stills":'+str( json.dumps( ll_browser.getStills() ) )
                 #print(browser.getShoots("0.jpg"))
             
             elif actionVal == "getShoots":
                 
-                jsonResp += ',"gallery":'+str( json.dumps( browser.getShoots("00.jpg") ) )
+                jsonResp += ',"gallery":'+str( json.dumps( ll_browser.getShoots("00.jpg") ) )
                 #print(browser.getShoots("0.jpg"))
 
             elif actionVal == "systemstatus" :
                 #pull all system status for simple startup script
                 #diskspace / free space on device ######## df
                 #device name ######## os.uname()[1]
-                #timelapse in progress ######## ps -f -C python3 | grep timelapse-auto.py
+                #timelapse in progress ######## ps -f -C python3 | grep lltimelapse.py
                 
                 print(actionVal)
-                #check_kill_process("letslapse_streamer.py")
+                #check_kill_process("ll_streamer.py")
                 #startTimelapse(query_components["shootName"][0])
             elif actionVal == "quit" :
                 exit()
@@ -242,16 +242,16 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             self.wfile.write(bytes(jsonResp, "utf8"))
 
             if actionVal == "exit" :
-                check_kill_process("timelapse-auto.py")
-                check_kill_process("letslapse_streamer.py")
+                check_kill_process("ll_timelapse.py")
+                check_kill_process("ll_streamer.py")
                 exit()
             if actionVal == "shutdown" :
-                check_kill_process("timelapse-auto.py")
-                check_kill_process("letslapse_streamer.py")
+                check_kill_process("ll_timelapse.py")
+                check_kill_process("ll_streamer.py")
                 system("sudo shutdown now")
             elif actionVal == "reset" :
-                check_kill_process("timelapse-auto.py")
-                check_kill_process("letslapse_streamer.py")
+                check_kill_process("ll_timelapse.py")
+                check_kill_process("ll_streamer.py")
                 system("sudo reboot now")
             
             return

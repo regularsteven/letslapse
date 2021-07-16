@@ -6,7 +6,7 @@ import argparse
 from os import path
 
 #example usage:
-#python3 preview.py --ss 1000 --iso 100 --awbg 3,2
+#python3 ll_still.py --ss 1000 --iso 100 --awbg 3,2
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')

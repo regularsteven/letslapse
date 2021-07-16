@@ -2,10 +2,10 @@ runWithoutCamera = False
 updateGainsWithLivePreview = True
 import os
 instanceCount = 0
-for line in os.popen("ps -f -C python3 | grep timelapse-auto.py"):
+for line in os.popen("ps -f -C python3 | grep ll_timelapse.py"):
     instanceCount = instanceCount + 1
     if instanceCount > 1:
-        print("timelapse-auto.py: Instance already running - exiting now")
+        print("ll_timelapse.py: Instance already running - exiting now")
         exit()
 
 from os import system
@@ -47,8 +47,8 @@ parser.add_argument('--nightMode', help='nature or streets for brightness offset
 
 
 #example use:
-# python3 timelapse-auto --folderName demo
-# python3 timelapse-auto.py --folderName testing --raw false --nightMode normal
+# python3 ll_timelapse.py --folderName demo
+# python3 ll_timelapse.py --folderName testing --raw false --nightMode normal
 
 
 
