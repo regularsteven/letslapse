@@ -277,7 +277,7 @@ function takeStill(){
 
 
 
-            displayStill("/previews/"+makeThumb(json.filename));
+            displayStill("/stills/"+makeThumb(json.filename));
             displayStatus("isReady");
             //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
             //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
@@ -312,7 +312,7 @@ function parseProgress(displayLatest, execOnStartup){
             $("#shootName").val(progressName);
             $("#shootName").prop( "disabled", true );
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
-            var latestImage = "/auto_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
+            var latestImage = "/timelapse_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
             if($("#manualSwitch2").is(":checked") == false){
                 $("#manualSwitch2").click();
             }

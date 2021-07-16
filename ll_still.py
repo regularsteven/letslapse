@@ -34,10 +34,10 @@ args = parser.parse_args()
 
 
 
-if path.isdir("previews") == True :
+if path.isdir("stills") == True :
     print("preview directory created")
 else :
-    system("mkdir previews")
+    system("mkdir stills")
  
 #sleep(2)
 #d=RPICAM2DNG()
@@ -84,7 +84,7 @@ else :
 
 #print("Exposure INPUT Time: "+str(exposureInput))
 
-outputPathAndFilename = "/home/pi/letslapse/previews/"+args.filename
+outputPathAndFilename = "/home/pi/letslapse/stills/"+args.filename
 
 #print("/"+outputPathAndFilename)
 

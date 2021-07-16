@@ -14,8 +14,8 @@ def getShoots(filterBy):
 
 
     for t in range(len(topLevel)):
-        #look in each and and find the auto_ folders - these are the shoot folders
-        if "auto_" in topLevel[t]:
+        #look in each and and find the timelapse_ folders - these are the shoot folders
+        if "timelapse_" in topLevel[t]:
             shootImages = []
             thisShoot = topLevel[t]
             #print("-"+thisShoot)
@@ -41,10 +41,10 @@ def getShoots(filterBy):
 
 def getStills():
     siteRoot = os.getcwd()
-    topLevel = sorted(os.listdir(siteRoot+"/previews/"))
+    topLevel = sorted(os.listdir(siteRoot+"/stills/"))
     jpegs = []
     for t in range(len(topLevel)):
-        #look in each and and find the auto_ folders - these are the shoot folders
+        #look in each and and find the timelapse_ folders - these are the shoot folders
         if 'thumb' not in topLevel[t]:
             jpegs.append(topLevel[t].replace('.jpg',''))
 

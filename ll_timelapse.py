@@ -198,10 +198,10 @@ def manageColorGainChanges (measuredBlueGains, measuredRedGains) :
     awbgSettings = str(blueGains) + "," + str(redGains)
     print("awbgSettings: "+awbgSettings)
 
-if path.isdir("auto_"+folderName) == True :
+if path.isdir("timelapse_"+folderName) == True :
     print("directory already created")
 else :
-    system("mkdir auto_"+folderName)
+    system("mkdir timelapse_"+folderName)
 
 startTime = datetime.datetime.now().timestamp()
 print("start time: "+str(startTime))
@@ -212,11 +212,11 @@ for i in range(80000):
     #print("taking a photo")
     raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm --thumb 600:450:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
     #--
-    if path.isdir("auto_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
-        system("mkdir auto_"+folderName+"/group"+str(int(actualIndex/1000)))
+    if path.isdir("timelapse_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
+        system("mkdir timelapse_"+folderName+"/group"+str(int(actualIndex/1000)))
         print("need to create group folder")
 
-    filename = "auto_"+folderName+"/group"+str(int(actualIndex/1000))+"/image"+str(actualIndex)+".jpg"
+    filename = "timelapse_"+folderName+"/group"+str(int(actualIndex/1000))+"/image"+str(actualIndex)+".jpg"
     
 
     fileOutput = ""

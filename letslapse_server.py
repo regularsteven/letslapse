@@ -155,7 +155,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #must be continuing the shoot
                     startTimelapse(shootName, includeRaw, nightMode)
 
-                elif path.isdir("auto_"+shootName) == True :
+                elif path.isdir("timelapse_"+shootName) == True :
                     print("project with the same name already in use")
                     jsonResp += ',"error":true'
                     jsonResp += ',"message":"used"'
