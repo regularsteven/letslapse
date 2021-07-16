@@ -311,6 +311,8 @@ function parseProgress(displayLatest, execOnStartup){
             //put the current shoot name inside the input box
             $("#shootName").val(progressName);
             $("#shootName").prop( "disabled", true );
+            $("#underexposeNights").prop( "disabled", true );
+            $("#rawTimelapse").prop( "disabled", true );
             var folderNum = Math.ceil((progressIndex+1)/1000)-1
             var latestImage = "/timelapse_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
             if($("#manualSwitch2").is(":checked") == false){
@@ -342,6 +344,11 @@ function timelapseMode(startOrStop){
         displayStatus("isShootingTimelapse");
         $("#photo-tab").addClass("disabled");
         $("#shootName").prop( "disabled", true );
+
+        $("#underexposeNights").prop( "disabled", true );
+        $("#rawTimelapse").prop( "disabled", true );
+
+
         $("#timelapse-tab").click();
         $("#timelapse .custom-switch").addClass("d-none");
         
@@ -391,6 +398,8 @@ function stopTimelapse(){
                     progressTxt = null;
                     $("#pauseOrKillWarning").addClass("d-none");
                     $("#shootName").prop( "disabled", false );
+                    $("#underexposeNights").prop( "disabled", false );
+                    $("#rawTimelapse").prop( "disabled", false );
                     if($("#manualSwitch2").is(":checked")){
                         //nothing
                     }else{
@@ -432,8 +441,18 @@ function startTimelapseDelay(){
         
         apiCall += "&mode=auto";
     }
+    var nightMode="normal";
+    if($("#underexposeNights").is(":checked")){
+        nightMode="city";
+    }
 
-    apiCall += "&raw=false&nightMode=normal";
+    var captureRaw="false";
+    if($("#rawTimelapse").is(":checked")){
+        captureRaw = "true";
+    }
+
+
+    apiCall += "&raw="+captureRaw+"&nightMode="+nightMode;
 
     apiCall += "&shootName="+shootName;
     $.getJSON( apiCall)
@@ -447,6 +466,8 @@ function startTimelapseDelay(){
                 $("#manualSwitch2").click();
             }
             $("#shootName").prop( "disabled", false );
+            $("#underexposeNights").prop( "disabled", false );
+            $("#rawTimelapse").prop( "disabled", false );
             $("#shootName").focus();
             $("#newNameRequired").removeClass("d-none");
             $("#newNameRequired .shootName").html('"'+json.shootName+'"');
