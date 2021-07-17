@@ -64,13 +64,13 @@ print(args)
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
-    filename = "timelapse_"+str(folder)+"/timelapse.log"
-    #if path.isfile(filename) == False:
-    #    f = open(filename, "w+")
+    filename = "timelapse_"+str(folder)+".log"
+    if path.isfile(filename) == False:
+        system("touch "+filename)
     #else:
-    #    f = open(filename, "a")
-    #f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
-    #f.close()
+    f = open(filename, "a")
+    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
+    f.close()
     
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
