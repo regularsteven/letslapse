@@ -23,6 +23,11 @@ import os.path
 from os import path
 
 
+#extracted utils for broader use and more component oriented approach
+import ll_brightness
+
+
+
 width = 4056
 height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
@@ -61,7 +66,7 @@ print(args)
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
     filename = "timelapse_"+str(folder)+"/timelapse.log"
     if path.isfile(filename) == False:
-        f = open(filename, "w")
+        f = open(filename, "w+")
     else:
         f = open(filename, "a")
     f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
@@ -93,6 +98,8 @@ AGIncrement = .1
 
 #the bigger brightnessTarget, the brighter the image
 brightnessTarget = 130
+#nightmode brightness target
+nightModeBrightnessTarget = 80
 #the bigger brightnessRange, the less changes will take place
 brightnessRange = 10
 
@@ -154,13 +161,6 @@ else :
 
 
 #print(args.imageCount)
-
-#logic from https://stackoverflow.com/a/3498247 (from https://stackoverflow.com/users/64313/cmcginty)
-def brightnessPerceived ( img ):
-    stat = ImageStat.Stat(img)
-    r,g,b = stat.rms
-    return math.sqrt( 0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2) )
-
 
 
 gainsTolerance = .2 #this is how much difference can exist between gains before we change the gains settings 
@@ -252,9 +252,9 @@ for i in range(80000):
     else :
 
         #analyse the thumbnail as this is a smaller file, should be faster - however, we need to now make a thumbnail for every image - which might make things slower
-        img = Image.open(filename.replace(".jpg", "_thumb.jpg")) 
-        
-        brightnessScore = brightnessPerceived(img)
+        img = filename.replace(".jpg", "_thumb.jpg")
+
+        brightnessScore = ll_brightness.brightnessPerceived(img)
         print("brightnessPerceived score: " + str(brightnessScore))
 
         storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, brightnessScore)
@@ -263,8 +263,8 @@ for i in range(80000):
         if nightMode == "city":
             if shutterSpeed > 1000000:
                 brightnessTarget = brightnessTarget-2
-                if brightnessTarget < 100:
-                    brightnessTarget = 100
+                if brightnessTarget < nightModeBrightnessTarget:
+                    brightnessTarget = nightModeBrightnessTarget
             else:
                 brightnessTarget = brightnessTarget+2
                 if brightnessTarget > 130:
