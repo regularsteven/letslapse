@@ -53,7 +53,7 @@ parser.add_argument('--nightMode', help='nature or streets for brightness offset
 
 #example use:
 # python3 ll_timelapse.py --folderName demo
-# python3 ll_timelapse.py --folderName testing --raw false --nightMode normal
+# python3 ll_timelapse.py --folderName testing --raw false --nightMode city
 
 
 
@@ -65,12 +65,13 @@ print(args)
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
     filename = "timelapse_"+str(folder)+"/timelapse.log"
-    if path.isfile(filename) == False:
-        f = open(filename, "w+")
-    else:
-        f = open(filename, "a")
-    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
-    f.close()
+    #if path.isfile(filename) == False:
+    #    f = open(filename, "w+")
+    #else:
+    #    f = open(filename, "a")
+    #f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
+    #f.close()
+    
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
 
