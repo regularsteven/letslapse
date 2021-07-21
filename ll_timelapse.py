@@ -23,6 +23,11 @@ import os.path
 from os import path
 
 
+#extracted utils for broader use and more component oriented approach
+import ll_brightness
+
+
+
 width = 4056
 height = int(width * .75)
 resolution = " -w "+str(width)+" -h "+str(height)
@@ -48,16 +53,26 @@ parser.add_argument('--nightMode', help='nature or streets for brightness offset
 
 #example use:
 # python3 ll_timelapse.py --folderName demo
-# python3 ll_timelapse.py --folderName testing --raw false --nightMode normal
+# python3 ll_timelapse.py --folderName testing --raw false --nightMode city
 
 
 
 args = parser.parse_args()
 
+print("args")
+print(args)
 
 
-
-def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode):
+def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
+    print("storeProgress: folder = "+ folder + ", nightMode="+str(nightMode)+", brightnessTarget="+str(brightnessTarget)+", brightnessScore="+str(brightnessScore) )
+    filename = "timelapse_"+folder+".log"
+    if path.isfile(filename) == False:
+        system("touch "+filename)
+    #else:
+    f = open(filename, "a")
+    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
+    f.close()
+    
     system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
 
 
@@ -85,6 +100,8 @@ AGIncrement = .1
 
 #the bigger brightnessTarget, the brighter the image
 brightnessTarget = 130
+#nightmode brightness target
+nightModeBrightnessTarget = 80
 #the bigger brightnessRange, the less changes will take place
 brightnessRange = 10
 
@@ -115,7 +132,7 @@ else:
 
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode)
+    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, -1)
     print("New shoot, no progress file, making one... ")
     
 else :
@@ -146,13 +163,6 @@ else :
 
 
 #print(args.imageCount)
-
-#logic from https://stackoverflow.com/a/3498247 (from https://stackoverflow.com/users/64313/cmcginty)
-def brightnessPerceived ( img ):
-    stat = ImageStat.Stat(img)
-    r,g,b = stat.rms
-    return math.sqrt( 0.241*(r**2) + 0.691*(g**2) + 0.068*(b**2) )
-
 
 
 gainsTolerance = .2 #this is how much difference can exist between gains before we change the gains settings 
@@ -237,26 +247,26 @@ for i in range(80000):
     
 
     
-    storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode)
+    
 
     if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
     else :
 
         #analyse the thumbnail as this is a smaller file, should be faster - however, we need to now make a thumbnail for every image - which might make things slower
-        img = Image.open(filename.replace(".jpg", "_thumb.jpg")) 
-        
-        brightnessScore = brightnessPerceived(img)
+        img = filename.replace(".jpg", "_thumb.jpg")
+
+        brightnessScore = ll_brightness.brightnessPerceived(img)
         print("brightnessPerceived score: " + str(brightnessScore))
 
-        
+        storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, brightnessScore)
 
         #if we're at night, we want he pictures to be a bit darker if shooting in the city
         if nightMode == "city":
             if shutterSpeed > 1000000:
                 brightnessTarget = brightnessTarget-2
-                if brightnessTarget < 100:
-                    brightnessTarget = 100
+                if brightnessTarget < nightModeBrightnessTarget:
+                    brightnessTarget = nightModeBrightnessTarget
             else:
                 brightnessTarget = brightnessTarget+2
                 if brightnessTarget > 130:
