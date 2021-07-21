@@ -20,7 +20,7 @@ Follow the instructions to ensure the process is verified.
 ### 2) Set up Raspberry Pi WiFi and system access
 See https://github.com/regularsteven/letslapse/. We need to put settings on the MicroSD card to configure wireless network and access to the OS.
 
-1) Place wpa_supplicant.conf to the SD card partition called "Boot" of your newly formatted MicroSD card
+1) Place wpa_supplicant.conf (inside 'install' folder) to the SD card partition called "Boot" of your newly formatted MicroSD card
      > Edit the file to put your own WiFi credentials in this file. The formatting matters - so put your wireless network(s) inside the "quotations". If you have a mobile phone hotspot, you can add this and your home network. The Pi will connect to whatever it see's first, in order of their placement.
 2) Create an empty file called 'ssh' in the same "Boot" partition. This file tells the Pi OS to allow 'SSH' (logging in remote) to occur.
     > This can be called ssh.txt or just 'ssh'. 
