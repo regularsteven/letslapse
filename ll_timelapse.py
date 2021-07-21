@@ -64,7 +64,8 @@ print(args)
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
-    filename = "timelapse_"+str(folder)+".log"
+    print("storeProgress: folder = "+ folder + ", nightMode="+str(nightMode)+", brightnessTarget="+str(brightnessTarget)+", brightnessScore="+str(brightnessScore) )
+    filename = "timelapse_"+folder+".log"
     if path.isfile(filename) == False:
         system("touch "+filename)
     #else:
