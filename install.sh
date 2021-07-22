@@ -22,7 +22,7 @@ sudo apt-get install python-picamera python3-picamera -y
 
 echo "4 Numpy"
 #numpy and dependencies
-sudo apt-get install libatlas-base-dev
+sudo apt-get install libatlas-base-dev -y
 python3 -m pip install numpy
 echo "5 Pillow"
 python3 -m pip install Pillow
@@ -47,9 +47,9 @@ pip3 install piexif
 
 echo "----------Settingh up WiFi Hosting-----------------"
 echo "8 Install hostapd"
-sudo apt-get install hostapd
+sudo apt-get install hostapd -y
 echo "9 Install hostapd"
-sudo apt-get install dnsmasq
+sudo apt-get install dnsmasq -y
 echo "10 Unmask and disable services"
 sudo systemctl unmask hostapd
 sudo systemctl disable hostapd
