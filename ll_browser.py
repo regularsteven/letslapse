@@ -19,7 +19,7 @@ def getShoots(filterBy):
             shootImages = []
             thisShoot = topLevel[t]
             #print("-"+thisShoot)
-            shootLevel = sorted(os.listdir(siteRoot+"/"+thisShoot))
+            shootLevel = sorted(os.listdir(siteRoot+"/"+thisShoot+"/"))
             for s in range(len(shootLevel)):
                 thisGroup = shootLevel[s]
                 #print("--"+thisGroup)
