@@ -61,12 +61,15 @@ parser.add_argument('--blendingMethod', help='if not set defaults as "regular", 
 parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds')
 parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy')
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy')
+parser.add_argument('--imagePrefix', help='specify and image name other than image')
 
 parser.add_argument('--test', help='tests the folder satructure to ensure all images are in place, returns the largest gap between two images')
 
 args = parser.parse_args()
 
-
+imagePrefix = "image"
+if args.imagePrefix is not None:
+    imagePrefix = args.imagePrefix
 
 cwd = os.getcwd()
 thisDir = cwd.split("/")[len(cwd.split("/"))-1]
@@ -126,10 +129,10 @@ def testFiles(testType) :
     lastPhotoTimestamp = 0
     for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
         if thisFolderIndex == False :
-            if path.isfile('image'+str(a)+'.jpg') == True:
-                filename = 'image'+str(a)+'.jpg'
+            if path.isfile(imagePrefix+str(a)+'.jpg') == True:
+                filename = imagePrefix+str(a)+'.jpg'
         if thisFolderIndex != False :
-            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+            filename = imagePrefix+str(int(thisFolderIndex)*1000+a)+'.jpg'
 
         if path.isfile(filename) == False:
             foundMissingFiles = True 
@@ -217,8 +220,10 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     #out.show()
 
 def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif): 
-    print(imagesToBlendToOne)
+    print("imagesToBlendToOne: "+ str(imagesToBlendToOne))
+    print("fullImageSet:")
     print(fullImageSet)
+    print(os.getcwd())
     
     if imagesToBlendToOne == 1:
         print("no need to process these images, as we're just rendering them as one simple playback")
@@ -229,10 +234,10 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
                 #print(i)
                 if a == 0:
                     #in some instances, images start at index 1 - if so, don't add it.
-                    if path.isfile('image'+str(i)+'.jpg') == True:
-                        imlist.append('image'+str(i)+'.jpg')
+                    if path.isfile(imagePrefix+str(i)+'.jpg') == True:
+                        imlist.append(imagePrefix+str(i)+'.jpg')
                 else :
-                    imlist.append('image'+str(i+(imagesToBlendToOne*a))+'.jpg')
+                    imlist.append(imagePrefix+str(i+(imagesToBlendToOne*a))+'.jpg')
             blendingOutput = imlist[0]
             if len(imlist) > 0:
                 blendingOutput = blendingOutput+ " to " + imlist[len(imlist)-1]
@@ -411,7 +416,7 @@ else:
             #if inside the first or last frames, we want to ease in and out
             if a < 50:
                 print("adding single images")
-                curImage = 'image'+str(a)+'.jpg'
+                curImage = imagePrefix+str(a)+'.jpg'
                 imlist.append(curImage)
                 blendGroupToOne(imlist, a, migrateExif, outputFolder)
                 imageIndex = imageIndex+1
@@ -424,7 +429,7 @@ else:
 
                 print("adding "+str(numberToBlend)+" images")
                 for m in range(numberToBlend):
-                    curImage = 'image'+str(imageIndex+m)+'.jpg'
+                    curImage = imagePrefix+str(imageIndex+m)+'.jpg'
                     if imageIndex+m < fullImageSet:
                         imlist.append(curImage)
                 imageIndex = imageIndex+ len(imlist)
@@ -489,9 +494,9 @@ else :
     outputFolder = "/blended"+str(groupBy)+"_"+str(groupByType)
     for a in range(int(fullImageSet)-folderCount): #exclude folders from the count
         if thisFolderIndex == False :
-            filename = 'image'+str(a)+'.jpg'
+            filename = imagePrefix+str(a)+'.jpg'
         if thisFolderIndex != False :
-            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+            filename = imagePrefix+str(int(thisFolderIndex)*1000+a)+'.jpg'
         #print(filename)
         thisTimestamp = getMeta( filename )
         
