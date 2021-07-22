@@ -15,11 +15,11 @@ def getShoots(filterBy):
 
     for t in range(len(topLevel)):
         #look in each and and find the timelapse_ folders - these are the shoot folders
-        if "timelapse_" in topLevel[t]:
+        if "timelapse_" in topLevel[t] and ".log" not in topLevel[t]:
             shootImages = []
             thisShoot = topLevel[t]
             #print("-"+thisShoot)
-            shootLevel = sorted(os.listdir(siteRoot+"/"+thisShoot+"/"))
+            shootLevel = sorted(os.listdir(siteRoot+"/"+thisShoot))
             for s in range(len(shootLevel)):
                 thisGroup = shootLevel[s]
                 #print("--"+thisGroup)
