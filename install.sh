@@ -14,7 +14,7 @@ sudo apt-get update -y && sudo apt-get upgrade -y
 echo "----------Dependencies for Python-----------------"
 echo "2 Setting up Python and PIP"
 #python related dependencies
-sudo apt install python3-pip
+sudo apt install python3-pip -y
 
 echo "3 Camera Stuff"
 #camera stuff
@@ -24,18 +24,21 @@ echo "4 Numpy"
 #numpy and dependencies
 sudo apt-get install libatlas-base-dev -y
 python3 -m pip install numpy
+
+pip3 install numpy --upgrade 
+#unsure why we can't install numpy in the first instance, but an issue is found and requires the pip3 command
 echo "5 Pillow"
 python3 -m pip install Pillow
 
 echo "6 OpenCV and dependencies"
 #OpenCV and dependencies
-sudo apt install libtiff5
-sudo apt install libwebp-dev
-sudo apt install libopenjp2-7
-sudo apt install libIlmImf-2_2-23
-sudo apt install libgstreamer1.0-dev
-sudo apt-get install libopenexr-dev
-sudo apt-get install python-opencv
+sudo apt install libtiff5 -y
+sudo apt install libwebp-dev -y
+sudo apt install libopenjp2-7 -y
+sudo apt install libIlmImf-2_2-23 -y
+sudo apt install libgstreamer1.0-dev -y
+sudo apt-get install libopenexr-dev -y
+sudo apt-get install python-opencv -y
 python3 -m pip install opencv-python
 
 #exif and ffmpeg tools
