@@ -111,14 +111,12 @@ Address: **IP as found in step three.**
 2) Update the OS / Software with latest from Raspbbery Pi
 
     ```
-    sudo apt update
-    sudo apt upgrade
+    sudo apt update && sudo apt upgrade
     ```
 3) Install 'git'. This allows us to 'clone' LetsLapse code, and BC.
 
     ```
-    sudo apt install git -y
-    sudo apt install bc -y
+    sudo apt install git bc -y
     ```
 
 4) Clone LetsLapse
@@ -145,37 +143,16 @@ If everything above worked, LetsLapse is installed. In a browser on your network
 ## What have we done? What's LetsLapse
 
 
-
 ## Additional Notes 
 For, um, cleaning up... 
 
-### Possible depencies 
+### Dependencies installation 
 ```
-sudo apt install python3-pip -y
-sudo apt install python3-pip
+sudo apt-get update && apt install python3-pip -y
+sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools libatlas-base-dev
 python3 -m pip install --upgrade pip
-python3 -m pip install --upgrade Pillow
-python3 -m pip install --upgrade Pillow --global-option="build_ext" --global-option="--enable-[feature]"
-sudo apt install libopenjp2-7 libopenjp2-7-dev libopenjp2-tools
+python3 -m pip install -r requirements.txt
 ```
-
-#### Additional requirements to run blending tools
-```
-sudo pip3 install opencv
-sudo apt-get install libatlas-base-dev
-sudo pip3 install piexif
-```
-
-#### For opencv and image processing
-
-```
-python3 -m pip install --upgrade imutils
-python3 -m pip3 install opencv-contrib-python
-python3 -m pip install opencv-python - this worked, not contrib version
-python3 -m pip install numpy
-python3 -m pip install picamera
-```
-
 
 ### Windows / File Access
 
