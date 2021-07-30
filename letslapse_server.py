@@ -192,7 +192,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 
 
             elif actionVal == "uptime" :
-                uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime) | bc", shell=True)
+                uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime)", shell=True)
                 hostname = os.uname()[1]
                 print(float(uptime))
                 jsonResp += ',"seconds":"'+str(float(uptime))+'"'

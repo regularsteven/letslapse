@@ -11,6 +11,8 @@ import os.path
 from os import path
 
 
+import ll_utils
+
 
 
 
@@ -52,19 +54,23 @@ from os import path
 # run command from project home, eg. cd ~/Documents/dev/letslapse/ OR from a specific folder ()
 # 1 python3 blend.py --video videos/castle-long.mp4 
 # 2 python3 blend.py --video videos/castle-long.mp4 --blendingMethod easing
-# 3 python3 ~/Documents/dev/letslapse/blend.py --video longvideo.mp4
+# 3 python3 ~/Documents/dev/letslapse/blend.py --video longvideo.mp4 --groupBy 12
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--video', help='specify video to convert to images then blend to image')
-parser.add_argument('--blendingMethod', help='if not set defaults as "regular", set value to make "easing"')
-parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds')
-parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy')
-parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy')
+parser.add_argument('--blendingMethod', help='if not set defaults as "regular", set value to make "easing"', default="regular")
+parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds', default="30")
+parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy', default="seconds")
+parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy', default="yes")
+parser.add_argument('--imagePrefix', help='specify and image name other than image', default="image")
 
 parser.add_argument('--test', help='tests the folder satructure to ensure all images are in place, returns the largest gap between two images')
 
 args = parser.parse_args()
+
+imagePrefix = args.imagePrefix
+
 
 
 
@@ -126,10 +132,10 @@ def testFiles(testType) :
     lastPhotoTimestamp = 0
     for a in range(int(fullImageSet)-folderCount): #-1 is based on the blended folder being in the folder - we want to exclude this
         if thisFolderIndex == False :
-            if path.isfile('image'+str(a)+'.jpg') == True:
-                filename = 'image'+str(a)+'.jpg'
+            if path.isfile(imagePrefix+str(a)+'.jpg') == True:
+                filename = imagePrefix+str(a)+'.jpg'
         if thisFolderIndex != False :
-            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+            filename = imagePrefix+str(int(thisFolderIndex)*1000+a)+'.jpg'
 
         if path.isfile(filename) == False:
             foundMissingFiles = True 
@@ -169,6 +175,10 @@ if args.test == "basic" or args.test == "full" :
 
 
 def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
+    start = time.time()
+    
+    print("blendGroupToOne(imlist, sequenceNo: "+str(sequenceNo)+", migrateExif: "+str()+", outputFolder)")
+    
     # ref to https://stackoverflow.com/questions/17291455/how-to-get-an-average-picture-from-100-pictures-using-pil 
     #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
     # if blendAction = "process" #this is second, go through the text file and blend the actual images
@@ -178,11 +188,11 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     N=len(imlist)
 
     #### Create a numpy array of floats to store the average (assume RGB images)
-    arr=numpy.zeros((h,w,3),numpy.float)
+    arr=numpy.zeros((h,w,3),numpy.float16)
 
     # load exif data from the first image parsed in - we'll use this to put in the output image
     im = Image.open( imlist[0])
-    #print("im.info:")
+    print("first image: "+ imlist[0])
 
 
     if migrateExif == True:
@@ -194,20 +204,23 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     #exit()
     
 
-    #### Build up average pixel intensities, casting each image as an array of floats
+    print("Build up average pixel intensities, casting each image as an array of floats")
     for im in imlist:
+        substart = time.time()
         thisImg = Image.open(im)
         
-        #print(im)
-        imarr=numpy.array(thisImg,dtype=numpy.float)
+        print(im)
+        imarr=numpy.array(thisImg,dtype=numpy.float16)
         arr=arr+imarr/N
-    #### Round values in array and cast as 8-bit integer
+        subend = time.time()
+        print ('time for blendGroupToOne - mix image ' + str(subend - substart) )
+    print("Round values in array and cast as 8-bit integer")
     arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
 
-    #### Generate, save and preview final image
+    print("Generate, save and preview final image")
     out=Image.fromarray(arr,mode="RGB")
     fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+".jpg"
-    #print(fileName)
+    print("fileName: "+fileName)
     
 
     if migrateExif == True:
@@ -215,10 +228,15 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     else: 
         out.save(fileName)
     #out.show()
+    end = time.time()
+    print ('time for blendGroupToOne ' + str(end - start) )
+    
 
 def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif): 
-    print(imagesToBlendToOne)
+    print("imagesToBlendToOne: "+ str(imagesToBlendToOne))
+    print("fullImageSet:")
     print(fullImageSet)
+    print(os.getcwd())
     
     if imagesToBlendToOne == 1:
         print("no need to process these images, as we're just rendering them as one simple playback")
@@ -229,10 +247,10 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
                 #print(i)
                 if a == 0:
                     #in some instances, images start at index 1 - if so, don't add it.
-                    if path.isfile('image'+str(i)+'.jpg') == True:
-                        imlist.append('image'+str(i)+'.jpg')
+                    if path.isfile(imagePrefix+str(i)+'.jpg') == True:
+                        imlist.append(imagePrefix+str(i)+'.jpg')
                 else :
-                    imlist.append('image'+str(i+(imagesToBlendToOne*a))+'.jpg')
+                    imlist.append(imagePrefix+str(i+(imagesToBlendToOne*a))+'.jpg')
             blendingOutput = imlist[0]
             if len(imlist) > 0:
                 blendingOutput = blendingOutput+ " to " + imlist[len(imlist)-1]
@@ -255,7 +273,7 @@ def testIfPrime(num):
 
 
 if args.video == None:
-    print("NOT A VIDEO")
+    print("Standard operation - blend images")
     groupByType = args.groupByType #images or seconds
         #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
         #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
@@ -317,10 +335,8 @@ else:
     
     #possible mode=dirty - this would recompress JPGs if testIfPrime(num) == False
 
-    groupBy = 10
-    if args.groupBy is not None:
-        groupBy = int(args.groupBy)
-    groupByType = "images"
+    groupBy = args.groupBy
+    groupByType = "images" #must be images as the files don't have metadata which is required for grouping by seconds
 
     calculatedGroupBy = 0
     biggestMatch = 0
@@ -371,9 +387,7 @@ else:
 
     blendedDirectory = "blended"+str(groupBy)+"_"+str(groupByType)
 
-    blendingMethod = "regular" 
-    if args.blendingMethod is not None:
-        blendingMethod = "easing"
+    blendingMethod = args.blendingMethod
 
     # note look into using -threads for better performance
     #exit()
@@ -404,34 +418,40 @@ else:
         imagesProcessed = 0
         imagesToProcess = True
         a=1
+        delaySpeedInFrames = 120
         while imagesToProcess == True:
             print("--------")
         #for a in range(int(fullImageSet)-1):
             imlist = []
             #if inside the first or last frames, we want to ease in and out
-            if a < 50:
+            if a < delaySpeedInFrames:
                 print("adding single images")
-                curImage = 'image'+str(a)+'.jpg'
+                curImage = imagePrefix+str(a)+'.jpg'
                 imlist.append(curImage)
                 blendGroupToOne(imlist, a, migrateExif, outputFolder)
                 imageIndex = imageIndex+1
                 
 
-            if a > 49 :
-                numberToBlend = a - 49
-                if numberToBlend > 10: 
-                    numberToBlend = 10
+            if a > delaySpeedInFrames-1 :
+                numberToBlend = a - (delaySpeedInFrames-1)
+                #if numberToBlend > 100: 
+                #    numberToBlend = 100
+
+                numberToBlend = int(numberToBlend/20) + 1 #bigger the number, the slower the transition
+                #numberToBlend = numberToBlend + int(numberToBlend/4)
 
                 print("adding "+str(numberToBlend)+" images")
                 for m in range(numberToBlend):
-                    curImage = 'image'+str(imageIndex+m)+'.jpg'
+                    curImage = imagePrefix+str(imageIndex+m)+'.jpg'
                     if imageIndex+m < fullImageSet:
                         imlist.append(curImage)
                 imageIndex = imageIndex+ len(imlist)
             
             if len(imlist)>0:
+                #this length should always be greater than zero
                 blendGroupToOne(imlist, a, migrateExif, outputFolder)
             else:
+                #this catches the case where we're at the end of the file list inside the folder
                 imagesToProcess = False
 
             #for i in range(imagesToBlendToOne):
@@ -441,19 +461,28 @@ else:
             print("Images processed: " + str(imagesProcessed))
             imagesProcessed = imagesProcessed+ len(imlist)
 
+            #check to see if we've gone through the full list
             if imagesProcessed > fullImageSet:
                 imagesToProcess = False
 
             a=a+1
 
         #imlist.append(1)
-        #1 make the video play and reverse
-        ffmpegCommand = 'ffmpeg -framerate 50 -i '+outputFolder+'/image%d.jpg -filter_complex "[0]reverse[r];[0][r]concat,loop=0:42,setpts=N/50/TB" -crf 5 -pix_fmt yuv420p '+outputFolder+'/single.mp4'
-        system(ffmpegCommand)
+        #option 1
+        print(os.getcwd())
+        print(outputFolder)
+        firstImage = outputFolder+'/image'
+        outputVideo = 'single'
+
+        ll_utils.convertImagesToVideo(firstImage, outputVideo)
+
+        #option 2 - make the video play and reverse
+        #ffmpegCommand = 'ffmpeg -framerate 50 -i '+outputFolder+'/image%d.jpg -filter_complex "[0]reverse[r];[0][r]concat,loop=0:42,setpts=N/50/TB" -crf 5 -pix_fmt yuv420p '+outputFolder+'/single.mp4'
+        #system(ffmpegCommand)
         #2 
-        #dumpt the file to a concat txt
-        ffmpegCommand = 'ffmpeg -stream_loop 3 -i '+outputFolder+'/single.mp4 -c copy '+outputFolder+'/output.mp4'
-        system(ffmpegCommand)
+        #option 3 - loop the playback from the source video
+        #ffmpegCommand = 'ffmpeg -stream_loop 3 -i '+outputFolder+'/single.mp4 -c copy '+outputFolder+'/output.mp4'
+        #system(ffmpegCommand)
             
 
     
@@ -489,9 +518,9 @@ else :
     outputFolder = "/blended"+str(groupBy)+"_"+str(groupByType)
     for a in range(int(fullImageSet)-folderCount): #exclude folders from the count
         if thisFolderIndex == False :
-            filename = 'image'+str(a)+'.jpg'
+            filename = imagePrefix+str(a)+'.jpg'
         if thisFolderIndex != False :
-            filename = 'image'+str(int(thisFolderIndex)*1000+a)+'.jpg'
+            filename = imagePrefix+str(int(thisFolderIndex)*1000+a)+'.jpg'
         #print(filename)
         thisTimestamp = getMeta( filename )
         
@@ -517,12 +546,18 @@ else :
 
 
 if args.makeMP4 == "yes" :
-    inputFile = "blended"+str(groupBy)+"_"+str(groupByType)+"/image"
+    inputImage = "blended"+str(groupBy)+"_"+str(groupByType)+"/image"
+    
+    #in the event we are just blending an image tequence, we won't be looking for a blended image
     if imagesToBlendToOne == 1:
-        inputFile = "image"
+        inputImage = "image"
+    
     folderStrOutput = ""
     if thisFolderIndex != False :
         folderStrOutput = "_"+str(thisFolderIndex)
-    system("ffmpeg -i "+inputFile+"%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 ../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBlendToOne)+".mp4")
-    #fmpeg -i image%d.jpg -b:v 500000k -vcodec mpeg4 -r 25 timelapse_Wojtek_blendedVideo_seconds30.mp4
-    #fmpeg -i timelapse_testingCity/group0/image%d_thumb.jpg -b:v 500000k -vcodec mpeg4 -r 25 preview.mp4
+
+    outputVideo = "../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBlendToOne)
+    
+    ll_utils.convertImagesToVideo(firstImage, outputVideo)
+    
+    

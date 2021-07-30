@@ -10,6 +10,34 @@ LetsLapse has been developed with Pi Zero W and HQ Camera Module in mind, for co
 To proceed, you **must have a Pi and Camera connected**. See the first three pages of https://projects.raspberrypi.org/en/projects/getting-started-with-picamera, until it says "Start up your Raspberry Pi". You don't need to do this yet for this process.
 
 # Install Guide
+
+## Quick Install
+This install implies you know how to install Raspberry OS and connect to your device. If you're unsure, see Detailed Install below.
+
+## 1) Install and connect to device
+Install  **Raspberry Pi OS Lite** on the MicoSD Card / allow SSH and Wifi and log in to device with SSH.
+
+## 2) Download LetsLapse
+Raspberry Pi OS Lite doesn't include GIT. To download ('clone') LetsLapse, we need to install git:
+
+```
+sudo apt install git -y
+```
+Once completed, run the following:
+
+```
+git clone https://github.com/regularsteven/letslapse
+```
+## 3) Install LetsLapse Dependencies 
+
+```
+cd letslapse
+sudo sh install.sh 
+
+```
+## Detailed Install
+
+
 ### 1) Install Raspberry Pi OS 
 See https://www.raspberrypi.org/software/ for the **Raspberry Pi Imager**. A fast SD card is required, and the bigger the better.
 
@@ -145,6 +173,13 @@ If everything above worked, LetsLapse is installed. In a browser on your network
 
 ## Additional Notes 
 For, um, cleaning up... 
+
+### Memory issues with floating numpy stuff
+Killed message can display when trying to blend images - try update swapfile (4096) as test
+Can droubleshoot with dmesg
+```
+sudo pico /etc/dphys-swapfile
+```
 
 ### Dependencies installation 
 ```
