@@ -177,6 +177,13 @@ If everything above worked, LetsLapse is installed. In a browser on your network
 ## Additional Notes 
 For, um, cleaning up... 
 
+### Memory issues with floating numpy stuff
+Killed message can display when trying to blend images - try update swapfile (4096) as test
+Can droubleshoot with dmesg
+```
+sudo pico /etc/dphys-swapfile
+```
+
 ### Possible depencies 
 ```
 sudo apt install python3-pip -y

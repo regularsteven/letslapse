@@ -63,7 +63,7 @@ parser.add_argument('--blendingMethod', help='if not set defaults as "regular", 
 parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds', default="30")
 parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy', default="seconds")
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy', default="yes")
-parser.add_argument('--imagePrefix', help='specify and image name other than image', default="images")
+parser.add_argument('--imagePrefix', help='specify and image name other than image', default="image")
 
 parser.add_argument('--test', help='tests the folder satructure to ensure all images are in place, returns the largest gap between two images')
 
@@ -73,8 +73,6 @@ imagePrefix = args.imagePrefix
 
 
 
-print(imagePrefix)
-exit()
 
 cwd = os.getcwd()
 thisDir = cwd.split("/")[len(cwd.split("/"))-1]
@@ -177,6 +175,10 @@ if args.test == "basic" or args.test == "full" :
 
 
 def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
+    start = time.time()
+    
+    print("blendGroupToOne(imlist, sequenceNo: "+str(sequenceNo)+", migrateExif: "+str()+", outputFolder)")
+    
     # ref to https://stackoverflow.com/questions/17291455/how-to-get-an-average-picture-from-100-pictures-using-pil 
     #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
     # if blendAction = "process" #this is second, go through the text file and blend the actual images
@@ -186,11 +188,11 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     N=len(imlist)
 
     #### Create a numpy array of floats to store the average (assume RGB images)
-    arr=numpy.zeros((h,w,3),numpy.float)
+    arr=numpy.zeros((h,w,3),numpy.float16)
 
     # load exif data from the first image parsed in - we'll use this to put in the output image
     im = Image.open( imlist[0])
-    #print("im.info:")
+    print("first image: "+ imlist[0])
 
 
     if migrateExif == True:
@@ -202,20 +204,23 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     #exit()
     
 
-    #### Build up average pixel intensities, casting each image as an array of floats
+    print("Build up average pixel intensities, casting each image as an array of floats")
     for im in imlist:
+        substart = time.time()
         thisImg = Image.open(im)
         
-        #print(im)
-        imarr=numpy.array(thisImg,dtype=numpy.float)
+        print(im)
+        imarr=numpy.array(thisImg,dtype=numpy.float16)
         arr=arr+imarr/N
-    #### Round values in array and cast as 8-bit integer
+        subend = time.time()
+        print ('time for blendGroupToOne - mix image ' + str(subend - substart) )
+    print("Round values in array and cast as 8-bit integer")
     arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
 
-    #### Generate, save and preview final image
+    print("Generate, save and preview final image")
     out=Image.fromarray(arr,mode="RGB")
     fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+".jpg"
-    #print(fileName)
+    print("fileName: "+fileName)
     
 
     if migrateExif == True:
@@ -223,6 +228,9 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     else: 
         out.save(fileName)
     #out.show()
+    end = time.time()
+    print ('time for blendGroupToOne ' + str(end - start) )
+    
 
 def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif): 
     print("imagesToBlendToOne: "+ str(imagesToBlendToOne))
@@ -265,7 +273,7 @@ def testIfPrime(num):
 
 
 if args.video == None:
-    print("NOT A VIDEO")
+    print("Standard operation - blend images")
     groupByType = args.groupByType #images or seconds
         #if images, this would be a simple group up by images I.e. 10 images and then merge the average pixels of all
         #if seconds, this would require analysis of all images taken betwee the range of seconds (eg 60 seconds) and for many images taken in 60 seconds, bundle up to 1, for 2 images, bundle to one
