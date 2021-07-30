@@ -9,3 +9,4 @@ rebootbreadcrumb.txt
 blend/*
 Deflickered/*
 nohup.out
+__pycache*
