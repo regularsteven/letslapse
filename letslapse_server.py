@@ -77,8 +77,10 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse(shootName, includeRaw, nightMode) :
-    system('nohup python3 ll_timelapse.py --folderName '+shootName+' --raw '+includeRaw+' --nightMode '+nightMode+' &')
+def startTimelapse(shootName, includeRaw, nightMode, ultraBasic) :
+    shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName+' --raw '+includeRaw+' --nightMode '+nightMode+' --ultraBasic '+ultraBasic+' &'
+    print(shellStr)
+    system(shellStr)
     return "startTimelapse function complete"
 
 def shootPreview(query_components) :
@@ -145,6 +147,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 
                 includeRaw = query_components["raw"][0]
                 nightMode = query_components["nightMode"][0]
+                ultraBasic = query_components["ultraBasic"][0]
 
                 
                 jsonResp += ',"shootName":"'+shootName+'"'
@@ -163,7 +166,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
-                    startTimelapse(shootName, includeRaw, nightMode)
+                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic)
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :

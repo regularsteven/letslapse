@@ -18,6 +18,7 @@ import datetime
 from decimal import Decimal
 import argparse
 import math
+import requests
 
 import os.path
 from os import path
@@ -25,6 +26,7 @@ from os import path
 
 #extracted utils for broader use and more component oriented approach
 import ll_brightness
+import ll_utils
 
 
 
@@ -45,35 +47,47 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--folderName', help="name of folder to use")
-parser.add_argument('--imageCount', help='number of images')
-parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg')
+parser.add_argument('--folderName', help="name of folder to use", default="default")
+parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', default="false")
 parser.add_argument('--nightMode', help='nature or streets for brightness offset in low light')
+parser.add_argument('--ultraBasic', help='nature or streets for brightness offset in low light', default="false")
+
 
 
 #example use:
 # python3 ll_timelapse.py --folderName demo
 # python3 ll_timelapse.py --folderName testing --raw false --nightMode city
 
-
-
 args = parser.parse_args()
 
+folderName = args.folderName
+
+if args.ultraBasic == "true":
+    system("mkdir timelapse_"+folderName)
+    system("mkdir timelapse_"+folderName+"/group0")
+    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+folderName+"/group0/image%04d.jpg &"
+    system(sysCommand)
+    exit()
+
+
+
+raw = args.raw
+nightMode = args.nightMode
 print("args")
 print(args)
 
 
-def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore):
+def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore, postID):
     print("storeProgress: folder = "+ folder + ", nightMode="+str(nightMode)+", brightnessTarget="+str(brightnessTarget)+", brightnessScore="+str(brightnessScore) )
     filename = "timelapse_"+folder+".log"
     if path.isfile(filename) == False:
         system("touch "+filename)
     #else:
     f = open(filename, "a")
-    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+"\n")
+    f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+","+str(postID)+"\n")
     f.close()
     
-    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"' >progress.txt")
+    system("echo '"+str(index)+"\n"+folder+"\n"+str(float(shutterSpeed))+"\n"+str(DG)+"\n"+str(AG)+"\n"+str(blueGains)+"\n"+str(redGains)+"\n"+str(raw)+"\n"+str(nightMode)+"\n"+str(brightnessTarget)+"\n"+str(brightnessScore)+"\n"+str(postID)+"' >progress.txt")
 
 
 
@@ -107,20 +121,11 @@ brightnessRange = 10
 
 
 
-folderName = "default"
-if args.folderName == None:
-    print("No folder name specified for project")
-else : 
-    folderName = args.folderName
-    print("normal operation")
 
+includeRaw = ""
+if args.raw == "true":
+    includeRaw = " -r "
 
-
-includeRaw = " -r "
-if args.raw == None:
-    includeRaw = ""
-elif args.raw == "false":
-    includeRaw = ""
 
 if args.nightMode == None:
     nightMode = ""
@@ -128,13 +133,14 @@ else:
     nightMode = args.nightMode
     
 
-#exit()
-
 
 if path.isfile("progress.txt") == False:
-    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, -1)
-    print("New shoot, no progress file, making one... ")
     
+    print("New shoot, no progress file, making one... ")
+    #this is the time to create a new post in the CMS
+    postID = ll_utils.createPost(folderName + "Timelapse")
+    storeProgress (0, folderName, shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, -1, postID)
+
 else :
     print("progress.txt exists - need to get the captureCount from the previous session")
     print("START values:")
@@ -150,8 +156,13 @@ else :
     blueGains = float(Lines[5].strip())
     redGains = float(Lines[6].strip())
 
-    includeRaw = str(Lines[7].strip())
+    raw = str(Lines[7].strip())
+    includeRaw = ""
+    if raw == "true":
+        includeRaw = " -r "
+
     nightMode = str(Lines[8].strip())
+    postID = str(Lines[11].strip())
 
     awbgSettings = str(blueGains)+","+str(redGains)
     #for line in Lines:
@@ -160,9 +171,6 @@ else :
     #print("END values")
 #exit()
 
-
-
-#print(args.imageCount)
 
 
 gainsTolerance = .2 #this is how much difference can exist between gains before we change the gains settings 
@@ -213,6 +221,10 @@ if path.isdir("timelapse_"+folderName) == True :
 else :
     system("mkdir timelapse_"+folderName)
 
+
+
+
+
 startTime = datetime.datetime.now().timestamp()
 print("start time: "+str(startTime))
 for i in range(80000):
@@ -244,7 +256,13 @@ for i in range(80000):
         #if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
         exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
         system(exifCommand)
-    
+
+        #upload the image to the server
+        fileToUpload = filename.replace(".jpg", "_thumb.jpg")
+
+        ll_utils.uploadMedia(fileToUpload, postID)
+        
+        
 
     
     
@@ -259,7 +277,7 @@ for i in range(80000):
         brightnessScore = ll_brightness.brightnessPerceived(img)
         print("brightnessPerceived score: " + str(brightnessScore))
 
-        storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, includeRaw, nightMode, brightnessTarget, brightnessScore)
+        storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore, postID)
 
         #if we're at night, we want he pictures to be a bit darker if shooting in the city
         if nightMode == "city":
@@ -388,36 +406,3 @@ for i in range(80000):
     
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
-
-#------Group A ------
-#test 1: 206.7581 (daylight) 10.3 per image
-#test 2: 205.73247718811035 (7:30pm) 
-#test 3:  205.3529450893402 (7:34pm)
-#------Group B ------ - Removed 1 second sleep at end of loop
-#test 4: 186.32252311706543
-#test 5:185.76070308685303
-#test 6: 187.51620602607727
-
-#------Group C ------ - Removed exif extraction
-#test 7: 139.24690413475037
-#test 8: 141.42937898635864
-#test 9: 141.65500903129578
-
-
-#------Group D ------ - Exif extraction via nuhup
-#test 10: 194.60327076911926
-#test 11: 191.37261486053467
-#test 12: 189.88408708572388
-
-#------Group D ------ - Exif extraction via nuhup with no thumbail size set
-#test 13: 189.375629901886
-#test 14: 196.02005195617676
-#test 15: 190.6642289161682
-
-#------Group D ------ - Removed exif extraction with small thumbnail
-#test 13: 142.09371709823608
-#test 14: 149.758474111557
-#test 15: 143.14420294761658
-
-
-

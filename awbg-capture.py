@@ -1,5 +1,6 @@
 from time import sleep
 from picamera import PiCamera
+from fractions import Fraction
 
 camera = PiCamera(resolution=(1280, 720), framerate=30)
 # Set ISO and meter mode to the desired value
