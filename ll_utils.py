@@ -84,6 +84,7 @@ def convertImagesToVideo(inputImage, outputVideo):
 
 
 def createPost(postName):
+    return -1
     url=letslapseCMS+postsEndpoint
     data = {
         'title':postName,
