@@ -24,6 +24,7 @@ userAuthenticated = False
 
 
 def logInCMS():
+    return -1
     url=letslapseCMS+usersEndpoint+"me"
     print(url)
 
@@ -46,6 +47,7 @@ def logInCMS():
 
 
 def registerCMS():
+    return -1
     url=letslapseCMS+usersEndpoint+"register"
     print(url)
     data = {
@@ -61,6 +63,7 @@ def registerCMS():
 
     
 def pingCMS(): 
+    return -1
     hostname = letslapseDomain
     response = os.system("ping -c 1 " + hostname)
 
@@ -106,6 +109,7 @@ def createPost(postName):
 
 
 def attachPostToImage(postID, imageId):
+    return -1
     url=letslapseCMS+mediaEndpoint+str(imageId)
     print(url)
 
@@ -119,7 +123,7 @@ def attachPostToImage(postID, imageId):
     print(res.text)
 
 def uploadMedia(imgPath, postID):
-
+    return -1
     url=letslapseCMS+mediaEndpoint
 
     data = open(imgPath, 'rb').read()
