@@ -291,6 +291,7 @@ function takeStill(){
 
 var progressTxt = null;
 function parseProgress(displayLatest, execOnStartup){
+    console.log("displayLatest: "+displayLatest)
     jQuery.get('progress.txt', function(data) {
         console.log("data start");
         if (data == ""){
@@ -306,27 +307,40 @@ function parseProgress(displayLatest, execOnStartup){
             }
         }else{
             progressTxt = (data).split("\n");
-            var progressIndex = parseInt(progressTxt[0]);
+            var progressIndex = progressTxt[0];
             var progressName = progressTxt[1];
             //put the current shoot name inside the input box
             $("#shootName").val(progressName);
             $("#shootName").prop( "disabled", true );
-            $("#underexposeNights").prop( "disabled", true );
-            $("#rawTimelapse").prop( "disabled", true );
-            var folderNum = Math.ceil((progressIndex+1)/1000)-1
-            var latestImage = "/timelapse_"+progressName+"/group"+folderNum+"/image"+progressIndex+".jpg";
-            if($("#manualSwitch2").is(":checked") == false){
-                $("#manualSwitch2").click();
+            console.log(progressIndex);
+            if(progressIndex == "ultraBasic"){
+                var latestImage = "/timelapse_"+progressName+"/latest.jpg";
+            }else{
+                $("#underexposeNights").prop( "disabled", true );
+                $("#rawTimelapse").prop( "disabled", true );
+                var folderNum = Math.ceil((parseInt(progressIndex)+1)/1000)-1
+                var latestImage = "/timelapse_"+progressName+"/group"+folderNum+"/image"+parseInt(progressIndex)+".jpg";
+                if($("#manualSwitch2").is(":checked") == false){
+                    $("#manualSwitch2").click();
+                }
             }
             
+            
             if (displayLatest){
-                log("latestImage: "+latestImage);
+                console.log("latestImage: "+latestImage);
                 $("#messageViewport .isShootingTimelapse .imageOpen").attr("onclick", 'window.open("'+latestImage+'", "_blank")');
                 
-                displayStill(makeThumb(latestImage));
-
-                if(progressIndex <10){ //first image is pesky, so we double load it just in case - this will actually display the first 10
+                
+                if(progressIndex == "ultraBasic"){
+                    document.getElementById("imageViewport").style.backgroundImage = "url('#')";
+                    displayStill((latestImage));
+                    console.log("Need to manually refresh");
+                }else if(parseInt(progressIndex) <10){ //first image is pesky, so we double load it just in case - this will actually display the first 10
+                    
+                    displayStill(makeThumb(latestImage));
                     window.setTimeout("parseProgress(true, false)", 2000);
+                }else{
+                    displayStill(makeThumb(latestImage));
                 }
             }
             $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressTxt[0]);
@@ -451,8 +465,13 @@ function startTimelapseDelay(){
         captureRaw = "true";
     }
 
+    var ultraBasic="false";
+    if($("#ultraBasic").is(":checked")){
+        ultraBasic = "true";
+    }
 
-    apiCall += "&raw="+captureRaw+"&nightMode="+nightMode;
+
+    apiCall += "&raw="+captureRaw+"&nightMode="+nightMode+"&ultraBasic="+ultraBasic;
 
     apiCall += "&shootName="+shootName;
     $.getJSON( apiCall)

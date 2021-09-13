@@ -156,7 +156,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     
                     jsonResp += ',"message":"resuming"'
                     #must be continuing the shoot
-                    startTimelapse(shootName, includeRaw, nightMode)
+                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic)
 
                 elif path.isdir("timelapse_"+shootName) == True :
                     print("project with the same name already in use")
@@ -173,6 +173,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :
                 check_kill_process("ll_timelapse.py")
+                check_kill_process("raspistill")
                 if query_components["pauseOrKill"][0] == "kill":
                     system("rm progress.txt")
             elif actionVal == "killstreamer" :
@@ -321,15 +322,23 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 if path.isfile("progress.txt") == True:
     file1 = open('progress.txt', 'r')
     Lines = file1.readlines()
-    shootName = (Lines[1].strip())
 
-    includeRaw = (Lines[7].strip())
-    if includeRaw == "":
-        includeRaw = "false"
-    nightMode = (Lines[8].strip())
+    indexOrUltraBasic = (Lines[0].strip())
+    ultraBasic = "false"
+    shootName = (Lines[1].strip())
+    if indexOrUltraBasic == "ultraBasic":
+        ultraBasic = "true"
+    else:
+        includeRaw = (Lines[7].strip())
+        if includeRaw == "":
+            includeRaw = "false"
+        nightMode = (Lines[8].strip())
+    
+
+    
 
     print("System restarted - progress.txt indicated shoot in progress")
-    startTimelapse(shootName, includeRaw, nightMode)
+    startTimelapse(shootName, includeRaw, nightMode, ultraBasic)
 
 
 # Create an object of the above class

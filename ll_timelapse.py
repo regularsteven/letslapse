@@ -65,7 +65,9 @@ folderName = args.folderName
 if args.ultraBasic == "true":
     system("mkdir timelapse_"+folderName)
     system("mkdir timelapse_"+folderName+"/group0")
-    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+folderName+"/group0/image%04d.jpg &"
+    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+folderName+"/group0/image%04d.jpg  --thumb 600:450:30 --latest timelapse_"+folderName+"/latest.jpg &"
+    #store progress if required
+    system("echo 'ultraBasic\n"+folderName+"' >progress.txt")
     system(sysCommand)
     exit()
 
