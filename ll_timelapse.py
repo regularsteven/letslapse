@@ -92,6 +92,9 @@ if args.ultraBasic == True:
 
 
 raw = args.raw
+
+disableAWBG = args.disableAWBG
+
 nightMode = args.nightMode
 print("args")
 print(args)
