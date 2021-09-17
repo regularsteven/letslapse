@@ -422,33 +422,35 @@ for i in range(80000):
     
 
     #we only want to run this every 10 images, it takes a lot of time and we don't need to do this every image - or when we first start
-    timeToUpdateGains = False
-    if actualIndex%10 == 0 or i == 0:
-        timeToUpdateGains = True
+    if disableAWBG == False:
+
+        timeToUpdateGains = False
+        if actualIndex%10 == 0 or i == 0:
+            timeToUpdateGains = True
 
 
-    if timeToUpdateGains:
-        if updateGainsWithLivePreview == True :
-            if runWithoutCamera == True:
-                print("faking white balance changes, as we don't have the camera available")
-                measuredBlueGains = 1.91015625
-                measuredRedGains = 3.02734375
-                sleep(5)
-            else :
-                camera = PiCamera(resolution=(1280, 720), framerate=30)
-                camera.iso = 400
-                camera.meter_mode = 'backlit'
-                sleep(1)
-                camera.shutter_speed = camera.exposure_speed
-                camera.exposure_mode = 'off'
-                g = camera.awb_gains
-                camera.awb_mode = 'off'
-                camera.awb_gains = g
-                measuredBlueGains = float(g[0])
-                measuredRedGains = float(g[1])
-                camera.close()
-        
-    manageColorGainChanges(measuredBlueGains, measuredRedGains)
+        if timeToUpdateGains:
+            if updateGainsWithLivePreview == True :
+                if runWithoutCamera == True:
+                    print("faking white balance changes, as we don't have the camera available")
+                    measuredBlueGains = 1.91015625
+                    measuredRedGains = 3.02734375
+                    sleep(5)
+                else :
+                    camera = PiCamera(resolution=(1280, 720), framerate=30)
+                    camera.iso = 400
+                    camera.meter_mode = 'backlit'
+                    sleep(1)
+                    camera.shutter_speed = camera.exposure_speed
+                    camera.exposure_mode = 'off'
+                    g = camera.awb_gains
+                    camera.awb_mode = 'off'
+                    camera.awb_gains = g
+                    measuredBlueGains = float(g[0])
+                    measuredRedGains = float(g[1])
+                    camera.close()
+            
+        manageColorGainChanges(measuredBlueGains, measuredRedGains)
     
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
