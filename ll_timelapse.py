@@ -46,10 +46,13 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 parser = argparse.ArgumentParser()
 parser.add_argument('--exitAfter', help="number of seconds to test before quit", default=0, type=int)
 parser.add_argument('--width', help="pixel width to capture, height is .75 ratio", default=4096, type=int)
+parser.add_argument('--useThumbnail', help="can help performance to set to false", default=False, type=bool)
 parser.add_argument('--folderName', help="name of folder to use", default="default")
-parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', default="false")
+parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', default=False, type=bool)
+parser.add_argument('--disableAWBG', help='set to True and no checking of color will take place - NOT recommend for JPEG unless fixed color temp is desired', default=False, type=bool)
+
 parser.add_argument('--nightMode', help='nature or streets for brightness offset in low light')
-parser.add_argument('--ultraBasic', help='nature or streets for brightness offset in low light', default="false")
+parser.add_argument('--ultraBasic', help='nature or streets for brightness offset in low light', default=False, type=bool)
 
 
 #example use:
@@ -70,14 +73,14 @@ start_time = int(time.time())
 
 
 #thumbnailConfig
-useThumbnail = False
+useThumbnail = args.useThumbnail
 thumbnailStr =" "
 if useThumbnail == True:
     thumbnailStr = " --thumb 600:450:30 "
 
 folderName = args.folderName
 
-if args.ultraBasic == "true":
+if args.ultraBasic == True:
     system("mkdir timelapse_"+folderName)
     system("mkdir timelapse_"+folderName+"/group0")
     sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+folderName+"/group0/image%04d.jpg"+thumbnailStr+"--latest timelapse_"+folderName+"/latest.jpg &"
@@ -140,7 +143,7 @@ brightnessRange = 10
 
 
 includeRaw = ""
-if args.raw == "true":
+if args.raw == True:
     includeRaw = " -r "
 
 
@@ -173,7 +176,7 @@ else :
     blueGains = float(Lines[5].strip())
     redGains = float(Lines[6].strip())
 
-    raw = str(Lines[7].strip())
+    raw = bool(Lines[7].strip())
     includeRaw = ""
     if raw == "true":
         includeRaw = " -r "
