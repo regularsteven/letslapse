@@ -150,6 +150,9 @@ if args.raw == True:
     includeRaw = " -r "
 
 
+#print (includeRaw)
+#exit()
+
 if args.nightMode == None:
     nightMode = ""
 else:
@@ -181,7 +184,7 @@ else :
 
     raw = bool(Lines[7].strip())
     includeRaw = ""
-    if raw == "true":
+    if raw == True:
         includeRaw = " -r "
 
     nightMode = str(Lines[8].strip())
