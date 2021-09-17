@@ -153,7 +153,7 @@ def testFiles(testType) :
                     gapBetweenThisAndLastPhoto = thisPhotoTimestamp - lastPhotoTimestamp
                     if gapBetweenThisAndLastPhoto > biggestGapBetweenPhotos :
                         biggestGapBetweenPhotos = gapBetweenThisAndLastPhoto
-                        print("In Progress - new big gap between images found: " + str(biggestGapBetweenPhotos))
+                        print("In Progress - new big gap between images found: " + str(biggestGapBetweenPhotos) + " - from " + str(filename))
                         
                     
                     lastPhotoTimestamp = thisPhotoTimestamp
@@ -204,7 +204,7 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     #exit()
     
 
-    print("Build up average pixel intensities, casting each image as an array of floats")
+    #print("Build up average pixel intensities, casting each image as an array of floats")
     for im in imlist:
         substart = time.time()
         thisImg = Image.open(im)
@@ -213,11 +213,11 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
         imarr=numpy.array(thisImg,dtype=numpy.float16)
         arr=arr+imarr/N
         subend = time.time()
-        print ('time for blendGroupToOne - mix image ' + str(subend - substart) )
-    print("Round values in array and cast as 8-bit integer")
+        #print ('time for blendGroupToOne - mix image ' + str(subend - substart) )
+    #print("Round values in array and cast as 8-bit integer")
     arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
 
-    print("Generate, save and preview final image")
+    #print("Generate, save and preview final image")
     out=Image.fromarray(arr,mode="RGB")
     fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+".jpg"
     print("fileName: "+fileName)
