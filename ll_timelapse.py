@@ -13,6 +13,7 @@ from os import system
 if runWithoutCamera != True: 
     from picamera import PiCamera
     from PIL import Image, ExifTags, ImageStat
+import time
 from time import sleep
 import datetime
 from decimal import Decimal
@@ -47,11 +48,11 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--exitAfter', help="number of seconds to test before quit", default=0, type=int)
 parser.add_argument('--folderName', help="name of folder to use", default="default")
 parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', default="false")
 parser.add_argument('--nightMode', help='nature or streets for brightness offset in low light')
 parser.add_argument('--ultraBasic', help='nature or streets for brightness offset in low light', default="false")
-
 
 
 #example use:
@@ -59,6 +60,10 @@ parser.add_argument('--ultraBasic', help='nature or streets for brightness offse
 # python3 ll_timelapse.py --folderName testing --raw false --nightMode city
 
 args = parser.parse_args()
+
+#for running tests to measure how many pictures are taken in a timeframe
+start_time = int(time.time())
+
 
 folderName = args.folderName
 
@@ -80,7 +85,7 @@ print(args)
 
 
 def storeProgress (index, folder,shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore, postID):
-    print("storeProgress: folder = "+ folder + ", nightMode="+str(nightMode)+", brightnessTarget="+str(brightnessTarget)+", brightnessScore="+str(brightnessScore) )
+    #print("storeProgress: folder = "+ folder + ", nightMode="+str(nightMode)+", brightnessTarget="+str(brightnessTarget)+", brightnessScore="+str(brightnessScore) )
     filename = "timelapse_"+folder+".log"
     if path.isfile(filename) == False:
         system("touch "+filename)
@@ -230,6 +235,17 @@ else :
 startTime = datetime.datetime.now().timestamp()
 print("start time: "+str(startTime))
 for i in range(80000):
+
+
+    #for testing how many images can be taken in a timeframe 
+    if args.exitAfter > 0:
+        cur_time = int(time.time())
+        if cur_time - start_time >= args.exitAfter:
+            print(str(i) + " images captured in "+ str(cur_time - start_time) + " seconds")
+            exit()
+
+
+
     actualIndex = i + preResetCount
     #print("")
     print("-----------------------------------------")
@@ -277,7 +293,8 @@ for i in range(80000):
         img = filename.replace(".jpg", "_thumb.jpg")
 
         brightnessScore = ll_brightness.brightnessPerceived(img)
-        print("brightnessPerceived score: " + str(brightnessScore))
+        if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+            print("brightnessPerceived score: " + str(brightnessScore))
 
         storeProgress (actualIndex, folderName, shutterSpeed, DG, AG, blueGains, redGains, raw, nightMode, brightnessTarget, brightnessScore, postID)
 
@@ -296,9 +313,11 @@ for i in range(80000):
         lowBrightness = brightnessTarget - brightnessRange #140
         highBrightness = brightnessTarget + brightnessRange #160
         
-        print("brightness target: " + str(brightnessTarget))
+        if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+            print("brightness target: " + str(brightnessTarget))
         if brightnessScore < 50 or brightnessScore > 200:
-            print("extreme low brightness, something")
+            if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                print("extreme low brightness, something")
             brightnessChangeOfSignificance = brightnessChangeOfSignificance + 1
             if brightnessChangeOfSignificance > 2 :
                 #we reset this counter, as there's been more than 2 images taken outside of the range, so changes should be made below
@@ -313,7 +332,8 @@ for i in range(80000):
         # we don't want to blow out photos, for example, after a lightning photo
         # equally the camera can have misfires and capture black - if this happens, we don't want horrible overexposed shots
         if brightnessScore < lowBrightness and brightnessChangeOfSignificance == 0:
-            print("low brightness")
+            if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                print("low brightness")
             brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
             shutterSpeed = int(shutterSpeed) / (brightnessTargetAccuracy)
             if(shutterSpeed > maxShutterSpeed): #max shutterspeed of 8 seconds
@@ -323,7 +343,8 @@ for i in range(80000):
                 #if ISO > maxISO : 
                 #    ISO = maxISO
                 #print("too little light, hard coding shutter and making ISO dynamic")
-                print("increasing digital gain, shutter over 2 seconds")
+                if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                    print("increasing digital gain, shutter over 2 seconds")
                 DG = DG + DGIncrement
                 if DG > maxDG : 
                     DG = maxDG
@@ -332,14 +353,17 @@ for i in range(80000):
                 AG = AG + AGIncrement
                 if AG > maxAG : 
                     AG = maxAG
-                print("getting very dark, increment AG: "+str(AG))
+                if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                    print("getting very dark, increment AG: "+str(AG))
 
-            print("new shutterspeed: " + str(shutterSpeed))
+            if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                print("new shutterspeed: " + str(shutterSpeed))
 
 
         if brightnessScore > highBrightness and brightnessChangeOfSignificance == 0:
             brightnessChangeOfSignificance = brightnessChangeOfSignificance+1
-            print("high brightness")
+            if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                print("high brightness")
             brightnessTargetAccuracy = (brightnessScore/brightnessTarget)
             if brightnessScore > 200 :
                 #case where the shot is very over-exposed, as such double the amount of adjustment
@@ -362,10 +386,11 @@ for i in range(80000):
 
             if(shutterSpeed < 100): 
                 shutterSpeed = 100
-                print("too much light, hard coding shutter")
+                if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                    print("too much light, hard coding shutter")
             
-            
-            print("new shutterspeed: " + str(shutterSpeed))
+            if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
+                print("new shutterspeed: " + str(shutterSpeed))
         
         #END of brightness checks - first if it's too low, then if too high
 
