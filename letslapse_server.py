@@ -27,15 +27,23 @@ import argparse
 import ll_browser
 
 
-PORT = 80
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
 
 parser.add_argument('--testing', type=str,
                     help='Local development testing')
+
+parser.add_argument('--port', type=int,
+                    help='specifiy port to run, 80 requires sudo', default = 80)
                     
 args = parser.parse_args()
+
+
+
+
+PORT = args.port
+
 localDev = False
 if args.testing == "True":
     localDev = True
@@ -55,6 +63,8 @@ os.chdir(siteRoot+"/")
 #system("python3 ll_streamer.py")
 
 letslapse_streamerPath = siteRoot+"/ll_streamer.py"    #CHANGE PATH TO LOCATION OF ll_streamer.py
+
+
 
 def letslapse_streamer_thread():
     call(["python3", letslapse_streamerPath])
@@ -77,8 +87,17 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse(shootName, includeRaw, nightMode, ultraBasic) :
-    shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName+' --raw '+includeRaw+' --nightMode '+nightMode+' --ultraBasic '+ultraBasic+' &'
+def startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width) :
+    shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName+' --nightMode '+nightMode
+    if bool(includeRaw):
+        shellStr = shellStr + ' --raw'
+    if bool(ultraBasic):
+        shellStr = shellStr + ' --ultraBasic'
+    if bool(disableAWBG):
+        shellStr = shellStr + ' --disableAWBG'
+    
+    shellStr = shellStr + " --width "+ str(width)
+    shellStr = shellStr + ' &'
     print(shellStr)
     system(shellStr)
     return "startTimelapse function complete"
@@ -95,8 +114,8 @@ def shootPreview(query_components) :
         ss = query_components["ss"][0]
         iso = query_components["iso"][0]
         awbg = query_components["awbg"][0]
-        raw = query_components["raw"][0]
-        settings = " --ss "+ss+" --iso "+iso+" --awbg "+awbg + " --raw "+raw
+        raw = bool(query_components["raw"][0])
+        settings = " --ss "+ss+" --iso "+iso+" --awbg "+awbg + " --raw "+str(raw)
         filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+"_manual.jpg"
 
 
@@ -145,10 +164,34 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 #check to see if this timelapse project is already in place - don't make a new one, if so
                 shootName = query_components["shootName"][0]
 
-                includeRaw = query_components["raw"][0]
-                nightMode = query_components["nightMode"][0]
-                ultraBasic = query_components["ultraBasic"][0]
-
+                if "includeRaw" in query_components:
+                    includeRaw = query_components["includeRaw"][0]
+                    if includeRaw == "false":
+                        includeRaw = False
+                else:
+                    includeRaw = False
+                
+                if "nightMode" in query_components:
+                    nightMode = query_components["nightMode"][0]
+                else:
+                    nightMode = False
+                
+                if "ultraBasic" in query_components:
+                    ultraBasic = query_components["ultraBasic"][0]
+                    if ultraBasic == "false":
+                        ultraBasic = False
+                else:
+                    ultraBasic = False
+                
+                if "disableAWBG" in query_components:
+                    disableAWBG = query_components["disableAWBG"][0]
+                else:
+                    disableAWBG = False
+                
+                if "width" in query_components:
+                    width = query_components["width"][0]
+                else:
+                    width = 4096
                 
                 jsonResp += ',"shootName":"'+shootName+'"'
                 if path.isfile("progress.txt") == True:
@@ -156,7 +199,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     
                     jsonResp += ',"message":"resuming"'
                     #must be continuing the shoot
-                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic)
+                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width)
 
                 elif path.isdir("timelapse_"+shootName) == True :
                     print("project with the same name already in use")
@@ -166,7 +209,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
-                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic)
+                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width)
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :
@@ -226,15 +269,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 jsonResp += ',"gallery":'+str( json.dumps( ll_browser.getShoots("00.jpg") ) )
                 #print(browser.getShoots("0.jpg"))
 
-            elif actionVal == "systemstatus" :
-                #pull all system status for simple startup script
-                #diskspace / free space on device ######## df
-                #device name ######## os.uname()[1]
-                #timelapse in progress ######## ps -f -C python3 | grep lltimelapse.py
-                
-                print(actionVal)
-                #check_kill_process("ll_streamer.py")
-                #startTimelapse(query_components["shootName"][0])
+
             elif actionVal == "quit" :
                 exit()
 
@@ -327,18 +362,18 @@ if path.isfile("progress.txt") == True:
     ultraBasic = "false"
     shootName = (Lines[1].strip())
     if indexOrUltraBasic == "ultraBasic":
-        ultraBasic = "true"
+        ultraBasic = True
     else:
         includeRaw = (Lines[7].strip())
         if includeRaw == "":
-            includeRaw = "false"
+            includeRaw = False
         nightMode = (Lines[8].strip())
     
-
-    
+    disableAWBG = False
+    width = 4096
 
     print("System restarted - progress.txt indicated shoot in progress")
-    startTimelapse(shootName, includeRaw, nightMode, ultraBasic)
+    startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width)
 
 
 # Create an object of the above class

@@ -46,13 +46,13 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 parser = argparse.ArgumentParser()
 parser.add_argument('--exitAfter', help="number of seconds to test before quit", default=0, type=int)
 parser.add_argument('--width', help="pixel width to capture, height is .75 ratio", default=4096, type=int)
-parser.add_argument('--useThumbnail', help="can help performance to set to false", default=False, type=bool)
+parser.add_argument('--useThumbnail', help="can help performance to set to false", action='store_true')
 parser.add_argument('--folderName', help="name of folder to use", default="default")
-parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', default=False, type=bool)
-parser.add_argument('--disableAWBG', help='set to True and no checking of color will take place - NOT recommend for JPEG unless fixed color temp is desired', default=False, type=bool)
+parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', action='store_true')
+parser.add_argument('--disableAWBG', help='set to True and no checking of color will take place - NOT recommend for JPEG unless fixed color temp is desired', action='store_true')
 
 parser.add_argument('--nightMode', help='nature or streets for brightness offset in low light')
-parser.add_argument('--ultraBasic', help='nature or streets for brightness offset in low light', default=False, type=bool)
+parser.add_argument('--ultraBasic', help='nature or streets for brightness offset in low light', action='store_true')
 
 
 #example use:
@@ -60,8 +60,6 @@ parser.add_argument('--ultraBasic', help='nature or streets for brightness offse
 # python3 ll_timelapse.py --folderName testing --raw false --nightMode city
 
 args = parser.parse_args()
-
-
 
 width = args.width
 height = width * .75
@@ -87,7 +85,7 @@ if args.ultraBasic == True:
     #store progress if required
     system("echo 'ultraBasic\n"+folderName+"' >progress.txt")
     system(sysCommand)
-    exit()
+    #exit()
 
 
 

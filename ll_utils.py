@@ -22,6 +22,17 @@ letslapseCMSOnline = False
 userAuthenticated = False
 
 
+def convert_str_bool(s):
+    trues = ["true", "True", "1"]
+    print(trues)
+    print(s)
+    if str(s) in trues:
+        return True
+    else: 
+        return False
+
+
+
 
 def logInCMS():
     return -1

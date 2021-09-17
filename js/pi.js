@@ -460,21 +460,25 @@ function startTimelapseDelay(){
         nightMode="city";
     }
 
-    var captureRaw="false";
+    apiCall += "&nightMode="+nightMode;
+
     if($("#rawTimelapse").is(":checked")){
-        captureRaw = "true";
+        apiCall += "&includeRaw=true";
     }
 
-    var ultraBasic="false";
     if($("#ultraBasic").is(":checked")){
-        ultraBasic = "true";
+        apiCall+= "&ultraBasic=true";
     }
 
-
-    apiCall += "&raw="+captureRaw+"&nightMode="+nightMode+"&ultraBasic="+ultraBasic;
-
+    if($("#disableAWBG").is(":checked")){
+        apiCall+= "&disableAWBG=true";
+    }
+    apiCall += "&width="+$("#resolution").val();
+    
     apiCall += "&shootName="+shootName;
-    $.getJSON( apiCall)
+
+    console.log(apiCall);
+    $.getJSON( apiCall )
     .done(function( json ) {
         console.log( json );
         log("timelapse: "+json.shootName + " - " + json.message);
