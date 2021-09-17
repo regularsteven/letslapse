@@ -31,10 +31,6 @@ import ll_utils
 
 
 
-width = 4056
-height = int(width * .75)
-resolution = " -w "+str(width)+" -h "+str(height)
-
 
 blueGains = 3.484375
 redGains = 1.44921875
@@ -49,6 +45,7 @@ awbgSettings = str(blueGains)+","+str(redGains) #for natural light, great in day
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--exitAfter', help="number of seconds to test before quit", default=0, type=int)
+parser.add_argument('--width', help="pixel width to capture, height is .75 ratio", default=4096, type=int)
 parser.add_argument('--folderName', help="name of folder to use", default="default")
 parser.add_argument('--raw', help='setting a value will include a raw image in the jpeg', default="false")
 parser.add_argument('--nightMode', help='nature or streets for brightness offset in low light')
@@ -61,16 +58,29 @@ parser.add_argument('--ultraBasic', help='nature or streets for brightness offse
 
 args = parser.parse_args()
 
+
+
+width = args.width
+height = width * .75
+resolution = " -w "+str(width)+" -h "+str(height)
+
+
 #for running tests to measure how many pictures are taken in a timeframe
 start_time = int(time.time())
 
+
+#thumbnailConfig
+useThumbnail = False
+thumbnailStr =" "
+if useThumbnail == True:
+    thumbnailStr = " --thumb 600:450:30 "
 
 folderName = args.folderName
 
 if args.ultraBasic == "true":
     system("mkdir timelapse_"+folderName)
     system("mkdir timelapse_"+folderName+"/group0")
-    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+folderName+"/group0/image%04d.jpg  --thumb 600:450:30 --latest timelapse_"+folderName+"/latest.jpg &"
+    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+folderName+"/group0/image%04d.jpg"+thumbnailStr+"--latest timelapse_"+folderName+"/latest.jpg &"
     #store progress if required
     system("echo 'ultraBasic\n"+folderName+"' >progress.txt")
     system(sysCommand)
@@ -250,7 +260,7 @@ for i in range(80000):
     #print("")
     print("-----------------------------------------")
     #print("taking a photo")
-    raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm --thumb 600:450:30 -ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
+    raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm"+thumbnailStr+"-ag 1 -sa -10 -dg "+str(DG)+" -ag "+str(AG)+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + resolution
     #--
     if path.isdir("timelapse_"+folderName+"/group"+str(int(actualIndex/1000))) == False :
         system("mkdir timelapse_"+folderName+"/group"+str(int(actualIndex/1000)))
@@ -271,14 +281,16 @@ for i in range(80000):
     else :
         system(raspiCommand)
         print(raspiCommand)
-        #if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
-        exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
-        system(exifCommand)
+        
+        if useThumbnail == True:
+            #if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
+            exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
+            system(exifCommand)
 
         #upload the image to the server
-        fileToUpload = filename.replace(".jpg", "_thumb.jpg")
+        #fileToUpload = filename.replace(".jpg", "_thumb.jpg")
 
-        ll_utils.uploadMedia(fileToUpload, postID)
+        #ll_utils.uploadMedia(fileToUpload, postID)
         
         
 
@@ -290,7 +302,11 @@ for i in range(80000):
     else :
 
         #analyse the thumbnail as this is a smaller file, should be faster - however, we need to now make a thumbnail for every image - which might make things slower
-        img = filename.replace(".jpg", "_thumb.jpg")
+        if useThumbnail == True:
+            img = filename.replace(".jpg", "_thumb.jpg")
+        else: 
+            img = filename
+        
 
         brightnessScore = ll_brightness.brightnessPerceived(img)
         if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
