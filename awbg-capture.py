@@ -1,6 +1,5 @@
 from time import sleep
 from picamera import PiCamera
-from fractions import Fraction
 
 camera = PiCamera(resolution=(1280, 720), framerate=30)
 # Set ISO and meter mode to the desired value
@@ -14,4 +13,7 @@ camera.exposure_mode = 'off'
 g = camera.awb_gains
 camera.awb_mode = 'off'
 camera.awb_gains = g
-print("Captured AWB at:", g)
+blueGains = float(g[0])
+redGains = float(g[1])
+print("Blue and Red Gains")
+print(str(blueGains)+","+str(redGains))

@@ -24,6 +24,7 @@ import argparse
 
 #my own custom utilities extracted for simpler structure 
 import ll_browser
+import ll_utils
 
 
 
@@ -235,7 +236,9 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     print(isStreamerRunning)
                     print("checkStreamerIsRunningCount" + str(checkStreamerIsRunningCount))
                 
-
+            elif actionVal == "getAWBG" :
+                measuredGains = ll_utils.detectAWBG()
+                jsonResp += ',"awbg":"'+ str(float(measuredGains[0])) +','+str(float(measuredGains[1]))+'"'
             elif actionVal == "uptime" :
                 uptime = subprocess.check_output("echo $(awk '{print $1}' /proc/uptime)", shell=True)
                 hostname = os.uname()[1]

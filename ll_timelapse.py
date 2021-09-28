@@ -452,20 +452,10 @@ for i in range(80000):
                     measuredRedGains = 3.02734375
                     sleep(5)
                 else :
-                    camera = PiCamera(resolution=(1280, 720), framerate=30)
-                    camera.iso = 400
-                    camera.meter_mode = 'backlit'
-                    sleep(1)
-                    camera.shutter_speed = camera.exposure_speed
-                    camera.exposure_mode = 'off'
-                    g = camera.awb_gains
-                    camera.awb_mode = 'off'
-                    camera.awb_gains = g
-                    measuredBlueGains = float(g[0])
-                    measuredRedGains = float(g[1])
-                    camera.close()
+                    measuredGains = ll_utils.detectAWBG()
+                    
             
-        manageColorGainChanges(measuredBlueGains, measuredRedGains)
+        manageColorGainChanges(float(measuredGains[0]), float(measuredGains[1]))
     
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("END time: "+str(totalTime))
