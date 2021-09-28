@@ -3,7 +3,8 @@ from os import listdir, walk, path
 from os.path import isfile, join
 
 #
-
+# if debugging is required,
+# python3 ll_browser.py and uncomment the last line to print results in command line
 
 def getShoots(filterBy):
     #1 - go through the top level
@@ -15,23 +16,29 @@ def getShoots(filterBy):
 
     for t in range(len(topLevel)):
         #look in each and and find the timelapse_ folders - these are the shoot folders
+        
         if "timelapse_" in topLevel[t] and ".log" not in topLevel[t]:
+            #print(t)
             shootImages = []
             thisShoot = topLevel[t]
             #print("-"+thisShoot)
             shootLevel = sorted(os.listdir(siteRoot+"/"+thisShoot))
+            #print(shootLevel)
             for s in range(len(shootLevel)):
                 thisGroup = shootLevel[s]
-                #print("--"+thisGroup)
-                groupLevel = sorted(os.listdir(siteRoot+"/"+thisShoot + "/"+thisGroup))
-                for f in range(len(groupLevel)):
-                    #need to include the first image as this wont be met by the filter
-                    if f == 0:
-                        shootImages.append(thisGroup.replace('group','')+"/"+groupLevel[f].replace('.jpg',''))
-                    elif filterBy in groupLevel[f]:
-                        #print("---"+groupLevel[f])
-                        shootImages.append(thisGroup.replace('group','')+"/"+groupLevel[f].replace('.jpg',''))
-                #
+                if "group" in thisGroup: #this avoids latest.jpg issues as created from ultraBasic
+                
+                    #print("--"+thisGroup)
+                    groupLevel = sorted(os.listdir(siteRoot+"/"+thisShoot + "/"+thisGroup))
+                    #print(groupLevel)
+                    for f in range(len(groupLevel)):
+                        #need to include the first image as this wont be met by the filter
+                        if f == 0:
+                            shootImages.append(thisGroup.replace('group','')+"/"+groupLevel[f].replace('.jpg',''))
+                        elif filterBy in groupLevel[f]:
+                            #print("---"+groupLevel[f])
+                            shootImages.append(thisGroup.replace('group','')+"/"+groupLevel[f].replace('.jpg',''))
+                    #
             #shootFolders.append()
             shootNameAndImages = [thisShoot]
             shootNameAndImages.append(shootImages)
@@ -52,3 +59,6 @@ def getStills():
             jpegs.append(topLevel[t].replace('.jpg',''))
 
     return jpegs
+
+ 
+#print(getShoots("00.jpg"))
