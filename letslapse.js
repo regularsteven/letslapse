@@ -326,6 +326,12 @@ function parseProgress(displayLatest, execOnStartup){
             $("#disableAWBG").prop( "disabled", true );
             document.getElementById("disableAWBG").checked = progressData.disableAWBG;
 
+            $("#startingGains").prop( "disabled", true );
+            //document.getElementById("disableAWBG").checked = progressData.disableAWBG;
+
+            $("#useThumbnail").prop( "disabled", true );
+            document.getElementById("useThumbnail").checked = progressData.useThumbnail;
+
             $("#ultraBasic").prop( "disabled", true );
             document.getElementById("ultraBasic").checked = progressData.ultraBasic;
             
@@ -437,6 +443,9 @@ function stopTimelapse(){
                     $("#ultraBasic").prop( "disabled", false );
                     $("#disableAWBG").prop( "disabled", false );
                     $("#resolution").prop( "disabled", false );
+
+                    $("#useThumbnail").prop( "disabled", false );
+                    $("#startingGains").prop( "disabled", false );
                     if($("#manualSwitch2").is(":checked")){
                         //nothing
                     }else{
@@ -480,6 +489,15 @@ function startTimelapseDelay(){
     }
     if($("#underexposeNights").is(":checked")){
         apiCall += "&underexposeNights=true";
+    }
+
+    if($("#useThumbnail").is(":checked")){
+        apiCall += "&useThumbnail=true";
+    }
+
+
+    if($("#startingGains").val().match(",") !== null){
+        apiCall += "&startingGains="+$("#startingGains").val();
     }
 
     
@@ -617,6 +635,24 @@ function getShoots(filter){
         var err = textStatus + ", " + error;
         console.log( "Request Failed: " + err );
         log("getShoots ERROR: "+ error)
+    });
+}
+
+function getGains(returnTo){
+    var apiCall = "/?action=getAWBG";
+    $.getJSON( apiCall)
+    .done(function( json ) {
+        console.log( "JSON Data: ");
+        console.log(json);
+        //displayStill("latest.jpg");
+        //log("getShoots: "+ json.gallery);
+        $("#"+returnTo).val(json.awbg);
+
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+        log("getGains ERROR: "+ error)
     });
 }
 

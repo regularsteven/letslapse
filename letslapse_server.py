@@ -84,8 +84,12 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width) :
+def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail) :
     shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName
+
+    if startingGains is not False:
+        shellStr += " --startingGains " + startingGains
+
     if bool(includeRaw):
         shellStr = shellStr + ' --raw'
     if bool(ultraBasic):
@@ -94,6 +98,8 @@ def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disable
         shellStr = shellStr + ' --disableAWBG'
     if bool(underexposeNights):
         shellStr = shellStr + ' --underexposeNights'
+    if bool(useThumbnail):
+        shellStr = shellStr + ' --useThumbnail'
     
     shellStr = shellStr + " --width "+ str(width)
     shellStr = shellStr + ' &'
@@ -192,13 +198,24 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 else:
                     width = 4096
                 
+                if "startingGains" in query_components:
+                    startingGains = query_components["startingGains"][0]
+                else:
+                    startingGains = False
+                
+                if "useThumbnail" in query_components:
+                    useThumbnail = query_components["useThumbnail"][0]
+                else:
+                    useThumbnail = False
+                
+                
                 jsonResp += ',"shootName":"'+shootName+'"'
                 if path.isfile("progress.txt") == True:
                     jsonResp += ',"error":false'
                     
                     jsonResp += ',"message":"resuming"'
                     #must be continuing the shoot
-                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width)
+                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail)
 
                 elif path.isdir("timelapse_"+shootName) == True :
                     print("project with the same name already in use")
@@ -208,7 +225,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
-                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width)
+                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail)
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :

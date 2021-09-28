@@ -61,6 +61,11 @@ parser.add_argument(
     action='store_true')
 
 parser.add_argument(
+    '--startingGains',
+    help='Set the kick off gains values for blue and red colour channels (default FLASE, no value required to set TRUE)',
+    default="3.484375,", type=str)
+
+parser.add_argument(
     '--disableAWBG',
     help='Stop AWBG color correction. NOT recommend for JPEG ONLY unless RAW color correction is planned (default FLASE, no value required to set TRUE)',
     action='store_true')
@@ -179,8 +184,8 @@ if path.isfile("progress.txt") == False:
     progressData["DG"] = 1 #start low
     progressData["AG"] = 1 #start low
         
-    progressData["blueGains"] = 3.484375
-    progressData["redGains"] = 1.44921875
+    progressData["blueGains"] = float(args.startingGains.split(",")[0])
+    progressData["redGains"] = float(args.startingGains.split(",")[1])
 
     #for natural light, great in daylight and moonlight - too yellow in street artificial light
         #at a starting point, set the red and blue values to the above, but at the end of every photo, do a test to see how far we are off the white balance

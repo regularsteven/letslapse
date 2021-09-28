@@ -215,7 +215,7 @@
                         <div class="col-4">
                           <strong>AWBG:</strong>
                           <input id="awbg" name="awbg" class="form-control" placeholder="e.g. 3,2"></input>
-                          <sub>Gain values from sensor for ble and red channels</sub>
+                          <sub>Gain values from sensor for blue and red channels <a href="javascript:getGains('awbg');" >auto-detect</a></sub>
                         </div>
                       </div>
             
@@ -314,7 +314,7 @@
                       </div>
                     </div>
                     </div>
-
+                    
                     <div class="row">
                       <div class="col-sm-6">
                       <div class="form-group form-check ">
@@ -324,11 +324,32 @@
                       </div>
                       </div>
                       <div class="col-sm-6">
+                        
+                        <div class="form-group form-check ">
+                          
+                          <input type="checkbox" class="form-check-input" id="useThumbnail">
+                          <label class="form-check-label" for="useThumbnail">Include Thumbnails</label>
+                          <br> <small class="text-muted">Include a 600x450px thumbnail for better previews, has performance impact</small>
+                        </div>
+
+                      </div>
+                    </div>
+
+                    <div class="row">
+                      <div class="col-sm-6">
+                      <div class="form-group form-check ">
+                        <label class="form-check-label" for="startingGains">Starting AWBG</label>
+                        <input type="text" class="form-control" id="startingGains" placeholder="1,1" value="1,1">
+                        <br><small class="text-muted">Set starting blue and red gains <a href="javascript:getGains('startingGains');" >auto-detect</a></small>
+                      </div>
+                      </div>
+                      <div class="col-sm-6">
                         <div class="form-group form-check ">
                           <input type="checkbox" class="form-check-input" id="disableAWBG">
                           <label class="form-check-label" for="disableAWBG">Disable Color Correction</label>
                           <br> <small class="text-muted">Disables AWBG analysis to capture images faster</small>
                         </div>
+                       
                       </div>
                     </div>
 
