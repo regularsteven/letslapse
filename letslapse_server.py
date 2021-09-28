@@ -10,7 +10,6 @@ for line in os.popen("ps -f -C python3 | grep letslapse_server.py"):
 from time import sleep
 import subprocess
 import io
-import logging
 import socketserver
 from datetime import datetime
 from threading import Condition
@@ -38,9 +37,6 @@ parser.add_argument('--port', type=int,
                     help='specifiy port to run, 80 requires sudo', default = 80)
                     
 args = parser.parse_args()
-
-
-
 
 PORT = args.port
 
@@ -87,14 +83,16 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width) :
-    shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName+' --nightMode '+nightMode
+def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width) :
+    shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName
     if bool(includeRaw):
         shellStr = shellStr + ' --raw'
     if bool(ultraBasic):
         shellStr = shellStr + ' --ultraBasic'
     if bool(disableAWBG):
         shellStr = shellStr + ' --disableAWBG'
+    if bool(underexposeNights):
+        shellStr = shellStr + ' --underexposeNights'
     
     shellStr = shellStr + " --width "+ str(width)
     shellStr = shellStr + ' &'
@@ -171,10 +169,10 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 else:
                     includeRaw = False
                 
-                if "nightMode" in query_components:
-                    nightMode = query_components["nightMode"][0]
+                if "underexposeNights" in query_components:
+                    underexposeNights = query_components["underexposeNights"][0]
                 else:
-                    nightMode = False
+                    underexposeNights = False
                 
                 if "ultraBasic" in query_components:
                     ultraBasic = query_components["ultraBasic"][0]
@@ -199,7 +197,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     
                     jsonResp += ',"message":"resuming"'
                     #must be continuing the shoot
-                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width)
+                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width)
 
                 elif path.isdir("timelapse_"+shootName) == True :
                     print("project with the same name already in use")
@@ -209,7 +207,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
-                    startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width)
+                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width)
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :
@@ -355,26 +353,8 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 
 #on strartup, if progress.txt is in place, then a boot has happened and the shoot should restart
 if path.isfile("progress.txt") == True:
-    file1 = open('progress.txt', 'r')
-    Lines = file1.readlines()
-
-    indexOrUltraBasic = (Lines[0].strip())
-    ultraBasic = "false"
-    shootName = (Lines[1].strip())
-    if indexOrUltraBasic == "ultraBasic":
-        ultraBasic = True
-    else:
-        includeRaw = (Lines[7].strip())
-        if includeRaw == "":
-            includeRaw = False
-        nightMode = (Lines[8].strip())
-    
-    disableAWBG = False
-    width = 4096
-
     print("System restarted - progress.txt indicated shoot in progress")
-    startTimelapse(shootName, includeRaw, nightMode, ultraBasic, disableAWBG, width)
-
+    system("nohup python3 ll_timelapse.py &")
 
 # Create an object of the above class
 handler_object = MyHttpRequestHandler

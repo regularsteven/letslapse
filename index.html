@@ -14,7 +14,7 @@
 <script src="/js/vue.min.js"></script>
 
 <script src="js/jquery-3.6.0.min.js"></script>
-<script src="/js/pi.js"></script>
+<script src="/letslapse.js"></script>
 
 
 <script src="/js/bootstrap.min.js"></script>
@@ -23,8 +23,6 @@
 
 
   <!-- main nav at header-->
-  
-
 
 
 
@@ -282,52 +280,71 @@
                   <label class="custom-control-label" for="manualSwitch2">Manual Control</label>
                 </div>
 
-                <div class="collapse" id="manualControls2">
-                  <div class="container">
-                    <label for="shootName">Shoot Name</label>
-                    <input type="text" id="shootName" placeholder="StreetsOfPrague" class="form-control">
-                  </div>
-                  <div class="container">
-                    <div class="form-group form-check form-control-lg">
-                      <input type="checkbox" class="form-check-input" id="ultraBasic">
-                      <label class="form-check-label" for="ultraBasic">UltraBasic<sub><br />uses 'raspistill -t 0 -tl 3000 -o shoot-name'</sub></label>
+                <div class="collapse container" id="manualControls2">
+                  <div class="row">
+                    <div class="col-sm-12 form-group">
+                      <label for="shootName" class="form-check-label" >Shoot Name</label>
+                      <input type="text" id="shootName" placeholder="StreetsOfPrague" class="form-control">
                     </div>
+                    
                   </div>
-                  <div class="container">
-                    <div class="form-group form-check form-control-lg">
-                      <input type="checkbox" class="form-check-input" id="disableAWBG">
-                      <label class="form-check-label" for="disableAWBG">Disable Color Correction<sub><br /> - disables AWBG analysis to capture images faster</sub></label>
-                    </div>
-                  </div>
-                  <div class="container">
+                  
 
-                      <div class="form-group form-check form-control-lg">
+                    <div class="row">
+                      <div class="col-sm-12 form-group">
+                        <label class="form-check-label" for="resolution">JPEG Resolution</label>
+                      <select name="resolution" id="resolution" class="form-select form-control" aria-label="Default select example">
+                        <option value="4096">4K Resolution - 4096x3072px</option>
+                        <option value="2560">2.5K Resolution - 2560x1920px</option>
+                        <option value="1920">HD Resolution - 1920x1440</option>
+                        <option value="720">SD Low Resolution - 720x540</option>
+                        <option value="360">Minimum Resolution - 360x270 (useful for RAW processing only)</option>
+                      </select>
+                      <small class="text-muted">RAW files included inside of JPEG at full resolution</small>
+                    </div>
+                    </div>
+
+
+                  <div class="row">
+                    <div class="col-sm-12">
+                      <div class="form-group form-check">
                         <input type="checkbox" class="form-check-input" id="underexposeNights" checked="true">
-                        <label class="form-check-label" for="underexposeNights">Underexpose Nights <sub><br />Ideal for city shooting where bright lights can overexpose</sub></label>
+                        <label class="form-check-label" for="underexposeNights">Underexpose Nights </label>
+                        <br><small class="text-muted">Ideal for city shooting where bright lights can overexpose</small>
                       </div>
+                    </div>
+                    </div>
 
-</div>
-                    <div class="container">
-                      <div class="form-group form-check form-control-lg">
+                    <div class="row">
+                      <div class="col-sm-6">
+                      <div class="form-group form-check ">
                         <input type="checkbox" class="form-check-input" id="rawTimelapse">
-                        <label class="form-check-label" for="rawTimelapse">Capture Raw <sub><br />Experimental, will make much larger files</sub></label>
+                        <label class="form-check-label" for="rawTimelapse">Capture Raw </label>
+                          <br><small class="text-muted">Experimental, will make much larger files</small>
+                      </div>
+                      </div>
+                      <div class="col-sm-6">
+                        <div class="form-group form-check ">
+                          <input type="checkbox" class="form-check-input" id="disableAWBG">
+                          <label class="form-check-label" for="disableAWBG">Disable Color Correction</label>
+                          <br> <small class="text-muted">Disables AWBG analysis to capture images faster</small>
+                        </div>
                       </div>
                     </div>
 
-                    <div class="container">
-                      
-                        <select name="resolution" id="resolution"  class="form-select form-control" aria-label="Default select example">
-                          <option value="4096">4K Resolution - 4096x3072px</option>
-                          <option value="2560">2.5K Resolution - 2560x1920px</option>
-                          <option value="1920">HD Resolution - 1920x1440</option>
-                          <option value="720">SD Low Resolution - 720x540</option>
-                          <option value="360">Minimum Resolution - 360x270 (useful for RAW processing only)</option>
-                        </select>
-                        <label class="form-check-label" for="resolution">JPEG Resolution <sub><br />RAW files included inside of JPEG at full resolution</sub></label>
 
+
+                    
+                    
+                    <div class="row">
+                      <div class="col-sm-12">
+                      <div class="form-group form-check ">
+                        <input type="checkbox" class="form-check-input" id="ultraBasic">
+                        <label class="form-check-label" for="ultraBasic">UltraBasic</label>
+                          <br /><small class="text-muted">Uses 'raspistill -t 0 -tl 3000 -o shoot-name'</small>
+                      </div>
                     </div>
-                    
-                    
+                    </div>
                   
                     
                 </div>

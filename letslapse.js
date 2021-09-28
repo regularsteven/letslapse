@@ -289,11 +289,11 @@ function takeStill(){
   });
 }
 
-var progressTxt = null;
+var progressData = null;
 function parseProgress(displayLatest, execOnStartup){
     console.log("displayLatest: "+displayLatest)
     jQuery.get('progress.txt', function(data) {
-        console.log("data start");
+        console.log("data response");
         if (data == ""){
             log("parseProgress: No progress.txt, indicating this is brand new");
             if(execOnStartup == false){
@@ -306,20 +306,37 @@ function parseProgress(displayLatest, execOnStartup){
                 displayStatus("isReady");
             }
         }else{
-            progressTxt = (data).split("\n");
-            var progressIndex = progressTxt[0];
-            var progressName = progressTxt[1];
+            progressData = JSON.parse(data);
+
+            var progressName = progressData.folderName;
+            console.log(progressData);
             //put the current shoot name inside the input box
             $("#shootName").val(progressName);
             $("#shootName").prop( "disabled", true );
-            console.log(progressIndex);
-            if(progressIndex == "ultraBasic"){
+
+            $("#resolution").prop("disabled", true);
+            $("#resolution").val( progressData.width );
+
+            $("#underexposeNights").prop( "disabled", true );
+            document.getElementById("underexposeNights").checked = progressData.underexposeNights;
+
+            $("#rawTimelapse").prop( "disabled", true );
+            document.getElementById("rawTimelapse").checked = progressData.raw;
+
+            $("#disableAWBG").prop( "disabled", true );
+            document.getElementById("disableAWBG").checked = progressData.disableAWBG;
+
+            $("#ultraBasic").prop( "disabled", true );
+            document.getElementById("ultraBasic").checked = progressData.ultraBasic;
+            
+            if(progressData.ultraBasic){
+                //tbc
                 var latestImage = "/timelapse_"+progressName+"/latest.jpg";
             }else{
-                $("#underexposeNights").prop( "disabled", true );
-                $("#rawTimelapse").prop( "disabled", true );
-                var folderNum = Math.ceil((parseInt(progressIndex)+1)/1000)-1
-                var latestImage = "/timelapse_"+progressName+"/group"+folderNum+"/image"+parseInt(progressIndex)+".jpg";
+                
+                var folderNum = Math.ceil((progressData.index+1)/1000)-1;
+
+                var latestImage = "/timelapse_"+progressData.folderName+"/group"+folderNum+"/image"+progressData.index+".jpg";
                 if($("#manualSwitch2").is(":checked") == false){
                     $("#manualSwitch2").click();
                 }
@@ -331,19 +348,19 @@ function parseProgress(displayLatest, execOnStartup){
                 $("#messageViewport .isShootingTimelapse .imageOpen").attr("onclick", 'window.open("'+latestImage+'", "_blank")');
                 
                 
-                if(progressIndex == "ultraBasic"){
+                if(progressData.ultraBasic){
                     document.getElementById("imageViewport").style.backgroundImage = "url('#')";
                     displayStill((latestImage));
                     console.log("Need to manually refresh");
-                }else if(parseInt(progressIndex) <10){ //first image is pesky, so we double load it just in case - this will actually display the first 10
+                }else if(progressData.index <10){ //first image is pesky, so we double load it just in case - this will actually display the first 10
                     
                     displayStill(makeThumb(latestImage));
-                    window.setTimeout("parseProgress(true, false)", 2000);
+                    //window.setTimeout("parseProgress(true, false)", 2000);
                 }else{
                     displayStill(makeThumb(latestImage));
                 }
             }
-            $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressTxt[0]);
+            $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressData.index);
             
             if(execOnStartup){
                 startTimelapseDelay();
@@ -361,6 +378,9 @@ function timelapseMode(startOrStop){
 
         $("#underexposeNights").prop( "disabled", true );
         $("#rawTimelapse").prop( "disabled", true );
+
+        $("#resolution").prop("disabled", true);
+        
 
 
         $("#timelapse-tab").click();
@@ -414,6 +434,9 @@ function stopTimelapse(){
                     $("#shootName").prop( "disabled", false );
                     $("#underexposeNights").prop( "disabled", false );
                     $("#rawTimelapse").prop( "disabled", false );
+                    $("#ultraBasic").prop( "disabled", false );
+                    $("#disableAWBG").prop( "disabled", false );
+                    $("#resolution").prop( "disabled", false );
                     if($("#manualSwitch2").is(":checked")){
                         //nothing
                     }else{
@@ -455,12 +478,11 @@ function startTimelapseDelay(){
         
         apiCall += "&mode=auto";
     }
-    var nightMode="normal";
     if($("#underexposeNights").is(":checked")){
-        nightMode="city";
+        apiCall += "&underexposeNights=true";
     }
 
-    apiCall += "&nightMode="+nightMode;
+    
 
     if($("#rawTimelapse").is(":checked")){
         apiCall += "&includeRaw=true";
