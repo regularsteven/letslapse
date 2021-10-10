@@ -34,10 +34,10 @@ import ll_utils
 #python3 /home/steven/Documents/dev/letslapse/blend.py --groupBy 45 --groupByType seconds --makeMP4 yes
 
 # *************** Create image sequence based on images being GROUPED BY IMAGE NUMBER **********************
-#python3 /home/steven/Documents/dev/letslapse/blend.py --groupBy 10 --groupByType images --makeMP4 yes
+#python3 /home/steven/Documents/dev/letslapse/blend.py --groupBy 30 --groupByType images --makeMP4 yes
 
 #windows - run from directory in with images
-#py -3 E:\Clients\letslapse\longexposure.py --groupBy 60 --groupByType seconds --makeMP4 no
+#py -3 E:\Clients\letslapse\longexposure.py --groupBy 30 --groupByType seconds --makeMP4 no
 
 
 #standard way to run this would be put all requred images inside a folder, then run:
@@ -242,6 +242,8 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
         print("no need to process these images, as we're just rendering them as one simple playback")
     else :
         for a in range(int((fullImageSet) / imagesToBlendToOne) ):
+
+            a = (a + 2204 + 1) #if there's a prevoius session run, and images already processed, this can make it start with an offset (just use the number of images created as '10')
             imlist = []
             for i in range(imagesToBlendToOne):
                 #print(i)

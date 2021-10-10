@@ -1,7 +1,7 @@
 from os import system
 import requests, os, json
 from time import sleep
-from picamera import PiCamera
+#from picamera import PiCamera
 
 
 
