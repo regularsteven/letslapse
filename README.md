@@ -294,3 +294,18 @@ Can the following be removed?
 * pulseaudio
 * xserver related
 
+
+
+
+# for local development
+## best to run of a pi zero or pi4 (for increased performance) and mount locally
+
+To mount, ensure directory is in place of the last attribute
+```
+sshfs pi@192.168.7.2:/home/pi/letslapse ~/Documents/dev/letslapse-pi4dev/
+
+```
+To unmount:
+```
+umount ~/Documents/dev/letslapse-pi4dev/
+```
