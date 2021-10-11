@@ -302,7 +302,7 @@ Can the following be removed?
 
 To mount, ensure directory is in place of the last attribute
 ```
-sshfs pi@192.168.7.2:/home/pi/letslapse ~/Documents/dev/letslapse-pi4dev/
+sshfs pi@10.3.141.224:/home/pi/letslapse ~/Documents/dev/letslapse-pi4dev/
 
 ```
 To unmount:

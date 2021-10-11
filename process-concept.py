@@ -5,6 +5,11 @@ import argparse
 from pidng.core import RPICAM2DNG
 
 
+#egtting this going requires a few pi installs
+#pip install cython
+# see "Installation from source on Linux/macOS" from https://pypi.org/project/rawpy/
+
+#sudo apt-get install imagemagick
 
 curWorkDir = os.getcwd()
 
