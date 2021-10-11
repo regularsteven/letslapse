@@ -85,7 +85,7 @@ def check_kill_process(pstring):
 
 
 def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail) :
-    shellStr = 'nohup python3 ll_timelapse.py --folderName '+shootName
+    shellStr = 'nohup python3 ll_timelapse.py --shootName '+shootName
 
     if startingGains is not False:
         shellStr += " --startingGains " + startingGains

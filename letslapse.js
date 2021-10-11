@@ -308,7 +308,7 @@ function parseProgress(displayLatest, execOnStartup){
         }else{
             progressData = JSON.parse(data);
 
-            var progressName = progressData.folderName;
+            var progressName = progressData.shootName;
             console.log(progressData);
             //put the current shoot name inside the input box
             $("#shootName").val(progressName);
@@ -342,7 +342,7 @@ function parseProgress(displayLatest, execOnStartup){
                 
                 var folderNum = Math.ceil((progressData.index+1)/1000)-1;
 
-                var latestImage = "/timelapse_"+progressData.folderName+"/group"+folderNum+"/image"+progressData.index+".jpg";
+                var latestImage = "/timelapse_"+progressData.shootName+"/group"+folderNum+"/image"+progressData.index+".jpg";
                 if($("#manualSwitch2").is(":checked") == false){
                     $("#manualSwitch2").click();
                 }

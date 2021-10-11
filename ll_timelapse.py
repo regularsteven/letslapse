@@ -21,6 +21,7 @@ import json
 import os.path
 from os import path
 
+import sqlite3
 
 #extracted utils for broader use and more component oriented approach
 import ll_brightness
@@ -29,8 +30,8 @@ import ll_utils
 
 
 #example use:
-# python3 ll_timelapse.py --folderName demo
-# python3 ll_timelapse.py --folderName testing --raw false --underexposeNights
+# python3 ll_timelapse.py --shootName demo
+# python3 ll_timelapse.py --shootName testing --raw false --underexposeNights
 # python3 ll_timelapse.py --exitAfter 30
 # python3 ll_timelapse.py --exitAfter 30 --useThumbnail
 
@@ -51,7 +52,7 @@ parser.add_argument(
     action='store_true')
 
 parser.add_argument(
-    '--folderName',
+    '--shootName',
     help="Name of folder to use for shoot (default 'default', str",
     default="default")
 
@@ -63,7 +64,7 @@ parser.add_argument(
 parser.add_argument(
     '--startingGains',
     help='Set the kick off gains values for blue and red colour channels (default FLASE, no value required to set TRUE)',
-    default="3.484375,", type=str)
+    default="1,1", type=str)
 
 parser.add_argument(
     '--disableAWBG',
@@ -86,63 +87,20 @@ args = parser.parse_args()
 progressData = {}
 
 
-
-progressData["width"] = args.width
-progressData["height"] = progressData["width"] * .75
-
-
 #for running tests to measure how many pictures are taken in a timeframe
 start_time = int(time.time())
 
 
-#thumbnailConfig
+
 progressData["useThumbnail"] = args.useThumbnail
-
-progressData["folderName"] = args.folderName
-
-
-
-
+progressData["shootName"] = args.shootName
 progressData["disableAWBG"] = args.disableAWBG
-
 progressData["underexposeNights"] = args.underexposeNights
+progressData["includeRAW"] = args.raw
 
+progressData["width"] = args.width
+progressData["height"] = progressData["width"] * .75
 
-def storeProgress (progressData):
-    #print("storeProgress: folder = "+ folder + ", nightMode="+str(nightMode)+", brightnessTarget="+str(brightnessTarget)+", brightnessScore="+str(brightnessScore) )
-    #store log
-    #filename = "timelapse_"+folder+".log"
-    #if path.isfile(filename) == False:
-    #    system("touch "+filename)
-    #else:
-    #f = open(filename, "a")
-    #f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+","+str(postID)+"\n")
-    #f.close()
-
-    with open("progress.txt", "w") as outputfile:
-        json.dump(progressData, outputfile)
-
-
-
-
-def ultraBasicShoot():
-    system("mkdir timelapse_"+progressData["folderName"])
-    system("mkdir timelapse_"+progressData["folderName"]+"/group0")
-    thumbnailStr = " "
-    if progressData["useThumbnail"]:
-        thumbnailStr = " --thumb 600:450:30 "
-
-    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+progressData["folderName"]+"/group0/image%04d.jpg"+thumbnailStr+"--latest timelapse_"+progressData["folderName"]+"/latest.jpg &"
-    #store progress if required
-    progressData["ultraBasic"] = args.ultraBasic
-
-    storeProgress(progressData)
-    #system("echo 'ultraBasic\n"+progressData["folderName"]+"' >progress.txt")
-    system(sysCommand)
-    exit()
-
-if args.ultraBasic == True:
-    ultraBasicShoot()
 
 
 
@@ -164,70 +122,200 @@ underexposeNightsBrightnessTarget = 80
 brightnessRange = 10
 
 
-includeRaw = ""
-if args.raw == True:
-    includeRaw = " -r "
-
-
-#print (includeRaw)
-#exit()
-
-
-if path.isfile("progress.txt") == False:
-    
-    print("New shoot, no progress file, making one... ")
-    #this is the time to create a new post in the CMS
-    #postID = ll_utils.createPost(folderName + "Timelapse")
-    
-    progressData["index"] = 0
-    progressData["shutterSpeed"] = 1000 #random number, should take a test auto shot to be better set from kick-off
-    progressData["DG"] = 1 #start low
-    progressData["AG"] = 1 #start low
-        
-    progressData["blueGains"] = float(args.startingGains.split(",")[0])
-    progressData["redGains"] = float(args.startingGains.split(",")[1])
-
-    #for natural light, great in daylight and moonlight - too yellow in street artificial light
-        #at a starting point, set the red and blue values to the above, but at the end of every photo, do a test to see how far we are off the white balance
-        #in a similar way to exposure, make minor adjustments - but only if there's two or more than 3 white balance readings that are out of range of the default
-        #white balance settings
-
-    progressData["raw"] = args.raw
-    progressData["underexposeNights"] = args.underexposeNights
-    progressData["brightnessTarget"] = brightnessTarget
-    progressData["brightnessScore"] = -1 #no value
-    progressData["posidID"] = -1 #no value
-
-    storeProgress (progressData)
-
-else :
-    
-    with open('progress.txt') as json_file:
-        progressData = json.load(json_file)
-
-    print(progressData)
-    if "ultraBasic" not in progressData:
-        progressData["ultraBasic"] = False
-
-    if progressData["ultraBasic"] == True:
-        print("ultraBasic in place")
-        ultraBasicShoot()
-    else:
-        print("some issue")
-        preResetCount = progressData["index"] #index on load to ensure files are not overridden
-    #for line in Lines:
-        #lineCount += 1
-        #print((line.strip()))
-    #print("END values")
-#exit()
-
-
-
 gainsTolerance = .2 #this is how much difference can exist between gains before we change the gains settings 
 
 redGainsChangeOfSignificance = 0
 blueGainsChangeOfSignificance = 0
 brightnessChangeOfSignificance = 0
+
+includeRaw = ""
+if args.raw == True:
+    includeRaw = " -r "
+
+
+
+#connect to database file
+dbconnect = sqlite3.connect("letslapse.db")
+
+def configureDB(progressData):
+    #create the core table if it's not there
+    cursor = dbconnect.cursor()
+    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_project "
+    sqlStr += "(id INTEGER PRIMARY KEY, shootName VARCHAR (255), startTime DATETIME, endTime DATETIME, includeRAW BOOLEAN, useThumbnail BOOLEAN, disableAWBG BOOLEAN, underexposeNights BOOLEAN, width INTEGER, height INTEGER);"
+    cursor.execute(sqlStr)
+    dbconnect.commit()
+
+    #create the table for each individual shoot
+    cursor = dbconnect.cursor()
+    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shots "
+    sqlStr += "(id INTEGER PRIMARY KEY, timelapse_project_id INTEGER, captureIndex INTEGER, captureTime DATETIME, "
+    sqlStr += "shutterSpeed INTEGER, analogueGains DECIMAL, digitalGains DECIMAL, blueGains DECIMAL, redGains DECIMAL, brightnessTarget DECIMAL, brightnessScore DECIMAL);"
+    #print(sqlStr)
+    cursor.execute(sqlStr)
+    dbconnect.commit()
+
+
+    #to refer to cursor response by name, following is requried
+    dbconnect.row_factory = sqlite3.Row
+
+    cursor = dbconnect.cursor()
+    sqlStr = "SELECT * FROM timelapse_project WHERE shootName = '" + str(progressData["shootName"]) +"';"
+    cursor.execute(sqlStr)
+    dbconnect.commit()
+    
+    thisShootId = -1
+    for row in cursor:
+        thisShootId = row['id']
+        progressData['id'] = row['id']
+        progressData['shootName'] = row['shootName']
+        progressData['startTime'] = row['startTime']
+        progressData['includeRAW'] = row['includeRAW']
+        progressData['useThumbnail'] = row['useThumbnail']
+        progressData['disableAWBG'] = row['disableAWBG']
+        progressData['underexposeNights'] = row['underexposeNights']
+        progressData['width'] = row['width']
+        progressData['height'] = row['height']
+
+        print("shoot in progress")
+        
+
+    if thisShootId == -1:
+        #add this shoot if it's not there
+        cursor = dbconnect.cursor()
+        #execute insetr statement
+        now = datetime.datetime.now()
+        dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+        sqlStr = "INSERT INTO timelapse_project "
+        sqlStr += "VALUES ("
+        sqlStr += "NULL"
+        sqlStr += ",'" + str(progressData["shootName"]) + "'"
+        sqlStr += ",'" + str(dt_string) + "'"
+        sqlStr += ",'" + '' + "'" #endTime
+        sqlStr += ",'" + str(progressData["includeRAW"]) + "'"
+        sqlStr += ",'" + str(progressData["useThumbnail"]) + "'"
+        sqlStr += ",'" + str(progressData["disableAWBG"]) + "'"
+        sqlStr += ",'" + str(progressData["underexposeNights"]) + "'"
+        sqlStr += ",'" + str(progressData["width"]) + "'"
+        sqlStr += ",'" + str(progressData["height"]) + "'"
+        sqlStr += ");"
+        #print(sqlStr)
+        cursor.execute(sqlStr)
+
+        dbconnect.commit()
+        
+        progressData['id'] = cursor.lastrowid
+
+        #set up default values for use in this new shoot
+        progressData["captureIndex"] = 0
+        progressData["shutterSpeed"] = 1000 #random number, should take a test auto shot to be better set from kick-off
+        progressData["digitalGains"] = 1 #start low
+        progressData["analogueGains"] = 1 #start low
+            
+        progressData["blueGains"] = float(args.startingGains.split(",")[0])
+        progressData["redGains"] = float(args.startingGains.split(",")[1])
+        
+        progressData["underexposeNights"] = args.underexposeNights
+        progressData["brightnessTarget"] = brightnessTarget
+        progressData["brightnessScore"] = -1 #no value
+        #progressData["posidID"] = -1 #no value
+
+
+    else:
+        print("getting most updated data from db")
+        dbconnect.row_factory = sqlite3.Row
+
+        cursor = dbconnect.cursor()
+        sqlStr = "SELECT * FROM timelapse_shots WHERE timelapse_project_id = "+str(thisShootId)+" ORDER BY captureIndex DESC LIMIT 1;"
+        cursor.execute(sqlStr)
+        dbconnect.commit()
+        for row in cursor:
+            progressData['captureIndex'] = row['captureIndex']
+            progressData['shutterSpeed'] = row['shutterSpeed']
+            progressData['analogueGains'] = row['analogueGains']
+            progressData['digitalGains'] = row['digitalGains']
+            progressData['blueGains'] = row['blueGains']
+            progressData['redGains'] = row['redGains']
+            progressData['brightnessTarget'] = row['brightnessTarget']
+            progressData['brightnessScore'] = row['brightnessScore']
+
+
+
+    print(progressData)
+    #exit()
+
+configureDB(progressData)
+
+
+
+
+def storeProgress (progressData):
+    print("Store Progress")
+    print(progressData)
+    #store log
+    #filename = "timelapse_"+folder+".log"
+    #if path.isfile(filename) == False:
+    #    system("touch "+filename)
+    #else:
+    #f = open(filename, "a")
+    #f.write("image"+str(index)+".jpg,"+str(shutterSpeed)+","+str(DG)+","+str(AG)+","+str(blueGains)+","+str(redGains)+","+str(raw)+","+str(nightMode)+","+str(brightnessTarget)+","+str(brightnessScore)+","+str(postID)+"\n")
+    #f.close()
+
+    
+    cursor = dbconnect.cursor()
+    #execute insetr statement
+    now = datetime.datetime.now()
+    dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
+    sqlStr = "INSERT INTO timelapse_shots "
+    sqlStr += "VALUES ("
+    sqlStr += "NULL"
+    sqlStr += ",'" + str(progressData["id"]) + "'"
+    sqlStr += ",'" + str(progressData["captureIndex"]) + "'"
+    sqlStr += ",'" + str(dt_string) + "'"
+    sqlStr += ",'" + str(progressData["shutterSpeed"]) + "'"
+    sqlStr += ",'" + str(progressData["analogueGains"]) + "'"
+    sqlStr += ",'" + str(progressData["digitalGains"]) + "'"
+    sqlStr += ",'" + str(progressData["blueGains"]) + "'"
+    sqlStr += ",'" + str(progressData["redGains"]) + "'"
+    sqlStr += ",'" + str(progressData["brightnessTarget"]) + "'"
+    sqlStr += ",'" + str(progressData["brightnessScore"]) + "'"
+    
+    sqlStr += ");"
+    print(sqlStr)
+    cursor.execute(sqlStr)
+
+    dbconnect.commit()
+    #print(cursor)
+    
+
+    #need to kill this off, but it should stay in place until sqlite is fully integrated
+    #with open("progress.txt", "w") as outputfile:
+    #    json.dump(progressData, outputfile)
+
+
+
+
+def ultraBasicShoot():
+    system("mkdir timelapse_"+progressData["shootName"])
+    system("mkdir timelapse_"+progressData["shootName"]+"/group0")
+    thumbnailStr = " "
+    if progressData["useThumbnail"]:
+        thumbnailStr = " --thumb 600:450:30 "
+
+    sysCommand = "nohup raspistill -t 0 -tl 3000 -o timelapse_"+progressData["shootName"]+"/group0/image%04d.jpg"+thumbnailStr+"--latest timelapse_"+progressData["shootName"]+"/latest.jpg &"
+    #store progress if required
+    progressData["ultraBasic"] = args.ultraBasic
+
+    storeProgress(progressData)
+    #system("echo 'ultraBasic\n"+progressData["shootName"]+"' >progress.txt")
+    system(sysCommand)
+    exit()
+
+if args.ultraBasic == True:
+    ultraBasicShoot()
+
+
+
+
 
 def manageColorGainChanges (measuredBlueGains, measuredRedGains) :
     global redGainsChangeOfSignificance,blueGainsChangeOfSignificance
@@ -265,10 +353,10 @@ def manageColorGainChanges (measuredBlueGains, measuredRedGains) :
 
     
 
-if path.isdir("timelapse_"+progressData["folderName"]) == True :
+if path.isdir("timelapse_"+progressData["shootName"]) == True :
     print("directory already created")
 else :
-    system("mkdir timelapse_"+progressData["folderName"])
+    system("mkdir timelapse_"+progressData["shootName"])
 
 
 startTime = datetime.datetime.now().timestamp()
@@ -282,9 +370,6 @@ for i in range(80000):
             print(str(i) + " images captured in "+ str(cur_time - start_time) + " seconds")
             exit()
 
-    actualIndex = i + preResetCount
-    progressData["index"] = actualIndex
-    
     print("-----------------------------------------")
     #print("taking a photo")
     awbgSettings = str(progressData["blueGains"])+","+str(progressData["redGains"]) 
@@ -292,13 +377,13 @@ for i in range(80000):
     if progressData["useThumbnail"]:
         thumbnailStr = " --thumb 600:450:30 "
         
-    raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm"+thumbnailStr+"-ag 1 -sa -10 -dg "+str(progressData["DG"])+" -ag "+str(progressData["AG"])+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + " -w "+str(progressData["width"])+" -h "+str(progressData["height"])
+    raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm"+thumbnailStr+"-ag 1 -sa -10 -dg "+str(progressData["digitalGains"])+" -ag "+str(progressData["analogueGains"])+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + " -w "+str(progressData["width"])+" -h "+str(progressData["height"])
     #--
-    if path.isdir("timelapse_"+progressData["folderName"]+"/group"+str(int(actualIndex/1000))) == False :
-        system("mkdir timelapse_"+progressData["folderName"]+"/group"+str(int(actualIndex/1000)))
+    if path.isdir("timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000))) == False :
+        system("mkdir timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000)))
         print("need to create group folder")
 
-    filename = "timelapse_"+progressData["folderName"]+"/group"+str(int(actualIndex/1000))+"/image"+str(actualIndex)+".jpg"
+    filename = "timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000))+"/image"+str(progressData["captureIndex"])+".jpg"
     
 
     fileOutput = ""
@@ -315,7 +400,7 @@ for i in range(80000):
         print(raspiCommand)
         
         if progressData["useThumbnail"] == True:
-            #if actualIndex%100 == 0: #only extract the thumbnail for every 100 images
+            #if progressData["captureIndex"]%100 == 0: #only extract the thumbnail for every 100 images
             exifCommand = "exiftool -b -ThumbnailImage "+filename+" > "+filename.replace(".jpg", "_thumb.jpg")
             system(exifCommand)
 
@@ -324,7 +409,10 @@ for i in range(80000):
 
         #ll_utils.uploadMedia(fileToUpload, postID)
 
+    progressData["captureIndex"] = progressData["captureIndex"] + 1
     
+
+
 
     if runWithoutCamera == True:
         print("normally, analysis of the image happens here, but in this testing, we don't")
@@ -387,16 +475,16 @@ for i in range(80000):
                 #print("too little light, hard coding shutter and making ISO dynamic with virtualization of ag and dg")
                 if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
                     print("increasing digital gain, shutter over 2 seconds")
-                progressData["DG"] = progressData["DG"] + DGIncrement
-                if progressData["DG"] > maxDG : 
-                    progressData["DG"] = maxDG
+                progressData["digitalGains"] = progressData["digitalGains"] + DGIncrement
+                if progressData["digitalGains"] > maxDG : 
+                    progressData["digitalGains"] = maxDG
 
             if progressData["shutterSpeed"] > 6000000 :
-                progressData["AG"] = progressData["AG"] + AGIncrement
-                if progressData["AG"] > maxAG : 
-                    progressData["AG"] = maxAG
+                progressData["analogueGains"] = progressData["analogueGains"] + AGIncrement
+                if progressData["analogueGains"] > maxAG : 
+                    progressData["analogueGains"] = maxAG
                 if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
-                    print("getting very dark, increment AG: "+str(progressData["AG"]))
+                    print("getting very dark, increment AG: "+str(progressData["analogueGains"]))
 
             if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
                 print("new shutterspeed: " + str(progressData["shutterSpeed"]))
@@ -414,14 +502,14 @@ for i in range(80000):
             progressData["shutterSpeed"] = int(progressData["shutterSpeed"]) / (brightnessTargetAccuracy)
 
             if progressData["shutterSpeed"] < 2000000: #if we're getting faster than a 2 second exposure
-                progressData["DG"] = progressData["DG"] - DGIncrement
-                if progressData["DG"] < 1 : 
-                    progressData["DG"] = 1
+                progressData["digitalGains"] = progressData["digitalGains"] - DGIncrement
+                if progressData["digitalGains"] < 1 : 
+                    progressData["digitalGains"] = 1
 
             if progressData["shutterSpeed"] < 6000000 :
-                progressData["AG"] = progressData["AG"] - AGIncrement
-                if progressData["AG"] < 1 : 
-                    progressData["AG"] = 1
+                progressData["analogueGains"] = progressData["analogueGains"] - AGIncrement
+                if progressData["analogueGains"] < 1 : 
+                    progressData["analogueGains"] = 1
 
             if(progressData["shutterSpeed"] < 100): 
                 progressData["shutterSpeed"] = 100
@@ -445,7 +533,7 @@ for i in range(80000):
     if progressData["disableAWBG"] == False:
 
         timeToUpdateGains = False
-        if actualIndex%10 == 0 or i == 0:
+        if progressData["captureIndex"]%10 == 0 or i == 0:
             timeToUpdateGains = True
 
 

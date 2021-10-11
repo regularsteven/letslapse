@@ -4,6 +4,11 @@ import os
 import argparse
 from pidng.core import RPICAM2DNG
 
+import sqlite3
+
+
+
+
 
 #egtting this going requires a few pi installs
 #pip install cython
@@ -78,9 +83,9 @@ def stackImages():
     os.system(shellStr)
 
 
-extractToDNG()
-convertFromDNG()
-stackImages()
+#extractToDNG()
+#convertFromDNG()
+#stackImages()
 
 
 #convert image10.jpg image11.jpg image12.jpg image13.jpg image14.jpg image15.jpg image16.jpg image17.jpg image18.jpg image19.jpg image20.jpg -evaluate-sequence mean output.jpg
