@@ -236,14 +236,15 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
     print("imagesToBlendToOne: "+ str(imagesToBlendToOne))
     print("fullImageSet:")
     print(fullImageSet)
+    
     print(os.getcwd())
     
     if imagesToBlendToOne == 1:
         print("no need to process these images, as we're just rendering them as one simple playback")
     else :
-        for a in range(int((fullImageSet) / imagesToBlendToOne) ):
+        for a in range(int((fullImageSet) / (imagesToBlendToOne)) ):
 
-            a = (a + 2204 + 1) #if there's a prevoius session run, and images already processed, this can make it start with an offset (just use the number of images created as '10')
+            #a = (a + 2204 + 1) #if there's a prevoius session run, and images already processed, this can make it start with an offset (just use the number of images created as '10')
             imlist = []
             for i in range(imagesToBlendToOne):
                 #print(i)
@@ -263,14 +264,17 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
             blendGroupToOne(imlist, a, migrateExif, outputFolder)
 
 def testIfPrime(num): 
-    for i in range(2, int(num/2)+1):
+    
+    return True
+
+    #for i in range(2, (int(num)/2)+1):
         # If num is divisible by any number between
         # 2 and n / 2, it is not prime
-        if (num % i) == 0:
-            return False
-            break
-    else:
-        return True
+    #    if (num % i) == 0:
+    #        return False
+    #        break
+    #else:
+    #    return True
 
 
 
@@ -337,7 +341,7 @@ else:
     
     #possible mode=dirty - this would recompress JPGs if testIfPrime(num) == False
 
-    groupBy = args.groupBy
+    groupBy = int(args.groupBy)
     groupByType = "images" #must be images as the files don't have metadata which is required for grouping by seconds
 
     calculatedGroupBy = 0
