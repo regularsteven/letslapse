@@ -1,10 +1,16 @@
 from os import system
 import requests, os, json
 from time import sleep
-from picamera import PiCamera
 
+def module_exists(module_name):
+    try:
+        __import__(module_name)
+    except ImportError:
+        return False
+    else:
+        return True
 
-
+module_exists("PiCamera")
 
 def detectAWBG():
     print("running camera to detect color temperature")
