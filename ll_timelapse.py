@@ -103,7 +103,6 @@ progressData["height"] = progressData["width"] * .75
 
 
 
-
 preResetCount = 0 #this is the value that will be overriden in the even there was a crash or bad exit / restart / battery change
 maxShutterSpeed = 25000000 #20 seconds in ver low light 
 #DG and AG values for virtualisation of ISO - ISO doesn't seem to work with -ex night and adds overhead in processing time,
@@ -140,7 +139,7 @@ dbconnect = sqlite3.connect("letslapse.db")
 def configureDB(progressData):
     #create the core table if it's not there
     cursor = dbconnect.cursor()
-    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_project "
+    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shoots "
     sqlStr += "(id INTEGER PRIMARY KEY, shootName VARCHAR (255), startTime DATETIME, endTime DATETIME, includeRAW BOOLEAN, useThumbnail BOOLEAN, disableAWBG BOOLEAN, underexposeNights BOOLEAN, width INTEGER, height INTEGER);"
     cursor.execute(sqlStr)
     dbconnect.commit()
@@ -148,7 +147,7 @@ def configureDB(progressData):
     #create the table for each individual shoot
     cursor = dbconnect.cursor()
     sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shots "
-    sqlStr += "(id INTEGER PRIMARY KEY, timelapse_project_id INTEGER, captureIndex INTEGER, captureTime DATETIME, "
+    sqlStr += "(id INTEGER PRIMARY KEY, timelapse_shoot_id INTEGER, captureIndex INTEGER, captureTime DATETIME, "
     sqlStr += "shutterSpeed INTEGER, analogueGains DECIMAL, digitalGains DECIMAL, blueGains DECIMAL, redGains DECIMAL, brightnessTarget DECIMAL, brightnessScore DECIMAL);"
     #print(sqlStr)
     cursor.execute(sqlStr)
@@ -159,7 +158,7 @@ def configureDB(progressData):
     dbconnect.row_factory = sqlite3.Row
 
     cursor = dbconnect.cursor()
-    sqlStr = "SELECT * FROM timelapse_project WHERE shootName = '" + str(progressData["shootName"]) +"';"
+    sqlStr = "SELECT * FROM timelapse_shoots WHERE shootName = '" + str(progressData["shootName"]) +"';"
     cursor.execute(sqlStr)
     dbconnect.commit()
     
@@ -185,7 +184,7 @@ def configureDB(progressData):
         #execute insetr statement
         now = datetime.datetime.now()
         dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-        sqlStr = "INSERT INTO timelapse_project "
+        sqlStr = "INSERT INTO timelapse_shoots "
         sqlStr += "VALUES ("
         sqlStr += "NULL"
         sqlStr += ",'" + str(progressData["shootName"]) + "'"
@@ -225,7 +224,7 @@ def configureDB(progressData):
         dbconnect.row_factory = sqlite3.Row
 
         cursor = dbconnect.cursor()
-        sqlStr = "SELECT * FROM timelapse_shots WHERE timelapse_project_id = "+str(thisShootId)+" ORDER BY captureIndex DESC LIMIT 1;"
+        sqlStr = "SELECT * FROM timelapse_shots WHERE timelapse_shoot_id = "+str(thisShootId)+" ORDER BY captureIndex DESC LIMIT 1;"
         cursor.execute(sqlStr)
         dbconnect.commit()
         for row in cursor:
@@ -240,11 +239,10 @@ def configureDB(progressData):
 
 
 
-    print(progressData)
+    #print(progressData)
     #exit()
 
 configureDB(progressData)
-
 
 
 
@@ -316,7 +314,6 @@ if args.ultraBasic == True:
 
 
 
-
 def manageColorGainChanges (measuredBlueGains, measuredRedGains) :
     global redGainsChangeOfSignificance,blueGainsChangeOfSignificance
     print("auto-measured gains: "+str(measuredBlueGains) + ", "+str(measuredRedGains))
@@ -361,22 +358,31 @@ else :
 
 startTime = datetime.datetime.now().timestamp()
 print("start time: "+str(startTime))
-for i in range(80000):
+captureTimelapse = True
+while captureTimelapse is True:
 
+
+
+
+    
     #for testing how many images can be taken in a timeframe 
     if args.exitAfter > 0:
         cur_time = int(time.time())
         if cur_time - start_time >= args.exitAfter:
-            print(str(i) + " images captured in "+ str(cur_time - start_time) + " seconds")
-            exit()
+            print(str(progressData["captureIndex"]) + " images captured in "+ str(cur_time - start_time) + " seconds")
+            captureTimelapse = False
 
     print("-----------------------------------------")
     #print("taking a photo")
     awbgSettings = str(progressData["blueGains"])+","+str(progressData["redGains"]) 
     thumbnailStr = " "
-    if progressData["useThumbnail"]:
+    if progressData["useThumbnail"] == True:
+        print(bool(progressData["useThumbnail"]))
         thumbnailStr = " --thumb 600:450:30 "
-        
+
+    
+
+ 
     raspiDefaults = "raspistill -t 1 "+includeRaw+"-bm"+thumbnailStr+"-ag 1 -sa -10 -dg "+str(progressData["digitalGains"])+" -ag "+str(progressData["analogueGains"])+" -awb off -awbg "+awbgSettings+" -co -15 -ex off" + " -w "+str(progressData["width"])+" -h "+str(progressData["height"])
     #--
     if path.isdir("timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000))) == False :
@@ -533,9 +539,8 @@ for i in range(80000):
     if progressData["disableAWBG"] == False:
 
         timeToUpdateGains = False
-        if progressData["captureIndex"]%10 == 0 or i == 0:
+        if progressData["captureIndex"]%10 == 0:
             timeToUpdateGains = True
-
 
         if timeToUpdateGains:
             if updateGainsWithLivePreview == True :
@@ -545,10 +550,12 @@ for i in range(80000):
                     measuredRedGains = 3.02734375
                     sleep(5)
                 else :
+                    print("detectAWBG - calculate captured gains from camera")
                     measuredGains = ll_utils.detectAWBG()
+                    print(measuredGains)
                     
             
-        manageColorGainChanges(float(measuredGains[0]), float(measuredGains[1]))
+            manageColorGainChanges(float(measuredGains[0]), float(measuredGains[1]))
     
 totalTime = datetime.datetime.now().timestamp() - startTime
-print("END time: "+str(totalTime))
+print("EXIT - END time: "+str(totalTime))
