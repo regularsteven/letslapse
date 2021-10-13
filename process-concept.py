@@ -3,6 +3,7 @@ import imageio
 import os
 import argparse
 import datetime
+from time import sleep
 from pidng.core import RPICAM2DNG
 
 import sqlite3
@@ -57,11 +58,27 @@ def getIdForShoot(shootName):
 
     return timelapse_shoot_id
 
+
+def getTotalNumberOfImagesCaptured(timelapse_shoot_id):
+
+    dbconnect.row_factory = sqlite3.Row
+    cursor = dbconnect.cursor()
+    sqlStr = "select captureIndex from timelapse_shots where timelapse_shoot_id = " + str(timelapse_shoot_id) + " order by captureIndex desc limit 1;"
+    #print(sqlStr)
+
+    cursor.execute(sqlStr)
+    dbconnect.commit()
+    totalCaptures = -1
+    for row in cursor:
+        totalCaptures = (row['captureIndex'])
+
+    return totalCaptures
+
 def getLastStackedImage(timelapse_shoot_id): #this returns the last stacked image and might be 1 in the event no process has taken place (i.e. start)
     dbconnect.row_factory = sqlite3.Row
     cursor = dbconnect.cursor()
     sqlStr = "SELECT * FROM timelapse_stacks WHERE timelapse_shoot_id = '" + str(timelapse_shoot_id) + "' ORDER BY id DESC LIMIT 1;"
-    print(sqlStr)
+    #print(sqlStr)
 
     cursor.execute(sqlStr)
     dbconnect.commit()
@@ -78,7 +95,7 @@ def getImagesToStack(timelapse_shoot_id, fromImageIndex):
     dbconnect.row_factory = sqlite3.Row
     cursor = dbconnect.cursor()
     sqlStr = "SELECT * FROM timelapse_shots WHERE timelapse_shoot_id = " + str(timelapse_shoot_id) + " AND captureIndex = "+str(fromImageIndex+1)+";"
-    print(sqlStr)
+    #print(sqlStr)
     
     cursor.execute(sqlStr)
     dbconnect.commit()
@@ -183,16 +200,26 @@ def storeStackImageDB(timelapse_shoot_id, shotIndex, captureTime, timeframe, sta
     sqlStr += "NULL, "
     sqlStr += str(timelapse_shoot_id) +", "+str(shotIndex) +", '"+str(captureTime) +"', "+str(timeframe) +", "+str(stackFromJPEG) +", "+str(processingTime) +", "+str(startImageIndex) +", "+str(endImageIndex)
     sqlStr += ");"
-    print(sqlStr)
+    #print(sqlStr)
     cursor.execute(sqlStr)
 
     dbconnect.commit()
+
+    if (endImageIndex + 50) < totalNumberOfImagesCaptured:
+        #we still have plenty of images to process
+        return True
+    else:
+        sleep(60)
+        print("WHOA SLOW DOWN - Don't have images to process")
+        return False
+
 
 def stackImages(timelapse_shoot_id, imagesToStack, shotIndex):
     shotIndex = shotIndex+1
     stackedOutputFolder = "timelapse_"+args.shootName+"/stacked"
     if os.path.isdir(stackedOutputFolder) == True :
-        print(stackedOutputFolder +" folder already created")
+        #print(stackedOutputFolder +" folder already created")
+        print("processing "+stackedOutputFolder+"/image" + str(shotIndex) + ".jpg")
     else :
         print(stackedOutputFolder +" folder now created")
         os.system("mkdir "+stackedOutputFolder)
@@ -211,26 +238,36 @@ def stackImages(timelapse_shoot_id, imagesToStack, shotIndex):
         
         endImageIndex = image["captureIndex"]
     shellStr = "convert " + imgToConv + "-evaluate-sequence mean "+stackedOutputFolder+"/image"+str(shotIndex)+".jpg"
-    print(shellStr)
+    #print(shellStr)
     os.system(shellStr)
 
     processingTime = int(datetime.datetime.now().timestamp()) - start_time
+    if processingTime < 1:
+        lotsOfPhotosToProcess = False
+        exit()
 
-    storeStackImageDB(timelapse_shoot_id, shotIndex, captureTime, timeframe, stackFromJPEG, processingTime, startImageIndex, endImageIndex)
+    print("Processed "+str(len(imagesToStack)) + " images in " + str(processingTime) + " seconds, from image"+str(startImageIndex)+".jpg")
+
+    shellStr = "rm " + imgToConv
+
+    return storeStackImageDB(timelapse_shoot_id, shotIndex, captureTime, timeframe, stackFromJPEG, processingTime, startImageIndex, endImageIndex)
     
 
 
 lotsOfPhotosToProcess = True
 timelapse_shoot_id = getIdForShoot(args.shootName)
 
-
-lastStackedImage = getLastStackedImage(timelapse_shoot_id)
+totalNumberOfImagesCaptured = getTotalNumberOfImagesCaptured(timelapse_shoot_id)
 
 while lotsOfPhotosToProcess is True:
     lastStackedImage = getLastStackedImage(timelapse_shoot_id)
     imagesToStack = getImagesToStack(timelapse_shoot_id, int(lastStackedImage["endImageIndex"]))
-    stackImages(timelapse_shoot_id, imagesToStack, lastStackedImage["shotIndex"])
+    checkOnProgress = stackImages(timelapse_shoot_id, imagesToStack, lastStackedImage["shotIndex"])
     
+    if(checkOnProgress == False):
+        totalNumberOfImagesCaptured = getTotalNumberOfImagesCaptured(timelapse_shoot_id)
+
+
 exit()
 
 
