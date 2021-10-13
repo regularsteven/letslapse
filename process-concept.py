@@ -207,7 +207,7 @@ def stackImages(timelapse_shoot_id, imagesToStack, shotIndex):
     stackFromJPEG = True
     for image in imagesToStack:
         zeroBasedIndex = int(image['captureIndex']) - 1
-        imgToConv +=  "timelapse_"+args.shootName + "/group0/image" + str(zeroBasedIndex) + ".jpg "
+        imgToConv +=  "timelapse_"+args.shootName + "/group"+str(int(zeroBasedIndex/1000))+"/image" + str(zeroBasedIndex) + ".jpg "
         
         endImageIndex = image["captureIndex"]
     shellStr = "convert " + imgToConv + "-evaluate-sequence mean "+stackedOutputFolder+"/image"+str(shotIndex)+".jpg"
@@ -220,17 +220,17 @@ def stackImages(timelapse_shoot_id, imagesToStack, shotIndex):
     
 
 
-
+lotsOfPhotosToProcess = True
 timelapse_shoot_id = getIdForShoot(args.shootName)
+
 
 lastStackedImage = getLastStackedImage(timelapse_shoot_id)
 
-imagesToStack = getImagesToStack(timelapse_shoot_id, int(lastStackedImage["endImageIndex"]))
-
-
-stackImages(timelapse_shoot_id, imagesToStack, lastStackedImage["shotIndex"])
-
-
+while lotsOfPhotosToProcess is True:
+    lastStackedImage = getLastStackedImage(timelapse_shoot_id)
+    imagesToStack = getImagesToStack(timelapse_shoot_id, int(lastStackedImage["endImageIndex"]))
+    stackImages(timelapse_shoot_id, imagesToStack, lastStackedImage["shotIndex"])
+    
 exit()
 
 
