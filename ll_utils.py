@@ -10,7 +10,9 @@ def module_exists(module_name):
     else:
         return True
 
-module_exists("PiCamera")
+#module_exists("PiCamera")
+from picamera import PiCamera
+
 
 def detectAWBG():
     print("running camera to detect color temperature")
