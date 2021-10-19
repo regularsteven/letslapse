@@ -26,7 +26,7 @@ STACKED_FOLDER="videos/$FILE_NAME-stacked-$PROCESS_SPEED-images"
 
 mkdir "$SCRIPT_DIR/$FRAMES_DIR"
 
-#ffmpeg -i $INPUT_FILE -qscale:v 1 $FRAMES_DIR/image%d.jpg
+ffmpeg -i $INPUT_FILE -qscale:v 1 $FRAMES_DIR/image%d.jpg
 
 
 mkdir "$SCRIPT_DIR/$STACKED_FOLDER"
@@ -64,4 +64,4 @@ done
 
 
 
-#ffmpeg -i $STACKED_FOLDER/img%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4
+ffmpeg -i $STACKED_FOLDER/img%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4
