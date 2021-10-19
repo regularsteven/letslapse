@@ -19,7 +19,7 @@ import sys
 from urllib.parse import urlparse, parse_qs
 import argparse
 
-PORT = 8083
+PORT = 8082
 
 import ll_utils
 
@@ -65,17 +65,23 @@ class StreamingHandler(server.BaseHTTPRequestHandler):
                         cap = cv2.VideoCapture(1)
                         
                         ret, frame = cap.read()
+                        if frame is None:
+                            return None
                         
                         _, jpg = cv2.imencode(".jpg", frame)
-
+                        
+                        print(len(frame))
+                        print(jpg)
+                        
                         self.wfile.write(b'--FRAME\r\n')
                         self.send_header('Content-Type', 'image/jpeg')
-                        self.send_header('Content-Length', len(frame))
+                        self.send_header('Content-Length', len(jpg))
                         self.end_headers()
                         self.wfile.write(jpg)
                         print("streaming now")
                         self.wfile.write(b'\r\n')
                         #self.wfile.write(jpg)
+                        #exit()
 
                 except Exception as e:
                     logging.warning(
@@ -136,5 +142,5 @@ else:
 
 
 # print in the command line instead of file's console
-if __name__ == '__main__':
-    main()
+#if __name__ == '__main__':
+#    main()
