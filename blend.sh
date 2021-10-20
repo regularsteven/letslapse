@@ -65,3 +65,5 @@ done
 
 
 ffmpeg -i $STACKED_FOLDER/img%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4
+
+
