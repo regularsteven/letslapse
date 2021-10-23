@@ -167,7 +167,7 @@ while true; do
     read -p "Move video to Camera folder?" yn
     case $yn in
         [Yy]* ) mv videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4 ../../dcim/Camera/; break;;
-        [Nn]* ) exit;;
+        [Nn]* ) break;;
         * ) echo "Please answer yes or no.";;
     esac
 done
