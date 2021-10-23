@@ -354,6 +354,8 @@ if path.isdir("timelapse_"+progressData["shootName"]) == True :
     print("directory already created")
 else :
     system("mkdir timelapse_"+progressData["shootName"])
+    os.chmod("timelapse_"+progressData["shootName"], 0o777)
+
 
 
 startTime = datetime.datetime.now().timestamp()
@@ -387,6 +389,7 @@ while captureTimelapse is True:
     #--
     if path.isdir("timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000))) == False :
         system("mkdir timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000)))
+        os.chmod("timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000)), 0o777)
         print("need to create group folder")
 
     filename = "timelapse_"+progressData["shootName"]+"/group"+str(int(progressData["captureIndex"]/1000))+"/image"+str(progressData["captureIndex"])+".jpg"
@@ -403,6 +406,7 @@ while captureTimelapse is True:
         print(raspiCommand)
     else :
         system(raspiCommand)
+        os.chmod(filename, 0o777)
         print(raspiCommand)
         
         if progressData["useThumbnail"] == True:

@@ -223,7 +223,7 @@ def stackImages(timelapse_shoot_id, imagesToStack, shotIndex):
     else :
         print(stackedOutputFolder +" folder now created")
         os.system("mkdir "+stackedOutputFolder)
-
+    #exit()
     start_time = int(datetime.datetime.now().timestamp())
     #print(imagesToStack)
     imgToConv = ""
@@ -249,8 +249,14 @@ def stackImages(timelapse_shoot_id, imagesToStack, shotIndex):
     print("Processed "+str(len(imagesToStack)) + " images in " + str(processingTime) + " seconds, from image"+str(startImageIndex)+".jpg")
 
     shellStr = "rm " + imgToConv
+    #delete all images processed at runtime
+    #os.system(shellStr)
+    #exit()
 
-    return storeStackImageDB(timelapse_shoot_id, shotIndex, captureTime, timeframe, stackFromJPEG, processingTime, startImageIndex, endImageIndex)
+    dbreturn = storeStackImageDB(timelapse_shoot_id, shotIndex, captureTime, timeframe, stackFromJPEG, processingTime, startImageIndex, endImageIndex)
+    
+    os.system(shellStr)
+    return dbreturn
     
 
 
