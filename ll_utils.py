@@ -2,16 +2,14 @@ from os import system
 import requests, os, json
 from time import sleep
 
-def module_exists(module_name):
-    try:
-        __import__(module_name)
-    except ImportError:
-        return False
-    else:
-        return True
+def isPi():
+    checkIfSystemHasARM = os.uname()[4][:3].startswith("arm")
+    print("system has ARM: " + str(checkIfSystemHasARM))
+    return (checkIfSystemHasARM)
 
-#module_exists("PiCamera")
-from picamera import PiCamera
+
+if isPi():
+    from picamera import PiCamera
 
 
 def detectAWBG():

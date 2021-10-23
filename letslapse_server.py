@@ -31,9 +31,6 @@ import ll_utils
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
 
-parser.add_argument('--testing', type=str,
-                    help='Local development testing')
-
 parser.add_argument('--port', type=int,
                     help='specifiy port to run, 80 requires sudo', default = 80)
                     
@@ -42,9 +39,10 @@ args = parser.parse_args()
 PORT = args.port
 
 localDev = False
-if args.testing == "True":
+if ll_utils.isPi() == False:
     localDev = True
 
+print(ll_utils.isPi)
 
 if localDev:
     print("Running in testing mode for localhost development")

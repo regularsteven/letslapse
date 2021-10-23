@@ -178,22 +178,18 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     start = time.time()
     
     print("blendGroupToOne(imlist, sequenceNo: "+str(sequenceNo)+", migrateExif: "+str()+", outputFolder)")
-    
-    # ref to https://stackoverflow.com/questions/17291455/how-to-get-an-average-picture-from-100-pictures-using-pil 
-    #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
-    # if blendAction = "process" #this is second, go through the text file and blend the actual images
-
-    #### Assuming all images are the same size, get dimensions of first image
-    w,h=Image.open(imlist[0]).size
-    N=len(imlist)
-
-    #### Create a numpy array of floats to store the average (assume RGB images)
-    arr=numpy.zeros((h,w,3),numpy.float16)
+    print(imlist)
+    blendingMethod = "numpy"
+    blendingMethod = "imagemagick"
 
     # load exif data from the first image parsed in - we'll use this to put in the output image
     im = Image.open( imlist[0])
     print("first image: "+ imlist[0])
 
+    
+    fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+".jpg"
+    
+    #print("fileName: "+fileName)
 
     if migrateExif == True:
         exif_dict = piexif.load(im.info["exif"])
@@ -201,35 +197,60 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
 
         exif = { ExifTags.TAGS[k]: v for k, v in im._getexif().items() if k in ExifTags.TAGS }
         #print((exif["ShutterSpeedValue"]))
-    #exit()
-    
 
-    #print("Build up average pixel intensities, casting each image as an array of floats")
-    for im in imlist:
-        substart = time.time()
-        thisImg = Image.open(im)
+    if blendingMethod == "imagemagick":
+        listOfFiles = ""
+        for im in imlist:
+            listOfFiles += im +" "
+        print("convert "+ listOfFiles)
+        system("convert " +listOfFiles+ " -evaluate-sequence mean "+fileName)
+    
+    #blendingMethod = "numpy"
+    fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+"_"+blendingMethod+".jpg"
+    if blendingMethod == "numpy":
+
+        # ref to https://stackoverflow.com/questions/17291455/how-to-get-an-average-picture-from-100-pictures-using-pil 
+        #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
+        # if blendAction = "process" #this is second, go through the text file and blend the actual images
+
+        #### Assuming all images are the same size, get dimensions of first image
+        w,h=Image.open(imlist[0]).size
+        N=len(imlist)
+
+        #### Create a numpy array of floats to store the average (assume RGB images)
+        arr=numpy.zeros((h,w,3),numpy.float16)
+
         
-        print(im)
-        imarr=numpy.array(thisImg,dtype=numpy.float16)
-        arr=arr+imarr/N
-        subend = time.time()
-        #print ('time for blendGroupToOne - mix image ' + str(subend - substart) )
-    #print("Round values in array and cast as 8-bit integer")
-    arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
+        #exit()
+        
 
-    #print("Generate, save and preview final image")
-    out=Image.fromarray(arr,mode="RGB")
-    fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+".jpg"
-    print("fileName: "+fileName)
-    
+        #print("Build up average pixel intensities, casting each image as an array of floats")
+        for im in imlist:
+            substart = time.time()
+            thisImg = Image.open(im)
+            
+            print(im)
+            imarr=numpy.array(thisImg,dtype=numpy.float16)
+            arr=arr+imarr/N
+            subend = time.time()
+            #print ('time for blendGroupToOne - mix image ' + str(subend - substart) )
+        #print("Round values in array and cast as 8-bit integer")
+        arr=numpy.array(numpy.round(arr),dtype=numpy.uint8)
 
-    if migrateExif == True:
-        out.save(fileName, exif=exif_bytes, quality=90, subsampling=0)
-    else: 
-        out.save(fileName)
-    #out.show()
+        #print("Generate, save and preview final image")
+        out=Image.fromarray(arr,mode="RGB")
+        
+        
+
+        if migrateExif == True:
+            out.save(fileName, exif=exif_bytes, quality=90, subsampling=0)
+        else: 
+            out.save(fileName)
+        #out.show()
     end = time.time()
     print ('time for blendGroupToOne ' + str(end - start) )
+
+    
     
 
 def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif): 
@@ -242,11 +263,11 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
     if imagesToBlendToOne == 1:
         print("no need to process these images, as we're just rendering them as one simple playback")
     else :
-        for a in range(int((fullImageSet) / (imagesToBlendToOne)) ):
+        for a in range(int((fullImageSet) / (imagesToBlendToOne+1)) ):
 
             #a = (a + 2204 + 1) #if there's a prevoius session run, and images already processed, this can make it start with an offset (just use the number of images created as '10')
             imlist = []
-            for i in range(imagesToBlendToOne):
+            for i in range(imagesToBlendToOne+1):
                 #print(i)
                 if a == 0:
                     #in some instances, images start at index 1 - if so, don't add it.
@@ -412,10 +433,10 @@ else:
         inputFile = blendedDirectory+"/image%d.jpg"
         system("ffmpeg -i "+inputFile+" -b:v 100000k -vcodec mpeg4 -r 25 ../"+videoName+"_letsLapse_"+str(args.groupBy)+"_"+str(groupByType)+".mp4")
         
-        altMethod1 = 'ffmpeg -i tram.mp4 -filter:v "minterpolate=\'mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=150\'" tram150fps.mp5'
-        print("Alternative method 1:")
-        print(altMethod1)
-        altMethod2 = 'ffmpeg -i tram.mp4 -filter:v "setpts=0.25*PTS" tram2_25pts.mp4'
+        #altMethod1 = 'ffmpeg -i tram.mp4 -filter:v "minterpolate=\'mi_mode=mci:mc_mode=aobmc:vsbmc=1:fps=150\'" tram150fps.mp5'
+        #print("Alternative method 1:")
+        #print(altMethod1)
+        #altMethod2 = 'ffmpeg -i tram.mp4 -filter:v "setpts=0.25*PTS" tram2_25pts.mp4'
 
     elif blendingMethod == "easing":
         outputFolder = "easing"+str(groupBy)+"_"+str(groupByType)
