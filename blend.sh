@@ -1,4 +1,6 @@
 #!/bin/bash
+#from this directory
+#./blend.sh 10 videos/OneMonth.mp4
 
 SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 PROCESS_SPEED=$1
@@ -24,7 +26,7 @@ FILE_EXTN=`echo $FILE_NAME_EXTN | cut -d "." -f 2`
 echo "Blend Basic - 1) Video to image seq, 2) Blend & stack images, 3) Images to MP4"
 #read name
 echo "1 Video to Image Sequence"
-echo " - $INPUT_FILE at $PROCESS_SPEED x speed to IMAGES"
+echo " - $INPUT_FILE speed at $PROCESS_SPEED x speed to IMAGES"
 
 
 POST_PROCESS=0
@@ -104,7 +106,9 @@ while [ $POST_PROCESS -ge 0 ]; do
         done
 
         echo "blending image$FROM_IMAGE.jpg to image$INPUT_IMAGE.jpg into image${THIS_OUTPUT_FILE}.jpg"
-        convert $FILES_TO_CONVERT-evaluate-sequence mean $STACKED_FOLDER/image${THIS_OUTPUT_FILE}.jpg
+        BUMP_CONTRAST=" "
+        BUMP_CONTRAST=" -modulate 100,130 -level 10%,90%,1"
+        convert $FILES_TO_CONVERT $BUMP_CONTRAST -evaluate-sequence mean $STACKED_FOLDER/image${THIS_OUTPUT_FILE}.jpg
 
         rm $FILES_TO_CONVERT
         if [ $INPUT_IMAGE -ge $TOTAL_IMAGES_SAFE ]

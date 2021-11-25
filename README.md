@@ -309,3 +309,42 @@ To unmount:
 ```
 umount ~/Documents/dev/letslapse-pi4dev/
 ```
+
+
+# cm4 notes
+## upgrading to latest everything
+Bullseye is now out, trying to ensure we can run letslapse on a CM4 latest OS version 
+
+After flashing drive with sudo ./rpiboot and the imager, adding wpa-suplicant and ssh...
+
+```
+sudo apt update
+sudo apt dist-upgrade -y
+sudo rpi-update
+```
+ - this will get everything to latest 32bit version
+ benchmark after reboot with:
+
+
+
+
+
+Prime number TEST A
+```
+sysbench --test=cpu --cpu-max-prime=20000 run
+```
+I/O of device TEST B
+```
+sysbench --test=fileio --file-total-size=2G prepare
+sysbench --test=fileio --file-total-size=2G --file-test-mode=rndrw --max-time=300 --max-requests=0 run
+sysbench --test=fileio --file-total-size=2G cleanup
+```
+Memory read and write TEST C
+```
+sysbench --test=memory run --memory-total-size=2G
+sysbench --test=memory run --memory-total-size=2G --memory-oper=read
+```
+
+
+DEVICE      | A         | B1                                        | B2        | B3 | C        | Notes
+CM4 32b     | 10.0153s  | 2147483648 bytes written in 51.98 seconds | 300.0833s |    | 4.2299s  | Running Bulleye 32bit, latest everything
