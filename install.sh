@@ -30,6 +30,10 @@ pip3 install numpy --upgrade
 echo "5 Pillow"
 python3 -m pip install Pillow
 
+
+echo "Install imagemagick"
+sudo apt-get install imagemagick
+
 echo "6 OpenCV and dependencies"
 #OpenCV and dependencies
 sudo apt install libtiff5 -y
