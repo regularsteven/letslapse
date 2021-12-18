@@ -291,10 +291,13 @@ function takeStill(){
 
 var progressData = null;
 function parseProgress(displayLatest, execOnStartup){
-    console.log("displayLatest: "+displayLatest)
+    //console.log("displayLatest: "+displayLatest)
     jQuery.get('progress.txt', function(data) {
-        console.log("data response");
-        if (data == ""){
+        //data = jQuery.parseJSON(data);
+        //console.log("data response");
+        //console.log(data.status);
+        
+        if (data.status == "ready"){
             log("parseProgress: No progress.txt, indicating this is brand new");
             if(execOnStartup == false){
                 log("parseProgress: Try again in one second");
@@ -306,8 +309,8 @@ function parseProgress(displayLatest, execOnStartup){
                 displayStatus("isReady");
             }
         }else{
-            progressData = JSON.parse(data);
-
+            //progressData = JSON.parse(data);
+            progressData = data;
             var progressName = progressData.shootName;
             console.log(progressData);
             //put the current shoot name inside the input box
@@ -340,9 +343,9 @@ function parseProgress(displayLatest, execOnStartup){
                 var latestImage = "/timelapse_"+progressName+"/latest.jpg";
             }else{
                 
-                var folderNum = Math.ceil((progressData.index+1)/1000)-1;
+                var folderNum = Math.ceil((parseInt(progressData.captureIndex)+1)/1000)-1;
 
-                var latestImage = "/timelapse_"+progressData.shootName+"/group"+folderNum+"/image"+progressData.index+".jpg";
+                var latestImage = "/timelapse_"+progressData.shootName+"/group"+folderNum+"/image"+parseInt(progressData.captureIndex)+".jpg";
                 if($("#manualSwitch2").is(":checked") == false){
                     $("#manualSwitch2").click();
                 }
@@ -366,10 +369,10 @@ function parseProgress(displayLatest, execOnStartup){
                     displayStill(makeThumb(latestImage));
                 }
             }
-            $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressData.index);
+            $("#status .isShootingTimelapse .extraInfo").html(" | Image "+  progressData.captureIndex);
             
-            if(execOnStartup){
-                startTimelapseDelay();
+            if(execOnStartup){ //idea was to restart the timelapse if in progress on startup of the page, however this isn't really intended UX ... might kill this
+                //startTimelapseDelay();
             }
         }
     });

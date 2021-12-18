@@ -137,21 +137,7 @@ if args.raw == True:
 dbconnect = sqlite3.connect("letslapse.db")
 
 def configureDB(progressData):
-    #create the core table if it's not there
-    cursor = dbconnect.cursor()
-    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shoots "
-    sqlStr += "(id INTEGER PRIMARY KEY, shootName VARCHAR (255), startTime DATETIME, endTime DATETIME, includeRAW BOOLEAN, useThumbnail BOOLEAN, disableAWBG BOOLEAN, underexposeNights BOOLEAN, width INTEGER, height INTEGER);"
-    cursor.execute(sqlStr)
-    dbconnect.commit()
 
-    #create the table for each individual shoot
-    cursor = dbconnect.cursor()
-    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shots "
-    sqlStr += "(id INTEGER PRIMARY KEY, timelapse_shoot_id INTEGER, captureIndex INTEGER, captureTime DATETIME, "
-    sqlStr += "shutterSpeed INTEGER, analogueGains DECIMAL, digitalGains DECIMAL, blueGains DECIMAL, redGains DECIMAL, brightnessTarget DECIMAL, brightnessScore DECIMAL);"
-    #print(sqlStr)
-    cursor.execute(sqlStr)
-    dbconnect.commit()
 
 
     #to refer to cursor response by name, following is requried
