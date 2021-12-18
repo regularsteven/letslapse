@@ -6,14 +6,17 @@ SCRIPT_DIR="$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 PROCESS_SPEED=$1
 INPUT_FILE=$2
 
-EXPORT_FROM_TIME=$3
-EXPORT_TO_TIME=$4
+PROCESS_FROM=$3
+PROCESS_TO=$4
 
+
+#if the input param is a video, we'll use this for the FFMPEG export
 FFMPEG_EXPORT=" "
+#if the input param is a folder, we'll use this for the start and end frames for processing
 
-if [ -n "$EXPORT_FROM_TIME" ]; then
-    if [ -n "$EXPORT_TO_TIME" ]; then
-        FFMPEG_EXPORT="-ss $EXPORT_FROM_TIME -to $EXPORT_TO_TIME "
+if [ -n "$PROCESS_FROM" ]; then
+    if [ -n "$PROCESS_TO" ]; then
+        FFMPEG_EXPORT="-ss $PROCESS_FROM -to $PROCESS_TO "
     fi
 fi
 
@@ -23,10 +26,15 @@ FILE_NAME_EXTN="$(basename -- $INPUT_FILE)"
 FILE_NAME=`echo $FILE_NAME_EXTN | cut -d "." -f 1`
 FILE_EXTN=`echo $FILE_NAME_EXTN | cut -d "." -f 2`
 
-echo "Blend Basic - 1) Video to image seq, 2) Blend & stack images, 3) Images to MP4"
-#read name
-echo "1 Video to Image Sequence"
-echo " - $INPUT_FILE speed at $PROCESS_SPEED x speed to IMAGES"
+if [ -d $INPUT_FILE ]; then
+    echo "Process Directory"
+elif [ -f $INPUT_FILE ]; then
+    echo "Blend Video - 1) Video to image seq, 2) Blend & stack images, 3) Images to MP4"
+else
+    echo "error - no file or folder exists"
+fi
+
+
 
 
 POST_PROCESS=0
@@ -66,15 +74,34 @@ if [ $PROCESS_SPEED -gt 10 ]; then
     fi
 fi
 
-FRAMES_DIR="videos/$FILE_NAME-frames"
-mkdir "$SCRIPT_DIR/$FRAMES_DIR"
-ffmpeg $FFMPEG_EXPORT-i $INPUT_FILE -qscale:v 1 $FRAMES_DIR/image%d.jpg
+
+STACKED_FOLDER=" "
+TOTAL_IMAGES=" "
+TOTAL_IMAGES_MATCH_PROCESS_SPEED=" "
+TOTAL_IMAGES_SAFE=" "
+FRAMES_DIR=" "
 
 
+if [ -f $INPUT_FILE ]; then
+
+    #read name
+    echo "1 Video to Image Sequence"
+    echo " - $INPUT_FILE speed at $PROCESS_SPEED x speed to IMAGES"
+
+    FRAMES_DIR="videos/$FILE_NAME-frames"
+    mkdir "$SCRIPT_DIR/$FRAMES_DIR"
+    ffmpeg $FFMPEG_EXPORT-i $INPUT_FILE -qscale:v 1 $FRAMES_DIR/image%d.jpg
+
+    STACKED_FOLDER="videos/$FILE_NAME-stacked-$PROCESS_SPEED-images"
+fi
 
 
-STACKED_FOLDER="videos/$FILE_NAME-stacked-$PROCESS_SPEED-images"
-mkdir "$SCRIPT_DIR/$STACKED_FOLDER"
+if [ -d $INPUT_FILE ]; then
+    FRAMES_DIR="$FILE_NAME/group0"
+    STACKED_FOLDER="$FILE_NAME/stacked-$PROCESS_SPEED-images"
+fi
+
+mkdir "$SCRIPT_DIR/$STACKED_FOLDER/"
 TOTAL_IMAGES=$(ls $FRAMES_DIR/ | wc -l)
 TOTAL_IMAGES_MATCH_PROCESS_SPEED=`expr $TOTAL_IMAGES  %  $PROCESS_SPEED`
 
@@ -83,6 +110,7 @@ TOTAL_IMAGES_SAFE=$TOTAL_IMAGES
 if [ $TOTAL_IMAGES_MATCH_PROCESS_SPEED != 0 ]; then
     TOTAL_IMAGES_SAFE=`expr $TOTAL_IMAGES  -  $PROCESS_SPEED`
 fi
+
 
 THIS_FILE=0
 INPUT_IMAGE=0
@@ -110,10 +138,10 @@ while [ $POST_PROCESS -ge 0 ]; do
         BUMP_CONTRAST=" -modulate 100,130 -level 10%,90%,1"
         convert $FILES_TO_CONVERT $BUMP_CONTRAST -evaluate-sequence mean $STACKED_FOLDER/image${THIS_OUTPUT_FILE}.jpg
 
-        rm $FILES_TO_CONVERT
+        #rm $FILES_TO_CONVERT
         if [ $INPUT_IMAGE -ge $TOTAL_IMAGES_SAFE ]
         then
-            rm $FRAMES_DIR -R
+            #rm $FRAMES_DIR -R
             echo "No more to process"
             break
         fi
