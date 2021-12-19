@@ -103,7 +103,7 @@ fi
 
 mkdir "$SCRIPT_DIR/$STACKED_FOLDER/"
 #need to clean up the thumbs for this, they get in the way
-/bin/rm -f $SCRIPT_DIR/$FRAMES_DIR/*thumb*.jpg
+/bin/rm -f $SCRIPT_DIR/$FRAMES_DIR/*thumb*
 TOTAL_IMAGES=$(ls $FRAMES_DIR/ | wc -l)
 TOTAL_IMAGES_MATCH_PROCESS_SPEED=`expr $TOTAL_IMAGES  %  $PROCESS_SPEED`
 
