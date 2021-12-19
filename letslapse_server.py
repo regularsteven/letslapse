@@ -121,11 +121,14 @@ def shootPreview(query_components) :
         settings = " --mode auto"
     else : 
         ss = query_components["ss"][0]
-        iso = query_components["iso"][0]
+        #iso = query_components["iso"][0]
+        ag = query_components["analogueGains"][0]
+        dg = query_components["digitalGains"][0]
+
         awbg = query_components["awbg"][0]
         raw = bool(query_components["raw"][0])
-        settings = " --ss "+ss+" --iso "+iso+" --awbg "+awbg + " --raw "+str(raw)
-        filename = "img_"+current_time+"_ss-"+str(ss)+"_iso-"+str(iso)+"_awbg-"+awbg+"_manual.jpg"
+        settings = " --ss "+ss+" --ag "+ag+" --dg "+dg+" --awbg "+awbg + " --raw "+str(raw)
+        filename = "img_"+current_time+"_ss-"+str(ss)+"_ag-"+str(ag)+"_dg-"+str(dg)+"_awbg-"+awbg+"_manual.jpg"
 
 
     print("start shootPreview")
@@ -288,6 +291,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             elif actionVal == "preview" :
                 jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :
+                #?action=killtimelapse&pauseOrKill=kill
                 check_kill_process("ll_timelapse.py")
                 check_kill_process("raspistill")
                 if query_components["pauseOrKill"][0] == "kill":

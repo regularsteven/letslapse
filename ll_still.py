@@ -6,7 +6,7 @@ import argparse
 from os import path
 
 #example usage:
-#python3 ll_still.py --ss 1000 --iso 100 --awbg 3,2
+#python3 ll_still.py --filename sample.jpg --ss 1000 --ag 1 --dg 1 --awbg 3,2
 
 # Instantiate the parser
 parser = argparse.ArgumentParser(description='Optional app description')
@@ -17,8 +17,11 @@ parser.add_argument('--mode', type=str,
 parser.add_argument('--ss', type=str,
                     help='Shutter Speed')
 
-parser.add_argument('--iso', type=int,
-                    help='ISO')   
+parser.add_argument('--ag', type=int,
+                    help='AG')   
+
+parser.add_argument('--dg', type=int,
+                    help='DG')   
 
 parser.add_argument('--awbg', type=str,
                     help='blue and green values')   
@@ -43,7 +46,7 @@ else :
 #d=RPICAM2DNG()
 
 # -r = append raw file for later processing
-# ISO - Set capture ISO (100 - 800)
+
 # -ss 6000000 = shutter speed 6 seconds, 200000000 (i.e. 200s)
 # --awb = off
 # --hflip,    -hf     Set horizontal flip
@@ -67,7 +70,7 @@ else :
 
     exposureTime = (exposureInput)
 
-    userParams = "-ISO "+str(args.iso)+" -ss "+str(exposureTime) + " -co -10"
+    userParams = "-ag "+str(args.ag)+" -dg "+str(args.dg)+" -ss "+str(exposureTime) + " -co -10"
     jpegDimensions = " -w 2400 -h 1800"
     includeRaw = ""
     if args.raw == "true":

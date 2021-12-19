@@ -106,7 +106,7 @@ presets["nightNature"] = {ss: 6 * 100000, iso: 800, awbg: '3,2'};
 function setPreset(){
     preset = $("#presets").val();
     document.getElementById('ss').value = presets[preset].ss;
-    document.getElementById('iso').value = presets[preset].iso;
+    //document.getElementById('iso').value = presets[preset].iso;
     document.getElementById('awbg').value = presets[preset].awbg;
 
     //clear the active filters
@@ -261,13 +261,13 @@ function takeStill(){
     var apiCall = "?action=preview";
 
     if($("#manualSwitch1").is(":checked")){
-        apiCall += "&mode=manual&ss="+$("#ss").val()+"&iso="+$("#iso").val()+"&awbg="+$("#awbg").val()+"&raw="+$("#captureRaw").is(":checked");
+        apiCall += "&mode=manual&ss="+$("#ss").val()+"&analogueGains="+$("#analogueGains").val()+"&digitalGains="+$("#digitalGains").val()+"&awbg="+$("#awbg").val()+"&raw="+$("#captureRaw").is(":checked");
     }else{
         //shotting in auto mode
         apiCall += "&mode=auto";
     }
 
-    
+    console.log(apiCall);
     displayStatus("isShooting");
 
     streamManager("stop");
