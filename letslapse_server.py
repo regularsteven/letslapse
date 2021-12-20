@@ -328,6 +328,14 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 #updateCodeResp.split()
                 jsonResp += ',"updateCodeResp":'+str(json.dumps(updateCodeResp.decode('utf-8')))
                 #print(updatecode)
+            elif actionVal == "blend" :
+                jsonResp += ',"processing":"'+str(query_components["shootName"][0])+'"'
+                jsonResp += ',"speed":"'+str(query_components["processingSpeed"][0])+'"'
+                
+                strToFire = "./blend.sh "+ str(query_components["processingSpeed"][0]) + " " + str(query_components["shootName"][0]) + ""
+                print(strToFire)
+                system(strToFire)
+
             elif actionVal == "listshoots":
                 #for display of projects and still shots
                 print("tbc")

@@ -786,3 +786,21 @@ function displayVideos(videos){
     }
 }
 
+
+
+
+function blend(shootName, processingSpeed){
+    var apiCall = "/?action=blend&shootName="+shootName+"&processingSpeed="+processingSpeed;
+    $.getJSON( apiCall)
+    .done(function( json ) {
+        console.log( "JSON Data: ");
+        console.log(json);
+        log("blend: "+ json);
+        alert("this can take a while, see the log")
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+        log("blend ERROR: "+ error)
+    });
+}
