@@ -405,6 +405,9 @@ while captureTimelapse is True:
             print("---------------------------------------------------")
             print("---------------------------------------------------")
             captureTimelapse = False
+            #on completion of this task, we need to add the end date to close the shoot
+            ll_utils.killTimelapseDB()
+            sleep(2)
             quit()
     
     #print("taking a photo")
