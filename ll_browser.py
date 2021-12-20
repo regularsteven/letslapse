@@ -60,5 +60,17 @@ def getStills():
 
     return jpegs
 
- 
+def getVideos():
+    if path.isdir("videos") == False :
+        system("mkdir videos")
+
+    siteRoot = os.getcwd()
+    topLevel = sorted(os.listdir(siteRoot+"/videos/"))
+    mp4s = []
+    for t in range(len(topLevel)):
+        #look in each and and find the timelapse_ folders - these are the shoot folders
+        mp4s.append(topLevel[t])
+
+    return mp4s
+
 #print(getShoots("00.jpg"))

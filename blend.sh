@@ -197,21 +197,21 @@ done
 ffmpeg -i $STACKED_FOLDER/image%d.jpg -b:v 100000k -vcodec mpeg4 -r 25 videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4
 
 
-while true; do
-    read -p "Move video to Camera folder?" yn
-    case $yn in
-        [Yy]* ) mv videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4 ../../dcim/Camera/; break;;
-        [Nn]* ) break;;
-        * ) echo "Please answer yes or no.";;
-    esac
-done
+#while true; do
+#    read -p "Move video to Camera folder?" yn
+#    case $yn in
+#        [Yy]* ) mv videos/$FILE_NAME-$PROCESS_SPEED-speed.mp4 ../../dcim/Camera/; break;;
+#        [Nn]* ) break;;
+#        * ) echo "Please answer yes or no.";;
+#    esac
+#done
 
 
-while true; do
-    read -p "Move stacked images to Camera folder?" yn
-    case $yn in
-        [Yy]* ) mv $STACKED_FOLDER ../../dcim/Camera/; break;;
-        [Nn]* ) exit;;
-        * ) echo "Please answer yes or no.";;
-    esac
-done
+#while true; do
+#    read -p "Move stacked images to Camera folder?" yn
+#    case $yn in
+#        [Yy]* ) mv $STACKED_FOLDER ../../dcim/Camera/; break;;
+#        [Nn]* ) exit;;
+#        * ) echo "Please answer yes or no.";;
+#    esac
+#done

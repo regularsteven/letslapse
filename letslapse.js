@@ -22,7 +22,7 @@ function toggleControls(value){
 var currentStatus = "isLoading";
 
 window.addEventListener("load", function(){
-    console.log("document loaded");
+    console.log("load event function call");
     pollUptime();
     //streamManager("start");
     setPreset();
@@ -310,30 +310,37 @@ function parseProgress(displayLatest, execOnStartup){
             }
         }else{
             //progressData = JSON.parse(data);
+            if(execOnStartup){timelapseMode("start")};
+
+            console.log("timelapse seems to be in-progress based on progress.txt");
             progressData = data;
             var progressName = progressData.shootName;
             console.log(progressData);
             //put the current shoot name inside the input box
-            $("#shootName").val(progressName);
+            $("#shootName").val(progressName);                          //GOOD
             $("#shootName").prop( "disabled", true );
 
-            $("#resolution").prop("disabled", true);
+            $("#resolution").prop("disabled", true);                    //GOOD
             $("#resolution").val( progressData.width );
 
-            $("#underexposeNights").prop( "disabled", true );
-            document.getElementById("underexposeNights").checked = progressData.underexposeNights;
-
             $("#rawTimelapse").prop( "disabled", true );
-            document.getElementById("rawTimelapse").checked = progressData.raw;
+            document.getElementById("rawTimelapse").checked = JSON.parse(progressData.includeRAW.toLowerCase()); //hack to convert string to boolean
+
+            $("#useThumbnail").prop( "disabled", true );
+            document.getElementById("useThumbnail").checked = JSON.parse(progressData.useThumbnail.toLowerCase());
 
             $("#disableAWBG").prop( "disabled", true );
-            document.getElementById("disableAWBG").checked = progressData.disableAWBG;
+            document.getElementById("disableAWBG").checked = JSON.parse(progressData.disableAWBG.toLowerCase());
 
             $("#startingGains").prop( "disabled", true );
             //document.getElementById("disableAWBG").checked = progressData.disableAWBG;
 
-            $("#useThumbnail").prop( "disabled", true );
-            document.getElementById("useThumbnail").checked = progressData.useThumbnail;
+            
+
+
+            $("#underexposeNights").prop( "disabled", true );
+            document.getElementById("underexposeNights").checked = progressData.underexposeNights;
+
 
             $("#ultraBasic").prop( "disabled", true );
             document.getElementById("ultraBasic").checked = progressData.ultraBasic;
@@ -345,7 +352,7 @@ function parseProgress(displayLatest, execOnStartup){
                 
                 var folderNum = Math.ceil((parseInt(progressData.captureIndex)+1)/1000)-1;
 
-                var latestImage = "/timelapse_"+progressData.shootName+"/group"+folderNum+"/image"+parseInt(progressData.captureIndex)+".jpg";
+                var latestImage = "/timelapse_"+progressData.shootName+"/group"+folderNum+"/image"+parseInt(progressData.captureIndex-1)+".jpg";
                 if($("#manualSwitch2").is(":checked") == false){
                     $("#manualSwitch2").click();
                 }
@@ -478,6 +485,7 @@ function startTimelapse(){
 }
 
 function startTimelapseDelay(){
+    var tmpVal; //junk for later use
     var apiCall = "?action=timelapse";
     var shootName = "default";
     if($("#manualSwitch2").is(":checked")){
@@ -490,8 +498,12 @@ function startTimelapseDelay(){
         
         apiCall += "&mode=auto";
     }
-    if($("#underexposeNights").is(":checked")){
-        apiCall += "&underexposeNights=true";
+
+    
+    apiCall += "&shootName="+shootName;
+    apiCall += "&width="+$("#resolution").val();
+    if($("#disableAWBG").is(":checked")){
+        apiCall+= "&disableAWBG=true";
     }
 
     if($("#useThumbnail").is(":checked")){
@@ -503,22 +515,40 @@ function startTimelapseDelay(){
         apiCall += "&startingGains="+$("#startingGains").val();
     }
 
-    
-
     if($("#rawTimelapse").is(":checked")){
         apiCall += "&includeRaw=true";
     }
 
-    if($("#ultraBasic").is(":checked")){
+
+
+    if($("#underexposeNights").is(":checked")){
+        apiCall += "&underexposeNights=true";
+    }else if($("#autoExposure").is(":checked")){
+        apiCall += "&underexposeNights=false";
+    }else{
+        apiCall += "&lockExposure=true";
+    }
+
+    apiCall += "&shutterSpeed="+$("#startingSS").val();
+    apiCall += "&analogueGains="+$("#analogueGains").val();
+    apiCall += "&digitalGains="+$("#digitalGains").val();
+
+
+    tmpVal = $("#delayBetweenShots").val();
+    if (tmpVal == '') tmpVal = 0;
+    apiCall += "&delayBetweenShots="+tmpVal;
+
+
+    tmpVal = $("#exitAfter").val();
+    if (tmpVal == '') tmpVal = 0;
+    apiCall += "&exitAfter="+tmpVal;
+    
+   
+    if($("#ultraBasic").is(":checked")){ //this will pretty much override everything and I'll most likely remove this... 
         apiCall+= "&ultraBasic=true";
     }
 
-    if($("#disableAWBG").is(":checked")){
-        apiCall+= "&disableAWBG=true";
-    }
-    apiCall += "&width="+$("#resolution").val();
     
-    apiCall += "&shootName="+shootName;
 
     console.log(apiCall);
     $.getJSON( apiCall )
@@ -553,6 +583,7 @@ function startTimelapseDelay(){
 
 
 function makeThumb(url){ 
+    //return url;
     return url.split(".jpg")[0]+"_thumb.jpg";
 }
 
@@ -617,8 +648,10 @@ function openGallery(){
     //$(".stillGalleryBtn").removeClass("active");
     if($(".timelapseGalleryBtn").hasClass("active")){
         getShoots();
-    }else{
+    }else if($(".stillGalleryBtn").hasClass("active")){
         getStills();
+    }else{
+        getVideos();
     }
 }
 
@@ -684,9 +717,6 @@ function displayShoots(gallery){
 }
 
 function getStills(){
-
-
-
     var apiCall = "/?action=getStills";
     $.getJSON( apiCall)
     .done(function( json ) {
@@ -700,13 +730,12 @@ function getStills(){
         console.log( "Request Failed: " + err );
         log("getStills ERROR: "+ error)
     });
-
-
 }
 var stillsApp = null;
 function displayStills(stills){
     $("#stillsApp").removeClass("d-none");
     $("#galleryApp").addClass("d-none");
+    $("#videosApp").addClass("d-none");
     console.log(stills);
     if(stillsApp == null){
         stillsApp = new Vue({
@@ -719,3 +748,41 @@ function displayStills(stills){
         stillsApp.stills = stills;
     }
 }
+
+
+
+
+function getVideos(){
+    console.log("getVideos();")
+    var apiCall = "/?action=getVideos";
+    $.getJSON( apiCall)
+    .done(function( json ) {
+        console.log( "JSON Data: ");
+        console.log(json);
+        //log("getVideos: "+ json.videos);
+        displayVideos(json.videos);
+    })
+    .fail(function( jqxhr, textStatus, error ) {
+        var err = textStatus + ", " + error;
+        console.log( "Request Failed: " + err );
+        log("getVideos ERROR: "+ error)
+    });
+}
+var videosApp = null;
+function displayVideos(videos){
+    $("#stillsApp").addClass("d-none");
+    $("#galleryApp").addClass("d-none");
+    $("#videosApp").removeClass("d-none");
+    console.log(videos);
+    if(videosApp == null){
+        videosApp = new Vue({
+            el: '#videosApp',
+            data: {
+                videos:videos
+            }
+        });
+    }else{
+        videosApp.videos = videos;
+    }
+}
+

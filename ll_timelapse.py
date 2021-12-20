@@ -88,7 +88,19 @@ parser.add_argument(
 parser.add_argument(
     '--startingSS',
     help='Specifiy the starting shutter speed in microseconds',
-    default='1000')
+    default='8000')
+
+parser.add_argument(
+    '--analogueGains',
+    help='Specifiy the starting analogueGains (1 to 8)',
+    default='1')
+
+parser.add_argument(
+    '--digitalGains',
+    help='Specifiy the starting digitalGains (1 to 8)',
+    default='1')
+
+
 
 parser.add_argument(
     '--lockExposure',
@@ -239,8 +251,8 @@ def configureDB(progressData):
         #set up default values for use in this new shoot
         progressData["captureIndex"] = 0
         progressData["shutterSpeed"] = args.startingSS #random number, should take a test auto shot to be better set from kick-off
-        progressData["digitalGains"] = 1 #start low
-        progressData["analogueGains"] = 1 #start low
+        progressData["digitalGains"] = args.digitalGains #start low
+        progressData["analogueGains"] = args.analogueGains #start low
             
         progressData["blueGains"] = float(args.startingGains.split(",")[0])
         progressData["redGains"] = float(args.startingGains.split(",")[1])

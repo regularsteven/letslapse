@@ -525,6 +525,9 @@
                     <label class="btn btn-secondary timelapseGalleryBtn" onclick="getShoots();">
                       <input type="radio" name="options" id="option2" autocomplete="off"> Timelapse Gallery
                     </label>
+                    <label class="btn btn-secondary videoGalleryBtn" onclick="getVideos();">
+                      <input type="radio" name="options" id="option3" autocomplete="off"> Video Gallery
+                    </label>
                   </div>
 
                 </div>
@@ -552,6 +555,20 @@
                       <a v-bind:href="'/stills/'+still+'.jpg'" target="_blank">
                         <img v-bind:src="'/stills/'+still+'_thumb.jpg'" class="theImage" />
                       </a>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div id="videosApp" class="d-none" >
+                <div class="container" >
+                  <div class="row stillImages">
+                    <div class="col col-12 p-0" v-for="video in videos">
+                      <ul>
+                        <li>
+                          <a v-bind:href="'/videos/'+video+''" v-bind:download="video" >Download {{video}}</a>
+                        </li>
+                      </ul>
                     </div>
                   </div>
                 </div>

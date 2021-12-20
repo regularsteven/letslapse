@@ -87,7 +87,7 @@ def check_kill_process(pstring):
         os.kill(int(pid), signal.SIGKILL)
 
 
-def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail) :
+def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail, lockExposure, shutterSpeed, analogueGains, digitalGains, delayBetweenShots, exitAfter) :
     shellStr = 'nohup python3 ll_timelapse.py --shootName '+shootName
 
     if startingGains is not False:
@@ -103,6 +103,17 @@ def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disable
         shellStr = shellStr + ' --underexposeNights'
     if bool(useThumbnail):
         shellStr = shellStr + ' --useThumbnail'
+    if bool(lockExposure):
+        shellStr = shellStr + ' --lockExposure'
+
+    shellStr = shellStr + " --startingSS " +  str(shutterSpeed)
+    shellStr = shellStr + " --analogueGains " +  str(analogueGains)
+    shellStr = shellStr + " --digitalGains " +  str(digitalGains)
+    if int(delayBetweenShots) > 0:
+        shellStr = shellStr + " --delayBetweenShots " +  str(delayBetweenShots)
+    if int(exitAfter) > 0:
+        shellStr = shellStr + " --exitAfter " +  str(exitAfter)
+
     
     shellStr = shellStr + " --width "+ str(width)
     shellStr = shellStr + ' &'
@@ -191,6 +202,37 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 else:
                     underexposeNights = False
                 
+                if "lockExposure" in query_components:
+                    lockExposure = query_components["lockExposure"][0]
+                else:
+                    lockExposure = False
+                
+                if "shutterSpeed" in query_components:
+                    shutterSpeed = query_components["shutterSpeed"][0]
+                else:
+                    shutterSpeed = 8000
+                
+                if "analogueGains" in query_components:
+                    analogueGains = query_components["analogueGains"][0]
+                else:
+                    analogueGains = 1
+                
+                if "digitalGains" in query_components:
+                    digitalGains = query_components["digitalGains"][0]
+                else:
+                    digitalGains = 1
+
+                if "delayBetweenShots" in query_components:
+                    delayBetweenShots = query_components["delayBetweenShots"][0]
+                else:
+                    delayBetweenShots = 0
+
+                if "exitAfter" in query_components:
+                    exitAfter = query_components["exitAfter"][0]
+                else:
+                    exitAfter = 0
+                
+                
                 if "ultraBasic" in query_components:
                     ultraBasic = query_components["ultraBasic"][0]
                     if ultraBasic == "false":
@@ -236,7 +278,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #this instance is a new shoot
                     jsonResp += ',"error":false'
                     jsonResp += ',"message":"starting"'
-                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail)
+                    startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail, lockExposure, shutterSpeed, analogueGains, digitalGains, delayBetweenShots, exitAfter)
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :
@@ -295,6 +337,12 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 
                 jsonResp += ',"stills":'+str( json.dumps( ll_browser.getStills() ) )
                 #print(browser.getShoots("0.jpg"))
+            
+            elif actionVal == "getVideos":
+                
+                jsonResp += ',"videos":'+str( json.dumps( ll_browser.getVideos() ) )
+                #print(browser.getShoots("0.jpg"))
+            
             
             elif actionVal == "getShoots":
                 
@@ -365,6 +413,10 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     self.send_header('Content-Type', 'application/javascript')
                 if self.path.endswith('.jpg'):
                     self.send_header('Content-Type', 'image/jpeg')
+                if self.path.endswith('.mp4'):
+                    self.send_header('Content-Disposition', 'attachment; filename="download.mp4"')
+                    self.send_header('Content-Type', 'video/mp4')
+#                    self.send_header('Content-Length', len(self.path))
                 else:
                     self.send_header('Content-Type', 'text/html')
 
