@@ -33,12 +33,20 @@ import ll_utils
 # python3 ll_timelapse.py --shootName demo
 # python3 ll_timelapse.py --shootName testing --raw false --underexposeNights
 # python3 ll_timelapse.py --exitAfter 30
-# python3 ll_timelapse.py --exitAfter 30 --useThumbnail
+# python3 ll_timelapse.py --exitAfter 10 --useThumbnail
+
+# sudo python3 ll_timelapse.py --exitAfter 4 --delayBetweenShots 4 --shootName demoA --startingSS 200000 --lockExposure --width 1280 --disableAWBG --startingGains 3.26171875,1.65625
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
     '--exitAfter', 
     help="Number of seconds to run before quiting, useful for testing (default 0, int)", 
+    default=0, type=int)
+
+
+parser.add_argument(
+    '--delayBetweenShots', 
+    help="Number of seconds to delay between shots, useful for extended timelapse (default 0, int)", 
     default=0, type=int)
 
 parser.add_argument(
@@ -76,6 +84,17 @@ parser.add_argument(
     help='Can help low light shooting where bright elements are present in shot; will result in darker images',
     action='store_true')
 
+
+parser.add_argument(
+    '--startingSS',
+    help='Specifiy the starting shutter speed in microseconds',
+    default='1000')
+
+parser.add_argument(
+    '--lockExposure',
+    help='Stop light corrections. default False, set to True with this param and locks exposure and gains)',
+    action='store_true')
+
 parser.add_argument(
     '--ultraBasic',
     help='Use core raspberry pi timelapse mode with no customisation',
@@ -95,8 +114,10 @@ start_time = int(time.time())
 progressData["useThumbnail"] = args.useThumbnail
 progressData["shootName"] = args.shootName
 progressData["disableAWBG"] = args.disableAWBG
+progressData["lockExposure"] = args.lockExposure
 progressData["underexposeNights"] = args.underexposeNights
 progressData["includeRAW"] = args.raw
+progressData["delayBetweenShots"] = args.delayBetweenShots
 
 progressData["width"] = args.width
 progressData["height"] = progressData["width"] * .75
@@ -154,14 +175,37 @@ def configureDB(progressData):
         progressData['id'] = row['id']
         progressData['shootName'] = row['shootName']
         progressData['startTime'] = row['startTime']
-        progressData['includeRAW'] = row['includeRAW']
-        progressData['useThumbnail'] = row['useThumbnail']
-        progressData['disableAWBG'] = row['disableAWBG']
-        progressData['underexposeNights'] = row['underexposeNights']
+
+        progressData['includeRAW'] = False
+        if row['includeRAW'] == 'True':
+            progressData['includeRAW'] = True
+        
+        progressData['useThumbnail'] = False
+        if row['useThumbnail'] == 'True':
+            progressData['useThumbnail'] = True
+
+        
+        progressData['disableAWBG'] = False
+        if row['disableAWBG'] == 'True':
+            progressData['disableAWBG'] = True
+
+        progressData['underexposeNights'] = False
+        if row['underexposeNights'] == 'True':
+            progressData['underexposeNights'] = True
+
+        progressData["lockExposure"] = False
+        if row["lockExposure"] == 'True':
+            progressData["lockExposure"] = True
+
+
+        progressData["delayBetweenShots"] = int(row['delayBetweenShots'])
+        
         progressData['width'] = row['width']
         progressData['height'] = row['height']
 
         print("shoot in progress")
+
+        #print(progressData)
         
 
     if thisShootId == -1:
@@ -180,6 +224,8 @@ def configureDB(progressData):
         sqlStr += ",'" + str(progressData["useThumbnail"]) + "'"
         sqlStr += ",'" + str(progressData["disableAWBG"]) + "'"
         sqlStr += ",'" + str(progressData["underexposeNights"]) + "'"
+        sqlStr += ",'" + str(progressData["lockExposure"]) + "'"
+        sqlStr += ",'" + str(progressData["delayBetweenShots"]) + "'"
         sqlStr += ",'" + str(progressData["width"]) + "'"
         sqlStr += ",'" + str(progressData["height"]) + "'"
         sqlStr += ");"
@@ -192,7 +238,7 @@ def configureDB(progressData):
 
         #set up default values for use in this new shoot
         progressData["captureIndex"] = 0
-        progressData["shutterSpeed"] = 1000 #random number, should take a test auto shot to be better set from kick-off
+        progressData["shutterSpeed"] = args.startingSS #random number, should take a test auto shot to be better set from kick-off
         progressData["digitalGains"] = 1 #start low
         progressData["analogueGains"] = 1 #start low
             
@@ -347,20 +393,20 @@ else :
 startTime = datetime.datetime.now().timestamp()
 print("start time: "+str(startTime))
 captureTimelapse = True
+
 while captureTimelapse is True:
-
-
-
-
-    
-    #for testing how many images can be taken in a timeframe 
+     #for testing how many images can be taken in a timeframe 
     if args.exitAfter > 0:
         cur_time = int(time.time())
         if cur_time - start_time >= args.exitAfter:
+            print("---------------------------------------------------")
+            print("---------------------------------------------------")
             print(str(progressData["captureIndex"]) + " images captured in "+ str(cur_time - start_time) + " seconds")
+            print("---------------------------------------------------")
+            print("---------------------------------------------------")
             captureTimelapse = False
-
-    print("-----------------------------------------")
+            quit()
+    
     #print("taking a photo")
     awbgSettings = str(progressData["blueGains"])+","+str(progressData["redGains"]) 
     thumbnailStr = " "
@@ -408,10 +454,10 @@ while captureTimelapse is True:
     progressData["captureIndex"] = progressData["captureIndex"] + 1
     
 
+    storeProgress (progressData)
 
-
-    if runWithoutCamera == True:
-        print("normally, analysis of the image happens here, but in this testing, we don't")
+    if runWithoutCamera == True or progressData["lockExposure"] == True:
+        print("bypassing image analysis as we've locked settings")
     else :
 
         #analyse the thumbnail as this is a smaller file, should be faster - however, we need to now make a thumbnail for every image - which might make things slower
@@ -425,7 +471,7 @@ while captureTimelapse is True:
         if args.exitAfter > 0: #only run this in normal mode, no need for exitAfter tests
             print("brightnessPerceived score: " + str(progressData["brightnessScore"]))
 
-        storeProgress (progressData)
+        
 
         #if we're at night, we want he pictures to be a bit darker if shooting in the city
         if progressData["underexposeNights"] == True:
@@ -547,5 +593,14 @@ while captureTimelapse is True:
             
             manageColorGainChanges(float(measuredGains[0]), float(measuredGains[1]))
     
+
+
+
+   
+
+    #we may have a sleep moment if the user wants this, otherwise this will default to zero
+    sleep(int(progressData["delayBetweenShots"]))
+    
+
 totalTime = datetime.datetime.now().timestamp() - startTime
 print("EXIT - END time: "+str(totalTime))

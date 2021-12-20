@@ -56,8 +56,7 @@ else:
 os.chdir(siteRoot+"/")
 
 
-dbconnect = sqlite3.connect("letslapse.db")
-dbconnect.row_factory = sqlite3.Row
+
 
 
 #start up the streamer, this will run as a child on a different port
@@ -141,57 +140,9 @@ def shootPreview(query_components) :
     return filename
 
 
-def startCreateDB():
-    #create the core table if it's not there
-    cursor = dbconnect.cursor()
-    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shoots "
-    sqlStr += "(id INTEGER PRIMARY KEY, shootName VARCHAR (255), startTime DATETIME, endTime DATETIME, includeRAW BOOLEAN, useThumbnail BOOLEAN, disableAWBG BOOLEAN, underexposeNights BOOLEAN, width INTEGER, height INTEGER);"
-    cursor.execute(sqlStr)
-    dbconnect.commit()
 
-    #create the table for each individual shoot
-    cursor = dbconnect.cursor()
-    sqlStr = "CREATE TABLE IF NOT EXISTS timelapse_shots "
-    sqlStr += "(id INTEGER PRIMARY KEY, timelapse_shoot_id INTEGER, captureIndex INTEGER, captureTime DATETIME, "
-    sqlStr += "shutterSpeed INTEGER, analogueGains DECIMAL, digitalGains DECIMAL, blueGains DECIMAL, redGains DECIMAL, brightnessTarget DECIMAL, brightnessScore DECIMAL);"
-    #print(sqlStr)
-    cursor.execute(sqlStr)
-    dbconnect.commit()
 
-def createProgressTxtFromDB() : 
-    db = dbconnect.cursor()
-    #if we have a known shoot, no need for the following
-    sqlStr = "select * from timelapse_shots inner join timelapse_shoots on timelapse_shots.timelapse_shoot_id=timelapse_shoots.id where timelapse_shoots.endTime = '' ORDER by id DESC limit 1;"
-    rows = db.execute(sqlStr).fetchone()
-    dbconnect.commit()
-    
-    jsonOutput = "{"
 
-    jsonOutput += '"status":"progress",'
-    if (isinstance(rows, sqlite3.Row)):
-        names = rows.keys()
-        curCount = 0
-        for colName in names:
-            if curCount > 2: #have a dodgy bit of sql and the id from both tables gets sucked in, but we don't want this, hence we start from column 2
-                jsonOutput += "," #only add this as the prefix for the 1st on (2nd, but zero based)
-
-            if curCount > 1:
-                jsonOutput += '"'+ ( str(colName) + '":"' + str(rows[colName]) ) + '"'
-            curCount = curCount + 1
-    else:
-        print("nothing in progress")
-        jsonOutput += '"status": "ready"'
-    jsonOutput += "}"
-
-    return jsonOutput
-
-def killTimelapseDB():
-    db = dbconnect.cursor()
-    now = datetime.now()
-    dt_string = now.strftime("%d/%m/%Y %H:%M:%S")
-    sqlStr = "update timelapse_shoots set endTime = '"+str(dt_string)+"' where endTime == '';"
-    db.execute(sqlStr)
-    dbconnect.commit()
 
 class StreamingOutput(object):
     def __init__(self):
@@ -297,7 +248,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 if query_components["pauseOrKill"][0] == "kill":
                     #update DB where the endTime value gets set
                     #system("rm progress.txt")
-                    killTimelapseDB()
+                    ll_utils.killTimelapseDB()
             elif actionVal == "killstreamer" :
                 check_kill_process("ll_streamer.py")
             elif actionVal == "startstreamer" :
@@ -392,7 +343,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 
             if self.path == "/progress.txt":
                 #progress.txt was formally a static file, but now is dynamically generated
-                jsonResp = createProgressTxtFromDB()
+                jsonResp = ll_utils.createProgressTxtFromDB()
                 
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -438,7 +389,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 #    system("nohup python3 ll_timelapse.py &")
 
 
-startCreateDB()
+ll_utils.startCreateDB()
 
 # Create an object of the above class
 handler_object = MyHttpRequestHandler

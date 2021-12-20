@@ -195,8 +195,27 @@
                       <div class="row">
                         <div class="col-4">
                           <strong>Shutter:</strong>
-                          <input id="ss" value="" name="ss" class="form-control" placeholder="e.g. 1000 for 1/100th"></input>
-                          <sub>Shutter-speed in micro seconds. 1000000 = 1 second</sub>
+                          <select id="ss" name="ss" class="form-control">
+                            <option value="250">1/4000</option>
+                            <option value="500">1/2000</option>
+                            <option value="1000">1/1000</option>
+                            <option value="2000">1/500</option>
+                            <option value="4000">1/250</option>
+                            <option value="8000" selected>1/125</option>
+                            <option value="16667">1/60</option>
+                            <option value="33333">1/30</option>
+                            <option value="66666">1/15</option>
+                            <option value="125000">1/8</option>
+                            <option value="250000">1/4</option>
+                            <option value="500000">1/2</option>
+                            <option value="1000000">1"</option>
+                            <option value="2000000">2"</option>
+                            <option value="5000000">5"</option>
+                            <option value="10000000">10"</option>
+                            <option value="15000000">15"</option>
+                            <option value="30000000">30"</option>
+                            <option value="60000000">60"</option>
+                          </select>
                         </div>
                         <div class="col-2">
                           <strong>AG:</strong>
@@ -316,15 +335,6 @@
                     </div>
 
 
-                  <div class="row">
-                    <div class="col-sm-12">
-                      <div class="form-group form-check">
-                        <input type="checkbox" class="form-check-input" id="underexposeNights" checked="true">
-                        <label class="form-check-label" for="underexposeNights">Underexpose Nights </label>
-                        <br><small class="text-muted">Ideal for city shooting where bright lights can overexpose</small>
-                      </div>
-                    </div>
-                    </div>
                     
                     <div class="row">
                       <div class="col-sm-6">
@@ -347,26 +357,141 @@
                     </div>
 
                     <div class="row">
-                      <div class="col-sm-6">
-                      <div class="form-group form-check ">
-                        <label class="form-check-label" for="startingGains">Starting AWBG</label>
-                        <input type="text" class="form-control" id="startingGains" placeholder="1,1" value="1,1">
-                        <br><small class="text-muted">Set starting blue and red gains <a href="javascript:getGains('startingGains');" >auto-detect</a></small>
+                      <div class="col-12">
+                        <strong>White Balance Settings</strong> <br />
+                        <sub>AWBG color correction; floating point for sensor gain values in red and blue</sub>
                       </div>
+                      <div class="col-sm-5">
+                        <div class="form-group ">
+                          <label class="form-check-label" for="startingGains">AWBG: </label>
+                          <input type="text" class="form-control" id="startingGains" placeholder="1,1" value="1,1">
+                          <br><small class="text-muted"><a href="javascript:getGains('startingGains');" >Auto-detect NOW</a></small>
+                        </div>
                       </div>
-                      <div class="col-sm-6">
+                      <div class="col-sm-7">
                         <div class="form-group form-check ">
                           <input type="checkbox" class="form-check-input" id="disableAWBG">
-                          <label class="form-check-label" for="disableAWBG">Disable Color Correction</label>
-                          <br> <small class="text-muted">Disables AWBG analysis to capture images faster</small>
+                          <label class="form-check-label" for="disableAWBG">Lock AWBG</label>
+                          <small class="text-muted">Disables AWBG analysis to capture images faster</small>
                         </div>
                        
                       </div>
                     </div>
 
 
+                    <div class="row">
+                      <div class="col-12">
+                        <strong>Exposure Settings</strong> <br />
+                        <sub>Leave untouched for default settings, or set as required for custom starting settings</sub>
+                      </div>
+                      <div class="col-6">
+                        Shutter:
+                        <select id="startingSS" name="startingSS" class="form-control">
+                          <option value="250">1/4000</option>
+                          <option value="500">1/2000</option>
+                          <option value="1000">1/1000</option>
+                          <option value="2000">1/500</option>
+                          <option value="4000">1/250</option>
+                          <option value="8000" selected>1/125</option>
+                          <option value="16667">1/60</option>
+                          <option value="33333">1/30</option>
+                          <option value="66666">1/15</option>
+                          <option value="125000">1/8</option>
+                          <option value="250000">1/4</option>
+                          <option value="500000">1/2</option>
+                          <option value="1000000">1"</option>
+                          <option value="2000000">2"</option>
+                          <option value="5000000">5"</option>
+                          <option value="10000000">10"</option>
+                          <option value="15000000">15"</option>
+                          <option value="30000000">30"</option>
+                          <option value="60000000">60"</option>
+                        </select>
+                        
+                      </div>
+                      <div class="col-3">
+                        AG:
+                        <select id="analogueGains" name="analogueGains" class="form-control" >
+                          <option>1</option>
+                          <option>2</option>
+                          <option>3</option>
+                          <option>4</option>
+                          <option>5</option>
+                          <option>6</option>
+                          <option>7</option>
+                          <option>8</option>
+                        </select>
+                        
+                      </div>
+                      <div class="col-3">
+                        DG:
+                        <select id="digitalGains" name="digitalGains" class="form-control" >
+                          <option>1</option>
+                          <option>2</option>
+                          <option>3</option>
+                          <option>4</option>
+                          <option>5</option>
+                          <option>6</option>
+                          <option>7</option>
+                          <option>8</option>
+                        </select>
+                        
+                      </div>
 
+                      <div class="col-sm-12">
+                        <div class="form-group form-check">
+                          <div class="row">
+                            <div class="col-sm-4">
+                              <input type="radio" class="form-check-input" id="underexposeNights" checked="true" name="exposureSettings">
+                              <label class="form-check-label" for="underexposeNights">Underexpose Nights </label>
+                              <br><small class="text-muted">Ideal for city shooting where bright lights can overexpose</small>
+                            </div>
+                            <div class="col-sm-4">
+                              <input type="radio" class="form-check-input" id="autoExposure" name="exposureSettings">
+                              <label class="form-check-label" for="autoExposure">Auto Exposure from bright day to dark night </label>
+                              <br><small class="text-muted">Ideal for day to dark night sky</small>
+                            </div>
+                          <div class="col-sm-4">
+                            <input type="radio" class="form-check-input" id="lockedExposure" name="exposureSettings">
+                            <label class="form-check-label" for="lockedExposure">Locked Exposure </label>
+                            <br><small class="text-muted">Ideal for controlled light settings</small>
+                          </div>
+                        </div>
+                      </div>
+                      
+                    </div>
+
+
+
+                  </div>        
+                  
+                  
+
+                  <div class="row">
                     
+                      <div class="col-12">
+                        <strong>Capture Settings</strong> <br />
+                      </div>
+
+                      <div class="col-sm-6">
+                        <div class="form-group ">
+                          <label class="form-check-label" for="delayBetweenShots">Delay between images: </label>
+                          <input type="text" class="form-control" id="delayBetweenShots" placeholder="Default: 0 (no delay)" >
+                          
+                        </div>
+                      </div>
+
+                      <div class="col-sm-6">
+                        <div class="form-group ">
+                          <label class="form-check-label" for="exitAfter">Exit after seconds: </label>
+                          <input type="text" class="form-control" id="exitAfter" placeholder="Default: 0 (indefinite)" >
+                          
+                        </div>
+                      </div>
+                      
+                      
+                    </div>
+                   
                     
                     <div class="row">
                       <div class="col-sm-12">
