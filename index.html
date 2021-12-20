@@ -536,7 +536,11 @@
               <div id="galleryApp" class="d-none" >
                 <div class="container" v-for="shoot in shoots">
                   <div class="row shootName" >
-                    <div class="col theLabel">{{ shoot.shootName }}</div>
+                    <div class="theLabel">{{ shoot.shootName }} - Process: 
+                      <a href="#" v-bind:onclick='"blend("+"\""+shoot.shootName+"\""+", 5);"'>5x</a>
+                      <a href="#" v-bind:onclick='"blend("+"\""+shoot.shootName+"\""+", 10);"'>10x</a>
+                      <a href="#" v-bind:onclick='"blend("+"\""+shoot.shootName+"\""+", 20);"'>20x</a>  
+                    </div>
                   </div>
                   <div class="row shootImages">
                     <div class="col col-4 p-0" v-for="image in shoot.shootImages">
