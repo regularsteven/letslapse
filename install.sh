@@ -22,28 +22,28 @@ sudo apt-get install python-picamera python3-picamera -y
 
 echo "4 Numpy"
 #numpy and dependencies
-sudo apt-get install libatlas-base-dev -y
-python3 -m pip install numpy
+#sudo apt-get install libatlas-base-dev -y
+#python3 -m pip install numpy
 
-pip3 install numpy --upgrade 
+#pip3 install numpy --upgrade 
 #unsure why we can't install numpy in the first instance, but an issue is found and requires the pip3 command
 echo "5 Pillow"
-python3 -m pip install Pillow
+#python3 -m pip install Pillow
 
 
 echo "Install imagemagick"
-sudo apt-get install imagemagick
+sudo apt-get install imagemagick -y
 
 echo "6 OpenCV and dependencies"
 #OpenCV and dependencies
-sudo apt install libtiff5 -y
-sudo apt install libwebp-dev -y
-sudo apt install libopenjp2-7 -y
-sudo apt install libIlmImf-2_2-23 -y
-sudo apt install libgstreamer1.0-dev -y
-sudo apt-get install libopenexr-dev -y
-sudo apt-get install python-opencv -y
-python3 -m pip install opencv-python
+#sudo apt install libtiff5 -y
+#sudo apt install libwebp-dev -y
+#sudo apt install libopenjp2-7 -y
+#sudo apt install libIlmImf-2_2-23 -y
+#sudo apt install libgstreamer1.0-dev -y
+#sudo apt-get install libopenexr-dev -y
+#sudo apt-get install python-opencv -y
+#python3 -m pip install opencv-python
 
 #exif and ffmpeg tools
 sudo apt install -y ffmpeg

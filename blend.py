@@ -1,6 +1,8 @@
-import os, numpy, PIL
+import os
+#import numpy
+import PIL
 import re
-import cv2 as cv
+#import cv2 as cv
 from PIL import Image, ExifTags, ImageStat
 import piexif
 from os import system
