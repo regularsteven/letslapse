@@ -332,7 +332,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 jsonResp += ',"processing":"'+str(query_components["shootName"][0])+'"'
                 jsonResp += ',"speed":"'+str(query_components["processingSpeed"][0])+'"'
                 
-                strToFire = "./blend.sh "+ str(query_components["processingSpeed"][0]) + " " + str(query_components["shootName"][0]) + ""
+                strToFire = "nohup ./blend.sh "+ str(query_components["processingSpeed"][0]) + " " + str(query_components["shootName"][0]) + " &"
                 print(strToFire)
                 system(strToFire)
 
