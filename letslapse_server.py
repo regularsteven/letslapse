@@ -412,17 +412,16 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             else:
                 print("General FILE serving")
                 self.send_response(200)
-                
                 if self.path.endswith('.svg'):
                     self.send_header('Content-Type', 'image/svg+xml')
-                if self.path.endswith('.css'):
+                elif self.path.endswith('.css'):
                     self.send_header('Content-Type', 'text/css')
-                if self.path.endswith('.js'):
+                elif self.path.endswith('.js'):
                     self.send_header('Content-Type', 'application/javascript')
-                if self.path.endswith('.jpg'):
+                elif self.path.endswith('.jpg'):
                     self.send_header('Content-Type', 'image/jpeg')
-                if self.path.endswith('.mp4'):
-                    self.send_header('Content-Disposition', 'attachment; filename="download.mp4"')
+                elif self.path.endswith('.mp4'):
+                    self.send_header('Content-Disposition', 'attachment; filename="'+os.path.basename(self.path)+'"')
                     self.send_header('Content-Type', 'video/mp4')
 #                    self.send_header('Content-Length', len(self.path))
                 else:
