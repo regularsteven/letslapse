@@ -4,7 +4,7 @@ import PIL
 import re
 #import cv2 as cv
 from PIL import Image, ExifTags, ImageStat
-import piexif
+#import piexif
 from os import system
 import time
 import argparse
@@ -56,7 +56,11 @@ import ll_utils
 # run command from project home, eg. cd ~/Documents/dev/letslapse/ OR from a specific folder ()
 # 1 python3 blend.py --video videos/castle-long.mp4 
 # 2 python3 blend.py --video videos/castle-long.mp4 --blendingMethod easing
-# 3 python3 ~/Documents/dev/letslapse/blend.py --video longvideo.mp4 --groupBy 12
+# 3 python3 ~/Documents/dev/letslapse/blend.py --groupBy 30 --video
+
+
+                    #CONVERT VIDEO TO varied playback
+
 
 
 parser = argparse.ArgumentParser()
@@ -323,9 +327,10 @@ if args.video == None:
 else:
     #make the directory for the frames
     print("Blend Video!")
-    
+    starttime = datetime.now().strftime('%s')
     videoName = args.video.replace(".mp4", "")
 
+    frameCount = 0
 
     projectName = str(videoName)+"_letsLapse"
 
@@ -357,6 +362,12 @@ else:
         ffmpegCommand = "ffmpeg -i "+str(args.video) +" -qscale:v 1 " +framesDirectory + "/image%d.jpg" 
     
         system(ffmpegCommand)
+
+        endtime = datetime.now().strftime('%s')
+        processingtime = int(endtime) - int(starttime)
+
+        print(str(processingtime))
+        exit()
     else: 
         print("Frames already exported, no need to export again")
     
@@ -422,6 +433,10 @@ else:
     #exit()
     if blendingMethod == "regular":
         system("mkdir "+blendedDirectory)
+        print("About to do blendingMethod == regular ")
+        print("-------")
+        print("-------")
+        print("-------")
         blendByImages(groupBy, fullImageSet, migrateExif)
 
         if calculatedGroupBy == args.groupBy:

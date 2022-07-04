@@ -6,6 +6,7 @@ import json
 import sqlite3
 
 def isPi():
+    return False
     checkIfSystemHasARM = os.uname()[4][:3].startswith("arm")
     print("system has ARM: " + str(checkIfSystemHasARM))
     return (checkIfSystemHasARM)
