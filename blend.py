@@ -584,7 +584,7 @@ else:
 
                 groupBy = groupBy + framesToAddOnCounter
 
-                #blendGroupToOne(imlist, curImageSet, migrateExif, outputFolder)
+                blendGroupToOne(imlist, curImageSet, migrateExif, outputFolder)
                 imlist = []
             #check 
             #i=i+1
