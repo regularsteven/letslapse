@@ -56,20 +56,23 @@ import ll_utils
 # run command from project home, eg. cd ~/Documents/dev/letslapse/ OR from a specific folder ()
 # 1 python3 blend.py --video videos/castle-long.mp4 
 # 2 python3 blend.py --video videos/castle-long.mp4 --blendingMethod easing
-# 3 python3 ~/Documents/dev/letslapse/blend.py --groupBy 30 --video
+# 3 python3 ~/Documents/dev/letslapse/blend.py --groupBy 30 --video filename.mp4
 
 
                     #CONVERT VIDEO TO varied playback
-
+# python3 ~/Documents/dev/letslapse/blend.py --groupBy 50,2000-2200@1,5500-5900@2 --video tram_low.mp4
+# python3 ~/Documents/dev/letslapse/blend.py --groupBy 50 --blendingMethod 2000-2200@1,5500-5900@2 --video rain_low.mp4
 
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--video', help='specify video to convert to images then blend to image')
-parser.add_argument('--blendingMethod', help='if not set defaults as "regular", set value to make "easing"', default="regular")
+parser.add_argument('--blendingMethod', help='defaults as "regular", set value to make "easing"', default="regular")
 parser.add_argument('--groupBy', help='number to group batching by with --type images or seconds', default="30")
 parser.add_argument('--groupByType', help='images or seconds - group images as per --groupBy', default="seconds")
 parser.add_argument('--makeMP4', help='images or seconds - group images as per --groupBy', default="yes")
 parser.add_argument('--imagePrefix', help='specify and image name other than image', default="image")
+
+parser.add_argument('--customGrouping', help='range of frames @ FPS')
 
 parser.add_argument('--test', help='tests the folder satructure to ensure all images are in place, returns the largest gap between two images')
 
@@ -183,10 +186,10 @@ if args.test == "basic" or args.test == "full" :
 def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     start = time.time()
     
-    print("blendGroupToOne(imlist, sequenceNo: "+str(sequenceNo)+", migrateExif: "+str()+", outputFolder)")
+    print("blendGroupToOne(imlist, sequenceNo: "+str(sequenceNo)+", migrateExif: "+str(migrateExif)+", outputFolder:"+outputFolder+")")
     print(imlist)
-    blendingMethod = "numpy"
-    blendingMethod = "imagemagick"
+    blendingTool = "numpy"
+    blendingTool = "imagemagick"
 
     # load exif data from the first image parsed in - we'll use this to put in the output image
     im = Image.open( imlist[0])
@@ -204,16 +207,16 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
         exif = { ExifTags.TAGS[k]: v for k, v in im._getexif().items() if k in ExifTags.TAGS }
         #print((exif["ShutterSpeedValue"]))
 
-    if blendingMethod == "imagemagick":
+    if blendingTool == "imagemagick":
         listOfFiles = ""
         for im in imlist:
             listOfFiles += im +" "
         print("convert "+ listOfFiles)
         system("convert " +listOfFiles+ " -evaluate-sequence mean "+fileName)
     
-    #blendingMethod = "numpy"
-    fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+"_"+blendingMethod+".jpg"
-    if blendingMethod == "numpy":
+    #blendingTool = "numpy"
+    fileName = os.getcwd()+"/"+outputFolder+"/image"+str(sequenceNo)+"_"+blendingTool+".jpg"
+    if blendingTool == "numpy":
 
         # ref to https://stackoverflow.com/questions/17291455/how-to-get-an-average-picture-from-100-pictures-using-pil 
         #if blendAction = "preprocess" #this is the first step, to put all the blending jobs into a text file
@@ -260,7 +263,11 @@ def blendGroupToOne(imlist, sequenceNo, migrateExif, outputFolder) :
     
 
 def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif): 
+
+    
+
     print("imagesToBlendToOne: "+ str(imagesToBlendToOne))
+
     print("fullImageSet:")
     print(fullImageSet)
     
@@ -268,9 +275,9 @@ def blendByImages(imagesToBlendToOne, fullImageSet, migrateExif):
     
     if imagesToBlendToOne == 1:
         print("no need to process these images, as we're just rendering them as one simple playback")
+    
     else :
         for a in range(int((fullImageSet) / (imagesToBlendToOne+1)) ):
-
             #a = (a + 2204 + 1) #if there's a prevoius session run, and images already processed, this can make it start with an offset (just use the number of images created as '10')
             imlist = []
             for i in range(imagesToBlendToOne+1):
@@ -358,6 +365,8 @@ else:
     
     #os.chdir("videos/")
     if stillsAlreadyExported == False:
+
+
         print("extract frames with FFMPEG")
         ffmpegCommand = "ffmpeg -i "+str(args.video) +" -qscale:v 1 " +framesDirectory + "/image%d.jpg" 
     
@@ -528,7 +537,69 @@ else:
         #ffmpegCommand = 'ffmpeg -stream_loop 3 -i '+outputFolder+'/single.mp4 -c copy '+outputFolder+'/output.mp4'
         #system(ffmpegCommand)
             
+    else:
+        print("blendingMethod:")
+        print(blendingMethod)
+        print("   ------ with custom blended images between ranges")
 
+        #check structure matches required spec, eg:
+        #[fromframe-toframe@blendrate], or 2000-2200@1,5500-5900@2
+
+        outputFolder = "custom"+str(groupBy)+"_"+str(blendingMethod)
+        system("mkdir "+outputFolder)
+        #print(fullImageSet)
+        customBlendParts = blendingMethod.split(",")
+        
+        
+        curImageSet = 0
+        imlist = []
+        basedGroupBy = groupBy
+        imageToAdd = 0
+
+        
+
+        for i in range(fullImageSet):
+            imageToAdd = imageToAdd+1 #use this intead of i as we're 1 based from image sequence
+
+            imlist.append( imagePrefix +str(imageToAdd)+'.jpg' )
+            if imageToAdd == groupBy:
+                #time to make the image
+                curImageSet = curImageSet+1
+
+                print("Image: " + str(curImageSet))
+                print(imlist)
+                print("   ------ send the images to be blended")
+                framesToAddOnCounter = basedGroupBy
+
+                #this is very dirty - shouldn't have to do this much string manipulation inside the loop and ideally store these as variables
+                for n in customBlendParts:
+                    
+                    this_fromFrame = int(n.split("@")[0].split("-")[0])
+                    this_toFrame = int(n.split("@")[0].split("-")[1])
+                    #print("Testing if inside a custom blending range of frames, from: " + str(this_fromFrame) + " " + str(this_toFrame))
+                    if imageToAdd >= this_fromFrame and imageToAdd <= this_toFrame:
+                        print("inside a range to blend custom amounts")
+                        this_imagesToBlendToOne = int(n.split("@")[1])
+                        framesToAddOnCounter = this_imagesToBlendToOne
+
+                groupBy = groupBy + framesToAddOnCounter
+
+                #blendGroupToOne(imlist, curImageSet, migrateExif, outputFolder)
+                imlist = []
+            #check 
+            #i=i+1
+            #print(i)
+        
+        system("mv "+outputFolder + " ../")
+        os.chdir("../")
+        inputFile = outputFolder+"/image%d.jpg"
+        system("ffmpeg -i "+inputFile+" -b:v 100000k -pix_fmt yuv420p -r 25 ../"+videoName+"_letsLapse_"+str(args.groupBy)+"_"+str(groupByType)+"_"+str(blendingMethod)+".mp4")
+
+        #imlist = [imagePrefix+'1.jpg', imagePrefix+'2.jpg', imagePrefix+'3.jpg', imagePrefix+'4.jpg', imagePrefix+'5.jpg', imagePrefix+'6.jpg', imagePrefix+'7.jpg', imagePrefix+'8.jpg', imagePrefix+'9.jpg', imagePrefix+'10.jpg']
+        #imageSeq = "1"
+        #blendGroupToOne(imlist, imageSeq, migrateExif, outputFolder)
+        #print()
+        exit()
     
     
     #system("python3 /../blend.py --groupBy "+groupBy+" --groupByType images --makeMP4 yes")
