@@ -32,5 +32,5 @@ picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.
 #picam2.start(show_preview=False)
 time.sleep(2)
 
-filename = args.name + "_" + str(args.lenposition) +  "." + args.format
+filename = args.name + "_" + str(args.lenPosition) +  "." + args.format
 picam2.switch_mode_and_capture_file(capture_config, filename, name=args.format)
