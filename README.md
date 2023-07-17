@@ -348,3 +348,42 @@ sysbench --test=memory run --memory-total-size=2G --memory-oper=read
 
 DEVICE      | A         | B1                                        | B2        | B3 | C        | Notes
 CM4 32b     | 10.0153s  | 2147483648 bytes written in 51.98 seconds | 300.0833s |    | 4.2299s  | Running Bulleye 32bit, latest everything
+
+
+
+
+# bullseye notes:
+camera_app/
+├── app.py
+├── camera/
+│   ├── __init__.py
+│   ├── camera.py
+│   ├── capture.py
+│   ├── video.py
+│   └── timelapse.py
+├── web_interface/
+│   ├── __init__.py
+│   ├── server.py
+│   ├── routes.py
+│   ├── templates/
+│   │   ├── index.html
+│   │   ├── project_gallery.html
+│   │   ├── edit_project.html
+│   │   └── ...
+│   └── static/
+│       ├── css/
+│       ├── js/
+│       └── ...
+├── web_server/
+│   ├── __init__.py
+│   ├── wifi.py
+│   └── ...
+└── utils/
+    ├── __init__.py
+    ├── conversions.py
+    ├── shell_commands.py
+    └── ...
+
+
+## install dependencies:
+sudo apt install -y python3-picamera2
