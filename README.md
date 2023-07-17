@@ -385,7 +385,83 @@ camera_app/
     └── ...
 
 
+# # focus testing:
+ range: 15 > 2.75 ( 0  = theoretical infinate)
+ - --lens-position 15 = MACRO (7.5cm)
+ - --lens-position 10 = MACRO (10cm)
+ - --lens-position 4.5 = Arms length
+ - --lens-position 2.75 = INFINATE
+
+
 ## install dependencies:
 sudo apt install -y python3-pyqt5 python3-opengl
 add video=HDMI-A-1:1920x1080@60D to sudo /boot/cmdline.txt
+
+# simple camera utils in SHELL
+libcamera-jpeg -o FirstPhoto.jpg
+
+libcamera-jpeg -o manual_lens_00000.jpg -t 1 --autofocus-mode manual --lens-position 0
+libcamera-jpeg -o manual_lens_00025.jpg -t 1 --autofocus-mode manual --lens-position 0.25
+libcamera-jpeg -o manual_lens_00050.jpg -t 1 --autofocus-mode manual --lens-position 0.5
+libcamera-jpeg -o manual_lens_00075.jpg -t 1 --autofocus-mode manual --lens-position 0.75
+libcamera-jpeg -o manual_lens_00125.jpg -t 1 --autofocus-mode manual --lens-position 1.25
+libcamera-jpeg -o manual_lens_00150.jpg -t 1 --autofocus-mode manual --lens-position 1.5
+libcamera-jpeg -o manual_lens_00175.jpg -t 1 --autofocus-mode manual --lens-position 1.75
+libcamera-jpeg -o manual_lens_00200.jpg -t 1 --autofocus-mode manual --lens-position 2
+libcamera-jpeg -o manual_lens_00225.jpg -t 1 --autofocus-mode manual --lens-position 2.25
+libcamera-jpeg -o manual_lens_00250.jpg -t 1 --autofocus-mode manual --lens-position 2.5
+libcamera-jpeg -o manual_lens_00275.jpg -t 1 --autofocus-mode manual --lens-position 2.75
+libcamera-jpeg -o manual_lens_00300.jpg -t 1 --autofocus-mode manual --lens-position 3
+libcamera-jpeg -o manual_lens_00325.jpg -t 1 --autofocus-mode manual --lens-position 3.25
+libcamera-jpeg -o manual_lens_00350.jpg -t 1 --autofocus-mode manual --lens-position 3.5
+libcamera-jpeg -o manual_lens_00375.jpg -t 1 --autofocus-mode manual --lens-position 3.75
+libcamera-jpeg -o manual_lens_00400.jpg -t 1 --autofocus-mode manual --lens-position 4
+libcamera-jpeg -o manual_lens_00425.jpg -t 1 --autofocus-mode manual --lens-position 4.25
+libcamera-jpeg -o manual_lens_00450.jpg -t 1 --autofocus-mode manual --lens-position 4.5
+libcamera-jpeg -o manual_lens_00475.jpg -t 1 --autofocus-mode manual --lens-position 4.75
+libcamera-jpeg -o manual_lens_00500.jpg -t 1 --autofocus-mode manual --lens-position 5
+libcamera-jpeg -o manual_lens_00525.jpg -t 1 --autofocus-mode manual --lens-position 5.25
+libcamera-jpeg -o manual_lens_00550.jpg -t 1 --autofocus-mode manual --lens-position 5.5
+libcamera-jpeg -o manual_lens_00575.jpg -t 1 --autofocus-mode manual --lens-position 5.75
+libcamera-jpeg -o manual_lens_00600.jpg -t 1 --autofocus-mode manual --lens-position 6
+libcamera-jpeg -o manual_lens_00625.jpg -t 1 --autofocus-mode manual --lens-position 6.25
+libcamera-jpeg -o manual_lens_00650.jpg -t 1 --autofocus-mode manual --lens-position 6.5
+libcamera-jpeg -o manual_lens_00675.jpg -t 1 --autofocus-mode manual --lens-position 6.75
+libcamera-jpeg -o manual_lens_00700.jpg -t 1 --autofocus-mode manual --lens-position 7
+libcamera-jpeg -o manual_lens_00725.jpg -t 1 --autofocus-mode manual --lens-position 7.25
+libcamera-jpeg -o manual_lens_00750.jpg -t 1 --autofocus-mode manual --lens-position 7.5
+libcamera-jpeg -o manual_lens_00775.jpg -t 1 --autofocus-mode manual --lens-position 7.75
+libcamera-jpeg -o manual_lens_00800.jpg -t 1 --autofocus-mode manual --lens-position 8
+libcamera-jpeg -o manual_lens_00900.jpg -t 1 --autofocus-mode manual --lens-position 9
+libcamera-jpeg -o manual_lens_01000.jpg -t 1 --autofocus-mode manual --lens-position 10
+
+
+
+libcamera-jpeg -o manual_lens_50.jpg -t 1 --autofocus-mode manual --lens-position 50
+libcamera-jpeg -o manual_lens_40.jpg -t 1 --autofocus-mode manual --lens-position 40
+libcamera-jpeg -o manual_lens_30.jpg -t 1 --autofocus-mode manual --lens-position 30
+libcamera-jpeg -o manual_lens_20.jpg -t 1 --autofocus-mode manual --lens-position 20
+libcamera-jpeg -o manual_lens_18.jpg -t 1 --autofocus-mode manual --lens-position 18
+libcamera-jpeg -o manual_lens_16.jpg -t 1 --autofocus-mode manual --lens-position 16
+libcamera-jpeg -o manual_lens_15.jpg -t 1 --autofocus-mode manual --lens-position 15
+libcamera-jpeg -o manual_lens_14.jpg -t 1 --autofocus-mode manual --lens-position 14
+libcamera-jpeg -o manual_lens_13.jpg -t 1 --autofocus-mode manual --lens-position 13
+libcamera-jpeg -o manual_lens_12.jpg -t 1 --autofocus-mode manual --lens-position 12
+libcamera-jpeg -o manual_lens_11.jpg -t 1 --autofocus-mode manual --lens-position 11
+libcamera-jpeg -o manual_lens_10.jpg -t 1 --autofocus-mode manual --lens-position 10
+libcamera-jpeg -o manual_lens_9.5.jpg -t 1 --autofocus-mode manual --lens-position 9.5
+libcamera-jpeg -o manual_lens_9.jpg -t 1 --autofocus-mode manual --lens-position 9
+libcamera-jpeg -o manual_lens_8.5.jpg -t 1 --autofocus-mode manual --lens-position 8.5
+libcamera-jpeg -o manual_lens_7.jpg -t 1 --autofocus-mode manual --lens-position 7
+libcamera-jpeg -o manual_lens_6.5.jpg -t 1 --autofocus-mode manual --lens-position 6.5
+libcamera-jpeg -o manual_lens_6.jpg -t 1 --autofocus-mode manual --lens-position 6
+libcamera-jpeg -o manual_lens_5.5.jpg -t 1 --autofocus-mode manual --lens-position 5.5
+libcamera-jpeg -o manual_lens_5.jpg -t 1 --autofocus-mode manual --lens-position 5
+libcamera-jpeg -o manual_lens_4.5.jpg -t 1 --autofocus-mode manual --lens-position 4.5
+libcamera-jpeg -o manual_lens_4.jpg -t 1 --autofocus-mode manual --lens-position 4
+libcamera-jpeg -o manual_lens_3.5.jpg -t 1 --autofocus-mode manual --lens-position 3.5
+libcamera-jpeg -o manual_lens_3.jpg -t 1 --autofocus-mode manual --lens-position 3
+libcamera-jpeg -o manual_lens_2.75.jpg -t 1 --autofocus-mode manual --lens-position 2.75
+
+
 
