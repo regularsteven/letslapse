@@ -386,4 +386,6 @@ camera_app/
 
 
 ## install dependencies:
-sudo apt install -y python3-picamera2
+sudo apt install -y python3-pyqt5 python3-opengl
+add video=HDMI-A-1:1920x1080@60D to sudo /boot/cmdline.txt
+
