@@ -21,15 +21,18 @@ picam2.start_preview(Preview.DRM)
 picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition})
 
 #time.sleep(2)
+picam2.start()
 
 if args.format == "jpg":
-    capture_config = picam2.create_still_configuration()
+    capture_config = picam2.create_still_configuration(display=None)
+    r = picam2.switch_mode_capture_request_and_stop(capture_config)
+    filename = args.filename + "_" + args.lensPosition + "." + args.format
+    r.save("main", filename)
 else:
     capture_config = picam2.create_still_configuration(raw={}, display=None)
-    picam2.start()
     r = picam2.switch_mode_capture_request_and_stop(capture_config)
-    #r.save("main", "full.jpg")
-    r.save_dng("full.dng")
+    filename = args.filename + "_" + args.lensPosition + "." + args.format
+    r.save_dng(filename)
     #picam2.switch_mode_and_capture_file(capture_config, "full.dng", name="raw")
 
 
