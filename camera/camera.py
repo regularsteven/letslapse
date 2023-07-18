@@ -16,31 +16,38 @@ args = parser.parse_args()
 picam2 = Picamera2()
 picam2.start_preview(Preview.DRM)
 
-preview_config = picam2.create_preview_configuration()
 
-picam2.configure(preview_config)
-
-picam2.start()
-
-#preview_config = picam2.create_preview_configuration()
-picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition})
-
-#time.sleep(2)
+filename = args.filename + "_" + str(args.lensPosition) + "." + args.format
 
 if args.format == "jpg":
-    filename = args.filename + "_" + str(args.lensPosition) + "." + args.format
-    capture_config = picam2.create_still_configuration(display=None)
+    preview_config = picam2.create_preview_configuration()
+    capture_config = picam2.create_still_configuration(raw={}, display=None)
+
+    picam2.configure(preview_config)
+
+    picam2.start()
+
+    picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition})
+
+    time.sleep(2)
+
     r = picam2.switch_mode_capture_request_and_stop(capture_config)
     r.save("main", filename)
 else:
-    filename = args.filename + "_" + str(args.lensPosition) + "." + args.format
+    preview_config = picam2.create_preview_configuration()
     capture_config = picam2.create_still_configuration(raw={}, display=None)
-    
-    #picam2.switch_mode_and_capture_file(capture_config, filename, name="raw")
-    
+
+    picam2.configure(preview_config)
+
+    picam2.start()
+
+    picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition})
+
+    time.sleep(2)
+
     r = picam2.switch_mode_capture_request_and_stop(capture_config)
-    #r.save("main", "full3.jpg")
-    r.save_dng("full3.dng")
+
+    r.save_dng(filename)
 
 
 
