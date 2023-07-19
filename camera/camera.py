@@ -4,6 +4,8 @@ import argparse
 import time
 import numpy as np
 from picamera2.sensor_format import SensorFormat
+import pickle
+
 
 
 
@@ -38,8 +40,17 @@ def capture_and_save_image(index):
         raw_format = SensorFormat(picam2.sensor_format)
         raw_format.packing = None
 
-        
+        print("1) pre set config")
         config = picam2.create_still_configuration(raw={"format": raw_format.format}, buffer_count=2)
+        
+        
+        print("config:")
+        print(config)
+        
+        print("config[raw]:")
+        print(config["raw"])
+
+        print("4) picam2.configure(config)")
         picam2.configure(config)
         picam2.set_controls({}) #"AnalogueGain": 1.0})
 
@@ -48,27 +59,34 @@ def capture_and_save_image(index):
     elif args.format == "dng":
         r.save_dng(filename +  "." + args.format)
     else:
-
+        print("5) start camera")
         picam2.start()
         time.sleep(1)
 
+        print("6) start capture")
         raw_capture = picam2.capture_array("raw").view(np.uint16)
-        np.save(filename +  ".npy", raw_capture)
+        
+        print("2) config set, dumping to file")
+        with open('raw_config', 'wb') as config_file:
+            pickle.dump(config["raw"], config_file)
 
+            
+        print("7) save raw_capture")
+        
+        np.save(filename +  ".npy", raw_capture)
+        print("9) store associated meatadata")
         # associated metadata for image
         metadata = picam2.capture_metadata()
-        np.save(filename +  ".meta", metadata)
+        with open('metadata', 'wb') as metadata_file:
+            pickle.dump(metadata, metadata_file)
+        
 
         raw_format = SensorFormat(picam2.sensor_format)
         raw_format.packing = None
-        np.save(filename +  ".sensor", raw_format)
-        
-        np.save(filename +  ".config", config)
 
-        print("raw_format: "+ str(raw_format))
-        print("metadata: "+ str(metadata))
-        print("config: "+ str(config))
-
+        #np.save(filename +  ".sensor", raw_format)
+        with open('raw_format', 'wb') as raw_format_file:
+            pickle.dump(raw_format, raw_format_file)
 
     picam2.stop()
 
@@ -92,7 +110,7 @@ def pull_focus(startPoint, endPoint, totalSteps):
 capture_and_save_image(index=0)
 capture_and_save_image(index=1)
 capture_and_save_image(index=2)
-capture_and_save_image(index=3)
+#capture_and_save_image(index=3)
 #capture_and_save_image(index=4)
 #capture_and_save_image(index=5)
 

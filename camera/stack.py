@@ -1,22 +1,40 @@
 import numpy as np
+import sys
 from picamera2 import Picamera2
+import pickle
+import struct
+from pidng.camdefs import Picamera2Camera
+from pidng.core import PICAM2DNG
+import picamera2.formats as formats
+
+ 
 
 # Rebuild the images array from the saved .npy files
-num_frames = 4
+num_frames = 2
 images = []
 for i in range(num_frames):
-    image = np.load(f"testing_{i}_4.5.npy")
+    image = np.load(f"concept_{i}_4.5.npy")
     
     images.append(image)
 
 
 
-metadata = {'SensorTimestamp': 51867530120000, 'ScalerCrop': (0, 0, 4608, 2592), 'ColourCorrectionMatrix': (1.1673871278762817, 0.21403875946998596, -0.38143041729927063, -0.4674781560897827, 1.594957947731018, -0.12748435139656067, -0.07635503262281418, -1.0225597620010376, 2.098909378051758), 'ExposureTime': 119305, 'SensorTemperature': 45.0, 'AfPauseState': 0, 'FrameDuration': 120567, 'AeLocked': False, 'AfState': 0, 'DigitalGain': 1.0077252388000488, 'AnalogueGain': 4.612612724304199, 'ColourGains': (1.2584811449050903, 3.261364698410034), 'ColourTemperature': 2673, 'Lux': 24.42319107055664, 'SensorBlackLevels': (4096, 4096, 4096, 4096), 'FocusFoM': 2895}
+metadata = object()
 
+with open('metadata', 'rb') as fp:
+    metadata = pickle.load(fp)
 exposure_time = metadata["ExposureTime"]
 
-raw_format = np.load(f"testing_0_4.5.sensor")
-config = np.load(f"testing_0_4.5.config")
+
+raw_config = object()
+with open('raw_config', 'rb') as fp:
+    raw_config = pickle.load(fp)
+
+
+
+raw_format = type('', (), {})()
+raw_format.bit_depth = 10
+
 
 accumulated = images.pop(0).astype(int)
 for image in images:
@@ -31,6 +49,35 @@ accumulated = accumulated.clip(0, 2 ** raw_format.bit_depth - 1).astype(np.uint1
 accumulated = accumulated.view(np.uint8)
 metadata["ExposureTime"] = exposure_time
 
-picam2 = Picamera2()
 
-picam2.helpers.save_dng(accumulated, metadata, config["raw"], "accumulated.dng")
+
+def make_array(buffer, config):
+    """Make a 2d numpy array from the named stream's buffer."""
+    array = buffer
+    fmt = config["format"]
+    w, h = config["size"]
+    stride = 9216
+
+    # Turning the 1d array into a 2d image-like array only works if the
+    # image stride (which is in bytes) is a whole number of pixels. Even
+    # then, if they don't match exactly you will get "padding" down the RHS.
+    # Working around this requires another expensive copy of all the data.
+    if formats.is_raw(fmt):
+        image = array.reshape((h, stride))
+    else:
+        raise RuntimeError("Format " + fmt + " not supported")
+    return image
+
+def save_dng(buffer, metadata, config, filename):
+    """Save a DNG RAW image of the raw stream's buffer."""
+    raw = make_array(buffer, config)
+
+    camera = Picamera2Camera(config.copy(), metadata)
+    r = PICAM2DNG(camera)
+
+    dng_compress_level = 0
+
+    r.options(compress=dng_compress_level)
+    r.convert(raw, str(filename))
+
+save_dng(accumulated, metadata, raw_config, "accumulated.dng")
