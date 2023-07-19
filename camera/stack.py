@@ -10,11 +10,10 @@ import picamera2.formats as formats
  
 
 # Build the images array from the saved .npy (RAW uint16) files
-num_frames = 10
-images = []
-for i in range(num_frames):
-    image = np.load(f"working_{i}_4.5.npy")
-    images.append(image)
+num_frames = 20
+inputfile = sys.argv[1]
+
+
 
 metadata = object()
 
@@ -31,9 +30,6 @@ raw_format = type('', (), {})()
 raw_format.bit_depth = 10
 
 
-accumulated = images.pop(0).astype(int)
-for image in images:
-    accumulated += image
 
 
 def make_array(buffer, config):
@@ -67,12 +63,44 @@ def save_dng(buffer, metadata, config, filename):
 
 
 # Fix the black level, and convert back to uint8 form for saving as a DNG.
-black_level = metadata["SensorBlackLevels"][0] / 2**(16  - raw_format.bit_depth)
-accumulated -= (num_frames - 1) * int(black_level)
-accumulated = accumulated.clip(0, 2 ** raw_format.bit_depth - 1).astype(np.uint16)
+print(metadata)
+# Create an empty list to hold the loaded images
+images = []
+
+# Loop through the range of num_frames (e.g., 20 in this case)
+# and load the corresponding numpy arrays (images) from files
+for i in range(num_frames):
+    # Load the image from the file in the format "inputfile_i_2.75.npy"
+    # The f-string is used to insert the value of i into the filename
+    image = np.load(f"{inputfile}_{i}_2.75.npy")
+    
+    # Append the loaded image to the 'images' list
+    images.append(image)
+
+# Take the first image from the list and assign it to the 'accumulated' variable
+# The 'pop(0)' function removes the first element from the 'images' list and returns it
+accumulated = images.pop(0).astype(float)
+
+# Loop through the remaining images in the 'images' list and accumulate them into 'accumulated'
+for image in images:
+    # Convert the image to floating-point before adding
+    image_float = image.astype(float)
+
+    # Add the pixel values using floating-point arithmetic
+    accumulated += image_float
+    # accumulated += image - not this ... 
+
+
+accumulated /= num_frames
+
+# Clip the pixel values to ensure they are within the valid range of 0 to 2^(bit_depth) - 1
+# '2 ** raw_format.bit_depth' calculates the maximum possible pixel value
+accumulated = np.clip(accumulated, 0, 2 ** raw_format.bit_depth - 1).astype(np.uint16)
+
+# Convert the accumulated image from uint16 to uint8 for saving as a DNG file
+# The 'view' function creates a new view of the array with a different data type without copying the data
+# This is done to reduce memory usage while maintaining the same pixel values
 accumulated = accumulated.view(np.uint8)
-metadata["ExposureTime"] = exposure_time
 
 
-save_dng(accumulated, metadata, raw_config, "accumulated.dng")
-
+save_dng(accumulated, metadata, raw_config, inputfile+"_merged.dng")
