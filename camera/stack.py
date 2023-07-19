@@ -9,15 +9,12 @@ import picamera2.formats as formats
 
  
 
-# Rebuild the images array from the saved .npy files
-num_frames = 2
+# Build the images array from the saved .npy (RAW uint16) files
+num_frames = 10
 images = []
 for i in range(num_frames):
-    image = np.load(f"concept_{i}_4.5.npy")
-    
+    image = np.load(f"working_{i}_4.5.npy")
     images.append(image)
-
-
 
 metadata = object()
 
@@ -30,8 +27,6 @@ raw_config = object()
 with open('raw_config', 'rb') as fp:
     raw_config = pickle.load(fp)
 
-
-
 raw_format = type('', (), {})()
 raw_format.bit_depth = 10
 
@@ -40,23 +35,13 @@ accumulated = images.pop(0).astype(int)
 for image in images:
     accumulated += image
 
-# point of failure two
-
-# Fix the black level, and convert back to uint8 form for saving as a DNG.
-black_level = metadata["SensorBlackLevels"][0] / 2**(16 - raw_format.bit_depth)
-accumulated -= (num_frames - 1) * int(black_level)
-accumulated = accumulated.clip(0, 2 ** raw_format.bit_depth - 1).astype(np.uint16)
-accumulated = accumulated.view(np.uint8)
-metadata["ExposureTime"] = exposure_time
-
-
 
 def make_array(buffer, config):
     """Make a 2d numpy array from the named stream's buffer."""
     array = buffer
     fmt = config["format"]
     w, h = config["size"]
-    stride = 9216
+    stride = 9216 #this is for a 16 bit image
 
     # Turning the 1d array into a 2d image-like array only works if the
     # image stride (which is in bytes) is a whole number of pixels. Even
@@ -80,4 +65,14 @@ def save_dng(buffer, metadata, config, filename):
     r.options(compress=dng_compress_level)
     r.convert(raw, str(filename))
 
+
+# Fix the black level, and convert back to uint8 form for saving as a DNG.
+black_level = metadata["SensorBlackLevels"][0] / 2**(16  - raw_format.bit_depth)
+accumulated -= (num_frames - 1) * int(black_level)
+accumulated = accumulated.clip(0, 2 ** raw_format.bit_depth - 1).astype(np.uint16)
+accumulated = accumulated.view(np.uint8)
+metadata["ExposureTime"] = exposure_time
+
+
 save_dng(accumulated, metadata, raw_config, "accumulated.dng")
+
