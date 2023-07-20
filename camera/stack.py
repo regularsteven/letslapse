@@ -10,20 +10,21 @@ import picamera2.formats as formats
  
 
 # Build the images array from the saved .npy (RAW uint16) files
-num_frames = 20
+
 inputfile = sys.argv[1]
+num_frames = int(sys.argv[2])
 
 
 
 metadata = object()
 
-with open('metadata', 'rb') as fp:
+with open(inputfile+'_0.meta', 'rb') as fp:
     metadata = pickle.load(fp)
 exposure_time = metadata["ExposureTime"]
 
 
 raw_config = object()
-with open('raw_config', 'rb') as fp:
+with open(inputfile+'_0.config', 'rb') as fp:
     raw_config = pickle.load(fp)
 
 raw_format = type('', (), {})()
@@ -72,7 +73,7 @@ images = []
 for i in range(num_frames):
     # Load the image from the file in the format "inputfile_i_2.75.npy"
     # The f-string is used to insert the value of i into the filename
-    image = np.load(f"{inputfile}_{i}_2.75.npy")
+    image = np.load(f"{inputfile}_{i}.npy")
     
     # Append the loaded image to the 'images' list
     images.append(image)
