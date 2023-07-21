@@ -395,6 +395,16 @@ camera_app/
 
 ## install dependencies:
 sudo apt install -y python3-pyqt5 python3-opengl
+
+pip install opencv-python
+pip3 install opencv-python
+pip3 install simplejpeg
+
+
+sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.9
+
+
+
 add video=HDMI-A-1:1920x1080@60D to sudo /boot/cmdline.txt
 
 # simple camera utils in SHELL
@@ -465,3 +475,22 @@ libcamera-jpeg -o manual_lens_2.75.jpg -t 1 --autofocus-mode manual --lens-posit
 
 
 
+# MacOS testing:
+Need to download the picamera2 and add to python
+https://github.com/raspberrypi/picamera2 (picamera2 folder)
+/opt/homebrew/lib/python3.11/site-packages
+
+
+sshfs steven@z2c3.local:/home/steven/letslapse/ ~/z2c3
+
+pip3 install piexif
+pip3 install pidng
+
+
+libcamera
+git clone https://git.libcamera.org/libcamera/libcamera.git
+
+Also add pi Python libs from device to mac site-packages folder
+/usr/lib/python3/dist-packages/libcamera 
+  ( zip -r /home/steven/letslapse/libcamera.zip libcamera )
+  zip -r /home/steven/letslapse/pidng.zip pidng
