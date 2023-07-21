@@ -5,13 +5,14 @@ import time
 import numpy as np
 from picamera2.sensor_format import SensorFormat
 import pickle
+import os
 
 # argparser for custom params from commandline or defaults
 parser = argparse.ArgumentParser(description='Optional params')
 parser.add_argument('--o', type=str, help='file name', default="image")
 parser.add_argument('--format', type=str, help='image format', default="jpg")
-parser.add_argument('--focus', type=float, help='Macro 15, Infinate 2.75, Arm length 4.5', default=2.75) #for the lensPosition
-parser.add_argument('--lensPosition', type=float, help='Macro 15, Infinate 2.75, Arm length 4.5', default=2.75) #for the lensPosition
+parser.add_argument('--focus', type=float, help='Macro 15, Infinate 2.5, Arm length 4.5', default=2.5) #for the lensPosition
+parser.add_argument('--lensPosition', type=float, help='Macro 15, Infinate 2.5, Arm length 4.5', default=2.5) #for the lensPosition
 parser.add_argument('--count', type=int, help='1 and up, 0 for no end', default=1)
 args = parser.parse_args()
 
@@ -19,12 +20,12 @@ picam2 = Picamera2()
 #picam2.start_preview(Preview.DRM)
 
 def capture_and_save_image(index):
-    print("index: " str(index))
-    args.lensPosition = args.focus
-    filename = args.o + "_" + str(index)
+    print("index: "+ str(index) + " lensPosition: " + str(args.lensPosition))
+    
+    filename = args.o + "/" + args.o + "_" + str(index)
 
-    preview_config = picam2.create_preview_configuration()
-    picam2.configure(preview_config)
+    #preview_config = picam2.create_preview_configuration()
+    #picam2.configure(preview_config)
     
     picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
     
@@ -41,7 +42,7 @@ def capture_and_save_image(index):
         config = picam2.create_still_configuration(raw={"format": raw_format.format}, buffer_count=2)
         
         picam2.configure(config)
-        picam2.set_controls({}) #"AnalogueGain": 1.0})
+        picam2.set_controls({"AnalogueGain": 0})
 
     if args.format == "jpg":
         r.save("main", filename +  "." + args.format)
@@ -72,7 +73,18 @@ def capture_and_save_image(index):
     picam2.stop()
 
 
+
+def setup_folder():
+    folder = args.o
+    isExist = os.path.exists(folder)
+    if not isExist:
+        # Create a new directory because it does not exist
+        os.makedirs(folder)
+        print("The new directory is created!")
+
+
 def pull_focus(startPoint, endPoint, totalSteps):
+    setup_folder()
     #create a loop to capture 10 images and save them as an image sequence with a 1 second delay between each image
     for i in range(totalSteps):
         print(str(i) + " of " + str(totalSteps))
@@ -81,11 +93,11 @@ def pull_focus(startPoint, endPoint, totalSteps):
         #print("Current point is: " + str(currentPoint))
         capture_and_save_image(i)
 
-# pull_focus(startPoint = 5, endPoint = 10, totalSteps = 3)
-
-
+#pull_focus(startPoint = 2, endPoint = 10, totalSteps = 50)
 
 def capture():
+    setup_folder()
+    args.lensPosition = args.focus
     for i in range(args.count):
         capture_and_save_image(i)
 
