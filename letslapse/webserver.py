@@ -1,18 +1,9 @@
-import os
 import socketserver
-from http import server
-from urllib.parse import urlparse, parse_qs
-import subprocess
-from subprocess import check_call, call
-import threading, signal
-import letslapse.utils as utils
-from time import sleep
+
+from letslapse.routes import MyHttpRequestHandler
+
 
 PORT = 80
-
-siteRoot = "/home/steven/letslapse"
-
-
 
 def start_server():
     # Create an object of the above class

@@ -544,8 +544,9 @@
                   </div>
                   <div class="row shootImages">
                     <div class="col col-4 p-0" v-for="image in shoot.shootImages">
-                      <a v-bind:href="'/'+shoot.shootName+'/group'+image+'.jpg'" target="_blank">
-                        <img v-bind:src="'/'+shoot.shootName+'/group'+image+'_thumb.jpg'" class="theImage" />
+                      <a v-bind:href="'/'+shoot.shootName+'/group'+image" target="_blank">
+                        <!--img v-bind:src="'/'+shoot.shootName+'/group'+image+'_thumb.jpg'" class="theImage" /-->
+                        <img v-bind:src="'/'+shoot.shootName+'/group'+image" class="theImage" />
                       </a>
                     </div>
                   </div>
@@ -556,8 +557,9 @@
 
                   <div class="row stillImages">
                     <div class="col col-4 p-0" v-for="still in stills">
-                      <a v-bind:href="'/stills/'+still+'.jpg'" target="_blank">
-                        <img v-bind:src="'/stills/'+still+'_thumb.jpg'" class="theImage" />
+                      <a v-bind:href="'/stills/'+still" target="_blank">
+                        <!--img v-bind:src="'/stills/'+still+'_thumb.jpg'" class="theImage" /-->
+                        <img v-bind:src="'/stills/'+still" class="theImage" />
                       </a>
                     </div>
                   </div>

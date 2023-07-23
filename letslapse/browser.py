@@ -55,8 +55,9 @@ def getStills():
     jpegs = []
     for t in range(len(topLevel)):
         #look in each and and find the timelapse_ folders - these are the shoot folders
-        if 'thumb' not in topLevel[t]:
-            jpegs.append(topLevel[t].replace('.jpg',''))
+        #if 'thumb' not in topLevel[t]:
+        #removed extentions: - add this at end: .replace('.jpg','') 
+        jpegs.append(topLevel[t])
 
     return jpegs
 

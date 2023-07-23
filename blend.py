@@ -13,7 +13,7 @@ import os.path
 from os import path
 
 
-import ll_utils
+import letslapse.utils as utils
 
 
 
@@ -527,7 +527,7 @@ else:
         firstImage = outputFolder+'/image'
         outputVideo = 'single'
 
-        ll_utils.convertImagesToVideo(firstImage, outputVideo)
+        utils.convertImagesToVideo(firstImage, outputVideo)
 
         #option 2 - make the video play and reverse
         #ffmpegCommand = 'ffmpeg -framerate 50 -i '+outputFolder+'/image%d.jpg -filter_complex "[0]reverse[r];[0][r]concat,loop=0:42,setpts=N/50/TB" -crf 5 -pix_fmt yuv420p '+outputFolder+'/single.mp4'
@@ -673,6 +673,6 @@ if args.makeMP4 == "yes" :
 
     outputVideo = "../"+thisDir+"_blendedVideo"+folderStrOutput+"_"+str(groupByType)+""+str(imagesToBlendToOne)
     
-    ll_utils.convertImagesToVideo(firstImage, outputVideo)
+    utils.convertImagesToVideo(firstImage, outputVideo)
     
     

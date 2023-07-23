@@ -1,6 +1,6 @@
 import requests, os, json
 
-import ll_utils
+import letslapse.utils as utils
 
 fileToUpload = "stills/img_21_15_49_ss-300000_iso-800_awbg-3,2_manual.jpg"
 fileName = os.path.basename(fileToUpload)
@@ -10,7 +10,7 @@ fileName = os.path.basename(fileToUpload)
 #ll_utils.pingCMS()
 #ll_utils.logIn()
 
-ll_utils.registerCMS()
+utils.registerCMS()
 
 #postID = ll_utils.createPost("debug post")
 #print("New post created: "+str(postID))

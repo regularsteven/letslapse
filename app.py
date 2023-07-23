@@ -1,14 +1,15 @@
 # app.py
 
-from camera.camera import camera
-from web_interface import server
+#from camera.camera import camera
+from letslapse import webserver
+
 
 def main():
     # Initialize camera
-    my_camera = camera.Camera()
+    # my_camera = camera.Camera()
 
     # Start the web server
-    server.start_server(my_camera)
+    webserver.start_server()
 
 if __name__ == '__main__':
     main()

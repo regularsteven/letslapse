@@ -1,70 +1,18 @@
-#!/usr/bin/python3
-import os
-instanceCount = 0
-for line in os.popen("ps -f -C python3 | grep letslapse_server.py"):
-    instanceCount = instanceCount + 1
-    if instanceCount > 1:
-        print("letslapse_server.py: Instance already running - exiting now")
-        exit()
-
-from time import sleep
-import subprocess
-import io
-import socketserver
-from datetime import datetime
-from threading import Condition
+import os, subprocess, threading, signal
 from http import server
-import threading, signal
+from urllib.parse import urlparse, parse_qs
+from subprocess import check_call, call
+from time import sleep
 from os import system, path
 import json
-from subprocess import check_call, call
-import sys
-from urllib.parse import urlparse, parse_qs
-import argparse
 
-import sqlite3
-
-#my own custom utilities extracted for simpler structure 
 import letslapse.browser as browser
 import letslapse.utils as utils
+import letslapse.db as db
 
 
-
-# Instantiate the parser
-parser = argparse.ArgumentParser(description='Optional app description')
-
-parser.add_argument('--port', type=int,
-                    help='specifiy port to run, 80 requires sudo', default = 80)
-                    
-args = parser.parse_args()
-
-PORT = args.port
-
-localDev = False
-if utils.isPi() == False:
-    localDev = True
-
-print(utils.isPi)
-
-if localDev:
-    print("Running in testing mode for localhost development")
-    siteRoot = os.getcwd()
-else: 
-    siteRoot = "/home/pi/letslapse"
-    
-
-os.chdir(siteRoot+"/")
-
-
-
-
-
-#start up the streamer, this will run as a child on a different port
-#system("python3 ll_streamer.py")
-
-letslapse_streamerPath = siteRoot+"/ll_streamer.py"    #CHANGE PATH TO LOCATION OF ll_streamer.py
-
-
+siteRoot = "/home/steven/letslapse"
+letslapse_streamerPath = siteRoot+"/letslapse/streamer.py"    #CHANGE PATH TO LOCATION OF streamer.py
 
 def letslapse_streamer_thread():
     call(["python3", letslapse_streamerPath])
@@ -72,7 +20,7 @@ def letslapse_streamer_thread():
 
 def checkStreamerIsRunning():
     instanceCount = 0
-    for line in os.popen("ps -f -C python3 | grep ll_streamer.py"):
+    for line in os.popen("ps -f -C python3 | grep streamer.py"):
         print(line)
         instanceCount = instanceCount + 1
         if instanceCount > 0:
@@ -86,89 +34,6 @@ def check_kill_process(pstring):
         pid = fields[0]
         os.kill(int(pid), signal.SIGKILL)
 
-
-def startTimelapse(shootName, includeRaw, underexposeNights, ultraBasic, disableAWBG, width, startingGains, useThumbnail, lockExposure, shutterSpeed, analogueGains, digitalGains, delayBetweenShots, exitAfter) :
-    shellStr = 'nohup python3 ll_timelapse.py --shootName '+shootName
-
-    if startingGains is not False:
-        shellStr += " --startingGains " + startingGains
-
-    if bool(includeRaw):
-        shellStr = shellStr + ' --raw'
-    if bool(ultraBasic):
-        shellStr = shellStr + ' --ultraBasic'
-    if bool(disableAWBG):
-        shellStr = shellStr + ' --disableAWBG'
-    if bool(underexposeNights):
-        shellStr = shellStr + ' --underexposeNights'
-    if bool(useThumbnail):
-        shellStr = shellStr + ' --useThumbnail'
-    if bool(lockExposure):
-        shellStr = shellStr + ' --lockExposure'
-
-    shellStr = shellStr + " --startingSS " +  str(shutterSpeed)
-    shellStr = shellStr + " --analogueGains " +  str(analogueGains)
-    shellStr = shellStr + " --digitalGains " +  str(digitalGains)
-    if int(delayBetweenShots) > 0:
-        shellStr = shellStr + " --delayBetweenShots " +  str(delayBetweenShots)
-    if int(exitAfter) > 0:
-        shellStr = shellStr + " --exitAfter " +  str(exitAfter)
-
-    
-    shellStr = shellStr + " --width "+ str(width)
-    shellStr = shellStr + ' &'
-    print(shellStr)
-    system(shellStr)
-    return "startTimelapse function complete"
-
-def shootPreview(query_components) :
-    mode = query_components["mode"][0]
-    now = datetime.now()
-    current_time = now.strftime("%H_%M_%S")
-    settings = ""
-    if mode == "auto": 
-        filename = "img_"+current_time+"_auto.jpg"
-        settings = " --mode auto"
-    else : 
-        ss = query_components["ss"][0]
-        #iso = query_components["iso"][0]
-        ag = query_components["analogueGains"][0]
-        dg = query_components["digitalGains"][0]
-
-        awbg = query_components["awbg"][0]
-        raw = bool(query_components["raw"][0])
-        settings = " --ss "+ss+" --ag "+ag+" --dg "+dg+" --awbg "+awbg + " --raw "+str(raw)
-        filename = "img_"+current_time+"_ss-"+str(ss)+"_ag-"+str(ag)+"_dg-"+str(dg)+"_awbg-"+awbg+"_manual.jpg"
-
-
-    print("start shootPreview")
-    sysCommand = "python3 ll_still.py --filename "+filename + settings
-    print(sysCommand)
-    system(sysCommand)
-    print("end shootPreview")
-    #processThread = threading.Thread(target=letslapse_streamer_thread)
-    #processThread.start()
-    return filename
-
-
-
-
-
-
-class StreamingOutput(object):
-    def __init__(self):
-        self.frame = None
-        self.buffer = io.BytesIO()
-        self.condition = Condition()
-
-    def write(self, buf):
-        if buf.startswith(b'\xff\xd8'):
-            self.buffer.truncate()
-            with self.condition:
-                self.frame = self.buffer.getvalue()
-                self.condition.notify_all()
-            self.buffer.seek(0)
-        return self.buffer.write(buf)
 
 class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
     def do_GET(self):
@@ -186,7 +51,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             jsonResp += '"completedAction":"'+actionVal+'"'
             
             if actionVal == "timelapse" :
-                check_kill_process("ll_streamer.py")
+                check_kill_process("streamer.py")
                 #check to see if this timelapse project is already in place - don't make a new one, if so
                 shootName = query_components["shootName"][0]
 
@@ -282,7 +147,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 sleep(3) #gives time for the timelapse to start
                 
             elif actionVal == "preview" :
-                jsonResp += ',"filename":"'+shootPreview(query_components)+'"'
+                jsonResp += ',"filename":"'+utils.shootPreview(query_components)+'"'
             elif actionVal == "killtimelapse" :
                 #?action=killtimelapse&pauseOrKill=kill
                 check_kill_process("ll_timelapse.py")
@@ -292,11 +157,11 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                     #system("rm progress.txt")
                     utils.killTimelapseDB()
             elif actionVal == "killstreamer" :
-                check_kill_process("ll_streamer.py")
+                check_kill_process("streamer.py")
             elif actionVal == "startstreamer" :
                 processThread = threading.Thread(target=letslapse_streamer_thread)
                 processThread.start()
-                sleep(5) #ideally this would wait for a callback, but this allows the camera to start
+                sleep(4) #ideally this would wait for a callback, but this allows the camera to start
                 isStreamerRunning = checkStreamerIsRunning()
                 print("isStreamerRunning - TEST 1")
                 print(isStreamerRunning)
@@ -370,15 +235,15 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
 
             if actionVal == "exit" :
                 check_kill_process("ll_timelapse.py")
-                check_kill_process("ll_streamer.py")
+                check_kill_process("streamer.py")
                 exit()
             if actionVal == "shutdown" :
                 check_kill_process("ll_timelapse.py")
-                check_kill_process("ll_streamer.py")
+                check_kill_process("streamer.py")
                 system("sudo shutdown now")
             elif actionVal == "reset" :
                 check_kill_process("ll_timelapse.py")
-                check_kill_process("ll_streamer.py")
+                check_kill_process("streamer.py")
                 system("sudo reboot now")
             
             return
@@ -399,7 +264,7 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
                 
             if self.path == "/progress.txt":
                 #progress.txt was formally a static file, but now is dynamically generated
-                jsonResp = utils.createProgressTxtFromDB()
+                jsonResp = db.createProgressTxtFromDB()
                 
                 self.send_response(200)
                 self.send_header("Content-type", "application/json")
@@ -439,23 +304,4 @@ class MyHttpRequestHandler(server.BaseHTTPRequestHandler):
             #return http.server.SimpleHTTPRequestHandler.do_GET(self)
 
         #
-
-
-
-#on strartup, if progress.txt is in place, then a boot has happened and the shoot should restart
-#if path.isfile("progress.txt") == True:
-#    print("System restarted - progress.txt indicated shoot in progress")
-#    system("nohup python3 ll_timelapse.py &")
-
-
-utils.startCreateDB()
-
-# Create an object of the above class
-handler_object = MyHttpRequestHandler
-
-my_server = socketserver.TCPServer(("", PORT), handler_object)
-print("my_server running on PORT" + str(PORT))
-# Star the server
-my_server.serve_forever()
-
 

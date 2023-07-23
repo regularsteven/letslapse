@@ -130,7 +130,7 @@ function streamManager(startOrStop){
                 }else{
                     stream += "http://"+window.location.host+":8081";
                 }
-                stream += "/stream.mjpg?cachebuster="+Math.random(100);
+                stream += "/stream.mjpg";
                 displayStill(stream);
                 })
             .fail(function( jqxhr, textStatus, error ) {
@@ -273,11 +273,11 @@ function takeStill(){
     streamManager("stop");
     $.getJSON( apiCall)
         .done(function( json ) {
-            console.log( "JSON Data: " + json );
+            console.log( "JSON Data: ");
+            console.log(json);
 
 
-
-            displayStill("/stills/"+makeThumb(json.filename));
+            displayStill("/stills/"+json.filename);
             displayStatus("isReady");
             //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
             //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);
@@ -583,8 +583,8 @@ function startTimelapseDelay(){
 
 
 function makeThumb(url){ 
-    //return url;
-    return url.split(".jpg")[0]+"_thumb.jpg";
+    return url;
+    //return url.split(".jpg")[0]+"_thumb.jpg";
 }
 
 function displayStill(filename){

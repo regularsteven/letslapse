@@ -15,7 +15,7 @@ from picamera2.encoders import JpegEncoder
 from picamera2.outputs import FileOutput
 from pprint import pprint
 
-
+from libcamera import controls
 
 lsize = (1280, 720)
 
@@ -112,9 +112,17 @@ picam2.configure(
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
+
+picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+#picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": 10, "AnalogueGain": 0})
+
+
 try:
-    address = ('', 80)
+    address = ('', 8081)
     server = StreamingServer(address, StreamingHandler)
     server.serve_forever()
+
+    lens_position = picam2.capture_metadata()['LensPosition']
+
 finally:
     picam2.stop_recording()

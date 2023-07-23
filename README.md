@@ -400,10 +400,20 @@ pip install opencv-python
 pip3 install opencv-python
 pip3 install simplejpeg
 
+sudo apt install -y libimage-exiftool-perl
+
 
 sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.9
 
+# remote storage process
+# # see https://raspberrytips.com/mount-usb-drive-raspberry-pi/
 
+### mount USB:
+usbmount
+### unmount USB:
+sudo umount /mnt/usb
+### test if mounted
+ls -latr /mnt/usb
 
 add video=HDMI-A-1:1920x1080@60D to sudo /boot/cmdline.txt
 

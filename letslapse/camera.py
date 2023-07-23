@@ -1,11 +1,17 @@
 from picamera2 import Picamera2, Preview
 from libcamera import controls
 import argparse
+from datetime import datetime
 import time
 import numpy as np
 from picamera2.sensor_format import SensorFormat
 import pickle
 import os
+import pprint
+from os import system, path
+
+
+
 
 # argparser for custom params from commandline or defaults
 parser = argparse.ArgumentParser(description='Optional params')
@@ -16,14 +22,20 @@ parser.add_argument('--lensPosition', type=float, help='Macro 15, Infinate 2.5, 
 parser.add_argument('--count', type=int, help='1 and up, 0 for no end', default=1)
 args = parser.parse_args()
 
-picam2 = Picamera2()
+
 #picam2.start_preview(Preview.DRM)
 
-def capture_and_save_image(index):
-    print("index: "+ str(index) + " lensPosition: " + str(args.lensPosition))
-    
-    filename = args.o + "/" + args.o + "_" + str(index)
+def capture_and_save_image(filename):
 
+    picam2 = Picamera2()
+
+    print("filename: "+ str(filename))
+    
+    print("args: ")
+    print(args)
+
+    
+    
     #preview_config = picam2.create_preview_configuration()
     #picam2.configure(preview_config)
     
@@ -45,9 +57,9 @@ def capture_and_save_image(index):
         picam2.set_controls({"AnalogueGain": 0})
 
     if args.format == "jpg":
-        r.save("main", filename +  "." + args.format)
+        r.save("main", "stills/" + filename)
     elif args.format == "dng":
-        r.save_dng(filename +  "." + args.format)
+        r.save_dng("stills/" + filename)
     else:
         picam2.start()
         time.sleep(1)
@@ -71,11 +83,16 @@ def capture_and_save_image(index):
             pickle.dump(raw_format, raw_format_file)
 
     picam2.stop()
+    picam2.close()
+    
+
+
+
 
 
 
 def setup_folder():
-    folder = args.o
+    folder = "/mnt/usb/"+args.o
     isExist = os.path.exists(folder)
     if not isExist:
         # Create a new directory because it does not exist
@@ -91,14 +108,16 @@ def pull_focus(startPoint, endPoint, totalSteps):
         args.lensPosition = startPoint + ((endPoint - startPoint) / float(totalSteps)) * float(i)
         args.lensPosition = round(args.lensPosition, 2)
         #print("Current point is: " + str(currentPoint))
-        capture_and_save_image(i)
+        filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
+        capture_and_save_image(filename)
 
-#pull_focus(startPoint = 2, endPoint = 10, totalSteps = 50)
+#pull_focus(startPoint = 2, endPoint = 4,totalSteps =10)
 
 def capture():
     setup_folder()
     args.lensPosition = args.focus
     for i in range(args.count):
-        capture_and_save_image(i)
+        filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
+        capture_and_save_image(filename)
 
-capture()
+# capture()
