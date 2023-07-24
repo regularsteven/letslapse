@@ -5,6 +5,7 @@ from datetime import datetime
 import time
 import numpy as np
 from picamera2.sensor_format import SensorFormat
+from picamera2.encoders import JPEGEncoder
 import pickle
 import os
 import pprint
@@ -42,10 +43,10 @@ def capture_and_save_image(filename):
     picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
     
     if args.format == "jpg" or args.format == "dng":
-
+        
         picam2.start()
         time.sleep(1)
-        capture_config = picam2.create_still_configuration(raw={}, display=None)
+        capture_config = picam2.create_still_configuration(raw={},lores={"size": (640, 480)}, display=None)
         r = picam2.switch_mode_capture_request_and_stop(capture_config)
     else:
         raw_format = SensorFormat(picam2.sensor_format)
@@ -58,6 +59,7 @@ def capture_and_save_image(filename):
 
     if args.format == "jpg":
         r.save("main", "stills/" + filename)
+        r.save("lowres", "stills/" + "thumb"+filename)
     elif args.format == "dng":
         r.save_dng("stills/" + filename)
     else:
@@ -121,3 +123,6 @@ def capture():
         capture_and_save_image(filename)
 
 # capture()
+
+if __name__ == '__main__':
+    capture_and_save_image("sample.jpg")  # For testing purposes
