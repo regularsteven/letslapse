@@ -5,7 +5,7 @@ from datetime import datetime
 import time
 import numpy as np
 from picamera2.sensor_format import SensorFormat
-from picamera2.encoders import JPEGEncoder
+#from picamera2.encoders import JPEGEncoder
 import pickle
 import os
 import pprint
@@ -40,13 +40,15 @@ def capture_and_save_image(filename):
     #preview_config = picam2.create_preview_configuration()
     #picam2.configure(preview_config)
     
-    picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
-    
     if args.format == "jpg" or args.format == "dng":
         
         picam2.start()
+        picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
+        print("args.lensPosition")
+        print(args.lensPosition)
+        
         time.sleep(1)
-        capture_config = picam2.create_still_configuration(raw={},lores={"size": (640, 480)}, display=None)
+        capture_config = picam2.create_still_configuration(raw={}, display=None)
         r = picam2.switch_mode_capture_request_and_stop(capture_config)
     else:
         raw_format = SensorFormat(picam2.sensor_format)
@@ -58,14 +60,16 @@ def capture_and_save_image(filename):
         picam2.set_controls({"AnalogueGain": 0})
 
     if args.format == "jpg":
-        r.save("main", "stills/" + filename)
-        r.save("lowres", "stills/" + "thumb"+filename)
+        r.save("main", "/home/steven/letslapse/stills/" + filename)
+        #r.save("lowres", "stills/" + "thumb"+filename)
     elif args.format == "dng":
         r.save_dng("stills/" + filename)
     else:
         picam2.start()
+        picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
+        
         time.sleep(1)
-
+        filename = "/home/steven/letslapse/stills/" + filename
         raw_capture = picam2.capture_array("raw").view(np.uint16)
         
         with open(filename+'.config', 'wb') as config_file:
@@ -110,7 +114,8 @@ def pull_focus(startPoint, endPoint, totalSteps):
         args.lensPosition = startPoint + ((endPoint - startPoint) / float(totalSteps)) * float(i)
         args.lensPosition = round(args.lensPosition, 2)
         #print("Current point is: " + str(currentPoint))
-        filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
+        #filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
+        filename = "pull_" + args.o + "_" + str(i) + ".jpg"
         capture_and_save_image(filename)
 
 #pull_focus(startPoint = 2, endPoint = 4,totalSteps =10)
@@ -119,10 +124,13 @@ def capture():
     setup_folder()
     args.lensPosition = args.focus
     for i in range(args.count):
-        filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
+        #filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
+        filename = args.o + "_" + str(i)
         capture_and_save_image(filename)
 
 # capture()
 
 if __name__ == '__main__':
-    capture_and_save_image("sample.jpg")  # For testing purposes
+    #pull_focus(startPoint = 1, endPoint = 5,totalSteps = 20)  # For testing purposes
+    #capture_and_save_image("sample.jpg")  # For testing purposes
+    capture()  # For testing purposes
