@@ -7,7 +7,7 @@ import json
 
 import letslapse.camera as camera
 
-
+storagePath = "/mnt/nas/"
 
 def isPi():
     return False
@@ -62,7 +62,7 @@ def convertImagesToVideo(inputImage, outputVideo):
 
 def shootPreview(query_components) :
 
-    folder = "stills"
+    folder = storagePath+"image"
     isExist = os.path.exists(folder)
     if not isExist:
         # Create a new directory because it does not exist
