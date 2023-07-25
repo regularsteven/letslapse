@@ -11,24 +11,11 @@ import picamera2.formats as formats
 
 # Build the images array from the saved .npy (RAW uint16) files
 
-inputfile = "/home/steven/letslapse/stills" + "/" + sys.argv[1]
+# from camera folder:
+# - python3 stack.py poc 1
+
+inputfile = "/Users/stevenwright/Documents/dev/letslapse/stills" + "/" + sys.argv[1]
 num_frames = int(sys.argv[2])
-
-
-
-metadata = object()
-
-with open(inputfile+'_0.meta', 'rb') as fp:
-    metadata = pickle.load(fp)
-exposure_time = metadata["ExposureTime"]
-
-
-raw_config = object()
-with open(inputfile+'_0.config', 'rb') as fp:
-    raw_config = pickle.load(fp)
-
-raw_format = type('', (), {})()
-raw_format.bit_depth = 10
 
 
 
@@ -63,47 +50,75 @@ def save_dng(buffer, metadata, config, filename):
     r.convert(raw, str(filename))
 
 
-# Fix the black level, and convert back to uint8 form for saving as a DNG.
-print(metadata)
-# Create an empty list to hold the loaded images
-images = []
+def stack_set(num_frames, start_frame, index):
+    metadata = object()
 
-# Loop through the range of num_frames (e.g., 20 in this case)
-# and load the corresponding numpy arrays (images) from files
-for i in range(num_frames):
-    
-    # load and append the loaded image to the 'images' list - first concept is for uncompressed
-    #image = np.load(f"{inputfile}_{i}.npy")
-    #images.append(image)
-
-    # this is for compressed:
-    image = np.load(f"{inputfile}_{i}.npz")
-    images.append(image['arr_0'])
-
-# Take the first image from the list and assign it to the 'accumulated' variable
-# The 'pop(0)' function removes the first element from the 'images' list and returns it
-accumulated = images.pop(0).astype(float)
-
-# Loop through the remaining images in the 'images' list and accumulate them into 'accumulated'
-for image in images:
-    # Convert the image to floating-point before adding
-    image_float = image.astype(float)
-
-    # Add the pixel values using floating-point arithmetic
-    accumulated += image_float
-    # accumulated += image - not this ... 
+    with open(inputfile+'_'+str(start_frame)+'.meta', 'rb') as fp:
+        metadata = pickle.load(fp)
+    #exposure_time = metadata["ExposureTime"]
 
 
-accumulated /= num_frames
+    raw_config = object()
+    with open(inputfile+'_'+str(start_frame)+'.config', 'rb') as fp:
+        raw_config = pickle.load(fp)
 
-# Clip the pixel values to ensure they are within the valid range of 0 to 2^(bit_depth) - 1
-# '2 ** raw_format.bit_depth' calculates the maximum possible pixel value
-accumulated = np.clip(accumulated, 0, 2 ** raw_format.bit_depth - 1).astype(np.uint16)
+    raw_format = type('', (), {})()
+    raw_format.bit_depth = 10
 
-# Convert the accumulated image from uint16 to uint8 for saving as a DNG file
-# The 'view' function creates a new view of the array with a different data type without copying the data
-# This is done to reduce memory usage while maintaining the same pixel values
-accumulated = accumulated.view(np.uint8)
+    # Fix the black level, and convert back to uint8 form for saving as a DNG.
+    print(metadata)
+    # Create an empty list to hold the loaded images
+    images = []
+
+    # Loop through the range of num_frames (e.g., 20 in this case)
+    # and load the corresponding numpy arrays (images) from files
+    for i in range(num_frames):
+        
+        # load and append the loaded image to the 'images' list - first concept is for uncompressed
+        #image = np.load(f"{inputfile}_{i}.npy")
+        #images.append(image)
+
+        frameToLoad = start_frame + i
+        # this is for compressed:
+        image = np.load(f"{inputfile}_{frameToLoad}.npz")
+        images.append(image['arr_0'])
+
+    # Take the first image from the list and assign it to the 'accumulated' variable
+    # The 'pop(0)' function removes the first element from the 'images' list and returns it
+    accumulated = images.pop(0).astype(float)
+
+    # Loop through the remaining images in the 'images' list and accumulate them into 'accumulated'
+    for image in images:
+        # Convert the image to floating-point before adding
+        image_float = image.astype(float)
+
+        # Add the pixel values using floating-point arithmetic
+        accumulated += image_float
+        # accumulated += image - not this ... 
 
 
-save_dng(accumulated, metadata, raw_config, inputfile+"_merged.dng")
+    accumulated /= num_frames
+
+    # Clip the pixel values to ensure they are within the valid range of 0 to 2^(bit_depth) - 1
+    # '2 ** raw_format.bit_depth' calculates the maximum possible pixel value
+    accumulated = np.clip(accumulated, 0, 2 ** raw_format.bit_depth - 1).astype(np.uint16)
+
+    # Convert the accumulated image from uint16 to uint8 for saving as a DNG file
+    # The 'view' function creates a new view of the array with a different data type without copying the data
+    # This is done to reduce memory usage while maintaining the same pixel values
+    accumulated = accumulated.view(np.uint8)
+
+
+    save_dng(accumulated, metadata, raw_config, inputfile+"_merged_"+str(index)+ "_" +str(num_frames)+".dng")
+
+
+#function to loop through all files in folder and stack them by the num_frames value
+def stack_all():
+    total_shots = 80
+
+    for index in range(total_shots//num_frames):
+        stack_set(num_frames, index*num_frames, index)
+
+    #for index in num_frames:
+
+stack_all()
