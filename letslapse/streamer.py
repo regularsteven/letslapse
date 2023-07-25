@@ -113,7 +113,7 @@ output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
 
-picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+#picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
 #picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": 10, "AnalogueGain": 0})
 
 

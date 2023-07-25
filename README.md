@@ -351,6 +351,28 @@ CM4 32b     | 10.0153s  | 2147483648 bytes written in 51.98 seconds | 300.0833s 
 
 
 
+# bullseye config
+STEP 1 - Prepare and verify device
+1) test camera
+libcamera-jpeg -o FirstPhoto.jpg
+
+2) Install git
+sudo apt install git -y
+
+3) Download repo
+git clone https://github.com/regularsteven/letslapse
+
+STEP 2 - CONFIGURE BRANCH & DEPENDNCIES
+1) cd letslapse && git checkout bullseye
+
+sudo apt install -y python3-pyqt5 python3-opengl
+pip install opencv-python
+pip3 install opencv-python
+pip3 install simplejpeg
+sudo apt install -y libimage-exiftool-perl
+sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.9
+
+
 
 # bullseye notes:
 camera_app/
@@ -395,15 +417,15 @@ camera_app/
 
 ## install dependencies:
 sudo apt install -y python3-pyqt5 python3-opengl
-
 pip install opencv-python
 pip3 install opencv-python
 pip3 install simplejpeg
-
 sudo apt install -y libimage-exiftool-perl
 
-
+### allow python to use port 80
 sudo setcap 'cap_net_bind_service=+ep' /usr/bin/python3.9
+
+
 
 # remote storage process
 # # see https://raspberrytips.com/mount-usb-drive-raspberry-pi/
