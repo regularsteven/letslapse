@@ -108,7 +108,7 @@ def capture_and_save_image(filename):
 
 
 def setup_folder():
-    folder = "/mnt/usb/"+args.o
+    folder = storagePath+args.o
     isExist = os.path.exists(folder)
     if not isExist:
         # Create a new directory because it does not exist
