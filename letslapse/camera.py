@@ -3,6 +3,7 @@ from libcamera import controls
 import argparse
 from datetime import datetime
 import time
+from time import sleep
 import numpy as np
 from picamera2.sensor_format import SensorFormat
 #from picamera2.encoders import JPEGEncoder
@@ -68,7 +69,7 @@ def capture_and_save_image(filename):
         picam2.start()
         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
         
-        time.sleep(1)
+        #time.sleep(1)
         filename = "/home/steven/letslapse/stills/" + filename
         raw_capture = picam2.capture_array("raw").view(np.uint16)
         
@@ -76,17 +77,18 @@ def capture_and_save_image(filename):
             pickle.dump(config["raw"], config_file)
 
 
-        np.save(filename +  ".npy", raw_capture)
+        #np.save(filename +  ".npy", raw_capture)
+        np.savez_compressed(filename +  ".npz", raw_capture)
         # associated metadata for image
         metadata = picam2.capture_metadata()
         with open(filename+".meta", 'wb') as metadata_file:
             pickle.dump(metadata, metadata_file)
         
-        raw_format = SensorFormat(picam2.sensor_format)
-        raw_format.packing = None
+        #raw_format = SensorFormat(picam2.sensor_format)
+        #raw_format.packing = None
 
-        with open(filename+".format", 'wb') as raw_format_file:
-            pickle.dump(raw_format, raw_format_file)
+        #with open(filename+".format", 'wb') as raw_format_file:
+        #    pickle.dump(raw_format, raw_format_file)
 
     picam2.stop()
     picam2.close()
@@ -117,6 +119,7 @@ def pull_focus(startPoint, endPoint, totalSteps):
         #filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
         filename = "pull_" + args.o + "_" + str(i) + ".jpg"
         capture_and_save_image(filename)
+        print(filename + " - captured")
 
 #pull_focus(startPoint = 2, endPoint = 4,totalSteps =10)
 
@@ -127,6 +130,7 @@ def capture():
         #filename = "/mnt/usb/" + args.o + "/" + args.o + "_" + str(i)
         filename = args.o + "_" + str(i)
         capture_and_save_image(filename)
+        #sleep(10)
 
 # capture()
 
@@ -134,3 +138,4 @@ if __name__ == '__main__':
     #pull_focus(startPoint = 1, endPoint = 5,totalSteps = 20)  # For testing purposes
     #capture_and_save_image("sample.jpg")  # For testing purposes
     capture()  # For testing purposes
+

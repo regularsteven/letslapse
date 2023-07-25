@@ -11,7 +11,7 @@ import picamera2.formats as formats
 
 # Build the images array from the saved .npy (RAW uint16) files
 
-inputfile = sys.argv[1] + "/" + sys.argv[1]
+inputfile = "/home/steven/letslapse/stills" + "/" + sys.argv[1]
 num_frames = int(sys.argv[2])
 
 
