@@ -14,6 +14,8 @@ from os import system, path
 
 
 
+#path for saving images:
+storagePath = "/mnt/nas/"
 
 # argparser for custom params from commandline or defaults
 parser = argparse.ArgumentParser(description='Optional params')
@@ -40,7 +42,7 @@ def capture_and_save_image(filename):
     
     #preview_config = picam2.create_preview_configuration()
     #picam2.configure(preview_config)
-    
+    #capture config, depending on format
     if args.format == "jpg" or args.format == "dng":
         
         picam2.start()
@@ -60,17 +62,19 @@ def capture_and_save_image(filename):
         picam2.configure(config)
         picam2.set_controls({"AnalogueGain": 0})
 
+
+    #save, depending on format
     if args.format == "jpg":
-        r.save("main", "/home/steven/letslapse/stills/" + filename)
+        r.save("main", storagePath + filename)
         #r.save("lowres", "stills/" + "thumb"+filename)
     elif args.format == "dng":
-        r.save_dng("stills/" + filename)
+        r.save_dng(storagePath + filename)
     else:
         picam2.start()
         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
         
         #time.sleep(1)
-        filename = "/home/steven/letslapse/stills/" + filename
+        # filename =  + filename
         raw_capture = picam2.capture_array("raw").view(np.uint16)
         
         with open(filename+'.config', 'wb') as config_file:
@@ -78,7 +82,8 @@ def capture_and_save_image(filename):
 
 
         #np.save(filename +  ".npy", raw_capture)
-        np.savez_compressed(filename +  ".npz", raw_capture)
+        np.savez_compressed(storagePath + filename +  ".npz", raw_capture)
+
         # associated metadata for image
         metadata = picam2.capture_metadata()
         with open(filename+".meta", 'wb') as metadata_file:

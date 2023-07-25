@@ -417,6 +417,9 @@ ls -latr /mnt/usb
 
 add video=HDMI-A-1:1920x1080@60D to sudo /boot/cmdline.txt
 
+# watchdog related:
+https://diode.io/blog/running-forever-with-the-raspberry-pi-hardware-watchdog
+
 # simple camera utils in SHELL
 libcamera-jpeg -o FirstPhoto.jpg
 
@@ -504,3 +507,15 @@ Also add pi Python libs from device to mac site-packages folder
 /usr/lib/python3/dist-packages/libcamera 
   ( zip -r /home/steven/letslapse/libcamera.zip libcamera )
   zip -r /home/steven/letslapse/pidng.zip pidng
+
+
+
+# mounting homenetwork USB NAS
+ - Requires a NAS drive
+sudo apt install samba-common samba-common-bin smbclient cifs-utils
+sudo mkdir /mnt/nas
+sudo nano ~/.smbcreds
+ - username= /n password=
+sudo chmod 600 ~/.smbcreds 
+sudo pico /etc/fstab 
+//192.168.1.1/kingston-datatraveler3.0-kingston /mnt/nas cifs credentials=/home/steven/.smbcreds 0 0

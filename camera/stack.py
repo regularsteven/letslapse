@@ -71,12 +71,14 @@ images = []
 # Loop through the range of num_frames (e.g., 20 in this case)
 # and load the corresponding numpy arrays (images) from files
 for i in range(num_frames):
-    # Load the image from the file in the format "inputfile_i_2.75.npy"
-    # The f-string is used to insert the value of i into the filename
-    image = np.load(f"{inputfile}_{i}.npy")
     
-    # Append the loaded image to the 'images' list
-    images.append(image)
+    # load and append the loaded image to the 'images' list - first concept is for uncompressed
+    #image = np.load(f"{inputfile}_{i}.npy")
+    #images.append(image)
+
+    # this is for compressed:
+    image = np.load(f"{inputfile}_{i}.npz")
+    images.append(image['arr_0'])
 
 # Take the first image from the list and assign it to the 'accumulated' variable
 # The 'pop(0)' function removes the first element from the 'images' list and returns it
