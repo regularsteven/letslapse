@@ -518,4 +518,4 @@ sudo nano ~/.smbcreds
  - username= /n password=
 sudo chmod 600 ~/.smbcreds 
 sudo pico /etc/fstab 
-//192.168.1.1/kingston-datatraveler3.0-kingston /mnt/nas cifs credentials=/home/steven/.smbcreds 0 0
+//192.168.1.1/kingston-datatraveler3.0-kingston /mnt/nas cifs credentials=/home/steven/.smbcreds,iocharset=utf8,file_mode=0777,dir_mode=0777,uid=steven,gid=steven,nofail 0 0

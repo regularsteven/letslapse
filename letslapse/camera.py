@@ -12,6 +12,8 @@ import os
 import pprint
 from os import system, path
 
+#example use:
+#python3 camera.py --o test --format raw --count 5
 
 
 #path for saving images:
@@ -39,6 +41,7 @@ def capture_and_save_image(filename):
     print(args)
 
     
+    shootPath = storagePath + args.o + "/"
     
     #preview_config = picam2.create_preview_configuration()
     #picam2.configure(preview_config)
@@ -65,10 +68,10 @@ def capture_and_save_image(filename):
 
     #save, depending on format
     if args.format == "jpg":
-        r.save("main", storagePath + filename)
+        r.save("main", shootPath + filename)
         #r.save("lowres", "stills/" + "thumb"+filename)
     elif args.format == "dng":
-        r.save_dng(storagePath + filename)
+        r.save_dng(shootPath + filename)
     else:
         picam2.start()
         picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
@@ -77,16 +80,16 @@ def capture_and_save_image(filename):
         # filename =  + filename
         raw_capture = picam2.capture_array("raw").view(np.uint16)
         
-        with open(filename+'.config', 'wb') as config_file:
+        with open(shootPath + filename+'.config', 'wb') as config_file:
             pickle.dump(config["raw"], config_file)
 
 
         #np.save(filename +  ".npy", raw_capture)
-        np.savez_compressed(storagePath + filename +  ".npz", raw_capture)
+        np.savez_compressed(shootPath + filename +  ".npz", raw_capture)
 
         # associated metadata for image
         metadata = picam2.capture_metadata()
-        with open(filename+".meta", 'wb') as metadata_file:
+        with open(shootPath + filename+".meta", 'wb') as metadata_file:
             pickle.dump(metadata, metadata_file)
         
         #raw_format = SensorFormat(picam2.sensor_format)
