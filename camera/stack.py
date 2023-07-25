@@ -12,7 +12,7 @@ import picamera2.formats as formats
 # Build the images array from the saved .npy (RAW uint16) files
 
 # from camera folder:
-# - python3 stack.py poc 1
+# python3 stack.py fullday 10
 
 inputfile = "/Users/stevenwright/Documents/dev/letslapse/stills" + "/" + sys.argv[1]
 num_frames = int(sys.argv[2])
@@ -114,7 +114,7 @@ def stack_set(num_frames, start_frame, index):
 
 #function to loop through all files in folder and stack them by the num_frames value
 def stack_all():
-    total_shots = 80
+    total_shots = 180
 
     for index in range(total_shots//num_frames):
         stack_set(num_frames, index*num_frames, index)
