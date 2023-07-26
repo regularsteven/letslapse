@@ -165,7 +165,7 @@
                 <div class="form-group">
                   <div class="row text-center">
                     <div class="col-sm">
-                      <button type="button" class="btn btn-lg btn-primary m-3" onclick="takeStill()">Take Still Image</button>
+                      <button type="button" class="btn btn-lg btn-primary m-3" onclick="takeStill()">Take Still</button>
                     </div>
                   </div>
             
@@ -557,9 +557,8 @@
 
                   <div class="row stillImages">
                     <div class="col col-4 p-0" v-for="still in stills">
-                      <a v-bind:href="'/stills/'+still" target="_blank">
-                        <!--img v-bind:src="'/stills/'+still+'_thumb.jpg'" class="theImage" /-->
-                        <img v-bind:src="'/stills/'+still" class="theImage" />
+                      <a v-bind:href="'/images/'+still" target="_blank">
+                        <img v-bind:src="'/images/'+still" class="theImage" />
                       </a>
                     </div>
                   </div>

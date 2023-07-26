@@ -14,10 +14,10 @@ from os import system, path
 
 #example use:
 #python3 camera.py --o test --format raw --count 5
+import letslapse.config as config
 
 
-#path for saving images:
-storagePath = "/mnt/nas/"
+
 
 # argparser for custom params from commandline or defaults
 parser = argparse.ArgumentParser(description='Optional params')
@@ -32,8 +32,16 @@ args = parser.parse_args()
 #picam2.start_preview(Preview.DRM)
 
 def capture_and_save_image(filename):
+    global config
+    print("config.storagePath:")
+    print(config.storagePath)
 
     picam2 = Picamera2()
+
+    hqCam = True
+    # HQ camera has a 4x3, whereas the alternative has 16x9
+    if 'AfMode' in picam2.camera_controls:
+        hqCam = False
 
     print("filename: "+ str(filename))
     
@@ -41,7 +49,7 @@ def capture_and_save_image(filename):
     print(args)
 
     
-    shootPath = storagePath + args.o + "/"
+    shootPath = config.storagePath # + args.o + "/"
     
     #preview_config = picam2.create_preview_configuration()
     #picam2.configure(preview_config)
@@ -49,7 +57,11 @@ def capture_and_save_image(filename):
     if args.format == "jpg" or args.format == "dng":
         
         picam2.start()
-        picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
+        if hqCam:
+            picam2.set_controls({"AnalogueGain": 0})
+        else:
+            picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": args.lensPosition, "AnalogueGain": 0})
+        
         print("args.lensPosition")
         print(args.lensPosition)
         
@@ -108,7 +120,7 @@ def capture_and_save_image(filename):
 
 
 def setup_folder():
-    folder = storagePath+args.o
+    folder = config.storagePath+args.o
     isExist = os.path.exists(folder)
     if not isExist:
         # Create a new directory because it does not exist

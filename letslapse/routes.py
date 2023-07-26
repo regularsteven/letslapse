@@ -9,9 +9,11 @@ import json
 import letslapse.browser as browser
 import letslapse.utils as utils
 import letslapse.db as db
+import letslapse.config as config
 
 
-siteRoot = "/home/steven/letslapse"
+
+siteRoot = config.siteRoot
 letslapse_streamerPath = siteRoot+"/letslapse/streamer.py"    #CHANGE PATH TO LOCATION OF streamer.py
 
 def letslapse_streamer_thread():

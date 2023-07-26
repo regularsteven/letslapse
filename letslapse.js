@@ -277,7 +277,7 @@ function takeStill(){
             console.log(json);
 
 
-            displayStill("/stills/"+json.filename);
+            displayStill("/images/"+json.filename);
             displayStatus("isReady");
             //window.setTimeout('streamManager("start");console.log("1 second attempt");', 1000);
             //window.setTimeout('streamManager("start");console.log("3 second attempt");', 3000);

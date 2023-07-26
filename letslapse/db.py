@@ -1,10 +1,11 @@
 import sqlite3
 from datetime import datetime
 
+import letslapse.config as config
+
 #db related for internal DB storage
+dbconnect = sqlite3.connect(config.device_storage + "letslapse.db")
 
-
-dbconnect = sqlite3.connect("letslapse.db")
 dbconnect.row_factory = sqlite3.Row
 
 

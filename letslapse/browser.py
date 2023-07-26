@@ -1,7 +1,9 @@
 import os
 from os import listdir, walk, path
 from os.path import isfile, join
+from os import system
 
+import letslapse.config as config
 #
 # if debugging is required,
 # python3 ll_browser.py and uncomment the last line to print results in command line
@@ -47,11 +49,12 @@ def getShoots(filterBy):
     return shootFolders
 
 def getStills():
-    if path.isdir("stills") == False :
-        system("mkdir stills")
+    if path.isdir(config.storagePath) == False :
+        system("mkdir " + config.storagePath)
 
-    siteRoot = os.getcwd()
-    topLevel = sorted(os.listdir(siteRoot+"/stills/"))
+    # siteRoot = os.getcwd()
+    
+    topLevel = sorted(os.listdir(config.siteRoot+config.storagePath))
     jpegs = []
     for t in range(len(topLevel)):
         #look in each and and find the timelapse_ folders - these are the shoot folders
