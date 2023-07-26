@@ -19,13 +19,16 @@ from libcamera import controls
 
 lsize = (1280, 720)
 
+reductionRatio = 4
+fps = 10
+
 PAGE = f"""\
 <html>
 <head>
-<title>picamera2 MJPEG streaming demo</title>
+<title></title>
 </head>
 <body>
-<h1>Picamera2 MJPEG Streaming Demo</h1>
+<h1>LetsLapse Streamer Test</h1>
 <img src="stream.mjpg" width="{lsize[0]}" />
 </body>
 </html>
@@ -89,8 +92,6 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 
 picam2 = Picamera2()
 
-reductionRatio = 8
-fps = 5
 
 
 hqCam = True
