@@ -535,9 +535,27 @@ Also add pi Python libs from device to mac site-packages folder
 # mounting homenetwork USB NAS
  - Requires a NAS drive
 sudo apt install samba-common samba-common-bin smbclient cifs-utils
+
+## local USB drive inside router, for storage:
 sudo mkdir /mnt/nas
 sudo nano ~/.smbcreds
  - username= /n password=
 sudo chmod 600 ~/.smbcreds 
 sudo pico /etc/fstab 
-//192.168.1.1/kingston-datatraveler3.0-kingston /mnt/nas cifs credentials=/home/steven/.smbcreds,iocharset=utf8,file_mode=0777,dir_mode=0777,uid=steven,gid=steven,nofail 0 0
+ - //192.168.1.1/kingston-datatraveler3.0-kingston /mnt/nas cifs credentials=/home/steven/.smbcreds,iocharset=utf8,file_mode=0777,dir_mode=0777,uid=steven,gid=steven,nofail 0 0
+
+## local MACOS share, for on-device testing:
+sudo mkdir /mnt/studio
+sudo nano ~/.smbcreds_studio
+ - username= /n password= - MAC account
+sudo chmod 600 ~/.smbcreds_studio
+sudo pico /etc/fstab
+ - //studio.local/letslapse /mnt/studio cifs credentials=/home/steven/.smbcreds_studio,iocharset=utf8,file_mode=0777,dir_mode=0777,uid=steven,gid=steven,nofail 0 0
+
+
+sudo mount -a
+
+Unmount with:
+sudo umount /mnt/nas
+sudo umount /mnt/studio
+
