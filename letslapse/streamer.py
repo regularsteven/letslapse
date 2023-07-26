@@ -89,6 +89,19 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 
 picam2 = Picamera2()
 
+reductionRatio = 8
+
+
+hqCam = True
+output_resolution = (int(4056/reductionRatio), int(3040/reductionRatio))
+deviceControls = {}
+# HQ camera has a 4x3, whereas the alternative has 16x9
+if 'AfMode' in picam2.camera_controls:
+    hqCam = False
+    deviceControls = {"AfMode": controls.AfModeEnum.Continuous}
+    output_resolution = (int(4608/reductionRatio), int(2592/reductionRatio))
+
+
 pprint(picam2.sensor_modes)
 
 #size = picam2.sensor_resolution
@@ -102,19 +115,29 @@ chosen_mode = available_modes[2]
 
 
 
-picam2.configure(
-    picam2.create_video_configuration(
-        raw={"size": chosen_mode["size"], "format": chosen_mode["format"].format}
-        )
-)
+if hqCam:
+    picam2.configure(
+        picam2.create_video_configuration(
+            #raw={"size": chosen_mode["size"], "format": chosen_mode["format"].format},
+            main={"size": output_resolution},
+            )
+    )
+else:
+    picam2.configure(
+        picam2.create_video_configuration(
+            raw={"size": chosen_mode["size"], "format": chosen_mode["format"].format},
+            #main={"size": output_resolution},
+            )
+    )
+
                  
 
 output = StreamingOutput()
 picam2.start_recording(JpegEncoder(), FileOutput(output))
 
 #can only do this on cameras which support it 
-if 'AfMode' in picam2.camera_controls:
-    picam2.set_controls({"AfMode": controls.AfModeEnum.Continuous})
+
+picam2.set_controls(deviceControls)
 
 #picam2.set_controls({"AfMode": controls.AfModeEnum.Manual, "LensPosition": 10, "AnalogueGain": 0})
 
@@ -124,7 +147,7 @@ try:
     server = StreamingServer(address, StreamingHandler)
     server.serve_forever()
 
-    lens_position = picam2.capture_metadata()['LensPosition']
+    #lens_position = picam2.capture_metadata()['LensPosition']
 
 finally:
     picam2.stop_recording()
