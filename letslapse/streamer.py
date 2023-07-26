@@ -90,16 +90,14 @@ class StreamingServer(socketserver.ThreadingMixIn, server.HTTPServer):
 picam2 = Picamera2()
 
 reductionRatio = 8
+fps = 5
 
 
 hqCam = True
-output_resolution = (int(4056/reductionRatio), int(3040/reductionRatio))
-deviceControls = {}
 # HQ camera has a 4x3, whereas the alternative has 16x9
 if 'AfMode' in picam2.camera_controls:
     hqCam = False
-    deviceControls = {"AfMode": controls.AfModeEnum.Continuous}
-    output_resolution = (int(4608/reductionRatio), int(2592/reductionRatio))
+    
 
 
 pprint(picam2.sensor_modes)
@@ -116,13 +114,15 @@ chosen_mode = available_modes[2]
 
 
 if hqCam:
+    output_resolution = (int(4056/reductionRatio), int(3040/reductionRatio))
+    deviceControls = {"FrameRate": fps}
     picam2.configure(
         picam2.create_video_configuration(
-            #raw={"size": chosen_mode["size"], "format": chosen_mode["format"].format},
             main={"size": output_resolution},
             )
     )
 else:
+    deviceControls = {"AfMode": controls.AfModeEnum.Continuous, "FrameRate": fps}
     picam2.configure(
         picam2.create_video_configuration(
             raw={"size": chosen_mode["size"], "format": chosen_mode["format"].format},
