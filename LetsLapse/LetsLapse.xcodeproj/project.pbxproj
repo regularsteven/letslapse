@@ -218,7 +218,10 @@
 /* Begin PBXTargetDependency section */
 		AA0000000000000000000042 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
-			platformFilters = (ios, iphonesimulator, );
+			platformFilters = (
+				ios,
+				iphonesimulator,
+			);
 			target = AA0000000000000000000034 /* LetsLapse Watch App */;
 			targetProxy = AA0000000000000000000041 /* PBXContainerItemProxy */;
 		};
@@ -424,6 +427,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -455,6 +459,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES = YES;
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

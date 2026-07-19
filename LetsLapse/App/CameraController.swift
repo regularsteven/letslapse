@@ -3,9 +3,8 @@ import Foundation
 import AVFoundation
 import UIKit
 
-/// Owns the AVCaptureSession for both capture modes: movie recording
-/// (optionally at the camera's highest 1080p frame rate, the raw material for
-/// slow-mo → hyperlapse ramps) and interval photo capture for stacking.
+/// Owns the AVCaptureSession for both capture modes: movie recording and
+/// interval photo capture for stacking.
 /// Session work runs on a dedicated queue; published state hops to main.
 final class CameraController: NSObject, ObservableObject {
     enum Lens: String, CaseIterable, Identifiable {
@@ -32,6 +31,26 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    struct CaptureResolution: Identifiable, Hashable {
+        var width: Int32
+        var height: Int32
+
+        var id: String { "\(width)x\(height)" }
+
+        var label: String {
+            switch (width, height) {
+            case (3840, 2160): return "4K"
+            case (1920, 1080): return "1080p"
+            case (1280, 720): return "720p"
+            default: return "\(width)x\(height)"
+            }
+        }
+
+        var pixelCount: Int64 {
+            Int64(width) * Int64(height)
+        }
+    }
+
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "com.letslapse.capture")
@@ -39,10 +58,12 @@ final class CameraController: NSObject, ObservableObject {
     private let photoOutput = AVCapturePhotoOutput()
     private var videoInput: AVCaptureDeviceInput?
     private var videoDevice: AVCaptureDevice?
-    private var highFrameRateEnabled = false
+    private var selectedPhotoDimensions: CMVideoDimensions?
     private var intervalTimer: DispatchSourceTimer?
     private var photoDirectory: URL?
     private var photoURLs: [URL] = []   // sessionQueue-confined
+    private let preferredFrameRates = [24, 25, 30, 50, 60, 120, 240]
+    private let frameRateTolerance = 0.2
 
     @Published var isAuthorized: Bool?
     @Published var isRecording = false
@@ -51,6 +72,10 @@ final class CameraController: NSObject, ObservableObject {
     @Published var activeFormatDescription = ""
     @Published var availableLenses: [Lens] = []
     @Published var selectedLens: Lens = .wide
+    @Published var availableResolutions: [CaptureResolution] = []
+    @Published var selectedResolution = CaptureResolution(width: 1920, height: 1080)
+    @Published var availableFrameRates: [Int] = [30]
+    @Published var selectedFrameRate = 30
 
     /// Both called on the main queue.
     var onFinishVideo: ((URL) -> Void)?
@@ -94,6 +119,7 @@ final class CameraController: NSObject, ObservableObject {
         if session.canAddOutput(movieOutput) { session.addOutput(movieOutput) }
         if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
         session.commitConfiguration()
+        refreshCaptureOptions()
         publishFormat()
     }
 
@@ -112,7 +138,7 @@ final class CameraController: NSObject, ObservableObject {
             self.session.beginConfiguration()
             self.configureLens(lens)
             self.session.commitConfiguration()
-            self.setHighFrameRateOnCurrentDevice(self.highFrameRateEnabled)
+            self.refreshCaptureOptions()
             self.publishFormat()
         }
     }
@@ -134,54 +160,183 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// Best-effort switch to the highest frame rate the camera offers at
-    /// 1080p (120/240 fps on recent iPhones). Falls back silently if the
-    /// device has no high-fps format.
-    func setHighFrameRate(_ enabled: Bool) {
+    func selectResolution(_ resolution: CaptureResolution) {
         sessionQueue.async {
-            self.highFrameRateEnabled = enabled
-            self.setHighFrameRateOnCurrentDevice(enabled)
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            self.refreshCaptureOptions(preferredResolution: resolution)
             self.publishFormat()
         }
     }
 
-    private func setHighFrameRateOnCurrentDevice(_ enabled: Bool) {
-        guard let device = self.videoDevice else { return }
+    func selectFrameRate(_ fps: Int) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            self.refreshCaptureOptions(preferredFrameRate: fps)
+            self.publishFormat()
+        }
+    }
+
+    private func refreshCaptureOptions(
+        preferredResolution: CaptureResolution? = nil,
+        preferredFrameRate: Int? = nil
+    ) {
+        guard let device = videoDevice else { return }
+        let supportedRates = supportedFrameRatesByResolution(for: device)
+        guard !supportedRates.isEmpty else { return }
+
+        let resolutions = supportedRates.keys.sorted {
+            if $0.pixelCount == $1.pixelCount {
+                return $0.width > $1.width
+            }
+            return $0.pixelCount > $1.pixelCount
+        }
+        let desiredResolution = preferredResolution ?? selectedResolution
+        let resolution = resolutions.first { $0 == desiredResolution }
+            ?? resolutions.first { $0.width == 1920 && $0.height == 1080 }
+            ?? resolutions[0]
+        let frameRates = Array(supportedRates[resolution] ?? [30]).sorted()
+        let desiredFrameRate = preferredFrameRate ?? selectedFrameRate
+        let frameRate = frameRates.contains(desiredFrameRate)
+            ? desiredFrameRate
+            : nearestFrameRate(to: desiredFrameRate, in: frameRates)
+
+        _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
+        DispatchQueue.main.async {
+            self.availableResolutions = resolutions
+            self.selectedResolution = resolution
+            self.availableFrameRates = frameRates
+            self.selectedFrameRate = frameRate
+        }
+    }
+
+    private func supportedFrameRatesByResolution(
+        for device: AVCaptureDevice
+    ) -> [CaptureResolution: Set<Int>] {
+        var supportedRates: [CaptureResolution: Set<Int>] = [:]
+        for format in device.formats {
+            let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            guard dims.width >= 640, dims.height >= 480 else { continue }
+            let resolution = CaptureResolution(width: dims.width, height: dims.height)
+            let rates = supportedFrameRates(for: format)
+            guard !rates.isEmpty else { continue }
+            supportedRates[resolution, default: []].formUnion(rates)
+        }
+        return supportedRates
+    }
+
+    private func supportedFrameRates(for format: AVCaptureDevice.Format) -> Set<Int> {
+        var rates = Set<Int>()
+        for range in format.videoSupportedFrameRateRanges {
+            for fps in preferredFrameRates
+                where supportsFrameRate(Double(fps), in: range) {
+                rates.insert(fps)
+            }
+            let maxFPS = Int(range.maxFrameRate.rounded())
+            if maxFPS > 0, maxFPS <= 240,
+               supportsFrameRate(Double(maxFPS), in: range) {
+                rates.insert(maxFPS)
+            }
+        }
+        return rates
+    }
+
+    private func supportsFrameRate(_ fps: Double, in range: AVFrameRateRange) -> Bool {
+        fps >= range.minFrameRate - frameRateTolerance
+            && fps <= range.maxFrameRate + frameRateTolerance
+    }
+
+    private func nearestFrameRate(to preferred: Int, in frameRates: [Int]) -> Int {
+        frameRates.min { first, second in
+            abs(first - preferred) < abs(second - preferred)
+        } ?? frameRates[0]
+    }
+
+    @discardableResult
+    private func applyCaptureFormat(resolution: CaptureResolution, fps: Int) -> Bool {
+        guard let device = videoDevice,
+              let match = captureFormatMatch(for: device, resolution: resolution, fps: fps)
+        else { return false }
+
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            if enabled {
-                var best: (format: AVCaptureDevice.Format, fps: Double)?
-                for format in device.formats {
-                    let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                    guard dims.width == 1920 else { continue }
-                    for range in format.videoSupportedFrameRateRanges {
-                        let fps = min(range.maxFrameRate, 240)
-                        if fps >= 120, fps > (best?.fps ?? 0) {
-                            best = (format, fps)
-                        }
-                    }
-                }
-                if let best {
-                    device.activeFormat = best.format
-                    let duration = CMTime(value: 1, timescale: Int32(best.fps))
-                    device.activeVideoMinFrameDuration = duration
-                    device.activeVideoMaxFrameDuration = duration
-                }
-            } else {
-                device.activeVideoMinFrameDuration = .invalid
-                device.activeVideoMaxFrameDuration = .invalid
+            device.activeFormat = match.format
+            let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            selectedPhotoDimensions = match.photoDimensions
+            if let photoDimensions = match.photoDimensions,
+               !sameDimensions(photoOutput.maxPhotoDimensions, photoDimensions) {
+                photoOutput.maxPhotoDimensions = photoDimensions
             }
+            return true
         } catch {
-            // Leave the current format in place.
+            return false
         }
+    }
+
+    private func captureFormatMatch(
+        for device: AVCaptureDevice,
+        resolution: CaptureResolution,
+        fps: Int
+    ) -> (format: AVCaptureDevice.Format, photoDimensions: CMVideoDimensions?)? {
+        let targetFPS = Double(fps)
+        return device.formats
+            .filter { format in
+                let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                return dims.width == resolution.width
+                    && dims.height == resolution.height
+                    && format.videoSupportedFrameRateRanges.contains { range in
+                        supportsFrameRate(targetFPS, in: range)
+                    }
+            }
+            .map { format in
+                (format: format, photoDimensions: bestPhotoDimensions(for: format, preferred: resolution))
+            }
+            .sorted { first, second in
+                let firstPixels = first.photoDimensions.map(photoPixelCount) ?? 0
+                let secondPixels = second.photoDimensions.map(photoPixelCount) ?? 0
+                return firstPixels > secondPixels
+            }
+            .first
+    }
+
+    private func bestPhotoDimensions(
+        for format: AVCaptureDevice.Format,
+        preferred resolution: CaptureResolution
+    ) -> CMVideoDimensions? {
+        let dimensions = format.supportedMaxPhotoDimensions
+        if let exact = dimensions.first(where: {
+            $0.width == resolution.width && $0.height == resolution.height
+        }) {
+            return exact
+        }
+        return dimensions
+            .filter { photoPixelCount($0) <= resolution.pixelCount }
+            .sorted { photoPixelCount($0) > photoPixelCount($1) }
+            .first ?? dimensions.sorted { photoPixelCount($0) < photoPixelCount($1) }.first
+    }
+
+    private func photoPixelCount(_ dimensions: CMVideoDimensions) -> Int64 {
+        Int64(dimensions.width) * Int64(dimensions.height)
+    }
+
+    private func sameDimensions(_ lhs: CMVideoDimensions, _ rhs: CMVideoDimensions) -> Bool {
+        lhs.width == rhs.width && lhs.height == rhs.height
+    }
+
+    private func currentFPS(for device: AVCaptureDevice) -> Int {
+        let frameDuration = device.activeVideoMinFrameDuration
+        if frameDuration.seconds > 0 {
+            return Int((1.0 / frameDuration.seconds).rounded())
+        }
+        return selectedFrameRate
     }
 
     private func publishFormat() {
         guard let device = videoDevice else { return }
         let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
-        let frameDuration = device.activeVideoMinFrameDuration
-        let fps = frameDuration.seconds > 0 ? Int((1.0 / frameDuration.seconds).rounded()) : 30
+        let fps = currentFPS(for: device)
         let line = "Capture \(dims.width)×\(dims.height) @ \(fps) fps"
         DispatchQueue.main.async { self.activeFormatDescription = line }
     }
@@ -246,7 +401,11 @@ final class CameraController: NSObject, ObservableObject {
                    connection.isVideoOrientationSupported {
                     connection.videoOrientation = currentCaptureOrientation()
                 }
-                self.photoOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
+                let settings = AVCapturePhotoSettings()
+                if let photoDimensions = self.selectedPhotoDimensions {
+                    settings.maxPhotoDimensions = photoDimensions
+                }
+                self.photoOutput.capturePhoto(with: settings, delegate: self)
             }
             timer.resume()
             self.intervalTimer = timer

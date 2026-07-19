@@ -17,28 +17,42 @@ struct WatchControlView: View {
             }
             .frame(maxWidth: .infinity)
 
-            Button {
-                remote.stopRecording()
-            } label: {
-                Label("Stop", systemImage: "stop.fill")
-                    .frame(maxWidth: .infinity)
+            if remote.isReachable {
+                Button {
+                    if remote.recordingState == .recording {
+                        remote.stopRecording()
+                    } else {
+                        remote.startRecording()
+                    }
+                } label: {
+                    Label(actionTitle, systemImage: actionIcon)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(remote.recordingState == .recording ? .red : .accentColor)
+                .disabled(remote.isSending)
+            } else {
+                Button {
+                    remote.refreshState()
+                } label: {
+                    Label("Find iPhone", systemImage: "iphone.slash")
+                        .frame(maxWidth: .infinity)
+                }
+                .disabled(remote.isSending)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(.red)
-            .disabled(remote.isSending)
-
-            Button {
-                remote.startRecording()
-            } label: {
-                Label("Start", systemImage: "record.circle")
-                    .frame(maxWidth: .infinity)
-            }
-            .disabled(remote.isSending)
         }
         .padding(.horizontal, 8)
         .onAppear {
             remote.refreshState()
         }
+    }
+
+    private var actionTitle: String {
+        remote.recordingState == .recording ? "Stop" : "Start"
+    }
+
+    private var actionIcon: String {
+        remote.recordingState == .recording ? "stop.fill" : "record.circle"
     }
 
     private var statusLine: String {

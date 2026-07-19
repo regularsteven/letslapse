@@ -9,6 +9,12 @@ struct CaptureView: View {
         var id: String { rawValue }
     }
 
+    enum PreviewLayout: String, CaseIterable, Identifiable {
+        case fullscreen = "Fullscreen"
+        case window = "Window"
+        var id: String { rawValue }
+    }
+
     var onCaptureComplete: () -> Void = {}
 
     @EnvironmentObject var model: AppModel
@@ -16,16 +22,15 @@ struct CaptureView: View {
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
     @StateObject private var camera = CameraController()
     @State private var mode: Mode = .video
+    @State private var previewLayout: PreviewLayout = .fullscreen
     @State private var interval: Double = 2
-    @State private var highFrameRate = false
     @State private var orientation = currentCaptureOrientation()
 
     var body: some View {
         ZStack {
             Color.black.ignoresSafeArea()
 
-            CameraPreview(session: camera.session, orientation: orientation)
-                .ignoresSafeArea()
+            preview
 
             if camera.isAuthorized == false {
                 VStack(spacing: 12) {
@@ -46,16 +51,24 @@ struct CaptureView: View {
                     }
                     .padding()
                     .foregroundStyle(.white)
+                    .background(.black.opacity(0.45), in: Capsule())
                     Spacer()
                     Text(camera.activeFormatDescription)
                         .font(.caption.monospacedDigit())
                         .foregroundStyle(.white.opacity(0.8))
                         .padding()
+                        .background(.black.opacity(0.45), in: Capsule())
                 }
+                .padding(.horizontal)
+                .padding(.top)
                 Spacer()
                 controls
                     .padding()
-                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 16))
+                    .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(.white.opacity(0.16))
+                    }
                     .padding()
             }
         }
@@ -68,7 +81,7 @@ struct CaptureView: View {
             camera.onFinishVideo = { url in
                 camera.stop()
                 dismiss()
-                model.setSource(.video(url), mode: highFrameRate ? "High-speed video" : "Video")
+                model.setSource(.video(url), mode: camera.activeFormatDescription)
                 onCaptureComplete()
             }
             camera.onFinishPhotos = { urls in
@@ -99,37 +112,94 @@ struct CaptureView: View {
     }
 
     @ViewBuilder
+    private var preview: some View {
+        switch previewLayout {
+        case .fullscreen:
+            CameraPreview(session: camera.session, orientation: orientation, videoGravity: .resizeAspectFill)
+                .ignoresSafeArea()
+        case .window:
+            VStack {
+                CameraPreview(session: camera.session, orientation: orientation, videoGravity: .resizeAspect)
+                    .aspectRatio(previewAspectRatio, contentMode: .fit)
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay {
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(.white.opacity(0.18))
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.top, 84)
+                Spacer(minLength: 260)
+            }
+        }
+    }
+
+    private var previewAspectRatio: CGFloat {
+        let resolution = camera.selectedResolution
+        let width = CGFloat(max(resolution.width, 1))
+        let height = CGFloat(max(resolution.height, 1))
+        return orientation == .portrait || orientation == .portraitUpsideDown
+            ? height / width
+            : width / height
+    }
+
+    @ViewBuilder
     private var controls: some View {
         VStack(spacing: 14) {
-            Picker("Mode", selection: $mode) {
-                ForEach(Mode.allCases) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
+            CaptureSegmentedControl(
+                options: PreviewLayout.allCases,
+                selection: $previewLayout
+            ) { layout in
+                layout.rawValue
             }
-            .pickerStyle(.segmented)
-            .disabled(camera.isRecording || camera.isIntervalRunning)
+
+            CaptureSegmentedControl(
+                options: Mode.allCases,
+                selection: $mode,
+                isDisabled: camera.isRecording || camera.isIntervalRunning
+            ) { mode in
+                mode.rawValue
+            }
 
             if camera.availableLenses.count > 1 {
-                Picker("Lens", selection: $camera.selectedLens) {
-                    ForEach(camera.availableLenses) { lens in
-                        Text(lens.label).tag(lens)
-                    }
+                CaptureSegmentedControl(
+                    options: camera.availableLenses,
+                    selection: $camera.selectedLens,
+                    isDisabled: camera.isRecording || camera.isIntervalRunning
+                ) { lens in
+                    lens.label
                 }
-                .pickerStyle(.segmented)
                 .onChange(of: camera.selectedLens) { lens in
                     camera.selectLens(lens)
                 }
+            }
+
+            if !camera.availableResolutions.isEmpty {
+                HStack(spacing: 12) {
+                    Picker("Resolution", selection: $camera.selectedResolution) {
+                        ForEach(camera.availableResolutions) { resolution in
+                            Text(resolution.label).tag(resolution)
+                        }
+                    }
+                    .onChange(of: camera.selectedResolution) { resolution in
+                        camera.selectResolution(resolution)
+                    }
+
+                    Picker("Frame rate", selection: $camera.selectedFrameRate) {
+                        ForEach(camera.availableFrameRates, id: \.self) { fps in
+                            Text("\(fps) fps").tag(fps)
+                        }
+                    }
+                    .onChange(of: camera.selectedFrameRate) { fps in
+                        camera.selectFrameRate(fps)
+                    }
+                }
+                .pickerStyle(.menu)
+                .tint(.white)
                 .disabled(camera.isRecording || camera.isIntervalRunning)
             }
 
             switch mode {
             case .video:
-                Toggle("High frame rate (slow-mo source)", isOn: $highFrameRate)
-                    .foregroundStyle(.white)
-                    .onChange(of: highFrameRate) { enabled in
-                        camera.setHighFrameRate(enabled)
-                    }
-                    .disabled(camera.isRecording)
                 Button {
                     camera.isRecording ? camera.stopRecording() : camera.startRecording()
                 } label: {
@@ -187,9 +257,49 @@ struct CaptureView: View {
     }
 }
 
+private struct CaptureSegmentedControl<Option: Identifiable & Equatable>: View where Option.ID: Hashable {
+    let options: [Option]
+    @Binding var selection: Option
+    var isDisabled = false
+    var title: (Option) -> String
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(options) { option in
+                let isSelected = option == selection
+                Button {
+                    selection = option
+                } label: {
+                    Text(title(option))
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .foregroundStyle(isSelected ? .black : .white.opacity(0.88))
+                        .frame(maxWidth: .infinity, minHeight: 42)
+                        .contentShape(RoundedRectangle(cornerRadius: 8))
+                }
+                .buttonStyle(.plain)
+                .background(
+                    isSelected ? .white : .white.opacity(0.14),
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(isSelected ? .white.opacity(0.82) : .white.opacity(0.12))
+                }
+            }
+        }
+        .padding(4)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .opacity(isDisabled ? 0.55 : 1)
+        .allowsHitTesting(!isDisabled)
+    }
+}
+
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
     let orientation: AVCaptureVideoOrientation
+    let videoGravity: AVLayerVideoGravity
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
@@ -204,7 +314,7 @@ struct CameraPreview: UIViewRepresentable {
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.session = session
-        view.previewLayer.videoGravity = .resizeAspect
+        view.previewLayer.videoGravity = videoGravity
         if view.previewLayer.connection?.isVideoOrientationSupported == true {
             view.previewLayer.connection?.videoOrientation = orientation
         }
@@ -213,6 +323,7 @@ struct CameraPreview: UIViewRepresentable {
 
     func updateUIView(_ uiView: PreviewView, context: Context) {
         uiView.previewLayer.frame = uiView.bounds
+        uiView.previewLayer.videoGravity = videoGravity
         if uiView.previewLayer.connection?.isVideoOrientationSupported == true {
             uiView.previewLayer.connection?.videoOrientation = orientation
         }
