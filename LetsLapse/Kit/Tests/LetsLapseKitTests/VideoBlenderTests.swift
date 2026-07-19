@@ -67,6 +67,27 @@ final class VideoBlenderTests: XCTestCase {
         XCTAssertEqual(reportedProgress, reportedProgress.sorted(), "progress should be monotonic")
     }
 
+    func testTrimHeadAndTailBeforeBlending() async throws {
+        let core = try makeCore()
+        let input = workDirectory.appendingPathComponent("trim-source.mov")
+        try VideoSynthesizer.makeVideo(at: input, frames: 90, width: 160, height: 120, fps: 30, pattern: .ramp)
+
+        let blender = VideoBlender(core: core)
+        let output = workDirectory.appendingPathComponent("trimmed.mp4")
+        let options = VideoBlendOptions(
+            ramp: .constant(10),
+            outputFPS: 30,
+            codec: .h264,
+            linearLight: true,
+            trimHeadTailSeconds: 1
+        )
+        let result = try await blender.blend(input: input, to: output, options: options)
+
+        XCTAssertEqual(result.inputFrames, 30)
+        XCTAssertEqual(result.outputFrames, 3)
+        XCTAssertEqual(result.outputDuration, 0.1, accuracy: 0.001)
+    }
+
     func testMissingVideoTrackThrows() async throws {
         let core = try makeCore()
         let bogus = workDirectory.appendingPathComponent("nothing.mp4")

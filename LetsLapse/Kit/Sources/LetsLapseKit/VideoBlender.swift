@@ -40,12 +40,21 @@ public struct VideoBlendOptions: Sendable {
     /// Average in linear light (physically correct long-exposure look) rather
     /// than in gamma-encoded values.
     public var linearLight: Bool
+    /// Number of seconds to skip at both the head and tail of the source.
+    public var trimHeadTailSeconds: Double
 
-    public init(ramp: BlendRamp, outputFPS: Double = 30, codec: OutputCodec = .h264, linearLight: Bool = true) {
+    public init(
+        ramp: BlendRamp,
+        outputFPS: Double = 30,
+        codec: OutputCodec = .h264,
+        linearLight: Bool = true,
+        trimHeadTailSeconds: Double = 0
+    ) {
         self.ramp = ramp
         self.outputFPS = outputFPS
         self.codec = codec
         self.linearLight = linearLight
+        self.trimHeadTailSeconds = trimHeadTailSeconds
     }
 }
 
@@ -97,7 +106,19 @@ public final class VideoBlender: @unchecked Sendable {
         let (nominalFPS, transform) = try await track.load(.nominalFrameRate, .preferredTransform)
         let duration = try await asset.load(.duration)
         let sourceFPS = nominalFPS > 0 ? Double(nominalFPS) : 30
-        let estimatedFrames = max(1, Int((duration.seconds * sourceFPS).rounded()))
+        let trim = max(0, options.trimHeadTailSeconds)
+        let sourceDuration = duration.seconds
+        guard sourceDuration.isFinite, trim * 2 < sourceDuration else {
+            throw LapseError.readerFailed("trim would remove the entire clip")
+        }
+        let workingDuration = max(0, sourceDuration - (trim * 2))
+        let estimatedFrames = max(1, Int((workingDuration * sourceFPS).rounded()))
+        let timeRange: CMTimeRange? = trim > 0
+            ? CMTimeRange(
+                start: CMTime(seconds: trim, preferredTimescale: 600),
+                duration: CMTime(seconds: workingDuration, preferredTimescale: 600)
+            )
+            : nil
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
@@ -105,6 +126,7 @@ public final class VideoBlender: @unchecked Sendable {
                     do {
                         let result = try self.run(
                             asset: asset, track: track, transform: transform,
+                            timeRange: timeRange,
                             estimatedFrames: estimatedFrames,
                             output: output, options: options, progress: progress)
                         continuation.resume(returning: result)
@@ -124,6 +146,7 @@ public final class VideoBlender: @unchecked Sendable {
         asset: AVURLAsset,
         track: AVAssetTrack,
         transform: CGAffineTransform,
+        timeRange: CMTimeRange?,
         estimatedFrames: Int,
         output: URL,
         options: VideoBlendOptions,
@@ -134,6 +157,9 @@ public final class VideoBlender: @unchecked Sendable {
             reader = try AVAssetReader(asset: asset)
         } catch {
             throw LapseError.readerFailed(error.localizedDescription)
+        }
+        if let timeRange {
+            reader.timeRange = timeRange
         }
         let readerSettings: [String: Any] = [
             kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,

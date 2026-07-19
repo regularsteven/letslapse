@@ -1,4 +1,4 @@
-# Let's Lapse — GPU Frame Blending (iOS · iPadOS · macOS)
+# LetsLapse — GPU Frame Blending (iOS · iPadOS · macOS)
 
 A proof-of-concept capture-and-blend app. It shoots video or interval photos
 (or imports them), then performs Metal-accelerated frame blending to produce:
@@ -10,7 +10,7 @@ A proof-of-concept capture-and-blend app. It shoots video or interval photos
    clip: start at 1 (dreamy slow-mo from high-fps source) and grow to 40+
    (a motion-blurred hyperlapse rush). Blur scales naturally with speed.
 
-The blending technique comes from the original Raspberry Pi Let's Lapse
+The blending technique comes from the original Raspberry Pi LetsLapse
 project (the rest of this repository, on `main`); this is a fresh native
 implementation of the same idea with the CPU pipeline replaced by a Metal
 compute kernel. The Pi project is untouched and lives on.

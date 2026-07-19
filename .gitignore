@@ -8,3 +8,15 @@ rebootbreadcrumb.txt
 blend/*
 Deflickered/*
 nohup.out
+
+# macOS / Xcode local files
+.DS_Store
+.build/
+.swiftpm/
+DerivedData/
+build/
+xcuserdata/
+*.xcuserstate
+*.xcresult
+*.dSYM/
+*.ipa

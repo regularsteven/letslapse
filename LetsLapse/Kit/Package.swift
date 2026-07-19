@@ -1,5 +1,5 @@
 // swift-tools-version:5.9
-// Let's Lapse — GPU frame blending engine (LetsLapseKit) + macOS CLI (lapse).
+// LetsLapse — GPU frame blending engine (LetsLapseKit) + macOS CLI (lapse).
 import PackageDescription
 
 let package = Package(

@@ -9,16 +9,22 @@ struct CaptureView: View {
         var id: String { rawValue }
     }
 
+    var onCaptureComplete: () -> Void = {}
+
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
     @StateObject private var camera = CameraController()
     @State private var mode: Mode = .video
     @State private var interval: Double = 2
     @State private var highFrameRate = false
+    @State private var orientation = currentCaptureOrientation()
 
     var body: some View {
         ZStack {
-            CameraPreview(session: camera.session)
+            Color.black.ignoresSafeArea()
+
+            CameraPreview(session: camera.session, orientation: orientation)
                 .ignoresSafeArea()
 
             if camera.isAuthorized == false {
@@ -55,17 +61,40 @@ struct CaptureView: View {
         }
         .statusBarHidden()
         .onAppear {
+            watchRemote.activate()
+            watchRemote.setCommandHandler(handleWatchCommand)
+            updateWatchRecordingState()
+            updateIdleTimer()
             camera.onFinishVideo = { url in
                 camera.stop()
                 dismiss()
-                model.setSource(.video(url))
+                model.setSource(.video(url), mode: highFrameRate ? "High-speed video" : "Video")
+                onCaptureComplete()
             }
             camera.onFinishPhotos = { urls in
                 camera.stop()
                 dismiss()
-                model.setSource(.photos(urls))
+                model.setSource(.photos(urls), mode: "Interval photos")
+                onCaptureComplete()
             }
+            orientation = currentCaptureOrientation()
+            camera.setVideoOrientation(orientation)
             camera.start()
+        }
+        .onDisappear {
+            watchRemote.setCommandHandler(nil)
+            UIApplication.shared.isIdleTimerDisabled = false
+        }
+        .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
+            orientation = currentCaptureOrientation()
+            camera.setVideoOrientation(orientation)
+        }
+        .onChange(of: camera.isRecording) { _ in
+            updateWatchRecordingState()
+            updateIdleTimer()
+        }
+        .onChange(of: camera.isIntervalRunning) { _ in
+            updateIdleTimer()
         }
     }
 
@@ -79,6 +108,19 @@ struct CaptureView: View {
             }
             .pickerStyle(.segmented)
             .disabled(camera.isRecording || camera.isIntervalRunning)
+
+            if camera.availableLenses.count > 1 {
+                Picker("Lens", selection: $camera.selectedLens) {
+                    ForEach(camera.availableLenses) { lens in
+                        Text(lens.label).tag(lens)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: camera.selectedLens) { lens in
+                    camera.selectLens(lens)
+                }
+                .disabled(camera.isRecording || camera.isIntervalRunning)
+            }
 
             switch mode {
             case .video:
@@ -122,23 +164,58 @@ struct CaptureView: View {
             }
         }
     }
+
+    private func handleWatchCommand(_ command: WatchCaptureCommand) {
+        switch command {
+        case .startRecording:
+            guard !camera.isRecording, !camera.isIntervalRunning else { return }
+            mode = .video
+            camera.startRecording()
+        case .stopRecording:
+            camera.stopRecording()
+        case .state:
+            updateWatchRecordingState()
+        }
+    }
+
+    private func updateWatchRecordingState() {
+        watchRemote.setRecordingState(camera.isRecording ? .recording : .idle)
+    }
+
+    private func updateIdleTimer() {
+        UIApplication.shared.isIdleTimerDisabled = camera.isRecording || camera.isIntervalRunning
+    }
 }
 
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
+    let orientation: AVCaptureVideoOrientation
 
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            previewLayer.frame = bounds
+        }
     }
 
     func makeUIView(context: Context) -> PreviewView {
         let view = PreviewView()
         view.previewLayer.session = session
-        view.previewLayer.videoGravity = .resizeAspectFill
+        view.previewLayer.videoGravity = .resizeAspect
+        if view.previewLayer.connection?.isVideoOrientationSupported == true {
+            view.previewLayer.connection?.videoOrientation = orientation
+        }
         return view
     }
 
-    func updateUIView(_ uiView: PreviewView, context: Context) {}
+    func updateUIView(_ uiView: PreviewView, context: Context) {
+        uiView.previewLayer.frame = uiView.bounds
+        if uiView.previewLayer.connection?.isVideoOrientationSupported == true {
+            uiView.previewLayer.connection?.videoOrientation = orientation
+        }
+    }
 }
 #endif

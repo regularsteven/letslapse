@@ -4,6 +4,7 @@ import UniformTypeIdentifiers
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
+    var onSourceReady: () -> Void = {}
     @State private var isImporting = false
     #if os(iOS)
     @State private var showCapture = false
@@ -12,6 +13,7 @@ struct HomeView: View {
     #else
     @State private var importingVideo = false
     @State private var importingPhotos = false
+    @State private var isDropTargeted = false
     #endif
 
     var body: some View {
@@ -62,10 +64,10 @@ struct HomeView: View {
                 }
             }
         }
-        .navigationTitle("Let's Lapse")
+        .navigationTitle("LetsLapse")
         #if os(iOS)
         .fullScreenCover(isPresented: $showCapture) {
-            CaptureView()
+            CaptureView(onCaptureComplete: onSourceReady)
         }
         .onChange(of: videoItem) { item in
             guard let item else { return }
@@ -76,7 +78,7 @@ struct HomeView: View {
             importPhotos(items)
         }
         #else
-        .fileImporter(isPresented: $importingVideo, allowedContentTypes: [.movie]) { result in
+        .fileImporter(isPresented: $importingVideo, allowedContentTypes: Self.videoContentTypes) { result in
             handleVideoImport(result)
         }
         .fileImporter(
@@ -85,6 +87,19 @@ struct HomeView: View {
             allowsMultipleSelection: true
         ) { result in
             handlePhotosImport(result)
+        }
+        .dropDestination(for: URL.self) { urls, _ in
+            handleDroppedURLs(urls)
+        } isTargeted: { isTargeted in
+            isDropTargeted = isTargeted
+        }
+        .overlay {
+            if isDropTargeted {
+                RoundedRectangle(cornerRadius: 12)
+                    .strokeBorder(Color.accentColor, style: StrokeStyle(lineWidth: 3, dash: [8, 6]))
+                    .padding(12)
+                    .allowsHitTesting(false)
+            }
         }
         #endif
     }
@@ -97,6 +112,7 @@ struct HomeView: View {
             do {
                 if let movie = try await item.loadTransferable(type: PickedMovie.self) {
                     model.setSource(.video(movie.url))
+                    onSourceReady()
                 } else {
                     model.errorMessage = "Couldn't load that video."
                 }
@@ -126,17 +142,25 @@ struct HomeView: View {
             photoItems = []
             if urls.count >= 2 {
                 model.setSource(.photos(urls))
+                onSourceReady()
             } else {
                 model.errorMessage = "Pick at least two photos to stack."
             }
         }
     }
     #else
+    private static let videoContentTypes: [UTType] = [
+        .movie,
+        .video,
+        .mpeg4Movie,
+        .quickTimeMovie,
+        UTType(filenameExtension: "m4v") ?? .movie,
+    ]
+
     private func handleVideoImport(_ result: Result<URL, Error>) {
         switch result {
         case .success(let url):
-            _ = url.startAccessingSecurityScopedResource()
-            model.setSource(.video(url))
+            importVideoURL(url)
         case .failure(let error):
             model.errorMessage = error.localizedDescription
         }
@@ -153,9 +177,38 @@ struct HomeView: View {
                 _ = url.startAccessingSecurityScopedResource()
             }
             model.setSource(.photos(urls))
+            onSourceReady()
         case .failure(let error):
             model.errorMessage = error.localizedDescription
         }
+    }
+
+    private func handleDroppedURLs(_ urls: [URL]) -> Bool {
+        guard let videoURL = urls.first(where: isVideoURL) else {
+            model.errorMessage = "Drop an MP4, MOV, or M4V video file."
+            return false
+        }
+        importVideoURL(videoURL)
+        return true
+    }
+
+    private func importVideoURL(_ url: URL) {
+        guard isVideoURL(url) else {
+            model.errorMessage = "Choose an MP4, MOV, or M4V video file."
+            return
+        }
+
+        isImporting = true
+        Task {
+            defer { isImporting = false }
+            model.setSource(.video(url))
+            onSourceReady()
+        }
+    }
+
+    private func isVideoURL(_ url: URL) -> Bool {
+        guard let type = UTType(filenameExtension: url.pathExtension) else { return false }
+        return Self.videoContentTypes.contains { type.conforms(to: $0) }
     }
     #endif
 }

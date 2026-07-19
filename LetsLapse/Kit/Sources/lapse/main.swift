@@ -2,11 +2,11 @@ import Foundation
 import AVFoundation
 import LetsLapseKit
 
-// lapse — headless front end for the Let's Lapse blend engine (macOS).
+// lapse — headless front end for the LetsLapse blend engine (macOS).
 // Hand-rolled argument parsing keeps the package dependency-free.
 
 let usageText = """
-lapse — GPU frame blending / stacking (Let's Lapse)
+lapse — GPU frame blending / stacking (LetsLapse)
 
 USAGE:
   lapse blend <video> -o <output> [options]     Blend a video with a moving window

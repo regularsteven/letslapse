@@ -1,18 +1,45 @@
 #if os(iOS)
 import Foundation
 import AVFoundation
+import UIKit
 
 /// Owns the AVCaptureSession for both capture modes: movie recording
 /// (optionally at the camera's highest 1080p frame rate, the raw material for
 /// slow-mo → hyperlapse ramps) and interval photo capture for stacking.
 /// Session work runs on a dedicated queue; published state hops to main.
 final class CameraController: NSObject, ObservableObject {
+    enum Lens: String, CaseIterable, Identifiable {
+        case ultraWide
+        case wide
+        case telephoto
+
+        var id: String { rawValue }
+
+        var label: String {
+            switch self {
+            case .ultraWide: return "Ultra Wide"
+            case .wide: return "Wide (1x)"
+            case .telephoto: return "Telephoto"
+            }
+        }
+
+        var deviceType: AVCaptureDevice.DeviceType {
+            switch self {
+            case .ultraWide: return .builtInUltraWideCamera
+            case .wide: return .builtInWideAngleCamera
+            case .telephoto: return .builtInTelephotoCamera
+            }
+        }
+    }
+
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "com.letslapse.capture")
     private let movieOutput = AVCaptureMovieFileOutput()
     private let photoOutput = AVCapturePhotoOutput()
+    private var videoInput: AVCaptureDeviceInput?
     private var videoDevice: AVCaptureDevice?
+    private var highFrameRateEnabled = false
     private var intervalTimer: DispatchSourceTimer?
     private var photoDirectory: URL?
     private var photoURLs: [URL] = []   // sessionQueue-confined
@@ -22,6 +49,8 @@ final class CameraController: NSObject, ObservableObject {
     @Published var isIntervalRunning = false
     @Published var photoCount = 0
     @Published var activeFormatDescription = ""
+    @Published var availableLenses: [Lens] = []
+    @Published var selectedLens: Lens = .wide
 
     /// Both called on the main queue.
     var onFinishVideo: ((URL) -> Void)?
@@ -60,15 +89,49 @@ final class CameraController: NSObject, ObservableObject {
         isConfigured = true
         session.beginConfiguration()
         session.sessionPreset = .high
-        if let device = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back),
-           let input = try? AVCaptureDeviceInput(device: device) {
-            videoDevice = device
-            if session.canAddInput(input) { session.addInput(input) }
-        }
+        publishAvailableLenses()
+        configureLens(.wide)
         if session.canAddOutput(movieOutput) { session.addOutput(movieOutput) }
         if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
         session.commitConfiguration()
         publishFormat()
+    }
+
+    private func publishAvailableLenses() {
+        let lenses = Lens.allCases.filter { lens in
+            AVCaptureDevice.default(lens.deviceType, for: .video, position: .back) != nil
+        }
+        DispatchQueue.main.async {
+            self.availableLenses = lenses.isEmpty ? [.wide] : lenses
+        }
+    }
+
+    func selectLens(_ lens: Lens) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            self.session.beginConfiguration()
+            self.configureLens(lens)
+            self.session.commitConfiguration()
+            self.setHighFrameRateOnCurrentDevice(self.highFrameRateEnabled)
+            self.publishFormat()
+        }
+    }
+
+    private func configureLens(_ lens: Lens) {
+        let device = AVCaptureDevice.default(lens.deviceType, for: .video, position: .back)
+            ?? AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: .back)
+        guard let device, let input = try? AVCaptureDeviceInput(device: device) else { return }
+
+        if let videoInput {
+            session.removeInput(videoInput)
+        }
+        if session.canAddInput(input) {
+            session.addInput(input)
+            videoInput = input
+            videoDevice = device
+            let selected = Lens.allCases.first { $0.deviceType == device.deviceType } ?? .wide
+            DispatchQueue.main.async { self.selectedLens = selected }
+        }
     }
 
     /// Best-effort switch to the highest frame rate the camera offers at
@@ -76,37 +139,41 @@ final class CameraController: NSObject, ObservableObject {
     /// device has no high-fps format.
     func setHighFrameRate(_ enabled: Bool) {
         sessionQueue.async {
-            guard let device = self.videoDevice else { return }
-            do {
-                try device.lockForConfiguration()
-                defer { device.unlockForConfiguration() }
-                if enabled {
-                    var best: (format: AVCaptureDevice.Format, fps: Double)?
-                    for format in device.formats {
-                        let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-                        guard dims.width == 1920 else { continue }
-                        for range in format.videoSupportedFrameRateRanges {
-                            let fps = min(range.maxFrameRate, 240)
-                            if fps >= 120, fps > (best?.fps ?? 0) {
-                                best = (format, fps)
-                            }
+            self.highFrameRateEnabled = enabled
+            self.setHighFrameRateOnCurrentDevice(enabled)
+            self.publishFormat()
+        }
+    }
+
+    private func setHighFrameRateOnCurrentDevice(_ enabled: Bool) {
+        guard let device = self.videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if enabled {
+                var best: (format: AVCaptureDevice.Format, fps: Double)?
+                for format in device.formats {
+                    let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                    guard dims.width == 1920 else { continue }
+                    for range in format.videoSupportedFrameRateRanges {
+                        let fps = min(range.maxFrameRate, 240)
+                        if fps >= 120, fps > (best?.fps ?? 0) {
+                            best = (format, fps)
                         }
                     }
-                    if let best {
-                        device.activeFormat = best.format
-                        let duration = CMTime(value: 1, timescale: Int32(best.fps))
-                        device.activeVideoMinFrameDuration = duration
-                        device.activeVideoMaxFrameDuration = duration
-                    }
-                } else {
-                    self.session.beginConfiguration()
-                    self.session.sessionPreset = .high
-                    self.session.commitConfiguration()
                 }
-            } catch {
-                // Leave the current format in place.
+                if let best {
+                    device.activeFormat = best.format
+                    let duration = CMTime(value: 1, timescale: Int32(best.fps))
+                    device.activeVideoMinFrameDuration = duration
+                    device.activeVideoMaxFrameDuration = duration
+                }
+            } else {
+                device.activeVideoMinFrameDuration = .invalid
+                device.activeVideoMaxFrameDuration = .invalid
             }
-            self.publishFormat()
+        } catch {
+            // Leave the current format in place.
         }
     }
 
@@ -115,8 +182,22 @@ final class CameraController: NSObject, ObservableObject {
         let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
         let frameDuration = device.activeVideoMinFrameDuration
         let fps = frameDuration.seconds > 0 ? Int((1.0 / frameDuration.seconds).rounded()) : 30
-        let line = "\(dims.width)×\(dims.height) @ \(fps) fps"
+        let line = "Capture \(dims.width)×\(dims.height) @ \(fps) fps"
         DispatchQueue.main.async { self.activeFormatDescription = line }
+    }
+
+    func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
+        sessionQueue.async {
+            let connections = [
+                self.movieOutput.connection(with: .video),
+                self.photoOutput.connection(with: .video),
+            ]
+            for connection in connections {
+                if connection?.isVideoOrientationSupported == true {
+                    connection?.videoOrientation = orientation
+                }
+            }
+        }
     }
 
     // MARK: - Movie recording
@@ -126,6 +207,10 @@ final class CameraController: NSObject, ObservableObject {
             guard !self.movieOutput.isRecording else { return }
             let url = FileManager.default.temporaryDirectory
                 .appendingPathComponent("capture-\(Int(Date().timeIntervalSince1970)).mov")
+            if let connection = self.movieOutput.connection(with: .video),
+               connection.isVideoOrientationSupported {
+                connection.videoOrientation = currentCaptureOrientation()
+            }
             self.movieOutput.startRecording(to: url, recordingDelegate: self)
             DispatchQueue.main.async { self.isRecording = true }
         }
@@ -157,6 +242,10 @@ final class CameraController: NSObject, ObservableObject {
             timer.schedule(deadline: .now(), repeating: max(0.5, seconds))
             timer.setEventHandler { [weak self] in
                 guard let self else { return }
+                if let connection = self.photoOutput.connection(with: .video),
+                   connection.isVideoOrientationSupported {
+                    connection.videoOrientation = currentCaptureOrientation()
+                }
                 self.photoOutput.capturePhoto(with: AVCapturePhotoSettings(), delegate: self)
             }
             timer.resume()
@@ -176,6 +265,24 @@ final class CameraController: NSObject, ObservableObject {
                 }
             }
         }
+    }
+}
+
+func currentCaptureOrientation() -> AVCaptureVideoOrientation {
+    let orientation = UIApplication.shared.connectedScenes
+        .compactMap { $0 as? UIWindowScene }
+        .first { $0.activationState == .foregroundActive }?
+        .interfaceOrientation
+
+    switch orientation {
+    case .landscapeLeft:
+        return .landscapeLeft
+    case .landscapeRight:
+        return .landscapeRight
+    case .portraitUpsideDown:
+        return .portraitUpsideDown
+    default:
+        return .portrait
     }
 }
 

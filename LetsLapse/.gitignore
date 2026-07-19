@@ -1,6 +1,10 @@
 .build/
 .swiftpm/
 DerivedData/
+build/
 xcuserdata/
 *.xcuserstate
 .DS_Store
+*.xcresult
+*.dSYM/
+*.ipa
