@@ -20,695 +20,179 @@ struct LetsLapseApp: App {
     }
 }
 
+/// Three tabs — Create, Projects, Settings — with the version flow
+/// (Adjust → Processing → Result) laid over them whenever a job is active.
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
-    @State private var selectedTab: AppTab = .capture
-
-    private enum AppTab {
-        case capture
-        case job
-        case library
-        case blends
-        case settings
-    }
+    @State private var selectedTab: LLTab = .create
 
     var body: some View {
+        ZStack {
+            tabs
+
+            #if os(iOS)
+            if model.stage == .home {
+                VStack {
+                    Spacer()
+                    FloatingTabBar(selection: $selectedTab)
+                        .padding(.bottom, 6)
+                }
+                .transition(.opacity)
+            }
+            #endif
+
+            if model.stage != .home {
+                FlowView()
+                    .background(LL.screenBackground.ignoresSafeArea())
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                    .zIndex(1)
+            }
+        }
+        .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.stage)
+        .onChange(of: model.requestedProjectDetailID) { requested in
+            guard requested != nil else { return }
+            selectedTab = .projects
+        }
+        .tint(LL.accent)
+        #if DEBUG
+        .onAppear(perform: applyUIPreviewHooks)
+        #endif
+    }
+
+    #if DEBUG
+    /// Drive the app into a specific screen from `simctl launch` env vars,
+    /// so screens can be screenshot-verified without tap automation.
+    private func applyUIPreviewHooks() {
+        let environment = ProcessInfo.processInfo.environment
+        switch environment["LL_TAB"] {
+        case "projects": selectedTab = .projects
+        case "settings": selectedTab = .settings
+        case "create": selectedTab = .create
+        default: break
+        }
+        if environment["LL_OPEN"] == "latest", let capture = model.captures.first {
+            model.openCapture(capture)
+        } else if let seed = environment["LL_SEED"] {
+            model.setSource(.video(URL(fileURLWithPath: seed)))
+        }
+        if environment["LL_DETAIL"] == "latest", let capture = model.captures.first {
+            selectedTab = .projects
+            model.requestedProjectDetailID = capture.id
+        }
+        if let speed = environment["LL_SPEED"].flatMap(Int.init) {
+            model.useRamp = false
+            model.constantWindow = speed
+        }
+        if environment["LL_AUTO"] == "process" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                if model.stage == .configure {
+                    model.startProcessing()
+                }
+            }
+        }
+    }
+    #endif
+
+    private var tabs: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                HomeView {
-                    selectedTab = .job
-                }
+                CreateView()
+                    .hiddenSystemTabBar()
             }
-            .tabItem {
-                Label("Capture", systemImage: "camera")
-            }
-            .tag(AppTab.capture)
+            .tabItem { Label(LLTab.create.title, systemImage: LLTab.create.systemImage) }
+            .tag(LLTab.create)
 
-            NavigationStack {
-                switch model.stage {
-                case .home:
-                    JobEmptyView {
-                        selectedTab = .capture
-                    }
-                case .configure:
-                    BlendOptionsView()
-                case .processing:
-                    ProcessingView()
-                case .done:
-                    ResultView()
-                }
-            }
-            .tabItem {
-                Label("Job", systemImage: "wand.and.stars")
-            }
-            .tag(AppTab.job)
-
-            NavigationStack {
-                LibraryView {
-                    selectedTab = .job
-                }
-            }
-            .tabItem {
-                Label("Library", systemImage: "rectangle.stack")
-            }
-            .tag(AppTab.library)
-
-            NavigationStack {
-                BlendsView {
-                    selectedTab = .job
-                }
-            }
-            .tabItem {
-                Label("Blends", systemImage: "square.stack.3d.up")
-            }
-            .tag(AppTab.blends)
+            ProjectsView()
+                .hiddenSystemTabBar()
+                .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
+                .tag(LLTab.projects)
 
             NavigationStack {
                 SettingsView()
+                    .hiddenSystemTabBar()
             }
-            .tabItem {
-                Label("Settings", systemImage: "gearshape")
-            }
-            .tag(AppTab.settings)
+            .tabItem { Label(LLTab.settings.title, systemImage: LLTab.settings.systemImage) }
+            .tag(LLTab.settings)
         }
     }
 }
 
-struct JobEmptyView: View {
-    var onChooseSource: () -> Void
-
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "wand.and.stars")
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text("No Active Job")
-                .font(.headline)
-            Text("Capture or import a source to start blending.")
-                .foregroundStyle(.secondary)
-            Button {
-                onChooseSource()
-            } label: {
-                Label("Go to Capture", systemImage: "camera")
-            }
-        }
-        .multilineTextAlignment(.center)
-        .padding()
-        .navigationTitle("Job")
-    }
-}
-
-struct LibraryView: View {
-    @EnvironmentObject var model: AppModel
-    var onOpenJob: () -> Void
-    @State private var displayMode: ProjectBrowserDisplayMode = .list
-    @State private var expandedCaptureIDs: Set<UUID> = []
-    @State private var previewItem: MediaPreviewItem?
-    @State private var deletionAlert: ProjectDeletionAlert?
-
-    var body: some View {
-        ScrollView {
-            if model.captures.isEmpty {
-                ProjectEmptyState(title: "No captures yet", systemImage: "rectangle.stack")
-            } else {
-                ProjectBrowserView(
-                    items: model.captures,
-                    displayMode: displayMode,
-                    title: { $0.originalName },
-                    subtitle: { $0.summary },
-                    metadata: { $0.createdAt.formatted(date: .abbreviated, time: .shortened) },
-                    mediaURL: { model.mediaURL(for: $0) },
-                    mediaKind: { model.mediaKind(for: $0) }
-                ) { capture in
-                    CaptureProjectActions(
-                        canPreview: model.mediaURL(for: capture) != nil,
-                        blendCount: model.blends(for: capture).count,
-                        isExpanded: expandedCaptureIDs.contains(capture.id),
-                        onPreview: {
-                            previewItem = previewItem(for: capture)
-                        },
-                        onOpen: {
-                            model.openCapture(capture)
-                            onOpenJob()
-                        },
-                        onToggleExpanded: {
-                            toggleExpanded(capture)
-                        },
-                        onDelete: {
-                            deletionAlert = .capture(
-                                capture,
-                                blendCount: model.blends(for: capture).count
-                            )
-                        }
-                    )
-                } expandedContent: { capture in
-                    if expandedCaptureIDs.contains(capture.id) {
-                        CaptureBlendGroup(
-                            capture: capture,
-                            blends: model.blends(for: capture),
-                            previewItem: $previewItem,
-                            onOpenJob: onOpenJob,
-                            onDeleteBlend: { blend in
-                                deletionAlert = .blend(blend)
-                            }
-                        )
-                        .environmentObject(model)
-                    }
-                }
-                .padding()
-            }
-        }
-        .navigationTitle("Library")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                ProjectBrowserModePicker(selection: $displayMode)
-            }
-        }
-        .sheet(item: $previewItem) { item in
-            ProjectMediaPreviewSheet(item: item)
-        }
-        .alert(item: $deletionAlert) { alert in
-            deletionConfirmation(for: alert)
-        }
-    }
-
-    private func toggleExpanded(_ capture: AppModel.CaptureProject) {
-        if expandedCaptureIDs.contains(capture.id) {
-            expandedCaptureIDs.remove(capture.id)
-        } else {
-            expandedCaptureIDs.insert(capture.id)
-        }
-    }
-
-    private func previewItem(for capture: AppModel.CaptureProject) -> MediaPreviewItem? {
-        guard let url = model.mediaURL(for: capture) else { return nil }
-        return MediaPreviewItem(
-            title: capture.originalName,
-            subtitle: capture.summary,
-            url: url,
-            kind: model.mediaKind(for: capture)
-        )
-    }
-
-    private func deletionConfirmation(for alert: ProjectDeletionAlert) -> Alert {
-        switch alert {
-        case .capture(let capture, let blendCount):
-            let blendDescription = blendCount == 1 ? "1 blend" : "\(blendCount) blends"
-            return Alert(
-                title: Text("Delete “\(capture.originalName)”?"),
-                message: Text("This permanently deletes the source, \(blendDescription), and all cached processing files for this capture."),
-                primaryButton: .destructive(Text("Delete")) {
-                    deleteCapture(capture)
-                },
-                secondaryButton: .cancel()
-            )
-        case .blend(let blend):
-            return Alert(
-                title: Text("Delete this blend?"),
-                message: Text("This permanently deletes the generated output. The original capture remains in your library."),
-                primaryButton: .destructive(Text("Delete")) {
-                    deleteBlend(blend)
-                },
-                secondaryButton: .cancel()
-            )
-        case .failure(let message):
-            return Alert(title: Text("Couldn’t Delete"), message: Text(message), dismissButton: .default(Text("OK")))
-        }
-    }
-
-    private func deleteCapture(_ capture: AppModel.CaptureProject) {
-        do {
-            try model.deleteCapture(capture)
-            expandedCaptureIDs.remove(capture.id)
-            previewItem = nil
-        } catch {
-            showDeletionFailure(error)
-        }
-    }
-
-    private func deleteBlend(_ blend: AppModel.BlendProject) {
-        do {
-            try model.deleteBlend(blend)
-            previewItem = nil
-        } catch {
-            showDeletionFailure(error)
-        }
-    }
-
-    private func showDeletionFailure(_ error: Error) {
-        Task { @MainActor in
-            await Task.yield()
-            deletionAlert = .failure(error.localizedDescription)
-        }
-    }
-}
-
-struct BlendsView: View {
-    @EnvironmentObject var model: AppModel
-    var onOpenJob: () -> Void
-    @State private var displayMode: ProjectBrowserDisplayMode = .list
-    @State private var previewItem: MediaPreviewItem?
-    @State private var deletionAlert: ProjectDeletionAlert?
-
-    var body: some View {
-        ScrollView {
-            if model.blends.isEmpty {
-                ProjectEmptyState(title: "No blends yet", systemImage: "square.stack.3d.up")
-            } else {
-                ProjectBrowserView(
-                    items: model.blends,
-                    displayMode: displayMode,
-                    title: { $0.parameterSummary },
-                    subtitle: { $0.summary },
-                    metadata: { blend in
-                        if let capture = model.capture(for: blend) {
-                            return "\(capture.originalName) · \(blend.createdAt.formatted(date: .abbreviated, time: .shortened))"
-                        }
-                        return blend.createdAt.formatted(date: .abbreviated, time: .shortened)
-                    },
-                    mediaURL: { model.mediaURL(for: $0) },
-                    mediaKind: { model.mediaKind(for: $0) }
-                ) { blend in
-                    BlendProjectActions(
-                        onPreview: {
-                            previewItem = previewItem(for: blend)
-                        },
-                        onOpen: {
-                            model.openBlend(blend)
-                            onOpenJob()
-                        },
-                        onAdjust: {
-                            model.openBlend(blend)
-                            model.stage = .configure
-                            onOpenJob()
-                        },
-                        onDelete: {
-                            deletionAlert = .blend(blend)
-                        }
-                    )
-                } expandedContent: { _ in
-                    EmptyView()
-                }
-                .padding()
-            }
-        }
-        .navigationTitle("Blends")
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                ProjectBrowserModePicker(selection: $displayMode)
-            }
-        }
-        .sheet(item: $previewItem) { item in
-            ProjectMediaPreviewSheet(item: item)
-        }
-        .alert(item: $deletionAlert) { alert in
-            switch alert {
-            case .blend(let blend):
-                return Alert(
-                    title: Text("Delete this blend?"),
-                    message: Text("This permanently deletes the generated output. The original capture remains in your library."),
-                    primaryButton: .destructive(Text("Delete")) {
-                        deleteBlend(blend)
-                    },
-                    secondaryButton: .cancel()
-                )
-            case .failure(let message):
-                return Alert(title: Text("Couldn’t Delete"), message: Text(message), dismissButton: .default(Text("OK")))
-            case .capture:
-                return Alert(title: Text("Couldn’t Delete"), dismissButton: .default(Text("OK")))
-            }
-        }
-    }
-
-    private func previewItem(for blend: AppModel.BlendProject) -> MediaPreviewItem {
-        MediaPreviewItem(
-            title: blend.parameterSummary,
-            subtitle: model.capture(for: blend)?.originalName ?? blend.summary,
-            url: model.mediaURL(for: blend),
-            kind: model.mediaKind(for: blend)
-        )
-    }
-
-    private func deleteBlend(_ blend: AppModel.BlendProject) {
-        do {
-            try model.deleteBlend(blend)
-            previewItem = nil
-        } catch {
-            Task { @MainActor in
-                await Task.yield()
-                deletionAlert = .failure(error.localizedDescription)
-            }
-        }
-    }
-}
-
-private enum ProjectDeletionAlert: Identifiable {
-    case capture(AppModel.CaptureProject, blendCount: Int)
-    case blend(AppModel.BlendProject)
-    case failure(String)
-
-    var id: String {
-        switch self {
-        case .capture(let capture, _): return "capture-\(capture.id)"
-        case .blend(let blend): return "blend-\(blend.id)"
-        case .failure(let message): return "failure-\(message)"
-        }
-    }
-}
-
-private struct CaptureProjectActions: View {
-    var canPreview: Bool
-    var blendCount: Int
-    var isExpanded: Bool
-    var onPreview: () -> Void
-    var onOpen: () -> Void
-    var onToggleExpanded: () -> Void
-    var onDelete: () -> Void
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                buttons
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                buttons
-            }
-        }
-        .buttonStyle(.bordered)
-    }
-
+private extension View {
+    /// iOS hides the system tab bar in favor of the floating pill;
+    /// macOS keeps its native tab styling.
     @ViewBuilder
-    private var buttons: some View {
-        Button(action: onPreview) {
-            Label("Preview", systemImage: "play.rectangle")
-        }
-        .disabled(!canPreview)
-
-        Button(action: onOpen) {
-            Label("Blend", systemImage: "slider.horizontal.3")
-        }
-
-        if blendCount > 0 {
-            Button(action: onToggleExpanded) {
-                Label(
-                    "\(blendCount)",
-                    systemImage: isExpanded ? "chevron.up.circle" : "chevron.down.circle"
-                )
-            }
-        }
-
-        Button(role: .destructive, action: onDelete) {
-            Label("Delete", systemImage: "trash")
-        }
+    func hiddenSystemTabBar() -> some View {
+        #if os(iOS)
+        toolbar(.hidden, for: .tabBar)
+        #else
+        self
+        #endif
     }
 }
 
-private struct BlendProjectActions: View {
-    var onPreview: () -> Void
-    var onOpen: () -> Void
-    var onAdjust: () -> Void
-    var onDelete: () -> Void
-
-    var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                buttons
-            }
-            VStack(alignment: .leading, spacing: 8) {
-                buttons
-            }
-        }
-        .buttonStyle(.bordered)
-    }
-
-    @ViewBuilder
-    private var buttons: some View {
-        Button(action: onPreview) {
-            Label("Preview", systemImage: "play.rectangle")
-        }
-        Button(action: onOpen) {
-            Label("Open", systemImage: "arrow.up.forward.app")
-        }
-        Button(action: onAdjust) {
-            Label("Adjust", systemImage: "slider.horizontal.3")
-        }
-        Button(role: .destructive, action: onDelete) {
-            Label("Delete", systemImage: "trash")
-        }
-    }
-}
-
-private struct CaptureBlendGroup: View {
+/// The linear job flow. Back always pops one step; there are no dead ends:
+/// cancelling processing returns to Adjust, finishing lands on the project.
+struct FlowView: View {
     @EnvironmentObject var model: AppModel
-    var capture: AppModel.CaptureProject
-    var blends: [AppModel.BlendProject]
-    @Binding var previewItem: MediaPreviewItem?
-    var onOpenJob: () -> Void
-    var onDeleteBlend: (AppModel.BlendProject) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Divider()
-
-            HStack(spacing: 10) {
-                ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
-                    .frame(width: 56, height: 42)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Original")
-                        .font(.subheadline.weight(.semibold))
-                    Text(capture.summary)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Button {
-                    if let url = model.mediaURL(for: capture) {
-                        previewItem = MediaPreviewItem(
-                            title: capture.originalName,
-                            subtitle: capture.summary,
-                            url: url,
-                            kind: model.mediaKind(for: capture)
-                        )
-                    }
-                } label: {
-                    Image(systemName: "play.rectangle")
-                }
-                .disabled(model.mediaURL(for: capture) == nil)
-            }
-
-            ForEach(blends) { blend in
-                HStack(spacing: 10) {
-                    ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
-                        .frame(width: 56, height: 42)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(blend.parameterSummary)
-                            .font(.subheadline.weight(.semibold))
-                            .lineLimit(1)
-                        Text(blend.summary)
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer()
-                    Button {
-                        previewItem = MediaPreviewItem(
-                            title: blend.parameterSummary,
-                            subtitle: blend.summary,
-                            url: model.mediaURL(for: blend),
-                            kind: model.mediaKind(for: blend)
-                        )
-                    } label: {
-                        Image(systemName: "play.rectangle")
-                    }
-                    Button {
-                        model.openBlend(blend)
-                        onOpenJob()
-                    } label: {
-                        Image(systemName: "arrow.up.forward.app")
-                    }
-                    Button(role: .destructive) {
-                        onDeleteBlend(blend)
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                }
+        Group {
+            switch model.stage {
+            case .home:
+                EmptyView()
+            case .configure:
+                AdjustView()
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            case .processing:
+                ProcessingView()
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+            case .done:
+                ResultView()
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
             }
         }
-        .buttonStyle(.bordered)
+        .animation(.spring(response: 0.32, dampingFraction: 0.88), value: model.stage)
     }
 }
 
-private struct ProjectEmptyState: View {
-    var title: String
+/// Circular chrome button used across flow screens ("‹" back, "⋯" menus).
+struct FlowChromeButton: View {
     var systemImage: String
+    var tint: Color = LL.accent
+    var action: () -> Void
 
     var body: some View {
-        VStack(spacing: 12) {
+        Button(action: action) {
             Image(systemName: systemImage)
-                .font(.largeTitle)
-                .foregroundStyle(.secondary)
-            Text(title)
-                .font(.headline)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 34, height: 34)
+                .background(LL.cardBackground, in: Circle())
+                .shadow(color: .black.opacity(0.08), radius: 2, y: 1)
         }
-        .frame(maxWidth: .infinity, minHeight: 260)
-        .padding()
+        .buttonStyle(.plain)
     }
 }
 
-struct CaptureProjectDetailView: View {
-    @EnvironmentObject var model: AppModel
-    let captureID: UUID
-    var onOpenJob: () -> Void
-    @State private var previewItem: MediaPreviewItem?
-    @State private var deletionAlert: ProjectDeletionAlert?
-
-    private var capture: AppModel.CaptureProject? {
-        model.captures.first { $0.id == captureID }
-    }
+/// Shared header for flow screens: back chevron + centered title.
+struct FlowHeader: View {
+    var title: String
+    var onBack: (() -> Void)?
 
     var body: some View {
-        List {
-            if let capture {
-                Section("Source") {
-                    HStack(spacing: 12) {
-                        ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
-                            .frame(width: 90, height: 68)
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(capture.originalName)
-                                .font(.headline)
-                            Text(capture.summary)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    LabeledContent("Type", value: capture.kind.label)
-                    LabeledContent("Captured", value: capture.createdAt.formatted(date: .abbreviated, time: .shortened))
-
-                    Button {
-                        if let url = model.mediaURL(for: capture) {
-                            previewItem = MediaPreviewItem(
-                                title: capture.originalName,
-                                subtitle: capture.summary,
-                                url: url,
-                                kind: model.mediaKind(for: capture)
-                            )
-                        }
-                    } label: {
-                        Label("Preview Original", systemImage: "play.rectangle")
-                    }
-                    Button {
-                        model.openCapture(capture)
-                        onOpenJob()
-                    } label: {
-                        Label("Re-blend from Source", systemImage: "slider.horizontal.3")
-                    }
-                    Button(role: .destructive) {
-                        deletionAlert = .capture(capture, blendCount: model.blends(for: capture).count)
-                    } label: {
-                        Label("Delete Capture", systemImage: "trash")
-                    }
-                }
-
-                Section("Blends") {
-                    let captureBlends = model.blends(for: capture)
-                    if captureBlends.isEmpty {
-                        Text("No blends generated yet.")
-                            .foregroundStyle(.secondary)
-                    } else {
-                        ForEach(captureBlends) { blend in
-                            HStack(spacing: 12) {
-                                ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
-                                    .frame(width: 72, height: 54)
-                                VStack(alignment: .leading, spacing: 8) {
-                                    Text(blend.parameterSummary)
-                                        .font(.headline)
-                                    Text(blend.summary)
-                                        .font(.caption)
-                                        .foregroundStyle(.secondary)
-                                    HStack {
-                                        Button {
-                                            previewItem = MediaPreviewItem(
-                                                title: blend.parameterSummary,
-                                                subtitle: blend.summary,
-                                                url: model.mediaURL(for: blend),
-                                                kind: model.mediaKind(for: blend)
-                                            )
-                                        } label: {
-                                            Label("Preview", systemImage: "play.rectangle")
-                                        }
-                                        Button {
-                                            model.openBlend(blend)
-                                            onOpenJob()
-                                        } label: {
-                                            Label("Open", systemImage: "arrow.up.forward.app")
-                                        }
-                                        Button {
-                                            model.openBlend(blend)
-                                            model.stage = .configure
-                                            onOpenJob()
-                                        } label: {
-                                            Label("Adjust", systemImage: "slider.horizontal.3")
-                                        }
-                                        Button(role: .destructive) {
-                                            deletionAlert = .blend(blend)
-                                        } label: {
-                                            Label("Delete", systemImage: "trash")
-                                        }
-                                    }
-                                }
-                            }
-                            .padding(.vertical, 4)
-                        }
-                    }
-                }
+        HStack(spacing: 8) {
+            if let onBack {
+                FlowChromeButton(systemImage: "chevron.left", action: onBack)
+                    .accessibilityLabel("Back")
             } else {
-                Section {
-                    Text("Capture not found.")
-                        .foregroundStyle(.secondary)
-                }
+                Color.clear.frame(width: 34, height: 34)
             }
+            Text(title)
+                .font(.system(size: 16, weight: .semibold))
+                .frame(maxWidth: .infinity)
+            Color.clear.frame(width: 34, height: 34)
         }
-        .navigationTitle("Project")
-        .sheet(item: $previewItem) { item in
-            ProjectMediaPreviewSheet(item: item)
-        }
-        .alert(item: $deletionAlert) { alert in
-            switch alert {
-            case .capture(let capture, let blendCount):
-                let blendDescription = blendCount == 1 ? "1 blend" : "\(blendCount) blends"
-                return Alert(
-                    title: Text("Delete “\(capture.originalName)”?"),
-                    message: Text("This permanently deletes the source, \(blendDescription), and all cached processing files for this capture."),
-                    primaryButton: .destructive(Text("Delete")) {
-                        performDeletion { try model.deleteCapture(capture) }
-                    },
-                    secondaryButton: .cancel()
-                )
-            case .blend(let blend):
-                return Alert(
-                    title: Text("Delete this blend?"),
-                    message: Text("This permanently deletes the generated output. The original capture remains in your library."),
-                    primaryButton: .destructive(Text("Delete")) {
-                        performDeletion { try model.deleteBlend(blend) }
-                    },
-                    secondaryButton: .cancel()
-                )
-            case .failure(let message):
-                return Alert(title: Text("Couldn’t Delete"), message: Text(message), dismissButton: .default(Text("OK")))
-            }
-        }
-    }
-
-    private func performDeletion(_ operation: () throws -> Void) {
-        do {
-            try operation()
-            previewItem = nil
-        } catch {
-            Task { @MainActor in
-                await Task.yield()
-                deletionAlert = .failure(error.localizedDescription)
-            }
-        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
     }
 }

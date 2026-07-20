@@ -6,26 +6,16 @@ enum WatchCaptureCommand: String {
     case startRecording
     case stopRecording
     case triggerMoment
+    case lockExposure
+    case unlockExposure
+    case setISO
+    case setLensPosition
     case state
 }
 
 enum WatchRecordingState: String {
     case idle
     case recording
-}
-
-private enum WatchMessageKey {
-    static let command = "command"
-    static let status = "status"
-    static let recordingState = "recordingState"
-    static let recordingStartedAt = "recordingStartedAt"
-    static let sequenceMode = "sequenceMode"
-    static let markerCount = "markerCount"
-    static let rampIntervalCount = "rampIntervalCount"
-    static let segmentCount = "segmentCount"
-    static let isRampActive = "isRampActive"
-    static let isRampHighRate = "isRampHighRate"
-    static let message = "message"
 }
 
 final class WatchRemoteControlReceiver: NSObject, ObservableObject {
@@ -35,7 +25,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     @Published private(set) var isReachable = false
 
     private var isActivated = false
-    private var commandHandler: ((WatchCaptureCommand) -> Void)?
+    private var commandHandler: ((WatchCaptureCommand, Double?) -> Void)?
     private var recordingStartedAt: Date?
     private var sequenceMode: LiveCaptureSequence.Mode?
     private var markerCount = 0
@@ -43,6 +33,16 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var segmentCount = 0
     private var isRampActive = false
     private var isRampHighRate = false
+    private var formatLine: String?
+    private var captureFPS = 0
+    private var plannedSpeed = 0
+    private var outputFPS = 0
+    private var isExposureLocked = false
+    private var lockedISO: Float = 0
+    private var lockedShutter: Double = 0
+    private var lockedLensPosition: Float = 0.5
+    private var isoMin: Float = 25
+    private var isoMax: Float = 3200
 
     private override init() {
         super.init()
@@ -57,8 +57,62 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     @MainActor
-    func setCommandHandler(_ handler: ((WatchCaptureCommand) -> Void)?) {
+    func setCommandHandler(_ handler: ((WatchCaptureCommand, Double?) -> Void)?) {
+        let wasActive = commandHandler != nil
         commandHandler = handler
+        if wasActive != (handler != nil) {
+            publishState()
+        }
+    }
+
+    /// What the Watch shows before/while recording: the locked format, the
+    /// planned speed, and the numbers its live estimate needs.
+    @MainActor
+    func setCaptureContext(
+        formatLine: String?,
+        captureFPS: Int,
+        plannedSpeed: Int,
+        outputFPS: Int
+    ) {
+        let changed = self.formatLine != formatLine
+            || self.captureFPS != captureFPS
+            || self.plannedSpeed != plannedSpeed
+            || self.outputFPS != outputFPS
+        self.formatLine = formatLine
+        self.captureFPS = captureFPS
+        self.plannedSpeed = plannedSpeed
+        self.outputFPS = outputFPS
+        if changed {
+            publishState()
+        }
+    }
+
+    /// The manual-exposure state mirrored to the Watch so it can label the
+    /// lock toggle and bound the Digital Crown ISO range.
+    @MainActor
+    func setExposureContext(
+        isExposureLocked: Bool,
+        lockedISO: Float,
+        lockedShutter: Double,
+        lockedLensPosition: Float,
+        isoMin: Float,
+        isoMax: Float
+    ) {
+        let changed = self.isExposureLocked != isExposureLocked
+            || self.lockedISO != lockedISO
+            || self.lockedShutter != lockedShutter
+            || self.lockedLensPosition != lockedLensPosition
+            || self.isoMin != isoMin
+            || self.isoMax != isoMax
+        self.isExposureLocked = isExposureLocked
+        self.lockedISO = lockedISO
+        self.lockedShutter = lockedShutter
+        self.lockedLensPosition = lockedLensPosition
+        self.isoMin = isoMin
+        self.isoMax = isoMax
+        if changed {
+            publishState()
+        }
     }
 
     @MainActor
@@ -98,27 +152,14 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             return response(status: "unavailable", message: "Capture screen is not active")
         }
 
-        commandHandler(command)
+        commandHandler(command, message[WatchMessageKey.value] as? Double)
         return response(status: "accepted")
     }
 
     @MainActor
     private func response(status: String, message: String? = nil) -> [String: Any] {
-        var payload: [String: Any] = [
-            WatchMessageKey.status: status,
-            WatchMessageKey.recordingState: recordingState.rawValue,
-        ]
-        if let recordingStartedAt {
-            payload[WatchMessageKey.recordingStartedAt] = recordingStartedAt.timeIntervalSince1970
-        }
-        if let sequenceMode {
-            payload[WatchMessageKey.sequenceMode] = sequenceMode.rawValue
-        }
-        payload[WatchMessageKey.markerCount] = markerCount
-        payload[WatchMessageKey.rampIntervalCount] = rampIntervalCount
-        payload[WatchMessageKey.segmentCount] = segmentCount
-        payload[WatchMessageKey.isRampActive] = isRampActive
-        payload[WatchMessageKey.isRampHighRate] = isRampHighRate
+        var payload = statePayload()
+        payload[WatchMessageKey.status] = status
         if let message {
             payload[WatchMessageKey.message] = message
         }
@@ -126,9 +167,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     @MainActor
-    private func publishState() {
-        guard WCSession.isSupported() else { return }
-        let session = WCSession.default
+    private func statePayload() -> [String: Any] {
         var payload: [String: Any] = [
             WatchMessageKey.recordingState: recordingState.rawValue
         ]
@@ -143,6 +182,27 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.segmentCount] = segmentCount
         payload[WatchMessageKey.isRampActive] = isRampActive
         payload[WatchMessageKey.isRampHighRate] = isRampHighRate
+        payload[WatchMessageKey.cameraActive] = commandHandler != nil
+        if let formatLine {
+            payload[WatchMessageKey.formatLine] = formatLine
+        }
+        payload[WatchMessageKey.captureFPS] = captureFPS
+        payload[WatchMessageKey.plannedSpeed] = plannedSpeed
+        payload[WatchMessageKey.outputFPS] = outputFPS
+        payload[WatchMessageKey.isExposureLocked] = isExposureLocked
+        payload[WatchMessageKey.lockedISO] = Double(lockedISO)
+        payload[WatchMessageKey.lockedShutter] = lockedShutter
+        payload[WatchMessageKey.lockedLensPosition] = Double(lockedLensPosition)
+        payload[WatchMessageKey.isoMin] = Double(isoMin)
+        payload[WatchMessageKey.isoMax] = Double(isoMax)
+        return payload
+    }
+
+    @MainActor
+    private func publishState() {
+        guard WCSession.isSupported() else { return }
+        let session = WCSession.default
+        let payload = statePayload()
         try? session.updateApplicationContext(payload)
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil, errorHandler: nil)

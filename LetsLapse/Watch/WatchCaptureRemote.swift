@@ -1,23 +1,12 @@
 import Foundation
 import WatchConnectivity
+#if os(watchOS)
+import WatchKit
+#endif
 
 enum WatchRecordingState: String {
     case idle
     case recording
-}
-
-private enum WatchMessageKey {
-    static let command = "command"
-    static let status = "status"
-    static let recordingState = "recordingState"
-    static let recordingStartedAt = "recordingStartedAt"
-    static let sequenceMode = "sequenceMode"
-    static let markerCount = "markerCount"
-    static let rampIntervalCount = "rampIntervalCount"
-    static let segmentCount = "segmentCount"
-    static let isRampActive = "isRampActive"
-    static let isRampHighRate = "isRampHighRate"
-    static let message = "message"
 }
 
 @MainActor
@@ -26,7 +15,6 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var recordingStartedAt: Date?
     @Published private(set) var isReachable = false
     @Published private(set) var statusText = "Connecting"
-    @Published private(set) var lastRoundTripMilliseconds: Int?
     @Published private(set) var isSending = false
     @Published private(set) var sequenceMode = "ramp"
     @Published private(set) var markerCount = 0
@@ -34,6 +22,17 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var segmentCount = 0
     @Published private(set) var isRampActive = false
     @Published private(set) var isRampHighRate = false
+    @Published private(set) var isCameraActive = false
+    @Published private(set) var formatLine: String?
+    @Published private(set) var captureFPS = 0
+    @Published private(set) var plannedSpeed = 0
+    @Published private(set) var outputFPS = 0
+    @Published private(set) var isExposureLocked = false
+    @Published private(set) var lockedISO: Double = 0
+    @Published private(set) var lockedShutter: Double = 0
+    @Published private(set) var lockedLensPosition: Double = 0.5
+    @Published private(set) var isoMin: Double = 25
+    @Published private(set) var isoMax: Double = 3200
 
     override init() {
         super.init()
@@ -65,7 +64,23 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         send(command: "triggerMoment")
     }
 
-    private func send(command: String) {
+    func lockExposure() {
+        send(command: "lockExposure")
+    }
+
+    func unlockExposure() {
+        send(command: "unlockExposure")
+    }
+
+    func setISO(_ iso: Double) {
+        send(command: "setISO", value: iso)
+    }
+
+    func setLensPosition(_ position: Double) {
+        send(command: "setLensPosition", value: position)
+    }
+
+    func send(command: String, value: Double? = nil) {
         guard WCSession.default.activationState == .activated else {
             statusText = "Connecting"
             return
@@ -77,11 +92,16 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             return
         }
 
+        var payload: [String: Any] = [WatchMessageKey.command: command]
+        if let value {
+            payload[WatchMessageKey.value] = value
+        }
+
         let startedAt = Date()
         isSending = true
         statusText = "Sending"
         WCSession.default.sendMessage(
-            [WatchMessageKey.command: command],
+            payload,
             replyHandler: { [weak self] reply in
                 Task { @MainActor in
                     self?.apply(reply: reply, startedAt: startedAt, command: command)
@@ -99,7 +119,6 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     private func apply(reply: [String: Any], startedAt: Date, command: String) {
         isSending = false
         isReachable = true
-        lastRoundTripMilliseconds = Int(Date().timeIntervalSince(startedAt) * 1000)
 
         if let rawState = reply[WatchMessageKey.recordingState] as? String,
            let state = WatchRecordingState(rawValue: rawState) {
@@ -142,6 +161,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             if segmentCount == 0 {
                 segmentCount = 1
             }
+            playHaptic(.start)
         case "stopRecording":
             recordingState = .idle
             recordingStartedAt = nil
@@ -150,6 +170,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             segmentCount = 0
             isRampActive = false
             isRampHighRate = false
+            playHaptic(.stop)
         case "triggerMoment":
             if recordingState == .recording {
                 isRampActive.toggle()
@@ -158,10 +179,35 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                     rampIntervalCount = max(1, rampIntervalCount + 1)
                     markerCount = rampIntervalCount
                 }
+                playHaptic(.click)
             }
+        case "lockExposure":
+            isExposureLocked = true
+            playHaptic(.click)
+        case "unlockExposure":
+            isExposureLocked = false
+            playHaptic(.click)
         default:
             break
         }
+    }
+
+    /// Command acknowledgment is the haptic plus the button state itself —
+    /// no readouts to squint at on a tripod rig.
+    private func playHaptic(_ type: WatchHapticType) {
+        #if os(watchOS)
+        switch type {
+        case .start: WKInterfaceDevice.current().play(.start)
+        case .stop: WKInterfaceDevice.current().play(.stop)
+        case .click: WKInterfaceDevice.current().play(.click)
+        }
+        #endif
+    }
+
+    private enum WatchHapticType {
+        case start
+        case stop
+        case click
     }
 
     func reconnect() {
@@ -191,6 +237,39 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if let isHighRate = payload[WatchMessageKey.isRampHighRate] as? Bool {
             isRampHighRate = isHighRate
+        }
+        if let cameraActive = payload[WatchMessageKey.cameraActive] as? Bool {
+            isCameraActive = cameraActive
+        }
+        if let line = payload[WatchMessageKey.formatLine] as? String {
+            formatLine = line
+        }
+        if let fps = payload[WatchMessageKey.captureFPS] as? Int, fps > 0 {
+            captureFPS = fps
+        }
+        if let speed = payload[WatchMessageKey.plannedSpeed] as? Int, speed > 0 {
+            plannedSpeed = speed
+        }
+        if let fps = payload[WatchMessageKey.outputFPS] as? Int, fps > 0 {
+            outputFPS = fps
+        }
+        if let locked = payload[WatchMessageKey.isExposureLocked] as? Bool {
+            isExposureLocked = locked
+        }
+        if let iso = payload[WatchMessageKey.lockedISO] as? Double, iso > 0 {
+            lockedISO = iso
+        }
+        if let shutter = payload[WatchMessageKey.lockedShutter] as? Double, shutter > 0 {
+            lockedShutter = shutter
+        }
+        if let lens = payload[WatchMessageKey.lockedLensPosition] as? Double {
+            lockedLensPosition = lens
+        }
+        if let min = payload[WatchMessageKey.isoMin] as? Double, min > 0 {
+            isoMin = min
+        }
+        if let max = payload[WatchMessageKey.isoMax] as? Double, max > 0 {
+            isoMax = max
         }
         if recordingState == .idle {
             markerCount = 0

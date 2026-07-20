@@ -2,123 +2,234 @@ import SwiftUI
 import AVKit
 import LetsLapseKit
 
+/// The review screen. It answers "where did my file go" up front, and turns
+/// re-blending into a single "New version" row.
 struct ResultView: View {
     @EnvironmentObject var model: AppModel
     @State private var player: AVPlayer?
+    @State private var compareItem: MediaPreviewItem?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if model.resultVideoURL != nil {
-                    VideoPlayer(player: player)
-                        .frame(minHeight: 280)
-                        .background(Color.black)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                } else if let image = model.resultImage {
-                    Image(decorative: image, scale: 1)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(minHeight: 280)
-                        .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
+        VStack(spacing: 0) {
+            ScrollView {
+                VStack(spacing: 14) {
+                    playerCard
+                        .padding(.top, 20)
 
-                if let summary = model.resultSummary {
-                    Text(summary)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                }
+                    savedBanner
 
-                if let blend = model.currentBlend {
-                    Text(blend.parameterSummary)
-                        .font(.caption.monospacedDigit())
-                        .foregroundStyle(.secondary)
-                }
+                    HStack(spacing: 10) {
+                        #if os(iOS)
+                        Button {
+                            model.saveResultToPhotos()
+                        } label: {
+                            Text("Save to Photos")
+                        }
+                        .buttonStyle(LLPrimaryButtonStyle())
+                        #endif
 
-                HStack(spacing: 20) {
-                    if let shareURL = model.resultVideoURL ?? model.resultImageURL {
-                        ShareLink(item: shareURL) {
-                            Label("Share", systemImage: "square.and.arrow.up")
+                        if let shareURL = model.resultVideoURL ?? model.resultImageURL {
+                            ShareLink(item: shareURL) {
+                                Text("Share")
+                                    .font(.system(size: 15.5, weight: .bold))
+                                    .foregroundStyle(LL.accent)
+                                    .frame(maxWidth: .infinity, minHeight: 50)
+                            }
+                            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                            .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
                         }
                     }
-                    #if os(iOS)
-                    Button {
-                        model.saveResultToPhotos()
-                    } label: {
-                        Label("Save to Photos", systemImage: "photo.badge.arrow.down")
+
+                    if let note = model.saveConfirmation {
+                        Text(note)
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
                     }
-                    #endif
-                    Button {
-                        model.reset()
-                    } label: {
-                        Label("Close", systemImage: "xmark.circle")
+
+                    nextSteps
+
+                    if let error = model.errorMessage {
+                        Text(error)
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(14)
+                            .llCard()
                     }
                 }
-
-                reblendControls
-
-                if let note = model.saveConfirmation {
-                    Text(note)
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
-                }
+                .padding(.horizontal, 16)
+                .padding(.bottom, 16)
             }
+
+            Button {
+                model.finishFlow(openProject: true)
+            } label: {
+                Text("Done")
+            }
+            .buttonStyle(LLSecondaryButtonStyle(tint: .secondary))
+            .padding(.horizontal, 16)
+            .padding(.bottom, 12)
         }
-        .padding()
-        .navigationTitle("Result")
+        .background(LL.screenBackground.ignoresSafeArea())
         .onAppear {
             updatePlayer()
         }
         .onChange(of: model.resultVideoURL) { _ in
             updatePlayer()
         }
+        .onDisappear {
+            player?.pause()
+        }
+        .sheet(item: $compareItem) { item in
+            ProjectMediaPreviewSheet(item: item)
+        }
     }
 
-    @ViewBuilder
-    private var reblendControls: some View {
-        if model.currentCapture != nil {
-            Divider()
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Re-blend from original")
-                    .font(.headline)
+    // MARK: - Player
 
-                if model.source?.isVideo == true {
-                    Picker("Frames to one output frame", selection: $model.constantWindow) {
-                        ForEach([2, 5, 10, 25, 50], id: \.self) { count in
-                            Text("\(count) to 1").tag(count)
-                        }
-                    }
-                    Stepper("Custom: \(model.constantWindow) frame\(model.constantWindow == 1 ? "" : "s")",
-                            value: $model.constantWindow, in: 1...120)
-                    Picker("Playback timing", selection: $model.outputFPS) {
-                        ForEach([24, 25, 30, 50, 60], id: \.self) { fps in
-                            Text("\(fps) fps").tag(fps)
-                        }
-                    }
-                    Toggle("Ramp the window across the clip", isOn: $model.useRamp)
-                    if model.useRamp {
-                        Stepper("Start: \(model.rampStart) frame\(model.rampStart == 1 ? "" : "s")",
-                                value: $model.rampStart, in: 1...120)
-                        Stepper("End: \(model.rampEnd) frames", value: $model.rampEnd, in: 1...120)
-                        Picker("Curve", selection: $model.curve) {
-                            ForEach(BlendCurve.allCases, id: \.self) { curve in
-                                Text(curve.rawValue).tag(curve)
-                            }
-                        }
-                    }
+    private var playerCard: some View {
+        ZStack(alignment: .topLeading) {
+            Group {
+                if model.resultVideoURL != nil {
+                    VideoPlayer(player: player)
+                } else if let image = model.resultImage {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .scaledToFit()
+                        .frame(maxWidth: .infinity)
                 } else {
-                    Toggle("Linear-light averaging", isOn: $model.linearLight)
+                    Rectangle().fill(.black)
                 }
+            }
+            .frame(height: 300)
+            .frame(maxWidth: .infinity)
+            .background(Color.black)
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+            MediaBadge(text: resultChip)
+                .padding(12)
+        }
+    }
+
+    private var resultChip: String {
+        guard let blend = model.currentBlend else { return "New version" }
+        var parts = [blend.speedLabel]
+        if let seconds = blend.outputSeconds {
+            parts.append(SpeedMath.clipLengthCompact(seconds))
+        }
+        if blend.kind == .video, let fps = blend.outputFPS {
+            parts.append("\(fps) fps")
+        }
+        if let width = blend.width, let height = blend.height {
+            parts.append(AppModel.CaptureProject.resolutionLabel(width: width, height: height))
+        }
+        return parts.joined(separator: " · ")
+    }
+
+    // MARK: - Saved banner
+
+    @ViewBuilder
+    private var savedBanner: some View {
+        if let blend = model.currentBlend, let capture = model.currentCapture {
+            HStack(spacing: 10) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.green)
+                Group {
+                    Text("Saved as ")
+                        + Text("v\(model.versionNumber(for: blend))").bold()
+                        + Text(" in ")
+                        + Text(capture.displayTitle).bold()
+                }
+                .font(.system(size: 13.5))
+                .lineLimit(2)
+                Spacer(minLength: 8)
+                Button("View project") {
+                    model.finishFlow(openProject: true)
+                }
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(LL.accent)
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .background(Color.green.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(Color.green.opacity(0.35), lineWidth: 1)
+            )
+        }
+    }
+
+    // MARK: - Next steps
+
+    private var nextSteps: some View {
+        VStack(spacing: 0) {
+            Button {
+                model.stage = .configure
+            } label: {
+                HStack {
+                    Label("New version from original", systemImage: "arrow.counterclockwise")
+                        .font(.system(size: 15.5, weight: .semibold))
+                        .foregroundStyle(LL.accent)
+                    Spacer()
+                    if let hint = suggestionHint {
+                        Text(hint)
+                            .font(.system(size: 12))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 13)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if canCompare {
+                Divider().padding(.leading, 16)
 
                 Button {
-                    model.startProcessing()
+                    compareWithOriginal()
                 } label: {
-                    Label("Regenerate", systemImage: "arrow.triangle.2.circlepath")
-                        .frame(maxWidth: .infinity)
+                    HStack {
+                        Text("Compare with original")
+                            .font(.system(size: 15.5))
+                            .foregroundStyle(.secondary)
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.plain)
             }
-            .frame(maxWidth: 520, alignment: .leading)
         }
+        .llCard()
+    }
+
+    private var suggestionHint: String? {
+        guard let speed = model.suggestedAlternateSpeed() else { return nil }
+        guard let seconds = model.estimatedOutputSeconds(speed: speed) else { return "try \(speed)×" }
+        return "try \(speed)× → \(SpeedMath.clipLengthCompact(seconds))"
+    }
+
+    private var canCompare: Bool {
+        guard let capture = model.currentCapture else { return false }
+        return model.mediaURL(for: capture) != nil
+    }
+
+    private func compareWithOriginal() {
+        guard let capture = model.currentCapture,
+              let url = model.mediaURL(for: capture) else { return }
+        compareItem = MediaPreviewItem(
+            title: "Original",
+            subtitle: capture.formatLine,
+            url: url,
+            kind: model.mediaKind(for: capture)
+        )
     }
 
     private func updatePlayer() {

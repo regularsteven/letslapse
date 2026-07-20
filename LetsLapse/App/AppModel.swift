@@ -17,6 +17,7 @@ final class AppModel: ObservableObject {
         static let trimHeadTailSeconds = "letslapse.trimHeadTailSeconds"
         static let maxCPUWorkers = "letslapse.maxCPUWorkers"
         static let maxBlendBatches = "letslapse.maxBlendBatches"
+        static let defaultSpeed = "letslapse.defaultSpeed"
     }
 
     enum CaptureKind: String, Codable {
@@ -49,6 +50,10 @@ final class AppModel: ObservableObject {
         var mode: String
         var sourceFileNames: [String]
         var sourceFPS: Double?
+        var name: String?
+        var sourceDurationSeconds: Double?
+        var sourceWidth: Int?
+        var sourceHeight: Int?
 
         var summary: String {
             switch kind {
@@ -59,6 +64,48 @@ final class AppModel: ObservableObject {
                 return mode
             case .photos:
                 return "\(sourceFileNames.count) source frames"
+            }
+        }
+
+        var sourceMediaCount: Int {
+            sourceFileNames.filter { !$0.hasSuffix(".json") }.count
+        }
+
+        /// A project title people can recognize: the custom name, an imported
+        /// file's name, or a dated fallback.
+        var displayTitle: String {
+            if let name, !name.isEmpty { return name }
+            if kind == .video, mode == "Import" {
+                let base = (originalName as NSString).deletingPathExtension
+                if !base.isEmpty { return base }
+            }
+            let stamp = createdAt.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+            return kind == .photos ? "Stack \(stamp)" : "Capture \(stamp)"
+        }
+
+        /// "Video · 1080p · 24 fps" / "Interval · 214 photos"
+        var formatLine: String {
+            switch kind {
+            case .video:
+                var parts = ["Video"]
+                if let sourceWidth, let sourceHeight {
+                    parts.append(Self.resolutionLabel(width: sourceWidth, height: sourceHeight))
+                }
+                if let sourceFPS {
+                    parts.append("\(Int(sourceFPS.rounded())) fps")
+                }
+                return parts.joined(separator: " · ")
+            case .photos:
+                return "Interval · \(sourceMediaCount) photos"
+            }
+        }
+
+        static func resolutionLabel(width: Int, height: Int) -> String {
+            switch (max(width, height), min(width, height)) {
+            case (3840, 2160): return "4K"
+            case (1920, 1080): return "1080p"
+            case (1280, 720): return "720p"
+            default: return "\(width)×\(height)"
             }
         }
     }
@@ -98,6 +145,32 @@ final class AppModel: ObservableObject {
             case .image:
                 return linearLight ? "Linear-light stack" : "Stack"
             }
+        }
+
+        /// "100×" / "1→30× ramp" / "Long exposure"
+        var speedLabel: String {
+            switch kind {
+            case .video:
+                if useRamp { return "\(rampStart)→\(rampEnd)× ramp" }
+                if let compressionRatio { return "\(compressionRatio)×" }
+                return "Video"
+            case .image:
+                return "Long exposure"
+            }
+        }
+
+        var outputSeconds: Double? {
+            guard kind == .video, let outputFrames, let outputFPS, outputFPS > 0 else { return nil }
+            return Double(outputFrames) / Double(outputFPS)
+        }
+
+        /// The thumbnail badge: "100× · 2.2s" / "Long exposure"
+        var badgeLabel: String {
+            if kind == .image { return "Long exposure" }
+            if let outputSeconds {
+                return "\(speedLabel) · \(SpeedMath.clipLengthCompact(outputSeconds))"
+            }
+            return speedLabel
         }
     }
 
@@ -165,6 +238,34 @@ final class AppModel: ObservableObject {
         case done
     }
 
+    /// Named stages for the processing screen — people see a checklist, not a log.
+    enum ProcessingStage: Int, CaseIterable, Comparable {
+        case preparing
+        case blending
+        case encoding
+        case saving
+
+        var title: String {
+            switch self {
+            case .preparing: return "Preparing footage"
+            case .blending: return "Blending frames"
+            case .encoding: return "Encoding video"
+            case .saving: return "Saving to project"
+            }
+        }
+
+        static func < (lhs: ProcessingStage, rhs: ProcessingStage) -> Bool {
+            lhs.rawValue < rhs.rawValue
+        }
+    }
+
+    var processingStage: ProcessingStage {
+        if progress < 0.02 { return .preparing }
+        if progress < 0.93 { return .blending }
+        if progress < 0.999 { return .encoding }
+        return .saving
+    }
+
     enum LibraryDeletionError: LocalizedError {
         case activeCapture
         case unsafeBlendPath
@@ -189,8 +290,13 @@ final class AppModel: ObservableObject {
 
     // Blend options
     @Published var useRamp = false
-    @Published var constantWindow = UserDefaults.standard.object(forKey: DefaultsKey.constantWindow) as? Int ?? 10 {
+    @Published var constantWindow = UserDefaults.standard.object(forKey: DefaultsKey.constantWindow) as? Int
+        ?? UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int
+        ?? 100 {
         didSet { UserDefaults.standard.set(constantWindow, forKey: DefaultsKey.constantWindow) }
+    }
+    @Published var defaultSpeed = UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int ?? 100 {
+        didSet { UserDefaults.standard.set(defaultSpeed, forKey: DefaultsKey.defaultSpeed) }
     }
     @Published var rampStart = 1
     @Published var rampEnd = 30
@@ -226,6 +332,12 @@ final class AppModel: ObservableObject {
     @Published var statusMessage = ""
     @Published var jobFolderURL: URL?
     @Published var jobLogLines: [String] = []
+    @Published var processingStartedAt: Date?
+    @Published var processingTotalInputFrames: Int?
+
+    /// Set by screens that want the Projects tab to open a specific project
+    /// (e.g. Result → Done). ContentView consumes and clears it.
+    @Published var requestedProjectDetailID: UUID?
 
     private var blendTask: Task<Void, Never>?
 
@@ -275,6 +387,20 @@ final class AppModel: ObservableObject {
 
     func mediaURL(for blend: BlendProject) -> URL {
         blendOutputURL(for: blend)
+    }
+
+    /// The individual source video segments backing a capture. Live sequences
+    /// have several; single imports have one; photo stacks have none.
+    func sourceClipURLs(for capture: CaptureProject) -> [URL] {
+        guard let source = try? source(for: capture) else { return [] }
+        switch source {
+        case .video(let url):
+            return [url]
+        case .liveSequence(let liveSource):
+            return liveSource.segmentURLs
+        case .photos:
+            return []
+        }
     }
 
     func deleteCapture(_ capture: CaptureProject) throws {
@@ -366,7 +492,19 @@ final class AppModel: ObservableObject {
         jobFolderURL = nil
         jobLogLines = []
         errorMessage = nil
+        processingStartedAt = nil
+        processingTotalInputFrames = nil
         stage = .home
+    }
+
+    /// Wrap up the flow. When `openProject` is set the Projects tab opens the
+    /// project this run belonged to, so a finished clip is never a dead end.
+    func finishFlow(openProject: Bool) {
+        let captureID = currentCaptureID
+        reset()
+        if openProject, let captureID {
+            requestedProjectDetailID = captureID
+        }
     }
 
     func openCapture(_ capture: CaptureProject) {
@@ -446,6 +584,158 @@ final class AppModel: ObservableObject {
             : .constant(constantWindow)
     }
 
+    // MARK: - Estimates
+
+    /// Source frames the current settings would feed into the blend, after trim.
+    var estimatedInputFrames: Double? {
+        guard let capture = currentCapture else { return nil }
+        switch capture.kind {
+        case .photos:
+            return Double(capture.sourceMediaCount)
+        case .video:
+            guard var duration = capture.sourceDurationSeconds else {
+                if let known = blends(for: capture).compactMap(\.inputFrames).max() {
+                    return Double(known)
+                }
+                return nil
+            }
+            if case .video = source, trimVideoEnds {
+                duration = max(0, duration - 2 * max(0, trimHeadTailSeconds))
+            }
+            return duration * (capture.sourceFPS ?? 30)
+        }
+    }
+
+    /// The one number that matters: how long the clip will be. `speed` defaults
+    /// to the current setting; ramps are approximated by their average window.
+    func estimatedOutputSeconds(speed: Int? = nil) -> Double? {
+        guard source?.isVideo == true, let frames = estimatedInputFrames else { return nil }
+        let window: Int
+        if let speed {
+            window = speed
+        } else if useRamp {
+            window = max(1, (rampStart + rampEnd) / 2)
+        } else {
+            window = constantWindow
+        }
+        return SpeedMath.outputSeconds(inputFrames: frames, speed: window, outputFPS: outputFPS)
+    }
+
+    /// A different speed worth trying next, for the Result screen's suggestion.
+    func suggestedAlternateSpeed() -> Int? {
+        guard source?.isVideo == true, !useRamp else { return nil }
+        let current = constantWindow
+        let candidate = current >= 50 ? current / 2 : current * 2
+        let clamped = min(max(candidate, SpeedMath.range.lowerBound), SpeedMath.range.upperBound)
+        return clamped == current ? nil : clamped
+    }
+
+    // MARK: - Projects & versions
+
+    func versionNumber(for blend: BlendProject) -> Int {
+        let siblings = blends
+            .filter { $0.captureID == blend.captureID }
+            .sorted { $0.createdAt < $1.createdAt }
+        return (siblings.firstIndex { $0.id == blend.id } ?? max(0, siblings.count - 1)) + 1
+    }
+
+    func renameProject(_ capture: CaptureProject, to newName: String) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        captures[index].name = trimmed.isEmpty ? nil : trimmed
+        try? persistLibrary()
+    }
+
+    // MARK: - Storage
+
+    struct LibraryStorage: Equatable {
+        var originalsBytes: Int64 = 0
+        var versionsBytes: Int64 = 0
+        var cacheBytes: Int64 = 0
+
+        var totalBytes: Int64 { originalsBytes + versionsBytes + cacheBytes }
+    }
+
+    func computeLibraryStorage() async -> LibraryStorage {
+        let root = projectsRootURL
+        let temporary = FileManager.default.temporaryDirectory
+        return await Task.detached(priority: .utility) {
+            var storage = LibraryStorage()
+            let fileManager = FileManager.default
+            if let folders = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
+                for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
+                    storage.originalsBytes += Self.directorySize(folder.appendingPathComponent("source"))
+                    storage.versionsBytes += Self.directorySize(folder.appendingPathComponent("blends"))
+                }
+            }
+            if let items = try? fileManager.contentsOfDirectory(at: temporary, includingPropertiesForKeys: nil) {
+                for item in items where Self.isCacheItem(item) {
+                    storage.cacheBytes += Self.directorySize(item)
+                }
+            }
+            return storage
+        }.value
+    }
+
+    func storageBytes(for capture: CaptureProject) async -> Int64 {
+        let folder = captureFolderURL(for: capture.id)
+        return await Task.detached(priority: .utility) {
+            Self.directorySize(folder)
+        }.value
+    }
+
+    /// Deletes reproducible temp files (imports, live-capture staging, blend
+    /// scratch). Returns the number of bytes freed.
+    @discardableResult
+    func clearCache() async -> Int64 {
+        let temporary = FileManager.default.temporaryDirectory
+        return await Task.detached(priority: .utility) {
+            let fileManager = FileManager.default
+            var freed: Int64 = 0
+            guard let items = try? fileManager.contentsOfDirectory(at: temporary, includingPropertiesForKeys: nil) else {
+                return freed
+            }
+            for item in items where Self.isCacheItem(item) {
+                let size = Self.directorySize(item)
+                do {
+                    try fileManager.removeItem(at: item)
+                    freed += size
+                } catch {
+                    continue
+                }
+            }
+            return freed
+        }.value
+    }
+
+    nonisolated private static func isCacheItem(_ url: URL) -> Bool {
+        let name = url.lastPathComponent.lowercased()
+        return name.hasPrefix("letslapse") || name.hasPrefix(".letslapse")
+            || name.hasPrefix("live-capture") || name.hasPrefix("picked-")
+            || name.hasPrefix("import-")
+    }
+
+    nonisolated static func directorySize(_ url: URL) -> Int64 {
+        let fileManager = FileManager.default
+        var isDirectory: ObjCBool = false
+        guard fileManager.fileExists(atPath: url.path, isDirectory: &isDirectory) else { return 0 }
+        guard isDirectory.boolValue else {
+            let values = try? url.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileSizeKey])
+            return Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
+        }
+        guard let enumerator = fileManager.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total: Int64 = 0
+        for case let file as URL in enumerator {
+            let values = try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileSizeKey])
+            total += Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
+        }
+        return total
+    }
+
     func startProcessing() {
         guard let source, let captureID = currentCaptureID else { return }
         stage = .processing
@@ -459,6 +749,8 @@ final class AppModel: ObservableObject {
         resultSummary = nil
         resultBlendID = nil
         errorMessage = nil
+        processingStartedAt = Date()
+        processingTotalInputFrames = estimatedInputFrames.map { Int($0.rounded()) }
         let ramp = self.ramp
         let fps = Double(outputFPS)
         let linear = linearLight
@@ -478,12 +770,16 @@ final class AppModel: ObservableObject {
                 }
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
                 self.apply(output, from: blend)
+                self.processingStartedAt = nil
                 self.stage = .done
             } catch is CancellationError {
+                self?.processingStartedAt = nil
                 self?.stage = .configure
             } catch LapseError.cancelled {
+                self?.processingStartedAt = nil
                 self?.stage = .configure
             } catch {
+                self?.processingStartedAt = nil
                 self?.errorMessage = (error as? LapseError)?.errorDescription ?? error.localizedDescription
                 self?.stage = .configure
             }
@@ -1122,7 +1418,9 @@ final class AppModel: ObservableObject {
             let manifest = try JSONDecoder().decode(LibraryManifest.self, from: data)
             captures = manifest.captures.sorted { $0.createdAt > $1.createdAt }
             blends = manifest.blends.sorted { $0.createdAt > $1.createdAt }
-            for capture in captures where capture.kind == .video && capture.sourceFPS == nil {
+            for capture in captures
+            where capture.kind == .video
+                && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil || capture.sourceWidth == nil) {
                 Task { [weak self] in
                     await self?.refreshVideoMetadata(for: capture.id)
                 }
@@ -1200,22 +1498,93 @@ final class AppModel: ObservableObject {
     }
 
     private func refreshVideoMetadata(for captureID: UUID) async {
-        guard let capture = captures.first(where: { $0.id == captureID }) else { return }
-        guard let captureSource = try? source(for: capture), case .video(let url) = captureSource else { return }
+        guard let capture = captures.first(where: { $0.id == captureID }),
+              let captureSource = try? source(for: capture) else { return }
 
-        do {
-            let asset = AVURLAsset(url: url)
-            guard let track = try await asset.loadTracks(withMediaType: .video).first else { return }
-            let fps = try await track.load(.nominalFrameRate)
-            guard fps > 0, let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
-            captures[index].sourceFPS = Double(fps)
-            try persistLibrary()
-        } catch {
+        let urls: [URL]
+        switch captureSource {
+        case .video(let url):
+            urls = [url]
+        case .liveSequence(let liveSource):
+            urls = liveSource.segmentURLs
+        case .photos:
             return
         }
+
+        var totalDuration: Double = 0
+        var fps: Double?
+        var width: Int?
+        var height: Int?
+
+        for url in urls {
+            let asset = AVURLAsset(url: url)
+            if let duration = try? await asset.load(.duration).seconds, duration.isFinite {
+                totalDuration += duration
+            }
+            guard fps == nil || width == nil,
+                  let track = try? await asset.loadTracks(withMediaType: .video).first else { continue }
+            if fps == nil, let rate = try? await track.load(.nominalFrameRate), rate > 0 {
+                fps = Double(rate)
+            }
+            if width == nil,
+               let size = try? await track.load(.naturalSize),
+               let transform = try? await track.load(.preferredTransform) {
+                let rect = CGRect(origin: .zero, size: size).applying(transform).standardized
+                if rect.width > 0, rect.height > 0 {
+                    width = Int(abs(rect.width).rounded())
+                    height = Int(abs(rect.height).rounded())
+                }
+            }
+        }
+
+        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        if let fps { captures[index].sourceFPS = fps }
+        if totalDuration > 0 { captures[index].sourceDurationSeconds = totalDuration }
+        if let width, let height {
+            captures[index].sourceWidth = width
+            captures[index].sourceHeight = height
+        }
+        try? persistLibrary()
     }
 
     #if os(iOS)
+    enum SourceClipSaveError: LocalizedError {
+        case accessDenied
+        case saveFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .accessDenied:
+                return "Photos access was denied. Enable it in Settings to save clips."
+            case .saveFailed(let reason):
+                return "Couldn't save the clip: \(reason)"
+            }
+        }
+    }
+
+    /// Saves a single source clip to the Photos library. Requests add-only
+    /// authorisation first and throws a descriptive error on denial or failure.
+    func saveSourceClip(at url: URL) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw SourceClipSaveError.accessDenied
+        }
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+            }
+        } catch {
+            throw SourceClipSaveError.saveFailed(error.localizedDescription)
+        }
+    }
+
+    /// Saves every source clip of a capture to Photos, one after another.
+    func saveAllSourceClips(for capture: CaptureProject) async throws {
+        for url in sourceClipURLs(for: capture) {
+            try await saveSourceClip(at: url)
+        }
+    }
+
     func saveResultToPhotos() {
         let videoURL = resultVideoURL
         let imageURL = resultImageURL

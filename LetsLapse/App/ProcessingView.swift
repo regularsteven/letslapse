@@ -1,54 +1,160 @@
 import SwiftUI
 
+/// Stages, not logs: a progress ring over the footage and a four-step
+/// checklist. Raw job folders and log lines live in Settings → Diagnostics.
 struct ProcessingView: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        VStack(spacing: 20) {
-            Spacer(minLength: 20)
-            ProgressView(value: model.progress) {
-                Text(model.statusMessage.isEmpty ? "Processing..." : model.statusMessage)
-            }
-            .progressViewStyle(.linear)
-            .padding(.horizontal, 48)
-            Text("\(Int(model.progress * 100)) %")
-                .font(.title2.monospacedDigit())
-                .foregroundStyle(.secondary)
+        VStack(spacing: 16) {
+            previewCard
+                .padding(.top, 24)
 
-            if let jobFolderURL = model.jobFolderURL {
-                VStack(spacing: 4) {
-                    Text("Job folder")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Text(jobFolderURL.path)
-                        .font(.caption.monospaced())
-                        .textSelection(.enabled)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal)
+            stageChecklist
+
+            // TimelineView survives the constant progress-driven re-renders
+            // that would reset a view-owned Timer publisher.
+            TimelineView(.periodic(from: .now, by: 1)) { context in
+                let text = timeRemainingText(at: context.date)
+                Text(text)
+                    .font(.system(size: 13))
+                    .foregroundStyle(.secondary)
+                    .opacity(text.isEmpty ? 0 : 1)
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(spacing: 8) {
+                Button {
+                    model.cancelProcessing()
+                } label: {
+                    Text("Cancel")
                 }
-            }
+                .buttonStyle(LLSecondaryButtonStyle(tint: .red))
 
-            if !model.jobLogLines.isEmpty {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ForEach(model.jobLogLines, id: \.self) { line in
-                            Text(line)
-                                .font(.caption.monospaced())
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                    }
-                    .padding(12)
-                }
-                .frame(maxHeight: 180)
-                .background(.secondary.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
-                .padding(.horizontal)
+                Text("Cancelling discards this version. Your original is safe.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
             }
-
-            Button("Cancel", role: .destructive) {
-                model.cancelProcessing()
-            }
-            Spacer(minLength: 20)
+            .padding(.bottom, 12)
         }
-        .navigationTitle("Processing")
+        .padding(.horizontal, 16)
+        .background(LL.screenBackground.ignoresSafeArea())
+    }
+
+    // MARK: - Preview + ring
+
+    private var previewCard: some View {
+        ZStack {
+            ProjectThumbnailView(
+                url: model.currentCapture.flatMap { model.mediaURL(for: $0) },
+                kind: model.currentCapture.map { model.mediaKind(for: $0) } ?? .video
+            )
+            .frame(height: 260)
+            .frame(maxWidth: .infinity)
+            .blur(radius: 2.5)
+            .overlay(Color.black.opacity(0.45))
+            .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+
+            ZStack {
+                Circle()
+                    .stroke(.white.opacity(0.2), lineWidth: 8)
+                Circle()
+                    .trim(from: 0, to: max(0.003, model.progress))
+                    .stroke(LL.amber, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+                    .animation(.linear(duration: 0.3), value: model.progress)
+                Text("\(Int((model.progress * 100).rounded()))%")
+                    .font(.system(size: 17, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.white)
+            }
+            .frame(width: 92, height: 92)
+            .padding(8)
+            .background(.black.opacity(0.35), in: Circle())
+        }
+    }
+
+    // MARK: - Checklist
+
+    private var stageChecklist: some View {
+        VStack(spacing: 0) {
+            ForEach(AppModel.ProcessingStage.allCases, id: \.rawValue) { stage in
+                stageRow(stage)
+            }
+        }
+        .padding(.vertical, 6)
+        .llCard()
+    }
+
+    @ViewBuilder
+    private func stageRow(_ stage: AppModel.ProcessingStage) -> some View {
+        let current = model.processingStage
+        HStack(spacing: 12) {
+            if stage < current {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.green)
+                    .frame(width: 18)
+            } else if stage == current {
+                Circle()
+                    .fill(LL.amber)
+                    .frame(width: 9, height: 9)
+                    .frame(width: 18)
+            } else {
+                Circle()
+                    .stroke(Color.secondary.opacity(0.5), lineWidth: 1.2)
+                    .frame(width: 9, height: 9)
+                    .frame(width: 18)
+            }
+
+            Text(stage.title)
+                .font(.system(size: 15, weight: stage == current ? .semibold : .regular))
+                .foregroundStyle(stage <= current ? Color.primary : Color.secondary.opacity(0.7))
+
+            Spacer()
+
+            if stage == .blending, current == .blending, let counts = blendingCounts {
+                Text(counts)
+                    .font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 11)
+    }
+
+    private var blendingCounts: String? {
+        guard let total = model.processingTotalInputFrames, total > 0 else { return nil }
+        let processed = min(total, Int((Double(total) * model.progress).rounded()))
+        let formatter = NumberFormatter()
+        formatter.numberStyle = .decimal
+        let processedText = formatter.string(from: NSNumber(value: processed)) ?? "\(processed)"
+        let totalText = formatter.string(from: NSNumber(value: total)) ?? "\(total)"
+        return "\(processedText) / \(totalText)"
+    }
+
+    // MARK: - ETA
+
+    private func timeRemainingText(at now: Date) -> String {
+        guard let startedAt = model.processingStartedAt, model.progress > 0.04 else {
+            return statusFallback
+        }
+        let elapsed = now.timeIntervalSince(startedAt)
+        guard elapsed > 3 else { return statusFallback }
+        let remaining = elapsed / model.progress * (1 - model.progress)
+        guard remaining.isFinite, remaining > 0 else { return "" }
+        if remaining < 8 {
+            return "Almost done"
+        }
+        if remaining < 90 {
+            let rounded = Int((remaining / 5).rounded() * 5)
+            return "About \(rounded) seconds left"
+        }
+        let minutes = Int((remaining / 60).rounded())
+        return "About \(minutes) minute\(minutes == 1 ? "" : "s") left"
+    }
+
+    private var statusFallback: String {
+        model.statusMessage.isEmpty ? " " : model.statusMessage
     }
 }

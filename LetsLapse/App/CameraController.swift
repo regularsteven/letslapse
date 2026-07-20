@@ -89,6 +89,13 @@ final class CameraController: NSObject, ObservableObject {
     private var isFinishingSequence = false
     private var isDiscardingSequence = false
     private var rampIntervalActive = false
+    // Manual-exposure lock state, confined to sessionQueue. Source of truth for
+    // re-asserting the lock after every activeFormat switch; the @Published
+    // mirrors below are for UI/Watch only.
+    private var exposureLocked = false
+    private var lockedISOValue: Float = 0
+    private var lockedShutterValue: Double = 0
+    private var lockedLensValue: Float = 0.5
 
     @Published var isAuthorized: Bool?
     @Published var isRecording = false
@@ -111,6 +118,20 @@ final class CameraController: NSObject, ObservableObject {
     @Published var segmentCount = 0
     @Published var isRampActive = false
     @Published var isRampHighRate = false
+    @Published var rampSpans: [RampSpan] = []
+    @Published var isExposureLocked: Bool = false
+    @Published var lockedISO: Float = 0
+    @Published var lockedShutterSeconds: Double = 0
+    @Published var lockedLensPosition: Float = 0.5
+    @Published var isoRange: ClosedRange<Float> = 25...3200
+
+    /// A ramp/marker interval relative to the recording start, for the
+    /// on-screen segment strip. `end == nil` while the interval is open.
+    struct RampSpan: Identifiable, Equatable {
+        let id: Int
+        var start: TimeInterval
+        var end: TimeInterval?
+    }
 
     /// Both called on the main queue.
     var onFinishVideo: ((URL) -> Void)?
@@ -362,9 +383,34 @@ final class CameraController: NSObject, ObservableObject {
                !sameDimensions(photoOutput.maxPhotoDimensions, photoDimensions) {
                 photoOutput.maxPhotoDimensions = photoDimensions
             }
+            reassertExposureLock(on: device)
             return true
         } catch {
             return false
+        }
+    }
+
+    /// Setting `activeFormat` resets the device to auto exposure/focus, so any
+    /// manual lock must be re-applied immediately — otherwise every burst/ramp
+    /// segment would flicker back to auto. Runs inside the caller's
+    /// `lockForConfiguration` block on the sessionQueue.
+    private func reassertExposureLock(on device: AVCaptureDevice) {
+        guard exposureLocked else { return }
+        let format = device.activeFormat
+        let iso = min(max(lockedISOValue, format.minISO), format.maxISO)
+        let seconds = min(
+            max(lockedShutterValue, format.minExposureDuration.seconds),
+            format.maxExposureDuration.seconds
+        )
+        let duration = CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000)
+        if device.isExposureModeSupported(.custom) {
+            device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+        }
+        if device.isFocusModeSupported(.locked) {
+            device.setFocusModeLocked(lensPosition: lockedLensValue, completionHandler: nil)
+        }
+        if device.isWhiteBalanceModeSupported(.locked) {
+            device.whiteBalanceMode = .locked
         }
     }
 
@@ -552,6 +598,111 @@ final class CameraController: NSObject, ObservableObject {
     }
     #endif
 
+    // MARK: - Manual exposure & focus
+
+    /// Freeze exposure, focus and white balance at their current auto values.
+    func lockExposureAndFocus() {
+        sessionQueue.async {
+            guard let device = self.videoDevice else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                let format = device.activeFormat
+                let iso = min(max(device.iso, format.minISO), format.maxISO)
+                let duration = device.exposureDuration
+                let lens = device.lensPosition
+                if device.isExposureModeSupported(.custom) {
+                    device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+                }
+                if device.isFocusModeSupported(.locked) {
+                    device.focusMode = .locked
+                }
+                if device.isWhiteBalanceModeSupported(.locked) {
+                    device.whiteBalanceMode = .locked
+                }
+                self.exposureLocked = true
+                self.lockedISOValue = iso
+                self.lockedShutterValue = duration.seconds
+                self.lockedLensValue = lens
+                let minISO = format.minISO
+                let maxISO = format.maxISO
+                DispatchQueue.main.async {
+                    self.isExposureLocked = true
+                    self.lockedISO = iso
+                    self.lockedShutterSeconds = duration.seconds
+                    self.lockedLensPosition = lens
+                    self.isoRange = minISO...maxISO
+                }
+            } catch {}
+        }
+    }
+
+    /// Return exposure, focus and white balance to their continuous-auto modes.
+    func unlockExposureAndFocus() {
+        sessionQueue.async {
+            guard let device = self.videoDevice else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                }
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                }
+                if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                    device.whiteBalanceMode = .continuousAutoWhiteBalance
+                }
+                self.exposureLocked = false
+                DispatchQueue.main.async {
+                    self.isExposureLocked = false
+                }
+            } catch {}
+        }
+    }
+
+    /// Adjust ISO while holding the current shutter, keeping the lock asserted.
+    func setISO(_ iso: Float) {
+        sessionQueue.async {
+            guard let device = self.videoDevice,
+                  device.isExposureModeSupported(.custom) else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                let format = device.activeFormat
+                let clamped = min(max(iso, format.minISO), format.maxISO)
+                let duration = device.exposureDuration
+                device.setExposureModeCustom(duration: duration, iso: clamped, completionHandler: nil)
+                self.exposureLocked = true
+                self.lockedISOValue = clamped
+                self.lockedShutterValue = duration.seconds
+                DispatchQueue.main.async {
+                    self.isExposureLocked = true
+                    self.lockedISO = clamped
+                    self.lockedShutterSeconds = duration.seconds
+                }
+            } catch {}
+        }
+    }
+
+    /// Lock focus at an explicit lens position (0 = near, 1 = far).
+    func setLensPosition(_ position: Float) {
+        sessionQueue.async {
+            guard let device = self.videoDevice,
+                  device.isFocusModeSupported(.locked) else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                let clamped = min(max(position, 0), 1)
+                device.setFocusModeLocked(lensPosition: clamped, completionHandler: nil)
+                self.lockedLensValue = clamped
+                DispatchQueue.main.async {
+                    self.lockedLensPosition = clamped
+                }
+            } catch {}
+        }
+    }
+
     // MARK: - Movie recording
 
     func startRecording() {
@@ -596,6 +747,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.segmentCount = 1
                 self.isRampActive = false
                 self.isRampHighRate = false
+                self.rampSpans = []
             }
         }
     }
@@ -677,11 +829,15 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     private func publishRampState(isActive: Bool, intervalCount: Int) {
+        let spans = (activeSequence?.rampIntervals ?? []).map {
+            RampSpan(id: $0.index, start: $0.relativeStart, end: $0.relativeEnd)
+        }
         DispatchQueue.main.async {
             self.isRampActive = isActive
             self.isRampHighRate = isActive
             self.rampIntervalCount = intervalCount
             self.markerCount = intervalCount
+            self.rampSpans = spans
         }
     }
 
@@ -799,6 +955,7 @@ final class CameraController: NSObject, ObservableObject {
             self.segmentCount = 0
             self.isRampActive = false
             self.isRampHighRate = false
+            self.rampSpans = []
         }
     }
 
