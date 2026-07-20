@@ -124,6 +124,7 @@ struct LibraryView: View {
     @State private var displayMode: ProjectBrowserDisplayMode = .list
     @State private var expandedCaptureIDs: Set<UUID> = []
     @State private var previewItem: MediaPreviewItem?
+    @State private var deletionAlert: ProjectDeletionAlert?
 
     var body: some View {
         ScrollView {
@@ -152,6 +153,12 @@ struct LibraryView: View {
                         },
                         onToggleExpanded: {
                             toggleExpanded(capture)
+                        },
+                        onDelete: {
+                            deletionAlert = .capture(
+                                capture,
+                                blendCount: model.blends(for: capture).count
+                            )
                         }
                     )
                 } expandedContent: { capture in
@@ -160,7 +167,10 @@ struct LibraryView: View {
                             capture: capture,
                             blends: model.blends(for: capture),
                             previewItem: $previewItem,
-                            onOpenJob: onOpenJob
+                            onOpenJob: onOpenJob,
+                            onDeleteBlend: { blend in
+                                deletionAlert = .blend(blend)
+                            }
                         )
                         .environmentObject(model)
                     }
@@ -176,6 +186,9 @@ struct LibraryView: View {
         }
         .sheet(item: $previewItem) { item in
             ProjectMediaPreviewSheet(item: item)
+        }
+        .alert(item: $deletionAlert) { alert in
+            deletionConfirmation(for: alert)
         }
     }
 
@@ -196,6 +209,58 @@ struct LibraryView: View {
             kind: model.mediaKind(for: capture)
         )
     }
+
+    private func deletionConfirmation(for alert: ProjectDeletionAlert) -> Alert {
+        switch alert {
+        case .capture(let capture, let blendCount):
+            let blendDescription = blendCount == 1 ? "1 blend" : "\(blendCount) blends"
+            return Alert(
+                title: Text("Delete “\(capture.originalName)”?"),
+                message: Text("This permanently deletes the source, \(blendDescription), and all cached processing files for this capture."),
+                primaryButton: .destructive(Text("Delete")) {
+                    deleteCapture(capture)
+                },
+                secondaryButton: .cancel()
+            )
+        case .blend(let blend):
+            return Alert(
+                title: Text("Delete this blend?"),
+                message: Text("This permanently deletes the generated output. The original capture remains in your library."),
+                primaryButton: .destructive(Text("Delete")) {
+                    deleteBlend(blend)
+                },
+                secondaryButton: .cancel()
+            )
+        case .failure(let message):
+            return Alert(title: Text("Couldn’t Delete"), message: Text(message), dismissButton: .default(Text("OK")))
+        }
+    }
+
+    private func deleteCapture(_ capture: AppModel.CaptureProject) {
+        do {
+            try model.deleteCapture(capture)
+            expandedCaptureIDs.remove(capture.id)
+            previewItem = nil
+        } catch {
+            showDeletionFailure(error)
+        }
+    }
+
+    private func deleteBlend(_ blend: AppModel.BlendProject) {
+        do {
+            try model.deleteBlend(blend)
+            previewItem = nil
+        } catch {
+            showDeletionFailure(error)
+        }
+    }
+
+    private func showDeletionFailure(_ error: Error) {
+        Task { @MainActor in
+            await Task.yield()
+            deletionAlert = .failure(error.localizedDescription)
+        }
+    }
 }
 
 struct BlendsView: View {
@@ -203,6 +268,7 @@ struct BlendsView: View {
     var onOpenJob: () -> Void
     @State private var displayMode: ProjectBrowserDisplayMode = .list
     @State private var previewItem: MediaPreviewItem?
+    @State private var deletionAlert: ProjectDeletionAlert?
 
     var body: some View {
         ScrollView {
@@ -235,6 +301,9 @@ struct BlendsView: View {
                             model.openBlend(blend)
                             model.stage = .configure
                             onOpenJob()
+                        },
+                        onDelete: {
+                            deletionAlert = .blend(blend)
                         }
                     )
                 } expandedContent: { _ in
@@ -252,6 +321,23 @@ struct BlendsView: View {
         .sheet(item: $previewItem) { item in
             ProjectMediaPreviewSheet(item: item)
         }
+        .alert(item: $deletionAlert) { alert in
+            switch alert {
+            case .blend(let blend):
+                return Alert(
+                    title: Text("Delete this blend?"),
+                    message: Text("This permanently deletes the generated output. The original capture remains in your library."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        deleteBlend(blend)
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .failure(let message):
+                return Alert(title: Text("Couldn’t Delete"), message: Text(message), dismissButton: .default(Text("OK")))
+            case .capture:
+                return Alert(title: Text("Couldn’t Delete"), dismissButton: .default(Text("OK")))
+            }
+        }
     }
 
     private func previewItem(for blend: AppModel.BlendProject) -> MediaPreviewItem {
@@ -262,6 +348,32 @@ struct BlendsView: View {
             kind: model.mediaKind(for: blend)
         )
     }
+
+    private func deleteBlend(_ blend: AppModel.BlendProject) {
+        do {
+            try model.deleteBlend(blend)
+            previewItem = nil
+        } catch {
+            Task { @MainActor in
+                await Task.yield()
+                deletionAlert = .failure(error.localizedDescription)
+            }
+        }
+    }
+}
+
+private enum ProjectDeletionAlert: Identifiable {
+    case capture(AppModel.CaptureProject, blendCount: Int)
+    case blend(AppModel.BlendProject)
+    case failure(String)
+
+    var id: String {
+        switch self {
+        case .capture(let capture, _): return "capture-\(capture.id)"
+        case .blend(let blend): return "blend-\(blend.id)"
+        case .failure(let message): return "failure-\(message)"
+        }
+    }
 }
 
 private struct CaptureProjectActions: View {
@@ -271,6 +383,7 @@ private struct CaptureProjectActions: View {
     var onPreview: () -> Void
     var onOpen: () -> Void
     var onToggleExpanded: () -> Void
+    var onDelete: () -> Void
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -303,6 +416,10 @@ private struct CaptureProjectActions: View {
                 )
             }
         }
+
+        Button(role: .destructive, action: onDelete) {
+            Label("Delete", systemImage: "trash")
+        }
     }
 }
 
@@ -310,6 +427,7 @@ private struct BlendProjectActions: View {
     var onPreview: () -> Void
     var onOpen: () -> Void
     var onAdjust: () -> Void
+    var onDelete: () -> Void
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
@@ -334,6 +452,9 @@ private struct BlendProjectActions: View {
         Button(action: onAdjust) {
             Label("Adjust", systemImage: "slider.horizontal.3")
         }
+        Button(role: .destructive, action: onDelete) {
+            Label("Delete", systemImage: "trash")
+        }
     }
 }
 
@@ -343,6 +464,7 @@ private struct CaptureBlendGroup: View {
     var blends: [AppModel.BlendProject]
     @Binding var previewItem: MediaPreviewItem?
     var onOpenJob: () -> Void
+    var onDeleteBlend: (AppModel.BlendProject) -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -404,6 +526,11 @@ private struct CaptureBlendGroup: View {
                     } label: {
                         Image(systemName: "arrow.up.forward.app")
                     }
+                    Button(role: .destructive) {
+                        onDeleteBlend(blend)
+                    } label: {
+                        Image(systemName: "trash")
+                    }
                 }
             }
         }
@@ -434,6 +561,7 @@ struct CaptureProjectDetailView: View {
     let captureID: UUID
     var onOpenJob: () -> Void
     @State private var previewItem: MediaPreviewItem?
+    @State private var deletionAlert: ProjectDeletionAlert?
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
@@ -474,6 +602,11 @@ struct CaptureProjectDetailView: View {
                         onOpenJob()
                     } label: {
                         Label("Re-blend from Source", systemImage: "slider.horizontal.3")
+                    }
+                    Button(role: .destructive) {
+                        deletionAlert = .capture(capture, blendCount: model.blends(for: capture).count)
+                    } label: {
+                        Label("Delete Capture", systemImage: "trash")
                     }
                 }
 
@@ -517,6 +650,11 @@ struct CaptureProjectDetailView: View {
                                         } label: {
                                             Label("Adjust", systemImage: "slider.horizontal.3")
                                         }
+                                        Button(role: .destructive) {
+                                            deletionAlert = .blend(blend)
+                                        } label: {
+                                            Label("Delete", systemImage: "trash")
+                                        }
                                     }
                                 }
                             }
@@ -534,6 +672,43 @@ struct CaptureProjectDetailView: View {
         .navigationTitle("Project")
         .sheet(item: $previewItem) { item in
             ProjectMediaPreviewSheet(item: item)
+        }
+        .alert(item: $deletionAlert) { alert in
+            switch alert {
+            case .capture(let capture, let blendCount):
+                let blendDescription = blendCount == 1 ? "1 blend" : "\(blendCount) blends"
+                return Alert(
+                    title: Text("Delete “\(capture.originalName)”?"),
+                    message: Text("This permanently deletes the source, \(blendDescription), and all cached processing files for this capture."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        performDeletion { try model.deleteCapture(capture) }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .blend(let blend):
+                return Alert(
+                    title: Text("Delete this blend?"),
+                    message: Text("This permanently deletes the generated output. The original capture remains in your library."),
+                    primaryButton: .destructive(Text("Delete")) {
+                        performDeletion { try model.deleteBlend(blend) }
+                    },
+                    secondaryButton: .cancel()
+                )
+            case .failure(let message):
+                return Alert(title: Text("Couldn’t Delete"), message: Text(message), dismissButton: .default(Text("OK")))
+            }
+        }
+    }
+
+    private func performDeletion(_ operation: () throws -> Void) {
+        do {
+            try operation()
+            previewItem = nil
+        } catch {
+            Task { @MainActor in
+                await Task.yield()
+                deletionAlert = .failure(error.localizedDescription)
+            }
         }
     }
 }

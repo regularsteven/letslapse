@@ -165,6 +165,20 @@ final class AppModel: ObservableObject {
         case done
     }
 
+    enum LibraryDeletionError: LocalizedError {
+        case activeCapture
+        case unsafeBlendPath
+
+        var errorDescription: String? {
+            switch self {
+            case .activeCapture:
+                return "This capture is currently being processed. Cancel the job before deleting it."
+            case .unsafeBlendPath:
+                return "The blend file is outside its capture folder and could not be deleted safely."
+            }
+        }
+    }
+
     @Published var stage: Stage = .home
     @Published var source: Source?
     @Published var errorMessage: String?
@@ -261,6 +275,61 @@ final class AppModel: ObservableObject {
 
     func mediaURL(for blend: BlendProject) -> URL {
         blendOutputURL(for: blend)
+    }
+
+    func deleteCapture(_ capture: CaptureProject) throws {
+        guard captures.contains(where: { $0.id == capture.id }) else { return }
+        if currentCaptureID == capture.id && stage == .processing {
+            throw LibraryDeletionError.activeCapture
+        }
+
+        let folder = captureFolderURL(for: capture.id)
+        if FileManager.default.fileExists(atPath: folder.path) {
+            try FileManager.default.removeItem(at: folder)
+        }
+
+        captures.removeAll { $0.id == capture.id }
+        blends.removeAll { $0.captureID == capture.id }
+        try persistLibrary()
+
+        if currentCaptureID == capture.id {
+            reset()
+        }
+    }
+
+    func deleteBlend(_ blend: BlendProject) throws {
+        guard blends.contains(where: { $0.id == blend.id }) else { return }
+
+        let captureFolder = captureFolderURL(for: blend.captureID).standardizedFileURL
+        let output = blendOutputURL(for: blend).standardizedFileURL
+        let capturePrefix = captureFolder.path.hasSuffix("/") ? captureFolder.path : captureFolder.path + "/"
+        guard output.path.hasPrefix(capturePrefix) else {
+            throw LibraryDeletionError.unsafeBlendPath
+        }
+
+        if FileManager.default.fileExists(atPath: output.path) {
+            try FileManager.default.removeItem(at: output)
+        }
+
+        blends.removeAll { $0.id == blend.id }
+        try persistLibrary()
+
+        let blendsFolder = output.deletingLastPathComponent()
+        if (try? FileManager.default.contentsOfDirectory(atPath: blendsFolder.path).isEmpty) == true {
+            try? FileManager.default.removeItem(at: blendsFolder)
+        }
+
+        if resultBlendID == blend.id {
+            resultBlendID = nil
+            resultVideoURL = nil
+            resultImage = nil
+            resultImageURL = nil
+            resultSummary = nil
+            saveConfirmation = nil
+            jobFolderURL = nil
+            jobLogLines = []
+            stage = source == nil ? .home : .configure
+        }
     }
 
     func setSource(_ source: Source, mode: String = "Import") {
