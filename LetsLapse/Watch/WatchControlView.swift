@@ -15,6 +15,9 @@ struct WatchControlView: View {
                     Text(elapsedTime)
                         .font(.title3.monospacedDigit().weight(.semibold))
                         .foregroundStyle(.red)
+                    Text(sequenceLine)
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
                 Text(statusLine)
                     .font(.footnote)
@@ -24,28 +27,44 @@ struct WatchControlView: View {
             }
             .frame(maxWidth: .infinity)
 
-            if remote.isReachable {
+            if remote.recordingState == .recording {
                 Button {
-                    if remote.recordingState == .recording {
-                        remote.stopRecording()
-                    } else {
-                        remote.startRecording()
-                    }
+                    remote.triggerMoment()
                 } label: {
-                    Label(actionTitle, systemImage: actionIcon)
+                    Label(triggerTitle, systemImage: triggerIcon)
                         .frame(maxWidth: .infinity)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(remote.recordingState == .recording ? .red : .accentColor)
-                .disabled(remote.isSending)
-            } else {
+                .tint(remote.isRampActive ? .orange : .blue)
+                .disabled(remote.isSending || !remote.isReachable)
+
                 Button {
-                    remote.refreshState()
+                    remote.stopRecording()
                 } label: {
-                    Label("Find iPhone", systemImage: "iphone.slash")
+                    Label("Stop", systemImage: "stop.fill")
                         .frame(maxWidth: .infinity)
                 }
-                .disabled(remote.isSending)
+                .tint(.red)
+                .disabled(remote.isSending || !remote.isReachable)
+            } else {
+                if remote.isReachable {
+                    Button {
+                        remote.startRecording()
+                    } label: {
+                        Label("Start", systemImage: "record.circle")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(remote.isSending)
+                } else {
+                    Button {
+                        remote.reconnect()
+                    } label: {
+                        Label("Find iPhone", systemImage: "iphone.slash")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .disabled(remote.isSending)
+                }
             }
         }
         .padding(.horizontal, 8)
@@ -57,12 +76,20 @@ struct WatchControlView: View {
         }
     }
 
-    private var actionTitle: String {
-        remote.recordingState == .recording ? "Stop" : "Start"
+    private var triggerTitle: String {
+        remote.isRampActive ? "Ramp Off" : "Ramp On"
     }
 
-    private var actionIcon: String {
-        remote.recordingState == .recording ? "stop.fill" : "record.circle"
+    private var triggerIcon: String {
+        remote.sequenceMode == "marker" ? "mappin.and.ellipse" : "speedometer"
+    }
+
+    private var sequenceLine: String {
+        let rampState = remote.isRampActive ? "ramp on" : "ramp off"
+        if remote.sequenceMode == "marker" {
+            return "\(remote.rampIntervalCount) intervals · \(rampState)"
+        }
+        return "\(remote.rampIntervalCount) intervals · \(remote.segmentCount) segments · \(rampState)"
     }
 
     private var statusLine: String {

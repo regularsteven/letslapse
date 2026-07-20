@@ -1,10 +1,41 @@
 import SwiftUI
+import AVFoundation
 
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
 
     var body: some View {
         Form {
+            #if os(macOS)
+            Section {
+                LabeledContent("Status") {
+                    Text(cameraStatusText)
+                        .foregroundStyle(cameraAuthorizationStatus == .authorized ? Color.secondary : Color.red)
+                }
+
+                if cameraAuthorizationStatus == .notDetermined {
+                    Button {
+                        CameraPrivacySettings.requestAccess { _ in
+                            cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
+                        }
+                    } label: {
+                        Label("Request Camera Access", systemImage: "video")
+                    }
+                } else if cameraAuthorizationStatus != .authorized {
+                    Button {
+                        CameraPrivacySettings.open()
+                    } label: {
+                        Label("Open Camera Privacy Settings", systemImage: "gear")
+                    }
+                }
+            } header: {
+                Text("Camera")
+            } footer: {
+                Text("macOS controls webcam permission in System Settings. After changing access, reopen the capture sheet.")
+            }
+            #endif
+
             Section("Defaults") {
                 Picker("Output frame rate", selection: $model.outputFPS) {
                     ForEach([24, 25, 30, 50, 60], id: \.self) { fps in
@@ -33,5 +64,27 @@ struct SettingsView: View {
             }
         }
         .navigationTitle("Settings")
+        .formStyle(.grouped)
+        .scrollContentBackground(.hidden)
+        .padding(.horizontal)
+        .frame(maxWidth: 720)
+        .onAppear {
+            cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
+        }
+    }
+
+    private var cameraStatusText: String {
+        switch cameraAuthorizationStatus {
+        case .authorized:
+            return "Enabled"
+        case .notDetermined:
+            return "Not requested"
+        case .denied:
+            return "Denied"
+        case .restricted:
+            return "Restricted"
+        @unknown default:
+            return "Unknown"
+        }
     }
 }

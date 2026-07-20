@@ -117,14 +117,35 @@ final class AppModel: ObservableObject {
         var height: Int?
     }
 
+    private final class ExportSessionBox: @unchecked Sendable {
+        let session: AVAssetExportSession
+
+        init(_ session: AVAssetExportSession) {
+            self.session = session
+        }
+    }
+
+    struct LiveCaptureSource: Equatable {
+        var sequence: LiveCaptureSequence
+        var segmentURLs: [URL]
+        var metadataURL: URL
+
+        var primaryVideoURL: URL? {
+            segmentURLs.first
+        }
+    }
+
     enum Source: Equatable {
         case video(URL)
+        case liveSequence(LiveCaptureSource)
         case photos([URL])
 
         var summary: String {
             switch self {
             case .video(let url):
                 return "Video · \(url.lastPathComponent)"
+            case .liveSequence(let source):
+                return "Video · \(source.sequence.summary)"
             case .photos(let urls):
                 return "\(urls.count) photos"
             }
@@ -132,6 +153,7 @@ final class AppModel: ObservableObject {
 
         var isVideo: Bool {
             if case .video = self { return true }
+            if case .liveSequence = self { return true }
             return false
         }
     }
@@ -230,6 +252,8 @@ final class AppModel: ObservableObject {
         switch source {
         case .video(let url):
             return url
+        case .liveSequence(let source):
+            return source.primaryVideoURL
         case .photos(let urls):
             return urls.first
         }
@@ -242,6 +266,15 @@ final class AppModel: ObservableObject {
     func setSource(_ source: Source, mode: String = "Import") {
         do {
             let capture = try registerCapture(from: source, mode: mode)
+            openCapture(capture)
+        } catch {
+            errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
+        }
+    }
+
+    func setSequenceSource(_ result: LiveCaptureResult) {
+        do {
+            let capture = try registerSequenceCapture(result)
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
@@ -369,6 +402,8 @@ final class AppModel: ObservableObject {
                 switch source {
                 case .video(let url):
                     output = try await self.blendVideo(url: url, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: trim)
+                case .liveSequence(let liveSource):
+                    output = try await self.blendLiveSequence(liveSource, ramp: ramp, fps: fps, linear: linear)
                 case .photos(let urls):
                     output = try await self.stackPhotos(urls: urls, linear: linear)
                 }
@@ -462,6 +497,333 @@ final class AppModel: ObservableObject {
             width: result.width,
             height: result.height
         )
+    }
+
+    private func blendLiveSequence(
+        _ source: LiveCaptureSource,
+        ramp: BlendRamp,
+        fps: Double,
+        linear: Bool
+    ) async throws -> ProcessingOutput {
+        guard !source.segmentURLs.isEmpty else { throw LapseError.noInputFrames }
+
+        guard source.sequence.mode == .ramp else {
+            return try await blendMarkerSequence(source, ramp: ramp, fps: fps, linear: linear)
+        }
+
+        let segmentURLByName = Dictionary(
+            uniqueKeysWithValues: source.segmentURLs.map { ($0.lastPathComponent, $0) }
+        )
+        let orderedSegments = source.sequence.segments.sorted { $0.index < $1.index }
+        guard !orderedSegments.isEmpty else {
+            let fallbackURL = source.segmentURLs[0]
+            return try await blendVideo(url: fallbackURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
+        }
+
+        var processedURLs: [URL] = []
+        var inputFrames = 0
+        var outputFrames = 0
+        var outputWidth: Int?
+        var outputHeight: Int?
+        let totalSegments = orderedSegments.count
+
+        for (index, segment) in orderedSegments.enumerated() {
+            guard let segmentURL = segmentURLByName[segment.fileName] else {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            let isRampOn = segmentIsRampOn(segment, in: source.sequence)
+            statusMessage = isRampOn
+                ? "Blending ramp segment \(index + 1) / \(totalSegments) at playback speed..."
+                : "Blending base segment \(index + 1) / \(totalSegments)..."
+            let segmentOutput = try await blendVideo(
+                url: segmentURL,
+                ramp: isRampOn ? .constant(1) : ramp,
+                fps: fps,
+                linear: linear,
+                trimHeadTailSeconds: 0
+            )
+            processedURLs.append(segmentOutput.url)
+            inputFrames += segmentOutput.inputFrames ?? 0
+            outputFrames += segmentOutput.outputFrames ?? 0
+            outputWidth = outputWidth ?? segmentOutput.width
+            outputHeight = outputHeight ?? segmentOutput.height
+            progress = Double(index + 1) / Double(max(1, totalSegments)) * 0.9
+        }
+
+        statusMessage = "Stitching \(processedURLs.count) processed segments..."
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LetsLapse-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
+        let stitched = try await stitchVideos(processedURLs, to: output)
+        progress = 1
+
+        let summary = "\(inputFrames) frames in → \(outputFrames) frames out · "
+            + "\(stitched.width)×\(stitched.height) · "
+            + "\(source.sequence.rampIntervals.count) ramp intervals stitched"
+        return ProcessingOutput(
+            kind: .video,
+            url: output,
+            image: nil,
+            summary: summary,
+            inputFrames: inputFrames,
+            outputFrames: outputFrames,
+            width: outputWidth ?? stitched.width,
+            height: outputHeight ?? stitched.height
+        )
+    }
+
+    private struct MarkerSequencePiece {
+        var range: ClosedRange<Double>
+        var isRampOn: Bool
+    }
+
+    private func blendMarkerSequence(
+        _ source: LiveCaptureSource,
+        ramp: BlendRamp,
+        fps: Double,
+        linear: Bool
+    ) async throws -> ProcessingOutput {
+        guard let sourceURL = source.primaryVideoURL else { throw LapseError.noInputFrames }
+        let pieces = try await markerSequencePieces(for: source, sourceURL: sourceURL)
+        guard !pieces.isEmpty else {
+            return try await blendVideo(url: sourceURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
+        }
+
+        var processedURLs: [URL] = []
+        var inputFrames = 0
+        var outputFrames = 0
+        var outputWidth: Int?
+        var outputHeight: Int?
+
+        for (index, piece) in pieces.enumerated() {
+            statusMessage = piece.isRampOn
+                ? "Rendering marker interval \(index + 1) / \(pieces.count) at playback speed..."
+                : "Blending marker interval \(index + 1) / \(pieces.count)..."
+
+            let clipURL = FileManager.default.temporaryDirectory
+                .appendingPathComponent("LetsLapse-marker-piece-\(UUID().uuidString).mov")
+            try await extractVideoRange(
+                sourceURL,
+                from: piece.range.lowerBound,
+                to: piece.range.upperBound,
+                outputURL: clipURL
+            )
+
+            let pieceOutput = try await blendVideo(
+                url: clipURL,
+                ramp: piece.isRampOn ? .constant(1) : ramp,
+                fps: fps,
+                linear: linear,
+                trimHeadTailSeconds: 0
+            )
+            processedURLs.append(pieceOutput.url)
+            inputFrames += pieceOutput.inputFrames ?? 0
+            outputFrames += pieceOutput.outputFrames ?? 0
+            outputWidth = outputWidth ?? pieceOutput.width
+            outputHeight = outputHeight ?? pieceOutput.height
+            progress = Double(index + 1) / Double(max(1, pieces.count)) * 0.9
+        }
+
+        statusMessage = "Stitching \(processedURLs.count) processed marker intervals..."
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LetsLapse-marker-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
+        let stitched = try await stitchVideos(processedURLs, to: output)
+        progress = 1
+
+        let summary = "\(inputFrames) frames in → \(outputFrames) frames out · "
+            + "\(stitched.width)×\(stitched.height) · "
+            + "\(source.sequence.rampIntervals.count) marker ramp intervals stitched"
+        return ProcessingOutput(
+            kind: .video,
+            url: output,
+            image: nil,
+            summary: summary,
+            inputFrames: inputFrames,
+            outputFrames: outputFrames,
+            width: outputWidth ?? stitched.width,
+            height: outputHeight ?? stitched.height
+        )
+    }
+
+    private func markerSequencePieces(
+        for source: LiveCaptureSource,
+        sourceURL: URL
+    ) async throws -> [MarkerSequencePiece] {
+        let asset = AVURLAsset(url: sourceURL)
+        let duration = try await asset.load(.duration).seconds
+        guard duration.isFinite, duration > 0 else { return [] }
+
+        let sequenceStart = source.sequence.segments.first?.relativeStart ?? 0
+        let sequenceEnd = source.sequence.segments.first?.relativeEnd ?? (sequenceStart + duration)
+        let rampRanges = source.sequence.rampIntervals
+            .compactMap { interval -> ClosedRange<Double>? in
+                let intervalEnd = interval.relativeEnd ?? sequenceEnd
+                let start = max(0, interval.relativeStart - sequenceStart)
+                let end = min(duration, intervalEnd - sequenceStart)
+                guard end > start else { return nil }
+                return start...end
+            }
+            .sorted { $0.lowerBound < $1.lowerBound }
+
+        guard !rampRanges.isEmpty else { return [] }
+
+        var mergedRampRanges: [ClosedRange<Double>] = []
+        for range in rampRanges {
+            guard let last = mergedRampRanges.last else {
+                mergedRampRanges.append(range)
+                continue
+            }
+            if range.lowerBound <= last.upperBound {
+                mergedRampRanges[mergedRampRanges.count - 1] = last.lowerBound...max(last.upperBound, range.upperBound)
+            } else {
+                mergedRampRanges.append(range)
+            }
+        }
+
+        let minimumDuration = 0.05
+        var pieces: [MarkerSequencePiece] = []
+        var cursor = 0.0
+        for range in mergedRampRanges {
+            if range.lowerBound - cursor > minimumDuration {
+                pieces.append(MarkerSequencePiece(range: cursor...range.lowerBound, isRampOn: false))
+            }
+            if range.upperBound - range.lowerBound > minimumDuration {
+                pieces.append(MarkerSequencePiece(range: range.lowerBound...range.upperBound, isRampOn: true))
+            }
+            cursor = max(cursor, range.upperBound)
+        }
+        if duration - cursor > minimumDuration {
+            pieces.append(MarkerSequencePiece(range: cursor...duration, isRampOn: false))
+        }
+        return pieces
+    }
+
+    private func extractVideoRange(
+        _ sourceURL: URL,
+        from start: Double,
+        to end: Double,
+        outputURL: URL
+    ) async throws {
+        guard end > start else { throw LapseError.noInputFrames }
+        try? FileManager.default.removeItem(at: outputURL)
+
+        let asset = AVURLAsset(url: sourceURL)
+        guard let export = AVAssetExportSession(
+            asset: asset,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            throw LapseError.writerFailed("could not create marker interval export session")
+        }
+        export.outputURL = outputURL
+        export.outputFileType = .mov
+        export.timeRange = CMTimeRange(
+            start: CMTime(seconds: start, preferredTimescale: 600),
+            duration: CMTime(seconds: end - start, preferredTimescale: 600)
+        )
+        export.shouldOptimizeForNetworkUse = true
+        let exportBox = ExportSessionBox(export)
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            exportBox.session.exportAsynchronously {
+                switch exportBox.session.status {
+                case .completed:
+                    continuation.resume()
+                case .failed:
+                    continuation.resume(throwing: LapseError.writerFailed(
+                        exportBox.session.error?.localizedDescription ?? "marker interval export failed"
+                    ))
+                case .cancelled:
+                    continuation.resume(throwing: LapseError.cancelled)
+                default:
+                    continuation.resume(throwing: LapseError.writerFailed("marker interval export did not complete"))
+                }
+            }
+        }
+    }
+
+    private func segmentIsRampOn(
+        _ segment: LiveCaptureSequence.Segment,
+        in sequence: LiveCaptureSequence
+    ) -> Bool {
+        if sequence.mode == .ramp {
+            return segment.frameRate > sequence.baseFrameRate
+        }
+        return sequence.rampIntervals.contains { interval in
+            let intervalEnd = interval.relativeEnd ?? segment.relativeEnd
+            return interval.relativeStart < segment.relativeEnd
+                && intervalEnd > segment.relativeStart
+        }
+    }
+
+    private func stitchVideos(_ urls: [URL], to outputURL: URL) async throws -> (width: Int, height: Int) {
+        guard !urls.isEmpty else { throw LapseError.noInputFrames }
+        try? FileManager.default.removeItem(at: outputURL)
+
+        let composition = AVMutableComposition()
+        guard let compositionTrack = composition.addMutableTrack(
+            withMediaType: .video,
+            preferredTrackID: kCMPersistentTrackID_Invalid
+        ) else {
+            throw LapseError.writerFailed("could not create composition track")
+        }
+
+        var cursor = CMTime.zero
+        var outputSize: CGSize?
+        var transform = CGAffineTransform.identity
+
+        for (index, url) in urls.enumerated() {
+            let asset = AVURLAsset(url: url)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+                throw LapseError.noVideoTrack(url)
+            }
+            let duration = try await asset.load(.duration)
+            try compositionTrack.insertTimeRange(
+                CMTimeRange(start: .zero, duration: duration),
+                of: track,
+                at: cursor
+            )
+            cursor = cursor + duration
+
+            if index == 0 {
+                let naturalSize = try await track.load(.naturalSize)
+                transform = try await track.load(.preferredTransform)
+                outputSize = CGRect(origin: .zero, size: naturalSize)
+                    .applying(transform)
+                    .standardized
+                    .size
+            }
+        }
+        compositionTrack.preferredTransform = transform
+
+        guard let export = AVAssetExportSession(
+            asset: composition,
+            presetName: AVAssetExportPresetHighestQuality
+        ) else {
+            throw LapseError.writerFailed("could not create export session")
+        }
+        export.outputURL = outputURL
+        export.outputFileType = .mp4
+        export.shouldOptimizeForNetworkUse = true
+        let exportBox = ExportSessionBox(export)
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            exportBox.session.exportAsynchronously {
+                switch exportBox.session.status {
+                case .completed:
+                    continuation.resume()
+                case .failed:
+                    continuation.resume(throwing: LapseError.writerFailed(
+                        exportBox.session.error?.localizedDescription ?? "sequence export failed"
+                    ))
+                case .cancelled:
+                    continuation.resume(throwing: LapseError.cancelled)
+                default:
+                    continuation.resume(throwing: LapseError.writerFailed("sequence export did not complete"))
+                }
+            }
+        }
+
+        let size = outputSize ?? .zero
+        return (Int(abs(size.width).rounded()), Int(abs(size.height).rounded()))
     }
 
     private func stackPhotos(urls: [URL], linear: Bool) async throws -> ProcessingOutput {
@@ -579,6 +941,12 @@ final class AppModel: ObservableObject {
                 sourceFileNames: [relativeName],
                 sourceFPS: nil
             )
+        case .liveSequence(let liveSource):
+            return try registerSequenceCapture(LiveCaptureResult(
+                sequence: liveSource.sequence,
+                segmentURLs: liveSource.segmentURLs,
+                metadataURL: liveSource.metadataURL
+            ))
         case .photos(let urls):
             var relativeNames: [String] = []
             for (index, url) in urls.enumerated() {
@@ -609,8 +977,47 @@ final class AppModel: ObservableObject {
         return capture
     }
 
+    private func registerSequenceCapture(_ result: LiveCaptureResult) throws -> CaptureProject {
+        let id = UUID()
+        let root = captureFolderURL(for: id)
+        let sourceFolder = root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+
+        var relativeNames: [String] = []
+        for (index, url) in result.segmentURLs.enumerated() {
+            let ext = url.pathExtension.isEmpty ? "mov" : url.pathExtension
+            let relativeName = String(format: "source/segment-%03d.%@", index, ext)
+            let destination = root.appendingPathComponent(relativeName)
+            try copyReplacingItem(at: url, to: destination)
+            relativeNames.append(relativeName)
+        }
+
+        let metadataName = "source/sequence.json"
+        try copyReplacingItem(at: result.metadataURL, to: root.appendingPathComponent(metadataName))
+        relativeNames.append(metadataName)
+
+        let capture = CaptureProject(
+            id: id,
+            kind: .video,
+            createdAt: result.sequence.createdAt,
+            originalName: result.sequence.mode == .ramp ? "Ramp capture" : "Marker capture",
+            mode: result.sequence.summary,
+            sourceFileNames: relativeNames,
+            sourceFPS: nil
+        )
+
+        captures.insert(capture, at: 0)
+        try persistLibrary()
+        Task { [weak self] in
+            await self?.refreshVideoMetadata(for: capture.id)
+        }
+        return capture
+    }
+
     private func source(for capture: CaptureProject) throws -> Source {
-        let urls = capture.sourceFileNames.map {
+        let root = captureFolderURL(for: capture.id)
+        let metadataURL = root.appendingPathComponent("source/sequence.json")
+        let urls = capture.sourceFileNames.filter { !$0.hasSuffix(".json") }.map {
             captureFolderURL(for: capture.id).appendingPathComponent($0)
         }
         for url in urls where !FileManager.default.fileExists(atPath: url.path) {
@@ -619,6 +1026,17 @@ final class AppModel: ObservableObject {
 
         switch capture.kind {
         case .video:
+            if FileManager.default.fileExists(atPath: metadataURL.path) {
+                let data = try Data(contentsOf: metadataURL)
+                let decoder = JSONDecoder()
+                decoder.dateDecodingStrategy = .iso8601
+                let sequence = try decoder.decode(LiveCaptureSequence.self, from: data)
+                return .liveSequence(LiveCaptureSource(
+                    sequence: sequence,
+                    segmentURLs: urls,
+                    metadataURL: metadataURL
+                ))
+            }
             guard let url = urls.first else { throw CocoaError(.fileNoSuchFile) }
             return .video(url)
         case .photos:

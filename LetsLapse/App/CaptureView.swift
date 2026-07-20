@@ -1,6 +1,10 @@
-#if os(iOS)
 import SwiftUI
 import AVFoundation
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 struct CaptureView: View {
     enum Mode: String, CaseIterable, Identifiable {
@@ -19,9 +23,12 @@ struct CaptureView: View {
 
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    #if os(iOS)
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
+    #endif
     @StateObject private var camera = CameraController()
     @State private var mode: Mode = .video
+    @State private var sequenceMode: LiveCaptureSequence.Mode = .ramp
     @State private var previewLayout: PreviewLayout = .fullscreen
     @State private var interval: Double = 2
     @State private var orientation = currentCaptureOrientation()
@@ -41,6 +48,21 @@ struct CaptureView: View {
                     Text("Camera access is needed to capture. Enable it in Settings.")
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 40)
+                    #if os(macOS)
+                    Button {
+                        openCameraPrivacySettings()
+                    } label: {
+                        Label("Open Camera Settings", systemImage: "gear")
+                    }
+                    .buttonStyle(CaptureActionButtonStyle(tint: .blue, minHeight: 34))
+
+                    Button {
+                        camera.start()
+                    } label: {
+                        Label("Try Again", systemImage: "arrow.clockwise")
+                    }
+                    .buttonStyle(CaptureActionButtonStyle(tint: .gray, minHeight: 34))
+                    #endif
                 }
                 .foregroundStyle(.white)
             }
@@ -51,9 +73,8 @@ struct CaptureView: View {
                         camera.stop()
                         dismiss()
                     }
+                    .buttonStyle(CaptureTopButtonStyle())
                     .padding()
-                    .foregroundStyle(.white)
-                    .background(.black.opacity(0.45), in: Capsule())
                     Spacer()
                     Text(camera.activeFormatDescription)
                         .font(.caption.monospacedDigit())
@@ -74,12 +95,22 @@ struct CaptureView: View {
                     .padding()
             }
         }
+        #if os(iOS)
         .statusBarHidden()
+        #endif
         .onAppear {
+            #if os(iOS)
             watchRemote.activate()
             watchRemote.setCommandHandler(handleWatchCommand)
             updateWatchRecordingState()
             updateIdleTimer()
+            #endif
+            camera.onFinishLiveCapture = { result in
+                camera.stop()
+                dismiss()
+                model.setSequenceSource(result)
+                onCaptureComplete()
+            }
             camera.onFinishVideo = { url in
                 camera.stop()
                 dismiss()
@@ -93,27 +124,69 @@ struct CaptureView: View {
                 onCaptureComplete()
             }
             orientation = currentCaptureOrientation()
+            #if os(iOS)
             camera.setVideoOrientation(orientation)
+            #endif
             camera.start()
         }
         .onDisappear {
+            #if os(iOS)
             watchRemote.setCommandHandler(nil)
             UIApplication.shared.isIdleTimerDisabled = false
+            #endif
         }
+        #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             orientation = currentCaptureOrientation()
             camera.setVideoOrientation(orientation)
         }
+        #endif
         .onChange(of: camera.isRecording) { _ in
+            #if os(iOS)
             updateWatchRecordingState()
             updateIdleTimer()
+            #endif
         }
         .onChange(of: camera.recordingStartedAt) { _ in
             now = Date()
+            #if os(iOS)
             updateWatchRecordingState()
+            #endif
+        }
+        .onChange(of: camera.activeSequenceMode) { _ in
+            #if os(iOS)
+            updateWatchRecordingState()
+            #endif
+        }
+        .onChange(of: camera.markerCount) { _ in
+            #if os(iOS)
+            updateWatchRecordingState()
+            #endif
+        }
+        .onChange(of: camera.rampIntervalCount) { _ in
+            #if os(iOS)
+            updateWatchRecordingState()
+            #endif
+        }
+        .onChange(of: camera.segmentCount) { _ in
+            #if os(iOS)
+            updateWatchRecordingState()
+            #endif
+        }
+        .onChange(of: camera.isRampActive) { _ in
+            #if os(iOS)
+            updateWatchRecordingState()
+            #endif
+        }
+        .onChange(of: camera.isRampHighRate) { _ in
+            #if os(iOS)
+            updateWatchRecordingState()
+            #endif
         }
         .onChange(of: camera.isIntervalRunning) { _ in
+            #if os(iOS)
             updateIdleTimer()
+            #endif
         }
         .onReceive(recordingTimer) { date in
             now = date
@@ -183,6 +256,14 @@ struct CaptureView: View {
             }
 
             if mode == .video {
+                CaptureSegmentedControl(
+                    options: LiveCaptureSequence.Mode.allCases,
+                    selection: $sequenceMode,
+                    isDisabled: camera.isRecording || camera.isIntervalRunning
+                ) { mode in
+                    mode.label
+                }
+
                 stabilizationControl
             }
 
@@ -198,13 +279,24 @@ struct CaptureView: View {
                             camera.selectResolution(resolution)
                         }
 
-                        Picker("Frame rate", selection: $camera.selectedFrameRate) {
+                        Picker(sequenceMode == .ramp ? "Base rate" : "Frame rate", selection: $camera.selectedFrameRate) {
                             ForEach(camera.availableFrameRates, id: \.self) { fps in
                                 Text("\(fps) fps").tag(fps)
                             }
                         }
                         .onChange(of: camera.selectedFrameRate) { fps in
                             camera.selectFrameRate(fps)
+                        }
+
+                        if mode == .video && sequenceMode == .ramp && !availableRampFrameRates.isEmpty {
+                            Picker("Ramp rate", selection: $camera.selectedRampFrameRate) {
+                                ForEach(availableRampFrameRates, id: \.self) { fps in
+                                    Text("\(fps) fps").tag(fps)
+                                }
+                            }
+                            .onChange(of: camera.selectedRampFrameRate) { fps in
+                                camera.selectRampFrameRate(fps)
+                            }
                         }
                     }
                 }
@@ -216,21 +308,53 @@ struct CaptureView: View {
             switch mode {
             case .video:
                 if camera.isRecording {
-                    Text(elapsedRecordingTime)
-                        .font(.title3.monospacedDigit().weight(.semibold))
-                        .foregroundStyle(.white)
-                        .padding(.vertical, 6)
-                        .padding(.horizontal, 12)
-                        .background(.red.opacity(0.28), in: Capsule())
+                    VStack(spacing: 6) {
+                        Text(elapsedRecordingTime)
+                            .font(.title3.monospacedDigit().weight(.semibold))
+                            .foregroundStyle(.white)
+                        Text(sequenceStatusLine)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.white.opacity(0.78))
+                    }
+                    .padding(.vertical, 6)
+                    .padding(.horizontal, 12)
+                    .background(.red.opacity(0.28), in: Capsule())
                 }
-                Button {
-                    camera.isRecording ? camera.stopRecording() : camera.startRecording()
-                } label: {
-                    Label(
-                        camera.isRecording ? "Stop Recording" : "Record",
-                        systemImage: camera.isRecording ? "stop.circle.fill" : "record.circle")
-                    .font(.title2)
-                    .foregroundStyle(camera.isRecording ? .red : .white)
+
+                if camera.isRecording {
+                    HStack(spacing: 12) {
+                        Button {
+                            camera.triggerLiveMoment()
+                        } label: {
+                            Label(sequenceTriggerTitle, systemImage: sequenceTriggerIcon)
+                                .font(.title3.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(camera.isRampActive ? .orange : .blue)
+                        .controlSize(.large)
+
+                        Button {
+                            camera.stopRecording()
+                        } label: {
+                            Label("Stop", systemImage: "stop.circle.fill")
+                                .font(.title3.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .tint(.red)
+                        .controlSize(.large)
+                    }
+                } else {
+                    Button {
+                        camera.startRecording(mode: sequenceMode)
+                    } label: {
+                        Label("Record", systemImage: "record.circle")
+                            .font(.title2)
+                            .foregroundStyle(.white)
+                    }
+                    .buttonStyle(CaptureActionButtonStyle(tint: .red))
+                    .disabled(camera.isAuthorized != true)
                 }
             case .interval:
                 if !camera.isIntervalRunning {
@@ -254,18 +378,23 @@ struct CaptureView: View {
                     .font(.title2)
                     .foregroundStyle(camera.isIntervalRunning ? .red : .white)
                 }
+                .buttonStyle(CaptureActionButtonStyle(tint: camera.isIntervalRunning ? .red : .blue))
+                .disabled(camera.isAuthorized != true)
             }
         }
     }
 
+    #if os(iOS)
     private func handleWatchCommand(_ command: WatchCaptureCommand) {
         switch command {
         case .startRecording:
             guard !camera.isRecording, !camera.isIntervalRunning else { return }
             mode = .video
-            camera.startRecording()
+            camera.startRecording(mode: sequenceMode)
         case .stopRecording:
             camera.stopRecording()
+        case .triggerMoment:
+            camera.triggerLiveMoment()
         case .state:
             updateWatchRecordingState()
         }
@@ -274,17 +403,47 @@ struct CaptureView: View {
     private func updateWatchRecordingState() {
         watchRemote.setRecordingState(
             camera.isRecording ? .recording : .idle,
-            startedAt: camera.recordingStartedAt
+            startedAt: camera.recordingStartedAt,
+            sequenceMode: camera.activeSequenceMode ?? sequenceMode,
+            markerCount: camera.markerCount,
+            rampIntervalCount: camera.rampIntervalCount,
+            segmentCount: camera.segmentCount,
+            isRampActive: camera.isRampActive,
+            isRampHighRate: camera.isRampHighRate
         )
     }
 
     private func updateIdleTimer() {
         UIApplication.shared.isIdleTimerDisabled = camera.isRecording || camera.isIntervalRunning
     }
+    #endif
 
     private var elapsedRecordingTime: String {
         guard let startedAt = camera.recordingStartedAt else { return "00:00" }
         return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
+    }
+
+    private var sequenceTriggerTitle: String {
+        camera.isRampActive ? "Ramp Off" : "Ramp On"
+    }
+
+    private var sequenceTriggerIcon: String {
+        camera.isRampActive ? "speedometer" : "speedometer"
+    }
+
+    private var sequenceStatusLine: String {
+        switch camera.activeSequenceMode ?? sequenceMode {
+        case .ramp:
+            let rampState = camera.isRampActive ? "ramp on" : "ramp off"
+            return "\(camera.rampIntervalCount) ramp intervals · \(camera.segmentCount) segments · \(rampState)"
+        case .marker:
+            let rampState = camera.isRampActive ? "ramp on" : "ramp off"
+            return "\(camera.rampIntervalCount) ramp intervals · \(rampState)"
+        }
+    }
+
+    private var availableRampFrameRates: [Int] {
+        camera.availableFrameRates.filter { $0 > camera.selectedFrameRate }
     }
 
     private var stabilizationBinding: Binding<Bool> {
@@ -312,6 +471,46 @@ struct CaptureView: View {
                 .lineLimit(2)
         }
         .disabled(camera.isRecording || camera.isIntervalRunning)
+    }
+
+    #if os(macOS)
+    private func openCameraPrivacySettings() {
+        CameraPrivacySettings.open()
+    }
+    #endif
+}
+
+private struct CaptureTopButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(.white)
+            .padding(.vertical, 7)
+            .padding(.horizontal, 12)
+            .background(
+                configuration.isPressed ? .white.opacity(0.22) : .black.opacity(0.48),
+                in: Capsule()
+            )
+    }
+}
+
+private struct CaptureActionButtonStyle: ButtonStyle {
+    var tint: Color
+    var minHeight: CGFloat = 44
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.headline.weight(.semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.82)
+            .foregroundStyle(.white)
+            .frame(minWidth: 92, maxWidth: .infinity, minHeight: minHeight)
+            .padding(.horizontal, 14)
+            .background(
+                tint.opacity(configuration.isPressed ? 0.66 : 0.92),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
+            .opacity(configuration.isPressed ? 0.88 : 1)
     }
 }
 
@@ -354,6 +553,7 @@ private struct CaptureSegmentedControl<Option: Identifiable & Equatable>: View w
     }
 }
 
+#if os(iOS)
 struct CameraPreview: UIViewRepresentable {
     let session: AVCaptureSession
     let orientation: AVCaptureVideoOrientation
@@ -384,6 +584,46 @@ struct CameraPreview: UIViewRepresentable {
         uiView.previewLayer.videoGravity = videoGravity
         if uiView.previewLayer.connection?.isVideoOrientationSupported == true {
             uiView.previewLayer.connection?.videoOrientation = orientation
+        }
+    }
+}
+#else
+struct CameraPreview: NSViewRepresentable {
+    let session: AVCaptureSession
+    let orientation: AVCaptureVideoOrientation
+    let videoGravity: AVLayerVideoGravity
+
+    final class PreviewView: NSView {
+        override func makeBackingLayer() -> CALayer {
+            AVCaptureVideoPreviewLayer()
+        }
+
+        var previewLayer: AVCaptureVideoPreviewLayer {
+            layer as! AVCaptureVideoPreviewLayer
+        }
+
+        override func layout() {
+            super.layout()
+            previewLayer.frame = bounds
+        }
+    }
+
+    func makeNSView(context: Context) -> PreviewView {
+        let view = PreviewView()
+        view.wantsLayer = true
+        view.previewLayer.session = session
+        view.previewLayer.videoGravity = videoGravity
+        if view.previewLayer.connection?.isVideoOrientationSupported == true {
+            view.previewLayer.connection?.videoOrientation = orientation
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: PreviewView, context: Context) {
+        nsView.previewLayer.frame = nsView.bounds
+        nsView.previewLayer.videoGravity = videoGravity
+        if nsView.previewLayer.connection?.isVideoOrientationSupported == true {
+            nsView.previewLayer.connection?.videoOrientation = orientation
         }
     }
 }

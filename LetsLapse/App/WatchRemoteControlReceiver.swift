@@ -5,6 +5,7 @@ import WatchConnectivity
 enum WatchCaptureCommand: String {
     case startRecording
     case stopRecording
+    case triggerMoment
     case state
 }
 
@@ -18,6 +19,12 @@ private enum WatchMessageKey {
     static let status = "status"
     static let recordingState = "recordingState"
     static let recordingStartedAt = "recordingStartedAt"
+    static let sequenceMode = "sequenceMode"
+    static let markerCount = "markerCount"
+    static let rampIntervalCount = "rampIntervalCount"
+    static let segmentCount = "segmentCount"
+    static let isRampActive = "isRampActive"
+    static let isRampHighRate = "isRampHighRate"
     static let message = "message"
 }
 
@@ -30,6 +37,12 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var isActivated = false
     private var commandHandler: ((WatchCaptureCommand) -> Void)?
     private var recordingStartedAt: Date?
+    private var sequenceMode: LiveCaptureSequence.Mode?
+    private var markerCount = 0
+    private var rampIntervalCount = 0
+    private var segmentCount = 0
+    private var isRampActive = false
+    private var isRampHighRate = false
 
     private override init() {
         super.init()
@@ -49,9 +62,24 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     @MainActor
-    func setRecordingState(_ state: WatchRecordingState, startedAt: Date? = nil) {
+    func setRecordingState(
+        _ state: WatchRecordingState,
+        startedAt: Date? = nil,
+        sequenceMode: LiveCaptureSequence.Mode? = nil,
+        markerCount: Int = 0,
+        rampIntervalCount: Int = 0,
+        segmentCount: Int = 0,
+        isRampActive: Bool = false,
+        isRampHighRate: Bool = false
+    ) {
         recordingState = state
         recordingStartedAt = state == .recording ? startedAt : nil
+        self.sequenceMode = state == .recording ? sequenceMode : nil
+        self.markerCount = state == .recording ? markerCount : 0
+        self.rampIntervalCount = state == .recording ? rampIntervalCount : 0
+        self.segmentCount = state == .recording ? segmentCount : 0
+        self.isRampActive = state == .recording ? isRampActive : false
+        self.isRampHighRate = state == .recording ? isRampHighRate : false
         publishState()
     }
 
@@ -83,6 +111,14 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         if let recordingStartedAt {
             payload[WatchMessageKey.recordingStartedAt] = recordingStartedAt.timeIntervalSince1970
         }
+        if let sequenceMode {
+            payload[WatchMessageKey.sequenceMode] = sequenceMode.rawValue
+        }
+        payload[WatchMessageKey.markerCount] = markerCount
+        payload[WatchMessageKey.rampIntervalCount] = rampIntervalCount
+        payload[WatchMessageKey.segmentCount] = segmentCount
+        payload[WatchMessageKey.isRampActive] = isRampActive
+        payload[WatchMessageKey.isRampHighRate] = isRampHighRate
         if let message {
             payload[WatchMessageKey.message] = message
         }
@@ -99,6 +135,14 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         if let recordingStartedAt {
             payload[WatchMessageKey.recordingStartedAt] = recordingStartedAt.timeIntervalSince1970
         }
+        if let sequenceMode {
+            payload[WatchMessageKey.sequenceMode] = sequenceMode.rawValue
+        }
+        payload[WatchMessageKey.markerCount] = markerCount
+        payload[WatchMessageKey.rampIntervalCount] = rampIntervalCount
+        payload[WatchMessageKey.segmentCount] = segmentCount
+        payload[WatchMessageKey.isRampActive] = isRampActive
+        payload[WatchMessageKey.isRampHighRate] = isRampHighRate
         try? session.updateApplicationContext(payload)
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil, errorHandler: nil)

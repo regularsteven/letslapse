@@ -6,8 +6,8 @@ struct HomeView: View {
     @EnvironmentObject var model: AppModel
     var onSourceReady: () -> Void = {}
     @State private var isImporting = false
-    #if os(iOS)
     @State private var showCapture = false
+    #if os(iOS)
     @State private var videoItem: PhotosPickerItem?
     @State private var photoItems: [PhotosPickerItem] = []
     #else
@@ -29,6 +29,14 @@ struct HomeView: View {
                     showCapture = true
                 } label: {
                     Label("Capture video or interval photos", systemImage: "camera")
+                }
+            }
+            #else
+            Section("Capture") {
+                Button {
+                    showCapture = true
+                } label: {
+                    Label("Capture from webcam", systemImage: "video")
                 }
             }
             #endif
@@ -65,10 +73,8 @@ struct HomeView: View {
             }
         }
         .navigationTitle("LetsLapse")
+        .capturePresentation(isPresented: $showCapture, onSourceReady: onSourceReady)
         #if os(iOS)
-        .fullScreenCover(isPresented: $showCapture) {
-            CaptureView(onCaptureComplete: onSourceReady)
-        }
         .onChange(of: videoItem) { item in
             guard let item else { return }
             importVideo(item)
@@ -211,4 +217,23 @@ struct HomeView: View {
         return Self.videoContentTypes.contains { type.conforms(to: $0) }
     }
     #endif
+}
+
+private extension View {
+    @ViewBuilder
+    func capturePresentation(
+        isPresented: Binding<Bool>,
+        onSourceReady: @escaping () -> Void
+    ) -> some View {
+        #if os(iOS)
+        fullScreenCover(isPresented: isPresented) {
+            CaptureView(onCaptureComplete: onSourceReady)
+        }
+        #else
+        sheet(isPresented: isPresented) {
+            CaptureView(onCaptureComplete: onSourceReady)
+                .frame(minWidth: 960, minHeight: 720)
+        }
+        #endif
+    }
 }
