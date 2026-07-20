@@ -25,6 +25,8 @@ struct CaptureView: View {
     @State private var previewLayout: PreviewLayout = .fullscreen
     @State private var interval: Double = 2
     @State private var orientation = currentCaptureOrientation()
+    @State private var now = Date()
+    private let recordingTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         ZStack {
@@ -106,8 +108,15 @@ struct CaptureView: View {
             updateWatchRecordingState()
             updateIdleTimer()
         }
+        .onChange(of: camera.recordingStartedAt) { _ in
+            now = Date()
+            updateWatchRecordingState()
+        }
         .onChange(of: camera.isIntervalRunning) { _ in
             updateIdleTimer()
+        }
+        .onReceive(recordingTimer) { date in
+            now = date
         }
     }
 
@@ -173,24 +182,30 @@ struct CaptureView: View {
                 }
             }
 
-            if !camera.availableResolutions.isEmpty {
-                HStack(spacing: 12) {
-                    Picker("Resolution", selection: $camera.selectedResolution) {
-                        ForEach(camera.availableResolutions) { resolution in
-                            Text(resolution.label).tag(resolution)
-                        }
-                    }
-                    .onChange(of: camera.selectedResolution) { resolution in
-                        camera.selectResolution(resolution)
-                    }
+            if mode == .video {
+                stabilizationControl
+            }
 
-                    Picker("Frame rate", selection: $camera.selectedFrameRate) {
-                        ForEach(camera.availableFrameRates, id: \.self) { fps in
-                            Text("\(fps) fps").tag(fps)
+            if !camera.availableResolutions.isEmpty {
+                VStack(spacing: 8) {
+                    HStack(spacing: 12) {
+                        Picker("Resolution", selection: $camera.selectedResolution) {
+                            ForEach(camera.availableResolutions) { resolution in
+                                Text(resolution.label).tag(resolution)
+                            }
                         }
-                    }
-                    .onChange(of: camera.selectedFrameRate) { fps in
-                        camera.selectFrameRate(fps)
+                        .onChange(of: camera.selectedResolution) { resolution in
+                            camera.selectResolution(resolution)
+                        }
+
+                        Picker("Frame rate", selection: $camera.selectedFrameRate) {
+                            ForEach(camera.availableFrameRates, id: \.self) { fps in
+                                Text("\(fps) fps").tag(fps)
+                            }
+                        }
+                        .onChange(of: camera.selectedFrameRate) { fps in
+                            camera.selectFrameRate(fps)
+                        }
                     }
                 }
                 .pickerStyle(.menu)
@@ -200,6 +215,14 @@ struct CaptureView: View {
 
             switch mode {
             case .video:
+                if camera.isRecording {
+                    Text(elapsedRecordingTime)
+                        .font(.title3.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.white)
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 12)
+                        .background(.red.opacity(0.28), in: Capsule())
+                }
                 Button {
                     camera.isRecording ? camera.stopRecording() : camera.startRecording()
                 } label: {
@@ -249,11 +272,46 @@ struct CaptureView: View {
     }
 
     private func updateWatchRecordingState() {
-        watchRemote.setRecordingState(camera.isRecording ? .recording : .idle)
+        watchRemote.setRecordingState(
+            camera.isRecording ? .recording : .idle,
+            startedAt: camera.recordingStartedAt
+        )
     }
 
     private func updateIdleTimer() {
         UIApplication.shared.isIdleTimerDisabled = camera.isRecording || camera.isIntervalRunning
+    }
+
+    private var elapsedRecordingTime: String {
+        guard let startedAt = camera.recordingStartedAt else { return "00:00" }
+        return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
+    }
+
+    private var stabilizationBinding: Binding<Bool> {
+        Binding {
+            camera.isVideoStabilizationEnabled
+        } set: { isEnabled in
+            camera.setVideoStabilizationEnabled(isEnabled)
+        }
+    }
+
+    private var stabilizationControl: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Toggle(isOn: stabilizationBinding) {
+                Label("Stabilization", systemImage: "hand.raised")
+                    .foregroundStyle(.white)
+            }
+            .toggleStyle(.switch)
+            .tint(.green)
+
+            Text(camera.isVideoStabilizationEnabled
+                 ? "Filters formats to stabilization-capable modes."
+                 : "Advanced: full format list for tripod or stable rigs.")
+                .font(.caption2)
+                .foregroundStyle(.white.opacity(0.7))
+                .lineLimit(2)
+        }
+        .disabled(camera.isRecording || camera.isIntervalRunning)
     }
 }
 

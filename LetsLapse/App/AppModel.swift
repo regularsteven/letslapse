@@ -36,6 +36,11 @@ final class AppModel: ObservableObject {
         case image
     }
 
+    enum MediaKind: Hashable {
+        case video
+        case image
+    }
+
     struct CaptureProject: Identifiable, Codable, Equatable {
         var id: UUID
         var kind: CaptureKind
@@ -206,6 +211,32 @@ final class AppModel: ObservableObject {
         blends
             .filter { $0.captureID == capture.id }
             .sorted { $0.createdAt > $1.createdAt }
+    }
+
+    func capture(for blend: BlendProject) -> CaptureProject? {
+        captures.first { $0.id == blend.captureID }
+    }
+
+    func mediaKind(for capture: CaptureProject) -> MediaKind {
+        capture.kind == .video ? .video : .image
+    }
+
+    func mediaKind(for blend: BlendProject) -> MediaKind {
+        blend.kind == .video ? .video : .image
+    }
+
+    func mediaURL(for capture: CaptureProject) -> URL? {
+        guard let source = try? source(for: capture) else { return nil }
+        switch source {
+        case .video(let url):
+            return url
+        case .photos(let urls):
+            return urls.first
+        }
+    }
+
+    func mediaURL(for blend: BlendProject) -> URL {
+        blendOutputURL(for: blend)
     }
 
     func setSource(_ source: Source, mode: String = "Import") {

@@ -10,12 +10,14 @@ private enum WatchMessageKey {
     static let command = "command"
     static let status = "status"
     static let recordingState = "recordingState"
+    static let recordingStartedAt = "recordingStartedAt"
     static let message = "message"
 }
 
 @MainActor
 final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var recordingState: WatchRecordingState = .idle
+    @Published private(set) var recordingStartedAt: Date?
     @Published private(set) var isReachable = false
     @Published private(set) var statusText = "Connecting"
     @Published private(set) var lastRoundTripMilliseconds: Int?
@@ -86,6 +88,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
            let state = WatchRecordingState(rawValue: rawState) {
             recordingState = state
         }
+        applyRecordingStartedAt(reply)
 
         let status = reply[WatchMessageKey.status] as? String ?? "ok"
         switch status {
@@ -104,6 +107,16 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         if let rawState = payload[WatchMessageKey.recordingState] as? String,
            let state = WatchRecordingState(rawValue: rawState) {
             recordingState = state
+        }
+        applyRecordingStartedAt(payload)
+    }
+
+    private func applyRecordingStartedAt(_ payload: [String: Any]) {
+        if recordingState == .recording,
+           let timestamp = payload[WatchMessageKey.recordingStartedAt] as? TimeInterval {
+            recordingStartedAt = Date(timeIntervalSince1970: timestamp)
+        } else if recordingState == .idle {
+            recordingStartedAt = nil
         }
     }
 }

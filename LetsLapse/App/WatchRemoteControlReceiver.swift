@@ -17,6 +17,7 @@ private enum WatchMessageKey {
     static let command = "command"
     static let status = "status"
     static let recordingState = "recordingState"
+    static let recordingStartedAt = "recordingStartedAt"
     static let message = "message"
 }
 
@@ -28,6 +29,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
 
     private var isActivated = false
     private var commandHandler: ((WatchCaptureCommand) -> Void)?
+    private var recordingStartedAt: Date?
 
     private override init() {
         super.init()
@@ -47,8 +49,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     @MainActor
-    func setRecordingState(_ state: WatchRecordingState) {
+    func setRecordingState(_ state: WatchRecordingState, startedAt: Date? = nil) {
         recordingState = state
+        recordingStartedAt = state == .recording ? startedAt : nil
         publishState()
     }
 
@@ -77,6 +80,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             WatchMessageKey.status: status,
             WatchMessageKey.recordingState: recordingState.rawValue,
         ]
+        if let recordingStartedAt {
+            payload[WatchMessageKey.recordingStartedAt] = recordingStartedAt.timeIntervalSince1970
+        }
         if let message {
             payload[WatchMessageKey.message] = message
         }
@@ -87,7 +93,12 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private func publishState() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
-        let payload = [WatchMessageKey.recordingState: recordingState.rawValue]
+        var payload: [String: Any] = [
+            WatchMessageKey.recordingState: recordingState.rawValue
+        ]
+        if let recordingStartedAt {
+            payload[WatchMessageKey.recordingStartedAt] = recordingStartedAt.timeIntervalSince1970
+        }
         try? session.updateApplicationContext(payload)
         if session.isReachable {
             session.sendMessage(payload, replyHandler: nil, errorHandler: nil)

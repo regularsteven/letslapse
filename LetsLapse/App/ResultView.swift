@@ -123,6 +123,7 @@ struct ResultView: View {
 
     private func updatePlayer() {
         if let url = model.resultVideoURL {
+            PlaybackAudioSession.configureAmbient()
             player = AVPlayer(url: url)
         } else {
             player = nil

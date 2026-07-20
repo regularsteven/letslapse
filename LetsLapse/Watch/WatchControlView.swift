@@ -2,6 +2,8 @@ import SwiftUI
 
 struct WatchControlView: View {
     @EnvironmentObject private var remote: WatchCaptureRemote
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     var body: some View {
         VStack(spacing: 10) {
@@ -9,6 +11,11 @@ struct WatchControlView: View {
                 Text(remote.recordingState == .recording ? "Recording" : "Idle")
                     .font(.headline)
                     .foregroundStyle(remote.recordingState == .recording ? .red : .primary)
+                if remote.recordingState == .recording {
+                    Text(elapsedTime)
+                        .font(.title3.monospacedDigit().weight(.semibold))
+                        .foregroundStyle(.red)
+                }
                 Text(statusLine)
                     .font(.footnote)
                     .foregroundStyle(.secondary)
@@ -45,6 +52,9 @@ struct WatchControlView: View {
         .onAppear {
             remote.refreshState()
         }
+        .onReceive(timer) { date in
+            now = date
+        }
     }
 
     private var actionTitle: String {
@@ -60,5 +70,10 @@ struct WatchControlView: View {
             return "\(remote.statusText) · \(lastRoundTripMilliseconds) ms"
         }
         return remote.statusText
+    }
+
+    private var elapsedTime: String {
+        guard let startedAt = remote.recordingStartedAt else { return "00:00" }
+        return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
     }
 }

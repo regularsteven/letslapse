@@ -62,11 +62,13 @@ final class CameraController: NSObject, ObservableObject {
     private var intervalTimer: DispatchSourceTimer?
     private var photoDirectory: URL?
     private var photoURLs: [URL] = []   // sessionQueue-confined
-    private let preferredFrameRates = [24, 25, 30, 50, 60, 120, 240]
+    private var videoStabilizationRequested = true
+    private let preferredFrameRates = [24, 25, 30, 50, 60, 100, 120, 240]
     private let frameRateTolerance = 0.2
 
     @Published var isAuthorized: Bool?
     @Published var isRecording = false
+    @Published var recordingStartedAt: Date?
     @Published var isIntervalRunning = false
     @Published var photoCount = 0
     @Published var activeFormatDescription = ""
@@ -76,6 +78,8 @@ final class CameraController: NSObject, ObservableObject {
     @Published var selectedResolution = CaptureResolution(width: 1920, height: 1080)
     @Published var availableFrameRates: [Int] = [30]
     @Published var selectedFrameRate = 30
+    @Published var isVideoStabilizationEnabled = true
+    @Published var videoStabilizationStatus = "Stabilization Auto"
 
     /// Both called on the main queue.
     var onFinishVideo: ((URL) -> Void)?
@@ -120,6 +124,7 @@ final class CameraController: NSObject, ObservableObject {
         if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
         session.commitConfiguration()
         refreshCaptureOptions()
+        applyVideoStabilization()
         publishFormat()
     }
 
@@ -139,6 +144,7 @@ final class CameraController: NSObject, ObservableObject {
             self.configureLens(lens)
             self.session.commitConfiguration()
             self.refreshCaptureOptions()
+            self.applyVideoStabilization()
             self.publishFormat()
         }
     }
@@ -168,6 +174,19 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    func setVideoStabilizationEnabled(_ isEnabled: Bool) {
+        DispatchQueue.main.async {
+            self.isVideoStabilizationEnabled = isEnabled
+        }
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            self.videoStabilizationRequested = isEnabled
+            self.refreshCaptureOptions()
+            self.applyVideoStabilization()
+            self.publishFormat()
+        }
+    }
+
     func selectFrameRate(_ fps: Int) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
@@ -182,7 +201,13 @@ final class CameraController: NSObject, ObservableObject {
     ) {
         guard let device = videoDevice else { return }
         let supportedRates = supportedFrameRatesByResolution(for: device)
-        guard !supportedRates.isEmpty else { return }
+        guard !supportedRates.isEmpty else {
+            DispatchQueue.main.async {
+                self.availableResolutions = []
+                self.availableFrameRates = []
+            }
+            return
+        }
 
         let resolutions = supportedRates.keys.sorted {
             if $0.pixelCount == $1.pixelCount {
@@ -214,6 +239,9 @@ final class CameraController: NSObject, ObservableObject {
     ) -> [CaptureResolution: Set<Int>] {
         var supportedRates: [CaptureResolution: Set<Int>] = [:]
         for format in device.formats {
+            guard !videoStabilizationRequested || stabilizationMode(for: format) != nil else {
+                continue
+            }
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             guard dims.width >= 640, dims.height >= 480 else { continue }
             let resolution = CaptureResolution(width: dims.width, height: dims.height)
@@ -286,6 +314,7 @@ final class CameraController: NSObject, ObservableObject {
                 let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
                 return dims.width == resolution.width
                     && dims.height == resolution.height
+                    && (!videoStabilizationRequested || stabilizationMode(for: format) != nil)
                     && format.videoSupportedFrameRateRanges.contains { range in
                         supportsFrameRate(targetFPS, in: range)
                     }
@@ -294,6 +323,11 @@ final class CameraController: NSObject, ObservableObject {
                 (format: format, photoDimensions: bestPhotoDimensions(for: format, preferred: resolution))
             }
             .sorted { first, second in
+                let firstStabilization = stabilizationSortScore(for: first.format)
+                let secondStabilization = stabilizationSortScore(for: second.format)
+                if firstStabilization != secondStabilization {
+                    return firstStabilization > secondStabilization
+                }
                 let firstPixels = first.photoDimensions.map(photoPixelCount) ?? 0
                 let secondPixels = second.photoDimensions.map(photoPixelCount) ?? 0
                 return firstPixels > secondPixels
@@ -337,8 +371,20 @@ final class CameraController: NSObject, ObservableObject {
         guard let device = videoDevice else { return }
         let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
         let fps = currentFPS(for: device)
-        let line = "Capture \(dims.width)×\(dims.height) @ \(fps) fps"
-        DispatchQueue.main.async { self.activeFormatDescription = line }
+        let stabilizationStatus: String
+        if let connection = movieOutput.connection(with: .video) {
+            stabilizationStatus = videoStabilizationStatusDescription(
+                preferred: connection.preferredVideoStabilizationMode,
+                active: connection.activeVideoStabilizationMode
+            )
+        } else {
+            stabilizationStatus = videoStabilizationRequested ? "Stabilization Auto" : "Stabilization Off"
+        }
+        let line = "Capture \(dims.width)×\(dims.height) @ \(fps) fps · \(stabilizationStatus)"
+        DispatchQueue.main.async {
+            self.videoStabilizationStatus = stabilizationStatus
+            self.activeFormatDescription = line
+        }
     }
 
     func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
@@ -352,6 +398,66 @@ final class CameraController: NSObject, ObservableObject {
                     connection?.videoOrientation = orientation
                 }
             }
+            self.applyVideoStabilization()
+        }
+    }
+
+    private func stabilizationMode(for format: AVCaptureDevice.Format) -> AVCaptureVideoStabilizationMode? {
+        if format.isVideoStabilizationModeSupported(.cinematic) {
+            return .cinematic
+        }
+        if format.isVideoStabilizationModeSupported(.standard) {
+            return .standard
+        }
+        return nil
+    }
+
+    private func stabilizationSortScore(for format: AVCaptureDevice.Format) -> Int {
+        switch stabilizationMode(for: format) {
+        case .cinematic:
+            return 2
+        case .standard:
+            return 1
+        default:
+            return 0
+        }
+    }
+
+    private func applyVideoStabilization() {
+        guard let connection = movieOutput.connection(with: .video) else { return }
+
+        let activeFormat = videoDevice?.activeFormat
+        let activeFormatSupportsStabilization = activeFormat.flatMap { stabilizationMode(for: $0) } != nil
+        if videoStabilizationRequested,
+           connection.isVideoStabilizationSupported,
+           activeFormatSupportsStabilization {
+            connection.preferredVideoStabilizationMode = .auto
+        } else {
+            connection.preferredVideoStabilizationMode = .off
+        }
+
+        let status = videoStabilizationStatusDescription(
+            preferred: connection.preferredVideoStabilizationMode,
+            active: connection.activeVideoStabilizationMode
+        )
+        DispatchQueue.main.async {
+            self.videoStabilizationStatus = status
+        }
+    }
+
+    private func videoStabilizationStatusDescription(
+        preferred: AVCaptureVideoStabilizationMode,
+        active: AVCaptureVideoStabilizationMode
+    ) -> String {
+        guard preferred != .off else { return "Stabilization Off" }
+
+        switch active {
+        case .cinematic:
+            return "Stabilization Cinematic"
+        case .standard:
+            return "Stabilization Standard"
+        default:
+            return "Stabilization Auto"
         }
     }
 
@@ -366,8 +472,13 @@ final class CameraController: NSObject, ObservableObject {
                connection.isVideoOrientationSupported {
                 connection.videoOrientation = currentCaptureOrientation()
             }
+            self.applyVideoStabilization()
             self.movieOutput.startRecording(to: url, recordingDelegate: self)
-            DispatchQueue.main.async { self.isRecording = true }
+            let startedAt = Date()
+            DispatchQueue.main.async {
+                self.recordingStartedAt = startedAt
+                self.isRecording = true
+            }
         }
     }
 
@@ -454,6 +565,7 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
     ) {
         DispatchQueue.main.async {
             self.isRecording = false
+            self.recordingStartedAt = nil
             // A partial file can still be delivered alongside an error.
             if FileManager.default.fileExists(atPath: outputFileURL.path) {
                 self.onFinishVideo?(outputFileURL)
