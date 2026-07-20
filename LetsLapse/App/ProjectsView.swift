@@ -4,7 +4,8 @@ import SwiftUI
 /// Library and Blends unified, with no expand/collapse state at all.
 struct ProjectsView: View {
     @EnvironmentObject var model: AppModel
-    @State private var path: [UUID] = []
+    /// Owned by ContentView so the tab bar can pop this stack to the list.
+    @Binding var path: [UUID]
     @State private var previewItem: MediaPreviewItem?
 
     var body: some View {

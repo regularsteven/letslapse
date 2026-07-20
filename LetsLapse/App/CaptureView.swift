@@ -212,6 +212,10 @@ struct CaptureView: View {
                 modeRow
             }
 
+            #if os(iOS)
+            exposurePanel
+            #endif
+
             HStack {
                 leadingControl
                     .frame(width: 64)
@@ -241,6 +245,11 @@ struct CaptureView: View {
                 Spacer()
                 VStack(spacing: 8) {
                     formatPill
+                    #if os(iOS)
+                    if mode == .video {
+                        landscapeExposureControl
+                    }
+                    #endif
                 }
                 Spacer()
                 if camera.isIntervalRunning {
@@ -885,6 +894,136 @@ struct CaptureView: View {
         guard let startedAt = camera.recordingStartedAt else { return "00:00" }
         return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
     }
+
+    // MARK: - Manual exposure (iOS only)
+
+    #if os(iOS)
+    /// Portrait letterbox control: a tap-to-lock AE/AF pill, and — once locked —
+    /// ISO and focus sliders. The viewfinder stays uncovered above.
+    @ViewBuilder
+    private var exposurePanel: some View {
+        if mode == .video {
+            VStack(spacing: 10) {
+                HStack(spacing: 10) {
+                    exposureLockButton
+                    if camera.isExposureLocked {
+                        Text(exposureReadout)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(LL.amber)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                    }
+                    Spacer()
+                }
+
+                if camera.isExposureLocked {
+                    if isoSliderRange.lowerBound < isoSliderRange.upperBound {
+                        exposureSlider(icon: "sun.max.fill", value: isoBinding, range: isoSliderRange)
+                    }
+                    exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+                }
+            }
+            .padding(.horizontal, 16)
+        }
+    }
+
+    private var exposureLockButton: some View {
+        Button {
+            toggleExposureLock()
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: camera.isExposureLocked ? "lock.fill" : "lock.open")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(camera.isExposureLocked ? "AE/AF Lock" : "Lock AE/AF")
+                    .font(.system(size: 12.5, weight: .semibold))
+            }
+            .foregroundStyle(camera.isExposureLocked ? .black : .white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(
+                camera.isExposureLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
+                in: Capsule()
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
+    }
+
+    /// Compact landscape-rail variant: lock toggle plus the frozen readout.
+    /// Fine ISO/focus tuning lives in portrait or on the Watch crown.
+    private var landscapeExposureControl: some View {
+        VStack(spacing: 6) {
+            Button {
+                toggleExposureLock()
+            } label: {
+                Image(systemName: camera.isExposureLocked ? "lock.fill" : "lock.open")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(camera.isExposureLocked ? .black : .white)
+                    .frame(width: 40, height: 40)
+                    .background(
+                        camera.isExposureLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
+                        in: Circle()
+                    )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
+
+            if camera.isExposureLocked {
+                Text(exposureReadout)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(LL.amber)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: 96)
+            }
+        }
+    }
+
+    private func exposureSlider(
+        icon: String,
+        value: Binding<Float>,
+        range: ClosedRange<Float>
+    ) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.6))
+                .frame(width: 22)
+            Slider(value: value, in: range)
+                .tint(LL.amber)
+        }
+    }
+
+    private var isoSliderRange: ClosedRange<Float> {
+        camera.isoRange
+    }
+
+    private var isoBinding: Binding<Float> {
+        Binding(get: { camera.lockedISO }, set: { camera.setISO($0) })
+    }
+
+    private var focusBinding: Binding<Float> {
+        Binding(get: { camera.lockedLensPosition }, set: { camera.setLensPosition($0) })
+    }
+
+    private func toggleExposureLock() {
+        if camera.isExposureLocked {
+            camera.unlockExposureAndFocus()
+        } else {
+            camera.lockExposureAndFocus()
+        }
+    }
+
+    private var exposureReadout: String {
+        "ISO \(Int(camera.lockedISO.rounded())) · \(shutterText(camera.lockedShutterSeconds))"
+    }
+
+    private func shutterText(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "—" }
+        if seconds >= 1 { return String(format: "%.1fs", seconds) }
+        return "1/\(Int((1 / seconds).rounded()))"
+    }
+    #endif
 
     // MARK: - Watch
 

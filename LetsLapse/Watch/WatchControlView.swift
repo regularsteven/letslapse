@@ -31,47 +31,44 @@ struct WatchControlView: View {
     // MARK: - Ready
 
     private var readyScreen: some View {
-        VStack(spacing: 6) {
-            Label("Ready · camera open", systemImage: "checkmark")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.green)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+        ScrollView {
+            VStack(spacing: 8) {
+                Label("Ready · camera open", systemImage: "checkmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-            Text(readyDetailLine)
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                Text(readyDetailLine)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
 
-            Spacer(minLength: 4)
-
-            Button {
-                remote.startRecording()
-            } label: {
-                ZStack {
-                    Circle()
-                        .stroke(.white.opacity(0.9), lineWidth: 3)
-                    Circle()
-                        .fill(Color.red)
-                        .padding(7)
-                    Text("START")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(.white)
+                Button {
+                    remote.startRecording()
+                } label: {
+                    ZStack {
+                        Circle()
+                            .stroke(.white.opacity(0.9), lineWidth: 3)
+                        Circle()
+                            .fill(Color.red)
+                            .padding(7)
+                        Text("START")
+                            .font(.system(size: 13, weight: .bold))
+                            .foregroundStyle(.white)
+                    }
+                    .frame(width: 92, height: 92)
+                    .contentShape(Circle())
                 }
-                .frame(width: 96, height: 96)
-                .contentShape(Circle())
+                .buttonStyle(.plain)
+                .disabled(remote.isSending)
+
+                exposureControl
             }
-            .buttonStyle(.plain)
-            .disabled(remote.isSending)
-
-            Spacer(minLength: 4)
-
-            exposureControl
-
-            Spacer(minLength: 0)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 6)
         }
-        .padding(.horizontal, 4)
         .navigationTitle("LetsLapse")
     }
 
@@ -168,25 +165,13 @@ struct WatchControlView: View {
                 }
             }
 
-            if remote.sequenceMode == "ramp" {
-                burstToggle
-            } else {
-                Button {
-                    remote.triggerMoment()
-                } label: {
-                    Label(
-                        remote.isRampActive ? "End marker" : "Marker",
-                        systemImage: "flag.fill"
-                    )
-                    .font(.system(size: 13, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 34)
+            HStack(spacing: 6) {
+                exposureLockButton
+                if remote.sequenceMode == "ramp" {
+                    burstToggle
+                } else {
+                    markerButton
                 }
-                .buttonStyle(.plain)
-                .background(
-                    remote.isRampActive ? amber.opacity(0.35) : Color.white.opacity(0.12),
-                    in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-                )
-                .disabled(remote.isSending || !remote.isReachable)
             }
 
             Button {
@@ -232,6 +217,51 @@ struct WatchControlView: View {
         .onAppear { isoAdjust = remote.lockedISO }
     }
 
+    /// Mid-shoot AE/AF lock — amber = locked, so you can grab a lock the moment
+    /// a tram crosses the frame and release it once the light settles again.
+    private var exposureLockButton: some View {
+        Button {
+            if remote.isExposureLocked {
+                remote.unlockExposure()
+            } else {
+                remote.lockExposure()
+            }
+        } label: {
+            Image(systemName: remote.isExposureLocked ? "lock.fill" : "lock.open")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(remote.isExposureLocked ? .black : .white)
+                .frame(width: 48, height: 34)
+        }
+        .buttonStyle(.plain)
+        .background(
+            remote.isExposureLocked ? amber : Color.white.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .disabled(remote.isSending || !remote.isReachable)
+        .accessibilityLabel(remote.isExposureLocked ? "Unlock exposure" : "Lock exposure")
+    }
+
+    private var markerButton: some View {
+        Button {
+            remote.triggerMoment()
+        } label: {
+            Label(
+                remote.isRampActive ? "End marker" : "Marker",
+                systemImage: "flag.fill"
+            )
+            .font(.system(size: 13, weight: .semibold))
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, minHeight: 34)
+        }
+        .buttonStyle(.plain)
+        .background(
+            remote.isRampActive ? amber.opacity(0.35) : Color.white.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .disabled(remote.isSending || !remote.isReachable)
+    }
+
     /// The 24⇄240 toggle — one giant tap, mirrored by the button state.
     private var burstToggle: some View {
         HStack(spacing: 6) {
@@ -248,6 +278,8 @@ struct WatchControlView: View {
             Text(label)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(isActive ? .black : .white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .frame(maxWidth: .infinity, minHeight: 34)
         }
         .buttonStyle(.plain)

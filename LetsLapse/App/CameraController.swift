@@ -396,6 +396,7 @@ final class CameraController: NSObject, ObservableObject {
     /// `lockForConfiguration` block on the sessionQueue.
     private func reassertExposureLock(on device: AVCaptureDevice) {
         guard exposureLocked else { return }
+        #if os(iOS)
         let format = device.activeFormat
         let iso = min(max(lockedISOValue, format.minISO), format.maxISO)
         let seconds = min(
@@ -409,6 +410,14 @@ final class CameraController: NSObject, ObservableObject {
         if device.isFocusModeSupported(.locked) {
             device.setFocusModeLocked(lensPosition: lockedLensValue, completionHandler: nil)
         }
+        #else
+        if device.isExposureModeSupported(.locked) {
+            device.exposureMode = .locked
+        }
+        if device.isFocusModeSupported(.locked) {
+            device.focusMode = .locked
+        }
+        #endif
         if device.isWhiteBalanceModeSupported(.locked) {
             device.whiteBalanceMode = .locked
         }
@@ -607,6 +616,7 @@ final class CameraController: NSObject, ObservableObject {
             do {
                 try device.lockForConfiguration()
                 defer { device.unlockForConfiguration() }
+                #if os(iOS)
                 let format = device.activeFormat
                 let iso = min(max(device.iso, format.minISO), format.maxISO)
                 let duration = device.exposureDuration
@@ -614,6 +624,11 @@ final class CameraController: NSObject, ObservableObject {
                 if device.isExposureModeSupported(.custom) {
                     device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
                 }
+                #else
+                if device.isExposureModeSupported(.locked) {
+                    device.exposureMode = .locked
+                }
+                #endif
                 if device.isFocusModeSupported(.locked) {
                     device.focusMode = .locked
                 }
@@ -621,6 +636,7 @@ final class CameraController: NSObject, ObservableObject {
                     device.whiteBalanceMode = .locked
                 }
                 self.exposureLocked = true
+                #if os(iOS)
                 self.lockedISOValue = iso
                 self.lockedShutterValue = duration.seconds
                 self.lockedLensValue = lens
@@ -633,6 +649,11 @@ final class CameraController: NSObject, ObservableObject {
                     self.lockedLensPosition = lens
                     self.isoRange = minISO...maxISO
                 }
+                #else
+                DispatchQueue.main.async {
+                    self.isExposureLocked = true
+                }
+                #endif
             } catch {}
         }
     }
@@ -663,6 +684,7 @@ final class CameraController: NSObject, ObservableObject {
 
     /// Adjust ISO while holding the current shutter, keeping the lock asserted.
     func setISO(_ iso: Float) {
+        #if os(iOS)
         sessionQueue.async {
             guard let device = self.videoDevice,
                   device.isExposureModeSupported(.custom) else { return }
@@ -683,10 +705,14 @@ final class CameraController: NSObject, ObservableObject {
                 }
             } catch {}
         }
+        #else
+        _ = iso
+        #endif
     }
 
     /// Lock focus at an explicit lens position (0 = near, 1 = far).
     func setLensPosition(_ position: Float) {
+        #if os(iOS)
         sessionQueue.async {
             guard let device = self.videoDevice,
                   device.isFocusModeSupported(.locked) else { return }
@@ -701,6 +727,9 @@ final class CameraController: NSObject, ObservableObject {
                 }
             } catch {}
         }
+        #else
+        _ = position
+        #endif
     }
 
     // MARK: - Movie recording

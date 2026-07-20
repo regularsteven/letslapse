@@ -25,6 +25,8 @@ struct LetsLapseApp: App {
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedTab: LLTab = .create
+    @State private var projectsPath: [UUID] = []
+    @State private var settingsPath: [SettingsDestination] = []
 
     var body: some View {
         ZStack {
@@ -34,7 +36,7 @@ struct ContentView: View {
             if model.stage == .home {
                 VStack {
                     Spacer()
-                    FloatingTabBar(selection: $selectedTab)
+                    FloatingTabBar(selection: $selectedTab, onReselect: popToRoot)
                         .padding(.bottom, 6)
                 }
                 .transition(.opacity)
@@ -79,6 +81,11 @@ struct ContentView: View {
             selectedTab = .projects
             model.requestedProjectDetailID = capture.id
         }
+        if let rawDestination = environment["LL_PUSH"],
+           let destination = SettingsDestination(rawValue: rawDestination) {
+            selectedTab = .settings
+            settingsPath = [destination]
+        }
         if let speed = environment["LL_SPEED"].flatMap(Int.init) {
             model.useRamp = false
             model.constantWindow = speed
@@ -102,17 +109,31 @@ struct ContentView: View {
             .tabItem { Label(LLTab.create.title, systemImage: LLTab.create.systemImage) }
             .tag(LLTab.create)
 
-            ProjectsView()
+            ProjectsView(path: $projectsPath)
                 .hiddenSystemTabBar()
                 .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
                 .tag(LLTab.projects)
 
-            NavigationStack {
+            NavigationStack(path: $settingsPath) {
                 SettingsView()
                     .hiddenSystemTabBar()
             }
             .tabItem { Label(LLTab.settings.title, systemImage: LLTab.settings.systemImage) }
             .tag(LLTab.settings)
+        }
+    }
+
+    /// Tab taps: switching tabs keeps each stack where it was, so the first
+    /// tap back to a tab restores the screen you left; tapping the tab you're
+    /// already on pops it to its root list.
+    private func popToRoot(_ tab: LLTab) {
+        switch tab {
+        case .create:
+            break // Create never pushes anything.
+        case .projects:
+            projectsPath = []
+        case .settings:
+            settingsPath = []
         }
     }
 }

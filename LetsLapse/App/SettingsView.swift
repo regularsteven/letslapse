@@ -1,6 +1,14 @@
 import SwiftUI
 import AVFoundation
 
+/// Screens Settings can push. Value-based so ContentView can own the
+/// navigation path and pop it when the Settings tab is reselected.
+enum SettingsDestination: String, Hashable {
+    case largeOriginals
+    case performance
+    case diagnostics
+}
+
 /// Creative defaults up top, storage in the middle, and the engine
 /// (performance, diagnostics) demoted to Advanced.
 struct SettingsView: View {
@@ -42,6 +50,13 @@ struct SettingsView: View {
             .padding(.horizontal, 16)
         }
         .background(LL.screenBackground)
+        .navigationDestination(for: SettingsDestination.self) { destination in
+            switch destination {
+            case .largeOriginals: LargeOriginalsView()
+            case .performance: PerformanceSettingsView()
+            case .diagnostics: DiagnosticsView()
+            }
+        }
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
         #else
@@ -152,9 +167,7 @@ struct SettingsView: View {
 
             Divider().padding(.leading, 16)
 
-            NavigationLink {
-                LargeOriginalsView()
-            } label: {
+            NavigationLink(value: SettingsDestination.largeOriginals) {
                 LLRow(title: "Review large originals") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
@@ -206,9 +219,7 @@ struct SettingsView: View {
 
     private var advancedCard: some View {
         VStack(spacing: 0) {
-            NavigationLink {
-                PerformanceSettingsView()
-            } label: {
+            NavigationLink(value: SettingsDestination.performance) {
                 LLRow(title: "Performance", subtitle: "CPU workers, GPU batches") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
@@ -218,9 +229,7 @@ struct SettingsView: View {
             }
             .buttonStyle(.plain)
 
-            NavigationLink {
-                DiagnosticsView()
-            } label: {
+            NavigationLink(value: SettingsDestination.diagnostics) {
                 LLRow(title: "Diagnostics", subtitle: "Job folders, processing logs", showsDivider: false) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
@@ -323,22 +332,34 @@ private struct LargeOriginalsView: View {
         List {
             Section {
                 ForEach(sorted) { capture in
-                    HStack(spacing: 12) {
-                        ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
-                            .frame(width: 64, height: 46)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(capture.displayTitle)
-                                .font(.system(size: 15, weight: .semibold))
-                                .lineLimit(1)
-                            Text("\(capture.formatLine) · \(model.blends(for: capture).count) versions")
-                                .font(.caption)
+                    Button {
+                        // Jumps to the Projects tab and opens this project
+                        // (ContentView switches tabs, ProjectsView sets its path).
+                        model.requestedProjectDetailID = capture.id
+                    } label: {
+                        HStack(spacing: 12) {
+                            ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
+                                .frame(width: 64, height: 46)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(capture.displayTitle)
+                                    .font(.system(size: 15, weight: .semibold))
+                                    .lineLimit(1)
+                                let versionCount = model.blends(for: capture).count
+                                Text("\(capture.formatLine) · \(versionCount) version\(versionCount == 1 ? "" : "s")")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(sizes[capture.id].map { LLFormat.bytes($0) } ?? "…")
+                                .font(.system(size: 13).monospacedDigit())
                                 .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.tertiary)
                         }
-                        Spacer()
-                        Text(sizes[capture.id].map { LLFormat.bytes($0) } ?? "…")
-                            .font(.system(size: 13).monospacedDigit())
-                            .foregroundStyle(.secondary)
+                        .contentShape(Rectangle())
                     }
+                    .buttonStyle(.plain)
                     .swipeActions {
                         Button(role: .destructive) {
                             pendingDelete = capture
@@ -348,7 +369,7 @@ private struct LargeOriginalsView: View {
                     }
                 }
             } footer: {
-                Text("Deleting a project removes its original and every version.")
+                Text("Tap a project to open it. Deleting a project removes its original and every version.")
             }
         }
         .navigationTitle("Large originals")

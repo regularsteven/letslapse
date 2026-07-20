@@ -257,15 +257,22 @@ enum LLTab: String, CaseIterable, Identifiable {
 }
 
 /// The floating pill tab bar from the redesign. Content scrolls behind it.
+/// Tapping the already-selected tab reports a reselect instead, so the owner
+/// can pop that tab back to its root.
 struct FloatingTabBar: View {
     @Binding var selection: LLTab
+    var onReselect: (LLTab) -> Void = { _ in }
 
     var body: some View {
         HStack(spacing: 4) {
             ForEach(LLTab.allCases) { tab in
                 let isSelected = tab == selection
                 Button {
-                    selection = tab
+                    if isSelected {
+                        onReselect(tab)
+                    } else {
+                        selection = tab
+                    }
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: tab.systemImage)
