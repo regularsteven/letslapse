@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 /// The management layer the old app was missing: play the original, make new
 /// versions, rename, see per-project storage, and delete safely.
@@ -391,6 +392,8 @@ private struct SourceClipRow: View {
 
     @State private var fileSize: Int64?
     @State private var isSaving = false
+    @State private var isConverting = false
+    @State private var isProRes = false
     @State private var saveState: SaveState = .idle
 
     private enum SaveState: Equatable {
@@ -433,25 +436,58 @@ private struct SourceClipRow: View {
                 AppModel.directorySize(url)
             }.value
         }
+        .task(id: url) {
+            isProRes = await AppModel.sourceClipIsProRes(at: url)
+        }
     }
 
     private var subtitle: String {
+        if isConverting { return "Converting…" }
         switch saveState {
         case .saved: return "Saved to Photos"
         case .failed(let message): return message
-        case .idle: return fileSize.map { LLFormat.bytes($0) } ?? "Video clip"
+        case .idle:
+            let size = fileSize.map { LLFormat.bytes($0) }
+            if isProRes {
+                return size.map { "ProRes · \($0)" } ?? "ProRes clip"
+            }
+            return size ?? "Video clip"
         }
     }
 
     @ViewBuilder private var saveControl: some View {
         #if os(iOS)
-        if isSaving {
+        if isSaving || isConverting {
             ProgressView()
                 .controlSize(.small)
         } else if saveState == .saved {
             Label("Saved", systemImage: "checkmark")
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(.secondary)
+        } else if isProRes {
+            // ProRes clips are huge; offer smaller re-encodes alongside Save.
+            Menu {
+                Button {
+                    save()
+                } label: {
+                    Label("Save to Photos", systemImage: "square.and.arrow.down")
+                }
+                Divider()
+                Button {
+                    convert(to: .h264)
+                } label: {
+                    Label("Convert to H.264", systemImage: "arrow.triangle.2.circlepath")
+                }
+                Button {
+                    convert(to: .hevc)
+                } label: {
+                    Label("Convert to HEVC", systemImage: "arrow.triangle.2.circlepath")
+                }
+            } label: {
+                Text(saveState.isError ? "Retry" : "Save")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+            }
         } else {
             Button(saveState.isError ? "Retry" : "Save") {
                 save()
@@ -475,6 +511,25 @@ private struct SourceClipRow: View {
                 saveState = .failed(error.localizedDescription)
             }
             isSaving = false
+        }
+        #endif
+    }
+
+    /// Re-encode this ProRes clip to a smaller codec, then drop the result into
+    /// Photos so it can be shared or offloaded.
+    private func convert(to codec: OutputCodec) {
+        #if os(iOS)
+        isConverting = true
+        saveState = .idle
+        Task {
+            do {
+                let converted = try await model.convertSourceClip(at: url, to: codec)
+                try await model.saveSourceClip(at: converted)
+                saveState = .saved
+            } catch {
+                saveState = .failed(error.localizedDescription)
+            }
+            isConverting = false
         }
         #endif
     }

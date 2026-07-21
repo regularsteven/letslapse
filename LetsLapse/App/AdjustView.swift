@@ -243,13 +243,62 @@ struct AdjustView: View {
     // MARK: - Photos stack
 
     private var stackCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("One silky still")
+        let photoCount = model.currentCapture?.sourceMediaCount ?? 0
+        let frameCount = model.photoOutputFrameCount ?? 0
+        let depth = model.photoBlendDepth
+        let singleImage = model.photosProduceSingleImage
+        let noBlend = depth <= 1
+        return VStack(alignment: .leading, spacing: 12) {
+            Text(stackTitle(singleImage: singleImage, noBlend: noBlend))
                 .font(.system(size: 20, weight: .bold))
                 .foregroundStyle(.white)
-            Text("All \(model.currentCapture?.sourceMediaCount ?? 0) photos are averaged into a single synthetic long exposure. Noise drops by roughly the square root of the frame count.")
+            Text(stackBlurb(photoCount: photoCount, depth: depth, singleImage: singleImage, noBlend: noBlend))
                 .font(.system(size: 12.5))
                 .foregroundStyle(.white.opacity(0.6))
+
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline) {
+                    Text("Blend depth")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Spacer()
+                    Text(depthLabel(photoCount: photoCount, depth: depth, singleImage: singleImage, noBlend: noBlend))
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(LL.amber)
+                }
+                Slider(
+                    value: Binding(
+                        get: { Double(model.photoBlendDepth) },
+                        set: { model.photoBlendDepth = max(1, Int($0.rounded())) }
+                    ),
+                    in: 1...Double(max(2, photoCount)),
+                    step: 1
+                )
+                .tint(LL.amber)
+                HStack {
+                    Text("Crisp")
+                    Spacer()
+                    Text("Long exposure")
+                }
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.35))
+            }
+            .padding(.top, 4)
+
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                if singleImage {
+                    Text("\(photoCount) photos → one still")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(.white)
+                } else {
+                    Text("\(photoCount) photos → \(frameCount) frames")
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(.white)
+                    Text("· \(String(format: "%.1fs", Double(frameCount) / Double(max(1, model.outputFPS)))) at \(model.outputFPS) fps")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.45))
+                }
+            }
 
             Toggle(isOn: $model.linearLight) {
                 VStack(alignment: .leading, spacing: 1) {
@@ -262,11 +311,33 @@ struct AdjustView: View {
                 }
             }
             .tint(.green)
-            .padding(.top, 6)
+            .padding(.top, 2)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LL.ink, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+    }
+
+    private func stackTitle(singleImage: Bool, noBlend: Bool) -> String {
+        if singleImage { return "One long exposure" }
+        if noBlend { return "A crisp timelapse" }
+        return "A blended timelapse"
+    }
+
+    private func stackBlurb(photoCount: Int, depth: Int, singleImage: Bool, noBlend: Bool) -> String {
+        if singleImage {
+            return "All \(photoCount) photos blend into a single silky still — the classic stacked long exposure, with noise dropping by roughly the square root of the frame count."
+        }
+        if noBlend {
+            return "Your \(photoCount) photos play back in order, one per frame — a straight timelapse with no blur."
+        }
+        return "Every \(depth) photos average into one frame — a rolling long exposure that carries motion blur through the whole sequence."
+    }
+
+    private func depthLabel(photoCount: Int, depth: Int, singleImage: Bool, noBlend: Bool) -> String {
+        if singleImage { return "all \(photoCount) → one still" }
+        if noBlend { return "no blend" }
+        return "\(depth) photos → 1 frame"
     }
 
     // MARK: - Advanced
@@ -331,7 +402,13 @@ struct AdjustView: View {
             }
             return "Create clip"
         }
-        return "Create long exposure"
+        if model.photosProduceSingleImage {
+            return "Create long exposure"
+        }
+        if let frames = model.photoOutputFrameCount {
+            return "Create \(frames)-frame timelapse"
+        }
+        return "Create timelapse"
     }
 }
 

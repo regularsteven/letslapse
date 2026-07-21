@@ -2,16 +2,19 @@ import SwiftUI
 
 /// One card per original, versions always visible as a thumbnail strip —
 /// Library and Blends unified, with no expand/collapse state at all.
+/// A List (restyled to match the ScrollView look) so cards get native
+/// swipe-to-delete.
 struct ProjectsView: View {
     @EnvironmentObject var model: AppModel
     /// Owned by ContentView so the tab bar can pop this stack to the list.
     @Binding var path: [UUID]
     @State private var previewItem: MediaPreviewItem?
+    @State private var deleteFailure: String?
 
     var body: some View {
         NavigationStack(path: $path) {
-            ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+            List {
+                Group {
                     Text("Projects")
                         .font(.system(size: 34, weight: .bold))
                         .padding(.horizontal, 4)
@@ -26,16 +29,37 @@ struct ProjectsView: View {
                                 onOpen: { path.append(capture.id) },
                                 onNewVersion: { model.openCapture(capture) },
                                 onOpenVersion: { blend in model.openBlend(blend) },
-                                onPreview: { preview(capture) }
+                                onPreview: { preview(capture) },
+                                onDelete: { delete(capture) }
                             )
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    delete(capture)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                            }
                         }
                     }
 
-                    Spacer(minLength: 96)
+                    // Clearance for the floating tab bar.
+                    Color.clear.frame(height: 82)
                 }
-                .padding(.horizontal, 16)
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+                .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
             }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
             .background(LL.screenBackground)
+            .alert(
+                "Couldn't delete",
+                isPresented: Binding(get: { deleteFailure != nil }, set: { if !$0 { deleteFailure = nil } })
+            ) {
+                Button("OK", role: .cancel) {}
+            } message: {
+                Text(deleteFailure ?? "")
+            }
             #if os(iOS)
             .toolbar(.hidden, for: .navigationBar)
             #else
@@ -87,6 +111,18 @@ struct ProjectsView: View {
         guard model.captures.contains(where: { $0.id == requested }) else { return }
         path = [requested]
     }
+
+    /// Deliberately unconfirmed: swiping is the confirmation. Failures
+    /// (e.g. the project is mid-processing) surface in an alert.
+    private func delete(_ capture: AppModel.CaptureProject) {
+        do {
+            try withAnimation {
+                try model.deleteCapture(capture)
+            }
+        } catch {
+            deleteFailure = error.localizedDescription
+        }
+    }
 }
 
 // MARK: - Project card
@@ -98,6 +134,9 @@ private struct ProjectCard: View {
     var onNewVersion: () -> Void
     var onOpenVersion: (AppModel.BlendProject) -> Void
     var onPreview: () -> Void
+    var onDelete: () -> Void
+
+    @State private var projectBytes: Int64?
 
     var body: some View {
         let versions = model.blends(for: capture)
@@ -190,6 +229,15 @@ private struct ProjectCard: View {
             } label: {
                 Label("Project details", systemImage: "info.circle")
             }
+            Divider()
+            Button(role: .destructive) {
+                onDelete()
+            } label: {
+                Label("Delete project", systemImage: "trash")
+            }
+        }
+        .task(id: versions.count) {
+            projectBytes = await model.storageBytes(for: capture)
         }
     }
 
@@ -204,10 +252,11 @@ private struct ProjectCard: View {
     }
 
     private func versionsLine(count: Int) -> String {
+        let size = projectBytes.map(LLFormat.bytes)
         switch count {
-        case 0: return "No versions yet — create one"
-        case 1: return "1 version"
-        default: return "\(count) versions"
+        case 0: return size ?? "…"
+        case 1: return size.map { "1 version · \($0)" } ?? "1 version"
+        default: return size.map { "\(count) versions · \($0)" } ?? "\(count) versions"
         }
     }
 }

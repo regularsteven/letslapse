@@ -2,7 +2,17 @@ import Foundation
 import CoreGraphics
 import ImageIO
 import Metal
+import AVFoundation
+import CoreVideo
 import UniformTypeIdentifiers
+
+/// The outcome of `ImageStacker.stackSequence` — how many frames were written
+/// and at what pixel size.
+public struct StackSequenceResult: Sendable {
+    public let outputFrames: Int
+    public let width: Int
+    public let height: Int
+}
 
 /// Averages a set of same-sized still images into one — a synthetic long
 /// exposure with the noise knocked down by roughly sqrt(N).
@@ -77,6 +87,154 @@ public final class ImageStacker {
         let result = try readImage(from: destination, commandBuffer: commandBuffer)
         progress?(1.0)
         return result
+    }
+
+    // MARK: - Sequence (variable-blend timelapse)
+
+    /// Produces a blended timelapse video from a sequence of still images.
+    /// Each output frame is the average of a window of consecutive input
+    /// stills, laid out by `ramp`: a flat window gives an evenly motion-blurred
+    /// timelapse, while a window of 1 gives a straight timelapse with no
+    /// stacking. Images are streamed off disk one at a time, so memory stays
+    /// bounded no matter how many go in. Returns the written file's frame count
+    /// and pixel dimensions.
+    public func stackSequence(
+        imageURLs: [URL],
+        ramp: BlendRamp,
+        outputFPS: Double,
+        linearLight: Bool = true,
+        outputURL: URL,
+        progress: ((Double) -> Void)? = nil
+    ) throws -> StackSequenceResult {
+        guard imageURLs.count >= 2 else {
+            throw LapseError.writerFailed("a timelapse needs at least two photos")
+        }
+        let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
+        guard !schedule.isEmpty else { throw LapseError.noInputFrames }
+
+        // Size the writer from the first still (orientation already baked in).
+        let firstImage = try ImageStacker.loadImage(at: imageURLs[0])
+        let width = firstImage.width
+        let height = firstImage.height
+
+        try? FileManager.default.removeItem(at: outputURL)
+        let writer: AVAssetWriter
+        do {
+            writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+        } catch {
+            throw LapseError.writerFailed(error.localizedDescription)
+        }
+        let videoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+        ]
+        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        writerInput.expectsMediaDataInRealTime = false
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: writerInput,
+            sourcePixelBufferAttributes: [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                kCVPixelBufferWidthKey as String: width,
+                kCVPixelBufferHeightKey as String: height,
+                kCVPixelBufferMetalCompatibilityKey as String: true,
+            ])
+        guard writer.canAdd(writerInput) else {
+            throw LapseError.writerFailed("cannot attach video input")
+        }
+        writer.add(writerInput)
+        guard writer.startWriting() else {
+            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start encoding")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        defer {
+            if writer.status == .writing { writer.cancelWriting() }
+        }
+
+        let accumulator = FrameAccumulator(core: core)
+        let srgb = linearLight
+        var inputIndex = 0
+        var outputFrames = 0
+
+        for window in schedule {
+            // Average this window's stills into the accumulator.
+            for offset in 0..<window {
+                let index = inputIndex + offset
+                try autoreleasepool {
+                    let image = index == 0 ? firstImage : try ImageStacker.loadImage(at: imageURLs[index])
+                    guard image.width == width, image.height == height else {
+                        throw LapseError.sizeMismatch(
+                            expectedWidth: width, expectedHeight: height,
+                            actualWidth: image.width, actualHeight: image.height)
+                    }
+                    let texture = try uploadTexture(for: image, srgb: srgb)
+                    guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+                        throw LapseError.gpuSetupFailed("could not create a command buffer")
+                    }
+                    if offset == 0 {
+                        try accumulator.reset(width: width, height: height, commandBuffer: commandBuffer)
+                    }
+                    try accumulator.accumulate(texture, commandBuffer: commandBuffer)
+                    commandBuffer.commit()
+                    commandBuffer.waitUntilCompleted()
+                    if let error = commandBuffer.error {
+                        throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+                    }
+                }
+            }
+            inputIndex += window
+
+            // Finalize the window into a pooled pixel buffer and append it.
+            guard let pool = adaptor.pixelBufferPool else {
+                throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
+            }
+            var outBuffer: CVPixelBuffer?
+            let poolStatus = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
+            guard poolStatus == kCVReturnSuccess, let outBuffer else {
+                throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
+            }
+            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: srgb)
+            guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+                throw LapseError.gpuSetupFailed("could not create a command buffer")
+            }
+            try accumulator.finalize(into: destination, commandBuffer: commandBuffer)
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            if let error = commandBuffer.error {
+                throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+            }
+            _ = destinationHolder
+
+            while !writerInput.isReadyForMoreMediaData {
+                if writer.status == .failed {
+                    throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
+                }
+                usleep(2000)
+            }
+            let time = CMTime(
+                value: Int64((Double(outputFrames) / outputFPS * 60000).rounded()),
+                timescale: 60000)
+            guard adaptor.append(outBuffer, withPresentationTime: time) else {
+                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+            }
+            outputFrames += 1
+            core.flushTextureCache()
+            progress?(min(0.99, Double(inputIndex) / Double(imageURLs.count)))
+        }
+
+        guard outputFrames > 0 else { throw LapseError.noInputFrames }
+
+        writerInput.markAsFinished()
+        let finished = DispatchSemaphore(value: 0)
+        writer.finishWriting { finished.signal() }
+        finished.wait()
+        guard writer.status == .completed else {
+            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+        }
+        progress?(1.0)
+
+        return StackSequenceResult(outputFrames: outputFrames, width: width, height: height)
     }
 
     // MARK: - CPU <-> GPU transfer

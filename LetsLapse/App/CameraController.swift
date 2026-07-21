@@ -47,8 +47,9 @@ final class CameraController: NSObject, ObservableObject {
     struct CaptureResolution: Identifiable, Hashable {
         var width: Int32
         var height: Int32
+        var isProRes: Bool = false
 
-        var id: String { "\(width)x\(height)" }
+        var id: String { isProRes ? "\(width)x\(height)-prores" : "\(width)x\(height)" }
 
         var label: String {
             switch (width, height) {
@@ -138,6 +139,35 @@ final class CameraController: NSObject, ObservableObject {
     var onFinishLiveCapture: ((LiveCaptureResult) -> Void)?
     var onFinishPhotos: (([URL]) -> Void)?
 
+    override init() {
+        super.init()
+        restoreRememberedSettings()
+    }
+
+    /// Seed the capture settings from the previous shoot when "Remember
+    /// recording settings" is on. Runs before the session is configured;
+    /// values the current device can't provide fall back gracefully in
+    /// `refreshCaptureOptions`.
+    private func restoreRememberedSettings() {
+        guard RecordingSettingsStore.isEnabled else { return }
+        if let lens = RecordingSettingsStore.lens {
+            selectedLens = lens
+        }
+        if let resolution = RecordingSettingsStore.resolution {
+            selectedResolution = resolution
+        }
+        if let frameRate = RecordingSettingsStore.frameRate {
+            selectedFrameRate = frameRate
+        }
+        if let rampFrameRate = RecordingSettingsStore.rampFrameRate {
+            selectedRampFrameRate = rampFrameRate
+        }
+        if let stabilization = RecordingSettingsStore.stabilization {
+            isVideoStabilizationEnabled = stabilization
+            videoStabilizationRequested = stabilization
+        }
+    }
+
     func start() {
         AVCaptureDevice.requestAccess(for: .video) { granted in
             DispatchQueue.main.async { self.isAuthorized = granted }
@@ -173,7 +203,7 @@ final class CameraController: NSObject, ObservableObject {
         session.beginConfiguration()
         session.sessionPreset = .high
         publishAvailableLenses()
-        configureLens(.wide)
+        configureLens(selectedLens)
         if session.canAddOutput(movieOutput) { session.addOutput(movieOutput) }
         if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
         session.commitConfiguration()
@@ -215,6 +245,7 @@ final class CameraController: NSObject, ObservableObject {
             videoInput = input
             videoDevice = device
             let selected = Lens.allCases.first { $0.deviceType == device.deviceType } ?? .wide
+            RecordingSettingsStore.save(lens: selected)
             DispatchQueue.main.async { self.selectedLens = selected }
         }
     }
@@ -242,6 +273,7 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
             self.videoStabilizationRequested = isEnabled
+            RecordingSettingsStore.save(stabilization: isEnabled)
             self.refreshCaptureOptions()
             self.applyVideoStabilization()
             self.publishFormat()
@@ -290,6 +322,11 @@ final class CameraController: NSObject, ObservableObject {
             : nearestRampFrameRate(from: frameRate, in: frameRates)
 
         _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
+        RecordingSettingsStore.save(
+            resolution: resolution,
+            frameRate: frameRate,
+            rampFrameRate: rampFrameRate
+        )
         DispatchQueue.main.async {
             self.availableResolutions = resolutions
             self.selectedResolution = resolution
@@ -311,7 +348,17 @@ final class CameraController: NSObject, ObservableObject {
             #endif
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             guard dims.width >= 640, dims.height >= 480 else { continue }
-            let resolution = CaptureResolution(width: dims.width, height: dims.height)
+            let subType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+            // ProRes codec subtypes (FourCC): 'apcn' 422, 'apch' 422 HQ,
+            // 'apcs' 422 LT, 'apco' 422 Proxy, 'ap4h' 4444, 'ap4x' 4444 XQ.
+            let proResFourCCs: Set<FourCharCode> = [
+                0x6170636e, 0x61706368, 0x61706373, 0x6170636f, 0x61703468, 0x61703478,
+            ]
+            let resolution = CaptureResolution(
+                width: dims.width,
+                height: dims.height,
+                isProRes: proResFourCCs.contains(subType)
+            )
             let rates = supportedFrameRates(for: format)
             guard !rates.isEmpty else { continue }
             supportedRates[resolution, default: []].formUnion(rates)
@@ -359,6 +406,7 @@ final class CameraController: NSObject, ObservableObject {
             let frameRate = self.availableFrameRates.contains(fps)
                 ? fps
                 : self.nearestRampFrameRate(from: self.selectedFrameRate, in: self.availableFrameRates)
+            RecordingSettingsStore.save(rampFrameRate: frameRate)
             DispatchQueue.main.async {
                 self.selectedRampFrameRate = frameRate
             }
@@ -519,6 +567,10 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// Point the movie and photo output connections at `orientation` so
+    /// recordings and stills are written the right way up. Driven from the
+    /// preview's `updateUIView`, which fires in step with every SwiftUI
+    /// rotation, so it never depends on device-motion notifications.
     func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
         sessionQueue.async {
             #if os(iOS)
@@ -874,6 +926,8 @@ final class CameraController: NSObject, ObservableObject {
         guard let directory = activeSequenceDirectory else { return }
         _ = applyCaptureFormat(resolution: selectedResolution, fps: frameRate)
         #if os(iOS)
+        // A new segment reuses the movie output connection; re-assert the
+        // orientation so a fresh connection never records the wrong way up.
         if let connection = movieOutput.connection(with: .video),
            connection.isVideoOrientationSupported {
             connection.videoOrientation = currentCaptureOrientation()
@@ -1054,6 +1108,9 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
         .first { $0.activationState == .foregroundActive }?
         .interfaceOrientation
 
+    // UIInterfaceOrientation and AVCaptureVideoOrientation share raw values for
+    // the same physical orientation, so this maps case-for-case (unlike
+    // UIDeviceOrientation, whose landscape cases are mirrored).
     switch orientation {
     case .landscapeLeft:
         return .landscapeLeft
@@ -1130,6 +1187,83 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                 self.photoURLs.append(url)
                 DispatchQueue.main.async { self.photoCount = self.photoURLs.count }
             }
+        }
+    }
+}
+
+// MARK: - Remembered recording settings
+
+/// The last-used capture setup (lens, resolution, frame rate, stabilization,
+/// burst rate), persisted so the next shoot starts where the previous one
+/// left off. Gated by the "Remember recording settings" toggle in Settings.
+/// UserDefaults is thread-safe, so saves may run on the session queue.
+enum RecordingSettingsStore {
+    static let isEnabledKey = "letslapse.rememberRecordingSettings"
+
+    private static let lensKey = "letslapse.capture.lens"
+    private static let resolutionWidthKey = "letslapse.capture.resolutionWidth"
+    private static let resolutionHeightKey = "letslapse.capture.resolutionHeight"
+    private static let frameRateKey = "letslapse.capture.frameRate"
+    private static let rampFrameRateKey = "letslapse.capture.rampFrameRate"
+    private static let stabilizationKey = "letslapse.capture.stabilization"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.object(forKey: isEnabledKey) as? Bool ?? true
+    }
+
+    static var lens: CameraController.Lens? {
+        UserDefaults.standard.string(forKey: lensKey)
+            .flatMap(CameraController.Lens.init(rawValue:))
+    }
+
+    static var resolution: CameraController.CaptureResolution? {
+        guard let width = UserDefaults.standard.object(forKey: resolutionWidthKey) as? Int,
+              let height = UserDefaults.standard.object(forKey: resolutionHeightKey) as? Int,
+              width > 0, height > 0
+        else { return nil }
+        return CameraController.CaptureResolution(width: Int32(width), height: Int32(height))
+    }
+
+    static var frameRate: Int? {
+        UserDefaults.standard.object(forKey: frameRateKey) as? Int
+    }
+
+    static var rampFrameRate: Int? {
+        UserDefaults.standard.object(forKey: rampFrameRateKey) as? Int
+    }
+
+    static var stabilization: Bool? {
+        UserDefaults.standard.object(forKey: stabilizationKey) as? Bool
+    }
+
+    static func save(
+        lens: CameraController.Lens? = nil,
+        resolution: CameraController.CaptureResolution? = nil,
+        frameRate: Int? = nil,
+        rampFrameRate: Int? = nil,
+        stabilization: Bool? = nil
+    ) {
+        guard isEnabled else { return }
+        let defaults = UserDefaults.standard
+        if let lens { defaults.set(lens.rawValue, forKey: lensKey) }
+        if let resolution {
+            defaults.set(Int(resolution.width), forKey: resolutionWidthKey)
+            defaults.set(Int(resolution.height), forKey: resolutionHeightKey)
+        }
+        if let frameRate { defaults.set(frameRate, forKey: frameRateKey) }
+        if let rampFrameRate { defaults.set(rampFrameRate, forKey: rampFrameRateKey) }
+        if let stabilization { defaults.set(stabilization, forKey: stabilizationKey) }
+    }
+
+    /// Drop the snapshot when the user turns the setting off, so re-enabling
+    /// starts from the app defaults rather than a stale setup.
+    static func clear() {
+        let defaults = UserDefaults.standard
+        for key in [
+            lensKey, resolutionWidthKey, resolutionHeightKey,
+            frameRateKey, rampFrameRateKey, stabilizationKey,
+        ] {
+            defaults.removeObject(forKey: key)
         }
     }
 }

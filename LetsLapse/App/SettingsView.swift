@@ -9,8 +9,8 @@ enum SettingsDestination: String, Hashable {
     case diagnostics
 }
 
-/// Creative defaults up top, storage in the middle, and the engine
-/// (performance, diagnostics) demoted to Advanced.
+/// Creative defaults and recording up top, storage in the middle, and the
+/// engine (performance, diagnostics) demoted to Advanced.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @State private var storage: AppModel.LibraryStorage?
@@ -30,6 +30,10 @@ struct SettingsView: View {
 
                 LLSectionHeader("Creative defaults")
                 creativeDefaultsCard
+                    .padding(.bottom, 12)
+
+                LLSectionHeader("Recording")
+                recordingCard
                     .padding(.bottom, 12)
 
                 LLSectionHeader("Storage")
@@ -125,6 +129,21 @@ struct SettingsView: View {
                     .labelsHidden()
                     .tint(.green)
             }
+        }
+        .llCard()
+    }
+
+    // MARK: - Recording
+
+    private var recordingCard: some View {
+        LLRow(
+            title: "Remember recording settings",
+            subtitle: "Start each shoot with your last-used lens, resolution, frame rate and stabilization",
+            showsDivider: false
+        ) {
+            Toggle("", isOn: $model.rememberRecordingSettings)
+                .labelsHidden()
+                .tint(.green)
         }
         .llCard()
     }

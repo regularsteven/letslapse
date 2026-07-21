@@ -35,7 +35,7 @@ enum CreateEffect: String, CaseIterable, Identifiable {
     var subtitle: String {
         switch self {
         case .smoothTimelapse: return "Hours become seconds, motion melts into streaks"
-        case .longExposure: return "Stack photos into one silky still"
+        case .longExposure: return "Interval photos into a timelapse, or one long exposure"
         case .speedRamp: return "Speed rises or falls across the clip"
         case .customBlend: return "Every dial, no presets"
         }

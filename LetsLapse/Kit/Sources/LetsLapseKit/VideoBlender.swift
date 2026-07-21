@@ -9,7 +9,7 @@ public enum OutputCodec: String, CaseIterable, Sendable {
     case prores
     case jpeg
 
-    var avCodec: AVVideoCodecType {
+    public var avCodec: AVVideoCodecType {
         switch self {
         case .h264: return .h264
         case .hevc: return .hevc

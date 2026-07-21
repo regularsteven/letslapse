@@ -298,6 +298,13 @@ final class AppModel: ObservableObject {
     @Published var defaultSpeed = UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int ?? 100 {
         didSet { UserDefaults.standard.set(defaultSpeed, forKey: DefaultsKey.defaultSpeed) }
     }
+
+    /// Blend depth for interval-stills output, kept separate from the video
+    /// `constantWindow` (whose default is a fast video speed). 1 = a crisp
+    /// timelapse, one frame per photo; higher values blend more stills into
+    /// each frame for motion blur; at or above the photo count every still
+    /// folds into a single long-exposure image.
+    @Published var photoBlendDepth = 1
     @Published var rampStart = 1
     @Published var rampEnd = 30
     @Published var curve: BlendCurve = .easeInOut
@@ -312,6 +319,16 @@ final class AppModel: ObservableObject {
     }
     @Published var trimHeadTailSeconds = UserDefaults.standard.object(forKey: DefaultsKey.trimHeadTailSeconds) as? Double ?? 1 {
         didSet { UserDefaults.standard.set(trimHeadTailSeconds, forKey: DefaultsKey.trimHeadTailSeconds) }
+    }
+
+    // Recording options
+    @Published var rememberRecordingSettings = RecordingSettingsStore.isEnabled {
+        didSet {
+            UserDefaults.standard.set(rememberRecordingSettings, forKey: RecordingSettingsStore.isEnabledKey)
+            if !rememberRecordingSettings {
+                RecordingSettingsStore.clear()
+            }
+        }
     }
 
     // Performance options
@@ -481,6 +498,7 @@ final class AppModel: ObservableObject {
         blendTask = nil
         source = nil
         currentCaptureID = nil
+        photoBlendDepth = 1
         resultBlendID = nil
         progress = 0
         resultVideoURL = nil
@@ -511,6 +529,7 @@ final class AppModel: ObservableObject {
         do {
             source = try source(for: capture)
             currentCaptureID = capture.id
+            photoBlendDepth = 1
             resultBlendID = nil
             resultVideoURL = nil
             resultImage = nil
@@ -540,7 +559,11 @@ final class AppModel: ObservableObject {
             resultSummary = blend.summary
 
             if let compressionRatio = blend.compressionRatio {
-                constantWindow = compressionRatio
+                if source?.isVideo == true {
+                    constantWindow = compressionRatio
+                } else {
+                    photoBlendDepth = compressionRatio
+                }
             }
             if let outputFPS = blend.outputFPS {
                 self.outputFPS = outputFPS
@@ -579,9 +602,26 @@ final class AppModel: ObservableObject {
     }
 
     var ramp: BlendRamp {
-        useRamp && source?.isVideo == true
+        useRamp
             ? BlendRamp(startWindow: rampStart, endWindow: rampEnd, curve: curve)
             : .constant(constantWindow)
+    }
+
+    /// For a photo source, how many output frames the current blend depth
+    /// yields — each window of `photoBlendDepth` stills becomes one frame.
+    var photoOutputFrameCount: Int? {
+        guard let capture = currentCapture, capture.kind == .photos else { return nil }
+        let count = capture.sourceMediaCount
+        guard count > 0 else { return nil }
+        return WindowSchedule.make(totalInputFrames: count, ramp: .constant(photoBlendDepth)).count
+    }
+
+    /// True when the blend depth folds every still into one frame — the classic
+    /// single stacked long-exposure image rather than a video sequence.
+    var photosProduceSingleImage: Bool {
+        guard let capture = currentCapture, capture.kind == .photos else { return false }
+        let count = capture.sourceMediaCount
+        return count > 0 && photoBlendDepth >= count
     }
 
     // MARK: - Estimates
@@ -755,6 +795,7 @@ final class AppModel: ObservableObject {
         let fps = Double(outputFPS)
         let linear = linearLight
         let trim = source.isVideo && trimVideoEnds ? max(0, trimHeadTailSeconds) : 0
+        let photoDepth = photoBlendDepth
         let parameters = currentBlendParameters()
         blendTask = Task { [weak self] in
             do {
@@ -766,7 +807,17 @@ final class AppModel: ObservableObject {
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(liveSource, ramp: ramp, fps: fps, linear: linear)
                 case .photos(let urls):
-                    output = try await self.stackPhotos(urls: urls, linear: linear)
+                    if photoDepth >= urls.count {
+                        // The blend depth spans every still, so fold them all
+                        // into one frame: the classic single long exposure.
+                        output = try await self.stackPhotos(urls: urls, linear: linear)
+                    } else {
+                        // A depth of 1 gives a straight timelapse; larger
+                        // depths blend consecutive stills into each frame for
+                        // motion blur. Output is a video sequence.
+                        output = try await self.blendPhotosSequence(
+                            urls: urls, ramp: .constant(photoDepth), fps: fps, linear: linear)
+                    }
                 }
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
                 self.apply(output, from: blend)
@@ -1191,6 +1242,48 @@ final class AppModel: ObservableObject {
         return (Int(abs(size.width).rounded()), Int(abs(size.height).rounded()))
     }
 
+    /// Blends a sequence of interval stills into a timelapse video. Each output
+    /// frame averages `ramp`-worth of consecutive stills, so `constantWindow`
+    /// doubles as the blend depth (1 = crisp timelapse, higher = motion blur).
+    private func blendPhotosSequence(
+        urls: [URL],
+        ramp: BlendRamp,
+        fps: Double,
+        linear: Bool
+    ) async throws -> ProcessingOutput {
+        let output = FileManager.default.temporaryDirectory
+            .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).mp4")
+        let result = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> StackSequenceResult in
+            let core = try BlendCore()
+            let stacker = ImageStacker(core: core)
+            return try stacker.stackSequence(
+                imageURLs: urls,
+                ramp: ramp,
+                outputFPS: fps,
+                linearLight: linear,
+                outputURL: output
+            ) { fraction in
+                Task { @MainActor in
+                    self?.progress = fraction
+                }
+            }
+        }.value
+        let summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
+        return ProcessingOutput(
+            kind: .video,
+            url: output,
+            image: nil,
+            summary: summary,
+            inputFrames: urls.count,
+            outputFrames: result.outputFrames,
+            width: result.width,
+            height: result.height
+        )
+    }
+
+    /// Legacy single-image stack: averages every still into one synthetic long
+    /// exposure. No longer the default for interval capture — kept for callers
+    /// that explicitly want one frame out.
     private func stackPhotos(urls: [URL], linear: Bool) async throws -> ProcessingOutput {
         let image = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> CGImage in
             let core = try BlendCore()
@@ -1225,8 +1318,8 @@ final class AppModel: ObservableObject {
             createdAt: Date(),
             outputFileName: "",
             summary: "",
-            compressionRatio: source?.isVideo == true ? constantWindow : nil,
-            outputFPS: source?.isVideo == true ? outputFPS : nil,
+            compressionRatio: source?.isVideo == true ? constantWindow : photoBlendDepth,
+            outputFPS: outputFPS,
             linearLight: linearLight,
             useRamp: useRamp && source?.isVideo == true,
             rampStart: rampStart,
@@ -1545,6 +1638,217 @@ final class AppModel: ObservableObject {
             captures[index].sourceHeight = height
         }
         try? persistLibrary()
+    }
+
+    // MARK: - Clip conversion
+
+    enum ConvertClipError: LocalizedError {
+        case noVideoTrack
+        case encodingFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .noVideoTrack:
+                return "This clip has no video track to convert."
+            case .encodingFailed(let reason):
+                return "Couldn't convert the clip: \(reason)"
+            }
+        }
+    }
+
+    private static let conversionQueue = DispatchQueue(
+        label: "com.letslapse.convert", qos: .userInitiated)
+
+    /// FourCC subtypes for the ProRes family, matching the capture-side check
+    /// in `CameraController`: 'apcn' 422, 'apch' 422 HQ, 'apcs' 422 LT,
+    /// 'apco' 422 Proxy, 'ap4h' 4444, 'ap4x' 4444 XQ.
+    private static let proResFourCCs: Set<FourCharCode> = [
+        0x6170636e, 0x61706368, 0x61706373, 0x6170636f, 0x61703468, 0x61703478,
+    ]
+
+    /// Whether a clip's video track is encoded with a ProRes codec — the cue
+    /// for offering a smaller-file H.264/HEVC conversion.
+    nonisolated static func sourceClipIsProRes(at url: URL) async -> Bool {
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let descriptions = try? await track.load(.formatDescriptions)
+        else { return false }
+        return descriptions.contains {
+            proResFourCCs.contains(CMFormatDescriptionGetMediaSubType($0))
+        }
+    }
+
+    /// Re-encodes a source clip with a smaller-file codec, writing a new file
+    /// into the documents directory and returning its URL. Video is decoded and
+    /// re-compressed; any audio track is copied through untouched.
+    func convertSourceClip(at sourceURL: URL, to codec: OutputCodec) async throws -> URL {
+        let timestamp = Int(Date().timeIntervalSince1970)
+        let outputURL = FileManager.default
+            .urls(for: .documentDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("converted-\(timestamp).\(codec.preferredExtension)")
+        try await Self.transcode(from: sourceURL, to: outputURL, codec: codec)
+        return outputURL
+    }
+
+    nonisolated private static func transcode(
+        from sourceURL: URL,
+        to outputURL: URL,
+        codec: OutputCodec
+    ) async throws {
+        let asset = AVURLAsset(url: sourceURL)
+        guard let videoTrack = try? await asset.loadTracks(withMediaType: .video).first else {
+            throw ConvertClipError.noVideoTrack
+        }
+        let naturalSize = try await videoTrack.load(.naturalSize)
+        let transform = try await videoTrack.load(.preferredTransform)
+        let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
+
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            conversionQueue.async {
+                do {
+                    try runConversion(
+                        asset: asset,
+                        videoTrack: videoTrack,
+                        naturalSize: naturalSize,
+                        transform: transform,
+                        audioTrack: audioTrack ?? nil,
+                        outputURL: outputURL,
+                        codec: codec
+                    )
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
+    /// Blocking reader → writer transcode. Runs on `conversionQueue`; the media
+    /// pumps run on their own queues so the `DispatchGroup.wait()` here is safe.
+    nonisolated private static func runConversion(
+        asset: AVURLAsset,
+        videoTrack: AVAssetTrack,
+        naturalSize: CGSize,
+        transform: CGAffineTransform,
+        audioTrack: AVAssetTrack?,
+        outputURL: URL,
+        codec: OutputCodec
+    ) throws {
+        try? FileManager.default.removeItem(at: outputURL)
+
+        let reader: AVAssetReader
+        let writer: AVAssetWriter
+        do {
+            reader = try AVAssetReader(asset: asset)
+            writer = try AVAssetWriter(outputURL: outputURL, fileType: codec.fileType)
+        } catch {
+            throw ConvertClipError.encodingFailed(error.localizedDescription)
+        }
+
+        let videoOutput = AVAssetReaderTrackOutput(
+            track: videoTrack,
+            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+        videoOutput.alwaysCopiesSampleData = false
+        guard reader.canAdd(videoOutput) else {
+            throw ConvertClipError.encodingFailed("cannot read the video track")
+        }
+        reader.add(videoOutput)
+
+        var videoSettings: [String: Any] = [
+            AVVideoCodecKey: codec.avCodec,
+            AVVideoWidthKey: Int(abs(naturalSize.width)),
+            AVVideoHeightKey: Int(abs(naturalSize.height)),
+        ]
+        if codec == .jpeg {
+            videoSettings[AVVideoCompressionPropertiesKey] = [AVVideoQualityKey: 0.95]
+        }
+        let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        videoInput.expectsMediaDataInRealTime = false
+        videoInput.transform = transform
+        guard writer.canAdd(videoInput) else {
+            throw ConvertClipError.encodingFailed("cannot write the video track")
+        }
+        writer.add(videoInput)
+
+        // Passthrough audio: nil settings on both ends copies samples verbatim.
+        var audioPair: (output: AVAssetReaderTrackOutput, input: AVAssetWriterInput)?
+        if let audioTrack {
+            let output = AVAssetReaderTrackOutput(track: audioTrack, outputSettings: nil)
+            output.alwaysCopiesSampleData = false
+            let input = AVAssetWriterInput(mediaType: .audio, outputSettings: nil)
+            input.expectsMediaDataInRealTime = false
+            if reader.canAdd(output), writer.canAdd(input) {
+                reader.add(output)
+                writer.add(input)
+                audioPair = (output, input)
+            }
+        }
+
+        guard reader.startReading() else {
+            throw ConvertClipError.encodingFailed(
+                reader.error?.localizedDescription ?? "could not start reading")
+        }
+        guard writer.startWriting() else {
+            throw ConvertClipError.encodingFailed(
+                writer.error?.localizedDescription ?? "could not start writing")
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        let group = DispatchGroup()
+
+        group.enter()
+        videoInput.requestMediaDataWhenReady(
+            on: DispatchQueue(label: "com.letslapse.convert.video")) {
+            while videoInput.isReadyForMoreMediaData {
+                if let sample = videoOutput.copyNextSampleBuffer() {
+                    if !videoInput.append(sample) {
+                        videoInput.markAsFinished()
+                        group.leave()
+                        return
+                    }
+                } else {
+                    videoInput.markAsFinished()
+                    group.leave()
+                    return
+                }
+            }
+        }
+
+        if let audioPair {
+            group.enter()
+            audioPair.input.requestMediaDataWhenReady(
+                on: DispatchQueue(label: "com.letslapse.convert.audio")) {
+                while audioPair.input.isReadyForMoreMediaData {
+                    if let sample = audioPair.output.copyNextSampleBuffer() {
+                        if !audioPair.input.append(sample) {
+                            audioPair.input.markAsFinished()
+                            group.leave()
+                            return
+                        }
+                    } else {
+                        audioPair.input.markAsFinished()
+                        group.leave()
+                        return
+                    }
+                }
+            }
+        }
+
+        group.wait()
+
+        if reader.status == .reading { reader.cancelReading() }
+        if reader.status == .failed {
+            throw ConvertClipError.encodingFailed(
+                reader.error?.localizedDescription ?? "reading failed")
+        }
+
+        let finished = DispatchSemaphore(value: 0)
+        writer.finishWriting { finished.signal() }
+        finished.wait()
+        guard writer.status == .completed else {
+            throw ConvertClipError.encodingFailed(
+                writer.error?.localizedDescription ?? "could not finalize the file")
+        }
     }
 
     #if os(iOS)
