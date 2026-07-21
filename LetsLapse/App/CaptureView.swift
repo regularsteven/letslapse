@@ -29,12 +29,6 @@ struct CaptureView: View {
     @State private var showGrid = false
     @State private var activeTarget: CaptureTargetPlan?
     @State private var targetReached = false
-    // Frame of the viewfinder slot in the capture coordinate space. The live
-    // preview is positioned here from a single, persistent CameraPreview that
-    // lives outside the portrait/landscape branch, so rotating never tears the
-    // preview down and re-attaches it to the running session.
-    @State private var previewRect: CGRect = .zero
-    private static let captureSpace = "captureSpace"
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(intent: CaptureIntent = CaptureIntent()) {
@@ -46,26 +40,32 @@ struct CaptureView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack {
-                // Persistent preview, positioned into the viewfinder slot the
-                // active layout reports. Never recreated across rotations.
+                // One persistent preview, filling the whole area. It lives
+                // outside the portrait/landscape branch and is sized by normal
+                // layout (never .position/.frame-to-a-rect), so it is neither
+                // recreated on rotation (no delay) nor blanked in landscape.
+                // `.resizeAspect` letterboxes it; the chrome sits over the bars.
                 CameraPreview(
                     session: camera.session,
                     camera: camera,
                     orientation: orientation,
                     videoGravity: .resizeAspect
                 )
-                .frame(width: previewRect.width, height: previewRect.height)
-                .position(x: previewRect.midX, y: previewRect.midY)
                 .allowsHitTesting(false)
 
-                if geometry.size.width > geometry.size.height {
-                    landscapeLayout(in: geometry.size)
-                } else {
-                    portraitLayout(in: geometry.size)
+                Group {
+                    if geometry.size.width > geometry.size.height {
+                        landscapeLayout(in: geometry.size)
+                    } else {
+                        portraitLayout(in: geometry.size)
+                    }
                 }
+                // Flip 180° turns an upside-down mount into plain inverted
+                // portrait: the chrome rotates a half-turn to match the feed
+                // (which the preview connection already flips), so buttons and
+                // image read the right way up on the inverted phone.
+                .rotationEffect(.degrees(camera.flipOrientation180 ? 180 : 0))
             }
-            .coordinateSpace(name: Self.captureSpace)
-            .onPreferenceChange(PreviewSlotKey.self) { previewRect = $0 }
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -98,7 +98,10 @@ struct CaptureView: View {
             // Refresh the orientation the grid overlay sizes against, and nudge
             // a re-render so the preview re-reads its window orientation. The
             // preview itself drives the capture connections in `updateUIView`.
-            orientation = currentCaptureOrientation()
+            let device = UIDevice.current.orientation.rawValue
+            let next = currentCaptureOrientation()
+            LLog("orientationNotif device=\(device) computed=\(next.rawValue) (was \(orientation.rawValue))")
+            orientation = next
         }
         .onChange(of: camera.isRecording) { isRecording in
             if !isRecording {
@@ -366,9 +369,8 @@ struct CaptureView: View {
 
     // MARK: - Viewfinder
 
-    /// The viewfinder slot. Reports its frame so the persistent preview in
-    /// `body` can be positioned here; the live preview itself lives outside the
-    /// rotating layout. Only the grid overlay draws locally.
+    /// The viewfinder region. Transparent — the live preview shows through from
+    /// the persistent layer behind `body`'s ZStack; only the grid draws here.
     private var viewfinder: some View {
         GeometryReader { geometry in
             let fitted = aspectFitSize(
@@ -378,10 +380,6 @@ struct CaptureView: View {
             )
             ZStack {
                 Color.clear
-                    .preference(
-                        key: PreviewSlotKey.self,
-                        value: geometry.frame(in: .named(Self.captureSpace))
-                    )
                 if showGrid {
                     RuleOfThirdsGrid()
                         .frame(width: fitted.width, height: fitted.height)
@@ -1122,16 +1120,6 @@ struct CaptureView: View {
     #endif
 }
 
-/// Carries the viewfinder slot's frame up to `body` so the persistent preview
-/// can be positioned there. The last non-empty slot wins.
-private struct PreviewSlotKey: PreferenceKey {
-    static var defaultValue: CGRect = .zero
-    static func reduce(value: inout CGRect, nextValue: () -> CGRect) {
-        let next = nextValue()
-        if next != .zero { value = next }
-    }
-}
-
 // MARK: - Small camera chrome
 
 private struct CameraChromeButton: View {
@@ -1255,6 +1243,14 @@ private struct FormatSheet: View {
                     if camera.availableResolutions.contains(where: { $0.isProRes }) {
                         Text("* ProRes — very large files")
                     }
+                }
+
+                Section {
+                    Toggle("Flip 180°", isOn: $camera.flipOrientation180)
+                } header: {
+                    Text("Orientation")
+                } footer: {
+                    Text("For mounting the phone upside down. Rotates the preview and recording a half-turn on top of the automatic orientation.")
                 }
 
                 if mode == .video {
@@ -1466,11 +1462,18 @@ struct CameraPreview: UIViewRepresentable {
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
     }
 
+    // Temporary: count preview-view creations. Should stay at 1 for a whole
+    // capture session — any increment on rotation means the preview is being
+    // torn down and re-attached to the running session.
+    private static var makeCount = 0
+
     func makeUIView(context: Context) -> PreviewView {
+        Self.makeCount += 1
+        LLog("CameraPreview.makeUIView #\(Self.makeCount) (preview view CREATED)")
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = videoGravity
-        applyOrientation(to: view)
+        applyOrientation(to: view, from: "makeUIView")
         return view
     }
 
@@ -1478,7 +1481,7 @@ struct CameraPreview: UIViewRepresentable {
         if uiView.previewLayer.videoGravity != videoGravity {
             uiView.previewLayer.videoGravity = videoGravity
         }
-        applyOrientation(to: uiView)
+        applyOrientation(to: uiView, from: "updateUIView")
     }
 
     /// Rotate only the preview connection to match the current interface
@@ -1493,26 +1496,19 @@ struct CameraPreview: UIViewRepresentable {
     /// stabilization — reconfiguring those on the live session mid-rotation was
     /// stalling the capture source. Recording/photo orientation is set at
     /// capture start instead (see `startNextSegment` / `startInterval`).
-    private func applyOrientation(to view: PreviewView) {
+    ///
+    /// `effectiveCaptureOrientation` also flips the preview when the phone is
+    /// physically mounted upside down (which the UI can't detect on its own).
+    private func applyOrientation(to view: PreviewView, from caller: String) {
         let interface = view.window?.windowScene?.interfaceOrientation
-        let target = interface.flatMap(Self.videoOrientation(for:)) ?? orientation
-        if let connection = view.previewLayer.connection,
+        let base = interface.map(effectiveCaptureOrientation(interface:)) ?? orientation
+        let target = camera.flipOrientation180 ? flipped180(base) : base
+        let connection = view.previewLayer.connection
+        LLog("applyOrientation(\(caller)) inWindow=\(view.window != nil) interface=\(interface?.rawValue ?? -1) device=\(UIDevice.current.orientation.rawValue) target=\(target.rawValue) conn=\(connection != nil) supported=\(connection?.isVideoOrientationSupported == true) current=\(connection?.videoOrientation.rawValue ?? -1)")
+        if let connection,
            connection.isVideoOrientationSupported,
            connection.videoOrientation != target {
             connection.videoOrientation = target
-        }
-    }
-
-    /// UIInterfaceOrientation and AVCaptureVideoOrientation agree case-for-case.
-    private static func videoOrientation(
-        for interface: UIInterfaceOrientation
-    ) -> AVCaptureVideoOrientation? {
-        switch interface {
-        case .portrait: return .portrait
-        case .portraitUpsideDown: return .portraitUpsideDown
-        case .landscapeLeft: return .landscapeLeft
-        case .landscapeRight: return .landscapeRight
-        default: return nil
         }
     }
 }

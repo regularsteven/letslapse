@@ -4,6 +4,18 @@ import AVFoundation
 import UIKit
 #endif
 
+/// Temporary capture diagnostics. Flip `captureDiagEnabled` off to silence.
+/// Everything is tagged 🎥LL so it's easy to filter in the Xcode console.
+/// Each line is prefixed with a rolling seconds timer so delays are visible as
+/// the gap between two lines.
+let captureDiagEnabled = true
+@inline(__always) func LLog(_ message: @autoclosure () -> String) {
+    if captureDiagEnabled {
+        let t = ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 1000)
+        print(String(format: "🎥LL %7.3f %@", t, message()))
+    }
+}
+
 /// Owns the AVCaptureSession for both capture modes: movie recording and
 /// interval photo capture for stacking.
 /// Session work runs on a dedicated queue; published state hops to main.
@@ -125,6 +137,10 @@ final class CameraController: NSObject, ObservableObject {
     @Published var lockedShutterSeconds: Double = 0
     @Published var lockedLensPosition: Float = 0.5
     @Published var isoRange: ClosedRange<Float> = 25...3200
+    /// Manual 180° flip for upside-down mounts, on top of whatever orientation
+    /// the interface/device implies. Session-only (resets each launch) so a
+    /// left-on flip can't silently invert a later handheld shot.
+    @Published var flipOrientation180 = false
 
     /// A ramp/marker interval relative to the recording start, for the
     /// on-screen segment strip. `end == nil` while the interval is open.
@@ -168,20 +184,34 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    // True between start() and stop(): the capture screen is up and wants a
+    // running session. Used to auto-resume after a background interruption
+    // (screen lock, Control Center, a momentary background) without which the
+    // camera stays dead until the view is dismissed and reopened.
+    private var shouldBeRunning = false
+
     func start() {
+        LLog("start() called")
+        installSessionLogging()
+        shouldBeRunning = true
         AVCaptureDevice.requestAccess(for: .video) { granted in
+            LLog("access granted=\(granted)")
             DispatchQueue.main.async { self.isAuthorized = granted }
             guard granted else { return }
             self.sessionQueue.async {
                 self.configureIfNeeded()
                 if !self.session.isRunning {
+                    LLog("startRunning()")
                     self.session.startRunning()
+                    LLog("after startRunning isRunning=\(self.session.isRunning)")
                 }
             }
         }
     }
 
     func stop() {
+        LLog("stop() called")
+        shouldBeRunning = false
         sessionQueue.async {
             self.intervalTimer?.cancel()
             self.intervalTimer = nil
@@ -190,15 +220,79 @@ final class CameraController: NSObject, ObservableObject {
                 self.movieOutput.stopRecording()
             }
             if self.session.isRunning {
+                LLog("stopRunning()")
                 self.session.stopRunning()
             }
         }
     }
 
+    /// Resume the session after an interruption ends or the app returns to the
+    /// foreground, as long as the capture screen still wants it running.
+    private func resumeIfNeeded(_ trigger: String) {
+        sessionQueue.async {
+            guard self.shouldBeRunning, self.isConfigured, !self.session.isRunning else { return }
+            LLog("resume(\(trigger)): startRunning()")
+            self.session.startRunning()
+            LLog("resume(\(trigger)): isRunning=\(self.session.isRunning)")
+        }
+    }
+
+    #if os(iOS)
+    /// Temporary: log the session's own lifecycle so we can see interruptions
+    /// and runtime errors (the source of the -17281/-12784 Fig asserts) with
+    /// their reasons and timing. Registered once.
+    private var sessionLoggingInstalled = false
+    private func installSessionLogging() {
+        guard !sessionLoggingInstalled else { return }
+        sessionLoggingInstalled = true
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: .AVCaptureSessionRuntimeError, object: session, queue: nil) { [weak self] note in
+            let err = note.userInfo?[AVCaptureSessionErrorKey] as? NSError
+            LLog("‼️ RuntimeError code=\(err?.code ?? 0) \(err?.localizedDescription ?? "")")
+            // Media services reset etc. — try to bring the session back.
+            self?.resumeIfNeeded("runtimeError")
+        }
+        nc.addObserver(forName: .AVCaptureSessionWasInterrupted, object: session, queue: nil) { note in
+            let raw = (note.userInfo?[AVCaptureSessionInterruptionReasonKey] as? NSNumber)?.intValue ?? -1
+            LLog("⏸️ Interrupted reason=\(raw) (\(Self.interruptionReasonName(raw)))")
+        }
+        nc.addObserver(forName: .AVCaptureSessionInterruptionEnded, object: session, queue: nil) { [weak self] _ in
+            LLog("▶️ InterruptionEnded")
+            self?.resumeIfNeeded("interruptionEnded")
+        }
+        nc.addObserver(forName: .AVCaptureSessionDidStartRunning, object: session, queue: nil) { _ in
+            LLog("✅ DidStartRunning")
+        }
+        nc.addObserver(forName: .AVCaptureSessionDidStopRunning, object: session, queue: nil) { _ in
+            LLog("🛑 DidStopRunning")
+        }
+        // Belt and suspenders: some background interruptions don't post
+        // InterruptionEnded, so also resume when the app becomes active.
+        nc.addObserver(forName: UIApplication.didBecomeActiveNotification, object: nil, queue: nil) { [weak self] _ in
+            LLog("app didBecomeActive")
+            self?.resumeIfNeeded("didBecomeActive")
+        }
+    }
+
+    private static func interruptionReasonName(_ raw: Int) -> String {
+        switch AVCaptureSession.InterruptionReason(rawValue: raw) {
+        case .videoDeviceNotAvailableInBackground: return "notAvailableInBackground"
+        case .audioDeviceInUseByAnotherClient: return "audioInUse"
+        case .videoDeviceInUseByAnotherClient: return "videoInUse"
+        case .videoDeviceNotAvailableWithMultipleForegroundApps: return "multipleForegroundApps"
+        case .videoDeviceNotAvailableDueToSystemPressure: return "systemPressure"
+        default: return "other"
+        }
+    }
+    #else
+    private func installSessionLogging() {}
+    #endif
+
     private var isConfigured = false
 
     private func configureIfNeeded() {
         guard !isConfigured else { return }
+        LLog("configureIfNeeded: begin")
         isConfigured = true
         session.beginConfiguration()
         session.sessionPreset = .high
@@ -210,6 +304,7 @@ final class CameraController: NSObject, ObservableObject {
         refreshCaptureOptions()
         applyVideoStabilization()
         publishFormat()
+        LLog("configureIfNeeded: done, inputs=\(session.inputs.count) outputs=\(session.outputs.count)")
     }
 
     private func publishAvailableLenses() {
@@ -572,6 +667,7 @@ final class CameraController: NSObject, ObservableObject {
     /// preview's `updateUIView`, which fires in step with every SwiftUI
     /// rotation, so it never depends on device-motion notifications.
     func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
+        LLog("setVideoOrientation(\(orientation.rawValue)) [outputs+stabilization]")
         sessionQueue.async {
             #if os(iOS)
             let connections = [
@@ -589,6 +685,15 @@ final class CameraController: NSObject, ObservableObject {
             self.applyVideoStabilization()
         }
     }
+
+    #if os(iOS)
+    /// The orientation to bake into recordings/stills right now: the
+    /// interface/device-derived orientation, plus the manual upside-down flip.
+    private func captureOrientation() -> AVCaptureVideoOrientation {
+        let base = currentCaptureOrientation()
+        return flipOrientation180 ? flipped180(base) : base
+    }
+    #endif
 
     #if os(iOS)
     private func stabilizationMode(for format: AVCaptureDevice.Format) -> AVCaptureVideoStabilizationMode? {
@@ -930,7 +1035,7 @@ final class CameraController: NSObject, ObservableObject {
         // orientation so a fresh connection never records the wrong way up.
         if let connection = movieOutput.connection(with: .video),
            connection.isVideoOrientationSupported {
-            connection.videoOrientation = currentCaptureOrientation()
+            connection.videoOrientation = captureOrientation()
         }
         #endif
         applyVideoStabilization()
@@ -1072,7 +1177,7 @@ final class CameraController: NSObject, ObservableObject {
                 #if os(iOS)
                 if let connection = self.photoOutput.connection(with: .video),
                    connection.isVideoOrientationSupported {
-                    connection.videoOrientation = currentCaptureOrientation()
+                    connection.videoOrientation = self.captureOrientation()
                 }
                 #endif
                 let settings = AVCapturePhotoSettings()
@@ -1103,15 +1208,20 @@ final class CameraController: NSObject, ObservableObject {
 
 #if os(iOS)
 func currentCaptureOrientation() -> AVCaptureVideoOrientation {
-    let orientation = UIApplication.shared.connectedScenes
+    let interface = UIApplication.shared.connectedScenes
         .compactMap { $0 as? UIWindowScene }
         .first { $0.activationState == .foregroundActive }?
-        .interfaceOrientation
+        .interfaceOrientation ?? .portrait
+    return effectiveCaptureOrientation(interface: interface)
+}
 
-    // UIInterfaceOrientation and AVCaptureVideoOrientation share raw values for
-    // the same physical orientation, so this maps case-for-case (unlike
-    // UIDeviceOrientation, whose landscape cases are mirrored).
-    switch orientation {
+/// Map an interface orientation to a capture orientation. Straight case-for-case
+/// (UIInterfaceOrientation and AVCaptureVideoOrientation share raw values for the
+/// same physical orientation). Upside-down mounting is handled by the manual
+/// Flip 180° control, not by sniffing the physical device orientation — iPhones
+/// never expose an upside-down interface, so that path was unreliable.
+func effectiveCaptureOrientation(interface: UIInterfaceOrientation) -> AVCaptureVideoOrientation {
+    switch interface {
     case .landscapeLeft:
         return .landscapeLeft
     case .landscapeRight:
@@ -1120,6 +1230,17 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
         return .portraitUpsideDown
     default:
         return .portrait
+    }
+}
+
+/// Rotate an orientation 180° — the manual upside-down-mount flip.
+func flipped180(_ orientation: AVCaptureVideoOrientation) -> AVCaptureVideoOrientation {
+    switch orientation {
+    case .portrait: return .portraitUpsideDown
+    case .portraitUpsideDown: return .portrait
+    case .landscapeLeft: return .landscapeRight
+    case .landscapeRight: return .landscapeLeft
+    @unknown default: return orientation
     }
 }
 #else
