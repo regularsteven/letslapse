@@ -19,6 +19,7 @@ struct AdjustView: View {
                     sourceCard
 
                     if model.source?.isVideo == true {
+                        blendFromSection
                         speedSection
                         estimateCard
                         advancedRow
@@ -83,6 +84,66 @@ struct AdjustView: View {
         }
         .padding(12)
         .llCard()
+    }
+
+    // MARK: - Blend from (source codec)
+
+    /// Shown only when a clip has been converted, so there's a real choice of
+    /// which encoding feeds the blend — the ProRes-vs-H.264 quality test.
+    @ViewBuilder private var blendFromSection: some View {
+        if let capture = model.currentCapture {
+            let codecs = model.availableBlendCodecs(for: capture)
+            if !codecs.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    LLSectionHeader("Blend from")
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 8) {
+                            codecChip(nil, "Auto")
+                            ForEach(codecs, id: \.self) { codec in
+                                codecChip(codec, codecLabel(codec))
+                            }
+                        }
+                    }
+                    Text(blendFromHint)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    private func codecChip(_ codec: OutputCodec?, _ label: String) -> some View {
+        let selected = model.blendSourceCodec == codec
+        return Button {
+            model.setBlendSourceCodec(codec)
+        } label: {
+            Text(label)
+                .font(.system(size: 13, weight: selected ? .bold : .regular))
+                .foregroundStyle(selected ? .black : .primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(selected ? LL.accent : Color.secondary.opacity(0.14), in: Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func codecLabel(_ codec: OutputCodec) -> String {
+        switch codec {
+        case .prores: return "ProRes"
+        case .hevc: return "HEVC"
+        case .h264: return "H.264"
+        case .jpeg: return "JPEG"
+        }
+    }
+
+    private var blendFromHint: String {
+        switch model.blendSourceCodec {
+        case nil: return "Uses the best surviving copy of each clip."
+        case .prores?: return "Blends from ProRes originals where available."
+        case .hevc?: return "Blends from HEVC where available, else the best copy."
+        case .h264?: return "Blends from H.264 where available, else the best copy."
+        case .jpeg?: return "Blends from JPEG where available, else the best copy."
+        }
     }
 
     private var sourceDetailLine: String {

@@ -3,6 +3,7 @@ import AVFoundation
 import CoreGraphics
 import ImageIO
 import LetsLapseKit
+import VideoToolbox
 #if os(iOS)
 import Photos
 #endif
@@ -42,6 +43,27 @@ final class AppModel: ObservableObject {
         case image
     }
 
+    /// One codec variant of a single source clip. The original capture file is
+    /// itself an encoding (usually ProRes); conversions are siblings inside the
+    /// project's `source/` folder. `fileName` is relative to the capture folder.
+    struct ClipEncoding: Codable, Equatable, Identifiable {
+        var codec: String
+        var fileName: String
+
+        var id: String { fileName }
+
+        var isProRes: Bool { codec == OutputCodec.prores.rawValue }
+
+        var codecLabel: String {
+            switch codec {
+            case OutputCodec.prores.rawValue: return "ProRes"
+            case OutputCodec.h264.rawValue: return "H.264"
+            case OutputCodec.hevc.rawValue: return "HEVC"
+            default: return "Video"
+            }
+        }
+    }
+
     struct CaptureProject: Identifiable, Codable, Equatable {
         var id: UUID
         var kind: CaptureKind
@@ -54,6 +76,9 @@ final class AppModel: ObservableObject {
         var sourceDurationSeconds: Double?
         var sourceWidth: Int?
         var sourceHeight: Int?
+        /// Extra codec variants per source clip, keyed by the clip's original
+        /// relative file name. Absent (nil) until a clip is first converted.
+        var clipEncodings: [String: [ClipEncoding]]?
 
         var summary: String {
             switch kind {
@@ -129,6 +154,20 @@ final class AppModel: ObservableObject {
         var height: Int?
         var inputFrames: Int?
         var outputFrames: Int?
+        /// The source codec this version was blended from, when the user picked
+        /// one explicitly (nil = automatic / best-available). Its `OutputCodec`
+        /// raw value, e.g. "h264".
+        var sourceCodec: String?
+
+        /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
+        var sourceCodecLabel: String? {
+            switch sourceCodec {
+            case "prores": return "ProRes"
+            case "h264": return "H.264"
+            case "hevc": return "HEVC"
+            default: return nil
+            }
+        }
 
         var parameterSummary: String {
             switch kind {
@@ -202,6 +241,9 @@ final class AppModel: ObservableObject {
         var sequence: LiveCaptureSequence
         var segmentURLs: [URL]
         var metadataURL: URL
+        /// Maps each segment's original file name (as recorded in the sequence
+        /// metadata) to the file actually used, after per-clip encoding choices.
+        var resolvedByOriginalName: [String: URL] = [:]
 
         var primaryVideoURL: URL? {
             segmentURLs.first
@@ -289,6 +331,10 @@ final class AppModel: ObservableObject {
     @Published var resultBlendID: UUID?
 
     // Blend options
+    /// Which codec each source clip contributes to the blend. `nil` = automatic
+    /// (best surviving encoding per clip). Only meaningful once a clip has more
+    /// than one encoding; drives the "Blend from" picker in Adjust.
+    @Published var blendSourceCodec: OutputCodec?
     @Published var useRamp = false
     @Published var constantWindow = UserDefaults.standard.object(forKey: DefaultsKey.constantWindow) as? Int
         ?? UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int
@@ -527,6 +573,7 @@ final class AppModel: ObservableObject {
 
     func openCapture(_ capture: CaptureProject) {
         do {
+            blendSourceCodec = nil
             source = try source(for: capture)
             currentCaptureID = capture.id
             photoBlendDepth = 1
@@ -550,6 +597,7 @@ final class AppModel: ObservableObject {
         }
 
         do {
+            blendSourceCodec = nil
             source = try source(for: capture)
             currentCaptureID = capture.id
             resultBlendID = blend.id
@@ -927,9 +975,7 @@ final class AppModel: ObservableObject {
             return try await blendMarkerSequence(source, ramp: ramp, fps: fps, linear: linear)
         }
 
-        let segmentURLByName = Dictionary(
-            uniqueKeysWithValues: source.segmentURLs.map { ($0.lastPathComponent, $0) }
-        )
+        let segmentURLByName = source.resolvedByOriginalName
         let orderedSegments = source.sequence.segments.sorted { $0.index < $1.index }
         guard !orderedSegments.isEmpty else {
             let fallbackURL = source.segmentURLs[0]
@@ -1329,7 +1375,8 @@ final class AppModel: ObservableObject {
             width: nil,
             height: nil,
             inputFrames: nil,
-            outputFrames: nil
+            outputFrames: nil,
+            sourceCodec: source?.isVideo == true ? blendSourceCodec?.rawValue : nil
         )
     }
 
@@ -1472,18 +1519,35 @@ final class AppModel: ObservableObject {
         return capture
     }
 
-    private func source(for capture: CaptureProject) throws -> Source {
+    private func source(
+        for capture: CaptureProject,
+        preferring codec: OutputCodec? = nil
+    ) throws -> Source {
         let root = captureFolderURL(for: capture.id)
         let metadataURL = root.appendingPathComponent("source/sequence.json")
-        let urls = capture.sourceFileNames.filter { !$0.hasSuffix(".json") }.map {
-            captureFolderURL(for: capture.id).appendingPathComponent($0)
-        }
-        for url in urls where !FileManager.default.fileExists(atPath: url.path) {
-            throw CocoaError(.fileNoSuchFile)
-        }
+        let clipNames = capture.sourceFileNames.filter { !$0.hasSuffix(".json") }
 
         switch capture.kind {
+        case .photos:
+            let urls = clipNames.map { root.appendingPathComponent($0) }
+            for url in urls where !FileManager.default.fileExists(atPath: url.path) {
+                throw CocoaError(.fileNoSuchFile)
+            }
+            return .photos(urls)
         case .video:
+            // Each logical clip resolves to the preferred codec when present,
+            // else its best surviving encoding — so deleting a ProRes original
+            // (once converted) doesn't break playback or blending.
+            var resolvedURLs: [URL] = []
+            var resolvedByName: [String: URL] = [:]
+            for relName in clipNames {
+                guard let url = activeEncodingURL(for: capture, clip: relName, preferring: codec) else {
+                    throw CocoaError(.fileNoSuchFile)
+                }
+                resolvedURLs.append(url)
+                resolvedByName[(relName as NSString).lastPathComponent] = url
+            }
+
             if FileManager.default.fileExists(atPath: metadataURL.path) {
                 let data = try Data(contentsOf: metadataURL)
                 let decoder = JSONDecoder()
@@ -1491,14 +1555,13 @@ final class AppModel: ObservableObject {
                 let sequence = try decoder.decode(LiveCaptureSequence.self, from: data)
                 return .liveSequence(LiveCaptureSource(
                     sequence: sequence,
-                    segmentURLs: urls,
-                    metadataURL: metadataURL
+                    segmentURLs: resolvedURLs,
+                    metadataURL: metadataURL,
+                    resolvedByOriginalName: resolvedByName
                 ))
             }
-            guard let url = urls.first else { throw CocoaError(.fileNoSuchFile) }
+            guard let url = resolvedURLs.first else { throw CocoaError(.fileNoSuchFile) }
             return .video(url)
-        case .photos:
-            return .photos(urls)
         }
     }
 
@@ -1678,16 +1741,148 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Re-encodes a source clip with a smaller-file codec, writing a new file
-    /// into the documents directory and returning its URL. Video is decoded and
-    /// re-compressed; any audio track is copied through untouched.
-    func convertSourceClip(at sourceURL: URL, to codec: OutputCodec) async throws -> URL {
-        let timestamp = Int(Date().timeIntervalSince1970)
-        let outputURL = FileManager.default
-            .urls(for: .documentDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("converted-\(timestamp).\(codec.preferredExtension)")
+    enum EncodingDeletionError: LocalizedError {
+        case lastEncoding
+
+        var errorDescription: String? {
+            switch self {
+            case .lastEncoding:
+                return "This is the clip's only file. Convert it to another format before deleting this one."
+            }
+        }
+    }
+
+    /// The logical source clips of a capture, as their original relative file
+    /// names (the stable identity used to key encodings).
+    func sourceClipNames(for capture: CaptureProject) -> [String] {
+        capture.sourceFileNames.filter { !$0.hasSuffix(".json") }
+    }
+
+    /// Absolute URL of a specific encoding inside the capture folder.
+    func encodingURL(for capture: CaptureProject, _ encoding: ClipEncoding) -> URL {
+        captureFolderURL(for: capture.id).appendingPathComponent(encoding.fileName)
+    }
+
+    /// Every encoding of one logical clip: the stored list once the clip has
+    /// been converted, otherwise the implicit single original file.
+    func encodings(for capture: CaptureProject, clip clipFileName: String) -> [ClipEncoding] {
+        if let stored = capture.clipEncodings?[clipFileName], !stored.isEmpty {
+            return stored
+        }
+        return [ClipEncoding(codec: "", fileName: clipFileName)]
+    }
+
+    /// The file the app should actually use for a logical clip — the preferred
+    /// codec when it exists, else the best surviving encoding (quality-first).
+    func activeEncodingURL(
+        for capture: CaptureProject,
+        clip clipFileName: String,
+        preferring codec: OutputCodec? = nil
+    ) -> URL? {
+        let existing = encodings(for: capture, clip: clipFileName).filter {
+            FileManager.default.fileExists(atPath: encodingURL(for: capture, $0).path)
+        }
+        guard !existing.isEmpty else { return nil }
+        if let codec, let match = existing.first(where: { $0.codec == codec.rawValue }) {
+            return encodingURL(for: capture, match)
+        }
+        let priority = [OutputCodec.prores.rawValue, OutputCodec.hevc.rawValue, OutputCodec.h264.rawValue]
+        let chosen = priority.compactMap { rawValue in
+            existing.first { $0.codec == rawValue }
+        }.first ?? existing[0]
+        return encodingURL(for: capture, chosen)
+    }
+
+    /// Codecs the blend can draw from across all of a capture's clips, ordered
+    /// quality-first. Empty when there's no real choice (nothing converted yet).
+    func availableBlendCodecs(for capture: CaptureProject) -> [OutputCodec] {
+        var present: Set<String> = []
+        for clipName in sourceClipNames(for: capture) {
+            for encoding in encodings(for: capture, clip: clipName)
+            where FileManager.default.fileExists(atPath: encodingURL(for: capture, encoding).path) {
+                present.insert(encoding.codec)
+            }
+        }
+        let available: [OutputCodec] = [.prores, .hevc, .h264].filter { present.contains($0.rawValue) }
+        return available.count > 1 ? available : []
+    }
+
+    /// Re-point the in-flight blend source at a specific codec (`nil` = auto,
+    /// best surviving encoding per clip). Used by the Adjust "Blend from" picker.
+    func setBlendSourceCodec(_ codec: OutputCodec?) {
+        blendSourceCodec = codec
+        guard let capture = currentCapture else { return }
+        source = try? source(for: capture, preferring: codec)
+    }
+
+    /// Re-encodes a ProRes source clip into a sibling file inside the project's
+    /// `source/` folder and registers it as an extra encoding of that clip.
+    @discardableResult
+    func addEncoding(
+        for capture: CaptureProject,
+        clip clipFileName: String,
+        codec: OutputCodec
+    ) async throws -> URL {
+        let root = captureFolderURL(for: capture.id)
+        let sourceURL = root.appendingPathComponent(clipFileName)
+        let base = ((clipFileName as NSString).lastPathComponent as NSString).deletingPathExtension
+        let newRelName = "source/\(base)-\(codec.rawValue).\(codec.preferredExtension)"
+        let outputURL = root.appendingPathComponent(newRelName)
         try await Self.transcode(from: sourceURL, to: outputURL, codec: codec)
+
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return outputURL }
+        // Materialise the original as its own (ProRes) encoding the first time.
+        var list = captures[index].clipEncodings?[clipFileName]
+            ?? [ClipEncoding(codec: OutputCodec.prores.rawValue, fileName: clipFileName)]
+        if !list.contains(where: { $0.fileName == newRelName }) {
+            list.append(ClipEncoding(codec: codec.rawValue, fileName: newRelName))
+        }
+        var map = captures[index].clipEncodings ?? [:]
+        map[clipFileName] = list
+        captures[index].clipEncodings = map
+        try persistLibrary()
         return outputURL
+    }
+
+    /// Deletes one encoding of a clip, including the ProRes original once a
+    /// conversion exists. Refuses to remove a clip's only remaining file.
+    func deleteEncoding(
+        for capture: CaptureProject,
+        clip clipFileName: String,
+        _ encoding: ClipEncoding
+    ) throws {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        // Read the live capture, not the caller's snapshot, so a delete that
+        // follows a convert (e.g. bulk purge) sees the newly added encoding.
+        let fresh = captures[index]
+        let list = encodings(for: fresh, clip: clipFileName)
+        let existing = list.filter {
+            FileManager.default.fileExists(atPath: encodingURL(for: fresh, $0).path)
+        }
+        guard existing.count > 1 else { throw EncodingDeletionError.lastEncoding }
+
+        let url = encodingURL(for: fresh, encoding)
+        if FileManager.default.fileExists(atPath: url.path) {
+            try FileManager.default.removeItem(at: url)
+        }
+        let newList = list.filter { $0.fileName != encoding.fileName }
+        var map = captures[index].clipEncodings ?? [:]
+        map[clipFileName] = newList
+        captures[index].clipEncodings = map.isEmpty ? nil : map
+        try persistLibrary()
+    }
+
+    /// One-tap storage reclaim: convert every ProRes clip in a capture to H.264
+    /// and delete the ProRes originals. Skips clips already free of ProRes.
+    func convertAllProResToH264Purging(for capture: CaptureProject) async throws {
+        for clipName in sourceClipNames(for: capture) {
+            let originalURL = captureFolderURL(for: capture.id).appendingPathComponent(clipName)
+            guard FileManager.default.fileExists(atPath: originalURL.path),
+                  await Self.sourceClipIsProRes(at: originalURL) else { continue }
+            _ = try await addEncoding(for: capture, clip: clipName, codec: .h264)
+            let proResEncoding = ClipEncoding(codec: OutputCodec.prores.rawValue, fileName: clipName)
+            try deleteEncoding(for: capture, clip: clipName, proResEncoding)
+        }
     }
 
     nonisolated private static func transcode(
@@ -1701,6 +1896,8 @@ final class AppModel: ObservableObject {
         }
         let naturalSize = try await videoTrack.load(.naturalSize)
         let transform = try await videoTrack.load(.preferredTransform)
+        let nominalFPS = (try? await videoTrack.load(.nominalFrameRate)) ?? 30
+        let fps = nominalFPS > 0 ? Double(nominalFPS) : 30
         let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first
 
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
@@ -1711,6 +1908,7 @@ final class AppModel: ObservableObject {
                         videoTrack: videoTrack,
                         naturalSize: naturalSize,
                         transform: transform,
+                        fps: fps,
                         audioTrack: audioTrack ?? nil,
                         outputURL: outputURL,
                         codec: codec
@@ -1730,6 +1928,7 @@ final class AppModel: ObservableObject {
         videoTrack: AVAssetTrack,
         naturalSize: CGSize,
         transform: CGAffineTransform,
+        fps: Double,
         audioTrack: AVAssetTrack?,
         outputURL: URL,
         codec: OutputCodec
@@ -1745,22 +1944,48 @@ final class AppModel: ObservableObject {
             throw ConvertClipError.encodingFailed(error.localizedDescription)
         }
 
+        // HEVC is encoded 10-bit (Main10) to preserve the ProRes gradient, so it
+        // decodes to a 10-bit pixel format; every other codec path stays 8-bit.
+        let readerPixelFormat: OSType = codec == .hevc
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_32BGRA
         let videoOutput = AVAssetReaderTrackOutput(
             track: videoTrack,
-            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA])
+            outputSettings: [kCVPixelBufferPixelFormatTypeKey as String: readerPixelFormat])
         videoOutput.alwaysCopiesSampleData = false
         guard reader.canAdd(videoOutput) else {
             throw ConvertClipError.encodingFailed("cannot read the video track")
         }
         reader.add(videoOutput)
 
+        let width = Int(abs(naturalSize.width))
+        let height = Int(abs(naturalSize.height))
         var videoSettings: [String: Any] = [
             AVVideoCodecKey: codec.avCodec,
-            AVVideoWidthKey: Int(abs(naturalSize.width)),
-            AVVideoHeightKey: Int(abs(naturalSize.height)),
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
         ]
-        if codec == .jpeg {
+        // Generous, resolution-aware bitrate so re-encoding doesn't introduce
+        // compression banding that would unfairly sink the blend-quality test.
+        let keyframeInterval = max(1, Int(fps.rounded()))
+        let pixelsPerSecond = Double(width * height) * fps
+        switch codec {
+        case .h264:
+            videoSettings[AVVideoCompressionPropertiesKey] = [
+                AVVideoAverageBitRateKey: Int(pixelsPerSecond * 0.24),
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
+                AVVideoMaxKeyFrameIntervalKey: keyframeInterval,
+            ]
+        case .hevc:
+            videoSettings[AVVideoCompressionPropertiesKey] = [
+                AVVideoAverageBitRateKey: Int(pixelsPerSecond * 0.18),
+                AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main10_AutoLevel as String,
+                AVVideoMaxKeyFrameIntervalKey: keyframeInterval,
+            ]
+        case .jpeg:
             videoSettings[AVVideoCompressionPropertiesKey] = [AVVideoQualityKey: 0.95]
+        case .prores:
+            break
         }
         let videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         videoInput.expectsMediaDataInRealTime = false
