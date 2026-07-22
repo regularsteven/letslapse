@@ -15,7 +15,7 @@ struct WatchControlView: View {
     // Mirrors of the phone's option lists; the phone rejects anything else.
     private let intervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
     private let frameOptions: [(frames: Int, label: String)] = [
-        (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
+        (1, "Untouched"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
     ]
 
     var body: some View {

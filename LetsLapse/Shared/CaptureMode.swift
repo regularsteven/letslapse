@@ -19,3 +19,12 @@ enum ScheduledStopUnit: String, CaseIterable {
     case minutes
     case frames
 }
+
+/// Output format for Live Blend intervals. DNG blends Bayer RAW captures
+/// into a real raw file — white balance and tone stay adjustable in post —
+/// and needs a RAW-capable camera source; Standard is the JPEG path every
+/// source supports.
+enum LiveBlendOutputFormat: String, CaseIterable {
+    case standard
+    case dng
+}

@@ -26,6 +26,9 @@ struct LiveBlendDiagnosticsSnapshot: Equatable {
     var lastOutputIntervalSeconds: Double?
     var outputCount = 0
     var status: LiveBlendStatus = .healthy
+    /// Shown in the running readout so the active output format is visible
+    /// during capture, not just before it ("DNG" on the RAW path).
+    var outputFormatLabel: String? = nil
 }
 
 /// Everything a finished session hands back to the capture screen.
@@ -35,6 +38,9 @@ struct LiveBlendCaptureResult {
     var completedOutputs: Int
     var fallbackOutputs: Int
     var failedOutputs: Int
+    /// "dng" when the RAW path produced the frames; drives the project's
+    /// provenance label at registration.
+    var outputFormat: String = "standard"
 }
 
 /// The experiment log written to Application Support/LetsLapse/Logs/.
@@ -51,6 +57,10 @@ struct LiveBlendSessionLog: Codable {
         var configuredFrameRate: Int
         var requestedIntervalSeconds: Double
         var requestedFramesPerBlend: Int
+        /// What the user asked for ("standard"/"dng") vs what this session
+        /// actually produces — a visible record of any fallback.
+        var requestedOutputFormat: String = "standard"
+        var outputFormat: String = "standard"
     }
 
     struct OutputEntry: Codable {
@@ -80,6 +90,9 @@ struct LiveBlendSessionLog: Codable {
         var partial: Bool
         var fallbackSingleFrame: Bool = false
         var failed: Bool = false
+        /// Per-output format ("dng"/"standard"); records mid-session
+        /// fallbacks individually.
+        var outputFormat: String? = nil
     }
 
     struct Summary: Codable {
@@ -123,6 +136,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         var captureWidth: Int
         var captureHeight: Int
         var configuredFrameRate: Int
+        /// "dng" when the user asked for DNG but this (standard) path ran as
+        /// the fallback — recorded in the log header.
+        var requestedOutputFormat: String = "standard"
     }
 
     /// One compiled kernel set for the app lifetime; nil only when Metal is
@@ -210,7 +226,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             captureHeight: configuration.captureHeight,
             configuredFrameRate: configuration.configuredFrameRate,
             requestedIntervalSeconds: configuration.intervalSeconds,
-            requestedFramesPerBlend: configuration.framesPerBlend))
+            requestedFramesPerBlend: configuration.framesPerBlend,
+            requestedOutputFormat: configuration.requestedOutputFormat,
+            outputFormat: "standard"))
         super.init()
     }
 
@@ -227,10 +245,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
     }
 
-    /// Graceful stop keeps a ≥1-frame partial window and hands the run over;
-    /// discard drops queued work, deletes the temp frames, and never fires the
-    /// result. Both are safe to call more than once.
-    func requestStop(discard: Bool) {
+    /// Graceful stop keeps a ≥1-frame partial window (unless `keepPartial`
+    /// is false — a scheduled "stop at N" wants exactly N) and hands the run
+    /// over; discard drops queued work, deletes the temp frames, and never
+    /// fires the result. All are safe to call more than once.
+    func requestStop(discard: Bool, keepPartial: Bool = true) {
         videoQueue.async {
             guard !self.finishRequested else { return }
             self.finishRequested = true
@@ -239,7 +258,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             self.watchdog = nil
             if discard {
                 self.generation.withLock { $0 += 1 }
-            } else if self.sessionStartPTS != nil, !self.window.frameTimes.isEmpty {
+            } else if keepPartial, self.sessionStartPTS != nil, !self.window.frameTimes.isEmpty {
                 self.window.partial = true
                 self.closeCurrentWindow()
             }

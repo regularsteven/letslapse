@@ -4,6 +4,7 @@ import CoreGraphics
 import ImageIO
 import LetsLapseKit
 import VideoToolbox
+import UniformTypeIdentifiers
 #if os(iOS)
 import Photos
 #endif
@@ -21,6 +22,7 @@ final class AppModel: ObservableObject {
         static let defaultSpeed = "letslapse.defaultSpeed"
         static let scratchFrameFormat = "letslapse.scratchFrameFormat"
         static let keepExtractedFrames = "letslapse.keepExtractedFrames"
+        static let liveBlendOutputFormat = "letslapse.liveBlendOutputFormat"
     }
 
     enum CaptureKind: String, Codable {
@@ -404,6 +406,15 @@ final class AppModel: ObservableObject {
         rawValue: UserDefaults.standard.string(forKey: DefaultsKey.scratchFrameFormat) ?? ""
     ) ?? .png {
         didSet { UserDefaults.standard.set(scratchFrameFormat.rawValue, forKey: DefaultsKey.scratchFrameFormat) }
+    }
+    /// Live Blend output preference: Standard JPEG everywhere, or blended
+    /// DNG where the capture source provides Bayer RAW (iPhone/iPad
+    /// cameras). Unsupported sources fall back to Standard with a visible
+    /// notice before recording.
+    @Published var liveBlendOutputFormat: LiveBlendOutputFormat = LiveBlendOutputFormat(
+        rawValue: UserDefaults.standard.string(forKey: DefaultsKey.liveBlendOutputFormat) ?? ""
+    ) ?? .standard {
+        didSet { UserDefaults.standard.set(liveBlendOutputFormat.rawValue, forKey: DefaultsKey.liveBlendOutputFormat) }
     }
     /// When on, decoded frames stay in the job folder for inspection and for
     /// instant re-blends at other speeds. When off (default) each blend
@@ -2139,6 +2150,106 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Project archives (share / import)
+
+    /// Builds a portable `.lapse` archive of one project: `project.json`
+    /// (capture + its blend entries) beside the project's `source/` and
+    /// `blends/` trees. The manifest is written into the project folder for
+    /// the duration of the archive pass so multi-gigabyte projects aren't
+    /// duplicated on disk first.
+    func exportProject(_ capture: CaptureProject) async throws -> URL {
+        let manifest = ProjectArchiveManifest(capture: capture, blends: blends(for: capture))
+        let folder = captureFolderURL(for: capture.id)
+
+        let rawName = capture.name ?? capture.originalName
+        let safeName = rawName
+            .components(separatedBy: CharacterSet.alphanumerics.union(CharacterSet(charactersIn: " -_")).inverted)
+            .joined()
+            .trimmingCharacters(in: .whitespaces)
+        let archiveURL = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(safeName.isEmpty ? "LetsLapse Project" : safeName).\(ProjectArchive.fileExtension)")
+
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        let manifestURL = folder.appendingPathComponent("project.json")
+        try encoder.encode(manifest).write(to: manifestURL, options: .atomic)
+        defer { try? FileManager.default.removeItem(at: manifestURL) }
+
+        try await Task.detached(priority: .userInitiated) {
+            try ProjectArchive.write(contentsOf: folder, to: archiveURL)
+        }.value
+        return archiveURL
+    }
+
+    /// Restores a `.lapse` archive as a new project. Fresh UUIDs are minted
+    /// for the capture and every blend (folder names and lookups key on
+    /// them, so reusing the originals would collide with re-imports or the
+    /// source device's own library).
+    func importProject(from pickedURL: URL) async {
+        let scoped = pickedURL.startAccessingSecurityScopedResource()
+        defer {
+            if scoped { pickedURL.stopAccessingSecurityScopedResource() }
+        }
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("lapse-import-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        do {
+            try await Task.detached(priority: .userInitiated) {
+                try ProjectArchive.extract(pickedURL, to: staging)
+            }.value
+
+            let manifestURL = staging.appendingPathComponent("project.json")
+            guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+                throw ProjectArchiveError.notAProjectArchive
+            }
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            let manifest = try decoder.decode(ProjectArchiveManifest.self, from: Data(contentsOf: manifestURL))
+            guard manifest.formatVersion == 1 else {
+                throw ProjectArchiveError.unsupportedVersion(manifest.formatVersion)
+            }
+
+            var capture = manifest.capture
+            let newID = UUID()
+            capture.id = newID
+            let destination = captureFolderURL(for: newID)
+            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+            for subfolder in ["source", "blends"] {
+                let extracted = staging.appendingPathComponent(subfolder)
+                if FileManager.default.fileExists(atPath: extracted.path) {
+                    try FileManager.default.moveItem(at: extracted, to: destination.appendingPathComponent(subfolder))
+                }
+            }
+
+            var importedBlends: [BlendProject] = []
+            for blendEntry in manifest.blends {
+                var blend = blendEntry
+                let extractedFile = destination.appendingPathComponent(blend.outputFileName)
+                guard FileManager.default.fileExists(atPath: extractedFile.path) else { continue }
+                let newBlendID = UUID()
+                let fileExtension = (blend.outputFileName as NSString).pathExtension
+                let newFileName = "blends/\(newBlendID.uuidString).\(fileExtension)"
+                do {
+                    try FileManager.default.moveItem(at: extractedFile, to: destination.appendingPathComponent(newFileName))
+                } catch {
+                    continue
+                }
+                blend.id = newBlendID
+                blend.captureID = newID
+                blend.outputFileName = newFileName
+                importedBlends.append(blend)
+            }
+
+            captures.insert(capture, at: 0)
+            blends.append(contentsOf: importedBlends)
+            try persistLibrary()
+            openCapture(capture)
+        } catch {
+            errorMessage = "Couldn't import the project: \(error.localizedDescription)"
+        }
+    }
+
     #if os(iOS)
     enum SourceClipSaveError: LocalizedError {
         case accessDenied
@@ -2154,16 +2265,23 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// Saves a single source clip to the Photos library. Requests add-only
-    /// authorisation first and throws a descriptive error on denial or failure.
+    /// Saves a single source clip or still to the Photos library. Requests
+    /// add-only authorisation first and throws a descriptive error on denial
+    /// or failure. Stills (including DNG) go through the image request —
+    /// handing them to the video request is what produced PHPhotosError 3302.
     func saveSourceClip(at url: URL) async throws {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
             throw SourceClipSaveError.accessDenied
         }
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                if isImage {
+                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                } else {
+                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                }
             }
         } catch {
             throw SourceClipSaveError.saveFailed(error.localizedDescription)

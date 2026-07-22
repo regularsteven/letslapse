@@ -14,6 +14,14 @@ struct ProjectDetailView: View {
     @State private var confirmingProjectDelete = false
     @State private var versionPendingDelete: AppModel.BlendProject?
     @State private var deletionFailure: String?
+    @State private var isExportingArchive = false
+    @State private var exportedArchive: ExportedArchive?
+    @State private var exportFailure: String?
+
+    private struct ExportedArchive: Identifiable {
+        let url: URL
+        var id: String { url.path }
+    }
     @State private var storageBytes: Int64?
     @State private var confirmingPurge = false
     @State private var isPurging = false
@@ -74,6 +82,45 @@ struct ProjectDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(deletionFailure ?? "")
+        }
+        .alert(
+            "Couldn't share project",
+            isPresented: Binding(
+                get: { exportFailure != nil },
+                set: { if !$0 { exportFailure = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportFailure ?? "")
+        }
+        .sheet(item: $exportedArchive) { archive in
+            VStack(spacing: 14) {
+                Image(systemName: "shippingbox")
+                    .font(.system(size: 30))
+                    .foregroundStyle(.secondary)
+                Text(archive.url.lastPathComponent)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                if let size = archiveSizeLabel(archive.url) {
+                    Text(size)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+                ShareLink(item: archive.url) {
+                    Label("Share archive", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                }
+                .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                Button("Done") { exportedArchive = nil }
+                    .buttonStyle(.plain)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(24)
+            #if os(macOS)
+            .frame(minWidth: 340)
+            #endif
         }
         .alert("Convert all ProRes to H.264?", isPresented: $confirmingPurge) {
             Button("Convert & delete originals", role: .destructive) { purgeProRes() }
@@ -174,13 +221,19 @@ struct ProjectDetailView: View {
                         .disabled(isPurging)
                     }
                     #endif
+                    Button {
+                        exportArchive(capture)
+                    } label: {
+                        Label("Share project", systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(isExportingArchive)
                     Button(role: .destructive) {
                         confirmingProjectDelete = true
                     } label: {
                         Label("Delete project…", systemImage: "trash")
                     }
                 } label: {
-                    if isPurging {
+                    if isPurging || isExportingArchive {
                         ProgressView()
                     } else {
                         Image(systemName: "ellipsis.circle")
@@ -398,6 +451,25 @@ struct ProjectDetailView: View {
     private func startRename(_ capture: AppModel.CaptureProject) {
         renameText = capture.name ?? capture.displayTitle
         isRenaming = true
+    }
+
+    private func exportArchive(_ capture: AppModel.CaptureProject) {
+        isExportingArchive = true
+        Task { @MainActor in
+            defer { isExportingArchive = false }
+            do {
+                let url = try await model.exportProject(capture)
+                exportedArchive = ExportedArchive(url: url)
+            } catch {
+                exportFailure = error.localizedDescription
+            }
+        }
+    }
+
+    private func archiveSizeLabel(_ url: URL) -> String? {
+        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
+        guard let bytes = (attributes?[.size] as? NSNumber)?.int64Value else { return nil }
+        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
     }
 
     private func deleteProject() {

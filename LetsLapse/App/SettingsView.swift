@@ -149,6 +149,34 @@ struct SettingsView: View {
             }
 
             LLRow(
+                title: "Live Blend output",
+                subtitle: "DNG keeps white balance and colour temperature adjustable in post — for day-to-night and mixed-light work. Needs a RAW-capable camera (iPhone/iPad); other sources fall back to Standard."
+            ) {
+                Menu {
+                    Button {
+                        model.liveBlendOutputFormat = .standard
+                    } label: {
+                        if model.liveBlendOutputFormat == .standard {
+                            Label("Standard", systemImage: "checkmark")
+                        } else {
+                            Text("Standard")
+                        }
+                    }
+                    Button {
+                        model.liveBlendOutputFormat = .dng
+                    } label: {
+                        if model.liveBlendOutputFormat == .dng {
+                            Label("DNG · when supported", systemImage: "checkmark")
+                        } else {
+                            Text("DNG · when supported")
+                        }
+                    }
+                } label: {
+                    menuValueLabel(model.liveBlendOutputFormat == .dng ? "DNG" : "Standard")
+                }
+            }
+
+            LLRow(
                 title: "Record audio",
                 subtitle: "Capture microphone sound with video shoots. Off keeps shoots silent and lets playing music continue.",
                 showsDivider: false

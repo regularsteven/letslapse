@@ -154,6 +154,17 @@ final class CameraController: NSObject, ObservableObject {
     }
     @Published var liveBlendDiagnostics: LiveBlendDiagnosticsSnapshot?
 
+    /// Whether the active camera source can produce Live Blend DNG — i.e.
+    /// offers Bayer RAW capture. Honest by construction: computed from the
+    /// photo output's actual RAW formats, never assumed.
+    struct LiveBlendDNGSupport: Equatable {
+        var isSupported: Bool
+        var reason: String?
+    }
+
+    @Published var liveBlendDNGSupport = LiveBlendDNGSupport(
+        isSupported: false, reason: "Checking camera…")
+
     /// A pending "stop at…" set from the Watch remote. Time-based stops hold
     /// a deadline; frame-based stops in Interval/Live Blend hold an absolute
     /// output-count target. Enforced here (not on the Watch) so the stop
@@ -185,11 +196,17 @@ final class CameraController: NSObject, ObservableObject {
     // Blend run and stays attached (delegate cleared between runs).
     private var liveBlendOutput: AVCaptureVideoDataOutput?
     private var liveBlendController: LiveBlendController?
+    #if os(iOS)
+    private var liveBlendRawController: LiveBlendRawController?
+    #endif
 
     /// True while a Live Blend run is collecting or draining. Guards the
     /// format/lens setters the same way recording and interval capture do.
     private var isLiveBlendActive: Bool {
-        liveBlendController?.isActive == true
+        #if os(iOS)
+        if liveBlendRawController?.isActive == true { return true }
+        #endif
+        return liveBlendController?.isActive == true
     }
 
     override init() {
@@ -262,6 +279,13 @@ final class CameraController: NSObject, ObservableObject {
             // mid-capture). A gracefully finished run is already inactive by
             // the time its finish handler calls stop(), so this leaves the
             // handed-over temp frames alone.
+            #if os(iOS)
+            if let rawController = self.liveBlendRawController, rawController.isActive {
+                rawController.requestStop(discard: true)
+                self.restoreAfterDNGRun()
+                DispatchQueue.main.async { self.isLiveBlendRunning = false }
+            }
+            #endif
             if let controller = self.liveBlendController, controller.isActive {
                 self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
                 controller.requestStop(discard: true)
@@ -352,7 +376,77 @@ final class CameraController: NSObject, ObservableObject {
         refreshCaptureOptions()
         applyVideoStabilization()
         publishFormat()
+        publishLiveBlendDNGSupport()
         LLog("configureIfNeeded: done, inputs=\(session.inputs.count) outputs=\(session.outputs.count)")
+    }
+
+    /// Bayer RAW formats offered by the photo output *in its current
+    /// configuration*, queried live on iOS. macOS has no RAW photo capture
+    /// API at all (AVCapturePhotoSettings(rawPixelFormatType:) is marked
+    /// unavailable), so the Mac is always empty by construction.
+    private func availableBayerRawFormats() -> [OSType] {
+        #if os(iOS)
+        return photoOutput.availableRawPhotoPixelFormatTypes
+            .filter { AVCapturePhotoOutput.isBayerRAWPixelFormat($0) }
+        #else
+        return []
+        #endif
+    }
+
+    #if os(iOS)
+    /// Per-device probe results, sessionQueue-confined.
+    private var bayerRAWSupportByDevice: [String: Bool] = [:]
+    #endif
+
+    /// Whether the current camera can capture Bayer RAW at all. The
+    /// video-recording formats LetsLapse pins for fps control never offer
+    /// RAW — the list is only populated in a photo configuration — so this
+    /// probes `.photo` once per device and restores the pinned format.
+    /// (Reading the list in the video configuration was the bug that made an
+    /// iPhone 16 Pro report "no RAW" and silently fall back to JPEG.)
+    private func deviceSupportsBayerRAW() -> Bool {
+        #if os(iOS)
+        guard let device = videoDevice else { return false }
+        if let cached = bayerRAWSupportByDevice[device.uniqueID] { return cached }
+        let previousPreset = session.sessionPreset
+        session.beginConfiguration()
+        session.sessionPreset = .photo
+        session.commitConfiguration()
+        let supported = !availableBayerRawFormats().isEmpty
+        // Cache before restoring: the restore re-pins the format, which
+        // republishes support and would otherwise probe again forever.
+        bayerRAWSupportByDevice[device.uniqueID] = supported
+        session.beginConfiguration()
+        session.sessionPreset = previousPreset
+        session.commitConfiguration()
+        applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        LLog("liveblend-dng: probe \(device.localizedName) bayerRAW=\(supported)")
+        return supported
+        #else
+        return false
+        #endif
+    }
+
+    private func publishLiveBlendDNGSupport() {
+        let support: LiveBlendDNGSupport
+        if deviceSupportsBayerRAW() {
+            support = LiveBlendDNGSupport(isSupported: true, reason: nil)
+        } else {
+            #if os(macOS)
+            support = LiveBlendDNGSupport(
+                isSupported: false,
+                reason: "Webcams deliver processed video, not RAW sensor data.")
+            #else
+            support = LiveBlendDNGSupport(
+                isSupported: false,
+                reason: "This camera does not provide RAW sensor data.")
+            #endif
+        }
+        DispatchQueue.main.async {
+            if self.liveBlendDNGSupport != support {
+                self.liveBlendDNGSupport = support
+            }
+        }
     }
 
     /// Custom rate last folded into the rate menus, so a Settings change made
@@ -625,6 +719,7 @@ final class CameraController: NSObject, ObservableObject {
                 photoOutput.maxPhotoDimensions = photoDimensions
             }
             reassertExposureLock(on: device)
+            publishLiveBlendDNGSupport()
             return true
         } catch {
             return false
@@ -1387,20 +1482,43 @@ final class CameraController: NSObject, ObservableObject {
         } else if isIntervalRunning {
             stopInterval()
         } else if isLiveBlendRunning {
-            stopLiveBlend()
+            // The user asked for an exact count/time; the window in progress
+            // is beyond it, so it is dropped rather than kept as a partial.
+            stopLiveBlend(keepPartial: false)
         }
     }
 
     // MARK: - Live Blend (experimental spike)
 
     /// Starts a Live Blend run: every `interval` seconds, `framesPerBlend`
-    /// frames tapped from the camera stream are averaged into one JPEG. The
-    /// run hands its outputs over through `onFinishLiveBlend` exactly like
-    /// interval capture hands over `onFinishPhotos`.
-    func startLiveBlend(every interval: Double, framesPerBlend: Int) {
+    /// frames are averaged into one output image. With `preferDNG` and a
+    /// Bayer-RAW-capable source, frames come from RAW photo captures and the
+    /// output is a blended DNG; otherwise the processed video stream is
+    /// tapped and the output is JPEG. The run hands its outputs over through
+    /// `onFinishLiveBlend` exactly like interval capture hands over
+    /// `onFinishPhotos`.
+    func startLiveBlend(every interval: Double, framesPerBlend: Int, preferDNG: Bool = false) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
 
+            #if os(iOS)
+            if preferDNG, self.deviceSupportsBayerRAW() {
+                self.startLiveBlendDNG(every: interval, framesPerBlend: framesPerBlend)
+                return
+            }
+            #endif
+            if preferDNG {
+                LLog("liveblend: DNG requested but unsupported on this source — standard output")
+            }
+            self.startLiveBlendStandard(
+                every: interval,
+                framesPerBlend: framesPerBlend,
+                requestedOutputFormat: preferDNG ? "dng" : "standard")
+        }
+    }
+
+    /// sessionQueue-confined: the video-tap JPEG path.
+    private func startLiveBlendStandard(every interval: Double, framesPerBlend: Int, requestedOutputFormat: String) {
             if self.liveBlendOutput == nil {
                 let output = AVCaptureVideoDataOutput()
                 output.videoSettings = [
@@ -1442,7 +1560,8 @@ final class CameraController: NSObject, ObservableObject {
                 cameraName: self.videoDevice?.localizedName ?? "unknown camera",
                 captureWidth: Int(dimensions?.width ?? 0),
                 captureHeight: Int(dimensions?.height ?? 0),
-                configuredFrameRate: self.selectedFrameRate)
+                configuredFrameRate: self.selectedFrameRate,
+                requestedOutputFormat: requestedOutputFormat)
 
             let controller: LiveBlendController
             do {
@@ -1490,17 +1609,116 @@ final class CameraController: NSObject, ObservableObject {
                     requestedIntervalSeconds: interval,
                     requestedFramesPerBlend: framesPerBlend)
             }
+    }
+
+    #if os(iOS)
+    /// The pinned preset to restore once a DNG run ends. sessionQueue-confined.
+    private var dngRunPreviousPreset: AVCaptureSession.Preset?
+
+    /// sessionQueue-confined DNG variant of `startLiveBlend`: switches the
+    /// session to a RAW-capable photo configuration for the run (restored on
+    /// finish), then RAW photo captures feed a Bayer average — one blended
+    /// DNG per interval.
+    private func startLiveBlendDNG(every interval: Double, framesPerBlend: Int) {
+        let previousPreset = session.sessionPreset
+        session.beginConfiguration()
+        session.sessionPreset = .photo
+        session.commitConfiguration()
+        guard let rawFormat = availableBayerRawFormats().first else {
+            session.beginConfiguration()
+            session.sessionPreset = previousPreset
+            session.commitConfiguration()
+            applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            LLog("liveblend-dng: photo configuration offers no Bayer RAW — standard output")
+            startLiveBlendStandard(every: interval, framesPerBlend: framesPerBlend, requestedOutputFormat: "dng")
+            return
+        }
+        dngRunPreviousPreset = previousPreset
+        if let dimensions = videoDevice?.activeFormat.supportedMaxPhotoDimensions.last {
+            photoOutput.maxPhotoDimensions = dimensions
+        }
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("liveblend-dng-\(Int(Date().timeIntervalSince1970))")
+        do {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        } catch {
+            LLog("liveblend-dng: could not create temp directory: \(error)")
+            publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+            return
+        }
+        let dimensions = videoDevice.map {
+            CMVideoFormatDescriptionGetDimensions($0.activeFormat.formatDescription)
+        }
+        let configuration = LiveBlendRawController.Configuration(
+            intervalSeconds: interval,
+            framesPerBlend: framesPerBlend,
+            outputDirectory: directory,
+            logURL: Self.liveBlendLogURL(),
+            cameraName: videoDevice?.localizedName ?? "unknown camera",
+            captureWidth: Int(dimensions?.width ?? 0),
+            captureHeight: Int(dimensions?.height ?? 0),
+            configuredFrameRate: selectedFrameRate,
+            rawPixelFormat: rawFormat)
+        let controller = LiveBlendRawController(
+            configuration: configuration,
+            photoOutput: photoOutput,
+            captureExecutor: { [weak self] block in self?.sessionQueue.async(execute: block) })
+        controller.onDiagnostics = { [weak self] snapshot in
+            guard let self else { return }
+            if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
+            if self.liveBlendOutputCount != snapshot.outputCount {
+                self.liveBlendOutputCount = snapshot.outputCount
+            }
+        }
+        controller.onFinished = { [weak self] result in
+            guard let self else { return }
+            self.isLiveBlendRunning = false
+            self.sessionQueue.async { self.restoreAfterDNGRun() }
+            if let result {
+                self.onFinishLiveBlend?(result)
+            }
+        }
+        liveBlendRawController = controller
+        controller.start()
+        DispatchQueue.main.async {
+            self.isLiveBlendRunning = true
+            self.liveBlendOutputCount = 0
+            var snapshot = LiveBlendDiagnosticsSnapshot(
+                requestedIntervalSeconds: interval,
+                requestedFramesPerBlend: framesPerBlend)
+            snapshot.outputFormatLabel = "DNG"
+            self.liveBlendDiagnostics = snapshot
         }
     }
 
-    /// Graceful stop: the partial window is kept when it has frames, then the
-    /// finish handler fires with everything completed so far.
-    func stopLiveBlend() {
+    /// sessionQueue-confined: undo the photo-configuration switch after a
+    /// DNG run so preview and the other modes get their pinned format back.
+    private func restoreAfterDNGRun() {
+        guard let previousPreset = dngRunPreviousPreset else { return }
+        dngRunPreviousPreset = nil
+        session.beginConfiguration()
+        session.sessionPreset = previousPreset
+        session.commitConfiguration()
+        applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        publishFormat()
+    }
+    #endif
+
+    /// Graceful stop: the partial window is kept when it has frames (unless
+    /// `keepPartial` is false — a scheduled "stop at N" wants exactly N),
+    /// then the finish handler fires with everything completed so far.
+    func stopLiveBlend(keepPartial: Bool = true) {
         cancelScheduledStop()
         sessionQueue.async {
+            #if os(iOS)
+            if let rawController = self.liveBlendRawController, rawController.isActive {
+                rawController.requestStop(discard: false, keepPartial: keepPartial)
+                return
+            }
+            #endif
             guard let controller = self.liveBlendController, controller.isActive else { return }
             self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
-            controller.requestStop(discard: false)
+            controller.requestStop(discard: false, keepPartial: keepPartial)
         }
     }
 

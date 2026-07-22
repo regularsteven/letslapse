@@ -50,6 +50,7 @@ struct CreateView: View {
     @State private var isImporting = false
     @State private var showCapture = false
     @State private var captureIntent = CaptureIntent()
+    @State private var importingProject = false
     #if os(iOS)
     @State private var videoItem: PhotosPickerItem?
     @State private var photoItems: [PhotosPickerItem] = []
@@ -58,6 +59,10 @@ struct CreateView: View {
     @State private var importingPhotos = false
     @State private var isDropTargeted = false
     #endif
+
+    private static let projectArchiveTypes: [UTType] = [
+        UTType(filenameExtension: ProjectArchive.fileExtension) ?? .data,
+    ]
 
     private let effectColumns = [
         GridItem(.flexible(), spacing: 12),
@@ -144,6 +149,14 @@ struct CreateView: View {
             guard !items.isEmpty else { return }
             importPhotos(items)
         }
+        .fileImporter(
+            isPresented: $importingProject,
+            allowedContentTypes: Self.projectArchiveTypes
+        ) { result in
+            if case .success(let url) = result {
+                Task { await model.importProject(from: url) }
+            }
+        }
         #else
         .fileImporter(isPresented: $importingVideo, allowedContentTypes: Self.videoContentTypes) { result in
             handleVideoImport(result)
@@ -154,6 +167,14 @@ struct CreateView: View {
             allowsMultipleSelection: true
         ) { result in
             handlePhotosImport(result)
+        }
+        .fileImporter(
+            isPresented: $importingProject,
+            allowedContentTypes: Self.projectArchiveTypes
+        ) { result in
+            if case .success(let url) = result {
+                Task { await model.importProject(from: url) }
+            }
         }
         .dropDestination(for: URL.self) { urls, _ in
             handleDroppedURLs(urls)
@@ -195,8 +216,25 @@ struct CreateView: View {
             Divider().padding(.leading, 58)
 
             importPhotosRow
+
+            Divider().padding(.leading, 58)
+
+            importProjectRow
         }
         .llCard(cornerRadius: 18)
+    }
+
+    private var importProjectRow: some View {
+        Button {
+            importingProject = true
+        } label: {
+            SourceRow(
+                icon: "shippingbox",
+                iconColor: Color(red: 0.56, green: 0.45, blue: 0.32),
+                title: "Import a LetsLapse project…"
+            )
+        }
+        .buttonStyle(.plain)
     }
 
     @ViewBuilder

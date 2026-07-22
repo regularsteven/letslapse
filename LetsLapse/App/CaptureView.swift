@@ -25,7 +25,7 @@ struct CaptureView: View {
     /// interval seconds above. The set is deliberately small for the spike.
     @State private var framesPerBlend = 5
     private let liveBlendFrameOptions: [(frames: Int, label: String)] = [
-        (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
+        (1, "Untouched"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
     ]
     private let captureIntervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
     @State private var orientation = currentCaptureOrientation()
@@ -191,7 +191,12 @@ struct CaptureView: View {
         camera.onFinishLiveBlend = { result in
             camera.stop()
             dismiss()
-            model.setSource(.photos(result.frameURLs), mode: "Live Blend")
+            // The experiment log rides along as a JSON sidecar (the project
+            // model filters .json from media), so shared/imported projects
+            // carry their own capture diagnostics.
+            model.setSource(
+                .photos(result.frameURLs + [result.logURL]),
+                mode: result.outputFormat == "dng" ? "Live Blend DNG" : "Live Blend")
         }
         orientation = currentCaptureOrientation()
         #if os(iOS)
@@ -483,6 +488,11 @@ struct CaptureView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(camera.isRecording ? LL.amber.opacity(0.6) : LL.amber)
                 }
+                if mode == .liveBlend && model.liveBlendOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported {
+                    Text("· DNG")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(LL.amber)
+                }
                 Image(systemName: camera.isRecording ? "lock.fill" : "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.4))
@@ -745,7 +755,10 @@ struct CaptureView: View {
                 liveBlendDiagnosticsReadout
             }
         } else {
-            liveBlendPickerRow
+            VStack(spacing: 6) {
+                liveBlendPickerRow
+                liveBlendOutputStatusLine
+            }
         }
     }
 
@@ -759,11 +772,48 @@ struct CaptureView: View {
                 liveBlendDiagnosticsReadout
             }
         } else {
-            liveBlendPickerRow
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(Color.black.opacity(0.5), in: Capsule())
+            VStack(alignment: .leading, spacing: 4) {
+                liveBlendPickerRow
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+                liveBlendOutputStatusLine
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+            }
         }
+    }
+
+    /// §Output status before recording starts: the user must know whether
+    /// the capture will be gradeable DNG or baked Standard, and why.
+    @ViewBuilder
+    private var liveBlendOutputStatusLine: some View {
+        let wantsDNG = model.liveBlendOutputFormat == .dng
+        let support = camera.liveBlendDNGSupport
+        Group {
+            if wantsDNG && support.isSupported {
+                if framesPerBlend == 1 {
+                    Text("Output: DNG · untouched originals, no blending")
+                        .foregroundStyle(LL.amber)
+                } else if interval / Double(framesPerBlend) < 0.9 {
+                    Text("Output: DNG · RAW captures run ~1/s — expect fewer than \(framesPerBlend) frames per blend at this spacing")
+                        .foregroundStyle(LL.amber)
+                } else {
+                    Text("Output: DNG")
+                        .foregroundStyle(LL.amber)
+                }
+            } else if wantsDNG {
+                Text("Output: Standard · DNG unavailable — \(support.reason ?? "not supported on this camera source")")
+                    .foregroundStyle(.white.opacity(0.6))
+            } else {
+                Text("Output: Standard")
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+        }
+        .font(.system(size: 10.5, weight: .medium))
+        .lineLimit(2)
+        .multilineTextAlignment(.leading)
     }
 
     private var liveBlendRunningPills: some View {
@@ -781,7 +831,7 @@ struct CaptureView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("frames \(diagnostics.currentWindowSelectedFrames)/\(diagnostics.requestedFramesPerBlend) · last \(diagnostics.lastCapturedFrames.map(String.init) ?? "–")")
                 Text("out \(diagnostics.lastOutputIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "–") (req \(String(format: "%.1f s", diagnostics.requestedIntervalSeconds)))")
-                Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–") · \(diagnostics.status.rawValue)")
+                Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–")\(diagnostics.outputFormatLabel.map { " · \($0)" } ?? "") · \(diagnostics.status.rawValue)")
                     .foregroundStyle(liveBlendStatusTint(diagnostics.status))
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
@@ -1020,7 +1070,10 @@ struct CaptureView: View {
                 camera.stopLiveBlend()
             } else {
                 framingStartedAt = Date()
-                camera.startLiveBlend(every: interval, framesPerBlend: framesPerBlend)
+                camera.startLiveBlend(
+                    every: interval,
+                    framesPerBlend: framesPerBlend,
+                    preferDNG: model.liveBlendOutputFormat == .dng)
             }
         }
     }
