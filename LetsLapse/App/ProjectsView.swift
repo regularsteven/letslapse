@@ -72,9 +72,9 @@ struct ProjectsView: View {
                 ProjectMediaPreviewSheet(item: item)
             }
         }
-        .onAppear(perform: consumeDetailRequest)
-        .onReceive(model.$requestedProjectDetailID) { _ in
-            consumeDetailRequest()
+        .onAppear { consumeDetailRequest(model.requestedProjectDetailID) }
+        .onReceive(model.$requestedProjectDetailID) { requested in
+            consumeDetailRequest(requested)
         }
     }
 
@@ -105,11 +105,22 @@ struct ProjectsView: View {
         )
     }
 
-    private func consumeDetailRequest() {
-        guard let requested = model.requestedProjectDetailID else { return }
-        model.requestedProjectDetailID = nil
+    /// `requested` must arrive as a parameter: @Published emits on willSet, so
+    /// during the emission the model property still holds the OLD value — the
+    /// previous re-read here made a live ProjectsView drop every request (the
+    /// macOS "clicking a project in Settings does nothing" bug; iOS was saved
+    /// only by onAppear re-firing on tab switches).
+    private func consumeDetailRequest(_ requested: UUID?) {
+        guard let requested else { return }
         guard model.captures.contains(where: { $0.id == requested }) else { return }
         path = [requested]
+        // Clear once the emission has settled; writing back during it would
+        // re-enter the publisher mid-publish.
+        DispatchQueue.main.async {
+            if model.requestedProjectDetailID == requested {
+                model.requestedProjectDetailID = nil
+            }
+        }
     }
 
     /// Deliberately unconfirmed: swiping is the confirmation. Failures

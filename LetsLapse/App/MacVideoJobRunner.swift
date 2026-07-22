@@ -13,6 +13,11 @@ struct MacVideoJobOptions: Sendable {
     var trimHeadTailSeconds: Double
     var maxCPUWorkers: Int
     var maxBlendBatches: Int
+    var extractFormat: ImageFormat = .png
+    /// Off (default): each blend window's scratch frames are deleted as soon
+    /// as its blended frame is written, so scratch stays bounded by the number
+    /// of in-flight batches instead of the clip length.
+    var keepExtractedFrames: Bool = false
 }
 
 struct MacVideoJobProgress: Sendable {
@@ -20,6 +25,11 @@ struct MacVideoJobProgress: Sendable {
     var message: String
     var jobFolderURL: URL
     var recentLogLines: [String]
+    /// Stage-aware estimate computed by the runner; the UI shows it verbatim
+    /// instead of extrapolating from the (piecewise, non-linear) fraction.
+    var etaSeconds: Double? = nil
+    var framesDone: Int? = nil
+    var framesTotal: Int? = nil
 }
 
 struct MacVideoJobResult: Sendable {
@@ -41,6 +51,8 @@ enum MacVideoJobRunner {
         var trimHeadTailSeconds: Double?
         var maxCPUWorkers: Int
         var maxBlendBatches: Int
+        var extractFormat: String?
+        var keepExtractedFrames: Bool?
         var status: String
         var inputFrames: Int
         var blendedFrames: Int
@@ -93,7 +105,7 @@ enum MacVideoJobRunner {
             )
             : nil
 
-        return try await Task.detached(priority: .userInitiated) {
+        let job = Task.detached(priority: .userInitiated) {
             try runSynchronously(
                 inputURL: inputURL,
                 asset: asset,
@@ -104,7 +116,15 @@ enum MacVideoJobRunner {
                 options: options,
                 progress: progress
             )
-        }.value
+        }
+        // A detached task does not inherit cancellation from the caller, so
+        // forward it explicitly — otherwise the UI's Cancel never reaches the
+        // Task.checkCancellation() calls inside the job.
+        return try await withTaskCancellationHandler {
+            try await job.value
+        } onCancel: {
+            job.cancel()
+        }
     }
 
     private static func runSynchronously(
@@ -120,7 +140,8 @@ enum MacVideoJobRunner {
         let paths = try prepareJobFolder(
             for: inputURL,
             blendWindow: options.blendWindow,
-            trimHeadTailSeconds: options.trimHeadTailSeconds
+            trimHeadTailSeconds: options.trimHeadTailSeconds,
+            extractFormat: options.extractFormat
         )
         let previousManifest = try? readManifest(from: paths.manifest)
         var manifest = previousManifest ?? Manifest(
@@ -132,6 +153,8 @@ enum MacVideoJobRunner {
             trimHeadTailSeconds: options.trimHeadTailSeconds,
             maxCPUWorkers: options.maxCPUWorkers,
             maxBlendBatches: options.maxBlendBatches,
+            extractFormat: options.extractFormat.rawValue,
+            keepExtractedFrames: options.keepExtractedFrames,
             status: "created",
             inputFrames: 0,
             blendedFrames: 0,
@@ -145,7 +168,9 @@ enum MacVideoJobRunner {
         let extractedFrames: [URL]
         let blendedFrames: [URL]
         let canReuseExtraction = ["extracted", "blending", "encoding", "completed"].contains(manifest.status)
-        if canReuseExtraction, let existing = try existingExtractedFrames(in: paths.extractedFrames), !existing.isEmpty {
+        if canReuseExtraction,
+           let existing = try existingExtractedFrames(in: paths.extractedFrames, format: options.extractFormat),
+           !existing.isEmpty {
             extractedFrames = existing
             manifest.status = "extracted"
             manifest.inputFrames = existing.count
@@ -163,6 +188,7 @@ enum MacVideoJobRunner {
                 window: max(1, options.blendWindow),
                 linearLight: options.linearLight,
                 maxBlendBatches: options.maxBlendBatches,
+                deleteSourcesAfterBlend: !options.keepExtractedFrames,
                 paths: paths,
                 progress: progress
             )
@@ -175,6 +201,8 @@ enum MacVideoJobRunner {
             manifest.trimHeadTailSeconds = options.trimHeadTailSeconds
             manifest.maxCPUWorkers = options.maxCPUWorkers
             manifest.maxBlendBatches = options.maxBlendBatches
+            manifest.extractFormat = options.extractFormat.rawValue
+            manifest.keepExtractedFrames = options.keepExtractedFrames
             manifest.status = "extracting"
             manifest.inputFrames = 0
             manifest.blendedFrames = 0
@@ -243,13 +271,17 @@ enum MacVideoJobRunner {
     private static func prepareJobFolder(
         for inputURL: URL,
         blendWindow: Int,
-        trimHeadTailSeconds: Double
+        trimHeadTailSeconds: Double,
+        extractFormat: ImageFormat
     ) throws -> JobPaths {
         let root = inputURL.deletingPathExtension().appendingPathExtension("letslapse")
         let trim = max(0, trimHeadTailSeconds)
         let trimSuffix = trim > 0 ? String(format: "-trim-%0.1fs-each-end", trim) : ""
         let passName = String(format: "blend-%03d-to-001%@", max(1, blendWindow), trimSuffix)
-        let extractionName = trim > 0 ? "extracted\(trimSuffix)" : "extracted"
+        // The format is part of the folder name so a PNG run and a HEIC run
+        // never mix frames in one sequence.
+        let formatSuffix = extractFormat == .png ? "" : "-\(extractFormat.rawValue)"
+        let extractionName = "extracted\(trimSuffix)\(formatSuffix)"
         let paths = JobPaths(
             root: root,
             manifest: root.appendingPathComponent("manifest.json"),
@@ -270,66 +302,6 @@ enum MacVideoJobRunner {
             try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         }
         return paths
-    }
-
-    private static func extractFrames(
-        asset: AVURLAsset,
-        track: AVAssetTrack,
-        to folder: URL,
-        estimatedFrames: Int,
-        paths: JobPaths,
-        progress: @escaping @Sendable (MacVideoJobProgress) -> Void
-    ) throws -> [URL] {
-        try appendLog("Extracting frames", to: paths.log)
-        let reader = try AVAssetReader(asset: asset)
-        let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-        ])
-        output.alwaysCopiesSampleData = false
-        guard reader.canAdd(output) else {
-            throw LapseError.readerFailed("cannot attach track output")
-        }
-        reader.add(output)
-        guard reader.startReading() else {
-            throw LapseError.readerFailed(reader.error?.localizedDescription ?? "could not start decoding")
-        }
-
-        let context = CIContext()
-        var frameURLs: [URL] = []
-        var frameIndex = 0
-        let started = Date()
-
-        while let sample = output.copyNextSampleBuffer() {
-            try Task.checkCancellation()
-            guard let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { continue }
-            frameIndex += 1
-            let url = folder.appendingPathComponent(String(format: "frame-%06d.png", frameIndex))
-            if !FileManager.default.fileExists(atPath: url.path) {
-                let image = CIImage(cvPixelBuffer: pixelBuffer)
-                let rect = CGRect(
-                    x: 0,
-                    y: 0,
-                    width: CVPixelBufferGetWidth(pixelBuffer),
-                    height: CVPixelBufferGetHeight(pixelBuffer)
-                )
-                guard let cgImage = context.createCGImage(image, from: rect) else {
-                    throw LapseError.imageEncodeFailed("could not render extracted frame \(frameIndex)")
-                }
-                try ImageExporter.write(cgImage, to: url, format: .png)
-            }
-            frameURLs.append(url)
-
-            if frameIndex == 1 || frameIndex % 10 == 0 {
-                let fraction = Double(frameIndex) / Double(max(estimatedFrames, frameIndex))
-                let message = "Extracting frames \(frameIndex) / \(max(estimatedFrames, frameIndex)) \(etaText(started: started, completed: frameIndex, total: max(estimatedFrames, frameIndex)))"
-                sendProgress(0.05 + min(0.35, fraction * 0.35), message, paths: paths, progress: progress)
-            }
-        }
-
-        if reader.status == .failed {
-            throw LapseError.readerFailed(reader.error?.localizedDescription ?? "decode error")
-        }
-        return frameURLs
     }
 
     private static func extractAndBlendFrames(
@@ -366,6 +338,11 @@ enum MacVideoJobRunner {
         guard reader.startReading() else {
             throw LapseError.readerFailed(reader.error?.localizedDescription ?? "could not start decoding")
         }
+        // Tear the decoder down cleanly when cancellation (or any error)
+        // exits the read loop early.
+        defer {
+            if reader.status == .reading { reader.cancelReading() }
+        }
 
         let context = CIContext()
         let blendSemaphore = DispatchSemaphore(value: max(1, options.maxBlendBatches))
@@ -375,9 +352,22 @@ enum MacVideoJobRunner {
         var blendedFrames: [URL] = []
         var firstError: Error?
         var frameIndex = 0
+        var extractedCount = 0
         var outputIndex = 0
         var currentWindow: [URL] = []
         var completedBlendFrames = 0
+        var extractionDone = false
+        var blendedBytesWritten: Int64 = 0
+        var blendedWrites = 0
+        // Bytes actually written this run (reader thread only) — feeds the
+        // disk-headroom projection; reused frames from a prior run don't count.
+        var freshBytes: Int64 = 0
+        var freshFrames = 0
+        // True while the current window's blended output already exists from a
+        // prior run and scratch isn't being kept: its frames are never needed,
+        // so resume fast-forwards with a decode-only pass.
+        var skipWindowScratch = false
+        let frameExtension = options.extractFormat.fileExtension
 
         func setError(_ error: Error) {
             stateLock.lock()
@@ -393,6 +383,37 @@ enum MacVideoJobRunner {
             return firstError
         }
 
+        // One coherent signal for the whole pipelined phase. The fraction
+        // follows the trailing stage (blend completions, band 0.05–0.85) so it
+        // never moves backwards when extraction and blend messages interleave,
+        // and the ETA follows the pipeline's driver (extraction pace) so the
+        // two message kinds can't quote wildly different clocks.
+        func pipelineProgress(_ message: String) {
+            stateLock.lock()
+            let blends = completedBlendFrames
+            let extracted = extractedCount
+            let extracting = !extractionDone
+            stateLock.unlock()
+            let fraction = 0.05 + min(0.80, Double(blends) / Double(estimatedOutputFrames) * 0.80)
+            let elapsed = Date().timeIntervalSince(jobStarted)
+            var eta: Double?
+            if extracting, extracted > 0, extracted < estimatedFrames {
+                eta = elapsed / Double(extracted) * Double(estimatedFrames - extracted)
+            } else if blends > 0, blends < estimatedOutputFrames {
+                eta = elapsed / Double(blends) * Double(estimatedOutputFrames - blends)
+            }
+            let suffix = eta.map { " ETA \(formatDuration($0))" } ?? ""
+            sendProgress(
+                fraction,
+                message + suffix,
+                paths: paths,
+                progress: progress,
+                etaSeconds: eta,
+                framesDone: extracted,
+                framesTotal: max(estimatedFrames, extracted)
+            )
+        }
+
         func scheduleBlend(_ frameURLs: [URL], outputNumber: Int) {
             let outputURL = blendOutputFolder.appendingPathComponent(String(format: "frame-%06d.png", outputNumber))
 
@@ -403,12 +424,7 @@ enum MacVideoJobRunner {
                 let completed = completedBlendFrames
                 stateLock.unlock()
                 if completed == 1 || completed % 5 == 0 {
-                    sendProgress(
-                        0.25 + min(0.60, Double(completed) / Double(estimatedOutputFrames) * 0.60),
-                        "Reusing blended frames \(completed) / \(estimatedOutputFrames)",
-                        paths: paths,
-                        progress: progress
-                    )
+                    pipelineProgress("Reusing blended frames \(completed) / \(estimatedOutputFrames)")
                 }
                 return
             }
@@ -426,21 +442,23 @@ enum MacVideoJobRunner {
                     let stacker = ImageStacker(core: core)
                     let image = try stacker.stack(imageURLs: frameURLs, linearLight: options.linearLight)
                     try ImageExporter.write(image, to: outputURL, format: .png)
+                    if !options.keepExtractedFrames {
+                        for frameURL in frameURLs {
+                            try? FileManager.default.removeItem(at: frameURL)
+                        }
+                    }
+                    let outputBytes = ((try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size]) as? Int64) ?? 0
 
                     stateLock.lock()
                     blendedFrames.append(outputURL)
                     completedBlendFrames += 1
+                    blendedBytesWritten += outputBytes
+                    blendedWrites += 1
                     let completed = completedBlendFrames
                     stateLock.unlock()
 
                     if completed == 1 || completed % 5 == 0 || completed == estimatedOutputFrames {
-                        let message = "Blending \(window)-to-1 \(completed) / \(estimatedOutputFrames) \(etaText(started: jobStarted, completed: completed, total: estimatedOutputFrames))"
-                        sendProgress(
-                            0.25 + min(0.60, Double(completed) / Double(estimatedOutputFrames) * 0.60),
-                            message,
-                            paths: paths,
-                            progress: progress
-                        )
+                        pipelineProgress("Blending \(window)-to-1 \(completed) / \(estimatedOutputFrames)")
                     }
                 } catch {
                     setError(error)
@@ -455,8 +473,12 @@ enum MacVideoJobRunner {
             }
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sample) else { continue }
             frameIndex += 1
-            let url = extractionFolder.appendingPathComponent(String(format: "frame-%06d.png", frameIndex))
-            if !FileManager.default.fileExists(atPath: url.path) {
+            if currentWindow.isEmpty {
+                let upcomingOutput = blendOutputFolder.appendingPathComponent(String(format: "frame-%06d.png", outputIndex + 1))
+                skipWindowScratch = !options.keepExtractedFrames && FileManager.default.fileExists(atPath: upcomingOutput.path)
+            }
+            let url = extractionFolder.appendingPathComponent(String(format: "frame-%06d.%@", frameIndex, frameExtension))
+            if !skipWindowScratch, !FileManager.default.fileExists(atPath: url.path) {
                 let image = CIImage(cvPixelBuffer: pixelBuffer)
                 let rect = CGRect(
                     x: 0,
@@ -467,10 +489,17 @@ enum MacVideoJobRunner {
                 guard let cgImage = context.createCGImage(image, from: rect) else {
                     throw LapseError.imageEncodeFailed("could not render extracted frame \(frameIndex)")
                 }
-                try ImageExporter.write(cgImage, to: url, format: .png)
+                try ImageExporter.write(cgImage, to: url, format: options.extractFormat)
+                if let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int64 {
+                    freshBytes += size
+                    freshFrames += 1
+                }
             }
             extractedFrames.append(url)
             currentWindow.append(url)
+            stateLock.lock()
+            extractedCount = frameIndex
+            stateLock.unlock()
 
             if currentWindow.count == window {
                 outputIndex += 1
@@ -478,10 +507,28 @@ enum MacVideoJobRunner {
                 currentWindow.removeAll(keepingCapacity: true)
             }
 
+            if freshFrames > 0, frameIndex == 25 || frameIndex % 2500 == 0 {
+                let averageFrameBytes = freshBytes / Int64(freshFrames)
+                stateLock.lock()
+                let averageBlendedBytes = blendedWrites > 0 ? blendedBytesWritten / Int64(blendedWrites) : averageFrameBytes
+                stateLock.unlock()
+                let remainingInputs = max(0, estimatedFrames - frameIndex)
+                // Retained scratch: everything when keeping frames, otherwise
+                // just the in-flight windows the rolling cleanup hasn't
+                // reclaimed yet. Blended pass frames always stay until encode.
+                let retainedInputs = options.keepExtractedFrames
+                    ? remainingInputs
+                    : min(remainingInputs, (max(1, options.maxBlendBatches) + 2) * window)
+                let remainingOutputs = (remainingInputs + window - 1) / window
+                try ensureDiskHeadroom(
+                    folder: extractionFolder,
+                    projectedBytes: averageFrameBytes * Int64(retainedInputs) + averageBlendedBytes * Int64(remainingOutputs),
+                    log: paths.log
+                )
+            }
+
             if frameIndex == 1 || frameIndex % 10 == 0 {
-                let fraction = Double(frameIndex) / Double(max(estimatedFrames, frameIndex))
-                let message = "Extracting frames \(frameIndex) / \(max(estimatedFrames, frameIndex)) \(etaText(started: jobStarted, completed: frameIndex, total: max(estimatedFrames, frameIndex)))"
-                sendProgress(0.05 + min(0.35, fraction * 0.35), message, paths: paths, progress: progress)
+                pipelineProgress("Extracting frames \(frameIndex) / \(max(estimatedFrames, frameIndex))")
             }
         }
 
@@ -489,6 +536,9 @@ enum MacVideoJobRunner {
             outputIndex += 1
             scheduleBlend(currentWindow, outputNumber: outputIndex)
         }
+        stateLock.lock()
+        extractionDone = true
+        stateLock.unlock()
 
         if reader.status == .failed {
             throw LapseError.readerFailed(reader.error?.localizedDescription ?? "decode error")
@@ -516,6 +566,7 @@ enum MacVideoJobRunner {
         window: Int,
         linearLight: Bool,
         maxBlendBatches: Int,
+        deleteSourcesAfterBlend: Bool,
         paths: JobPaths,
         progress: @escaping @Sendable (MacVideoJobProgress) -> Void
     ) throws -> [URL] {
@@ -548,14 +599,29 @@ enum MacVideoJobRunner {
                         let stacker = ImageStacker(core: core)
                         let image = try stacker.stack(imageURLs: windowURLs, linearLight: linearLight)
                         try ImageExporter.write(image, to: outputURL, format: .png)
+                        if deleteSourcesAfterBlend {
+                            for windowURL in windowURLs {
+                                try? FileManager.default.removeItem(at: windowURL)
+                            }
+                        }
                         lock.lock()
                         outputs.append(outputURL)
                         completed += 1
                         let done = completed
                         lock.unlock()
                         if done == 1 || done % 5 == 0 || done == outputCount {
-                            let message = "Blending \(window)-to-1 \(done) / \(outputCount) \(etaText(started: started, completed: done, total: outputCount))"
-                            sendProgress(0.40 + Double(done) / Double(outputCount) * 0.45, message, paths: paths, progress: progress)
+                            let elapsed = Date().timeIntervalSince(started)
+                            let eta = done < outputCount ? elapsed / Double(done) * Double(outputCount - done) : nil
+                            let suffix = eta.map { " ETA \(formatDuration($0))" } ?? ""
+                            sendProgress(
+                                0.40 + Double(done) / Double(outputCount) * 0.45,
+                                "Blending \(window)-to-1 \(done) / \(outputCount)" + suffix,
+                                paths: paths,
+                                progress: progress,
+                                etaSeconds: eta,
+                                framesDone: done,
+                                framesTotal: outputCount
+                            )
                         }
                     } catch {
                         lock.lock()
@@ -649,8 +715,18 @@ enum MacVideoJobRunner {
 
             if index == 0 || (index + 1) % 10 == 0 || index + 1 == frames.count {
                 let completed = index + 1
-                let message = "Encoding video \(completed) / \(frames.count) \(etaText(started: started, completed: completed, total: frames.count))"
-                sendProgress(0.85 + Double(completed) / Double(frames.count) * 0.14, message, paths: paths, progress: progress)
+                let elapsed = Date().timeIntervalSince(started)
+                let eta = completed < frames.count ? elapsed / Double(completed) * Double(frames.count - completed) : nil
+                let suffix = eta.map { " ETA \(formatDuration($0))" } ?? ""
+                sendProgress(
+                    0.85 + Double(completed) / Double(frames.count) * 0.14,
+                    "Encoding video \(completed) / \(frames.count)" + suffix,
+                    paths: paths,
+                    progress: progress,
+                    etaSeconds: eta,
+                    framesDone: completed,
+                    framesTotal: frames.count
+                )
             }
         }
 
@@ -695,13 +771,13 @@ enum MacVideoJobRunner {
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
-    private static func existingExtractedFrames(in folder: URL) throws -> [URL]? {
+    private static func existingExtractedFrames(in folder: URL, format: ImageFormat) throws -> [URL]? {
         guard FileManager.default.fileExists(atPath: folder.path) else { return nil }
         let urls = try FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: nil
         )
-        .filter { $0.pathExtension.lowercased() == "png" }
+        .filter { $0.pathExtension.lowercased() == format.fileExtension }
         .sorted { $0.lastPathComponent < $1.lastPathComponent }
         return urls
     }
@@ -738,23 +814,49 @@ enum MacVideoJobRunner {
         _ fraction: Double,
         _ message: String,
         paths: JobPaths,
-        progress: @escaping @Sendable (MacVideoJobProgress) -> Void
+        progress: @escaping @Sendable (MacVideoJobProgress) -> Void,
+        etaSeconds: Double? = nil,
+        framesDone: Int? = nil,
+        framesTotal: Int? = nil
     ) {
         try? appendLog(message, to: paths.log)
         progress(MacVideoJobProgress(
             fraction: min(max(fraction, 0), 1),
             message: message,
             jobFolderURL: paths.root,
-            recentLogLines: recentLogLines(from: paths.log)
+            recentLogLines: recentLogLines(from: paths.log),
+            etaSeconds: etaSeconds,
+            framesDone: framesDone,
+            framesTotal: framesTotal
         ))
     }
 
-    private static func etaText(started: Date, completed: Int, total: Int) -> String {
-        guard completed > 0, total > completed else { return "" }
-        let elapsed = Date().timeIntervalSince(started)
-        let secondsPerUnit = elapsed / Double(completed)
-        let remaining = secondsPerUnit * Double(total - completed)
-        return "ETA \(formatDuration(remaining))"
+    private struct MacJobError: LocalizedError {
+        var errorDescription: String?
+    }
+
+    /// Projects the job's remaining disk footprint from what has actually been
+    /// written so far — retained scratch frames plus blended pass frames — and
+    /// stops while the volume still has headroom, instead of running the disk
+    /// to zero.
+    private static func ensureDiskHeadroom(
+        folder: URL,
+        projectedBytes: Int64,
+        log: URL
+    ) throws {
+        guard projectedBytes > 0 else { return }
+        let values = try? folder.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        guard let available = values?.volumeAvailableCapacityForImportantUsage else { return }
+        let headroomBytes: Int64 = 10_000_000_000
+        if projectedBytes + headroomBytes > available {
+            let message = String(
+                format: "Not enough disk space to continue: finishing this job needs about %.0f GB but only %.0f GB is free. Free up space, trim the clip, or switch scratch frames to HEIC in Settings → Performance.",
+                Double(projectedBytes) / 1e9,
+                Double(available) / 1e9
+            )
+            try? appendLog(message, to: log)
+            throw MacJobError(errorDescription: message)
+        }
     }
 
     private static func formatDuration(_ seconds: TimeInterval) -> String {

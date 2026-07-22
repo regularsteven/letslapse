@@ -124,8 +124,18 @@ struct ProcessingView: View {
     }
 
     private var blendingCounts: String? {
-        guard let total = model.processingTotalInputFrames, total > 0 else { return nil }
-        let processed = min(total, Int((Double(total) * model.progress).rounded()))
+        let processed: Int
+        let total: Int
+        if let done = model.processingFramesDone, let runnerTotal = model.processingFramesTotal, runnerTotal > 0 {
+            // Real counts from the macOS job runner.
+            processed = done
+            total = runnerTotal
+        } else if let estimate = model.processingTotalInputFrames, estimate > 0 {
+            processed = min(estimate, Int((Double(estimate) * model.progress).rounded()))
+            total = estimate
+        } else {
+            return nil
+        }
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         let processedText = formatter.string(from: NSNumber(value: processed)) ?? "\(processed)"
@@ -136,6 +146,9 @@ struct ProcessingView: View {
     // MARK: - ETA
 
     private func timeRemainingText(at now: Date) -> String {
+        if let eta = model.processingETASeconds, eta.isFinite, eta > 0 {
+            return remainingPhrase(eta)
+        }
         guard let startedAt = model.processingStartedAt, model.progress > 0.04 else {
             return statusFallback
         }
@@ -143,6 +156,10 @@ struct ProcessingView: View {
         guard elapsed > 3 else { return statusFallback }
         let remaining = elapsed / model.progress * (1 - model.progress)
         guard remaining.isFinite, remaining > 0 else { return "" }
+        return remainingPhrase(remaining)
+    }
+
+    private func remainingPhrase(_ remaining: TimeInterval) -> String {
         if remaining < 8 {
             return "Almost done"
         }
@@ -150,8 +167,13 @@ struct ProcessingView: View {
             let rounded = Int((remaining / 5).rounded() * 5)
             return "About \(rounded) seconds left"
         }
-        let minutes = Int((remaining / 60).rounded())
-        return "About \(minutes) minute\(minutes == 1 ? "" : "s") left"
+        if remaining < 90 * 60 {
+            let minutes = Int((remaining / 60).rounded())
+            return "About \(minutes) minute\(minutes == 1 ? "" : "s") left"
+        }
+        let halfHours = (remaining / 3600 * 2).rounded() / 2
+        let text = halfHours == halfHours.rounded() ? String(format: "%.0f", halfHours) : String(format: "%.1f", halfHours)
+        return "About \(text) hour\(halfHours == 1 ? "" : "s") left"
     }
 
     private var statusFallback: String {

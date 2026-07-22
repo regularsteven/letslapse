@@ -362,6 +362,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots only when Record audio is turned on in Settings.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -405,6 +406,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots only when Record audio is turned on in Settings.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

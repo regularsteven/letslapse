@@ -83,13 +83,17 @@ final class CameraController: NSObject, ObservableObject {
     private let movieOutput = AVCaptureMovieFileOutput()
     private let photoOutput = AVCapturePhotoOutput()
     private var videoInput: AVCaptureDeviceInput?
+    private var audioInput: AVCaptureDeviceInput?
     private var videoDevice: AVCaptureDevice?
     private var selectedPhotoDimensions: CMVideoDimensions?
     private var intervalTimer: DispatchSourceTimer?
     private var photoDirectory: URL?
     private var photoURLs: [URL] = []   // sessionQueue-confined
     private var videoStabilizationRequested = true
-    private let preferredFrameRates = [24, 25, 30, 50, 60, 100, 120, 240]
+    // 10/12/15 are acquisition rates for the blend pipeline: sparse temporal
+    // sampling with up to a full-interval shutter, meant to be conformed or
+    // blended rather than played as-is.
+    private let preferredFrameRates = [10, 12, 15, 24, 25, 30, 50, 60, 100, 120, 240]
     private let frameRateTolerance = 0.2
     private var activeSequence: LiveCaptureSequence?
     private var activeSequenceDirectory: URL?
@@ -200,6 +204,7 @@ final class CameraController: NSObject, ObservableObject {
             guard granted else { return }
             self.sessionQueue.async {
                 self.configureIfNeeded()
+                self.reconcileSettingsDrivenState()
                 if !self.session.isRunning {
                     LLog("startRunning()")
                     self.session.startRunning()
@@ -305,6 +310,48 @@ final class CameraController: NSObject, ObservableObject {
         applyVideoStabilization()
         publishFormat()
         LLog("configureIfNeeded: done, inputs=\(session.inputs.count) outputs=\(session.outputs.count)")
+    }
+
+    /// Custom rate last folded into the rate menus, so a Settings change made
+    /// while the capture screen was away is picked up on the next start().
+    private var lastAppliedCustomFrameRate = RecordingSettingsStore.customFrameRate
+
+    /// Settings owns Record audio and the custom frame rate; the capture
+    /// screen re-checks both on every start() since they can change while it
+    /// is away. Runs on the sessionQueue.
+    private func reconcileSettingsDrivenState() {
+        reconcileAudioInput()
+        let custom = RecordingSettingsStore.customFrameRate
+        guard custom != lastAppliedCustomFrameRate else { return }
+        lastAppliedCustomFrameRate = custom
+        guard !movieOutput.isRecording, intervalTimer == nil else { return }
+        refreshCaptureOptions(preferredFrameRate: selectedFrameRate)
+        publishFormat()
+    }
+
+    /// Add or remove the microphone to match the Record audio setting. The
+    /// permission prompt happens when the toggle is turned on in Settings;
+    /// here the mic is only attached when access is already granted, so in
+    /// every other case shoots stay silent and playing music uninterrupted.
+    private func reconcileAudioInput() {
+        guard !movieOutput.isRecording else { return }
+        let wantsAudio = RecordingSettingsStore.isAudioEnabled
+            && AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        if wantsAudio, audioInput == nil {
+            guard let device = AVCaptureDevice.default(for: .audio),
+                  let input = try? AVCaptureDeviceInput(device: device) else { return }
+            session.beginConfiguration()
+            if session.canAddInput(input) {
+                session.addInput(input)
+                audioInput = input
+            }
+            session.commitConfiguration()
+        } else if !wantsAudio, let input = audioInput {
+            session.beginConfiguration()
+            session.removeInput(input)
+            session.commitConfiguration()
+            audioInput = nil
+        }
     }
 
     private func publishAvailableLenses() {
@@ -435,6 +482,11 @@ final class CameraController: NSObject, ObservableObject {
         for device: AVCaptureDevice
     ) -> [CaptureResolution: Set<Int>] {
         var supportedRates: [CaptureResolution: Set<Int>] = [:]
+        var candidateFrameRates = preferredFrameRates
+        if let custom = RecordingSettingsStore.customFrameRate,
+           !candidateFrameRates.contains(custom) {
+            candidateFrameRates.append(custom)
+        }
         for format in device.formats {
             #if os(iOS)
             guard !videoStabilizationRequested || stabilizationMode(for: format) != nil else {
@@ -454,17 +506,20 @@ final class CameraController: NSObject, ObservableObject {
                 height: dims.height,
                 isProRes: proResFourCCs.contains(subType)
             )
-            let rates = supportedFrameRates(for: format)
+            let rates = supportedFrameRates(for: format, candidates: candidateFrameRates)
             guard !rates.isEmpty else { continue }
             supportedRates[resolution, default: []].formUnion(rates)
         }
         return supportedRates
     }
 
-    private func supportedFrameRates(for format: AVCaptureDevice.Format) -> Set<Int> {
+    private func supportedFrameRates(
+        for format: AVCaptureDevice.Format,
+        candidates: [Int]
+    ) -> Set<Int> {
         var rates = Set<Int>()
         for range in format.videoSupportedFrameRateRanges {
-            for fps in preferredFrameRates
+            for fps in candidates
                 where supportsFrameRate(Double(fps), in: range) {
                 rates.insert(fps)
             }
@@ -542,9 +597,17 @@ final class CameraController: NSObject, ObservableObject {
         #if os(iOS)
         let format = device.activeFormat
         let iso = min(max(lockedISOValue, format.minISO), format.maxISO)
+        // Also clamp to the frame interval: a shutter longer than the frame
+        // duration drags the delivered rate below the requested fps (e.g. a
+        // 1/10 s lock from a 10 fps shoot carried into a 30 fps format).
+        var maxExposureSeconds = format.maxExposureDuration.seconds
+        let frameDuration = device.activeVideoMaxFrameDuration
+        if frameDuration.isValid, frameDuration.seconds > 0 {
+            maxExposureSeconds = min(maxExposureSeconds, frameDuration.seconds)
+        }
         let seconds = min(
             max(lockedShutterValue, format.minExposureDuration.seconds),
-            format.maxExposureDuration.seconds
+            maxExposureSeconds
         )
         let duration = CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000)
         if device.isExposureModeSupported(.custom) {
@@ -1328,8 +1391,34 @@ enum RecordingSettingsStore {
     private static let rampFrameRateKey = "letslapse.capture.rampFrameRate"
     private static let stabilizationKey = "letslapse.capture.stabilization"
 
+    // Settings-owned values, not part of the remembered-shoot snapshot: they
+    // apply regardless of `isEnabled` and survive `clear()`.
+    private static let customFrameRateKey = "letslapse.capture.customFrameRate"
+    private static let recordAudioKey = "letslapse.capture.recordAudio"
+
     static var isEnabled: Bool {
         UserDefaults.standard.object(forKey: isEnabledKey) as? Bool ?? true
+    }
+
+    static var customFrameRate: Int? {
+        let value = UserDefaults.standard.integer(forKey: customFrameRateKey)
+        return (1...240).contains(value) ? value : nil
+    }
+
+    static func save(customFrameRate: Int?) {
+        if let customFrameRate, (1...240).contains(customFrameRate) {
+            UserDefaults.standard.set(customFrameRate, forKey: customFrameRateKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: customFrameRateKey)
+        }
+    }
+
+    static var isAudioEnabled: Bool {
+        UserDefaults.standard.bool(forKey: recordAudioKey)
+    }
+
+    static func save(isAudioEnabled: Bool) {
+        UserDefaults.standard.set(isAudioEnabled, forKey: recordAudioKey)
     }
 
     static var lens: CameraController.Lens? {

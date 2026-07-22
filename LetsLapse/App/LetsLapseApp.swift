@@ -27,21 +27,28 @@ struct ContentView: View {
     @State private var selectedTab: LLTab = .create
     @State private var projectsPath: [UUID] = []
     @State private var settingsPath: [SettingsDestination] = []
+    #if os(macOS)
+    @State private var lastStage: AppModel.Stage = .home
+    #endif
 
     var body: some View {
         ZStack {
             tabs
 
+            // On iOS the flow is a full-screen overlay and the tab bar steps
+            // aside. On macOS the flow lives inside the Create tab instead
+            // (see `tabs`), so the native tab bar stays visible and clickable
+            // throughout — switching away parks the flow, switching back
+            // resumes it.
             #if os(iOS)
             if model.stage == .home {
                 VStack {
                     Spacer()
-                    FloatingTabBar(selection: $selectedTab, onReselect: popToRoot)
+                    FloatingTabBar(selection: $selectedTab, onReselect: handleReselect)
                         .padding(.bottom, 6)
                 }
                 .transition(.opacity)
             }
-            #endif
 
             if model.stage != .home {
                 FlowView()
@@ -49,12 +56,23 @@ struct ContentView: View {
                     .transition(.move(edge: .bottom).combined(with: .opacity))
                     .zIndex(1)
             }
+            #endif
         }
         .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.stage)
         .onChange(of: model.requestedProjectDetailID) { requested in
             guard requested != nil else { return }
             selectedTab = .projects
         }
+        #if os(macOS)
+        .onChange(of: model.stage) { newStage in
+            // A flow can start from any tab (e.g. "New version" in Projects);
+            // bring the Create tab front so the flow is on screen.
+            if newStage != .home, lastStage == .home {
+                selectedTab = .create
+            }
+            lastStage = newStage
+        }
+        #endif
         .tint(LL.accent)
         #if DEBUG
         .onAppear(perform: applyUIPreviewHooks)
@@ -100,6 +118,53 @@ struct ContentView: View {
     }
     #endif
 
+    #if os(macOS)
+    /// macOS uses the same floating pill bar as iOS instead of the native
+    /// toolbar tabs: the native bar never reports a click on the already-
+    /// selected tab, so reselect-to-pop behaviors are impossible with it.
+    /// Only the selected tab is in the hierarchy — hidden-but-alive siblings
+    /// would fight over the window title and stay in the accessibility tree.
+    /// Navigation state lives in this view's paths, so "the screen you left"
+    /// still restores on return.
+    private var tabs: some View {
+        ZStack(alignment: .bottom) {
+            Group {
+                switch selectedTab {
+                case .create:
+                    createContent
+                case .projects:
+                    ProjectsView(path: $projectsPath)
+                case .settings:
+                    NavigationStack(path: $settingsPath) {
+                        SettingsView()
+                    }
+                }
+            }
+            .safeAreaInset(edge: .bottom) {
+                // Clearance so scrolling content and flow buttons stay above
+                // the floating tab bar.
+                Color.clear.frame(height: 58)
+            }
+
+            FloatingTabBar(selection: $selectedTab, onReselect: handleReselect)
+                .padding(.bottom, 12)
+        }
+    }
+
+    /// The Create tab hosts the flow whenever one is active, so the tab bar
+    /// stays reachable throughout a job.
+    @ViewBuilder
+    private var createContent: some View {
+        if model.stage == .home {
+            NavigationStack {
+                CreateView()
+            }
+        } else {
+            FlowView()
+                .background(LL.screenBackground.ignoresSafeArea())
+        }
+    }
+    #else
     private var tabs: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
@@ -122,14 +187,20 @@ struct ContentView: View {
             .tag(LLTab.settings)
         }
     }
+    #endif
 
     /// Tab taps: switching tabs keeps each stack where it was, so the first
     /// tap back to a tab restores the screen you left; tapping the tab you're
-    /// already on pops it to its root list.
-    private func popToRoot(_ tab: LLTab) {
+    /// already on pops it back to its root.
+    private func handleReselect(_ tab: LLTab) {
         switch tab {
         case .create:
-            break // Create never pushes anything.
+            // Abandons a parked Adjust or Result and returns to the Create
+            // root. A running job stays put — its Cancel button is the only
+            // way to stop it.
+            if model.stage == .configure || model.stage == .done {
+                model.reset()
+            }
         case .projects:
             projectsPath = []
         case .settings:

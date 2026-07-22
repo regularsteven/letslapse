@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import LetsLapseKit
 
 /// Screens Settings can push. Value-based so ContentView can own the
 /// navigation path and pop it when the Settings tab is reselected.
@@ -15,6 +16,7 @@ struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @State private var storage: AppModel.LibraryStorage?
     @State private var isClearingCache = false
+    @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
     #if os(macOS)
     @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
     #endif
@@ -136,16 +138,52 @@ struct SettingsView: View {
     // MARK: - Recording
 
     private var recordingCard: some View {
-        LLRow(
-            title: "Remember recording settings",
-            subtitle: "Start each shoot with your last-used lens, resolution, frame rate and stabilization",
-            showsDivider: false
-        ) {
-            Toggle("", isOn: $model.rememberRecordingSettings)
-                .labelsHidden()
-                .tint(.green)
+        VStack(spacing: 0) {
+            LLRow(
+                title: "Remember recording settings",
+                subtitle: "Start each shoot with your last-used lens, resolution, frame rate and stabilization"
+            ) {
+                Toggle("", isOn: $model.rememberRecordingSettings)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+
+            LLRow(
+                title: "Record audio",
+                subtitle: "Capture microphone sound with video shoots. Off keeps shoots silent and lets playing music continue.",
+                showsDivider: false
+            ) {
+                Toggle("", isOn: recordAudioBinding)
+                    .labelsHidden()
+                    .tint(.green)
+            }
         }
         .llCard()
+    }
+
+    /// Turning audio on asks for microphone access first; the toggle only
+    /// sticks when access is granted, so the stored setting always reflects
+    /// what a shoot will actually do.
+    private var recordAudioBinding: Binding<Bool> {
+        Binding(
+            get: { model.recordAudio },
+            set: { wantsAudio in
+                guard wantsAudio else {
+                    model.recordAudio = false
+                    return
+                }
+                switch AVCaptureDevice.authorizationStatus(for: .audio) {
+                case .authorized:
+                    model.recordAudio = true
+                case .notDetermined:
+                    AVCaptureDevice.requestAccess(for: .audio) { granted in
+                        DispatchQueue.main.async { model.recordAudio = granted }
+                    }
+                default:
+                    model.recordAudio = false
+                }
+            }
+        )
     }
 
     private func menuValueLabel(_ text: String) -> some View {
@@ -238,6 +276,26 @@ struct SettingsView: View {
 
     private var advancedCard: some View {
         VStack(spacing: 0) {
+            LLRow(
+                title: "Custom frame rate",
+                subtitle: "Adds an extra rate to capture's frame-rate options whenever the camera supports it"
+            ) {
+                HStack(spacing: 4) {
+                    TextField("Off", text: $customFrameRateText)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 15))
+                        .multilineTextAlignment(.trailing)
+                        .frame(width: 48)
+                        #if os(iOS)
+                        .keyboardType(.numberPad)
+                        #endif
+                        .onChange(of: customFrameRateText) { commitCustomFrameRate($0) }
+                    Text("fps")
+                        .font(.system(size: 15))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
             NavigationLink(value: SettingsDestination.performance) {
                 LLRow(title: "Performance", subtitle: "CPU workers, GPU batches") {
                     Image(systemName: "chevron.right")
@@ -259,6 +317,24 @@ struct SettingsView: View {
             .buttonStyle(.plain)
         }
         .llCard()
+    }
+
+    /// Digits only, clamped to 1–240; empty (or 0) turns the extra rate off.
+    private func commitCustomFrameRate(_ text: String) {
+        let digits = String(text.filter(\.isNumber).prefix(3))
+        guard digits == text else {
+            customFrameRateText = digits
+            return
+        }
+        guard let value = Int(digits), value >= 1 else {
+            model.customCaptureFrameRate = nil
+            return
+        }
+        let clamped = min(value, 240)
+        if clamped != value {
+            customFrameRateText = String(clamped)
+        }
+        model.customCaptureFrameRate = clamped
     }
 
     // MARK: - macOS camera
@@ -388,7 +464,11 @@ private struct LargeOriginalsView: View {
                     }
                 }
             } footer: {
+                #if os(macOS)
+                Text("Click a project to open it. Deleting a project removes its original and every version.")
+                #else
                 Text("Tap a project to open it. Deleting a project removes its original and every version.")
+                #endif
             }
         }
         .navigationTitle("Large originals")
@@ -446,6 +526,19 @@ private struct PerformanceSettingsView: View {
             } footer: {
                 Text("Video decode runs mostly serially. Blend batches use Metal on the GPU; higher values may help until disk I/O or GPU contention dominates.")
             }
+
+            #if os(macOS)
+            Section {
+                Picker("Scratch frame format", selection: $model.scratchFrameFormat) {
+                    Text("PNG · lossless").tag(ImageFormat.png)
+                    Text("HEIC · compact").tag(ImageFormat.heic)
+                    Text("JPEG · compatible").tag(ImageFormat.jpeg)
+                }
+                Toggle("Keep extracted frames", isOn: $model.keepExtractedFrames)
+            } footer: {
+                Text("Blending a video decodes it into scratch frames — about 8 MB per 4K frame as PNG, a fraction of that as HEIC. By default each batch's frames are deleted the moment its blended frame is written, so even hour-long clips need only a few GB of scratch. Keep extracted frames leaves every frame in the job folder for inspection and faster re-blends at other speeds — a long 4K clip can then need hundreds of GB.")
+            }
+            #endif
         }
         .navigationTitle("Performance")
         #if os(iOS)

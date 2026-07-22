@@ -19,6 +19,8 @@ final class AppModel: ObservableObject {
         static let maxCPUWorkers = "letslapse.maxCPUWorkers"
         static let maxBlendBatches = "letslapse.maxBlendBatches"
         static let defaultSpeed = "letslapse.defaultSpeed"
+        static let scratchFrameFormat = "letslapse.scratchFrameFormat"
+        static let keepExtractedFrames = "letslapse.keepExtractedFrames"
     }
 
     enum CaptureKind: String, Codable {
@@ -376,6 +378,17 @@ final class AppModel: ObservableObject {
             }
         }
     }
+    /// Off by default: shoots are silent, no mic permission is requested, and
+    /// audio playing on the device keeps running during capture. The camera
+    /// picks changes up the next time the capture screen starts.
+    @Published var recordAudio = RecordingSettingsStore.isAudioEnabled {
+        didSet { RecordingSettingsStore.save(isAudioEnabled: recordAudio) }
+    }
+    /// Extra capture rate offered alongside the built-in ones whenever the
+    /// active camera supports it. nil = off.
+    @Published var customCaptureFrameRate = RecordingSettingsStore.customFrameRate {
+        didSet { RecordingSettingsStore.save(customFrameRate: customCaptureFrameRate) }
+    }
 
     // Performance options
     @Published var maxCPUWorkers = UserDefaults.standard.object(forKey: DefaultsKey.maxCPUWorkers) as? Int ?? max(1, ProcessInfo.processInfo.activeProcessorCount - 2) {
@@ -383,6 +396,21 @@ final class AppModel: ObservableObject {
     }
     @Published var maxBlendBatches = UserDefaults.standard.object(forKey: DefaultsKey.maxBlendBatches) as? Int ?? 2 {
         didSet { UserDefaults.standard.set(maxBlendBatches, forKey: DefaultsKey.maxBlendBatches) }
+    }
+    /// Format for the macOS job runner's scratch frames. PNG is lossless but
+    /// ~8 MB per 4K frame; HEIC/JPEG are a fraction of the size and cheaper to
+    /// encode, with a quality cost the final video encode swamps anyway.
+    @Published var scratchFrameFormat: ImageFormat = ImageFormat(
+        rawValue: UserDefaults.standard.string(forKey: DefaultsKey.scratchFrameFormat) ?? ""
+    ) ?? .png {
+        didSet { UserDefaults.standard.set(scratchFrameFormat.rawValue, forKey: DefaultsKey.scratchFrameFormat) }
+    }
+    /// When on, decoded frames stay in the job folder for inspection and for
+    /// instant re-blends at other speeds. When off (default) each blend
+    /// window's scratch is deleted as soon as its blended frame lands, so
+    /// scratch stays bounded no matter how long the clip is.
+    @Published var keepExtractedFrames = UserDefaults.standard.bool(forKey: DefaultsKey.keepExtractedFrames) {
+        didSet { UserDefaults.standard.set(keepExtractedFrames, forKey: DefaultsKey.keepExtractedFrames) }
     }
 
     // Progress / results
@@ -397,6 +425,11 @@ final class AppModel: ObservableObject {
     @Published var jobLogLines: [String] = []
     @Published var processingStartedAt: Date?
     @Published var processingTotalInputFrames: Int?
+    /// Live numbers reported by the macOS job runner; nil on the streaming
+    /// (iOS) path, where the view falls back to extrapolating from progress.
+    @Published var processingETASeconds: Double?
+    @Published var processingFramesDone: Int?
+    @Published var processingFramesTotal: Int?
 
     /// Set by screens that want the Projects tab to open a specific project
     /// (e.g. Result → Done). ContentView consumes and clears it.
@@ -558,6 +591,9 @@ final class AppModel: ObservableObject {
         errorMessage = nil
         processingStartedAt = nil
         processingTotalInputFrames = nil
+        processingETASeconds = nil
+        processingFramesDone = nil
+        processingFramesTotal = nil
         stage = .home
     }
 
@@ -839,6 +875,9 @@ final class AppModel: ObservableObject {
         errorMessage = nil
         processingStartedAt = Date()
         processingTotalInputFrames = estimatedInputFrames.map { Int($0.rounded()) }
+        processingETASeconds = nil
+        processingFramesDone = nil
+        processingFramesTotal = nil
         let ramp = self.ramp
         let fps = Double(outputFPS)
         let linear = linearLight
@@ -902,14 +941,22 @@ final class AppModel: ObservableObject {
                     linearLight: linear,
                     trimHeadTailSeconds: trimHeadTailSeconds,
                     maxCPUWorkers: maxCPUWorkers,
-                    maxBlendBatches: maxBlendBatches
+                    maxBlendBatches: maxBlendBatches,
+                    extractFormat: scratchFrameFormat,
+                    keepExtractedFrames: keepExtractedFrames
                 )
             ) { update in
                 Task { @MainActor [weak self] in
-                    self?.progress = update.fraction
-                    self?.statusMessage = update.message
-                    self?.jobFolderURL = update.jobFolderURL
-                    self?.jobLogLines = update.recentLogLines
+                    // Batches still in flight after a cancel keep reporting;
+                    // once the processing screen is gone, drop their updates.
+                    guard let self, self.stage == .processing else { return }
+                    self.progress = update.fraction
+                    self.statusMessage = update.message
+                    self.jobFolderURL = update.jobFolderURL
+                    self.jobLogLines = update.recentLogLines
+                    self.processingETASeconds = update.etaSeconds
+                    if let done = update.framesDone { self.processingFramesDone = done }
+                    if let total = update.framesTotal { self.processingFramesTotal = total }
                 }
             }
             jobFolderURL = result.jobFolderURL
@@ -1231,6 +1278,9 @@ final class AppModel: ObservableObject {
         var cursor = CMTime.zero
         var outputSize: CGSize?
         var transform = CGAffineTransform.identity
+        // Created lazily on the first segment that carries sound (Record
+        // audio setting); a failed audio insert never fails the stitch.
+        var audioCompositionTrack: AVMutableCompositionTrack?
 
         for (index, url) in urls.enumerated() {
             let asset = AVURLAsset(url: url)
@@ -1243,6 +1293,19 @@ final class AppModel: ObservableObject {
                 of: track,
                 at: cursor
             )
+            if let audioTrack = try? await asset.loadTracks(withMediaType: .audio).first {
+                if audioCompositionTrack == nil {
+                    audioCompositionTrack = composition.addMutableTrack(
+                        withMediaType: .audio,
+                        preferredTrackID: kCMPersistentTrackID_Invalid
+                    )
+                }
+                try? audioCompositionTrack?.insertTimeRange(
+                    CMTimeRange(start: .zero, duration: duration),
+                    of: audioTrack,
+                    at: cursor
+                )
+            }
             cursor = cursor + duration
 
             if index == 0 {
