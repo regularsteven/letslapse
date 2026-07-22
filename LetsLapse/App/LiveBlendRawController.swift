@@ -407,13 +407,36 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             guard let summed, decodedCount > 0 else {
                 throw DNGError.malformedDNG("no decodable frames in this window")
             }
+            // Per-window camera model from this window's own reference frame:
+            // camera-native samples + the camera's real matrices/neutral give
+            // raw developers their native dual-illuminant WB behaviour, and
+            // the as-shot anchor tracks the changing light window by window.
+            var cameraModel: CameraColorModel?
+            if let referenceData {
+                cameraModel = try? CameraColorTransform.model(
+                    from: DNGDocument.parseReference(referenceData))
+            }
+            if cameraModel == nil {
+                LLog("liveblend-dng: no camera color model — falling back to sRGB tags")
+            }
             let scale = (1.0 / CGFloat(decodedCount)) / CGFloat(1 << LiveBlendRawController.headroomStops)
-            let averaged = summed.applyingFilter("CIColorMatrix", parameters: [
+            let scalarAveraged = summed.applyingFilter("CIColorMatrix", parameters: [
                 "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
                 "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
                 "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
                 "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
             ])
+            let averaged: CIImage
+            if let rows = cameraModel?.transformRows {
+                averaged = summed.applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: rows[0][0] * scale, y: rows[0][1] * scale, z: rows[0][2] * scale, w: 0),
+                    "inputGVector": CIVector(x: rows[1][0] * scale, y: rows[1][1] * scale, z: rows[1][2] * scale, w: 0),
+                    "inputBVector": CIVector(x: rows[2][0] * scale, y: rows[2][1] * scale, z: rows[2][2] * scale, w: 0),
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+                ])
+            } else {
+                averaged = scalarAveraged
+            }
             let width = Int(averaged.extent.width)
             let height = Int(averaged.extent.height)
             // Render straight to 16-bit (the GPU scales and clamps), then a
@@ -446,10 +469,13 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             let url = configuration.outputDirectory
                 .appendingPathComponent(String(format: "frame-%05d.dng", outputIndex))
             let encodeStart = ProcessInfo.processInfo.systemUptime
-            let preview = blendedPreview(from: averaged)
+            // Preview renders from the WORKING-space average — camera-native
+            // samples pushed through an sRGB conversion would look green.
+            let preview = blendedPreview(from: scalarAveraged)
             try DNGAuthor.writeLinearDNG(
                 rgb16: rgb, width: width, height: height,
                 headroomStops: LiveBlendRawController.headroomStops,
+                cameraColor: cameraModel?.tags,
                 preview: preview,
                 to: url)
             entry.encodeMillis = (ProcessInfo.processInfo.systemUptime - encodeStart) * 1000

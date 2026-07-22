@@ -153,6 +153,10 @@ final class LinearDNGTests: XCTestCase {
         let single = try XCTUnwrap(CGImageSourceCreateImageAtIndex(singleSource, 0, nil))
         let singleMeans = channelMeans(of: single)
 
+        // Production shape: camera-native samples with the window's own tags.
+        let cameraModel = try CameraColorTransform.model(
+            from: DNGDocument.parseReference(try Data(contentsOf: frameURLs[0])))
+
         for count in [3, 5] {
             let overallStart = Date()
             var stageStart = Date()
@@ -165,10 +169,11 @@ final class LinearDNGTests: XCTestCase {
             }
             let graphMillis = Date().timeIntervalSince(stageStart) * 1000
             let scale = (1.0 / CGFloat(count)) / 4.0
+            let rows = cameraModel.transformRows
             let averaged = try XCTUnwrap(summed).applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
-                "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
-                "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
+                "inputRVector": CIVector(x: rows[0][0] * scale, y: rows[0][1] * scale, z: rows[0][2] * scale, w: 0),
+                "inputGVector": CIVector(x: rows[1][0] * scale, y: rows[1][1] * scale, z: rows[1][2] * scale, w: 0),
+                "inputBVector": CIVector(x: rows[2][0] * scale, y: rows[2][1] * scale, z: rows[2][2] * scale, w: 0),
                 "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
             ])
             let width = Int(averaged.extent.width)
@@ -202,7 +207,8 @@ final class LinearDNGTests: XCTestCase {
             let outputURL = outputFolder.appendingPathComponent("untouched-blend-\(count).dng")
             try DNGAuthor.writeLinearDNG(
                 rgb16: rgb, width: width, height: height,
-                headroomStops: 2, preview: nil, to: outputURL)
+                headroomStops: 2, cameraColor: cameraModel.tags,
+                preview: nil, to: outputURL)
             let writeMillis = Date().timeIntervalSince(stageStart) * 1000
             let totalMillis = Date().timeIntervalSince(overallStart) * 1000
             let fileBytes = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.intValue ?? 0

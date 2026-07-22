@@ -1,4 +1,5 @@
 import Foundation
+import Compression
 
 // MARK: - Tag model
 
@@ -246,11 +247,17 @@ public enum DNGAuthor {
     /// headroom` of full scale carry highlight headroom for recovery. This is
     /// the "practical first implementation" path: not sensor-native Bayer,
     /// but linear + 16-bit + headroom is real post latitude — unlike JPEG.
+    /// `cameraColor`: identity/matrix/neutral tags from
+    /// `CameraColorTransform.model(from:)` for samples already transformed
+    /// into camera-native space; nil keeps the fixed-sRGB tag set for
+    /// working-space samples.
     public static func writeLinearDNG(
         rgb16: Data,
         width: Int,
         height: Int,
         headroomStops: Int = 0,
+        compress: Bool = false,
+        cameraColor: [DNGTagValue]? = nil,
         preview: Preview?,
         to url: URL
     ) throws {
@@ -286,10 +293,16 @@ public enum DNGAuthor {
         var ifd0Tags: [DNGTagValue] = [
             DNGTagValue(tag: 50706, type: 1, count: 4, payload: Data([1, 4, 0, 0])),
             DNGTagValue(tag: 50707, type: 1, count: 4, payload: Data([1, 1, 0, 0])),
-            DNGTagValue(tag: 50721, type: 10, count: 9, payload: matrixPayload),
-            DNGTagValue(tag: 50728, type: 5, count: 3, payload: neutralPayload),
-            DNGTagValue(tag: 50778, type: 3, count: 1, payload: illuminantPayload),
         ]
+        if let cameraColor {
+            ifd0Tags.append(contentsOf: cameraColor)
+        } else {
+            ifd0Tags.append(contentsOf: [
+                DNGTagValue(tag: 50721, type: 10, count: 9, payload: matrixPayload),
+                DNGTagValue(tag: 50728, type: 5, count: 3, payload: neutralPayload),
+                DNGTagValue(tag: 50778, type: 3, count: 1, payload: illuminantPayload),
+            ])
+        }
         if headroomStops > 0 {
             // Values were pre-divided by 2^stops to keep highlight headroom;
             // BaselineExposure tells the decoder to push it back.
@@ -303,15 +316,109 @@ public enum DNGAuthor {
             raw: [
                 DNGTagValue(tag: 50717, type: 3, count: 3, payload: whitePayload),
             ])
+        // Deflate+predictor lands ~27 MB (measured on real data) and the
+        // stream round-trips byte-perfectly — but Apple's ImageIO refuses
+        // Deflate on integer LinearRaw (probe: DeflateProbeTests), which
+        // would break in-app rendering and Photos. Default stays
+        // uncompressed until the Bayer+lossless-JPEG path (Indigo's shape)
+        // lands in Phase 2; the flag remains for Adobe-only exports.
+        var payloadOverride: DNGAuthor.CompressedStrip?
+        if compress {
+            payloadOverride = DNGAuthor.CompressedStrip(
+                payload: try deflateWithPredictor(rgb16, width: width, height: height, samplesPerPixel: 3),
+                predictor: 2)
+        }
         let data = try makeDNGData(
             image: rgb16, width: width, height: height,
             samplesPerPixel: 3, photometric: 34892,
-            reference: reference, preview: preview)
+            reference: reference, preview: preview,
+            compressedStrip: payloadOverride)
         do {
             try data.write(to: url, options: .atomic)
         } catch {
             throw DNGError.writeFailed(error.localizedDescription)
         }
+    }
+
+    struct CompressedStrip {
+        let payload: Data
+        let predictor: UInt16
+    }
+
+    /// TIFF Deflate (Compression 8) with horizontal-difference Predictor 2
+    /// over 16-bit samples, quantised to 12 significant bits first. The
+    /// Compression framework emits raw deflate, so the zlib header/adler32
+    /// wrapper TIFF expects is added by hand.
+    static func deflateWithPredictor(_ image: Data, width: Int, height: Int, samplesPerPixel: Int, predict: Bool = true) throws -> Data {
+        let perRow = width * samplesPerPixel
+        var working = [UInt16](repeating: 0, count: perRow * height)
+        image.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            let source = raw.bindMemory(to: UInt16.self)
+            working.withUnsafeMutableBufferPointer { destination in
+                let dst = destination.baseAddress!
+                for row in 0..<height {
+                    let base = row * perRow
+                    // Quantise, then difference against the previous sample
+                    // of the same channel (stride = samplesPerPixel).
+                    var previous = [UInt16](repeating: 0, count: samplesPerPixel)
+                    for column in 0..<perRow {
+                        let value = source[base + column] & 0xFFF0
+                        let channel = column % samplesPerPixel
+                        if !predict || column < samplesPerPixel {
+                            dst[base + column] = value
+                        } else {
+                            dst[base + column] = value &- previous[channel]
+                        }
+                        previous[channel] = value
+                    }
+                }
+            }
+        }
+
+        let sourceData = working.withUnsafeBufferPointer { Data(buffer: $0) }
+        var compressed = Data(count: sourceData.count + 65536)
+        let compressedCount = compressed.withUnsafeMutableBytes { destination in
+            sourceData.withUnsafeBytes { source in
+                compression_encode_buffer(
+                    destination.bindMemory(to: UInt8.self).baseAddress!,
+                    destination.count,
+                    source.bindMemory(to: UInt8.self).baseAddress!,
+                    source.count,
+                    nil,
+                    COMPRESSION_ZLIB)
+            }
+        }
+        guard compressedCount > 0 else {
+            throw DNGError.writeFailed("deflate failed")
+        }
+        compressed.removeSubrange(compressedCount..<compressed.count)
+
+        // RFC1950 wrapper: header + raw deflate + Adler-32 (big-endian).
+        var wrapped = Data([0x78, 0x9C])
+        wrapped.append(compressed)
+        var s1: UInt32 = 1
+        var s2: UInt32 = 0
+        sourceData.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            var index = 0
+            let count = raw.count
+            let bytes = raw.bindMemory(to: UInt8.self).baseAddress!
+            while index < count {
+                let block = min(5552, count - index)
+                for offset in 0..<block {
+                    s1 &+= UInt32(bytes[index + offset])
+                    s2 &+= s1
+                }
+                s1 %= 65521
+                s2 %= 65521
+                index += block
+            }
+        }
+        let adler = (s2 << 16) | s1
+        wrapped.append(UInt8((adler >> 24) & 0xFF))
+        wrapped.append(UInt8((adler >> 16) & 0xFF))
+        wrapped.append(UInt8((adler >> 8) & 0xFF))
+        wrapped.append(UInt8(adler & 0xFF))
+        return wrapped
     }
 
     /// Builds the DNG in memory — callers that want to demosaic the blended
@@ -343,7 +450,8 @@ public enum DNGAuthor {
         samplesPerPixel: Int,
         photometric: UInt16,
         reference: DNGReference,
-        preview: Preview?
+        preview: Preview?,
+        compressedStrip: CompressedStrip? = nil
     ) throws -> Data {
         guard image.count == width * height * 2 * samplesPerPixel else {
             throw DNGError.sizeMismatch(
@@ -361,18 +469,22 @@ public enum DNGAuthor {
             }
         }
 
+        let strip = compressedStrip?.payload ?? image
         let rawIFD = IFDBuilder()
         rawIFD.addLong(254, 0)
         rawIFD.addLong(256, UInt32(width))
         rawIFD.addLong(257, UInt32(height))
         rawIFD.addShorts(258, Array(repeating: 16, count: samplesPerPixel))
-        rawIFD.addShorts(259, [1])
+        rawIFD.addShorts(259, [compressedStrip == nil ? 1 : 8])
         rawIFD.addShorts(262, [photometric])
         rawIFD.addLong(273, 0) // patched to the strip offset
         rawIFD.addShorts(277, [UInt16(samplesPerPixel)])
         rawIFD.addLong(278, UInt32(height))
-        rawIFD.addLong(279, UInt32(image.count))
+        rawIFD.addLong(279, UInt32(strip.count))
         rawIFD.addShorts(284, [1])
+        if let compressedStrip {
+            rawIFD.addShorts(317, [compressedStrip.predictor])
+        }
         for entry in carriedRaw {
             rawIFD.add(entry)
         }
@@ -432,6 +544,7 @@ public enum DNGAuthor {
         let rawEnd = singleIFD ? rawTable : rawTable + rawIFD.tableSize + rawIFD.valueSize
         let previewStrip = (rawEnd + 1) & ~1
         let rawStrip = ((previewStrip + (preview?.rgb.count ?? 0)) + 1) & ~1
+        _ = image // geometry validated by callers; strip may be compressed
 
         if singleIFD {
             ifd0.patchLong(273, UInt32(rawStrip))
@@ -444,7 +557,7 @@ public enum DNGAuthor {
             ifd0.patchLong(34665, UInt32(exifTable))
         }
 
-        var output = Data(capacity: rawStrip + image.count)
+        var output = Data(capacity: rawStrip + strip.count)
         output.append(contentsOf: [0x49, 0x49, 42, 0])
         output.appendU32(UInt32(ifd0Table))
         output.append(ifd0.serialize(tableOffset: ifd0Table))
@@ -459,7 +572,7 @@ public enum DNGAuthor {
             output.append(preview.rgb)
         }
         while output.count < rawStrip { output.append(0) }
-        output.append(image)
+        output.append(strip)
         return output
     }
 
