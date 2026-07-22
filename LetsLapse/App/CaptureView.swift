@@ -284,34 +284,30 @@ struct CaptureView: View {
                     #endif
                 }
                 Spacer()
-                if camera.isIntervalRunning {
-                    CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber)
-                } else if mode == .video, !camera.isRecording {
+                if !isCapturing {
                     zoomChips
                 }
             }
             .padding(.vertical, 16)
             .frame(width: 108)
 
-            // Viewfinder with the estimate chips in the safe corner
+            // Viewfinder with the estimate/interval chips in the safe corner
             viewfinder
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottomLeading) {
-                    if mode == .video {
-                        landscapeEstimateChips
-                            .padding(10)
+                    Group {
+                        if mode == .video {
+                            landscapeEstimateChips
+                        } else {
+                            landscapeIntervalRow
+                        }
                     }
+                    .padding(10)
                 }
 
             // Right rail: mode + shutter
             VStack {
-                Button {
-                    guard !camera.isRecording, !camera.isIntervalRunning else { return }
-                    mode = mode == .video ? .interval : .video
-                } label: {
-                    verticalModeLabel
-                }
-                .buttonStyle(.plain)
+                landscapeModeToggle
 
                 Spacer()
                 shutterButton
@@ -333,20 +329,30 @@ struct CaptureView: View {
         }
     }
 
-    private var verticalModeLabel: some View {
-        HStack(spacing: 4) {
-            Text("INTERVAL")
-                .foregroundStyle(mode == .interval ? LL.amber : .white.opacity(0.5))
-            Text("·")
-                .foregroundStyle(.white.opacity(0.4))
-            Text("VIDEO")
-                .foregroundStyle(mode == .video ? LL.amber : .white.opacity(0.5))
+    /// Stacked upright mode labels for the rail — the words must stay readable
+    /// in landscape, so they stack vertically instead of rotating 90°.
+    private var landscapeModeToggle: some View {
+        VStack(spacing: 10) {
+            Button {
+                guard !isCapturing else { return }
+                mode = .interval
+            } label: {
+                Text("INTERVAL")
+                    .foregroundStyle(mode == .interval ? LL.amber : .white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+
+            Button {
+                guard !isCapturing else { return }
+                mode = .video
+            } label: {
+                Text("VIDEO")
+                    .foregroundStyle(mode == .video ? LL.amber : .white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
         }
         .font(.system(size: 11, weight: .bold))
         .kerning(0.6)
-        .fixedSize()
-        .rotationEffect(.degrees(90))
-        .frame(width: 24, height: 130)
     }
 
     private var landscapeEstimateChips: some View {
@@ -618,47 +624,70 @@ struct CaptureView: View {
     @ViewBuilder
     private var intervalStatusRow: some View {
         if camera.isIntervalRunning {
-            HStack(spacing: 12) {
-                CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber, bold: true, monospaced: true)
-                CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
-            }
+            intervalRunningPills
         } else {
-            HStack(spacing: 8) {
-                Text("EVERY")
-                    .font(.system(size: 10, weight: .bold))
-                    .kerning(0.8)
-                    .foregroundStyle(.white.opacity(0.45))
-                Menu {
-                    ForEach([0.5, 1.0, 2.0, 3.0, 5.0, 10.0], id: \.self) { seconds in
-                        Button {
-                            interval = seconds
-                        } label: {
-                            if interval == seconds {
-                                Label(intervalLabel(seconds), systemImage: "checkmark")
-                            } else {
-                                Text(intervalLabel(seconds))
-                            }
+            intervalPickerRow
+        }
+    }
+
+    /// Landscape twin of `intervalStatusRow`, shown in the viewfinder's safe
+    /// corner: the picker sits over the live image (no letterbox there), so it
+    /// gets a dark backdrop to stay legible.
+    @ViewBuilder
+    private var landscapeIntervalRow: some View {
+        if camera.isIntervalRunning {
+            intervalRunningPills
+        } else {
+            intervalPickerRow
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color.black.opacity(0.5), in: Capsule())
+        }
+    }
+
+    private var intervalRunningPills: some View {
+        HStack(spacing: 12) {
+            CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber, bold: true, monospaced: true)
+            CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
+        }
+    }
+
+    private var intervalPickerRow: some View {
+        HStack(spacing: 8) {
+            Text("EVERY")
+                .font(.system(size: 10, weight: .bold))
+                .kerning(0.8)
+                .foregroundStyle(.white.opacity(0.45))
+            Menu {
+                ForEach([0.5, 1.0, 2.0, 3.0, 5.0, 10.0], id: \.self) { seconds in
+                    Button {
+                        interval = seconds
+                    } label: {
+                        if interval == seconds {
+                            Label(intervalLabel(seconds), systemImage: "checkmark")
+                        } else {
+                            Text(intervalLabel(seconds))
                         }
                     }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(intervalLabel(interval))
-                            .font(.system(size: 12.5, weight: .semibold))
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(.white.opacity(0.4))
-                    }
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
                 }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-                Text("blends into a timelapse")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.4))
+            } label: {
+                HStack(spacing: 4) {
+                    Text(intervalLabel(interval))
+                        .font(.system(size: 12.5, weight: .semibold))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.4))
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
             }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            Text("blends into a timelapse")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
         }
     }
 
@@ -1460,6 +1489,38 @@ struct CameraPreview: UIViewRepresentable {
     final class PreviewView: UIView {
         override class var layerClass: AnyClass { AVCaptureVideoPreviewLayer.self }
         var previewLayer: AVCaptureVideoPreviewLayer { layer as! AVCaptureVideoPreviewLayer }
+
+        /// Re-applies the connection orientation outside SwiftUI's update cycle.
+        /// Needed because the preview connection does not exist at `makeUIView`
+        /// time — the session is configured asynchronously on its queue — and
+        /// a freshly formed connection defaults to portrait. Without this, a
+        /// first open in landscape shows a sideways feed until a rotation
+        /// happens to trigger `updateUIView`.
+        var reapplyOrientation: (() -> Void)?
+        private var sessionStartObserver: NSObjectProtocol?
+
+        override func didMoveToWindow() {
+            super.didMoveToWindow()
+            if window != nil {
+                reapplyOrientation?()
+            }
+        }
+
+        func observeSessionStart(of session: AVCaptureSession) {
+            sessionStartObserver = NotificationCenter.default.addObserver(
+                forName: .AVCaptureSessionDidStartRunning,
+                object: session,
+                queue: .main
+            ) { [weak self] _ in
+                self?.reapplyOrientation?()
+            }
+        }
+
+        deinit {
+            if let sessionStartObserver {
+                NotificationCenter.default.removeObserver(sessionStartObserver)
+            }
+        }
     }
 
     // Temporary: count preview-view creations. Should stay at 1 for a whole
@@ -1473,6 +1534,11 @@ struct CameraPreview: UIViewRepresentable {
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = videoGravity
+        view.reapplyOrientation = { [weak view] in
+            guard let view else { return }
+            applyOrientation(to: view, from: "reapply")
+        }
+        view.observeSessionStart(of: session)
         applyOrientation(to: view, from: "makeUIView")
         return view
     }
@@ -1480,6 +1546,10 @@ struct CameraPreview: UIViewRepresentable {
     func updateUIView(_ uiView: PreviewView, context: Context) {
         if uiView.previewLayer.videoGravity != videoGravity {
             uiView.previewLayer.videoGravity = videoGravity
+        }
+        uiView.reapplyOrientation = { [weak uiView] in
+            guard let uiView else { return }
+            applyOrientation(to: uiView, from: "reapply")
         }
         applyOrientation(to: uiView, from: "updateUIView")
     }
@@ -1490,7 +1560,11 @@ struct CameraPreview: UIViewRepresentable {
     /// no `UIDevice` motion notifications, no lag. The view's window scene is
     /// authoritative once it's on screen; before then (`makeUIView`) we fall
     /// back to the orientation the view was created with, which is already
-    /// correct on a direct landscape launch.
+    /// correct on a direct landscape launch. `PreviewView.reapplyOrientation`
+    /// re-runs this on window attach and on session start, because the
+    /// connection this rotates does not exist until the session's async
+    /// configuration finishes — without that, a first open in landscape kept
+    /// the connection at its portrait default until the device was rotated.
     ///
     /// This deliberately does NOT touch the session's capture outputs or
     /// stabilization — reconfiguring those on the live session mid-rotation was
