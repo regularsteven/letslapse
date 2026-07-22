@@ -145,6 +145,11 @@ final class CameraController: NSObject, ObservableObject {
     /// the interface/device implies. Session-only (resets each launch) so a
     /// left-on flip can't silently invert a later handheld shot.
     @Published var flipOrientation180 = false
+    // Live Blend (macOS spike). Published on every platform so shared UI code
+    // compiles; only the macOS start/stop paths below ever set them.
+    @Published var isLiveBlendRunning = false
+    @Published var liveBlendOutputCount = 0
+    @Published var liveBlendDiagnostics: LiveBlendDiagnosticsSnapshot?
 
     /// A ramp/marker interval relative to the recording start, for the
     /// on-screen segment strip. `end == nil` while the interval is open.
@@ -154,10 +159,28 @@ final class CameraController: NSObject, ObservableObject {
         var end: TimeInterval?
     }
 
-    /// Both called on the main queue.
+    /// All called on the main queue.
     var onFinishVideo: ((URL) -> Void)?
     var onFinishLiveCapture: ((LiveCaptureResult) -> Void)?
     var onFinishPhotos: (([URL]) -> Void)?
+    var onFinishLiveBlend: ((LiveBlendCaptureResult) -> Void)?
+
+    #if os(macOS)
+    // sessionQueue-confined; the output is added lazily on the first Live
+    // Blend run and stays attached (delegate cleared between runs).
+    private var liveBlendOutput: AVCaptureVideoDataOutput?
+    private var liveBlendController: LiveBlendController?
+    #endif
+
+    /// True while a Live Blend run is collecting or draining. Guards the
+    /// format/lens setters the same way recording and interval capture do.
+    private var isLiveBlendActive: Bool {
+        #if os(macOS)
+        return liveBlendController?.isActive == true
+        #else
+        return false
+        #endif
+    }
 
     override init() {
         super.init()
@@ -224,6 +247,17 @@ final class CameraController: NSObject, ObservableObject {
                 self.isDiscardingSequence = true
                 self.movieOutput.stopRecording()
             }
+            #if os(macOS)
+            // Discard-teardown for an abandoned Live Blend run (window closed
+            // mid-capture). A gracefully finished run is already inactive by
+            // the time its finish handler calls stop(), so this leaves the
+            // handed-over temp frames alone.
+            if let controller = self.liveBlendController, controller.isActive {
+                self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
+                controller.requestStop(discard: true)
+                DispatchQueue.main.async { self.isLiveBlendRunning = false }
+            }
+            #endif
             if self.session.isRunning {
                 LLog("stopRunning()")
                 self.session.stopRunning()
@@ -365,7 +399,7 @@ final class CameraController: NSObject, ObservableObject {
 
     func selectLens(_ lens: Lens) {
         sessionQueue.async {
-            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             self.session.beginConfiguration()
             self.configureLens(lens)
             self.session.commitConfiguration()
@@ -402,7 +436,7 @@ final class CameraController: NSObject, ObservableObject {
 
     func selectResolution(_ resolution: CaptureResolution) {
         sessionQueue.async {
-            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             self.refreshCaptureOptions(preferredResolution: resolution)
             self.publishFormat()
         }
@@ -413,7 +447,7 @@ final class CameraController: NSObject, ObservableObject {
             self.isVideoStabilizationEnabled = isEnabled
         }
         sessionQueue.async {
-            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             self.videoStabilizationRequested = isEnabled
             RecordingSettingsStore.save(stabilization: isEnabled)
             self.refreshCaptureOptions()
@@ -424,7 +458,7 @@ final class CameraController: NSObject, ObservableObject {
 
     func selectFrameRate(_ fps: Int) {
         sessionQueue.async {
-            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             self.refreshCaptureOptions(preferredFrameRate: fps)
             self.publishFormat()
         }
@@ -552,7 +586,7 @@ final class CameraController: NSObject, ObservableObject {
 
     func selectRampFrameRate(_ fps: Int) {
         sessionQueue.async {
-            guard !self.movieOutput.isRecording, self.intervalTimer == nil else { return }
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             let frameRate = self.availableFrameRates.contains(fps)
                 ? fps
                 : self.nearestRampFrameRate(from: self.selectedFrameRate, in: self.availableFrameRates)
@@ -1267,6 +1301,135 @@ final class CameraController: NSObject, ObservableObject {
             }
         }
     }
+
+    #if os(macOS)
+    // MARK: - Live Blend (macOS spike)
+
+    /// Starts a Live Blend run: every `interval` seconds, `framesPerBlend`
+    /// frames tapped from the webcam stream are averaged into one JPEG. The
+    /// run hands its outputs over through `onFinishLiveBlend` exactly like
+    /// interval capture hands over `onFinishPhotos`.
+    func startLiveBlend(every interval: Double, framesPerBlend: Int) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+
+            if self.liveBlendOutput == nil {
+                let output = AVCaptureVideoDataOutput()
+                output.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                    kCVPixelBufferMetalCompatibilityKey as String: true,
+                ]
+                output.alwaysDiscardsLateVideoFrames = true
+                self.session.beginConfiguration()
+                if self.session.canAddOutput(output) {
+                    self.session.addOutput(output)
+                    self.liveBlendOutput = output
+                }
+                self.session.commitConfiguration()
+            }
+            guard let output = self.liveBlendOutput else {
+                LLog("liveblend: session refused the video data output")
+                self.publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+                return
+            }
+
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("liveblend-\(Int(Date().timeIntervalSince1970))")
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            } catch {
+                LLog("liveblend: could not create temp directory: \(error)")
+                self.publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+                return
+            }
+
+            let dimensions = self.videoDevice.map {
+                CMVideoFormatDescriptionGetDimensions($0.activeFormat.formatDescription)
+            }
+            let configuration = LiveBlendController.Configuration(
+                intervalSeconds: interval,
+                framesPerBlend: framesPerBlend,
+                outputDirectory: directory,
+                logURL: Self.liveBlendLogURL(),
+                cameraName: self.videoDevice?.localizedName ?? "unknown camera",
+                captureWidth: Int(dimensions?.width ?? 0),
+                captureHeight: Int(dimensions?.height ?? 0),
+                configuredFrameRate: self.selectedFrameRate)
+
+            let controller: LiveBlendController
+            do {
+                controller = try LiveBlendController(configuration: configuration)
+            } catch {
+                LLog("liveblend: controller init failed: \(error)")
+                self.publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+                return
+            }
+            controller.onDiagnostics = { [weak self] snapshot in
+                guard let self else { return }
+                if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
+                if self.liveBlendOutputCount != snapshot.outputCount {
+                    self.liveBlendOutputCount = snapshot.outputCount
+                }
+            }
+            controller.onFinished = { [weak self] result in
+                guard let self else { return }
+                self.isLiveBlendRunning = false
+                self.sessionQueue.async {
+                    self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
+                }
+                if let result {
+                    self.onFinishLiveBlend?(result)
+                }
+            }
+
+            self.liveBlendController = controller
+            output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
+            controller.start()
+            DispatchQueue.main.async {
+                self.isLiveBlendRunning = true
+                self.liveBlendOutputCount = 0
+                self.liveBlendDiagnostics = LiveBlendDiagnosticsSnapshot(
+                    requestedIntervalSeconds: interval,
+                    requestedFramesPerBlend: framesPerBlend)
+            }
+        }
+    }
+
+    /// Graceful stop: the partial window is kept when it has frames, then the
+    /// finish handler fires with everything completed so far.
+    func stopLiveBlend() {
+        sessionQueue.async {
+            guard let controller = self.liveBlendController, controller.isActive else { return }
+            self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
+            controller.requestStop(discard: false)
+        }
+    }
+
+    private func publishLiveBlendStartFailure(interval: Double, framesPerBlend: Int) {
+        DispatchQueue.main.async {
+            var snapshot = LiveBlendDiagnosticsSnapshot(
+                requestedIntervalSeconds: interval,
+                requestedFramesPerBlend: framesPerBlend)
+            snapshot.status = .captureFailed
+            self.liveBlendDiagnostics = snapshot
+        }
+    }
+
+    /// One log file per run in Application Support/LetsLapse/Logs — outside
+    /// the project so experiment data survives discarded captures.
+    private static func liveBlendLogURL() -> URL {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? FileManager.default.temporaryDirectory
+        let logsDirectory = base
+            .appendingPathComponent("LetsLapse", isDirectory: true)
+            .appendingPathComponent("Logs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
+        return logsDirectory.appendingPathComponent("liveblend-\(formatter.string(from: Date())).json")
+    }
+    #endif
 }
 
 #if os(iOS)

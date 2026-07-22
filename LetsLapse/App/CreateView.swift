@@ -11,6 +11,10 @@ struct CaptureIntent: Equatable {
 enum CaptureMode: String, CaseIterable, Identifiable {
     case video = "Video"
     case interval = "Interval"
+    /// macOS spike: blends several webcam frames into each timelapse image
+    /// during capture. The case exists on every platform so shared switches
+    /// stay exhaustive, but only macOS surfaces a button for it.
+    case liveBlend = "Live Blend"
     var id: String { rawValue }
 }
 

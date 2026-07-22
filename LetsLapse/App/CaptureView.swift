@@ -21,6 +21,12 @@ struct CaptureView: View {
     @State private var mode: CaptureMode
     @State private var sequenceMode: LiveCaptureSequence.Mode
     @State private var interval: Double = 2
+    /// Live Blend source frames per output image. Un-persisted, like the
+    /// interval seconds above. The set is deliberately small for the spike.
+    @State private var framesPerBlend = 5
+    private let liveBlendFrameOptions: [(frames: Int, label: String)] = [
+        (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
+    ]
     @State private var orientation = currentCaptureOrientation()
     @State private var now = Date()
     @State private var framingStartedAt = Date()
@@ -166,6 +172,11 @@ struct CaptureView: View {
             dismiss()
             model.setSource(.photos(urls), mode: "Interval photos")
         }
+        camera.onFinishLiveBlend = { result in
+            camera.stop()
+            dismiss()
+            model.setSource(.photos(result.frameURLs), mode: "Live Blend")
+        }
         orientation = currentCaptureOrientation()
         #if os(iOS)
         // Deliver orientation-change notifications so the grid overlay's aspect
@@ -236,11 +247,13 @@ struct CaptureView: View {
                 } else {
                     speedChipsRow
                 }
+            } else if mode == .liveBlend {
+                liveBlendStatusRow
             } else {
                 intervalStatusRow
             }
 
-            if !camera.isRecording && !camera.isIntervalRunning {
+            if !isCapturing {
                 modeRow
             }
 
@@ -298,6 +311,8 @@ struct CaptureView: View {
                     Group {
                         if mode == .video {
                             landscapeEstimateChips
+                        } else if mode == .liveBlend {
+                            landscapeLiveBlendRow
                         } else {
                             landscapeIntervalRow
                         }
@@ -341,6 +356,17 @@ struct CaptureView: View {
                     .foregroundStyle(mode == .interval ? LL.amber : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
+
+            #if os(macOS)
+            Button {
+                guard !isCapturing else { return }
+                mode = .liveBlend
+            } label: {
+                Text("LIVE BLEND")
+                    .foregroundStyle(mode == .liveBlend ? LL.amber : .white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            #endif
 
             Button {
                 guard !isCapturing else { return }
@@ -695,6 +721,137 @@ struct CaptureView: View {
         seconds == floor(seconds) ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
     }
 
+    // MARK: - Live Blend rows (macOS spike)
+
+    @ViewBuilder
+    private var liveBlendStatusRow: some View {
+        if camera.isLiveBlendRunning {
+            VStack(spacing: 8) {
+                liveBlendRunningPills
+                liveBlendDiagnosticsReadout
+            }
+        } else {
+            liveBlendPickerRow
+        }
+    }
+
+    /// Landscape twin of `liveBlendStatusRow`, shown over the viewfinder's
+    /// safe corner, so everything gets a dark backdrop.
+    @ViewBuilder
+    private var landscapeLiveBlendRow: some View {
+        if camera.isLiveBlendRunning {
+            VStack(alignment: .leading, spacing: 6) {
+                liveBlendRunningPills
+                liveBlendDiagnosticsReadout
+            }
+        } else {
+            liveBlendPickerRow
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color.black.opacity(0.5), in: Capsule())
+        }
+    }
+
+    private var liveBlendRunningPills: some View {
+        HStack(spacing: 12) {
+            CameraPill(text: "\(camera.liveBlendOutputCount) blends", tint: LL.amber, bold: true, monospaced: true)
+            CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
+        }
+    }
+
+    /// Compact experiment readout for the spike; goes away if the feature
+    /// graduates beyond testing.
+    @ViewBuilder
+    private var liveBlendDiagnosticsReadout: some View {
+        if let diagnostics = camera.liveBlendDiagnostics {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("frames \(diagnostics.currentWindowSelectedFrames)/\(diagnostics.requestedFramesPerBlend) · last \(diagnostics.lastCapturedFrames.map(String.init) ?? "–")")
+                Text("out \(diagnostics.lastOutputIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "–") (req \(String(format: "%.1f s", diagnostics.requestedIntervalSeconds)))")
+                Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–") · \(diagnostics.status.rawValue)")
+                    .foregroundStyle(liveBlendStatusTint(diagnostics.status))
+            }
+            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.75))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    private func liveBlendStatusTint(_ status: LiveBlendStatus) -> Color {
+        switch status {
+        case .healthy: return .white.opacity(0.75)
+        case .captureFailed: return .red
+        default: return LL.amber
+        }
+    }
+
+    private var liveBlendPickerRow: some View {
+        HStack(spacing: 8) {
+            Text("EVERY")
+                .font(.system(size: 10, weight: .bold))
+                .kerning(0.8)
+                .foregroundStyle(.white.opacity(0.45))
+            Menu {
+                ForEach([0.5, 1.0, 2.0, 3.0, 5.0, 10.0], id: \.self) { seconds in
+                    Button {
+                        interval = seconds
+                    } label: {
+                        if interval == seconds {
+                            Label(intervalLabel(seconds), systemImage: "checkmark")
+                        } else {
+                            Text(intervalLabel(seconds))
+                        }
+                    }
+                }
+            } label: {
+                liveBlendMenuLabel(intervalLabel(interval))
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Text("BLEND")
+                .font(.system(size: 10, weight: .bold))
+                .kerning(0.8)
+                .foregroundStyle(.white.opacity(0.45))
+            Menu {
+                ForEach(liveBlendFrameOptions, id: \.frames) { option in
+                    Button {
+                        framesPerBlend = option.frames
+                    } label: {
+                        if framesPerBlend == option.frames {
+                            Label("\(option.frames) frames · \(option.label)", systemImage: "checkmark")
+                        } else {
+                            Text("\(option.frames) frames · \(option.label)")
+                        }
+                    }
+                }
+            } label: {
+                liveBlendMenuLabel("\(framesPerBlend) frames")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+
+            Text("into one image")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.4))
+        }
+    }
+
+    private func liveBlendMenuLabel(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Text(text)
+                .font(.system(size: 12.5, weight: .semibold))
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.4))
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
+    }
+
     private var elapsedIntervalText: String {
         DurationFormatter.recordingTime(from: now.timeIntervalSince(framingStartedAt))
     }
@@ -710,6 +867,16 @@ struct CaptureView: View {
                     .foregroundStyle(mode == .interval ? LL.amber : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
+
+            #if os(macOS)
+            Button {
+                mode = .liveBlend
+            } label: {
+                Text("LIVE BLEND")
+                    .foregroundStyle(mode == .liveBlend ? LL.amber : .white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+            #endif
 
             Button {
                 mode = .video
@@ -785,7 +952,7 @@ struct CaptureView: View {
     }
 
     private var isCapturing: Bool {
-        camera.isRecording || camera.isIntervalRunning
+        camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
     }
 
     private func shutterAction() {
@@ -804,6 +971,15 @@ struct CaptureView: View {
                 framingStartedAt = Date()
                 camera.startInterval(every: interval)
             }
+        case .liveBlend:
+            #if os(macOS)
+            if camera.isLiveBlendRunning {
+                camera.stopLiveBlend()
+            } else {
+                framingStartedAt = Date()
+                camera.startLiveBlend(every: interval, framesPerBlend: framesPerBlend)
+            }
+            #endif
         }
     }
 
