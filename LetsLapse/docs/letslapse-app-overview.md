@@ -105,11 +105,13 @@ flowchart TB
         UI["SwiftUI views<br/>Create · Capture · Adjust · Processing · Result · Projects · Settings"]
         AM["AppModel (@MainActor ObservableObject)<br/>stage machine · library persistence · blend orchestration · clip encodings"]
         CC["CameraController (AVFoundation)<br/>iOS-centric capture"]
+        LBC["LiveBlendController<br/>(macOS only, live blend spike)"]
         WRR["WatchRemoteControlReceiver<br/>(iOS only, WCSession)"]
         MJR["MacVideoJobRunner<br/>(macOS only, disk-backed jobs)"]
         UI --> AM
         UI --> CC
         CC -->|finished media| AM
+        CC -->|sample buffers| LBC
         WRR -->|commands| CC
         CC -->|state| WRR
         AM --> MJR
@@ -120,9 +122,11 @@ flowchart TB
         IS["ImageStacker<br/>stills→image / stills→video"]
         BC["BlendCore + FrameAccumulator<br/>Metal device, pipelines, texture cache"]
         MK["BlendKernels.metal<br/>sum · divide"]
+        PBB["PixelBufferBlender<br/>streaming live average"]
         VS["VideoSynthesizer<br/>test clips"]
         VB --> BC
         IS --> BC
+        PBB --> BC
         BC --> MK
     end
 
@@ -131,6 +135,7 @@ flowchart TB
     AM --> VB
     AM --> IS
     MJR --> IS
+    LBC --> PBB
     WCR <-->|"WatchConnectivity<br/>(shared WatchMessageKey contract)"| WRR
 ```
 
@@ -163,15 +168,16 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 
 ### 3.4 Verification
 
-`Kit/Tests/LetsLapseKitTests/` (run with `swift test` inside `Kit/`; five suites):
+`Kit/Tests/LetsLapseKitTests/` (run with `swift test` inside `Kit/`; five suites plus a synthesizer helper):
 
 - `AccumulatorTests` — exact averaged values through the real GPU and blit readback.
+- `PixelBufferBlenderTests` — the live streaming average (§5.4): byte-space and linear-light averages checked against reference transfer functions; parity with `ImageStacker.stack` within one 8-bit step; window reuse, discard, and single-frame fallback.
 - `StackerTests` — ~√N noise reduction on synthetic noise; linear-light identity round-trip; size-mismatch and empty-input errors.
 - `VideoBlenderTests` — frame counts for constant and ramped blends against the schedule; linear-light output values (±0.06 tolerance for H.264/BT.709-vs-sRGB); trim; monotonic progress ending at 1.0.
 - `WindowScheduleTests` — schedules always sum exactly to input frames; monotonic ramp growth; clamping; curve shapes.
 - `VideoSynthesizer` provides deterministic inputs: a `ramp` pattern (gray level 0.1→0.9 across the clip, for numeric checks) and a `box` pattern (white box sweeping over gray, for eyeballing motion blur). Tests skip gracefully on machines without Metal.
 
-Not currently covered: HEVC/ProRes/JPEG output paths, `stackSequence`, the CLI, and `MacVideoJobRunner`.
+Not currently covered: HEVC/ProRes/JPEG output paths, `stackSequence`, the CLI, `MacVideoJobRunner`, and `LiveBlendController` (its Kit blender is tested; the frame-selection/watchdog/logging layer is not).
 
 ---
 
@@ -227,6 +233,7 @@ Below the cards: **Record now**, **Import a video**, **Import photos to stack** 
     - **Marker mode** — one continuous recording; tapping the moment button (phone or watch) marks intervals. At blend time the marked slices are extracted and kept at real speed (window 1) while everything else gets the user's speed; the pieces are stitched with `AVMutableComposition`.
     - **Ramp mode** — the moment button toggles a hardware **frame-rate burst** (base rate → e.g. 120/240 fps), recording separate segments per rate (`segment-%03d.mov` + a `sequence.json` sidecar describing segments, markers, and ramp intervals). At blend time, high-rate segments play every frame — a 240 fps burst rendered at 25 fps is ~9.6× slow motion — while base-rate segments get the timelapse blend, then all are stitched. One recording session yields a hyperlapse that dives into slow motion on demand.
   - **Interval** captures JPEG stills (`frame-%05d.jpg`) on a dispatch timer (0.5 s–10 s presets, floor 0.5 s), feeding the photo-stacking paths.
+  - A third `CaptureMode` case, **Live Blend**, exists in the shared enum so switches stay exhaustive, but it is surfaced only on macOS (§5.4).
 - **Capture UI.** Persistent aspect-fit preview; speed chips with live output-length estimates per speed; a segment strip visualizing burst spans during recording; a target sheet (auto-stop with countdown ring); zoom as discrete lens chips (.5×/1×/3× where hardware exists); grid overlay; format pill (locked while recording); idle timer disabled during capture. Last-used lens/resolution/rate/burst-rate/stabilization persist via `RecordingSettingsStore` (opt-out in Settings).
 
 Finished media hands off to `AppModel.setSource(...)` / `setSequenceSource(...)`, which registers a project on disk and enters the flow at `configure`.
@@ -302,7 +309,7 @@ Preferences use `UserDefaults` under `letslapse.*` keys (defaults, performance k
 
 The Mac app is the **same target and the same screens** — Create/Projects/Settings, the same flow overlay, the same engine — with platform-appropriate differences rather than a separate codebase:
 
-- **Import-first.** Imports use `.fileImporter` and **drag-and-drop onto the Create screen**; capture exists but is reduced (single default camera, coarse exposure lock, fixed landscape orientation, no lens/stabilization chrome). A Settings card surfaces camera authorization with a deep link to System Settings' privacy pane.
+- **Import-first.** Imports use `.fileImporter` and **drag-and-drop onto the Create screen**; capture exists but is reduced (single default camera, coarse exposure lock, fixed landscape orientation, no lens/stabilization chrome) — though it is also where the experimental **Live Blend** mode lives (§5.4). A Settings card surfaces camera authorization with a deep link to System Settings' privacy pane.
 - **Window & chrome.** Default window 760×680; native tab styling instead of the floating pill; capture presents as a sheet instead of a full-screen cover.
 - **No Watch layer.** `WatchRemoteControlReceiver` is compiled out (`#if os(iOS)`), and the Watch app embeds only into iOS builds.
 
@@ -334,6 +341,16 @@ swift build -c release
 ```
 
 `blend` takes `--window` or `--ramp A:B` (mutually exclusive), `--curve`, `--fps`, `--codec h264|hevc|prores|jpeg`, `--gamma`; `stack` takes `--format png|jpeg|heic` and `--gamma`; progress prints to stderr.
+
+### 5.4 Live Blend capture (experimental spike)
+
+A macOS-only experiment (July 2026) that moves blending to **capture time**: instead of recording video and averaging afterwards, frames tapped from the webcam stream are averaged into one JPEG per interval while the capture runs — a long-exposure timelapse assembling itself live. Same math as everything else in §2 (equal-weight linear-light average), applied to a live buffer stream.
+
+- **Pipeline.** `CameraController.startLiveBlend(every:framesPerBlend:)` lazily attaches an `AVCaptureVideoDataOutput` (BGRA, Metal-compatible) to the existing session and points its sample-buffer delegate at a per-run `App/LiveBlendController.swift`. The controller selects frames on an evenly spaced grid across each interval window (e.g. 5 frames spread over 2 s), streams them into a `PixelBufferBlender`, and writes `frame-%05d.jpg` to a temp directory. A finished run hands its JPEGs over exactly like interval capture does — into `AppModel.setSource(.photos)` and the photo-stacking flow (§2.5), so live-blended frames can themselves be stacked or sequenced.
+- **`PixelBufferBlender`** (`Kit/Sources/LetsLapseKit/PixelBufferBlender.swift`) is the reusable Kit piece: an equal-weight streaming average of live `CVPixelBuffer`s into one `CGImage`, built on the same `BlendCore`/`FrameAccumulator` as offline blending. Tests pin its output to within one 8-bit step of `ImageStacker.stack` on identical input. One instance serves a whole session: `finalizeImage()` closes a window and the next `accumulate` opens a fresh one; an in-flight semaphore caps how many camera buffers wait on the GPU.
+- **Resilience.** Two serial queues (frame selection vs blend/write) with a backpressure cap, so a slow writer drops frames rather than queuing unboundedly; a watchdog keeps interval windows ticking when the camera goes quiet (unplugged/covered); a single-frame window still produces a fallback output; three consecutive processing failures stop the run; mid-run teardown (window closed) discards cleanly via a generation counter that invalidates queued work.
+- **Instrumentation.** The capture screen shows a live diagnostics readout — frames selected, last blend ms, actual output spacing, and a health status (healthy / reduced frame count / camera rate limited / processing behind / thermal pressure / capture failed). Every run also writes a JSON experiment log to `Application Support/LetsLapse/Logs/liveblend-<timestamp>.json`: a machine/camera/format header, one entry per output (timings, frame spacing, drop counts, memory footprint, thermal state), and a summary — rewritten atomically after every output so a crash loses nothing.
+- **UI.** A LIVE BLEND mode button beside VIDEO/INTERVAL (macOS only), interval presets 0.5–10 s, and frames-per-blend presets 3 (Light) / 5 (Standard) / 10 (High) / 20 (Experimental). Settings are deliberately un-persisted while the feature is a spike.
 
 ---
 
@@ -432,6 +449,7 @@ The design history is documented in the repo-root `docs/letslapse-ios-ux-brief.m
 | UI / design changes | `App/DesignSystem.swift`, then the relevant view file |
 | Watch protocol | `Shared/WatchMessageKey.swift`, `Watch/WatchCaptureRemote.swift`, `App/WatchRemoteControlReceiver.swift` |
 | macOS batch pipeline | `App/MacVideoJobRunner.swift` |
+| Live Blend (macOS spike) | `App/LiveBlendController.swift`, `Kit/Sources/LetsLapseKit/PixelBufferBlender.swift` |
 
 ---
 
@@ -446,8 +464,9 @@ Honest notes for whoever picks this up:
 - **Rotation** is driven from the window's interface orientation by design (see §4.3); it is functional but still being refined on edge cases (recent commits note "not perfect").
 - **ProRes format matching**: the format matcher filters on dimensions/fps/stabilization but does not re-check the ProRes flag, so selecting a ProRes entry can, in principle, land on a same-dimension non-ProRes format if one also matches.
 - **`WatchRecordingState` is defined twice** (once per side of the WatchConnectivity bridge, since only the key names are shared) — the two enums must be kept in sync manually.
-- **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets.
+- **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets. (Live Blend *reports* thermal state in its diagnostics and experiment log but doesn't throttle either.)
 - **Processing checklist stages are cosmetic** — derived from progress thresholds, not real pipeline phases.
 - **Interval capture silently discards** sessions with fewer than 2 photos.
-- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, and `MacVideoJobRunner` are untested.
+- **Live Blend is a macOS-only experimental spike** (§5.4) — JPEG output only, settings un-persisted, and the on-screen diagnostics readout is expected to disappear if the feature graduates. Whether it comes to iOS (and at what battery cost) is an open question.
+- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, `MacVideoJobRunner`, and `LiveBlendController` are untested.
 - The whole app is a strong proof-of-concept moving toward production: no onboarding, no iCloud/sync, no keyframe editing (deliberate), and store-readiness items (privacy strings, App Store assets) are not addressed in this document.
