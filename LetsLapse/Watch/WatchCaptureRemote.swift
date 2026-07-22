@@ -25,7 +25,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var isCameraActive = false
     @Published private(set) var captureMode: CaptureMode = .video
     @Published private(set) var intervalSeconds: Double = 2
-    @Published private(set) var framesPerBlend = 5
+    /// Matches the phone's default (10); the phone's state push corrects
+    /// any drift on connection.
+    @Published private(set) var framesPerBlend = 10
     @Published private(set) var captureCount = 0
     @Published private(set) var stopAtUnit: ScheduledStopUnit?
     @Published private(set) var stopAtDeadline: Date?

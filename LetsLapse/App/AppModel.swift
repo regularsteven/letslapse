@@ -23,6 +23,9 @@ final class AppModel: ObservableObject {
         static let scratchFrameFormat = "letslapse.scratchFrameFormat"
         static let keepExtractedFrames = "letslapse.keepExtractedFrames"
         static let liveBlendOutputFormat = "letslapse.liveBlendOutputFormat"
+        static let liveBlendResponsiveCapture = "letslapse.liveBlendResponsiveCapture"
+        static let liveBlendBurstCapture = "letslapse.liveBlendBurstCapture"
+        static let liveBlendBracketedRAW = "letslapse.liveBlendBracketedRAW"
     }
 
     enum CaptureKind: String, Codable {
@@ -415,6 +418,22 @@ final class AppModel: ObservableObject {
         rawValue: UserDefaults.standard.string(forKey: DefaultsKey.liveBlendOutputFormat) ?? ""
     ) ?? .standard {
         didSet { UserDefaults.standard.set(liveBlendOutputFormat.rawValue, forKey: DefaultsKey.liveBlendOutputFormat) }
+    }
+    /// DNG capture experiments — A/B toggles for chasing tighter frame
+    /// density (denser samples read as blur; sparse ones read as ghosts).
+    /// Every run's log header records the combination in force. Defaults
+    /// follow the iPhone 16 Pro benchmark (2026-07-22): bracketed RAW was
+    /// the fastest AND most reliable (~40fps intra-bracket, 30/30 frames);
+    /// responsive capture wedged the photo output after ~15 rapid RAWs, so
+    /// it is opt-in only.
+    @Published var liveBlendResponsiveCapture = (UserDefaults.standard.object(forKey: DefaultsKey.liveBlendResponsiveCapture) as? Bool) ?? false {
+        didSet { UserDefaults.standard.set(liveBlendResponsiveCapture, forKey: DefaultsKey.liveBlendResponsiveCapture) }
+    }
+    @Published var liveBlendBurstCapture = (UserDefaults.standard.object(forKey: DefaultsKey.liveBlendBurstCapture) as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(liveBlendBurstCapture, forKey: DefaultsKey.liveBlendBurstCapture) }
+    }
+    @Published var liveBlendBracketedRAW = (UserDefaults.standard.object(forKey: DefaultsKey.liveBlendBracketedRAW) as? Bool) ?? true {
+        didSet { UserDefaults.standard.set(liveBlendBracketedRAW, forKey: DefaultsKey.liveBlendBracketedRAW) }
     }
     /// When on, decoded frames stay in the job folder for inspection and for
     /// instant re-blends at other speeds. When off (default) each blend

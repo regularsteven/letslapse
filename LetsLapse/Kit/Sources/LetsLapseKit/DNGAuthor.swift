@@ -345,6 +345,227 @@ public enum DNGAuthor {
         let predictor: UInt16
     }
 
+    /// Samples camera-native linear RGB back into a Bayer mosaic — one real
+    /// measured channel per site, the layout every raw decoder demosaics
+    /// natively and the reason the file shrinks 3× before compression.
+    public static func mosaic(
+        fromRGBA16 rgba: [UInt16],
+        width: Int,
+        height: Int,
+        pattern: [UInt8]
+    ) -> [UInt16] {
+        precondition(pattern.count == 4)
+        var output = [UInt16](repeating: 0, count: width * height)
+        rgba.withUnsafeBufferPointer { source in
+            output.withUnsafeMutableBufferPointer { destination in
+                let src = source.baseAddress!
+                let dst = destination.baseAddress!
+                for row in 0..<height {
+                    let rowBase = row * width
+                    let patternRow = (row & 1) << 1
+                    for column in 0..<width {
+                        let channel = Int(pattern[patternRow + (column & 1)])
+                        dst[rowBase + column] = src[(rowBase + column) * 4 + channel]
+                    }
+                }
+            }
+        }
+        return output
+    }
+
+    /// Writes a camera-native Bayer mosaic as a lossless-JPEG-compressed,
+    /// 256px-tiled CFA DNG — the same shape camera vendors ship, at roughly
+    /// a fifth the size of uncompressed LinearRaw with identical post
+    /// latitude (bit-exact codec; white balance lives in metadata).
+    public static func writeCompressedBayerDNG(
+        mosaic: [UInt16],
+        width: Int,
+        height: Int,
+        cfaPattern: [UInt8],
+        cameraColor: [DNGTagValue],
+        headroomStops: Int = 0,
+        preview: Preview?,
+        to url: URL
+    ) throws {
+        guard mosaic.count == width * height else {
+            throw DNGError.sizeMismatch(expected: "\(width * height) samples", actual: "\(mosaic.count)")
+        }
+        let tileSize = 256
+        let tilesAcross = (width + tileSize - 1) / tileSize
+        let tilesDown = (height + tileSize - 1) / tileSize
+
+        // Cut edge-replicated full tiles, then encode them concurrently.
+        var tileInputs: [[UInt16]] = []
+        tileInputs.reserveCapacity(tilesAcross * tilesDown)
+        for tileRow in 0..<tilesDown {
+            for tileColumn in 0..<tilesAcross {
+                var tile = [UInt16](repeating: 0, count: tileSize * tileSize)
+                for y in 0..<tileSize {
+                    let sourceY = min(tileRow * tileSize + y, height - 1)
+                    for x in 0..<tileSize {
+                        let sourceX = min(tileColumn * tileSize + x, width - 1)
+                        tile[y * tileSize + x] = mosaic[sourceY * width + sourceX]
+                    }
+                }
+                tileInputs.append(tile)
+            }
+        }
+        var encoded = [Data?](repeating: nil, count: tileInputs.count)
+        var encodeFailure = false
+        encoded.withUnsafeMutableBufferPointer { buffer in
+            let pointer = UnsafeMutableBufferPointer(rebasing: buffer[...])
+            DispatchQueue.concurrentPerform(iterations: tileInputs.count) { index in
+                pointer[index] = try? LosslessJPEG.encode(
+                    samples: tileInputs[index], width: tileSize, height: tileSize)
+            }
+        }
+        let tiles: [Data] = try encoded.map {
+            guard let tile = $0 else {
+                encodeFailure = true
+                throw DNGError.writeFailed("tile encode failed")
+            }
+            return tile
+        }
+        _ = encodeFailure
+
+        var ifd0Tags: [DNGTagValue] = [
+            DNGTagValue(tag: 50706, type: 1, count: 4, payload: Data([1, 4, 0, 0])),
+            DNGTagValue(tag: 50707, type: 1, count: 4, payload: Data([1, 1, 0, 0])),
+        ]
+        ifd0Tags.append(contentsOf: cameraColor)
+        if headroomStops > 0 {
+            var exposurePayload = Data()
+            exposurePayload.appendU32(UInt32(bitPattern: Int32(headroomStops)))
+            exposurePayload.appendU32(1)
+            ifd0Tags.append(DNGTagValue(tag: 50730, type: 10, count: 1, payload: exposurePayload))
+        }
+
+        var cfaDims = Data()
+        cfaDims.appendU16(2)
+        cfaDims.appendU16(2)
+        var blackPayload = Data()
+        blackPayload.appendU16(0)
+        var whitePayload = Data()
+        whitePayload.appendU32(65535)
+        let rawTags: [DNGTagValue] = [
+            DNGTagValue(tag: 33421, type: 3, count: 2, payload: cfaDims),
+            DNGTagValue(tag: 33422, type: 1, count: 4, payload: Data(cfaPattern)),
+            DNGTagValue(tag: 50710, type: 1, count: 3, payload: Data([0, 1, 2])),
+            DNGTagValue(tag: 50711, type: 3, count: 1, payload: { var d = Data(); d.appendU16(1); return d }()),
+            DNGTagValue(tag: 50714, type: 3, count: 1, payload: blackPayload),
+            DNGTagValue(tag: 50717, type: 4, count: 1, payload: whitePayload),
+        ]
+
+        let data = try makeTiledDNGData(
+            width: width, height: height,
+            tileSize: tileSize, tilesAcross: tilesAcross, tilesDown: tilesDown,
+            tiles: tiles,
+            ifd0Tags: ifd0Tags, rawTags: rawTags,
+            preview: preview)
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            throw DNGError.writeFailed(error.localizedDescription)
+        }
+    }
+
+    /// Assembles a two-IFD DNG whose raw image is lossless-JPEG tiles.
+    private static func makeTiledDNGData(
+        width: Int,
+        height: Int,
+        tileSize: Int,
+        tilesAcross: Int,
+        tilesDown: Int,
+        tiles: [Data],
+        ifd0Tags: [DNGTagValue],
+        rawTags: [DNGTagValue],
+        preview: Preview?
+    ) throws -> Data {
+        let rawIFD = IFDBuilder()
+        rawIFD.addLong(254, 0)
+        rawIFD.addLong(256, UInt32(width))
+        rawIFD.addLong(257, UInt32(height))
+        rawIFD.addShorts(258, [16])
+        rawIFD.addShorts(259, [7]) // lossless JPEG
+        rawIFD.addShorts(262, [32803])
+        rawIFD.addShorts(277, [1])
+        rawIFD.addShorts(284, [1])
+        rawIFD.addLong(322, UInt32(tileSize))
+        rawIFD.addLong(323, UInt32(tileSize))
+        rawIFD.addLongs(324, [UInt32](repeating: 0, count: tiles.count)) // patched
+        rawIFD.addLongs(325, tiles.map { UInt32($0.count) })
+        for tag in rawTags {
+            rawIFD.add(tag)
+        }
+
+        let ifd0 = IFDBuilder()
+        let hasPreview = preview != nil
+        if let preview {
+            ifd0.addLong(254, 1)
+            ifd0.addLong(256, UInt32(preview.width))
+            ifd0.addLong(257, UInt32(preview.height))
+            ifd0.addShorts(258, [8, 8, 8])
+            ifd0.addShorts(259, [1])
+            ifd0.addShorts(262, [2])
+            ifd0.addLong(273, 0) // patched
+            ifd0.addShorts(277, [3])
+            ifd0.addLong(278, UInt32(preview.height))
+            ifd0.addLong(279, UInt32(preview.rgb.count))
+            ifd0.addShorts(284, [1])
+            ifd0.addLong(330, 0) // patched
+        }
+        if !hasPreview {
+            for tag in rawIFD.sorted {
+                ifd0.add(tag)
+            }
+        }
+        for tag in ifd0Tags {
+            ifd0.add(tag)
+        }
+        if !ifd0.contains(50708) {
+            let name = Data("LetsLapse Live Blend\0".utf8)
+            ifd0.add(DNGTagValue(tag: 50708, type: 2, count: UInt32(name.count), payload: name))
+        }
+
+        let header = 8
+        let ifd0Table = header
+        let ifd0End = ifd0Table + ifd0.tableSize + ifd0.valueSize
+        let rawTable = ifd0End
+        let rawEnd = hasPreview ? rawTable + rawIFD.tableSize + rawIFD.valueSize : rawTable
+        let previewStrip = (rawEnd + 1) & ~1
+        var cursor = ((previewStrip + (preview?.rgb.count ?? 0)) + 1) & ~1
+        var tileOffsets: [UInt32] = []
+        for tile in tiles {
+            tileOffsets.append(UInt32(cursor))
+            cursor += tile.count
+            cursor = (cursor + 1) & ~1
+        }
+
+        let target = hasPreview ? rawIFD : ifd0
+        target.addLongs(324, tileOffsets)
+        if hasPreview {
+            ifd0.patchLong(273, UInt32(previewStrip))
+            ifd0.patchLong(330, UInt32(rawTable))
+        }
+
+        var output = Data(capacity: cursor)
+        output.append(contentsOf: [0x49, 0x49, 42, 0])
+        output.appendU32(UInt32(ifd0Table))
+        output.append(ifd0.serialize(tableOffset: ifd0Table))
+        if hasPreview {
+            output.append(rawIFD.serialize(tableOffset: rawTable))
+        }
+        while output.count < previewStrip { output.append(0) }
+        if let preview {
+            output.append(preview.rgb)
+        }
+        for (index, tile) in tiles.enumerated() {
+            while output.count < Int(tileOffsets[index]) { output.append(0) }
+            output.append(tile)
+        }
+        return output
+    }
+
     /// TIFF Deflate (Compression 8) with horizontal-difference Predictor 2
     /// over 16-bit samples, quantised to 12 significant bits first. The
     /// Compression framework emits raw deflate, so the zlib header/adler32
@@ -600,6 +821,14 @@ private final class IFDBuilder {
         var payload = Data()
         for value in values { payload.appendU16(value) }
         entries[tag] = DNGTagValue(tag: tag, type: 3, count: UInt32(values.count), payload: payload)
+    }
+
+    /// LONG array; replaces any existing entry (used to patch offset tables
+    /// once the layout is known — counts must match the placeholder's).
+    func addLongs(_ tag: UInt16, _ values: [UInt32]) {
+        var payload = Data()
+        for value in values { payload.appendU32(value) }
+        entries[tag] = DNGTagValue(tag: tag, type: 4, count: UInt32(values.count), payload: payload)
     }
 
     func patchLong(_ tag: UInt16, _ value: UInt32) {

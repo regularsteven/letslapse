@@ -22,8 +22,10 @@ struct CaptureView: View {
     @State private var sequenceMode: LiveCaptureSequence.Mode
     @State private var interval: Double = 2
     /// Live Blend source frames per output image. Un-persisted, like the
-    /// interval seconds above. The set is deliberately small for the spike.
-    @State private var framesPerBlend = 5
+    /// interval seconds above. Default 10: the capture benchmark showed
+    /// bracketed RAW delivers 10 frames in ~0.65s, and dense sampling is
+    /// what reads as motion blur — 3-5 spread samples read as ghosts.
+    @State private var framesPerBlend = 10
     private let liveBlendFrameOptions: [(frames: Int, label: String)] = [
         (1, "Untouched"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
     ]
@@ -796,8 +798,11 @@ struct CaptureView: View {
                 if framesPerBlend == 1 {
                     Text("Output: DNG · untouched originals, no blending")
                         .foregroundStyle(LL.amber)
-                } else if interval / Double(framesPerBlend) < 0.9 {
-                    Text("Output: DNG · RAW captures run ~1/s — expect fewer than \(framesPerBlend) frames per blend at this spacing")
+                } else if interval < 2 {
+                    // Capture bursts finish in well under a second; the
+                    // constraint is the ~1-2s blend+write per output, which
+                    // trails intervals shorter than that and pauses shots.
+                    Text("Output: DNG · blending takes ~1–2s per interval — expect reduced frames at this spacing")
                         .foregroundStyle(LL.amber)
                 } else {
                     Text("Output: DNG")
@@ -1073,7 +1078,11 @@ struct CaptureView: View {
                 camera.startLiveBlend(
                     every: interval,
                     framesPerBlend: framesPerBlend,
-                    preferDNG: model.liveBlendOutputFormat == .dng)
+                    preferDNG: model.liveBlendOutputFormat == .dng,
+                    options: LiveBlendCaptureOptions(
+                        responsiveCapture: model.liveBlendResponsiveCapture,
+                        burstScheduling: model.liveBlendBurstCapture,
+                        bracketedRAW: model.liveBlendBracketedRAW))
             }
         }
     }

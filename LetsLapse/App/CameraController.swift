@@ -1497,13 +1497,13 @@ final class CameraController: NSObject, ObservableObject {
     /// tapped and the output is JPEG. The run hands its outputs over through
     /// `onFinishLiveBlend` exactly like interval capture hands over
     /// `onFinishPhotos`.
-    func startLiveBlend(every interval: Double, framesPerBlend: Int, preferDNG: Bool = false) {
+    func startLiveBlend(every interval: Double, framesPerBlend: Int, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions()) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
 
             #if os(iOS)
             if preferDNG, self.deviceSupportsBayerRAW() {
-                self.startLiveBlendDNG(every: interval, framesPerBlend: framesPerBlend)
+                self.startLiveBlendDNG(every: interval, framesPerBlend: framesPerBlend, options: options)
                 return
             }
             #endif
@@ -1614,12 +1614,15 @@ final class CameraController: NSObject, ObservableObject {
     #if os(iOS)
     /// The pinned preset to restore once a DNG run ends. sessionQueue-confined.
     private var dngRunPreviousPreset: AVCaptureSession.Preset?
+    /// Fast-capture output state to restore after a DNG run (zero shutter
+    /// lag, responsive capture, fast prioritization). sessionQueue-confined.
+    private var dngRunPreviousFastCapture: (zsl: Bool, responsive: Bool, fast: Bool)?
 
     /// sessionQueue-confined DNG variant of `startLiveBlend`: switches the
     /// session to a RAW-capable photo configuration for the run (restored on
-    /// finish), then RAW photo captures feed a Bayer average — one blended
-    /// DNG per interval.
-    private func startLiveBlendDNG(every interval: Double, framesPerBlend: Int) {
+    /// finish), then RAW photo captures feed a linear-space average — one
+    /// blended DNG per interval.
+    private func startLiveBlendDNG(every interval: Double, framesPerBlend: Int, options: LiveBlendCaptureOptions) {
         let previousPreset = session.sessionPreset
         session.beginConfiguration()
         session.sessionPreset = .photo
@@ -1637,6 +1640,34 @@ final class CameraController: NSObject, ObservableObject {
         if let dimensions = videoDevice?.activeFormat.supportedMaxPhotoDimensions.last {
             photoOutput.maxPhotoDimensions = dimensions
         }
+
+        // Fast-capture experiment: the responsive pipeline (zero shutter
+        // lag + overlapped capture/processing) is what the system camera
+        // uses for rapid shot-to-shot. Enable order matters (ZSL before
+        // responsive before fast prioritization); the restore runs it in
+        // reverse. Skipped when brackets are requested — the two rapid-fire
+        // mechanisms aren't combined.
+        var responsiveApplied = false
+        if #available(iOS 17.0, *), options.responsiveCapture, !options.bracketedRAW {
+            dngRunPreviousFastCapture = (
+                zsl: photoOutput.isZeroShutterLagEnabled,
+                responsive: photoOutput.isResponsiveCaptureEnabled,
+                fast: photoOutput.isFastCapturePrioritizationEnabled)
+            session.beginConfiguration()
+            if photoOutput.isZeroShutterLagSupported {
+                photoOutput.isZeroShutterLagEnabled = true
+            }
+            if photoOutput.isResponsiveCaptureSupported {
+                photoOutput.isResponsiveCaptureEnabled = true
+                responsiveApplied = true
+            }
+            if photoOutput.isFastCapturePrioritizationSupported {
+                photoOutput.isFastCapturePrioritizationEnabled = true
+            }
+            session.commitConfiguration()
+        }
+        let bracketMax = Int(photoOutput.maxBracketedCapturePhotoCount)
+        LLog("liveblend-dng: capture options responsive=\(responsiveApplied) burst=\(options.burstScheduling) bracketed=\(options.bracketedRAW) bracketMax=\(bracketMax)")
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("liveblend-dng-\(Int(Date().timeIntervalSince1970))")
         do {
@@ -1658,7 +1689,11 @@ final class CameraController: NSObject, ObservableObject {
             captureWidth: Int(dimensions?.width ?? 0),
             captureHeight: Int(dimensions?.height ?? 0),
             configuredFrameRate: selectedFrameRate,
-            rawPixelFormat: rawFormat)
+            rawPixelFormat: rawFormat,
+            burstScheduling: options.burstScheduling,
+            bracketedRAW: options.bracketedRAW,
+            responsiveCapture: responsiveApplied,
+            maxBracketFrames: bracketMax)
         let controller = LiveBlendRawController(
             configuration: configuration,
             photoOutput: photoOutput,
@@ -1696,6 +1731,22 @@ final class CameraController: NSObject, ObservableObject {
     private func restoreAfterDNGRun() {
         guard let previousPreset = dngRunPreviousPreset else { return }
         dngRunPreviousPreset = nil
+        if #available(iOS 17.0, *), let previous = dngRunPreviousFastCapture {
+            dngRunPreviousFastCapture = nil
+            session.beginConfiguration()
+            // Reverse of the enable order: fast prioritization depends on
+            // responsive capture, which depends on zero shutter lag.
+            if photoOutput.isFastCapturePrioritizationSupported {
+                photoOutput.isFastCapturePrioritizationEnabled = previous.fast
+            }
+            if photoOutput.isResponsiveCaptureSupported {
+                photoOutput.isResponsiveCaptureEnabled = previous.responsive
+            }
+            if photoOutput.isZeroShutterLagSupported {
+                photoOutput.isZeroShutterLagEnabled = previous.zsl
+            }
+            session.commitConfiguration()
+        }
         session.beginConfiguration()
         session.sessionPreset = previousPreset
         session.commitConfiguration()

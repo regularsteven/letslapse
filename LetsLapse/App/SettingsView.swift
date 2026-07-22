@@ -17,6 +17,9 @@ struct SettingsView: View {
     @State private var storage: AppModel.LibraryStorage?
     @State private var isClearingCache = false
     @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
+    #if os(iOS)
+    @State private var showCaptureBenchmark = false
+    #endif
     #if os(macOS)
     @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
     #endif
@@ -65,6 +68,9 @@ struct SettingsView: View {
         }
         #if os(iOS)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showCaptureBenchmark) {
+            CaptureBenchmarkView()
+        }
         #else
         .navigationTitle("Settings")
         #endif
@@ -175,6 +181,46 @@ struct SettingsView: View {
                     menuValueLabel(model.liveBlendOutputFormat == .dng ? "DNG" : "Standard")
                 }
             }
+
+            #if os(iOS)
+            if model.liveBlendOutputFormat == .dng {
+                LLRow(
+                    title: "DNG bracketed RAW",
+                    subtitle: "Runs of back-to-back sensor frames per request — the tightest spacing possible, and the benchmark's most reliable mechanism. Falls back to single shots if the camera declines."
+                ) {
+                    Toggle("", isOn: $model.liveBlendBracketedRAW)
+                        .labelsHidden()
+                        .tint(.green)
+                }
+
+                LLRow(
+                    title: "DNG tight burst",
+                    subtitle: "Captures each blend's frames back-to-back at the start of the interval instead of spreading them out — moving subjects streak instead of ghosting."
+                ) {
+                    Toggle("", isOn: $model.liveBlendBurstCapture)
+                        .labelsHidden()
+                        .tint(.green)
+                }
+
+                LLRow(
+                    title: "DNG fast capture",
+                    subtitle: "Experimental: overlaps RAW captures through the system's responsive pipeline. Benchmarked faster than sequential but stalled the camera after ~15 rapid captures — keep off except for testing."
+                ) {
+                    Toggle("", isOn: $model.liveBlendResponsiveCapture)
+                        .labelsHidden()
+                        .tint(.green)
+                }
+
+                LLRow(
+                    title: "Capture benchmark",
+                    subtitle: "Automated timing run: 3/5/10-frame RAW bursts under every capture mechanism, ×3, plus the full blend pipeline per stage. Results copy as text."
+                ) {
+                    Button("Open") { showCaptureBenchmark = true }
+                        .buttonStyle(.bordered)
+                        .tint(.green)
+                }
+            }
+            #endif
 
             LLRow(
                 title: "Record audio",

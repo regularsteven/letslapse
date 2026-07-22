@@ -34,6 +34,14 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         var captureHeight: Int
         var configuredFrameRate: Int
         var rawPixelFormat: OSType
+        /// Capture experiments (Settings toggles; see LiveBlendCaptureOptions).
+        var burstScheduling: Bool
+        var bracketedRAW: Bool
+        /// Whether CameraController actually enabled the responsive-capture
+        /// pipeline on the output (support- and toggle-dependent).
+        var responsiveCapture: Bool
+        /// The output's bracket ceiling under the run's configuration.
+        var maxBracketFrames: Int
     }
 
     private let configuration: Configuration
@@ -77,11 +85,26 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private var windowFailures = 0
     private var windowPartial = false
     private var windowFrameDNGs: [Data] = []
+    private var readinessObservation: NSKeyValueObservation?
+    /// Set after a bracket request fails so the run degrades to singles
+    /// instead of sinking every window on a rejected settings shape.
+    private var bracketDisabled = false
+    /// Windows handed to `processingQueue` whose commit hasn't landed yet.
+    /// Backpressure: ≥2 pauses new captures so frame Data can't pile up.
+    private var pendingProcessingWindows = 0
+
+    /// Blend/author work runs here so capture scheduling never stalls
+    /// behind it — the next window's burst fires while the previous window
+    /// renders. Serial, so outputs stay ordered.
+    private let processingQueue = DispatchQueue(label: "com.letslapse.liveblend.raw.process", qos: .userInitiated)
+    /// processingQueue-confined; names stay contiguous because only actual
+    /// writes consume an index.
+    private var processingFileIndex = 0
+    private let discardRequested = OSAllocatedUnfairLock(initialState: false)
 
     // workQueue-confined output state.
     private var log: LiveBlendSessionLog
     private var frameURLs: [URL] = []
-    private var outputIndex = 0
     private var completedOutputs = 0
     private var fallbackOutputs = 0
     private var failedOutputs = 0
@@ -116,7 +139,11 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             requestedIntervalSeconds: configuration.intervalSeconds,
             requestedFramesPerBlend: configuration.framesPerBlend,
             requestedOutputFormat: "dng",
-            outputFormat: "dng"))
+            outputFormat: "dng",
+            responsiveCapture: configuration.responsiveCapture,
+            burstScheduling: configuration.burstScheduling,
+            bracketedRAW: configuration.bracketedRAW,
+            bracketMaxFrames: configuration.maxBracketFrames))
         super.init()
     }
 
@@ -130,15 +157,28 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             LLog("liveblend-dng: start interval=\(self.configuration.intervalSeconds)s frames=\(self.configuration.framesPerBlend) raw=\(self.configuration.rawPixelFormat) log=\(self.configuration.logURL.path)")
             self.rewriteLog()
 
-            // RAW capture cadence tops out around 1/s on most devices; the
-            // tick just requests shots and the in-flight guard records what
-            // the hardware couldn't keep up with.
-            let spacing = max(0.35, self.configuration.intervalSeconds / Double(self.configuration.framesPerBlend))
+            // Spread mode paces shots across the interval; burst mode fires
+            // them back-to-back, so its timer only closes windows and
+            // heartbeats the pump — a short fixed period keeps closes tight.
+            let spacing: Double
+            if self.usesBurst {
+                spacing = 0.25
+            } else {
+                spacing = max(0.35, self.configuration.intervalSeconds / Double(self.configuration.framesPerBlend))
+            }
             let timer = DispatchSource.makeTimerSource(queue: self.workQueue)
             timer.schedule(deadline: .now() + 0.05, repeating: spacing)
             timer.setEventHandler { [weak self] in self?.tick() }
             timer.resume()
             self.timer = timer
+
+            // The output's readiness transitions are the burst pacing signal
+            // (fastest shot-to-shot without over-queuing, per AVFoundation).
+            if self.usesBurst, !self.configuration.bracketedRAW, #available(iOS 17.0, *) {
+                self.readinessObservation = self.photoOutput.observe(\.captureReadiness) { [weak self] _, _ in
+                    self?.workQueue.async { self?.pumpCaptures() }
+                }
+            }
         }
     }
 
@@ -149,14 +189,34 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             self.selecting = false
             self.timer?.cancel()
             self.timer = nil
+            self.readinessObservation?.invalidate()
+            self.readinessObservation = nil
+            if discard {
+                self.discardRequested.withLock { $0 = true }
+            }
             if !discard, keepPartial, !self.windowFrameDNGs.isEmpty {
                 self.windowPartial = true
                 self.closeWindow()
             } else {
                 self.windowFrameDNGs.removeAll()
             }
-            self.finishRun(discard: discard)
+            // Drain before finishing: hop through the processing queue so
+            // every queued window's commit (processing → workQueue, FIFO)
+            // lands ahead of finishRun.
+            self.processingQueue.async {
+                self.workQueue.async { self.finishRun(discard: discard) }
+            }
         }
+    }
+
+    /// Burst variants (including bracketed) replace spread pacing.
+    private var usesBurst: Bool {
+        configuration.burstScheduling || configuration.bracketedRAW
+    }
+
+    /// Brackets stay in play only while the device honours them.
+    private var usesBrackets: Bool {
+        configuration.bracketedRAW && configuration.maxBracketFrames >= 2 && !bracketDisabled
     }
 
     // MARK: Scheduling (workQueue)
@@ -176,11 +236,23 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             let jumped = Int((now - windowStartUptime) / interval)
             windowStartUptime += Double(jumped) * interval
         }
-        // Strictly one RAW capture at a time. Overlapping RAW captures
-        // starved the session on iPhone 16 Pro (a hung second capture never
+        if usesBurst {
+            pumpCaptures()
+            return
+        }
+        // Processing runs off-queue now; if it falls behind, pause shots
+        // instead of piling captured frames into memory.
+        guard pendingProcessingWindows < 2 else {
+            windowMissed += 1
+            return
+        }
+        // Spread mode keeps strictly one RAW capture at a time. Overlapping
+        // RAW captures starved the session on iPhone 16 Pro when the output
+        // wasn't configured for overlap (a hung second capture never
         // completes, the in-flight budget never frees, and every later
         // window closes empty), so serialization plus honest miss-counting
-        // beats theoretical extra cadence.
+        // beats theoretical extra cadence. The burst path gets overlap the
+        // supported way, through responsive capture + readiness.
         if inFlightCaptures > 0 {
             // Stall recovery: a capture that never reported back must not
             // wedge the whole run.
@@ -197,6 +269,44 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         fireCapture()
     }
 
+    /// Burst scheduling: fire the window's remaining shots back-to-back,
+    /// gated by the output's readiness rather than a spacing grid. Dense
+    /// samples are what turn spread ghost copies into a streak — same frame
+    /// count, a fraction of the inter-frame displacement.
+    private func pumpCaptures() {
+        guard selecting, usesBurst else { return }
+        let now = ProcessInfo.processInfo.systemUptime
+        if inFlightCaptures > 0, now - lastCaptureFiredUptime > 8 {
+            LLog("liveblend-dng: capture stalled >8s — resetting in-flight guard")
+            inFlightCaptures = 0
+        }
+        guard pendingProcessingWindows < 2 else { return }
+        // Failed captures free their slots for a replacement shot, but never
+        // an unbounded retry loop inside one window.
+        let shotBudget = configuration.framesPerBlend * 2
+        while shotsRequestedThisWindow < shotBudget {
+            let wanted = configuration.framesPerBlend - windowFrameDNGs.count - inFlightCaptures
+            guard wanted > 0 else { return }
+            if usesBrackets {
+                // One bracket in flight at a time; its frames arrive at
+                // sensor-consecutive spacing.
+                guard inFlightCaptures == 0 else { return }
+                let count = min(wanted, configuration.maxBracketFrames)
+                if count >= 2 {
+                    fireBracket(count)
+                } else {
+                    fireCapture()
+                }
+            } else if #available(iOS 17.0, *) {
+                guard photoOutput.captureReadiness == .ready, inFlightCaptures < 3 else { return }
+                fireCapture()
+            } else {
+                guard inFlightCaptures == 0 else { return }
+                fireCapture()
+            }
+        }
+    }
+
     private var lastCaptureFiredUptime: Double = 0
 
     private func fireCapture() {
@@ -210,6 +320,32 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             // Speed over per-shot polish: blending supplies the noise
             // reduction, and slow captures are what starve short windows.
             settings.photoQualityPrioritization = .speed
+            self.photoOutput.capturePhoto(with: settings, delegate: self)
+        }
+    }
+
+    /// One bracket request for `count` RAW frames — consecutive sensor
+    /// frames, the closest a third-party app gets to video-rate RAW. Counts
+    /// as one in-flight request; each frame still arrives through
+    /// `didFinishProcessingPhoto`.
+    private func fireBracket(_ count: Int) {
+        inFlightCaptures += 1
+        lastCaptureFiredUptime = ProcessInfo.processInfo.systemUptime
+        shotsRequestedThisWindow += count
+        let format = configuration.rawPixelFormat
+        captureExecutor { [weak self] in
+            guard let self else { return }
+            let perFrame = (0..<count).map { _ in
+                AVCaptureAutoExposureBracketedStillImageSettings.autoExposureSettings(
+                    exposureTargetBias: AVCaptureDevice.currentExposureTargetBias)
+            }
+            // Quality prioritization is deliberately left default here —
+            // bracket settings reject some per-shot options that plain
+            // settings accept.
+            let settings = AVCapturePhotoBracketSettings(
+                rawPixelFormatType: format,
+                processedFormat: nil,
+                bracketedSettings: perFrame)
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }
     }
@@ -242,6 +378,13 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     ) {
         workQueue.async {
             self.inFlightCaptures = max(0, self.inFlightCaptures - 1)
+            if error != nil, self.usesBrackets {
+                // A rejected bracket request must not sink every window —
+                // degrade to single captures for the rest of the run.
+                self.bracketDisabled = true
+                LLog("liveblend-dng: bracket capture failed — single captures from here on")
+            }
+            self.pumpCaptures()
         }
     }
 
@@ -275,12 +418,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         windowFrameTimes.append(ProcessInfo.processInfo.systemUptime - startUptime)
         let selected = windowFrameDNGs.count
         pushDiagnostics { $0.currentWindowSelectedFrames = selected }
+        pumpCaptures()
     }
 
     // MARK: Window close + DNG output (workQueue)
 
+    /// Snapshots the window's stats, resets window state so the next burst
+    /// can fire immediately, and hands the heavy blend/author work to
+    /// `processingQueue`; `commitOutput` lands the result back here.
     private func closeWindow() {
-        let closeStart = ProcessInfo.processInfo.systemUptime
+        let frames = windowFrameDNGs
         let times = windowFrameTimes
         let spacings = zip(times.dropFirst(), times).map(-)
         var entry = LiveBlendSessionLog.OutputEntry(
@@ -289,7 +436,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             windowEndSeconds: windowStartUptime - startUptime + configuration.intervalSeconds,
             requestedIntervalSeconds: configuration.intervalSeconds,
             requestedFrames: configuration.framesPerBlend,
-            capturedFrames: windowFrameDNGs.count,
+            capturedFrames: frames.count,
             missedRateLimited: windowMissed,
             droppedProcessingBehind: 0,
             droppedByCamera: 0,
@@ -301,36 +448,6 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             thermalState: LiveBlendController.thermalStateName(),
             partial: windowPartial)
 
-        if windowFrameDNGs.isEmpty {
-            entry.failed = true
-            failedOutputs += 1
-        } else {
-            writeWindowOutput(&entry)
-        }
-
-        let done = ProcessInfo.processInfo.systemUptime
-        entry.totalMillis = (done - closeStart) * 1000
-        entry.actualIntervalSeconds = lastCompletionUptime.map { done - $0 }
-        lastCompletionUptime = done
-        peakProcessingSeconds = max(peakProcessingSeconds, done - closeStart)
-        entry.memoryFootprintBytes = LiveBlendController.memoryFootprintBytes()
-        if let footprint = entry.memoryFootprintBytes {
-            peakMemoryFootprint = max(peakMemoryFootprint ?? 0, footprint)
-        }
-        log.outputs.append(entry)
-        rewriteLog()
-
-        let status = status(after: entry)
-        pushDiagnostics {
-            $0.lastCapturedFrames = entry.capturedFrames
-            $0.lastBlendMillis = entry.blendMillis
-            $0.lastOutputIntervalSeconds = entry.actualIntervalSeconds
-            $0.outputCount = self.completedOutputs
-            $0.currentWindowSelectedFrames = 0
-            $0.status = status
-        }
-        LLog("liveblend-dng: window \(entry.index) captured=\(entry.capturedFrames)/\(entry.requestedFrames) format=\(entry.outputFormat ?? "-") total=\(Int(entry.totalMillis))ms \(status.rawValue)")
-
         windowIndex += 1
         windowStartUptime += configuration.intervalSeconds
         shotsRequestedThisWindow = 0
@@ -339,21 +456,83 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         windowFailures = 0
         windowPartial = false
         windowFrameDNGs = []
+        pushDiagnostics { $0.currentWindowSelectedFrames = 0 }
 
-        if consecutiveProcessingFailures >= 3 {
+        pendingProcessingWindows += 1
+        processingQueue.async {
+            autoreleasepool {
+                let processStart = ProcessInfo.processInfo.systemUptime
+                var processed = entry
+                var url: URL?
+                if frames.isEmpty || self.discardRequested.withLock({ $0 }) {
+                    // Empty window, or a discard raced the queue: nothing to
+                    // produce (a discarded run's log already says so).
+                    processed.failed = true
+                } else {
+                    url = self.processWindow(frames: frames, entry: &processed)
+                }
+                processed.totalMillis = (ProcessInfo.processInfo.systemUptime - processStart) * 1000
+                self.workQueue.async { self.commitOutput(processed, url: url) }
+            }
+        }
+    }
+
+    /// workQueue: fold a processed window back into run state and the log.
+    private func commitOutput(_ processed: LiveBlendSessionLog.OutputEntry, url: URL?) {
+        pendingProcessingWindows = max(0, pendingProcessingWindows - 1)
+        var entry = processed
+        let done = ProcessInfo.processInfo.systemUptime
+        entry.actualIntervalSeconds = lastCompletionUptime.map { done - $0 }
+        lastCompletionUptime = done
+        peakProcessingSeconds = max(peakProcessingSeconds, entry.totalMillis / 1000)
+        entry.memoryFootprintBytes = LiveBlendController.memoryFootprintBytes()
+        if let footprint = entry.memoryFootprintBytes {
+            peakMemoryFootprint = max(peakMemoryFootprint ?? 0, footprint)
+        }
+        if let url {
+            frameURLs.append(url)
+        }
+        if entry.failed {
+            failedOutputs += 1
+            consecutiveProcessingFailures += 1
+        } else {
+            completedOutputs += 1
+            consecutiveProcessingFailures = 0
+            if entry.fallbackSingleFrame {
+                fallbackOutputs += 1
+            }
+        }
+        log.outputs.append(entry)
+        rewriteLog()
+
+        var status = status(after: entry)
+        if !entry.failed, pendingProcessingWindows >= 2 {
+            status = .processingBehind
+        }
+        pushDiagnostics {
+            $0.lastCapturedFrames = entry.capturedFrames
+            $0.lastBlendMillis = entry.blendMillis
+            $0.lastOutputIntervalSeconds = entry.actualIntervalSeconds
+            $0.outputCount = self.completedOutputs
+            $0.status = status
+        }
+        LLog("liveblend-dng: window \(entry.index) captured=\(entry.capturedFrames)/\(entry.requestedFrames) format=\(entry.outputFormat ?? "-") total=\(Int(entry.totalMillis))ms \(status.rawValue)")
+
+        if consecutiveProcessingFailures >= 3, !finishRequested {
             LLog("liveblend-dng: three consecutive output failures, stopping")
             requestStop(discard: false)
         }
+        pumpCaptures()
     }
 
     /// Blend + author, entirely through Apple's calibrated RAW decode:
     /// every frame's DNG is taken to scene-linear working space, averaged,
-    /// and written as a 16-bit LinearRaw DNG with two stops of highlight
-    /// headroom. Fallback rule (deterministic, always logged): if the linear
-    /// blend cannot be produced, the window's first frame is saved as
-    /// Apple's own unblended DNG; with nothing decodable the window fails.
-    private func writeWindowOutput(_ entry: inout LiveBlendSessionLog.OutputEntry) {
-        let frames = windowFrameDNGs
+    /// and written as a compressed Bayer DNG. Fallback rule (deterministic,
+    /// always logged): if the linear blend cannot be produced, the window's
+    /// first frame is saved as Apple's own unblended DNG; with nothing
+    /// decodable the window fails. Runs on `processingQueue`; mutates only
+    /// the entry and `processingFileIndex`, returning the written file.
+    private func processWindow(frames: [Data], entry: inout LiveBlendSessionLog.OutputEntry) -> URL? {
         let referenceData = frames.first
 
         // "1 · Untouched": one RAW per interval, saved as Apple's original
@@ -361,22 +540,18 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // against blended output (and a legitimate holy-grail baseline).
         if configuration.framesPerBlend == 1, let referenceData {
             let url = configuration.outputDirectory
-                .appendingPathComponent(String(format: "frame-%05d.dng", outputIndex))
+                .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
             do {
                 try referenceData.write(to: url, options: .atomic)
                 entry.outputFormat = "dng"
                 entry.fileBytes = referenceData.count
-                frameURLs.append(url)
-                outputIndex += 1
-                completedOutputs += 1
-                consecutiveProcessingFailures = 0
+                processingFileIndex += 1
+                return url
             } catch {
                 LLog("liveblend-dng: untouched write failed: \(error)")
                 entry.failed = true
-                failedOutputs += 1
-                consecutiveProcessingFailures += 1
+                return nil
             }
-            return
         }
 
         do {
@@ -426,90 +601,117 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
                 "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
             ])
-            let averaged: CIImage
-            if let rows = cameraModel?.transformRows {
-                averaged = summed.applyingFilter("CIColorMatrix", parameters: [
-                    "inputRVector": CIVector(x: rows[0][0] * scale, y: rows[0][1] * scale, z: rows[0][2] * scale, w: 0),
-                    "inputGVector": CIVector(x: rows[1][0] * scale, y: rows[1][1] * scale, z: rows[1][2] * scale, w: 0),
-                    "inputBVector": CIVector(x: rows[2][0] * scale, y: rows[2][1] * scale, z: rows[2][2] * scale, w: 0),
-                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
-                ])
-            } else {
-                averaged = scalarAveraged
-            }
-            let width = Int(averaged.extent.width)
-            let height = Int(averaged.extent.height)
-            // Render straight to 16-bit (the GPU scales and clamps), then a
-            // single vImage pass drops alpha — a per-pixel Swift loop here
-            // cost ~6s in Debug builds and blew capture intervals.
+            let width = Int(scalarAveraged.extent.width)
+            let height = Int(scalarAveraged.extent.height)
+            // ONE pass through the RAW decoders: render the working-space
+            // average to 16-bit (the GPU scales and clamps). The preview and
+            // the camera-native transform both reuse this buffer — a second
+            // trip through the RAW graph re-decoded every frame and scaled
+            // with the blend count (benchmark: up to ~1.2s at 10:1).
             var rgba = [UInt16](repeating: 0, count: width * height * 4)
+            var wrappedData = Data()
             rgba.withUnsafeMutableBytes { buffer in
                 ciContext.render(
-                    averaged,
+                    scalarAveraged,
                     toBitmap: buffer.baseAddress!,
                     rowBytes: width * 8,
-                    bounds: averaged.extent,
+                    bounds: scalarAveraged.extent,
                     format: .RGBA16,
                     colorSpace: LiveBlendRawController.linearColorSpace)
+                wrappedData = Data(bytes: buffer.baseAddress!, count: width * height * 8)
             }
-            var rgb = Data(count: width * height * 6)
-            rgba.withUnsafeMutableBytes { source in
-                rgb.withUnsafeMutableBytes { destination in
-                    var sourceBuffer = vImage_Buffer(
-                        data: source.baseAddress, height: vImagePixelCount(height),
-                        width: vImagePixelCount(width), rowBytes: width * 8)
-                    var destinationBuffer = vImage_Buffer(
-                        data: destination.baseAddress, height: vImagePixelCount(height),
-                        width: vImagePixelCount(width), rowBytes: width * 6)
-                    vImageConvert_RGBA16UtoRGB16U(&sourceBuffer, &destinationBuffer, vImage_Flags(kvImageNoFlags))
-                }
-            }
+            let workingImage = CIImage(
+                bitmapData: wrappedData,
+                bytesPerRow: width * 8,
+                size: CGSize(width: width, height: height),
+                format: .RGBA16,
+                colorSpace: LiveBlendRawController.linearColorSpace)
             entry.blendMillis = (ProcessInfo.processInfo.systemUptime - blendStart) * 1000
 
             let url = configuration.outputDirectory
-                .appendingPathComponent(String(format: "frame-%05d.dng", outputIndex))
+                .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
             let encodeStart = ProcessInfo.processInfo.systemUptime
             // Preview renders from the WORKING-space average — camera-native
             // samples pushed through an sRGB conversion would look green.
-            let preview = blendedPreview(from: scalarAveraged)
-            try DNGAuthor.writeLinearDNG(
-                rgb16: rgb, width: width, height: height,
-                headroomStops: LiveBlendRawController.headroomStops,
-                cameraColor: cameraModel?.tags,
-                preview: preview,
-                to: url)
+            let preview = blendedPreview(from: workingImage)
+            if let cameraModel {
+                // Camera-native pass over the rendered buffer: decode-free,
+                // so it costs milliseconds instead of another full decode.
+                // Linear 3x3, so applying it after the scalar average (with
+                // its 16-bit quantize) is the same math to within an LSB.
+                let rows = cameraModel.transformRows
+                let cameraImage = workingImage.applyingFilter("CIColorMatrix", parameters: [
+                    "inputRVector": CIVector(x: rows[0][0], y: rows[0][1], z: rows[0][2], w: 0),
+                    "inputGVector": CIVector(x: rows[1][0], y: rows[1][1], z: rows[1][2], w: 0),
+                    "inputBVector": CIVector(x: rows[2][0], y: rows[2][1], z: rows[2][2], w: 0),
+                    "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+                ])
+                rgba.withUnsafeMutableBytes { buffer in
+                    ciContext.render(
+                        cameraImage,
+                        toBitmap: buffer.baseAddress!,
+                        rowBytes: width * 8,
+                        bounds: cameraImage.extent,
+                        format: .RGBA16,
+                        colorSpace: LiveBlendRawController.linearColorSpace)
+                }
+                // Phase 2 output: camera-native samples re-mosaiced to Bayer
+                // and lossless-JPEG tiled — one sample per pixel, ~4x smaller
+                // than LinearRaw, bit-exact codec, full WB latitude intact.
+                let mosaic = DNGAuthor.mosaic(
+                    fromRGBA16: rgba, width: width, height: height,
+                    pattern: [0, 1, 1, 2])
+                try DNGAuthor.writeCompressedBayerDNG(
+                    mosaic: mosaic, width: width, height: height,
+                    cfaPattern: [0, 1, 1, 2],
+                    cameraColor: cameraModel.tags,
+                    headroomStops: LiveBlendRawController.headroomStops,
+                    preview: preview,
+                    to: url)
+            } else {
+                var rgb = Data(count: width * height * 6)
+                rgba.withUnsafeMutableBytes { source in
+                    rgb.withUnsafeMutableBytes { destination in
+                        var sourceBuffer = vImage_Buffer(
+                            data: source.baseAddress, height: vImagePixelCount(height),
+                            width: vImagePixelCount(width), rowBytes: width * 8)
+                        var destinationBuffer = vImage_Buffer(
+                            data: destination.baseAddress, height: vImagePixelCount(height),
+                            width: vImagePixelCount(width), rowBytes: width * 6)
+                        vImageConvert_RGBA16UtoRGB16U(&sourceBuffer, &destinationBuffer, vImage_Flags(kvImageNoFlags))
+                    }
+                }
+                try DNGAuthor.writeLinearDNG(
+                    rgb16: rgb, width: width, height: height,
+                    headroomStops: LiveBlendRawController.headroomStops,
+                    cameraColor: nil,
+                    preview: preview,
+                    to: url)
+            }
             entry.encodeMillis = (ProcessInfo.processInfo.systemUptime - encodeStart) * 1000
             entry.outputFormat = "dng"
             let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
             entry.fileBytes = (attributes?[.size] as? NSNumber)?.intValue
-            frameURLs.append(url)
-            outputIndex += 1
-            completedOutputs += 1
             if decodedCount == 1 {
                 entry.fallbackSingleFrame = true
-                fallbackOutputs += 1
             }
-            consecutiveProcessingFailures = 0
+            processingFileIndex += 1
+            return url
         } catch {
             LLog("liveblend-dng: output \(entry.index) failed: \(error)")
             if let referenceData {
                 let url = configuration.outputDirectory
-                    .appendingPathComponent(String(format: "frame-%05d.dng", outputIndex))
+                    .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
                 if (try? referenceData.write(to: url, options: .atomic)) != nil {
                     entry.outputFormat = "dng"
                     entry.fallbackSingleFrame = true
                     entry.fileBytes = referenceData.count
-                    frameURLs.append(url)
-                    outputIndex += 1
-                    completedOutputs += 1
-                    fallbackOutputs += 1
-                    consecutiveProcessingFailures = 0
-                    return
+                    processingFileIndex += 1
+                    return url
                 }
             }
             entry.failed = true
-            failedOutputs += 1
-            consecutiveProcessingFailures += 1
+            return nil
         }
     }
 

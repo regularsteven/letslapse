@@ -31,6 +31,25 @@ struct LiveBlendDiagnosticsSnapshot: Equatable {
     var outputFormatLabel: String? = nil
 }
 
+/// Capture-experiment toggles for the DNG path. Each is a Settings switch
+/// so device runs can A/B one combination against another; the session log
+/// header records what was in force.
+struct LiveBlendCaptureOptions: Equatable {
+    /// Configure the photo output's responsive-capture pipeline (iOS 17):
+    /// zero shutter lag plus overlapped capture and processing, the same
+    /// machinery behind the system camera's rapid shot-to-shot pace.
+    var responsiveCapture = true
+    /// Fire each window's frames back-to-back from the window open instead
+    /// of spreading them across the interval — same frame count, a fraction
+    /// of the inter-frame displacement, so motion streaks instead of
+    /// ghosting.
+    var burstScheduling = true
+    /// Ask for consecutive-sensor-frame RAW brackets where the device
+    /// allows them (video-rate spacing inside each bracket). Experimental;
+    /// replaces the responsive pipeline for the run.
+    var bracketedRAW = false
+}
+
 /// Everything a finished session hands back to the capture screen.
 struct LiveBlendCaptureResult {
     var frameURLs: [URL]
@@ -61,6 +80,13 @@ struct LiveBlendSessionLog: Codable {
         /// actually produces — a visible record of any fallback.
         var requestedOutputFormat: String = "standard"
         var outputFormat: String = "standard"
+        // DNG capture-experiment toggles in force for this run (nil on the
+        // standard path and in logs from before the experiments existed).
+        var responsiveCapture: Bool? = nil
+        var burstScheduling: Bool? = nil
+        var bracketedRAW: Bool? = nil
+        /// The output's bracket ceiling for the active format (0 = none).
+        var bracketMaxFrames: Int? = nil
     }
 
     struct OutputEntry: Codable {

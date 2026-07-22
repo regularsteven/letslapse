@@ -131,14 +131,27 @@ final class LinearDNGTests: XCTestCase {
     /// writes viewable outputs, and asserts the blend renders with the same
     /// tone and cast as a single frame of the same scene.
     func testBlendsRealUntouchedSequence() throws {
-        let folder = URL(fileURLWithPath: "/Users/stevenwright/Library/Application Support/LetsLapse/Projects/44A0A7C9-B3BF-4AA5-8F09-54E200E36C12/source")
-        guard FileManager.default.fileExists(atPath: folder.path) else {
-            throw XCTSkip("no local untouched sequence")
+        // Discover an untouched-DNG project (Apple originals are big-endian
+        // "MM"; our authored blends are "II") — import mints fresh project
+        // IDs, so hard-coded paths rot.
+        let projectsRoot = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/LetsLapse/Projects")
+        var frameURLs: [URL] = []
+        if let projectFolders = try? FileManager.default.contentsOfDirectory(at: projectsRoot, includingPropertiesForKeys: nil) {
+            for project in projectFolders {
+                let source = project.appendingPathComponent("source")
+                guard let files = try? FileManager.default.contentsOfDirectory(at: source, includingPropertiesForKeys: nil) else { continue }
+                let dngs = files.filter { $0.pathExtension.lowercased() == "dng" }
+                    .sorted { $0.lastPathComponent < $1.lastPathComponent }
+                guard dngs.count >= 5,
+                      let handle = try? FileHandle(forReadingFrom: dngs[0]),
+                      let head = try? handle.read(upToCount: 2),
+                      head == Data([0x4D, 0x4D]) else { continue }
+                frameURLs = dngs
+                break
+            }
         }
-        let frameURLs = try FileManager.default.contentsOfDirectory(at: folder, includingPropertiesForKeys: nil)
-            .filter { $0.pathExtension.lowercased() == "dng" }
-            .sorted { $0.lastPathComponent < $1.lastPathComponent }
-        guard frameURLs.count >= 5 else { throw XCTSkip("need at least 5 frames") }
+        guard frameURLs.count >= 5 else { throw XCTSkip("no local untouched sequence") }
 
         let outputFolder = URL(fileURLWithPath: "/private/tmp/claude-501/-Users-stevenwright-Documents-dev-letslapse/74c6aabd-e72c-4181-a8be-063a41337a65/scratchpad")
         let linearSpace = try XCTUnwrap(CGColorSpace(name: CGColorSpace.extendedLinearSRGB))
@@ -168,51 +181,67 @@ final class LinearDNGTests: XCTestCase {
                 summed = summed.map { image.applyingFilter("CIAdditionCompositing", parameters: [kCIInputBackgroundImageKey: $0]) } ?? image
             }
             let graphMillis = Date().timeIntervalSince(stageStart) * 1000
+            // Production's two-pass shape: ONE decode pass renders the
+            // scalar working-space average; the camera-native matrix then
+            // runs over the rendered buffer, decode-free.
             let scale = (1.0 / CGFloat(count)) / 4.0
-            let rows = cameraModel.transformRows
-            let averaged = try XCTUnwrap(summed).applyingFilter("CIColorMatrix", parameters: [
-                "inputRVector": CIVector(x: rows[0][0] * scale, y: rows[0][1] * scale, z: rows[0][2] * scale, w: 0),
-                "inputGVector": CIVector(x: rows[1][0] * scale, y: rows[1][1] * scale, z: rows[1][2] * scale, w: 0),
-                "inputBVector": CIVector(x: rows[2][0] * scale, y: rows[2][1] * scale, z: rows[2][2] * scale, w: 0),
+            let scalarAveraged = try XCTUnwrap(summed).applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: scale, y: 0, z: 0, w: 0),
+                "inputGVector": CIVector(x: 0, y: scale, z: 0, w: 0),
+                "inputBVector": CIVector(x: 0, y: 0, z: scale, w: 0),
                 "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
             ])
-            let width = Int(averaged.extent.width)
-            let height = Int(averaged.extent.height)
+            let width = Int(scalarAveraged.extent.width)
+            let height = Int(scalarAveraged.extent.height)
 
             stageStart = Date()
             var rgba = [UInt16](repeating: 0, count: width * height * 4)
+            var wrappedData = Data()
             rgba.withUnsafeMutableBytes { buffer in
                 context.render(
-                    averaged, toBitmap: buffer.baseAddress!, rowBytes: width * 8,
-                    bounds: averaged.extent, format: .RGBA16, colorSpace: linearSpace)
+                    scalarAveraged, toBitmap: buffer.baseAddress!, rowBytes: width * 8,
+                    bounds: scalarAveraged.extent, format: .RGBA16, colorSpace: linearSpace)
+                wrappedData = Data(bytes: buffer.baseAddress!, count: width * height * 8)
             }
             let renderMillis = Date().timeIntervalSince(stageStart) * 1000
 
             stageStart = Date()
-            var rgb = Data(count: width * height * 6)
-            rgba.withUnsafeMutableBytes { source in
-                rgb.withUnsafeMutableBytes { destination in
-                    var sourceBuffer = vImage_Buffer(
-                        data: source.baseAddress, height: vImagePixelCount(height),
-                        width: vImagePixelCount(width), rowBytes: width * 8)
-                    var destinationBuffer = vImage_Buffer(
-                        data: destination.baseAddress, height: vImagePixelCount(height),
-                        width: vImagePixelCount(width), rowBytes: width * 6)
-                    vImageConvert_RGBA16UtoRGB16U(&sourceBuffer, &destinationBuffer, vImage_Flags(kvImageNoFlags))
-                }
+            let workingImage = CIImage(
+                bitmapData: wrappedData,
+                bytesPerRow: width * 8,
+                size: CGSize(width: width, height: height),
+                format: .RGBA16,
+                colorSpace: linearSpace)
+            let rows = cameraModel.transformRows
+            let cameraImage = workingImage.applyingFilter("CIColorMatrix", parameters: [
+                "inputRVector": CIVector(x: rows[0][0], y: rows[0][1], z: rows[0][2], w: 0),
+                "inputGVector": CIVector(x: rows[1][0], y: rows[1][1], z: rows[1][2], w: 0),
+                "inputBVector": CIVector(x: rows[2][0], y: rows[2][1], z: rows[2][2], w: 0),
+                "inputAVector": CIVector(x: 0, y: 0, z: 0, w: 1),
+            ])
+            rgba.withUnsafeMutableBytes { buffer in
+                context.render(
+                    cameraImage, toBitmap: buffer.baseAddress!, rowBytes: width * 8,
+                    bounds: cameraImage.extent, format: .RGBA16, colorSpace: linearSpace)
             }
+            let matrixMillis = Date().timeIntervalSince(stageStart) * 1000
+
+            stageStart = Date()
+            let mosaic = DNGAuthor.mosaic(fromRGBA16: rgba, width: width, height: height, pattern: [0, 1, 1, 2])
             let packMillis = Date().timeIntervalSince(stageStart) * 1000
 
             stageStart = Date()
             let outputURL = outputFolder.appendingPathComponent("untouched-blend-\(count).dng")
-            try DNGAuthor.writeLinearDNG(
-                rgb16: rgb, width: width, height: height,
-                headroomStops: 2, cameraColor: cameraModel.tags,
+            try DNGAuthor.writeCompressedBayerDNG(
+                mosaic: mosaic, width: width, height: height,
+                cfaPattern: [0, 1, 1, 2],
+                cameraColor: cameraModel.tags,
+                headroomStops: 2,
                 preview: nil, to: outputURL)
             let writeMillis = Date().timeIntervalSince(stageStart) * 1000
             let totalMillis = Date().timeIntervalSince(overallStart) * 1000
             let fileBytes = (try? FileManager.default.attributesOfItem(atPath: outputURL.path)[.size] as? NSNumber)?.intValue ?? 0
-            print("HARNESS blend \(count): graph \(Int(graphMillis))ms render \(Int(renderMillis))ms pack \(Int(packMillis))ms write \(Int(writeMillis))ms total \(Int(totalMillis))ms → \(fileBytes / 1_048_576) MB")
+            print("HARNESS blend \(count): graph \(Int(graphMillis))ms render \(Int(renderMillis))ms matrix \(Int(matrixMillis))ms pack \(Int(packMillis))ms write \(Int(writeMillis))ms total \(Int(totalMillis))ms → \(fileBytes / 1_048_576) MB")
 
             let blendSource = try XCTUnwrap(CGImageSourceCreateWithURL(outputURL as CFURL, nil))
             XCTAssertEqual(CGImageSourceGetType(blendSource) as String?, "com.adobe.raw-image")
