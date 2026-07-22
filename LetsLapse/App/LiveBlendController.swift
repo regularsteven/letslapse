@@ -1,14 +1,10 @@
 import Foundation
 import AVFoundation
 import CoreMedia
-#if os(macOS)
 import os
 import LetsLapseKit
-#endif
 
 // MARK: - Shared data types
-// Compiled on every platform so CameraController can publish them
-// unconditionally; the controller below is macOS-only.
 
 /// Health of a running Live Blend session, worst condition wins.
 enum LiveBlendStatus: String, Codable {
@@ -46,7 +42,7 @@ struct LiveBlendCaptureResult {
 struct LiveBlendSessionLog: Codable {
     struct Header: Codable {
         var startedAt: Date
-        var macModel: String
+        var deviceModel: String
         var osVersion: String
         var appVersion: String
         var cameraName: String
@@ -105,11 +101,9 @@ struct LiveBlendSessionLog: Codable {
     var summary: Summary?
 }
 
-#if os(macOS)
+// MARK: - Live Blend controller (experimental spike)
 
-// MARK: - Live Blend controller (macOS spike)
-
-/// Drives one Live Blend capture run: selects frames from the webcam stream on
+/// Drives one Live Blend capture run: selects frames from the camera stream on
 /// a schedule, streams them into a `PixelBufferBlender`, writes one JPEG per
 /// interval, and keeps the experiment log. Owned by `CameraController`, which
 /// does all AVCaptureSession surgery; this class only consumes sample buffers.
@@ -208,7 +202,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             requestedFramesPerBlend: configuration.framesPerBlend))
         self.log = LiveBlendSessionLog(header: LiveBlendSessionLog.Header(
             startedAt: Date(),
-            macModel: LiveBlendController.macModelIdentifier(),
+            deviceModel: LiveBlendController.deviceModelIdentifier(),
             osVersion: ProcessInfo.processInfo.operatingSystemVersionString,
             appVersion: LiveBlendController.appVersion(),
             cameraName: configuration.cameraName,
@@ -560,12 +554,19 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
 
     // MARK: Machine info helpers
 
-    static func macModelIdentifier() -> String {
+    /// "Mac16,6" on macOS, "iPhone17,1"-style on iOS (hw.model on iOS is the
+    /// internal board name, so each platform reads its meaningful key).
+    static func deviceModelIdentifier() -> String {
+        #if os(macOS)
+        let key = "hw.model"
+        #else
+        let key = "hw.machine"
+        #endif
         var size = 0
-        sysctlbyname("hw.model", nil, &size, nil, 0)
+        sysctlbyname(key, nil, &size, nil, 0)
         guard size > 0 else { return "unknown" }
         var value = [CChar](repeating: 0, count: size)
-        sysctlbyname("hw.model", &value, &size, nil, 0)
+        sysctlbyname(key, &value, &size, nil, 0)
         return String(cString: value)
     }
 
@@ -600,5 +601,3 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         return Int(info.phys_footprint)
     }
 }
-
-#endif

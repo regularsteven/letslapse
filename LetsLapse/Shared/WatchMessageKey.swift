@@ -26,4 +26,11 @@ enum WatchMessageKey {
     static let lockedLensPosition = "lockedLensPosition"
     static let isoMin = "isoMin"
     static let isoMax = "isoMax"
+    static let captureMode = "captureMode"
+    static let intervalSeconds = "intervalSeconds"
+    static let framesPerBlend = "framesPerBlend"
+    static let captureCount = "captureCount"
+    static let stopAtUnit = "stopAtUnit"
+    static let stopAtDeadline = "stopAtDeadline"
+    static let stopAtTargetCount = "stopAtTargetCount"
 }

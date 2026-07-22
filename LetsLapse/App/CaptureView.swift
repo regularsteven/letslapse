@@ -27,6 +27,7 @@ struct CaptureView: View {
     private let liveBlendFrameOptions: [(frames: Int, label: String)] = [
         (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
     ]
+    private let captureIntervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
     @State private var orientation = currentCaptureOrientation()
     @State private var now = Date()
     @State private var framingStartedAt = Date()
@@ -128,7 +129,20 @@ struct CaptureView: View {
         .onChange(of: camera.segmentCount) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isRampActive) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isRampHighRate) { _ in updateWatchRecordingState() }
-        .onChange(of: camera.isIntervalRunning) { _ in updateIdleTimer() }
+        .onChange(of: camera.isIntervalRunning) { _ in
+            updateIdleTimer()
+            updateWatchRecordingState()
+        }
+        .onChange(of: camera.isLiveBlendRunning) { _ in
+            updateIdleTimer()
+            updateWatchRecordingState()
+        }
+        .onChange(of: mode) { _ in updateWatchModeContext() }
+        .onChange(of: interval) { _ in updateWatchModeContext() }
+        .onChange(of: framesPerBlend) { _ in updateWatchModeContext() }
+        .onChange(of: camera.photoCount) { _ in updateWatchModeContext() }
+        .onChange(of: camera.liveBlendOutputCount) { _ in updateWatchModeContext() }
+        .onChange(of: camera.scheduledStop) { _ in updateWatchScheduledStop() }
         .onChange(of: camera.selectedResolution) { _ in updateWatchContext() }
         .onChange(of: camera.selectedFrameRate) { _ in updateWatchContext() }
         .onChange(of: model.constantWindow) { _ in updateWatchContext() }
@@ -154,6 +168,8 @@ struct CaptureView: View {
         watchRemote.setCommandHandler(handleWatchCommand)
         updateWatchRecordingState()
         updateWatchContext()
+        updateWatchModeContext()
+        updateWatchScheduledStop()
         updateWatchExposure()
         updateIdleTimer()
         #endif
@@ -357,7 +373,6 @@ struct CaptureView: View {
             }
             .buttonStyle(.plain)
 
-            #if os(macOS)
             Button {
                 guard !isCapturing else { return }
                 mode = .liveBlend
@@ -366,7 +381,6 @@ struct CaptureView: View {
                     .foregroundStyle(mode == .liveBlend ? LL.amber : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
-            #endif
 
             Button {
                 guard !isCapturing else { return }
@@ -685,7 +699,7 @@ struct CaptureView: View {
                 .kerning(0.8)
                 .foregroundStyle(.white.opacity(0.45))
             Menu {
-                ForEach([0.5, 1.0, 2.0, 3.0, 5.0, 10.0], id: \.self) { seconds in
+                ForEach(captureIntervalOptions, id: \.self) { seconds in
                     Button {
                         interval = seconds
                     } label: {
@@ -721,7 +735,7 @@ struct CaptureView: View {
         seconds == floor(seconds) ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
     }
 
-    // MARK: - Live Blend rows (macOS spike)
+    // MARK: - Live Blend rows (experimental spike)
 
     @ViewBuilder
     private var liveBlendStatusRow: some View {
@@ -787,13 +801,32 @@ struct CaptureView: View {
     }
 
     private var liveBlendPickerRow: some View {
+        // One line where it fits (Mac, landscape phones/iPads); portrait
+        // iPhones fall back to two stacked lines.
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                liveBlendIntervalPicker
+                liveBlendFramesPicker
+                liveBlendPickerCaption
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                liveBlendIntervalPicker
+                HStack(spacing: 8) {
+                    liveBlendFramesPicker
+                    liveBlendPickerCaption
+                }
+            }
+        }
+    }
+
+    private var liveBlendIntervalPicker: some View {
         HStack(spacing: 8) {
             Text("EVERY")
                 .font(.system(size: 10, weight: .bold))
                 .kerning(0.8)
                 .foregroundStyle(.white.opacity(0.45))
             Menu {
-                ForEach([0.5, 1.0, 2.0, 3.0, 5.0, 10.0], id: \.self) { seconds in
+                ForEach(captureIntervalOptions, id: \.self) { seconds in
                     Button {
                         interval = seconds
                     } label: {
@@ -809,7 +842,11 @@ struct CaptureView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+        }
+    }
 
+    private var liveBlendFramesPicker: some View {
+        HStack(spacing: 8) {
             Text("BLEND")
                 .font(.system(size: 10, weight: .bold))
                 .kerning(0.8)
@@ -831,11 +868,13 @@ struct CaptureView: View {
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-
-            Text("into one image")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.4))
         }
+    }
+
+    private var liveBlendPickerCaption: some View {
+        Text("into one image")
+            .font(.system(size: 11))
+            .foregroundStyle(.white.opacity(0.4))
     }
 
     private func liveBlendMenuLabel(_ text: String) -> some View {
@@ -859,7 +898,14 @@ struct CaptureView: View {
     // MARK: - Mode + zoom row
 
     private var modeRow: some View {
-        HStack(spacing: 22) {
+        // Three mode labels plus zoom chips have to fit an iPhone-portrait
+        // width; the Mac window has room to breathe.
+        #if os(iOS)
+        let spacing: CGFloat = 14
+        #else
+        let spacing: CGFloat = 22
+        #endif
+        return HStack(spacing: spacing) {
             Button {
                 mode = .interval
             } label: {
@@ -868,7 +914,6 @@ struct CaptureView: View {
             }
             .buttonStyle(.plain)
 
-            #if os(macOS)
             Button {
                 mode = .liveBlend
             } label: {
@@ -876,7 +921,6 @@ struct CaptureView: View {
                     .foregroundStyle(mode == .liveBlend ? LL.amber : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
-            #endif
 
             Button {
                 mode = .video
@@ -972,14 +1016,12 @@ struct CaptureView: View {
                 camera.startInterval(every: interval)
             }
         case .liveBlend:
-            #if os(macOS)
             if camera.isLiveBlendRunning {
                 camera.stopLiveBlend()
             } else {
                 framingStartedAt = Date()
                 camera.startLiveBlend(every: interval, framesPerBlend: framesPerBlend)
             }
-            #endif
         }
     }
 
@@ -1263,14 +1305,22 @@ struct CaptureView: View {
     // MARK: - Watch
 
     #if os(iOS)
-    private func handleWatchCommand(_ command: WatchCaptureCommand, value: Double?) {
+    private func handleWatchCommand(_ command: WatchCaptureCommand, payload: [String: Any]) {
+        let value = payload[WatchMessageKey.value] as? Double
         switch command {
         case .startRecording:
-            guard !camera.isRecording, !camera.isIntervalRunning else { return }
-            mode = .video
-            camera.startRecording(mode: sequenceMode)
+            // Starts whatever mode the capture screen is in — the same
+            // dispatch as the on-phone shutter, not a forced video recording.
+            guard !isCapturing else { return }
+            shutterAction()
         case .stopRecording:
-            camera.stopRecording()
+            if camera.isRecording {
+                camera.stopRecording()
+            } else if camera.isIntervalRunning {
+                camera.stopInterval()
+            } else if camera.isLiveBlendRunning {
+                camera.stopLiveBlend()
+            }
         case .triggerMoment:
             camera.triggerLiveMoment()
         case .lockExposure:
@@ -1281,15 +1331,36 @@ struct CaptureView: View {
             camera.setISO(Float(value ?? 0))
         case .setLensPosition:
             camera.setLensPosition(Float(value ?? 0.5))
+        case .setCaptureMode:
+            guard !isCapturing,
+                  let token = payload[WatchMessageKey.captureMode] as? String,
+                  let newMode = CaptureMode(rawValue: token) else { return }
+            mode = newMode
+        case .setIntervalSeconds:
+            guard !isCapturing, let value, captureIntervalOptions.contains(value) else { return }
+            interval = value
+        case .setFramesPerBlend:
+            guard !isCapturing, let value,
+                  liveBlendFrameOptions.contains(where: { $0.frames == Int(value) }) else { return }
+            framesPerBlend = Int(value)
+        case .scheduleStop:
+            guard isCapturing, let value,
+                  let token = payload[WatchMessageKey.stopAtUnit] as? String,
+                  let unit = ScheduledStopUnit(rawValue: token) else { return }
+            camera.scheduleStop(unit: unit, amount: value)
+        case .cancelScheduledStop:
+            camera.cancelScheduledStop()
         case .state:
             updateWatchRecordingState()
+            updateWatchModeContext()
+            updateWatchScheduledStop()
         }
     }
 
     private func updateWatchRecordingState() {
         watchRemote.setRecordingState(
-            camera.isRecording ? .recording : .idle,
-            startedAt: camera.recordingStartedAt,
+            isCapturing ? .recording : .idle,
+            startedAt: camera.recordingStartedAt ?? (isCapturing ? framingStartedAt : nil),
             sequenceMode: camera.activeSequenceMode ?? sequenceMode,
             markerCount: camera.markerCount,
             rampIntervalCount: camera.rampIntervalCount,
@@ -1308,6 +1379,29 @@ struct CaptureView: View {
         )
     }
 
+    private func updateWatchModeContext() {
+        let count: Int
+        if camera.isLiveBlendRunning {
+            count = camera.liveBlendOutputCount
+        } else if camera.isIntervalRunning {
+            count = camera.photoCount
+        } else {
+            count = 0
+        }
+        watchRemote.setModeContext(
+            mode: mode,
+            intervalSeconds: interval,
+            framesPerBlend: framesPerBlend,
+            captureCount: count)
+    }
+
+    private func updateWatchScheduledStop() {
+        watchRemote.setScheduledStopContext(
+            unit: camera.scheduledStop?.unit,
+            deadline: camera.scheduledStop?.deadline,
+            targetCount: camera.scheduledStop?.targetCount)
+    }
+
     private func updateWatchExposure() {
         watchRemote.setExposureContext(
             isExposureLocked: camera.isExposureLocked,
@@ -1320,7 +1414,7 @@ struct CaptureView: View {
     }
 
     private func updateIdleTimer() {
-        UIApplication.shared.isIdleTimerDisabled = camera.isRecording || camera.isIntervalRunning
+        UIApplication.shared.isIdleTimerDisabled = camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
     }
     #endif
 }

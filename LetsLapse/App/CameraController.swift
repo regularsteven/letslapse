@@ -118,7 +118,9 @@ final class CameraController: NSObject, ObservableObject {
     @Published var isRecording = false
     @Published var recordingStartedAt: Date?
     @Published var isIntervalRunning = false
-    @Published var photoCount = 0
+    @Published var photoCount = 0 {
+        didSet { checkScheduledStopCount() }
+    }
     @Published var activeFormatDescription = ""
     @Published var availableLenses: [Lens] = []
     @Published var selectedLens: Lens = .wide
@@ -145,11 +147,25 @@ final class CameraController: NSObject, ObservableObject {
     /// the interface/device implies. Session-only (resets each launch) so a
     /// left-on flip can't silently invert a later handheld shot.
     @Published var flipOrientation180 = false
-    // Live Blend (macOS spike). Published on every platform so shared UI code
-    // compiles; only the macOS start/stop paths below ever set them.
+    // Live Blend (experimental spike).
     @Published var isLiveBlendRunning = false
-    @Published var liveBlendOutputCount = 0
+    @Published var liveBlendOutputCount = 0 {
+        didSet { checkScheduledStopCount() }
+    }
     @Published var liveBlendDiagnostics: LiveBlendDiagnosticsSnapshot?
+
+    /// A pending "stop at…" set from the Watch remote. Time-based stops hold
+    /// a deadline; frame-based stops in Interval/Live Blend hold an absolute
+    /// output-count target. Enforced here (not on the Watch) so the stop
+    /// fires even when the Watch app is suspended.
+    struct ScheduledStop: Equatable {
+        var unit: ScheduledStopUnit
+        var deadline: Date?
+        var targetCount: Int?
+    }
+
+    @Published var scheduledStop: ScheduledStop?
+    private var scheduledStopWorkItem: DispatchWorkItem?
 
     /// A ramp/marker interval relative to the recording start, for the
     /// on-screen segment strip. `end == nil` while the interval is open.
@@ -165,21 +181,15 @@ final class CameraController: NSObject, ObservableObject {
     var onFinishPhotos: (([URL]) -> Void)?
     var onFinishLiveBlend: ((LiveBlendCaptureResult) -> Void)?
 
-    #if os(macOS)
     // sessionQueue-confined; the output is added lazily on the first Live
     // Blend run and stays attached (delegate cleared between runs).
     private var liveBlendOutput: AVCaptureVideoDataOutput?
     private var liveBlendController: LiveBlendController?
-    #endif
 
     /// True while a Live Blend run is collecting or draining. Guards the
     /// format/lens setters the same way recording and interval capture do.
     private var isLiveBlendActive: Bool {
-        #if os(macOS)
-        return liveBlendController?.isActive == true
-        #else
-        return false
-        #endif
+        liveBlendController?.isActive == true
     }
 
     override init() {
@@ -240,6 +250,7 @@ final class CameraController: NSObject, ObservableObject {
     func stop() {
         LLog("stop() called")
         shouldBeRunning = false
+        cancelScheduledStop()
         sessionQueue.async {
             self.intervalTimer?.cancel()
             self.intervalTimer = nil
@@ -247,8 +258,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.isDiscardingSequence = true
                 self.movieOutput.stopRecording()
             }
-            #if os(macOS)
-            // Discard-teardown for an abandoned Live Blend run (window closed
+            // Discard-teardown for an abandoned Live Blend run (screen closed
             // mid-capture). A gracefully finished run is already inactive by
             // the time its finish handler calls stop(), so this leaves the
             // handed-over temp frames alone.
@@ -257,7 +267,6 @@ final class CameraController: NSObject, ObservableObject {
                 controller.requestStop(discard: true)
                 DispatchQueue.main.async { self.isLiveBlendRunning = false }
             }
-            #endif
             if self.session.isRunning {
                 LLog("stopRunning()")
                 self.session.stopRunning()
@@ -1036,6 +1045,7 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     func stopRecording() {
+        cancelScheduledStop()
         sessionQueue.async {
             if self.movieOutput.isRecording {
                 self.closeOpenRampInterval(at: Date())
@@ -1289,6 +1299,7 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     func stopInterval() {
+        cancelScheduledStop()
         sessionQueue.async {
             self.intervalTimer?.cancel()
             self.intervalTimer = nil
@@ -1302,11 +1313,88 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    #if os(macOS)
-    // MARK: - Live Blend (macOS spike)
+    // MARK: - Scheduled stop (Watch "stop at…")
+
+    /// Schedules a stop of whatever capture is running: after `amount`
+    /// minutes, or after `amount` more frames (photos/blends in Interval and
+    /// Live Blend; fps-derived time in Video). Replaces any earlier schedule.
+    func scheduleStop(unit: ScheduledStopUnit, amount: Double) {
+        DispatchQueue.main.async {
+            guard amount > 0 else { return }
+            guard self.isRecording || self.isIntervalRunning || self.isLiveBlendRunning else { return }
+            self.scheduledStopWorkItem?.cancel()
+            self.scheduledStopWorkItem = nil
+
+            let stop: ScheduledStop
+            switch unit {
+            case .minutes:
+                stop = ScheduledStop(
+                    unit: .minutes,
+                    deadline: Date().addingTimeInterval(amount * 60),
+                    targetCount: nil)
+            case .frames:
+                if self.isRecording {
+                    let fps = Double(max(1, self.selectedFrameRate))
+                    stop = ScheduledStop(
+                        unit: .frames,
+                        deadline: Date().addingTimeInterval(amount / fps),
+                        targetCount: nil)
+                } else {
+                    let current = self.isLiveBlendRunning ? self.liveBlendOutputCount : self.photoCount
+                    stop = ScheduledStop(unit: .frames, deadline: nil, targetCount: current + Int(amount))
+                }
+            }
+            self.scheduledStop = stop
+            if let deadline = stop.deadline {
+                let workItem = DispatchWorkItem { [weak self] in self?.performScheduledStop() }
+                self.scheduledStopWorkItem = workItem
+                DispatchQueue.main.asyncAfter(
+                    deadline: .now() + max(0, deadline.timeIntervalSinceNow),
+                    execute: workItem)
+            }
+            LLog("scheduled stop: \(unit.rawValue) \(amount)")
+        }
+    }
+
+    func cancelScheduledStop() {
+        DispatchQueue.main.async {
+            self.scheduledStopWorkItem?.cancel()
+            self.scheduledStopWorkItem = nil
+            if self.scheduledStop != nil {
+                self.scheduledStop = nil
+                LLog("scheduled stop cancelled")
+            }
+        }
+    }
+
+    /// Main-queue only (didSet of the published counters).
+    private func checkScheduledStopCount() {
+        guard let stop = scheduledStop, let target = stop.targetCount else { return }
+        let current = isLiveBlendRunning ? liveBlendOutputCount : photoCount
+        guard current >= target else { return }
+        performScheduledStop()
+    }
+
+    /// Main-queue only.
+    private func performScheduledStop() {
+        guard scheduledStop != nil else { return }
+        scheduledStopWorkItem?.cancel()
+        scheduledStopWorkItem = nil
+        scheduledStop = nil
+        LLog("scheduled stop firing")
+        if isRecording {
+            stopRecording()
+        } else if isIntervalRunning {
+            stopInterval()
+        } else if isLiveBlendRunning {
+            stopLiveBlend()
+        }
+    }
+
+    // MARK: - Live Blend (experimental spike)
 
     /// Starts a Live Blend run: every `interval` seconds, `framesPerBlend`
-    /// frames tapped from the webcam stream are averaged into one JPEG. The
+    /// frames tapped from the camera stream are averaged into one JPEG. The
     /// run hands its outputs over through `onFinishLiveBlend` exactly like
     /// interval capture hands over `onFinishPhotos`.
     func startLiveBlend(every interval: Double, framesPerBlend: Int) {
@@ -1383,6 +1471,16 @@ final class CameraController: NSObject, ObservableObject {
             }
 
             self.liveBlendController = controller
+            #if os(iOS)
+            // Lock the stream orientation for the whole run, the same way the
+            // interval tick orients each photo. Buffers must keep one size and
+            // orientation per run; rotating the device mid-run keeps the
+            // locked framing rather than resizing frames under the blender.
+            if let connection = output.connection(with: .video),
+               connection.isVideoOrientationSupported {
+                connection.videoOrientation = self.captureOrientation()
+            }
+            #endif
             output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
             controller.start()
             DispatchQueue.main.async {
@@ -1398,6 +1496,7 @@ final class CameraController: NSObject, ObservableObject {
     /// Graceful stop: the partial window is kept when it has frames, then the
     /// finish handler fires with everything completed so far.
     func stopLiveBlend() {
+        cancelScheduledStop()
         sessionQueue.async {
             guard let controller = self.liveBlendController, controller.isActive else { return }
             self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
@@ -1429,7 +1528,6 @@ final class CameraController: NSObject, ObservableObject {
         try? FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
         return logsDirectory.appendingPathComponent("liveblend-\(formatter.string(from: Date())).json")
     }
-    #endif
 }
 
 #if os(iOS)

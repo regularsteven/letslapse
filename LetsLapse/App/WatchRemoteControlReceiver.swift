@@ -10,6 +10,11 @@ enum WatchCaptureCommand: String {
     case unlockExposure
     case setISO
     case setLensPosition
+    case setCaptureMode
+    case setIntervalSeconds
+    case setFramesPerBlend
+    case scheduleStop
+    case cancelScheduledStop
     case state
 }
 
@@ -25,8 +30,15 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     @Published private(set) var isReachable = false
 
     private var isActivated = false
-    private var commandHandler: ((WatchCaptureCommand, Double?) -> Void)?
+    private var commandHandler: ((WatchCaptureCommand, [String: Any]) -> Void)?
     private var recordingStartedAt: Date?
+    private var captureMode: CaptureMode = .video
+    private var intervalSeconds: Double = 2
+    private var framesPerBlend = 5
+    private var captureCount = 0
+    private var stopAtUnit: ScheduledStopUnit?
+    private var stopAtDeadline: Date?
+    private var stopAtTargetCount: Int?
     private var sequenceMode: LiveCaptureSequence.Mode?
     private var markerCount = 0
     private var rampIntervalCount = 0
@@ -57,10 +69,46 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     @MainActor
-    func setCommandHandler(_ handler: ((WatchCaptureCommand, Double?) -> Void)?) {
+    func setCommandHandler(_ handler: ((WatchCaptureCommand, [String: Any]) -> Void)?) {
         let wasActive = commandHandler != nil
         commandHandler = handler
         if wasActive != (handler != nil) {
+            publishState()
+        }
+    }
+
+    /// The pending "stop at…" mirrored to the Watch; all-nil clears it.
+    @MainActor
+    func setScheduledStopContext(unit: ScheduledStopUnit?, deadline: Date?, targetCount: Int?) {
+        let changed = self.stopAtUnit != unit
+            || self.stopAtDeadline != deadline
+            || self.stopAtTargetCount != targetCount
+        self.stopAtUnit = unit
+        self.stopAtDeadline = deadline
+        self.stopAtTargetCount = targetCount
+        if changed {
+            publishState()
+        }
+    }
+
+    /// The capture mode and its per-mode dials, mirrored so the Watch can
+    /// select a mode and show the interval/frames it will start with.
+    @MainActor
+    func setModeContext(
+        mode: CaptureMode,
+        intervalSeconds: Double,
+        framesPerBlend: Int,
+        captureCount: Int
+    ) {
+        let changed = self.captureMode != mode
+            || self.intervalSeconds != intervalSeconds
+            || self.framesPerBlend != framesPerBlend
+            || self.captureCount != captureCount
+        self.captureMode = mode
+        self.intervalSeconds = intervalSeconds
+        self.framesPerBlend = framesPerBlend
+        self.captureCount = captureCount
+        if changed {
             publishState()
         }
     }
@@ -152,7 +200,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             return response(status: "unavailable", message: "Capture screen is not active")
         }
 
-        commandHandler(command, message[WatchMessageKey.value] as? Double)
+        commandHandler(command, message)
         return response(status: "accepted")
     }
 
@@ -189,6 +237,19 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.captureFPS] = captureFPS
         payload[WatchMessageKey.plannedSpeed] = plannedSpeed
         payload[WatchMessageKey.outputFPS] = outputFPS
+        payload[WatchMessageKey.captureMode] = captureMode.rawValue
+        payload[WatchMessageKey.intervalSeconds] = intervalSeconds
+        payload[WatchMessageKey.framesPerBlend] = framesPerBlend
+        payload[WatchMessageKey.captureCount] = captureCount
+        if let stopAtUnit {
+            payload[WatchMessageKey.stopAtUnit] = stopAtUnit.rawValue
+        }
+        if let stopAtDeadline {
+            payload[WatchMessageKey.stopAtDeadline] = stopAtDeadline.timeIntervalSince1970
+        }
+        if let stopAtTargetCount {
+            payload[WatchMessageKey.stopAtTargetCount] = stopAtTargetCount
+        }
         payload[WatchMessageKey.isExposureLocked] = isExposureLocked
         payload[WatchMessageKey.lockedISO] = Double(lockedISO)
         payload[WatchMessageKey.lockedShutter] = lockedShutter

@@ -6,9 +6,17 @@ struct WatchControlView: View {
     @EnvironmentObject private var remote: WatchCaptureRemote
     @State private var now = Date()
     @State private var isoAdjust: Double = 0
+    @State private var showIntervalPicker = false
+    @State private var showFramesPicker = false
+    @State private var showStopAtSheet = false
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private let amber = Color(red: 1, green: 0.7, blue: 0.25)
+    // Mirrors of the phone's option lists; the phone rejects anything else.
+    private let intervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
+    private let frameOptions: [(frames: Int, label: String)] = [
+        (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
+    ]
 
     var body: some View {
         Group {
@@ -45,6 +53,15 @@ struct WatchControlView: View {
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
 
+                modeSelector
+
+                if remote.captureMode != .video {
+                    intervalRow
+                }
+                if remote.captureMode == .liveBlend {
+                    framesRow
+                }
+
                 Button {
                     remote.startRecording()
                 } label: {
@@ -70,6 +87,118 @@ struct WatchControlView: View {
             .padding(.vertical, 6)
         }
         .navigationTitle("LetsLapse")
+    }
+
+    /// The three capture modes as tappable rows — same vocabulary as the
+    /// phone's mode buttons, selected row marked in amber.
+    private var modeSelector: some View {
+        VStack(spacing: 4) {
+            ForEach(CaptureMode.allCases) { mode in
+                Button {
+                    remote.setCaptureMode(mode)
+                } label: {
+                    HStack {
+                        Text(mode.rawValue)
+                            .font(.system(size: 12, weight: .semibold))
+                        Spacer()
+                        if remote.captureMode == mode {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 10, weight: .bold))
+                                .foregroundStyle(amber)
+                        }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(maxWidth: .infinity, minHeight: 28)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .background(
+                    remote.captureMode == mode ? amber.opacity(0.22) : Color.white.opacity(0.08),
+                    in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+                )
+            }
+        }
+        .disabled(remote.isSending || !remote.isReachable)
+    }
+
+    private var intervalRow: some View {
+        Button {
+            showIntervalPicker = true
+        } label: {
+            HStack {
+                Text("Every")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text(intervalLabel(remote.intervalSeconds))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(amber)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .disabled(remote.isSending || !remote.isReachable)
+        .sheet(isPresented: $showIntervalPicker) {
+            List(intervalOptions, id: \.self) { seconds in
+                Button {
+                    remote.setIntervalSeconds(seconds)
+                    showIntervalPicker = false
+                } label: {
+                    HStack {
+                        Text(intervalLabel(seconds))
+                        Spacer()
+                        if remote.intervalSeconds == seconds {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(amber)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var framesRow: some View {
+        Button {
+            showFramesPicker = true
+        } label: {
+            HStack {
+                Text("Blend")
+                    .font(.system(size: 12, weight: .semibold))
+                Spacer()
+                Text("\(remote.framesPerBlend) frames")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(amber)
+            }
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(Color.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .disabled(remote.isSending || !remote.isReachable)
+        .sheet(isPresented: $showFramesPicker) {
+            List(frameOptions, id: \.frames) { option in
+                Button {
+                    remote.setFramesPerBlend(option.frames)
+                    showFramesPicker = false
+                } label: {
+                    HStack {
+                        Text("\(option.frames) · \(option.label)")
+                        Spacer()
+                        if remote.framesPerBlend == option.frames {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(amber)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private func intervalLabel(_ seconds: Double) -> String {
+        seconds == seconds.rounded(.down) ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
     }
 
     /// One-tap exposure lock, mirrored by the button state — no readouts to
@@ -153,7 +282,7 @@ struct WatchControlView: View {
             }
 
             HStack {
-                Text(liveEstimateLine)
+                Text(remote.captureMode == .video ? liveEstimateLine : runSettingsLine)
                     .font(.system(size: 11, design: .monospaced))
                     .foregroundStyle(amber)
                 Spacer()
@@ -167,36 +296,33 @@ struct WatchControlView: View {
 
             HStack(spacing: 6) {
                 exposureLockButton
-                if remote.sequenceMode == "ramp" {
+                if remote.captureMode != .video {
+                    captureCountBadge
+                } else if remote.sequenceMode == "ramp" {
                     burstToggle
                 } else {
                     markerButton
                 }
             }
 
-            Button {
+            SlideToStop(
+                enabled: !remote.isSending && remote.isReachable,
+                label: slideToStopLabel
+            ) {
                 remote.stopRecording()
-            } label: {
-                Label("Stop", systemImage: "stop.fill")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(Color(red: 1, green: 0.41, blue: 0.38))
-                    .frame(maxWidth: .infinity, minHeight: 34)
             }
-            .buttonStyle(.plain)
-            .background(Color.red.opacity(0.25), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(Color.red.opacity(0.6), lineWidth: 1)
-            )
-            .disabled(remote.isSending || !remote.isReachable)
 
-            intervalDots
+            stopAtControl
 
-            Text(sequenceCaption)
-                .font(.system(size: 10))
-                .foregroundStyle(.secondary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
+            if remote.captureMode == .video {
+                intervalDots
+
+                Text(sequenceCaption)
+                    .font(.system(size: 10))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
         }
         .padding(.horizontal, 6)
         .focusable(remote.isExposureLocked)
@@ -294,6 +420,25 @@ struct WatchControlView: View {
         remote.captureFPS > 0 ? "\(remote.captureFPS)" : "base"
     }
 
+    /// The interval/Live Blend counterpart of the burst toggle's slot: how
+    /// many outputs have landed so far.
+    private var captureCountBadge: some View {
+        Text("\(remote.captureCount) \(remote.captureMode == .liveBlend ? "blends" : "photos")")
+            .font(.system(size: 13, weight: .bold).monospacedDigit())
+            .foregroundStyle(amber)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, minHeight: 34)
+            .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+
+    private var runSettingsLine: String {
+        let every = "every \(intervalLabel(remote.intervalSeconds))"
+        return remote.captureMode == .liveBlend
+            ? "\(every) · \(remote.framesPerBlend) fr"
+            : every
+    }
+
     /// One amber dot per burst/marker interval, pulsing while one is open.
     private var intervalDots: some View {
         HStack(spacing: 4) {
@@ -376,5 +521,261 @@ struct WatchControlView: View {
     private var elapsedTime: String {
         guard let startedAt = remote.recordingStartedAt else { return "00:00" }
         return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
+    }
+
+    // MARK: - Scheduled stop
+
+    /// The slider label doubles as the countdown once a stop is scheduled.
+    private var slideToStopLabel: String {
+        guard let unit = remote.stopAtUnit else { return "Slide to stop" }
+        switch unit {
+        case .minutes:
+            guard let deadline = remote.stopAtDeadline else { return "Slide to stop" }
+            let remaining = max(0, deadline.timeIntervalSince(now))
+            return "Stopping in \(DurationFormatter.recordingTime(from: remaining))"
+        case .frames:
+            if let target = remote.stopAtTargetCount {
+                return "Stopping in \(max(0, target - remote.captureCount)) frames"
+            }
+            if let deadline = remote.stopAtDeadline {
+                let seconds = max(0, deadline.timeIntervalSince(now))
+                let frames = Int((seconds * Double(max(1, remote.captureFPS))).rounded(.up))
+                return "Stopping in \(frames) frames"
+            }
+            return "Slide to stop"
+        }
+    }
+
+    @ViewBuilder
+    private var stopAtControl: some View {
+        if remote.stopAtUnit != nil {
+            Button {
+                remote.cancelScheduledStop()
+            } label: {
+                Text("Cancel Stop At")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(amber)
+                    .frame(maxWidth: .infinity, minHeight: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(remote.isSending || !remote.isReachable)
+        } else {
+            Button {
+                showStopAtSheet = true
+            } label: {
+                Text("Stop at…")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 22)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(remote.isSending || !remote.isReachable)
+            .sheet(isPresented: $showStopAtSheet) {
+                StopAtSheet { unit, amount in
+                    remote.scheduleStop(unit: unit, amount: amount)
+                }
+            }
+        }
+    }
+}
+
+/// Mini modal for "stop at…": pick minutes or frames, dial the number with a
+/// vertical swipe or the crown, confirm or cancel.
+private struct StopAtSheet: View {
+    var onConfirm: (ScheduledStopUnit, Int) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    @State private var unit: ScheduledStopUnit = .minutes
+    @State private var amount = 10
+    @State private var crownValue: Double = 10
+    @State private var appliedDragSteps = 0
+
+    private let amber = Color(red: 1, green: 0.7, blue: 0.25)
+
+    private var upperBound: Int { unit == .minutes ? 180 : 999 }
+    private var defaultAmount: Int { unit == .minutes ? 10 : 50 }
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Text("Stop at")
+                .font(.system(size: 13, weight: .semibold))
+
+            HStack(spacing: 4) {
+                unitChip(.minutes, label: "Minutes")
+                unitChip(.frames, label: "Frames")
+            }
+
+            Text("\(amount)")
+                .font(.system(size: 42, weight: .bold).monospacedDigit())
+                .foregroundStyle(amber)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .contentShape(Rectangle())
+                .gesture(
+                    DragGesture()
+                        .onChanged { value in
+                            // One step per 12 points of vertical travel;
+                            // swiping up increases.
+                            let steps = Int(-value.translation.height / 12)
+                            let delta = steps - appliedDragSteps
+                            if delta != 0 {
+                                appliedDragSteps = steps
+                                setAmount(amount + delta)
+                            }
+                        }
+                        .onEnded { _ in appliedDragSteps = 0 }
+                )
+                .focusable(true)
+                .digitalCrownRotation(
+                    $crownValue,
+                    from: 1,
+                    through: Double(upperBound),
+                    by: 1,
+                    sensitivity: .medium
+                )
+                .onChange(of: crownValue) { newValue in
+                    let rounded = Int(newValue.rounded())
+                    if rounded != amount {
+                        setAmount(rounded)
+                    }
+                }
+
+            Text(unit == .minutes ? "minutes" : "frames")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 6) {
+                Button {
+                    dismiss()
+                } label: {
+                    Text("Cancel")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.plain)
+                .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+
+                Button {
+                    onConfirm(unit, amount)
+                    dismiss()
+                } label: {
+                    Text("Set")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.black)
+                        .frame(maxWidth: .infinity, minHeight: 30)
+                }
+                .buttonStyle(.plain)
+                .background(amber, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            }
+        }
+        .padding(.horizontal, 4)
+    }
+
+    private func unitChip(_ chipUnit: ScheduledStopUnit, label: String) -> some View {
+        Button {
+            guard unit != chipUnit else { return }
+            unit = chipUnit
+            setAmount(defaultAmount)
+        } label: {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(unit == chipUnit ? .black : .white)
+                .frame(maxWidth: .infinity, minHeight: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            unit == chipUnit ? amber : Color.white.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
+        )
+    }
+
+    private func setAmount(_ newValue: Int) {
+        let clamped = min(max(1, newValue), upperBound)
+        amount = clamped
+        crownValue = Double(clamped)
+    }
+}
+
+/// Slide-right-to-stop: deliberate friction so a sleeve brush or stray tap
+/// can't end a long capture. The stop fires only when the thumb is released
+/// past most of its travel; anything less springs back.
+private struct SlideToStop: View {
+    var enabled: Bool
+    var label: String = "Slide to stop"
+    var onStop: () -> Void
+
+    @State private var dragOffset: CGFloat = 0
+    @State private var didFire = false
+
+    private let height: CGFloat = 34
+    private let stopRed = Color(red: 1, green: 0.41, blue: 0.38)
+
+    var body: some View {
+        GeometryReader { geometry in
+            let thumbSize = height - 4
+            let travel = max(1, geometry.size.width - thumbSize - 4)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.red.opacity(0.25))
+                Capsule()
+                    .stroke(Color.red.opacity(0.6), lineWidth: 1)
+                HStack(spacing: 3) {
+                    Text(label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Image(systemName: "chevron.right.2")
+                        .font(.system(size: 10, weight: .bold))
+                }
+                .foregroundStyle(stopRed)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 8)
+                .opacity(labelOpacity(travel: travel))
+
+                Circle()
+                    .fill(Color.red)
+                    .overlay(
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(.white)
+                    )
+                    .frame(width: thumbSize, height: thumbSize)
+                    .padding(2)
+                    .offset(x: dragOffset)
+                    .gesture(
+                        DragGesture()
+                            .onChanged { value in
+                                guard enabled, !didFire else { return }
+                                dragOffset = min(max(0, value.translation.width), travel)
+                            }
+                            .onEnded { _ in
+                                guard enabled, !didFire else { return }
+                                if dragOffset >= travel * 0.85 {
+                                    didFire = true
+                                    dragOffset = travel
+                                    onStop()
+                                    // If the stop failed and this control is
+                                    // still on screen, be ready to try again.
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+                                        didFire = false
+                                        dragOffset = 0
+                                    }
+                                } else {
+                                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                                        dragOffset = 0
+                                    }
+                                }
+                            }
+                    )
+            }
+        }
+        .frame(height: height)
+        .opacity(enabled ? 1 : 0.5)
+    }
+
+    private func labelOpacity(travel: CGFloat) -> Double {
+        max(0, 1 - Double(dragOffset / (travel * 0.6)))
     }
 }

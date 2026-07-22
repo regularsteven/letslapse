@@ -23,6 +23,13 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var isRampActive = false
     @Published private(set) var isRampHighRate = false
     @Published private(set) var isCameraActive = false
+    @Published private(set) var captureMode: CaptureMode = .video
+    @Published private(set) var intervalSeconds: Double = 2
+    @Published private(set) var framesPerBlend = 5
+    @Published private(set) var captureCount = 0
+    @Published private(set) var stopAtUnit: ScheduledStopUnit?
+    @Published private(set) var stopAtDeadline: Date?
+    @Published private(set) var stopAtTargetCount: Int?
     @Published private(set) var formatLine: String?
     @Published private(set) var captureFPS = 0
     @Published private(set) var plannedSpeed = 0
@@ -80,7 +87,30 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         send(command: "setLensPosition", value: position)
     }
 
-    func send(command: String, value: Double? = nil) {
+    func setCaptureMode(_ mode: CaptureMode) {
+        send(command: "setCaptureMode", extra: [WatchMessageKey.captureMode: mode.rawValue])
+    }
+
+    func setIntervalSeconds(_ seconds: Double) {
+        send(command: "setIntervalSeconds", value: seconds)
+    }
+
+    func setFramesPerBlend(_ frames: Int) {
+        send(command: "setFramesPerBlend", value: Double(frames))
+    }
+
+    func scheduleStop(unit: ScheduledStopUnit, amount: Int) {
+        send(
+            command: "scheduleStop",
+            value: Double(amount),
+            extra: [WatchMessageKey.stopAtUnit: unit.rawValue])
+    }
+
+    func cancelScheduledStop() {
+        send(command: "cancelScheduledStop")
+    }
+
+    func send(command: String, value: Double? = nil, extra: [String: Any] = [:]) {
         guard WCSession.default.activationState == .activated else {
             statusText = "Connecting"
             return
@@ -96,6 +126,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         if let value {
             payload[WatchMessageKey.value] = value
         }
+        for (key, extraValue) in extra {
+            payload[key] = extraValue
+        }
 
         let startedAt = Date()
         isSending = true
@@ -104,7 +137,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             payload,
             replyHandler: { [weak self] reply in
                 Task { @MainActor in
-                    self?.apply(reply: reply, startedAt: startedAt, command: command)
+                    self?.apply(reply: reply, startedAt: startedAt, command: command, sent: payload)
                 }
             },
             errorHandler: { [weak self] error in
@@ -116,7 +149,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         )
     }
 
-    private func apply(reply: [String: Any], startedAt: Date, command: String) {
+    private func apply(reply: [String: Any], startedAt: Date, command: String, sent: [String: Any]) {
         isSending = false
         isReachable = true
 
@@ -130,7 +163,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         let status = reply[WatchMessageKey.status] as? String ?? "ok"
         switch status {
         case "accepted":
-            applyAcceptedCommand(command, fallbackStartedAt: startedAt)
+            applyAcceptedCommand(command, sent: sent, fallbackStartedAt: startedAt)
             statusText = "Command accepted"
         case "ok":
             statusText = "Ready"
@@ -151,14 +184,14 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         applyRecordingStartedAt(payload)
     }
 
-    private func applyAcceptedCommand(_ command: String, fallbackStartedAt: Date) {
+    private func applyAcceptedCommand(_ command: String, sent: [String: Any], fallbackStartedAt: Date) {
         switch command {
         case "startRecording":
             recordingState = .recording
             if recordingStartedAt == nil {
                 recordingStartedAt = fallbackStartedAt
             }
-            if segmentCount == 0 {
+            if captureMode == .video, segmentCount == 0 {
                 segmentCount = 1
             }
             playHaptic(.start)
@@ -186,6 +219,52 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             playHaptic(.click)
         case "unlockExposure":
             isExposureLocked = false
+            playHaptic(.click)
+        case "setCaptureMode":
+            // The phone's echo lags one UI pass behind the accepted command,
+            // so reflect what we sent immediately and let the authoritative
+            // state converge.
+            if let token = sent[WatchMessageKey.captureMode] as? String,
+               let mode = CaptureMode(rawValue: token) {
+                captureMode = mode
+            }
+            playHaptic(.click)
+        case "setIntervalSeconds":
+            if let seconds = sent[WatchMessageKey.value] as? Double {
+                intervalSeconds = seconds
+            }
+            playHaptic(.click)
+        case "setFramesPerBlend":
+            if let frames = sent[WatchMessageKey.value] as? Double {
+                framesPerBlend = Int(frames)
+            }
+            playHaptic(.click)
+        case "scheduleStop":
+            // Mirror the phone's math immediately; its authoritative echo
+            // arrives a beat later.
+            if let raw = sent[WatchMessageKey.stopAtUnit] as? String,
+               let unit = ScheduledStopUnit(rawValue: raw),
+               let amount = sent[WatchMessageKey.value] as? Double {
+                stopAtUnit = unit
+                switch unit {
+                case .minutes:
+                    stopAtDeadline = Date().addingTimeInterval(amount * 60)
+                    stopAtTargetCount = nil
+                case .frames:
+                    if captureMode == .video {
+                        stopAtDeadline = Date().addingTimeInterval(amount / Double(max(1, captureFPS)))
+                        stopAtTargetCount = nil
+                    } else {
+                        stopAtDeadline = nil
+                        stopAtTargetCount = captureCount + Int(amount)
+                    }
+                }
+            }
+            playHaptic(.click)
+        case "cancelScheduledStop":
+            stopAtUnit = nil
+            stopAtDeadline = nil
+            stopAtTargetCount = nil
             playHaptic(.click)
         default:
             break
@@ -240,6 +319,36 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if let cameraActive = payload[WatchMessageKey.cameraActive] as? Bool {
             isCameraActive = cameraActive
+        }
+        if let token = payload[WatchMessageKey.captureMode] as? String,
+           let mode = CaptureMode(rawValue: token) {
+            captureMode = mode
+        }
+        if let seconds = payload[WatchMessageKey.intervalSeconds] as? Double, seconds > 0 {
+            intervalSeconds = seconds
+        }
+        if let frames = payload[WatchMessageKey.framesPerBlend] as? Int, frames > 0 {
+            framesPerBlend = frames
+        }
+        if let count = payload[WatchMessageKey.captureCount] as? Int {
+            captureCount = count
+        }
+        // Scheduled stop: every payload is a full snapshot, so an absent unit
+        // means no schedule — clear rather than keep stale countdowns. Command
+        // replies are exempt (they run before the optimistic apply).
+        if let raw = payload[WatchMessageKey.stopAtUnit] as? String,
+           let unit = ScheduledStopUnit(rawValue: raw) {
+            stopAtUnit = unit
+            if let timestamp = payload[WatchMessageKey.stopAtDeadline] as? TimeInterval {
+                stopAtDeadline = Date(timeIntervalSince1970: timestamp)
+            } else {
+                stopAtDeadline = nil
+            }
+            stopAtTargetCount = payload[WatchMessageKey.stopAtTargetCount] as? Int
+        } else if payload[WatchMessageKey.captureMode] != nil {
+            stopAtUnit = nil
+            stopAtDeadline = nil
+            stopAtTargetCount = nil
         }
         if let line = payload[WatchMessageKey.formatLine] as? String {
             formatLine = line
