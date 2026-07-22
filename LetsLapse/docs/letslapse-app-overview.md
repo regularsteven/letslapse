@@ -25,7 +25,7 @@ Every original capture is preserved as a **project**; every generated output is 
 | Blend engine | `LetsLapseKit` (local Swift package in `Kit/`) | iOS 16+, macOS 13+ | UI-free; the app, the CLI, and any future caller drive the same library |
 | Command line | `lapse` (executable product of the Kit package) | macOS | Blend/stack/synth/info from the shell |
 
-The Xcode project uses Xcode 16 folder-synchronized groups: target membership follows the folders `App/`, `Watch/`, and `Shared/`. `Shared/WatchMessageKey.swift` is the only file compiled into both the app and the watch target.
+The Xcode project uses Xcode 16 folder-synchronized groups: target membership follows the folders `App/`, `Watch/`, and `Shared/`. The `Shared/` folder (`WatchMessageKey.swift` plus `CaptureMode.swift` — capture modes, scheduled-stop units, Live Blend output formats) is compiled into both the app and the watch target.
 
 ---
 
@@ -266,7 +266,7 @@ The estimate card explains the technique in one sentence ("Each output frame ave
 
 - Hero player for the original; a **Source Clips** section when a capture has multiple clips (ramp-mode segments), each individually playable and saveable.
 - **Versions** list — "v3 · 100× · 8s", open, delete, and **"New version from these settings"** (rehydrates that version's parameters into Adjust).
-- Rename, storage totals, delete project.
+- Rename, storage totals, delete project, and **Share project** — the entire project folder (manifest, originals, versions, sidecar logs) packed into a `.lapse` AppleArchive via `App/ProjectArchive.swift` + `Kit/.../DirectoryArchive.swift`. The Create tab's "Import a LetsLapse project…" row unpacks one on any platform, minting fresh project/version IDs so imports never collide — the workflow that moves device test captures onto a Mac for analysis (§6.6).
 - **Per-clip encoding management.** ProRes originals are wonderful capture masters and terrible distribution files, so each source clip can hold multiple codec variants (`ClipEncoding` in `App/AppModel.swift`, persisted per clip in the manifest):
   - A **Manage** sheet per ProRes clip lists existing formats with sizes, offers **Convert to H.264 / Convert to HEVC** (HEVC is encoded 10-bit Main10; bitrate heuristics ≈ 0.24 bits/pixel/s for H.264, 0.18 for HEVC; audio passthrough), per-format Save to Photos, and deletion — deleting the ProRes original asks for confirmation, and the last remaining encoding can never be deleted.
   - A project-level **"Convert ProRes → H.264, delete originals"** action reclaims storage in one tap.
@@ -274,7 +274,7 @@ The estimate card explains the technique in one sentence ("Each output frame ave
 
 ### 4.7 Settings
 
-`App/SettingsView.swift`: creative defaults (default speed, output fps, true-light), "Remember recording settings", a storage card with a segmented bar (Originals / Versions / Cache) plus **Review large originals** (sorted list, deep-links into project detail) and **Clear cache**; Advanced holds **Performance** (CPU worker budget, concurrent blend batches — used by the macOS job runner) and **Diagnostics** (latest job folder path and processing log). Debug/technical detail is deliberately quarantined here, away from the creative path.
+`App/SettingsView.swift`: creative defaults (default speed, output fps, true-light), "Remember recording settings", the **Live Blend output** chooser (Standard JPEG vs DNG-when-supported) with, when DNG is selected on iOS, the capture-experiment toggles (bracketed RAW / tight burst / responsive — see §6.5) and the **Capture benchmark** entry; a storage card with a segmented bar (Originals / Versions / Cache) plus **Review large originals** (sorted list, deep-links into project detail) and **Clear cache**; Advanced holds **Performance** (CPU worker budget, concurrent blend batches — used by the macOS job runner) and **Diagnostics** (latest job folder path and processing log). Debug/technical detail is deliberately quarantined here, away from the creative path.
 
 ### 4.8 Persistence
 
@@ -342,25 +342,73 @@ swift build -c release
 
 `blend` takes `--window` or `--ramp A:B` (mutually exclusive), `--curve`, `--fps`, `--codec h264|hevc|prores|jpeg`, `--gamma`; `stack` takes `--format png|jpeg|heic` and `--gamma`; progress prints to stderr.
 
-### 5.4 Live Blend capture (experimental spike)
+### 5.4 Live Blend capture (the video-tap "Standard" path)
 
-A macOS-only experiment (July 2026) that moves blending to **capture time**: instead of recording video and averaging afterwards, frames tapped from the webcam stream are averaged into one JPEG per interval while the capture runs — a long-exposure timelapse assembling itself live. Same math as everything else in §2 (equal-weight linear-light average), applied to a live buffer stream.
+An experiment (July 2026) that moves blending to **capture time**: instead of recording video and averaging afterwards, frames tapped from the camera stream are averaged into one JPEG per interval while the capture runs — a long-exposure timelapse assembling itself live. Same math as everything else in §2 (equal-weight linear-light average), applied to a live buffer stream. It began as a macOS-only spike and now runs on all platforms; on iPhone/iPad it is the "Standard" output path beside the DNG pipeline that grew out of it (§6).
 
 - **Pipeline.** `CameraController.startLiveBlend(every:framesPerBlend:)` lazily attaches an `AVCaptureVideoDataOutput` (BGRA, Metal-compatible) to the existing session and points its sample-buffer delegate at a per-run `App/LiveBlendController.swift`. The controller selects frames on an evenly spaced grid across each interval window (e.g. 5 frames spread over 2 s), streams them into a `PixelBufferBlender`, and writes `frame-%05d.jpg` to a temp directory. A finished run hands its JPEGs over exactly like interval capture does — into `AppModel.setSource(.photos)` and the photo-stacking flow (§2.5), so live-blended frames can themselves be stacked or sequenced.
 - **`PixelBufferBlender`** (`Kit/Sources/LetsLapseKit/PixelBufferBlender.swift`) is the reusable Kit piece: an equal-weight streaming average of live `CVPixelBuffer`s into one `CGImage`, built on the same `BlendCore`/`FrameAccumulator` as offline blending. Tests pin its output to within one 8-bit step of `ImageStacker.stack` on identical input. One instance serves a whole session: `finalizeImage()` closes a window and the next `accumulate` opens a fresh one; an in-flight semaphore caps how many camera buffers wait on the GPU.
 - **Resilience.** Two serial queues (frame selection vs blend/write) with a backpressure cap, so a slow writer drops frames rather than queuing unboundedly; a watchdog keeps interval windows ticking when the camera goes quiet (unplugged/covered); a single-frame window still produces a fallback output; three consecutive processing failures stop the run; mid-run teardown (window closed) discards cleanly via a generation counter that invalidates queued work.
 - **Instrumentation.** The capture screen shows a live diagnostics readout — frames selected, last blend ms, actual output spacing, and a health status (healthy / reduced frame count / camera rate limited / processing behind / thermal pressure / capture failed). Every run also writes a JSON experiment log to `Application Support/LetsLapse/Logs/liveblend-<timestamp>.json`: a machine/camera/format header, one entry per output (timings, frame spacing, drop counts, memory footprint, thermal state), and a summary — rewritten atomically after every output so a crash loses nothing.
-- **UI.** A LIVE BLEND mode button beside VIDEO/INTERVAL (macOS only), interval presets 0.5–10 s, and frames-per-blend presets 3 (Light) / 5 (Standard) / 10 (High) / 20 (Experimental). Settings are deliberately un-persisted while the feature is a spike.
+- **UI.** A LIVE BLEND mode button beside VIDEO/INTERVAL on every platform, interval presets 0.5–10 s, and frames-per-blend presets 1 (Untouched, DNG-only semantics) / 3 (Light) / 5 (Standard) / 10 (High, the default) / 20 (Experimental). Interval and frame count are deliberately un-persisted while the feature matures.
 
 ---
 
-## 6. The Apple Watch companion
+## 6. Live Blend DNG — the holy-grail pipeline (July 2026)
 
-### 6.1 What it is and why
+The largest single research-and-engineering arc in the app so far: making Live Blend produce **blended RAW DNGs** on iPhone/iPad, so day-to-night ("holy grail") timelapses keep white balance, tint, and exposure as *post* decisions. The reference bar was Adobe's Project Indigo — burst-merged 14 MB DNGs with real motion blur — shot side-by-side on the same iPhone 16 Pro. This section records what was built, what failed, and what was measured, because several findings overturned assumptions the codebase had been carrying.
 
-A deliberately narrow remote for the iPhone capture screen: **start/stop recording, trigger a "moment", and control exposure — without touching (and shaking) the phone.** The phone is always the camera and the brain; the watch is a thin remote/display with giant no-look controls. There are no complications and no independent watch features — the watch app requires the companion iPhone app.
+### 6.1 What it is
 
-### 6.2 Integration architecture
+In Live Blend mode with **Settings → Live Blend output = DNG**, each interval window captures a burst of Bayer RAW photos, decodes them to scene-linear, averages them, and writes one **blended Bayer DNG per interval** (~18 MB at 12 MP) whose color tags come from that window's own reference frame. Projects register exactly like any photo-sequence capture; every frame stays individually gradeable in Lightroom with the camera's native dual-illuminant white-balance behavior. macOS is honestly unsupported — the Bayer RAW capture API is marked unavailable there by the SDK, so the Mac always runs the §5.4 JPEG path; the Settings row says so rather than pretending.
+
+Support detection is honest, not optimistic: Bayer RAW formats only appear under a `.photo` session configuration, so `CameraController` probes each device once (flipping to `.photo`, reading `availableRawPhotoPixelFormatTypes`, restoring), caches the answer, and DNG runs switch the session for the run and restore after. If anything in the chain can't deliver, the run degrades to Standard output with a visible notice — never a silent format switch.
+
+A **"1 · Untouched"** frames option writes Apple's original per-interval DNG byte-for-byte: the ground-truth baseline for A/B comparisons, and a legitimate holy-grail mode in itself.
+
+### 6.2 The failed approach, and what it taught
+
+The obvious pipeline — average the sensor mosaics from `photo.pixelBuffer` and re-wrap them with the reference DNG's tags — produced blown-out, magenta-shifted images, and the debugging established a fact worth keeping: **Apple's Bayer pixel buffer is preprocessed and cannot be calibrated against its own DNG's metadata.** Measured on real captures: sample values run to ~13,000 against a declared black/white of 528/4095 (14% of pixels above declared white), the black pedestal is already subtracted, per-channel gains are partially applied (beyond `AsShotNeutral`; inverting them overshoots), and lens-shading state is ambiguous (stripping the DNG's opcode lists made casts worse, not better). The mosaic-averaging accumulator remains in the Kit, but the pipeline pivoted to Apple's own calibrated decode: `CIRAWFilter` with `boostAmount 0` into extended-linear sRGB, summed with `CIAdditionCompositing`, scaled by 1/N with two stops of highlight headroom (declared back via `BaselineExposure`). An offline gate runs this exact pipeline against Apple's direct rendering of the same file — channel casts match within 3% (R/G within 0.1%).
+
+Other findings that cost real debugging time, recorded so nobody re-learns them: iPhone DNGs are **big-endian** ("MM") and the TIFF reader normalizes every payload at parse (verbatim tag carry is only endian-safe after that); ImageIO's thumbnail path stops at a DNG's *embedded preview*, so the preview must be demosaiced from the blended raster itself (two-pass authoring) or renders silently come out unblended at preview size; `DefaultCropSize` governs decoded dimensions (4032×3024 from a 4224-wide readout); and CoreRAW refuses rasters much below ~1 MP, so unit tests must use realistic sizes.
+
+### 6.3 Color: camera-native by the open spec
+
+Early blends carried a fixed sRGB→XYZ `ColorMatrix1`, which Lightroom treated as a generic profile — white-balance extremes drifted visibly versus Indigo in an A/B. The fix (`Kit/Sources/LetsLapseKit/CameraColorTransform.swift`) builds the working-space→camera transform **from the reference DNG's own tags per the open DNG specification**: dual-illuminant `ColorMatrix1/2` interpolation by correlated color temperature (McCamy, iterated with the white point recomputed from the final matrix), Bradford adaptation from D65 to the scene white implied by `AsShotNeutral`, and normalization so working-space white lands exactly on neutral. The output DNG carries the camera's real matrices, calibration illuminants, `AsShotNeutral`, and `NoiseProfile` — so raw developers recognize the camera and give their native WB behavior, anchored per window to track changing light. Two lines were drawn deliberately: no `Orientation` tag is carried (decoded samples are already display-oriented), and Adobe's proprietary embedded profile ("Bonsai", plus the HDR gain-table that earns Indigo its HDR badge) is **not** replicated — everything written comes from the public spec and the camera's own metadata.
+
+### 6.4 Size: re-mosaic + lossless JPEG
+
+The first working output was 16-bit LinearRaw: three samples per pixel, ~73 MB per 12 MP frame (Apple's ImageIO refuses Deflate on integer LinearRaw — a byte-perfect Deflate writer exists behind a flag, proven undecodable by the system decoder and documented by a probe test). Indigo's 14 MB pointed at the answer: store **one sample per pixel again**. The blended RGB is re-sampled onto an RGGB Bayer grid (`DNGAuthor.mosaic`) and compressed with a from-scratch **ITU T.81 Annex H lossless JPEG** encoder (`Kit/Sources/LetsLapseKit/LosslessJPEG.swift`): predictor 1, optimal canonical Huffman with a fixed-table fallback, FF stuffing, 256 px tiles under Compression 7 with post-layout offset patching. Results: **~18 MB per frame**, bit-exact by construction (an independent decoder written only for the tests proves round-trips down to the SSSS=16 edge case), decodable by ImageIO/Lightroom, WB latitude untouched — lossless compression is orthogonal to gradeability.
+
+### 6.5 Capture speed: the benchmark and its findings
+
+The first device tests captured at ~1 RAW/s — spread ghost copies instead of blur, visibly worse than Indigo's dense streak. Manual A/B of capture settings got slow, so Settings gained an automated **Capture benchmark** (`App/CaptureBenchmark.swift`): a self-contained session captures 3/5/10-frame batches flat-out under each mechanism, three reps, then times every stage of the production blend pipeline on the captured frames — with a thermal cool-down gate between mechanisms, a bail-out after repeated zero-delivery wedges, and a monospaced copyable report. Three runs on an iPhone 16 Pro settled it:
+
+| Finding | Number | Consequence |
+|---|---|---|
+| RAW capture was never slow | sequential singles: 0.05–0.08 s gaps (~15 fps) | the ~1/s cadence was self-inflicted — processing used to block the scheduling queue |
+| Responsive capture (iOS 17 overlap) wedges | fine at 3-frame bursts; sustained 5+ → zero deliveries until session reconfig, reproduced 3× | shipped **off** by default, opt-in with a warning |
+| Bracketed RAW is the winner | 8-frame sensor-consecutive brackets, 0.02–0.03 s gaps (~40 fps), 30/30 frames, zero errors | shipped **on** by default; 10 frames captured in ~0.65 s |
+| Debug builds lie about the pipeline | Release: mosaic 1200→8 ms, lossless-JPEG write 2900→85 ms | benchmark in Release; totals ~0.6 s (3–5:1), ~1.5 s (10:1), remaining cost is Apple's GPU RAW decode |
+| Blur is sampling density | short exposures (1/2445 s daylight) mean gaps, not exposure, decide ghosting | tight bursts + 10-frame default; ghost spacing ~0.02–0.05 s vs Indigo's observed ~0.25 s |
+
+Architecturally, the same round moved window processing **off the capture path**: `LiveBlendRawController` snapshots and resets window state at close, blends/authors on a serial processing queue, and folds results back with backpressure (two pending windows pause new shots honestly rather than piling frame data into memory). Capture cadence is now independent of blend cost; the pre-record status line warns only below 2 s intervals, where the ~1–2 s per-output pipeline genuinely trails.
+
+### 6.6 Fallbacks, logging, and verification
+
+Every degradation is deterministic and logged, never silent: a window whose blend cannot be produced writes its first frame as Apple's unblended DNG (flagged `fallbackSingleFrame`); a window with nothing decodable fails; three consecutive failures stop the run. The per-run experiment log rides *inside* the project as a JSON sidecar (excluded from media, travels with shared archives) and records the capture-mechanism toggles in force, per-window frame timestamps and spacing statistics, per-stage timings, file sizes, memory footprint, and thermal state — the ghost-spacing evidence for any run is always in the log. Project **share/import** (`.lapse` AppleArchive of the whole project folder, fresh IDs minted on import) was built during this arc precisely to move device test captures onto the Mac for analysis.
+
+Verification leans on **gated real-file tests** rather than synthetic fixtures alone: round-trips of a real iPhone frame and a real DJI drone DNG, a harness that discovers an imported untouched-DNG project by byte order and runs the production pipeline over it (asserting channel casts against Apple's own render and eyeballing the blended output), the independent lossless-JPEG decoder, and ImageIO as the referee for everything written. The tests skip cleanly on machines without the local files.
+
+---
+
+## 7. The Apple Watch companion
+
+### 7.1 What it is and why
+
+A deliberately narrow remote for the iPhone capture screen: **pick the capture mode, start/stop, trigger a "moment", and control exposure — without touching (and shaking) the phone.** The phone is always the camera and the brain; the watch is a thin remote/display with giant no-look controls. The remote is mode-aware — Interval, Live Blend, and Video are selectable from the wrist, with each mode's settings (interval seconds, frames per blend) mirrored and adjustable — but every rule is enforced on the phone: the watch schedules and displays, the phone validates and executes. There are no complications and no independent watch features — the watch app requires the companion iPhone app.
+
+### 7.2 Integration architecture
 
 Three pieces, one shared contract:
 
@@ -389,24 +437,25 @@ sequenceDiagram
 
 Protocol details worth knowing:
 
-- **Commands (watch → phone)**: `state` (ping), `startRecording`, `stopRecording`, `triggerMoment`, `lockExposure`, `unlockExposure`, `setISO` (value), `setLensPosition` (value; no watch UI uses it yet). Replies carry a status: `accepted`, `ok`, `unavailable` (+ "Capture screen is not active"), or `error`.
-- **State (phone → watch)** rides **both channels at once**: `updateApplicationContext` (durable latest-state, survives backgrounding/relaunch) plus a fire-and-forget `sendMessage` when reachable (low latency). Both funnel into the same apply path on the watch. Payloads carry recording state and start time, sequence mode, marker/burst/segment counts, format line, capture fps, planned speed, output fps, and the full exposure-lock state including the real ISO range.
+- **Commands (watch → phone)**: `state` (ping), `startRecording` (starts whatever mode is selected — it dispatches the capture screen's shutter action, never forces Video), `stopRecording`, `triggerMoment`, `lockExposure`, `unlockExposure`, `setISO` (value), `setLensPosition` (value; no watch UI uses it yet), `setCaptureMode`, `setIntervalSeconds`, `setFramesPerBlend`, `scheduleStop` (unit + deadline or target count), `cancelScheduledStop`. Replies carry a status: `accepted`, `ok`, `unavailable` (+ "Capture screen is not active"), or `error`.
+- **State (phone → watch)** rides **both channels at once**: `updateApplicationContext` (durable latest-state, survives backgrounding/relaunch) plus a fire-and-forget `sendMessage` when reachable (low latency). Both funnel into the same apply path on the watch. Payloads carry recording state and start time, capture mode, interval seconds, frames per blend, capture count, any scheduled stop (unit, deadline, target count), sequence mode, marker/burst/segment counts, format line, capture fps, planned speed, output fps, and the full exposure-lock state including the real ISO range.
+- **Scheduled stops are enforced on the phone** (`CameraController.scheduleStop` — a deadline work item for minutes, a count observer for frames; video converts frame targets via fps). The watch only schedules, cancels, and counts down. Every stop path cancels any pending schedule.
 - **Push triggers are state-changes, not timers** — a cluster of SwiftUI `.onChange` observers in `CaptureView`, deduped by change-detection guards in the receiver. The watch runs its own 1 Hz clock for elapsed time from `recordingStartedAt`, so no periodic traffic is needed.
 - **The availability gate is `commandHandler != nil`.** The receiver activates at app launch and always answers, but only `CaptureView` registers a handler (cleared on disappear). Off the capture screen, commands return `unavailable` and the payload's `cameraActive` goes false — which is exactly what the watch UI keys off.
 
-### 6.3 The watch experience
+### 7.3 The watch experience
 
 `WatchControlView` switches between three screens:
 
-- **Ready** (reachable + camera open): green status, format + planned speed line, a 92 pt red START button, and a one-tap exposure lock showing ISO · shutter when locked.
-- **Recording**: REC + elapsed time, an amber live estimate ("@100× → 8s" — clip length computed on-watch from elapsed × capture fps ÷ speed ÷ output fps), the exposure lock, and a mode-dependent second button — **burst toggle** (base fps vs "⚡ burst") in ramp mode, **Marker / End marker** in marker mode. Amber dots show captured moments (the active one pulses). **Digital Crown adjusts ISO** (in steps of 50 within the phone-reported range) while exposure is locked. STOP below.
+- **Ready** (reachable + camera open): green status, a mode selector (Interval / Live Blend / Video), per-mode setting rows opening picker sheets ("Every" interval seconds; "Blend" frames including 1 · Untouched), format + planned speed line, a 92 pt red START button, and a one-tap exposure lock showing ISO · shutter when locked.
+- **Recording**: REC + elapsed time, a mode-appropriate count ("N photos" / "N blends"), an amber live estimate in video mode ("@100× → 8s" — clip length computed on-watch from elapsed × capture fps ÷ speed ÷ output fps), the exposure lock, and a mode-dependent second button — **burst toggle** (base fps vs "⚡ burst") in ramp mode, **Marker / End marker** in marker mode. Amber dots show captured moments (the active one pulses). **Digital Crown adjusts ISO** (in steps of 50 within the phone-reported range) while exposure is locked. Stopping has deliberate friction: a **slide-to-stop** control (release past 85% travel fires) instead of a tappable button, plus a "Stop at…" sheet scheduling a stop after N minutes or N frames — once armed, the slider label counts down and the button flips to "Cancel Stop at".
 - **Unreachable / camera closed**: "Open the camera on iPhone" with a Ping iPhone button.
 
 Feedback is haptic-first (`.start` / `.stop` / `.click` on accepted commands) with **optimistic local echo**: the watch flips to Recording immediately on `accepted` and reconciles when the authoritative state arrives — the remote feels instant even over WatchConnectivity latency. Edge cases degrade gracefully: unreachable sends short-circuit into a status line; application context replays the last known state after relaunch; the phone re-activates its session on watch-swap; both sides zero sequence counters when idle.
 
 ---
 
-## 7. Design language
+## 8. Design language
 
 Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, shared components):
 
@@ -420,7 +469,7 @@ The design history is documented in the repo-root `docs/letslapse-ios-ux-brief.m
 
 ---
 
-## 8. Developer quickstart
+## 9. Developer quickstart
 
 **App:** open `LetsLapse/LetsLapse.xcodeproj`. Two targets: `LetsLapse` (iPhone/iPad/Mac) and `LetsLapse Watch App` (embedded into iOS builds automatically). Select your development team under Signing & Capabilities — no team is checked in.
 
@@ -449,11 +498,14 @@ The design history is documented in the repo-root `docs/letslapse-ios-ux-brief.m
 | UI / design changes | `App/DesignSystem.swift`, then the relevant view file |
 | Watch protocol | `Shared/WatchMessageKey.swift`, `Watch/WatchCaptureRemote.swift`, `App/WatchRemoteControlReceiver.swift` |
 | macOS batch pipeline | `App/MacVideoJobRunner.swift` |
-| Live Blend (macOS spike) | `App/LiveBlendController.swift`, `Kit/Sources/LetsLapseKit/PixelBufferBlender.swift` |
+| Live Blend (video-tap path) | `App/LiveBlendController.swift`, `Kit/Sources/LetsLapseKit/PixelBufferBlender.swift` |
+| Live Blend DNG pipeline | `App/LiveBlendRawController.swift`, `Kit/Sources/LetsLapseKit/DNGAuthor.swift`, `CameraColorTransform.swift`, `LosslessJPEG.swift` |
+| Capture benchmark | `App/CaptureBenchmark.swift` (Settings → Capture benchmark, DNG output selected) |
+| Project share/import | `App/ProjectArchive.swift`, `Kit/Sources/LetsLapseKit/DirectoryArchive.swift` |
 
 ---
 
-## 9. Current limits and sharp edges
+## 10. Current limits and sharp edges
 
 Honest notes for whoever picks this up:
 
@@ -464,9 +516,12 @@ Honest notes for whoever picks this up:
 - **Rotation** is driven from the window's interface orientation by design (see §4.3); it is functional but still being refined on edge cases (recent commits note "not perfect").
 - **ProRes format matching**: the format matcher filters on dimensions/fps/stabilization but does not re-check the ProRes flag, so selecting a ProRes entry can, in principle, land on a same-dimension non-ProRes format if one also matches.
 - **`WatchRecordingState` is defined twice** (once per side of the WatchConnectivity bridge, since only the key names are shared) — the two enums must be kept in sync manually.
-- **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets. (Live Blend *reports* thermal state in its diagnostics and experiment log but doesn't throttle either.)
+- **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets. (Live Blend *reports* thermal state in its diagnostics and experiment log but doesn't throttle; the capture benchmark is the only place that waits for cooling.)
 - **Processing checklist stages are cosmetic** — derived from progress thresholds, not real pipeline phases.
 - **Interval capture silently discards** sessions with fewer than 2 photos.
-- **Live Blend is a macOS-only experimental spike** (§5.4) — JPEG output only, settings un-persisted, and the on-screen diagnostics readout is expected to disappear if the feature graduates. Whether it comes to iOS (and at what battery cost) is an open question.
-- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, `MacVideoJobRunner`, and `LiveBlendController` are untested.
+- **Live Blend DNG is iOS/iPadOS-only by SDK decree** (§6.1) — the Bayer RAW capture API is unavailable on macOS, so Macs always run the JPEG video-tap path. Interval and frame-count settings are still un-persisted, and the on-screen diagnostics readout is expected to disappear if the feature graduates.
+- **The responsive-capture toggle can wedge the photo output** — reproducibly, after ~15 rapid RAW captures on iPhone 16 Pro (three benchmark runs). It ships off; if a user enables it and windows start failing, the run's three-consecutive-failure auto-stop is the backstop. The wedge clears on session reconfiguration.
+- **The benchmark's pipeline stage is a mirror, not the production function** — `CaptureBenchmark.runPipelineBody` replicates `LiveBlendRawController.processWindow` with finer clocks; a change to one must be made in both or the benchmark silently measures a stale pipeline.
+- **Debug builds inflate the DNG pipeline enormously** (mosaic ~150×, lossless-JPEG write ~30×; Swift bounds-checking in per-pixel loops). Device-representative numbers require a Release build — the shared scheme's Run action is currently set to Release for exactly this reason; flip it back to Debug when you need the debugger.
+- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, `MacVideoJobRunner`, `LiveBlendController`, and `LiveBlendRawController` are untested at unit level — though the DNG pipeline's math is covered by gated real-file tests (§6.6) that skip without the local reference files.
 - The whole app is a strong proof-of-concept moving toward production: no onboarding, no iCloud/sync, no keyframe editing (deliberate), and store-readiness items (privacy strings, App Store assets) are not addressed in this document.
