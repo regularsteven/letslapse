@@ -42,8 +42,23 @@ struct CaptureView: View {
 
     init(intent: CaptureIntent = CaptureIntent()) {
         self.intent = intent
-        _mode = State(initialValue: intent.mode)
+        // An explicit intent (effect cards) wins; otherwise open in the
+        // remembered mode with its remembered dials, so a habitual Interval
+        // shooter never re-selects Interval and its spacing every shoot.
+        let remembering = RecordingSettingsStore.isEnabled
+        let mode = intent.mode
+            ?? (remembering ? RecordingSettingsStore.captureMode : nil)
+            ?? .video
+        _mode = State(initialValue: mode)
         _sequenceMode = State(initialValue: intent.sequenceMode)
+        if remembering {
+            if let seconds = RecordingSettingsStore.intervalSeconds(for: mode) {
+                _interval = State(initialValue: seconds)
+            }
+            if let frames = RecordingSettingsStore.framesPerBlend {
+                _framesPerBlend = State(initialValue: frames)
+            }
+        }
     }
 
     var body: some View {
@@ -101,6 +116,25 @@ struct CaptureView: View {
         .onReceive(tick) { date in
             now = date
             checkTarget()
+        }
+        // Persist the capture setup as it changes, from any entry path
+        // (on-screen pickers, Watch commands). On a mode switch, swap in
+        // that mode's remembered spacing — Interval and Live Blend each
+        // keep their own — or adopt the carried-over one as its first.
+        .onChange(of: mode) { newMode in
+            RecordingSettingsStore.save(captureMode: newMode)
+            guard RecordingSettingsStore.isEnabled else { return }
+            if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
+                interval = seconds
+            } else {
+                RecordingSettingsStore.save(intervalSeconds: interval, for: newMode)
+            }
+        }
+        .onChange(of: interval) { seconds in
+            RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
+        }
+        .onChange(of: framesPerBlend) { frames in
+            RecordingSettingsStore.save(framesPerBlend: frames)
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
@@ -165,6 +199,10 @@ struct CaptureView: View {
     // MARK: - Lifecycle
 
     private func configureOnAppear() {
+        // Count the mode the screen opened in as last-used: effect cards set
+        // it explicitly, and the plain entry resolved to the remembered mode
+        // anyway, so re-saving is a no-op there.
+        RecordingSettingsStore.save(captureMode: mode)
         #if os(iOS)
         watchRemote.activate()
         watchRemote.setCommandHandler(handleWatchCommand)

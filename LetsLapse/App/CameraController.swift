@@ -1907,19 +1907,27 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
 
 // MARK: - Remembered recording settings
 
-/// The last-used capture setup (lens, resolution, frame rate, stabilization,
-/// burst rate), persisted so the next shoot starts where the previous one
-/// left off. Gated by the "Remember recording settings" toggle in Settings.
+/// The last-used capture setup — mode (Video/Interval/Live Blend) plus each
+/// mode's dials (lens, resolution, frame rate, stabilization, burst rate,
+/// interval spacing, blend frames) — persisted so the next shoot starts where
+/// the previous one left off. Gated by the "Remember recording settings"
+/// toggle in Settings.
 /// UserDefaults is thread-safe, so saves may run on the session queue.
 enum RecordingSettingsStore {
     static let isEnabledKey = "letslapse.rememberRecordingSettings"
 
+    private static let modeKey = "letslapse.capture.mode"
     private static let lensKey = "letslapse.capture.lens"
     private static let resolutionWidthKey = "letslapse.capture.resolutionWidth"
     private static let resolutionHeightKey = "letslapse.capture.resolutionHeight"
     private static let frameRateKey = "letslapse.capture.frameRate"
     private static let rampFrameRateKey = "letslapse.capture.rampFrameRate"
     private static let stabilizationKey = "letslapse.capture.stabilization"
+    // Interval and Live Blend keep separate spacings: a 10s interval shoot
+    // shouldn't inherit the 2s used for the last Live Blend run.
+    private static let intervalSecondsKey = "letslapse.capture.intervalSeconds"
+    private static let liveBlendIntervalSecondsKey = "letslapse.capture.liveBlendIntervalSeconds"
+    private static let liveBlendFramesPerBlendKey = "letslapse.capture.liveBlendFramesPerBlend"
 
     // Settings-owned values, not part of the remembered-shoot snapshot: they
     // apply regardless of `isEnabled` and survive `clear()`.
@@ -1949,6 +1957,49 @@ enum RecordingSettingsStore {
 
     static func save(isAudioEnabled: Bool) {
         UserDefaults.standard.set(isAudioEnabled, forKey: recordAudioKey)
+    }
+
+    static var captureMode: CaptureMode? {
+        UserDefaults.standard.string(forKey: modeKey)
+            .flatMap(CaptureMode.init(rawValue:))
+    }
+
+    static func save(captureMode: CaptureMode) {
+        guard isEnabled else { return }
+        UserDefaults.standard.set(captureMode.rawValue, forKey: modeKey)
+    }
+
+    /// Video has no interval spacing; asking for it returns nil and saving
+    /// it is a no-op.
+    static func intervalSeconds(for mode: CaptureMode) -> Double? {
+        guard let key = intervalKey(for: mode),
+              let value = UserDefaults.standard.object(forKey: key) as? Double,
+              (0.1...3600).contains(value)
+        else { return nil }
+        return value
+    }
+
+    static func save(intervalSeconds: Double, for mode: CaptureMode) {
+        guard isEnabled, let key = intervalKey(for: mode) else { return }
+        UserDefaults.standard.set(intervalSeconds, forKey: key)
+    }
+
+    private static func intervalKey(for mode: CaptureMode) -> String? {
+        switch mode {
+        case .video: return nil
+        case .interval: return intervalSecondsKey
+        case .liveBlend: return liveBlendIntervalSecondsKey
+        }
+    }
+
+    static var framesPerBlend: Int? {
+        let value = UserDefaults.standard.integer(forKey: liveBlendFramesPerBlendKey)
+        return (1...60).contains(value) ? value : nil
+    }
+
+    static func save(framesPerBlend: Int) {
+        guard isEnabled else { return }
+        UserDefaults.standard.set(framesPerBlend, forKey: liveBlendFramesPerBlendKey)
     }
 
     static var lens: CameraController.Lens? {
@@ -2000,8 +2051,9 @@ enum RecordingSettingsStore {
     static func clear() {
         let defaults = UserDefaults.standard
         for key in [
-            lensKey, resolutionWidthKey, resolutionHeightKey,
+            modeKey, lensKey, resolutionWidthKey, resolutionHeightKey,
             frameRateKey, rampFrameRateKey, stabilizationKey,
+            intervalSecondsKey, liveBlendIntervalSecondsKey, liveBlendFramesPerBlendKey,
         ] {
             defaults.removeObject(forKey: key)
         }

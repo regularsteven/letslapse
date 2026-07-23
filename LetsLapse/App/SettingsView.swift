@@ -147,7 +147,7 @@ struct SettingsView: View {
         VStack(spacing: 0) {
             LLRow(
                 title: "Remember recording settings",
-                subtitle: "Start each shoot with your last-used lens, resolution, frame rate and stabilization"
+                subtitle: "Start each shoot in your last-used mode with its settings — lens, resolution, frame rate, stabilization, interval spacing and blend frames"
             ) {
                 Toggle("", isOn: $model.rememberRecordingSettings)
                     .labelsHidden()

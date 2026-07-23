@@ -3,8 +3,11 @@ import PhotosUI
 import UniformTypeIdentifiers
 
 /// What a tap on an effect card should set up before the camera opens.
+/// A nil mode (the plain "Record now" entry) means no opinion: the capture
+/// screen opens in the last-used mode when "Remember recording settings"
+/// is on, Video otherwise. Effect cards pass an explicit mode.
 struct CaptureIntent: Equatable {
-    var mode: CaptureMode = .video
+    var mode: CaptureMode? = nil
     var sequenceMode: LiveCaptureSequence.Mode = .ramp
 }
 
