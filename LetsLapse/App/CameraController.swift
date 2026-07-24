@@ -147,7 +147,7 @@ final class CameraController: NSObject, ObservableObject {
     /// the interface/device implies. Session-only (resets each launch) so a
     /// left-on flip can't silently invert a later handheld shot.
     @Published var flipOrientation180 = false
-    // Live Blend (experimental spike).
+    // Live Blend engine — Interval mode's blend/DNG pipeline.
     @Published var isLiveBlendRunning = false
     @Published var liveBlendOutputCount = 0 {
         didSet { checkScheduledStopCount() }
@@ -160,10 +160,20 @@ final class CameraController: NSObject, ObservableObject {
     struct LiveBlendDNGSupport: Equatable {
         var isSupported: Bool
         var reason: String?
+        /// The sensor frame DNG captures deliver (the photo configuration's
+        /// active format — full 4:3 on iPhones), so the UI can present the
+        /// true resolution and aspect instead of the 16:9 video format.
+        var sensorDimensions: CaptureResolution?
     }
 
     @Published var liveBlendDNGSupport = LiveBlendDNGSupport(
         isSupported: false, reason: "Checking camera…")
+
+    /// Actual dimensions of the live feed the preview layer is showing
+    /// (published from every (re)configuration), so the viewfinder
+    /// letterboxes to what the sensor really delivers — the 4:3 photo feed
+    /// while a DNG shoot is armed, the 16:9 video format otherwise.
+    @Published var previewDimensions: CaptureResolution?
 
     /// A pending "stop at…" set from the Watch remote. Time-based stops hold
     /// a deadline; frame-based stops in Interval/Live Blend hold an absolute
@@ -394,43 +404,58 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     #if os(iOS)
-    /// Per-device probe results, sessionQueue-confined.
-    private var bayerRAWSupportByDevice: [String: Bool] = [:]
+    /// Per-device probe results, sessionQueue-confined: RAW support plus the
+    /// photo configuration's sensor frame (what a DNG capture delivers).
+    private var bayerRAWProbeByDevice: [String: (supported: Bool, sensor: CaptureResolution?)] = [:]
     #endif
 
-    /// Whether the current camera can capture Bayer RAW at all. The
-    /// video-recording formats LetsLapse pins for fps control never offer
-    /// RAW — the list is only populated in a photo configuration — so this
-    /// probes `.photo` once per device and restores the pinned format.
-    /// (Reading the list in the video configuration was the bug that made an
-    /// iPhone 16 Pro report "no RAW" and silently fall back to JPEG.)
     private func deviceSupportsBayerRAW() -> Bool {
+        probeBayerRAW().supported
+    }
+
+    /// Whether the current camera can capture Bayer RAW at all, and at what
+    /// sensor frame. The video-recording formats LetsLapse pins for fps
+    /// control never offer RAW — the list is only populated in a photo
+    /// configuration — so this probes `.photo` once per device and restores
+    /// the pinned format. (Reading the list in the video configuration was
+    /// the bug that made an iPhone 16 Pro report "no RAW" and silently fall
+    /// back to JPEG.)
+    private func probeBayerRAW() -> (supported: Bool, sensor: CaptureResolution?) {
         #if os(iOS)
-        guard let device = videoDevice else { return false }
-        if let cached = bayerRAWSupportByDevice[device.uniqueID] { return cached }
+        guard let device = videoDevice else { return (false, nil) }
+        if let cached = bayerRAWProbeByDevice[device.uniqueID] { return cached }
         let previousPreset = session.sessionPreset
         session.beginConfiguration()
         session.sessionPreset = .photo
         session.commitConfiguration()
         let supported = !availableBayerRawFormats().isEmpty
+        let dims = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
+        let sensor = supported ? CaptureResolution(width: dims.width, height: dims.height) : nil
         // Cache before restoring: the restore re-pins the format, which
         // republishes support and would otherwise probe again forever.
-        bayerRAWSupportByDevice[device.uniqueID] = supported
+        bayerRAWProbeByDevice[device.uniqueID] = (supported, sensor)
         session.beginConfiguration()
         session.sessionPreset = previousPreset
         session.commitConfiguration()
-        applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
-        LLog("liveblend-dng: probe \(device.localizedName) bayerRAW=\(supported)")
-        return supported
+        // While the photo-aspect preview is armed, the session must stay in
+        // the photo configuration — re-pinning the video format here would
+        // snap the viewfinder back to 16:9.
+        if photoAspectPreviousPreset == nil {
+            applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        }
+        LLog("liveblend-dng: probe \(device.localizedName) bayerRAW=\(supported) sensor=\(dims.width)x\(dims.height)")
+        return (supported, sensor)
         #else
-        return false
+        return (false, nil)
         #endif
     }
 
     private func publishLiveBlendDNGSupport() {
+        let probe = probeBayerRAW()
         let support: LiveBlendDNGSupport
-        if deviceSupportsBayerRAW() {
-            support = LiveBlendDNGSupport(isSupported: true, reason: nil)
+        if probe.supported {
+            support = LiveBlendDNGSupport(
+                isSupported: true, reason: nil, sensorDimensions: probe.sensor)
         } else {
             #if os(macOS)
             support = LiveBlendDNGSupport(
@@ -1411,8 +1436,8 @@ final class CameraController: NSObject, ObservableObject {
     // MARK: - Scheduled stop (Watch "stop at…")
 
     /// Schedules a stop of whatever capture is running: after `amount`
-    /// minutes, or after `amount` more frames (photos/blends in Interval and
-    /// Live Blend; fps-derived time in Video). Replaces any earlier schedule.
+    /// minutes, or after `amount` more frames (photos/blends in Interval;
+    /// fps-derived time in Video). Replaces any earlier schedule.
     func scheduleStop(unit: ScheduledStopUnit, amount: Double) {
         DispatchQueue.main.async {
             guard amount > 0 else { return }
@@ -1488,7 +1513,7 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    // MARK: - Live Blend (experimental spike)
+    // MARK: - Live Blend engine (Interval's blend/DNG pipeline)
 
     /// Starts a Live Blend run: every `interval` seconds, `framesPerBlend`
     /// frames are averaged into one output image. With `preferDNG` and a
@@ -1907,10 +1932,10 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
 
 // MARK: - Remembered recording settings
 
-/// The last-used capture setup — mode (Video/Interval/Live Blend) plus each
-/// mode's dials (lens, resolution, frame rate, stabilization, burst rate,
-/// interval spacing, blend frames) — persisted so the next shoot starts where
-/// the previous one left off. Gated by the "Remember recording settings"
+/// The last-used capture setup — mode (Video/Interval) plus each mode's
+/// dials (lens, resolution, frame rate, stabilization, burst rate, interval
+/// spacing, blend frames) — persisted so the next shoot starts where the
+/// previous one left off. Gated by the "Remember recording settings"
 /// toggle in Settings.
 /// UserDefaults is thread-safe, so saves may run on the session queue.
 enum RecordingSettingsStore {
@@ -1923,9 +1948,10 @@ enum RecordingSettingsStore {
     private static let frameRateKey = "letslapse.capture.frameRate"
     private static let rampFrameRateKey = "letslapse.capture.rampFrameRate"
     private static let stabilizationKey = "letslapse.capture.stabilization"
-    // Interval and Live Blend keep separate spacings: a 10s interval shoot
-    // shouldn't inherit the 2s used for the last Live Blend run.
     private static let intervalSecondsKey = "letslapse.capture.intervalSeconds"
+    /// Pre-merge key from when Live Blend was its own mode with its own
+    /// spacing; read as a fallback so an upgrade keeps the user's spacing,
+    /// never written anymore.
     private static let liveBlendIntervalSecondsKey = "letslapse.capture.liveBlendIntervalSeconds"
     private static let liveBlendFramesPerBlendKey = "letslapse.capture.liveBlendFramesPerBlend"
 
@@ -1960,8 +1986,10 @@ enum RecordingSettingsStore {
     }
 
     static var captureMode: CaptureMode? {
+        // token-tolerant: a remembered "Live Blend" from before the mode
+        // merge resolves to Interval.
         UserDefaults.standard.string(forKey: modeKey)
-            .flatMap(CaptureMode.init(rawValue:))
+            .flatMap(CaptureMode.init(token:))
     }
 
     static func save(captureMode: CaptureMode) {
@@ -1970,12 +1998,13 @@ enum RecordingSettingsStore {
     }
 
     /// Video has no interval spacing; asking for it returns nil and saving
-    /// it is a no-op.
+    /// it is a no-op. Interval falls back to the retired Live Blend mode's
+    /// spacing so an upgrade keeps a habitual Live Blend shooter's setup.
     static func intervalSeconds(for mode: CaptureMode) -> Double? {
-        guard let key = intervalKey(for: mode),
-              let value = UserDefaults.standard.object(forKey: key) as? Double,
-              (0.1...3600).contains(value)
-        else { return nil }
+        guard let key = intervalKey(for: mode) else { return nil }
+        let stored = UserDefaults.standard.object(forKey: key) as? Double
+            ?? UserDefaults.standard.object(forKey: liveBlendIntervalSecondsKey) as? Double
+        guard let value = stored, (0.1...3600).contains(value) else { return nil }
         return value
     }
 
@@ -1988,7 +2017,6 @@ enum RecordingSettingsStore {
         switch mode {
         case .video: return nil
         case .interval: return intervalSecondsKey
-        case .liveBlend: return liveBlendIntervalSecondsKey
         }
     }
 

@@ -21,13 +21,13 @@ struct CaptureView: View {
     @State private var mode: CaptureMode
     @State private var sequenceMode: LiveCaptureSequence.Mode
     @State private var interval: Double = 2
-    /// Live Blend source frames per output image. Un-persisted, like the
-    /// interval seconds above. Default 10: the capture benchmark showed
-    /// bracketed RAW delivers 10 frames in ~0.65s, and dense sampling is
-    /// what reads as motion blur — 3-5 spread samples read as ghosts.
+    /// Interval mode's blend dial: source frames per output image, 1 = no
+    /// blending. Default 10: the capture benchmark showed bracketed RAW
+    /// delivers 10 frames in ~0.65s, and dense sampling is what reads as
+    /// motion blur — 3-5 spread samples read as ghosts.
     @State private var framesPerBlend = 10
-    private let liveBlendFrameOptions: [(frames: Int, label: String)] = [
-        (1, "Untouched"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
+    private let blendFrameOptions: [(frames: Int, label: String)] = [
+        (1, "No blending"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
     ]
     private let captureIntervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
     @State private var orientation = currentCaptureOrientation()
@@ -99,6 +99,7 @@ struct CaptureView: View {
         .sheet(isPresented: $showFormatSheet) {
             FormatSheet(
                 camera: camera,
+                model: model,
                 mode: $mode,
                 sequenceMode: $sequenceMode
             )
@@ -119,8 +120,8 @@ struct CaptureView: View {
         }
         // Persist the capture setup as it changes, from any entry path
         // (on-screen pickers, Watch commands). On a mode switch, swap in
-        // that mode's remembered spacing — Interval and Live Blend each
-        // keep their own — or adopt the carried-over one as its first.
+        // that mode's remembered spacing, or adopt the carried-over one
+        // as its first.
         .onChange(of: mode) { newMode in
             RecordingSettingsStore.save(captureMode: newMode)
             guard RecordingSettingsStore.isEnabled else { return }
@@ -226,7 +227,7 @@ struct CaptureView: View {
         camera.onFinishPhotos = { urls in
             camera.stop()
             dismiss()
-            model.setSource(.photos(urls), mode: "Interval photos")
+            model.setSource(.photos(urls), mode: "Interval · JPEG")
         }
         camera.onFinishLiveBlend = { result in
             camera.stop()
@@ -234,9 +235,11 @@ struct CaptureView: View {
             // The experiment log rides along as a JSON sidecar (the project
             // model filters .json from media), so shared/imported projects
             // carry their own capture diagnostics.
+            let format = result.outputFormat == "dng" ? "DNG" : "JPEG"
+            let blend = framesPerBlend > 1 ? " · \(framesPerBlend)-frame blend" : ""
             model.setSource(
                 .photos(result.frameURLs + [result.logURL]),
-                mode: result.outputFormat == "dng" ? "Live Blend DNG" : "Live Blend")
+                mode: "Interval · \(format)\(blend)")
         }
         orientation = currentCaptureOrientation()
         #if os(iOS)
@@ -308,8 +311,6 @@ struct CaptureView: View {
                 } else {
                     speedChipsRow
                 }
-            } else if mode == .liveBlend {
-                liveBlendStatusRow
             } else {
                 intervalStatusRow
             }
@@ -372,8 +373,6 @@ struct CaptureView: View {
                     Group {
                         if mode == .video {
                             landscapeEstimateChips
-                        } else if mode == .liveBlend {
-                            landscapeLiveBlendRow
                         } else {
                             landscapeIntervalRow
                         }
@@ -415,15 +414,6 @@ struct CaptureView: View {
             } label: {
                 Text("INTERVAL")
                     .foregroundStyle(mode == .interval ? LL.amber : .white.opacity(0.5))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                guard !isCapturing else { return }
-                mode = .liveBlend
-            } label: {
-                Text("LIVE BLEND")
-                    .foregroundStyle(mode == .liveBlend ? LL.amber : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
 
@@ -516,24 +506,33 @@ struct CaptureView: View {
 
     private var formatPill: some View {
         Button {
-            guard !camera.isRecording else { return }
+            guard !isCapturing else { return }
             showFormatSheet = true
         } label: {
             HStack(spacing: 4) {
                 Text(formatSummary)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(camera.isRecording ? .white.opacity(0.55) : .white)
+                    .foregroundStyle(isCapturing ? .white.opacity(0.55) : .white)
                 if camera.isVideoStabilizationEnabled && mode == .video {
                     Text("· Stab")
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(camera.isRecording ? LL.amber.opacity(0.6) : LL.amber)
+                        .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
                 }
-                if mode == .liveBlend && model.liveBlendOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported {
-                    Text("· DNG")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(LL.amber)
+                if mode == .interval {
+                    // The output format is part of the pill in Interval —
+                    // DNG in amber (it changes what lands on disk), JPEG in
+                    // the ordinary weight.
+                    if model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported {
+                        Text("· DNG")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
+                    } else {
+                        Text("· JPEG")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(isCapturing ? .white.opacity(0.55) : .white)
+                    }
                 }
-                Image(systemName: camera.isRecording ? "lock.fill" : "chevron.down")
+                Image(systemName: isCapturing ? "lock.fill" : "chevron.down")
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.4))
             }
@@ -545,8 +544,12 @@ struct CaptureView: View {
         .accessibilityLabel("Capture format")
     }
 
+    /// Video reads "2160p · 30"; Interval drops the frame rate — stills
+    /// have no base rate, the pill's trailing token carries the format.
     private var formatSummary: String {
-        "\(camera.selectedResolution.label) · \(camera.selectedFrameRate)"
+        mode == .video
+            ? "\(camera.selectedResolution.label) · \(camera.selectedFrameRate)"
+            : camera.selectedResolution.label
     }
 
     // MARK: - Speed chips (idle)
@@ -711,43 +714,97 @@ struct CaptureView: View {
 
     // MARK: - Interval rows
 
+    /// One of the interval engines is running — the plain photo timer or the
+    /// blend pipeline; either way the row swaps to counters.
+    private var isIntervalCapturing: Bool {
+        camera.isIntervalRunning || camera.isLiveBlendRunning
+    }
+
     @ViewBuilder
     private var intervalStatusRow: some View {
-        if camera.isIntervalRunning {
-            intervalRunningPills
+        if isIntervalCapturing {
+            VStack(spacing: 8) {
+                intervalRunningPills
+                blendDiagnosticsReadout
+            }
         } else {
-            intervalPickerRow
+            VStack(spacing: 6) {
+                intervalPickerRow
+                intervalOutputStatusLine
+            }
         }
     }
 
     /// Landscape twin of `intervalStatusRow`, shown in the viewfinder's safe
-    /// corner: the picker sits over the live image (no letterbox there), so it
-    /// gets a dark backdrop to stay legible.
+    /// corner: the controls sit over the live image (no letterbox there), so
+    /// they get dark backdrops to stay legible.
     @ViewBuilder
     private var landscapeIntervalRow: some View {
-        if camera.isIntervalRunning {
-            intervalRunningPills
+        if isIntervalCapturing {
+            VStack(alignment: .leading, spacing: 6) {
+                intervalRunningPills
+                blendDiagnosticsReadout
+            }
         } else {
-            intervalPickerRow
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
-                .background(Color.black.opacity(0.5), in: Capsule())
+            VStack(alignment: .leading, spacing: 4) {
+                intervalPickerRow
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+                intervalOutputStatusLine
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 4)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+            }
         }
     }
 
     private var intervalRunningPills: some View {
         HStack(spacing: 12) {
-            CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber, bold: true, monospaced: true)
+            if camera.isLiveBlendRunning {
+                CameraPill(
+                    text: "\(camera.liveBlendOutputCount) \(framesPerBlend > 1 ? "blends" : "photos")",
+                    tint: LL.amber, bold: true, monospaced: true)
+            } else {
+                CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber, bold: true, monospaced: true)
+            }
             CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
         }
     }
 
+    private var elapsedIntervalText: String {
+        DurationFormatter.recordingTime(from: now.timeIntervalSince(framingStartedAt))
+    }
+
+    /// The two interval dials — spacing and blend depth. One line where it
+    /// fits (Mac, landscape phones/iPads); portrait iPhones fall back to two
+    /// stacked lines.
     private var intervalPickerRow: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                intervalEveryPicker
+                blendFramesPicker
+                blendCaption
+            }
+            VStack(alignment: .leading, spacing: 6) {
+                intervalEveryPicker
+                HStack(spacing: 8) {
+                    blendFramesPicker
+                    blendCaption
+                }
+            }
+        }
+    }
+
+    private var intervalEveryPicker: some View {
         HStack(spacing: 8) {
+            // fixedSize keeps ViewThatFits honest: a wrappable label would
+            // let the one-line layout "fit" by folding the word in half.
             Text("EVERY")
                 .font(.system(size: 10, weight: .bold))
                 .kerning(0.8)
                 .foregroundStyle(.white.opacity(0.45))
+                .fixedSize()
             Menu {
                 ForEach(captureIntervalOptions, id: \.self) { seconds in
                     Button {
@@ -761,75 +818,73 @@ struct CaptureView: View {
                     }
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Text(intervalLabel(interval))
-                        .font(.system(size: 12.5, weight: .semibold))
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.4))
-                }
-                .foregroundStyle(.white)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
+                pickerMenuLabel(intervalLabel(interval))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
-            Text("blends into a timelapse")
+        }
+    }
+
+    private var blendFramesPicker: some View {
+        HStack(spacing: 8) {
+            Text("BLEND")
+                .font(.system(size: 10, weight: .bold))
+                .kerning(0.8)
+                .foregroundStyle(.white.opacity(0.45))
+                .fixedSize()
+            Menu {
+                ForEach(blendFrameOptions, id: \.frames) { option in
+                    Button {
+                        framesPerBlend = option.frames
+                    } label: {
+                        if framesPerBlend == option.frames {
+                            Label(blendOptionLabel(option), systemImage: "checkmark")
+                        } else {
+                            Text(blendOptionLabel(option))
+                        }
+                    }
+                }
+            } label: {
+                pickerMenuLabel(framesPerBlend == 1 ? "Off" : "\(framesPerBlend) frames")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    private func blendOptionLabel(_ option: (frames: Int, label: String)) -> String {
+        option.frames == 1 ? option.label : "\(option.frames) frames · \(option.label)"
+    }
+
+    /// The trailing "into one image" only makes sense while blending.
+    @ViewBuilder
+    private var blendCaption: some View {
+        if framesPerBlend > 1 {
+            Text("into one image")
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.4))
         }
     }
 
-    private func intervalLabel(_ seconds: Double) -> String {
-        seconds == floor(seconds) ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
-    }
-
-    // MARK: - Live Blend rows (experimental spike)
-
-    @ViewBuilder
-    private var liveBlendStatusRow: some View {
-        if camera.isLiveBlendRunning {
-            VStack(spacing: 8) {
-                liveBlendRunningPills
-                liveBlendDiagnosticsReadout
-            }
-        } else {
-            VStack(spacing: 6) {
-                liveBlendPickerRow
-                liveBlendOutputStatusLine
-            }
+    private func pickerMenuLabel(_ text: String) -> some View {
+        HStack(spacing: 4) {
+            Text(text)
+                .font(.system(size: 12.5, weight: .semibold))
+            Image(systemName: "chevron.down")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.4))
         }
-    }
-
-    /// Landscape twin of `liveBlendStatusRow`, shown over the viewfinder's
-    /// safe corner, so everything gets a dark backdrop.
-    @ViewBuilder
-    private var landscapeLiveBlendRow: some View {
-        if camera.isLiveBlendRunning {
-            VStack(alignment: .leading, spacing: 6) {
-                liveBlendRunningPills
-                liveBlendDiagnosticsReadout
-            }
-        } else {
-            VStack(alignment: .leading, spacing: 4) {
-                liveBlendPickerRow
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(Color.black.opacity(0.5), in: Capsule())
-                liveBlendOutputStatusLine
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.5), in: Capsule())
-            }
-        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
+        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
     }
 
     /// §Output status before recording starts: the user must know whether
-    /// the capture will be gradeable DNG or baked Standard, and why.
+    /// the shoot will be gradeable DNG or baked JPEG, and why.
     @ViewBuilder
-    private var liveBlendOutputStatusLine: some View {
-        let wantsDNG = model.liveBlendOutputFormat == .dng
+    private var intervalOutputStatusLine: some View {
+        let wantsDNG = model.intervalOutputFormat == .dng
         let support = camera.liveBlendDNGSupport
         Group {
             if wantsDNG && support.isSupported {
@@ -847,10 +902,10 @@ struct CaptureView: View {
                         .foregroundStyle(LL.amber)
                 }
             } else if wantsDNG {
-                Text("Output: Standard · DNG unavailable — \(support.reason ?? "not supported on this camera source")")
+                Text("Output: JPEG · DNG unavailable — \(support.reason ?? "not supported on this camera source")")
                     .foregroundStyle(.white.opacity(0.6))
             } else {
-                Text("Output: Standard")
+                Text("Output: JPEG")
                     .foregroundStyle(.white.opacity(0.45))
             }
         }
@@ -859,23 +914,16 @@ struct CaptureView: View {
         .multilineTextAlignment(.leading)
     }
 
-    private var liveBlendRunningPills: some View {
-        HStack(spacing: 12) {
-            CameraPill(text: "\(camera.liveBlendOutputCount) blends", tint: LL.amber, bold: true, monospaced: true)
-            CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
-        }
-    }
-
-    /// Compact experiment readout for the spike; goes away if the feature
-    /// graduates beyond testing.
+    /// Compact pipeline readout while the blend engine runs; the plain photo
+    /// timer produces no diagnostics, so plain-JPEG shoots never see it.
     @ViewBuilder
-    private var liveBlendDiagnosticsReadout: some View {
-        if let diagnostics = camera.liveBlendDiagnostics {
+    private var blendDiagnosticsReadout: some View {
+        if camera.isLiveBlendRunning, let diagnostics = camera.liveBlendDiagnostics {
             VStack(alignment: .leading, spacing: 2) {
                 Text("frames \(diagnostics.currentWindowSelectedFrames)/\(diagnostics.requestedFramesPerBlend) · last \(diagnostics.lastCapturedFrames.map(String.init) ?? "–")")
                 Text("out \(diagnostics.lastOutputIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "–") (req \(String(format: "%.1f s", diagnostics.requestedIntervalSeconds)))")
                 Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–")\(diagnostics.outputFormatLabel.map { " · \($0)" } ?? "") · \(diagnostics.status.rawValue)")
-                    .foregroundStyle(liveBlendStatusTint(diagnostics.status))
+                    .foregroundStyle(blendStatusTint(diagnostics.status))
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
             .foregroundStyle(.white.opacity(0.75))
@@ -885,7 +933,7 @@ struct CaptureView: View {
         }
     }
 
-    private func liveBlendStatusTint(_ status: LiveBlendStatus) -> Color {
+    private func blendStatusTint(_ status: LiveBlendStatus) -> Color {
         switch status {
         case .healthy: return .white.opacity(0.75)
         case .captureFailed: return .red
@@ -893,106 +941,13 @@ struct CaptureView: View {
         }
     }
 
-    private var liveBlendPickerRow: some View {
-        // One line where it fits (Mac, landscape phones/iPads); portrait
-        // iPhones fall back to two stacked lines.
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                liveBlendIntervalPicker
-                liveBlendFramesPicker
-                liveBlendPickerCaption
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                liveBlendIntervalPicker
-                HStack(spacing: 8) {
-                    liveBlendFramesPicker
-                    liveBlendPickerCaption
-                }
-            }
-        }
-    }
-
-    private var liveBlendIntervalPicker: some View {
-        HStack(spacing: 8) {
-            Text("EVERY")
-                .font(.system(size: 10, weight: .bold))
-                .kerning(0.8)
-                .foregroundStyle(.white.opacity(0.45))
-            Menu {
-                ForEach(captureIntervalOptions, id: \.self) { seconds in
-                    Button {
-                        interval = seconds
-                    } label: {
-                        if interval == seconds {
-                            Label(intervalLabel(seconds), systemImage: "checkmark")
-                        } else {
-                            Text(intervalLabel(seconds))
-                        }
-                    }
-                }
-            } label: {
-                liveBlendMenuLabel(intervalLabel(interval))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
-    }
-
-    private var liveBlendFramesPicker: some View {
-        HStack(spacing: 8) {
-            Text("BLEND")
-                .font(.system(size: 10, weight: .bold))
-                .kerning(0.8)
-                .foregroundStyle(.white.opacity(0.45))
-            Menu {
-                ForEach(liveBlendFrameOptions, id: \.frames) { option in
-                    Button {
-                        framesPerBlend = option.frames
-                    } label: {
-                        if framesPerBlend == option.frames {
-                            Label("\(option.frames) frames · \(option.label)", systemImage: "checkmark")
-                        } else {
-                            Text("\(option.frames) frames · \(option.label)")
-                        }
-                    }
-                }
-            } label: {
-                liveBlendMenuLabel("\(framesPerBlend) frames")
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
-    }
-
-    private var liveBlendPickerCaption: some View {
-        Text("into one image")
-            .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.4))
-    }
-
-    private func liveBlendMenuLabel(_ text: String) -> some View {
-        HStack(spacing: 4) {
-            Text(text)
-                .font(.system(size: 12.5, weight: .semibold))
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.4))
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
-    }
-
-    private var elapsedIntervalText: String {
-        DurationFormatter.recordingTime(from: now.timeIntervalSince(framingStartedAt))
+    private func intervalLabel(_ seconds: Double) -> String {
+        seconds == floor(seconds) ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
     }
 
     // MARK: - Mode + zoom row
 
     private var modeRow: some View {
-        // Three mode labels plus zoom chips have to fit an iPhone-portrait
-        // width; the Mac window has room to breathe.
         #if os(iOS)
         let spacing: CGFloat = 14
         #else
@@ -1004,14 +959,6 @@ struct CaptureView: View {
             } label: {
                 Text("INTERVAL")
                     .foregroundStyle(mode == .interval ? LL.amber : .white.opacity(0.5))
-            }
-            .buttonStyle(.plain)
-
-            Button {
-                mode = .liveBlend
-            } label: {
-                Text("LIVE BLEND")
-                    .foregroundStyle(mode == .liveBlend ? LL.amber : .white.opacity(0.5))
             }
             .buttonStyle(.plain)
 
@@ -1104,25 +1051,36 @@ struct CaptureView: View {
         case .interval:
             if camera.isIntervalRunning {
                 camera.stopInterval()
-            } else {
-                framingStartedAt = Date()
-                camera.startInterval(every: interval)
-            }
-        case .liveBlend:
-            if camera.isLiveBlendRunning {
+            } else if camera.isLiveBlendRunning {
                 camera.stopLiveBlend()
             } else {
                 framingStartedAt = Date()
-                camera.startLiveBlend(
-                    every: interval,
-                    framesPerBlend: framesPerBlend,
-                    preferDNG: model.liveBlendOutputFormat == .dng,
-                    options: LiveBlendCaptureOptions(
-                        responsiveCapture: model.liveBlendResponsiveCapture,
-                        burstScheduling: model.liveBlendBurstCapture,
-                        bracketedRAW: model.liveBlendBracketedRAW))
+                startIntervalCapture()
             }
         }
+    }
+
+    /// Routes an Interval shoot to the engine its dials call for:
+    /// plain JPEG stills come from the photo-output timer (Apple's full
+    /// processed pipeline, not a video-tap grab), everything else — any
+    /// blending, or DNG output — runs through the blend pipeline, which
+    /// handles a 1-frame DNG window as untouched originals. DNG on an
+    /// unsupported source degrades per dial: blends fall back to the JPEG
+    /// video tap, unblended shoots to real JPEG stills.
+    private func startIntervalCapture() {
+        let wantsDNG = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+        if !wantsDNG && framesPerBlend == 1 {
+            camera.startInterval(every: interval)
+            return
+        }
+        camera.startLiveBlend(
+            every: interval,
+            framesPerBlend: framesPerBlend,
+            preferDNG: wantsDNG,
+            options: LiveBlendCaptureOptions(
+                responsiveCapture: model.liveBlendResponsiveCapture,
+                burstScheduling: model.liveBlendBurstCapture,
+                bracketedRAW: model.liveBlendBracketedRAW))
     }
 
     /// Left of the shutter: the burst/marker trigger while recording,
@@ -1432,16 +1390,18 @@ struct CaptureView: View {
         case .setLensPosition:
             camera.setLensPosition(Float(value ?? 0.5))
         case .setCaptureMode:
+            // token-tolerant: a stale Watch build may still send the retired
+            // "Live Blend" mode, which resolves to Interval.
             guard !isCapturing,
                   let token = payload[WatchMessageKey.captureMode] as? String,
-                  let newMode = CaptureMode(rawValue: token) else { return }
+                  let newMode = CaptureMode(token: token) else { return }
             mode = newMode
         case .setIntervalSeconds:
             guard !isCapturing, let value, captureIntervalOptions.contains(value) else { return }
             interval = value
         case .setFramesPerBlend:
             guard !isCapturing, let value,
-                  liveBlendFrameOptions.contains(where: { $0.frames == Int(value) }) else { return }
+                  blendFrameOptions.contains(where: { $0.frames == Int(value) }) else { return }
             framesPerBlend = Int(value)
         case .scheduleStop:
             guard isCapturing, let value,
@@ -1588,10 +1548,13 @@ private extension CameraController.Lens {
 
 // MARK: - Format sheet
 
-/// Advanced capture format, off the viewfinder entirely: lens, resolution,
-/// frame rates, stabilization, and how speed bursts are captured.
+/// Advanced capture format, off the viewfinder entirely. Shows each mode
+/// its own dials: Video gets frame rates, stabilization and speed bursts;
+/// Interval gets the output format (JPEG or DNG) instead — stills have no
+/// base frame rate.
 private struct FormatSheet: View {
     @ObservedObject var camera: CameraController
+    @ObservedObject var model: AppModel
     @Binding var mode: CaptureMode
     @Binding var sequenceMode: LiveCaptureSequence.Mode
     @Environment(\.dismiss) private var dismiss
@@ -1616,31 +1579,51 @@ private struct FormatSheet: View {
                 Section {
                     Picker("Resolution", selection: $camera.selectedResolution) {
                         ForEach(camera.availableResolutions) { resolution in
-                            Text(resolution.isProRes ? "\(resolution.label) *" : resolution.label).tag(resolution)
+                            Text(mode == .video && resolution.isProRes ? "\(resolution.label) *" : resolution.label).tag(resolution)
                         }
                     }
                     .onChange(of: camera.selectedResolution) { resolution in
                         camera.selectResolution(resolution)
                     }
 
-                    Picker(sequenceMode == .ramp ? "Base frame rate" : "Frame rate", selection: $camera.selectedFrameRate) {
-                        ForEach(camera.availableFrameRates, id: \.self) { fps in
-                            Text("\(fps) fps").tag(fps)
+                    if mode == .video {
+                        Picker(sequenceMode == .ramp ? "Base frame rate" : "Frame rate", selection: $camera.selectedFrameRate) {
+                            ForEach(camera.availableFrameRates, id: \.self) { fps in
+                                Text("\(fps) fps").tag(fps)
+                            }
                         }
-                    }
-                    .onChange(of: camera.selectedFrameRate) { fps in
-                        camera.selectFrameRate(fps)
-                    }
+                        .onChange(of: camera.selectedFrameRate) { fps in
+                            camera.selectFrameRate(fps)
+                        }
 
-                    Toggle("Stabilization", isOn: Binding(
-                        get: { camera.isVideoStabilizationEnabled },
-                        set: { camera.setVideoStabilizationEnabled($0) }
-                    ))
+                        Toggle("Stabilization", isOn: Binding(
+                            get: { camera.isVideoStabilizationEnabled },
+                            set: { camera.setVideoStabilizationEnabled($0) }
+                        ))
+                    }
                 } header: {
                     Text("Format")
                 } footer: {
-                    if camera.availableResolutions.contains(where: { $0.isProRes }) {
+                    if mode == .video && camera.availableResolutions.contains(where: { $0.isProRes }) {
                         Text("* ProRes — very large files")
+                    }
+                }
+
+                if mode == .interval {
+                    Section {
+                        Picker("Output", selection: $model.intervalOutputFormat) {
+                            Text("JPEG").tag(IntervalOutputFormat.jpeg)
+                            Text("DNG").tag(IntervalOutputFormat.dng)
+                        }
+                        .pickerStyle(.segmented)
+                    } header: {
+                        Text("Output format")
+                    } footer: {
+                        if camera.liveBlendDNGSupport.isSupported {
+                            Text("DNG keeps the sensor's raw data — white balance and tone stay adjustable in post, for day-to-night and mixed-light work. Applies with or without blending. JPEG is smaller and ready to share.")
+                        } else {
+                            Text("DNG unavailable — \(camera.liveBlendDNGSupport.reason ?? "not supported on this camera source"). Shoots fall back to JPEG.")
+                        }
                     }
                 }
 

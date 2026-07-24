@@ -154,36 +154,11 @@ struct SettingsView: View {
                     .tint(.green)
             }
 
-            LLRow(
-                title: "Live Blend output",
-                subtitle: "DNG keeps white balance and colour temperature adjustable in post — for day-to-night and mixed-light work. Needs a RAW-capable camera (iPhone/iPad); other sources fall back to Standard."
-            ) {
-                Menu {
-                    Button {
-                        model.liveBlendOutputFormat = .standard
-                    } label: {
-                        if model.liveBlendOutputFormat == .standard {
-                            Label("Standard", systemImage: "checkmark")
-                        } else {
-                            Text("Standard")
-                        }
-                    }
-                    Button {
-                        model.liveBlendOutputFormat = .dng
-                    } label: {
-                        if model.liveBlendOutputFormat == .dng {
-                            Label("DNG · when supported", systemImage: "checkmark")
-                        } else {
-                            Text("DNG · when supported")
-                        }
-                    }
-                } label: {
-                    menuValueLabel(model.liveBlendOutputFormat == .dng ? "DNG" : "Standard")
-                }
-            }
-
+            // The JPEG/DNG output choice lives in the capture screen's
+            // format sheet with the other per-shoot dials; these rows are
+            // the advanced DNG capture experiments, shown once DNG is on.
             #if os(iOS)
-            if model.liveBlendOutputFormat == .dng {
+            if model.intervalOutputFormat == .dng {
                 LLRow(
                     title: "DNG bracketed RAW",
                     subtitle: "Runs of back-to-back sensor frames per request — the tightest spacing possible, and the benchmark's most reliable mechanism. Falls back to single shots if the camera declines."

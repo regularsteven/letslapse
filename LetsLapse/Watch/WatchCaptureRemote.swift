@@ -227,7 +227,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // so reflect what we sent immediately and let the authoritative
             // state converge.
             if let token = sent[WatchMessageKey.captureMode] as? String,
-               let mode = CaptureMode(rawValue: token) {
+               let mode = CaptureMode(token: token) {
                 captureMode = mode
             }
             playHaptic(.click)
@@ -322,8 +322,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         if let cameraActive = payload[WatchMessageKey.cameraActive] as? Bool {
             isCameraActive = cameraActive
         }
+        // token-tolerant: a phone build from before the mode merge may still
+        // mirror "Live Blend", which resolves to Interval.
         if let token = payload[WatchMessageKey.captureMode] as? String,
-           let mode = CaptureMode(rawValue: token) {
+           let mode = CaptureMode(token: token) {
             captureMode = mode
         }
         if let seconds = payload[WatchMessageKey.intervalSeconds] as? Double, seconds > 0 {

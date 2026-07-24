@@ -15,7 +15,7 @@ struct WatchControlView: View {
     // Mirrors of the phone's option lists; the phone rejects anything else.
     private let intervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
     private let frameOptions: [(frames: Int, label: String)] = [
-        (1, "Untouched"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
+        (1, "No blending"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
     ]
 
     var body: some View {
@@ -55,10 +55,8 @@ struct WatchControlView: View {
 
                 modeSelector
 
-                if remote.captureMode != .video {
+                if remote.captureMode == .interval {
                     intervalRow
-                }
-                if remote.captureMode == .liveBlend {
                     framesRow
                 }
 
@@ -89,8 +87,8 @@ struct WatchControlView: View {
         .navigationTitle("LetsLapse")
     }
 
-    /// The three capture modes as tappable rows — same vocabulary as the
-    /// phone's mode buttons, selected row marked in amber.
+    /// The capture modes as tappable rows — same vocabulary as the phone's
+    /// mode buttons, selected row marked in amber.
     private var modeSelector: some View {
         VStack(spacing: 4) {
             ForEach(CaptureMode.allCases) { mode in
@@ -167,7 +165,7 @@ struct WatchControlView: View {
                 Text("Blend")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text("\(remote.framesPerBlend) frames")
+                Text(remote.framesPerBlend == 1 ? "Off" : "\(remote.framesPerBlend) frames")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(amber)
             }
@@ -185,7 +183,7 @@ struct WatchControlView: View {
                     showFramesPicker = false
                 } label: {
                     HStack {
-                        Text("\(option.frames) · \(option.label)")
+                        Text(option.frames == 1 ? option.label : "\(option.frames) · \(option.label)")
                         Spacer()
                         if remote.framesPerBlend == option.frames {
                             Image(systemName: "checkmark")
@@ -420,10 +418,10 @@ struct WatchControlView: View {
         remote.captureFPS > 0 ? "\(remote.captureFPS)" : "base"
     }
 
-    /// The interval/Live Blend counterpart of the burst toggle's slot: how
-    /// many outputs have landed so far.
+    /// Interval's counterpart of the burst toggle's slot: how many outputs
+    /// have landed so far.
     private var captureCountBadge: some View {
-        Text("\(remote.captureCount) \(remote.captureMode == .liveBlend ? "blends" : "photos")")
+        Text("\(remote.captureCount) \(remote.framesPerBlend > 1 ? "blends" : "photos")")
             .font(.system(size: 13, weight: .bold).monospacedDigit())
             .foregroundStyle(amber)
             .lineLimit(1)
@@ -434,7 +432,7 @@ struct WatchControlView: View {
 
     private var runSettingsLine: String {
         let every = "every \(intervalLabel(remote.intervalSeconds))"
-        return remote.captureMode == .liveBlend
+        return remote.framesPerBlend > 1
             ? "\(every) · \(remote.framesPerBlend) fr"
             : every
     }

@@ -22,7 +22,9 @@ final class AppModel: ObservableObject {
         static let defaultSpeed = "letslapse.defaultSpeed"
         static let scratchFrameFormat = "letslapse.scratchFrameFormat"
         static let keepExtractedFrames = "letslapse.keepExtractedFrames"
-        static let liveBlendOutputFormat = "letslapse.liveBlendOutputFormat"
+        /// Key string keeps the pre-merge "liveBlend" name existing installs
+        /// persisted under.
+        static let intervalOutputFormat = "letslapse.liveBlendOutputFormat"
         static let liveBlendResponsiveCapture = "letslapse.liveBlendResponsiveCapture"
         static let liveBlendBurstCapture = "letslapse.liveBlendBurstCapture"
         static let liveBlendBracketedRAW = "letslapse.liveBlendBracketedRAW"
@@ -410,14 +412,15 @@ final class AppModel: ObservableObject {
     ) ?? .png {
         didSet { UserDefaults.standard.set(scratchFrameFormat.rawValue, forKey: DefaultsKey.scratchFrameFormat) }
     }
-    /// Live Blend output preference: Standard JPEG everywhere, or blended
-    /// DNG where the capture source provides Bayer RAW (iPhone/iPad
-    /// cameras). Unsupported sources fall back to Standard with a visible
-    /// notice before recording.
-    @Published var liveBlendOutputFormat: LiveBlendOutputFormat = LiveBlendOutputFormat(
-        rawValue: UserDefaults.standard.string(forKey: DefaultsKey.liveBlendOutputFormat) ?? ""
-    ) ?? .standard {
-        didSet { UserDefaults.standard.set(liveBlendOutputFormat.rawValue, forKey: DefaultsKey.liveBlendOutputFormat) }
+    /// Interval output preference: JPEG everywhere, or DNG where the
+    /// capture source provides Bayer RAW (iPhone/iPad cameras). Unsupported
+    /// sources fall back to JPEG with a visible notice before recording.
+    /// Set from the capture format sheet; applies whether or not frames are
+    /// blended.
+    @Published var intervalOutputFormat: IntervalOutputFormat = IntervalOutputFormat(
+        rawValue: UserDefaults.standard.string(forKey: DefaultsKey.intervalOutputFormat) ?? ""
+    ) ?? .jpeg {
+        didSet { UserDefaults.standard.set(intervalOutputFormat.rawValue, forKey: DefaultsKey.intervalOutputFormat) }
     }
     /// DNG capture experiments — A/B toggles for chasing tighter frame
     /// density (denser samples read as blur; sparse ones read as ghosts).

@@ -535,9 +535,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private func processWindow(frames: [Data], entry: inout LiveBlendSessionLog.OutputEntry) -> URL? {
         let referenceData = frames.first
 
-        // "1 · Untouched": one RAW per interval, saved as Apple's original
-        // DNG byte-for-byte — the ground-truth capture mode for comparing
-        // against blended output (and a legitimate holy-grail baseline).
+        // Blending off: one RAW per interval, saved as Apple's original
+        // DNG byte-for-byte — untouched originals, the ground truth for
+        // comparing against blended output (and a legitimate holy-grail
+        // baseline).
         if configuration.framesPerBlend == 1, let referenceData {
             let url = configuration.outputDirectory
                 .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
