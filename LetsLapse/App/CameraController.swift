@@ -143,10 +143,6 @@ final class CameraController: NSObject, ObservableObject {
     @Published var lockedShutterSeconds: Double = 0
     @Published var lockedLensPosition: Float = 0.5
     @Published var isoRange: ClosedRange<Float> = 25...3200
-    /// Manual 180° flip for upside-down mounts, on top of whatever orientation
-    /// the interface/device implies. Session-only (resets each launch) so a
-    /// left-on flip can't silently invert a later handheld shot.
-    @Published var flipOrientation180 = false
     // Live Blend engine — Interval mode's blend/DNG pipeline.
     @Published var isLiveBlendRunning = false
     @Published var liveBlendOutputCount = 0 {
@@ -474,6 +470,64 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Photo-aspect preview (armed DNG framing)
+
+    /// The preset to restore when the photo-aspect framing preview disarms.
+    /// Non-nil exactly while the preview is armed. sessionQueue-confined.
+    private var photoAspectPreviousPreset: AVCaptureSession.Preset?
+
+    /// Presents the sensor's true capture frame while a DNG interval shoot
+    /// is armed: DNG captures the full 4:3 sensor, so framing switches the
+    /// session to the photo configuration (and back on disarm) rather than
+    /// letting a 16:9 video letterbox promise framing the file won't have.
+    /// No-op while any capture is running — the DNG run flips the preset
+    /// itself, and its restore leaves the armed configuration in place.
+    func setPhotoAspectPreview(_ active: Bool) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            if active {
+                guard self.photoAspectPreviousPreset == nil,
+                      self.deviceSupportsBayerRAW() else { return }
+                self.photoAspectPreviousPreset = self.session.sessionPreset
+                self.applyPhotoAspectConfiguration()
+            } else {
+                guard let previous = self.photoAspectPreviousPreset else { return }
+                self.photoAspectPreviousPreset = nil
+                self.session.beginConfiguration()
+                self.session.sessionPreset = previous
+                self.session.commitConfiguration()
+                _ = self.applyCaptureFormat(resolution: self.selectedResolution, fps: self.selectedFrameRate)
+                self.publishFormat()
+            }
+        }
+    }
+
+    /// sessionQueue-confined: flips the session to the photo configuration
+    /// and re-asserts any manual exposure lock (a preset change resets the
+    /// device to auto, like any format switch).
+    private func applyPhotoAspectConfiguration() {
+        session.beginConfiguration()
+        session.sessionPreset = .photo
+        session.commitConfiguration()
+        if let device = videoDevice, (try? device.lockForConfiguration()) != nil {
+            reassertExposureLock(on: device)
+            device.unlockForConfiguration()
+        }
+        publishFormat()
+    }
+
+    /// Lens (and resolution) changes re-pin the 16:9 video format as a side
+    /// effect; when the photo-aspect preview is armed it must win again
+    /// afterwards — or disarm honestly if the new device cannot do RAW.
+    private func reassertPhotoAspectPreviewIfArmed() {
+        guard photoAspectPreviousPreset != nil else { return }
+        if deviceSupportsBayerRAW() {
+            applyPhotoAspectConfiguration()
+        } else {
+            photoAspectPreviousPreset = nil
+        }
+    }
+
     /// Custom rate last folded into the rate menus, so a Settings change made
     /// while the capture screen was away is picked up on the next start().
     private var lastAppliedCustomFrameRate = RecordingSettingsStore.customFrameRate
@@ -534,6 +588,7 @@ final class CameraController: NSObject, ObservableObject {
             self.refreshCaptureOptions()
             self.applyVideoStabilization()
             self.publishFormat()
+            self.reassertPhotoAspectPreviewIfArmed()
         }
     }
 
@@ -567,6 +622,7 @@ final class CameraController: NSObject, ObservableObject {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             self.refreshCaptureOptions(preferredResolution: resolution)
             self.publishFormat()
+            self.reassertPhotoAspectPreviewIfArmed()
         }
     }
 
@@ -882,9 +938,13 @@ final class CameraController: NSObject, ObservableObject {
             stabilizationStatus = videoStabilizationRequested ? "Stabilization Auto" : "Stabilization Off"
         }
         let line = "Capture \(dims.width)×\(dims.height) @ \(fps) fps · \(stabilizationStatus)"
+        let preview = CaptureResolution(width: dims.width, height: dims.height)
         DispatchQueue.main.async {
             self.videoStabilizationStatus = stabilizationStatus
             self.activeFormatDescription = line
+            if self.previewDimensions != preview {
+                self.previewDimensions = preview
+            }
         }
     }
 
@@ -913,11 +973,10 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     #if os(iOS)
-    /// The orientation to bake into recordings/stills right now: the
-    /// interface/device-derived orientation, plus the manual upside-down flip.
+    /// The orientation to bake into recordings/stills right now, derived
+    /// from the interface orientation.
     private func captureOrientation() -> AVCaptureVideoOrientation {
-        let base = currentCaptureOrientation()
-        return flipOrientation180 ? flipped180(base) : base
+        currentCaptureOrientation()
     }
     #endif
 
@@ -1662,6 +1721,10 @@ final class CameraController: NSObject, ObservableObject {
             return
         }
         dngRunPreviousPreset = previousPreset
+        // The preview now shows the 4:3 photo feed; keep the published
+        // letterbox dimensions honest even when the run started without the
+        // armed framing preview.
+        publishFormat()
         if let dimensions = videoDevice?.activeFormat.supportedMaxPhotoDimensions.last {
             photoOutput.maxPhotoDimensions = dimensions
         }
@@ -1775,7 +1838,12 @@ final class CameraController: NSObject, ObservableObject {
         session.beginConfiguration()
         session.sessionPreset = previousPreset
         session.commitConfiguration()
-        applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        // While the photo-aspect preview is armed the run started from (and
+        // returns to) the photo configuration — re-pinning the video format
+        // would snap the viewfinder back to 16:9 after every DNG shoot.
+        if photoAspectPreviousPreset == nil {
+            _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        }
         publishFormat()
     }
     #endif
@@ -1834,10 +1902,10 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
 }
 
 /// Map an interface orientation to a capture orientation. Straight case-for-case
-/// (UIInterfaceOrientation and AVCaptureVideoOrientation share raw values for the
-/// same physical orientation). Upside-down mounting is handled by the manual
-/// Flip 180° control, not by sniffing the physical device orientation — iPhones
-/// never expose an upside-down interface, so that path was unreliable.
+/// (UIInterfaceOrientation and AVCaptureVideoOrientation share raw values for
+/// the same physical orientation). Deliberately interface-driven — sniffing the
+/// physical device orientation was unreliable (iPhones never expose an
+/// upside-down interface).
 func effectiveCaptureOrientation(interface: UIInterfaceOrientation) -> AVCaptureVideoOrientation {
     switch interface {
     case .landscapeLeft:
@@ -1851,16 +1919,6 @@ func effectiveCaptureOrientation(interface: UIInterfaceOrientation) -> AVCapture
     }
 }
 
-/// Rotate an orientation 180° — the manual upside-down-mount flip.
-func flipped180(_ orientation: AVCaptureVideoOrientation) -> AVCaptureVideoOrientation {
-    switch orientation {
-    case .portrait: return .portraitUpsideDown
-    case .portraitUpsideDown: return .portrait
-    case .landscapeLeft: return .landscapeRight
-    case .landscapeRight: return .landscapeLeft
-    @unknown default: return orientation
-    }
-}
 #else
 func currentCaptureOrientation() -> AVCaptureVideoOrientation {
     .landscapeRight

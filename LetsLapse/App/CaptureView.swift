@@ -38,6 +38,16 @@ struct CaptureView: View {
     @State private var showGrid = false
     @State private var activeTarget: CaptureTargetPlan?
     @State private var targetReached = false
+    /// Rolling reference scale for the lens pinch — each threshold crossing
+    /// steps one lens and re-anchors here, so a long pinch walks the range.
+    @State private var pinchBaseline: CGFloat = 1
+    /// On-phone shutter delay: tapping record waits 2 s before starting.
+    /// Watch remote starts are deliberately immediate — the wrist is already
+    /// hands-off the phone.
+    @State private var shutterDelayEnabled = false
+    /// Deadline of a pending delayed start; nil when none. Tapping the
+    /// shutter while pending cancels instead of stacking starts.
+    @State private var delayedStartAt: Date?
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(intent: CaptureIntent = CaptureIntent()) {
@@ -84,11 +94,6 @@ struct CaptureView: View {
                         portraitLayout(in: geometry.size)
                     }
                 }
-                // Flip 180° turns an upside-down mount into plain inverted
-                // portrait: the chrome rotates a half-turn to match the feed
-                // (which the preview connection already flips), so buttons and
-                // image read the right way up on the inverted phone.
-                .rotationEffect(.degrees(camera.flipOrientation180 ? 180 : 0))
             }
         }
         .background(Color.black.ignoresSafeArea())
@@ -117,6 +122,10 @@ struct CaptureView: View {
         .onReceive(tick) { date in
             now = date
             checkTarget()
+            if let deadline = delayedStartAt, date >= deadline {
+                delayedStartAt = nil
+                shutterAction()
+            }
         }
         // Persist the capture setup as it changes, from any entry path
         // (on-screen pickers, Watch commands). On a mode switch, swap in
@@ -124,6 +133,7 @@ struct CaptureView: View {
         // as its first.
         .onChange(of: mode) { newMode in
             RecordingSettingsStore.save(captureMode: newMode)
+            updateAspectPreview()
             guard RecordingSettingsStore.isEnabled else { return }
             if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
                 interval = seconds
@@ -131,6 +141,10 @@ struct CaptureView: View {
                 RecordingSettingsStore.save(intervalSeconds: interval, for: newMode)
             }
         }
+        // The viewfinder must show what a DNG shoot will capture — the full
+        // 4:3 sensor — so arming/disarming DNG re-configures the preview.
+        .onChange(of: model.intervalOutputFormat) { _ in updateAspectPreview() }
+        .onChange(of: camera.liveBlendDNGSupport) { _ in updateAspectPreview() }
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
         }
@@ -174,7 +188,12 @@ struct CaptureView: View {
             updateIdleTimer()
             updateWatchRecordingState()
         }
-        .onChange(of: mode) { _ in updateWatchModeContext() }
+        .onChange(of: mode) { _ in
+            updateWatchModeContext()
+            updateWatchContext()
+        }
+        .onChange(of: model.intervalOutputFormat) { _ in updateWatchContext() }
+        .onChange(of: camera.liveBlendDNGSupport) { _ in updateWatchContext() }
         .onChange(of: interval) { _ in updateWatchModeContext() }
         .onChange(of: framesPerBlend) { _ in updateWatchModeContext() }
         .onChange(of: camera.photoCount) { _ in updateWatchModeContext() }
@@ -250,7 +269,20 @@ struct CaptureView: View {
         camera.setVideoOrientation(orientation)
         #endif
         camera.start()
+        updateAspectPreview()
         framingStartedAt = Date()
+    }
+
+    /// True when the next Interval shoot will capture DNG — the session
+    /// should be framing on the full 4:3 sensor, not the 16:9 video format.
+    private var wantsPhotoAspectPreview: Bool {
+        mode == .interval
+            && model.intervalOutputFormat == .dng
+            && camera.liveBlendDNGSupport.isSupported
+    }
+
+    private func updateAspectPreview() {
+        camera.setPhotoAspectPreview(wantsPhotoAspectPreview)
     }
 
     private func cleanUpOnDisappear() {
@@ -325,14 +357,14 @@ struct CaptureView: View {
 
             HStack {
                 leadingControl
-                    .frame(width: 64)
+                    .frame(width: 96)
                 Spacer()
                 shutterButton
                 Spacer()
                 trailingControl
-                    .frame(width: 64)
+                    .frame(width: 96)
             }
-            .padding(.horizontal, 36)
+            .padding(.horizontal, 24)
         }
     }
 
@@ -350,14 +382,7 @@ struct CaptureView: View {
                     }
                 }
                 Spacer()
-                VStack(spacing: 8) {
-                    formatPill
-                    #if os(iOS)
-                    if mode == .video {
-                        landscapeExposureControl
-                    }
-                    #endif
-                }
+                formatPill
                 Spacer()
                 if !isCapturing {
                     zoomChips
@@ -380,7 +405,8 @@ struct CaptureView: View {
                     .padding(10)
                 }
 
-            // Right rail: mode + shutter
+            // Right rail: mode + shutter, exposure lock below (the burst/
+            // marker trigger takes that slot while recording).
             VStack {
                 landscapeModeToggle
 
@@ -391,7 +417,7 @@ struct CaptureView: View {
                 if camera.isRecording {
                     leadingControl
                 } else {
-                    projectThumbnailButton
+                    landscapeExposureControl
                 }
             }
             .padding(.vertical, 16)
@@ -452,6 +478,8 @@ struct CaptureView: View {
 
     /// The viewfinder region. Transparent — the live preview shows through from
     /// the persistent layer behind `body`'s ZStack; only the grid draws here.
+    /// It also hosts the framing gestures: swipe between modes, pinch through
+    /// the lenses.
     private var viewfinder: some View {
         GeometryReader { geometry in
             let fitted = aspectFitSize(
@@ -468,10 +496,60 @@ struct CaptureView: View {
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
+        .contentShape(Rectangle())
+        .simultaneousGesture(modeSwipeGesture)
+        .simultaneousGesture(lensPinchGesture)
+    }
+
+    /// Swipe across the viewfinder to change modes, matching the mode row's
+    /// order (INTERVAL · VIDEO): swipe left moves right along the row, swipe
+    /// right moves left. The 40 pt floor keeps taps and menu touches free.
+    private var modeSwipeGesture: some Gesture {
+        DragGesture(minimumDistance: 40)
+            .onEnded { value in
+                guard !isCapturing else { return }
+                let dx = value.translation.width
+                let dy = value.translation.height
+                guard abs(dx) > abs(dy) * 1.5, abs(dx) > 60 else { return }
+                mode = dx < 0 ? .video : .interval
+            }
+    }
+
+    /// Pinch steps through the lenses one stop per threshold crossed:
+    /// pinch in walks .5× → 1× → 3×, pinch out walks back, stopping at
+    /// the tight and wide ends.
+    private var lensPinchGesture: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                guard !isCapturing, camera.availableLenses.count > 1 else { return }
+                let threshold: CGFloat = 1.35
+                while value / pinchBaseline > threshold {
+                    pinchBaseline *= threshold
+                    stepLens(tighter: false)
+                }
+                while value / pinchBaseline < 1 / threshold {
+                    pinchBaseline /= threshold
+                    stepLens(tighter: true)
+                }
+            }
+            .onEnded { _ in
+                pinchBaseline = 1
+            }
+    }
+
+    private func stepLens(tighter: Bool) {
+        let lenses = camera.availableLenses
+        guard let index = lenses.firstIndex(of: camera.selectedLens) else { return }
+        let next = tighter ? index + 1 : index - 1
+        guard lenses.indices.contains(next) else { return }
+        camera.selectedLens = lenses[next]
+        camera.selectLens(lenses[next])
     }
 
     private var previewAspectRatio: CGFloat {
-        let resolution = camera.selectedResolution
+        // The letterbox follows what the sensor is actually delivering
+        // (4:3 while a DNG shoot is armed), not the video-format selection.
+        let resolution = camera.previewDimensions ?? camera.selectedResolution
         let width = CGFloat(max(resolution.width, 1))
         let height = CGFloat(max(resolution.height, 1))
         return orientation == .portrait || orientation == .portraitUpsideDown
@@ -546,10 +624,18 @@ struct CaptureView: View {
 
     /// Video reads "2160p · 30"; Interval drops the frame rate — stills
     /// have no base rate, the pill's trailing token carries the format.
+    /// With DNG armed the shoot captures the full sensor, so the pill
+    /// presents the sensor frame ("12MP 4:3"), not the video format.
     private var formatSummary: String {
-        mode == .video
-            ? "\(camera.selectedResolution.label) · \(camera.selectedFrameRate)"
-            : camera.selectedResolution.label
+        if mode == .video {
+            return "\(camera.selectedResolution.label) · \(camera.selectedFrameRate)"
+        }
+        if model.intervalOutputFormat == .dng,
+           camera.liveBlendDNGSupport.isSupported,
+           let sensor = camera.liveBlendDNGSupport.sensorDimensions {
+            return sensorSummaryLabel(sensor)
+        }
+        return camera.selectedResolution.label
     }
 
     // MARK: - Speed chips (idle)
@@ -728,10 +814,9 @@ struct CaptureView: View {
                 blendDiagnosticsReadout
             }
         } else {
-            VStack(spacing: 6) {
-                intervalPickerRow
-                intervalOutputStatusLine
-            }
+            // The output format lives in the format pill and its sheet — no
+            // duplicate copy line here.
+            intervalPickerRow
         }
     }
 
@@ -746,16 +831,10 @@ struct CaptureView: View {
                 blendDiagnosticsReadout
             }
         } else {
-            VStack(alignment: .leading, spacing: 4) {
-                intervalPickerRow
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(Color.black.opacity(0.5), in: Capsule())
-                intervalOutputStatusLine
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 4)
-                    .background(Color.black.opacity(0.5), in: Capsule())
-            }
+            intervalPickerRow
+                .padding(.horizontal, 12)
+                .padding(.vertical, 5)
+                .background(Color.black.opacity(0.5), in: Capsule())
         }
     }
 
@@ -880,40 +959,6 @@ struct CaptureView: View {
         .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
     }
 
-    /// §Output status before recording starts: the user must know whether
-    /// the shoot will be gradeable DNG or baked JPEG, and why.
-    @ViewBuilder
-    private var intervalOutputStatusLine: some View {
-        let wantsDNG = model.intervalOutputFormat == .dng
-        let support = camera.liveBlendDNGSupport
-        Group {
-            if wantsDNG && support.isSupported {
-                if framesPerBlend == 1 {
-                    Text("Output: DNG · untouched originals, no blending")
-                        .foregroundStyle(LL.amber)
-                } else if interval < 2 {
-                    // Capture bursts finish in well under a second; the
-                    // constraint is the ~1-2s blend+write per output, which
-                    // trails intervals shorter than that and pauses shots.
-                    Text("Output: DNG · blending takes ~1–2s per interval — expect reduced frames at this spacing")
-                        .foregroundStyle(LL.amber)
-                } else {
-                    Text("Output: DNG")
-                        .foregroundStyle(LL.amber)
-                }
-            } else if wantsDNG {
-                Text("Output: JPEG · DNG unavailable — \(support.reason ?? "not supported on this camera source")")
-                    .foregroundStyle(.white.opacity(0.6))
-            } else {
-                Text("Output: JPEG")
-                    .foregroundStyle(.white.opacity(0.45))
-            }
-        }
-        .font(.system(size: 10.5, weight: .medium))
-        .lineLimit(2)
-        .multilineTextAlignment(.leading)
-    }
-
     /// Compact pipeline readout while the blend engine runs; the plain photo
     /// timer produces no diagnostics, so plain-JPEG shoots never see it.
     @ViewBuilder
@@ -1004,7 +1049,7 @@ struct CaptureView: View {
     // MARK: - Shutter row
 
     private var shutterButton: some View {
-        Button(action: shutterAction) {
+        Button(action: shutterTapped) {
             ZStack {
                 Circle()
                     .stroke(.white, lineWidth: 4)
@@ -1026,6 +1071,11 @@ struct CaptureView: View {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 60, height: 60)
+                    if let label = shutterDelayLabel {
+                        Text(label)
+                            .font(.system(size: 17, weight: .bold).monospacedDigit())
+                            .foregroundStyle(.white)
+                    }
                 }
             }
             .contentShape(Circle())
@@ -1033,6 +1083,29 @@ struct CaptureView: View {
         .buttonStyle(.plain)
         .disabled(camera.isAuthorized != true)
         .accessibilityLabel(isCapturing ? "Stop" : "Record")
+    }
+
+    /// "2s" while the delay is armed; the live countdown once tapped.
+    private var shutterDelayLabel: String? {
+        if let deadline = delayedStartAt {
+            return "\(max(1, Int(deadline.timeIntervalSince(now).rounded(.up))))"
+        }
+        return shutterDelayEnabled ? "2s" : nil
+    }
+
+    /// On-phone shutter taps honor the 2 s delay when armed (and a tap
+    /// during the countdown cancels it). Stops are always immediate, and the
+    /// Watch remote calls `shutterAction()` directly — no delay on the wrist.
+    private func shutterTapped() {
+        if delayedStartAt != nil {
+            delayedStartAt = nil
+            return
+        }
+        if !isCapturing && shutterDelayEnabled {
+            delayedStartAt = Date().addingTimeInterval(2)
+            return
+        }
+        shutterAction()
     }
 
     private var isCapturing: Bool {
@@ -1084,7 +1157,7 @@ struct CaptureView: View {
     }
 
     /// Left of the shutter: the burst/marker trigger while recording,
-    /// the latest project's thumbnail otherwise.
+    /// the exposure lock otherwise.
     @ViewBuilder
     private var leadingControl: some View {
         if camera.isRecording {
@@ -1111,34 +1184,32 @@ struct CaptureView: View {
             .buttonStyle(.plain)
             .accessibilityLabel((camera.activeSequenceMode ?? sequenceMode) == .ramp ? "Toggle speed burst" : "Toggle marker")
         } else {
-            projectThumbnailButton
+            exposureLockCircle
         }
     }
 
-    private var projectThumbnailButton: some View {
-        Group {
-            if let latest = model.captures.first {
-                Button {
-                    camera.stop()
-                    dismiss()
-                    model.requestedProjectDetailID = latest.id
-                } label: {
-                    ProjectThumbnailView(url: model.mediaURL(for: latest), kind: model.mediaKind(for: latest))
-                        .frame(width: 44, height: 44)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .stroke(.white.opacity(0.25), lineWidth: 1)
-                        )
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Open latest project")
-            } else {
-                Color.clear.frame(width: 44, height: 44)
-            }
+    /// Circular AE/AF lock, sized for the shutter-row slots and the
+    /// landscape rail. The locked readout and fine ISO/focus sliders live in
+    /// `exposurePanel` (portrait) once locked.
+    private var exposureLockCircle: some View {
+        Button {
+            toggleExposureLock()
+        } label: {
+            Image(systemName: camera.isExposureLocked ? "lock.fill" : "lock.open")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(camera.isExposureLocked ? .black : .white)
+                .frame(width: 44, height: 44)
+                .background(
+                    camera.isExposureLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
+                    in: Circle()
+                )
         }
+        .buttonStyle(.plain)
+        .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
     }
 
-    /// Right of the shutter: grid toggle idle, interval/marker count while busy.
+    /// Right of the shutter: delay + grid toggles idle, the interval/marker
+    /// count while recording.
     @ViewBuilder
     private var trailingControl: some View {
         if camera.isRecording {
@@ -1149,17 +1220,34 @@ struct CaptureView: View {
                 .frame(width: 44, height: 44)
                 .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
         } else {
-            Button {
-                showGrid.toggle()
-            } label: {
-                Image(systemName: showGrid ? "grid.circle.fill" : "grid.circle")
-                    .font(.system(size: 20))
-                    .foregroundStyle(showGrid ? LL.amber : .white)
-                    .frame(width: 44, height: 44)
-                    .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+            HStack(spacing: 8) {
+                Button {
+                    shutterDelayEnabled.toggle()
+                    if !shutterDelayEnabled {
+                        delayedStartAt = nil
+                    }
+                } label: {
+                    Image(systemName: "timer")
+                        .font(.system(size: 18))
+                        .foregroundStyle(shutterDelayEnabled ? LL.amber : .white)
+                        .frame(width: 44, height: 44)
+                        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(shutterDelayEnabled ? "Turn off 2 second delay" : "Turn on 2 second delay")
+
+                Button {
+                    showGrid.toggle()
+                } label: {
+                    Image(systemName: showGrid ? "grid.circle.fill" : "grid.circle")
+                        .font(.system(size: 20))
+                        .foregroundStyle(showGrid ? LL.amber : .white)
+                        .frame(width: 44, height: 44)
+                        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Toggle grid")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Toggle grid")
         }
     }
 
@@ -1230,78 +1318,13 @@ struct CaptureView: View {
         return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
     }
 
-    // MARK: - Manual exposure (iOS only)
+    // MARK: - Manual exposure
 
-    #if os(iOS)
-    /// Portrait letterbox control: a tap-to-lock AE/AF pill, and — once locked —
-    /// ISO and focus sliders. The viewfinder stays uncovered above.
-    @ViewBuilder
-    private var exposurePanel: some View {
-        if mode == .video {
-            VStack(spacing: 10) {
-                HStack(spacing: 10) {
-                    exposureLockButton
-                    if camera.isExposureLocked {
-                        Text(exposureReadout)
-                            .font(.system(size: 12, design: .monospaced))
-                            .foregroundStyle(LL.amber)
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.7)
-                    }
-                    Spacer()
-                }
-
-                if camera.isExposureLocked {
-                    if isoSliderRange.lowerBound < isoSliderRange.upperBound {
-                        exposureSlider(icon: "sun.max.fill", value: isoBinding, range: isoSliderRange)
-                    }
-                    exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
-                }
-            }
-            .padding(.horizontal, 16)
-        }
-    }
-
-    private var exposureLockButton: some View {
-        Button {
-            toggleExposureLock()
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: camera.isExposureLocked ? "lock.fill" : "lock.open")
-                    .font(.system(size: 12, weight: .semibold))
-                Text(camera.isExposureLocked ? "AE/AF Lock" : "Lock AE/AF")
-                    .font(.system(size: 12.5, weight: .semibold))
-            }
-            .foregroundStyle(camera.isExposureLocked ? .black : .white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 7)
-            .background(
-                camera.isExposureLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
-                in: Capsule()
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
-    }
-
-    /// Compact landscape-rail variant: lock toggle plus the frozen readout.
+    /// Landscape-rail variant: the lock circle plus the frozen readout.
     /// Fine ISO/focus tuning lives in portrait or on the Watch crown.
     private var landscapeExposureControl: some View {
         VStack(spacing: 6) {
-            Button {
-                toggleExposureLock()
-            } label: {
-                Image(systemName: camera.isExposureLocked ? "lock.fill" : "lock.open")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(camera.isExposureLocked ? .black : .white)
-                    .frame(width: 40, height: 40)
-                    .background(
-                        camera.isExposureLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
-                        in: Circle()
-                    )
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
+            exposureLockCircle
 
             if camera.isExposureLocked {
                 Text(exposureReadout)
@@ -1311,6 +1334,50 @@ struct CaptureView: View {
                     .minimumScaleFactor(0.6)
                     .frame(maxWidth: 96)
             }
+        }
+    }
+
+    private func toggleExposureLock() {
+        if camera.isExposureLocked {
+            camera.unlockExposureAndFocus()
+        } else {
+            camera.lockExposureAndFocus()
+        }
+    }
+
+    private var exposureReadout: String {
+        "ISO \(Int(camera.lockedISO.rounded())) · \(shutterText(camera.lockedShutterSeconds))"
+    }
+
+    private func shutterText(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "—" }
+        if seconds >= 1 { return String(format: "%.1fs", seconds) }
+        return "1/\(Int((1 / seconds).rounded()))"
+    }
+
+    #if os(iOS)
+    /// The locked-exposure readout and fine ISO/focus sliders, shown in any
+    /// mode once AE/AF is locked. The lock toggle itself is the circular
+    /// button beside the shutter (`exposureLockCircle`).
+    @ViewBuilder
+    private var exposurePanel: some View {
+        if camera.isExposureLocked {
+            VStack(spacing: 10) {
+                HStack {
+                    Text(exposureReadout)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(LL.amber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer()
+                }
+
+                if isoSliderRange.lowerBound < isoSliderRange.upperBound {
+                    exposureSlider(icon: "sun.max.fill", value: isoBinding, range: isoSliderRange)
+                }
+                exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+            }
+            .padding(.horizontal, 16)
         }
     }
 
@@ -1339,24 +1406,6 @@ struct CaptureView: View {
 
     private var focusBinding: Binding<Float> {
         Binding(get: { camera.lockedLensPosition }, set: { camera.setLensPosition($0) })
-    }
-
-    private func toggleExposureLock() {
-        if camera.isExposureLocked {
-            camera.unlockExposureAndFocus()
-        } else {
-            camera.lockExposureAndFocus()
-        }
-    }
-
-    private var exposureReadout: String {
-        "ISO \(Int(camera.lockedISO.rounded())) · \(shutterText(camera.lockedShutterSeconds))"
-    }
-
-    private func shutterText(_ seconds: Double) -> String {
-        guard seconds > 0 else { return "—" }
-        if seconds >= 1 { return String(format: "%.1fs", seconds) }
-        return "1/\(Int((1 / seconds).rounded()))"
     }
     #endif
 
@@ -1431,8 +1480,17 @@ struct CaptureView: View {
     }
 
     private func updateWatchContext() {
+        // Mirror the format pill: Video reads "2160p · 30 fps", Interval
+        // reads the still format ("12MP 4:3 · DNG" / "1080p · JPEG").
+        let formatLine: String
+        if mode == .interval {
+            let dngActive = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+            formatLine = "\(formatSummary) · \(dngActive ? "DNG" : "JPEG")"
+        } else {
+            formatLine = "\(camera.selectedResolution.label) · \(camera.selectedFrameRate) fps"
+        }
         watchRemote.setCaptureContext(
-            formatLine: "\(camera.selectedResolution.label) · \(camera.selectedFrameRate) fps",
+            formatLine: formatLine,
             captureFPS: camera.selectedFrameRate,
             plannedSpeed: model.constantWindow,
             outputFPS: model.outputFPS
@@ -1526,7 +1584,9 @@ private struct RuleOfThirdsGrid: View {
                     path.addLine(to: CGPoint(x: width, y: height * fraction))
                 }
             }
-            .stroke(.white.opacity(0.22), lineWidth: 0.5)
+            // Strong enough to read over bright scenes — the old 0.22
+            // hairline vanished in daylight.
+            .stroke(.white.opacity(0.9), lineWidth: 1)
         }
         .allowsHitTesting(false)
     }
@@ -1548,6 +1608,27 @@ private extension CameraController.Lens {
 
 // MARK: - Format sheet
 
+/// "12MP 4:3" — a sensor frame the way photographers read one.
+private func sensorSummaryLabel(_ sensor: CameraController.CaptureResolution) -> String {
+    let megapixels = Int((Double(sensor.width) * Double(sensor.height) / 1_000_000).rounded())
+    return "\(megapixels)MP \(sensorAspectLabel(sensor))"
+}
+
+private func sensorAspectLabel(_ sensor: CameraController.CaptureResolution) -> String {
+    let ratio = Double(sensor.width) / Double(max(sensor.height, 1))
+    // Sensors sometimes report a few extra readout pixels (4224×3024), so
+    // match the photographic ratios with tolerance before reducing exactly.
+    let common: [(label: String, value: Double)] = [
+        ("4:3", 4.0 / 3.0), ("3:2", 1.5), ("16:9", 16.0 / 9.0), ("1:1", 1.0),
+    ]
+    if let match = common.first(where: { abs($0.value - ratio) < 0.02 }) {
+        return match.label
+    }
+    func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
+    let divisor = max(gcd(Int(sensor.width), Int(sensor.height)), 1)
+    return "\(Int(sensor.width) / divisor):\(Int(sensor.height) / divisor)"
+}
+
 /// Advanced capture format, off the viewfinder entirely. Shows each mode
 /// its own dials: Video gets frame rates, stabilization and speed bursts;
 /// Interval gets the output format (JPEG or DNG) instead — stills have no
@@ -1562,53 +1643,9 @@ private struct FormatSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                if camera.availableLenses.count > 1 {
-                    Section("Lens") {
-                        Picker("Lens", selection: $camera.selectedLens) {
-                            ForEach(camera.availableLenses) { lens in
-                                Text(lens.label).tag(lens)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-                        .onChange(of: camera.selectedLens) { lens in
-                            camera.selectLens(lens)
-                        }
-                    }
-                }
-
-                Section {
-                    Picker("Resolution", selection: $camera.selectedResolution) {
-                        ForEach(camera.availableResolutions) { resolution in
-                            Text(mode == .video && resolution.isProRes ? "\(resolution.label) *" : resolution.label).tag(resolution)
-                        }
-                    }
-                    .onChange(of: camera.selectedResolution) { resolution in
-                        camera.selectResolution(resolution)
-                    }
-
-                    if mode == .video {
-                        Picker(sequenceMode == .ramp ? "Base frame rate" : "Frame rate", selection: $camera.selectedFrameRate) {
-                            ForEach(camera.availableFrameRates, id: \.self) { fps in
-                                Text("\(fps) fps").tag(fps)
-                            }
-                        }
-                        .onChange(of: camera.selectedFrameRate) { fps in
-                            camera.selectFrameRate(fps)
-                        }
-
-                        Toggle("Stabilization", isOn: Binding(
-                            get: { camera.isVideoStabilizationEnabled },
-                            set: { camera.setVideoStabilizationEnabled($0) }
-                        ))
-                    }
-                } header: {
-                    Text("Format")
-                } footer: {
-                    if mode == .video && camera.availableResolutions.contains(where: { $0.isProRes }) {
-                        Text("* ProRes — very large files")
-                    }
-                }
-
+                // Choices with downstream consequences come first: Interval's
+                // output format decides whether resolution is even selectable,
+                // and Video's stabilization filters the format list below it.
                 if mode == .interval {
                     Section {
                         Picker("Output", selection: $model.intervalOutputFormat) {
@@ -1620,7 +1657,8 @@ private struct FormatSheet: View {
                         Text("Output format")
                     } footer: {
                         if camera.liveBlendDNGSupport.isSupported {
-                            Text("DNG keeps the sensor's raw data — white balance and tone stay adjustable in post, for day-to-night and mixed-light work. Applies with or without blending. JPEG is smaller and ready to share.")
+                            let aspect = camera.liveBlendDNGSupport.sensorDimensions.map(sensorAspectLabel) ?? "4:3"
+                            Text("DNG keeps the sensor's raw data — white balance and tone stay adjustable in post, for day-to-night and mixed-light work. Applies with or without blending, and captures the sensor's full \(aspect) frame — the viewfinder shows that framing. JPEG is smaller and ready to share.")
                         } else {
                             Text("DNG unavailable — \(camera.liveBlendDNGSupport.reason ?? "not supported on this camera source"). Shoots fall back to JPEG.")
                         }
@@ -1628,11 +1666,52 @@ private struct FormatSheet: View {
                 }
 
                 Section {
-                    Toggle("Flip 180°", isOn: $camera.flipOrientation180)
+                    if mode == .video {
+                        Toggle("Stabilization", isOn: Binding(
+                            get: { camera.isVideoStabilizationEnabled },
+                            set: { camera.setVideoStabilizationEnabled($0) }
+                        ))
+                    }
+
+                    if mode == .interval && model.intervalOutputFormat == .dng,
+                       camera.liveBlendDNGSupport.isSupported,
+                       let sensor = camera.liveBlendDNGSupport.sensorDimensions {
+                        // DNG captures the sensor's full photo frame — the
+                        // video-format list doesn't apply, so state the real
+                        // resolution instead of offering a dead picker.
+                        HStack {
+                            Text("Resolution")
+                            Spacer()
+                            Text("\(sensor.width)×\(sensor.height) · \(sensorSummaryLabel(sensor))")
+                                .foregroundStyle(.secondary)
+                        }
+                    } else {
+                        Picker("Resolution", selection: $camera.selectedResolution) {
+                            ForEach(camera.availableResolutions) { resolution in
+                                Text(mode == .video && resolution.isProRes ? "\(resolution.label) *" : resolution.label).tag(resolution)
+                            }
+                        }
+                        .onChange(of: camera.selectedResolution) { resolution in
+                            camera.selectResolution(resolution)
+                        }
+                    }
+
+                    if mode == .video {
+                        Picker(sequenceMode == .ramp ? "Base frame rate" : "Frame rate", selection: $camera.selectedFrameRate) {
+                            ForEach(camera.availableFrameRates, id: \.self) { fps in
+                                Text("\(fps) fps").tag(fps)
+                            }
+                        }
+                        .onChange(of: camera.selectedFrameRate) { fps in
+                            camera.selectFrameRate(fps)
+                        }
+                    }
                 } header: {
-                    Text("Orientation")
+                    Text("Format")
                 } footer: {
-                    Text("For mounting the phone upside down. Rotates the preview and recording a half-turn on top of the automatic orientation.")
+                    if mode == .video && camera.availableResolutions.contains(where: { $0.isProRes }) {
+                        Text("* ProRes — very large files")
+                    }
                 }
 
                 if mode == .video {
@@ -1923,13 +2002,9 @@ struct CameraPreview: UIViewRepresentable {
     /// stabilization — reconfiguring those on the live session mid-rotation was
     /// stalling the capture source. Recording/photo orientation is set at
     /// capture start instead (see `startNextSegment` / `startInterval`).
-    ///
-    /// `effectiveCaptureOrientation` also flips the preview when the phone is
-    /// physically mounted upside down (which the UI can't detect on its own).
     private func applyOrientation(to view: PreviewView, from caller: String) {
         let interface = view.window?.windowScene?.interfaceOrientation
-        let base = interface.map(effectiveCaptureOrientation(interface:)) ?? orientation
-        let target = camera.flipOrientation180 ? flipped180(base) : base
+        let target = interface.map(effectiveCaptureOrientation(interface:)) ?? orientation
         let connection = view.previewLayer.connection
         LLog("applyOrientation(\(caller)) inWindow=\(view.window != nil) interface=\(interface?.rawValue ?? -1) device=\(UIDevice.current.orientation.rawValue) target=\(target.rawValue) conn=\(connection != nil) supported=\(connection?.isVideoOrientationSupported == true) current=\(connection?.videoOrientation.rawValue ?? -1)")
         if let connection,
