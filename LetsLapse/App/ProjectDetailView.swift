@@ -26,6 +26,14 @@ struct ProjectDetailView: View {
     @State private var confirmingPurge = false
     @State private var isPurging = false
 
+    /// Save-to-Photos progress, tracked separately for the photo asset and
+    /// the originals row so one export doesn't repaint the other.
+    private enum AssetSaveState: Equatable {
+        case idle, saving, saved, failed(String)
+    }
+    @State private var photoSaveState: AssetSaveState = .idle
+    @State private var originalsSaveState: AssetSaveState = .idle
+
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
     }
@@ -158,37 +166,49 @@ struct ProjectDetailView: View {
             VStack(spacing: 14) {
                 heroCard(for: capture)
 
-                if clipNames.count > 1 {
-                    sourceClipsSection(for: capture, clipNames: clipNames)
-                }
+                // A Photo-mode capture is ONE photo — no clip list, no
+                // versions, no re-processing. Just save, share, manage.
+                if capture.isPhotoCapture {
+                    photoActions(for: capture)
+                } else {
+                    if capture.kind == .video, !clipNames.isEmpty {
+                        sourceClipsSection(for: capture, clipNames: clipNames)
+                    }
+                    // Interval frames are stacking material, not clips — one
+                    // compact row stands in for the whole set, with the export
+                    // path to Photos the originals never had.
+                    if capture.kind == .photos {
+                        originalsSection(for: capture)
+                    }
 
-                Button {
-                    model.openCapture(capture)
-                } label: {
-                    Label("New version", systemImage: "plus")
-                }
-                .buttonStyle(LLPrimaryButtonStyle())
+                    Button {
+                        model.openCapture(capture)
+                    } label: {
+                        Label("New version", systemImage: "plus")
+                    }
+                    .buttonStyle(LLPrimaryButtonStyle())
 
-                VStack(alignment: .leading, spacing: 8) {
-                    LLSectionHeader(versions.isEmpty ? "Versions" : "Versions · \(versions.count)")
+                    VStack(alignment: .leading, spacing: 8) {
+                        LLSectionHeader(versions.isEmpty ? "Versions" : "Versions · \(versions.count)")
 
-                    if versions.isEmpty {
-                        Text("No versions yet — tap New version to make the first clip from this original.")
-                            .font(.system(size: 13))
-                            .foregroundStyle(.secondary)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(16)
-                            .llCard()
-                    } else {
-                        VStack(spacing: 0) {
-                            ForEach(versions) { blend in
-                                versionRow(blend)
-                                if blend.id != versions.last?.id {
-                                    Divider().padding(.leading, 84)
+                        if versions.isEmpty {
+                            Text("No versions yet — tap New version to make the first clip from this original.")
+                                .font(.system(size: 13))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(16)
+                                .llCard()
+                        } else {
+                            VStack(spacing: 0) {
+                                ForEach(versions) { blend in
+                                    versionRow(blend)
+                                    if blend.id != versions.last?.id {
+                                        Divider().padding(.leading, 84)
+                                    }
                                 }
                             }
+                            .llCard()
                         }
-                        .llCard()
                     }
                 }
 
@@ -245,7 +265,7 @@ struct ProjectDetailView: View {
 
     private func heroCard(for capture: AppModel.CaptureProject) -> some View {
         ZStack {
-            ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
+            ProjectThumbnailView(url: heroMediaURL(for: capture), kind: model.mediaKind(for: capture))
                 .frame(height: 210)
                 .frame(maxWidth: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
@@ -253,28 +273,37 @@ struct ProjectDetailView: View {
             Button {
                 playOriginal(capture)
             } label: {
-                Image(systemName: "play.fill")
+                Image(systemName: capture.isPhotoCapture
+                        ? "arrow.up.left.and.arrow.down.right" : "play.fill")
                     .font(.system(size: 19))
                     .foregroundStyle(.white)
                     .frame(width: 52, height: 52)
                     .background(.black.opacity(0.45), in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Play original")
+            .accessibilityLabel(capture.isPhotoCapture ? "View photo" : "Play original")
         }
         .overlay(alignment: .topLeading) {
             MediaBadge(text: originalBadge(for: capture))
                 .padding(12)
         }
         .overlay(alignment: .bottomTrailing) {
-            MediaBadge(text: formatBadge(for: capture))
-                .padding(12)
+            if let badge = formatBadge(for: capture) {
+                MediaBadge(text: badge)
+                    .padding(12)
+            }
         }
+    }
+
+    /// What the hero shows: for a photo capture, the photo itself; otherwise
+    /// the source media.
+    private func heroMediaURL(for capture: AppModel.CaptureProject) -> URL? {
+        capture.isPhotoCapture ? model.heroImageURL(for: capture) : model.mediaURL(for: capture)
     }
 
     private func sourceClipsSection(for capture: AppModel.CaptureProject, clipNames: [String]) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            LLSectionHeader("Source Clips · \(clipNames.count)")
+            LLSectionHeader(clipNames.count == 1 ? "Source Clip" : "Source Clips · \(clipNames.count)")
 
             VStack(spacing: 0) {
                 ForEach(Array(clipNames.enumerated()), id: \.element) { index, clipName in
@@ -288,6 +317,96 @@ struct ProjectDetailView: View {
             }
             .llCard()
         }
+    }
+
+    /// The one-photo action row: Save to Photos — the export path originals
+    /// never had — and the system share sheet.
+    private func photoActions(for capture: AppModel.CaptureProject) -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 10) {
+                #if os(iOS)
+                Button {
+                    savePhoto(capture)
+                } label: {
+                    switch photoSaveState {
+                    case .idle:
+                        Text("Save to Photos")
+                    case .saving:
+                        Text("Saving…")
+                    case .saved:
+                        Label("Saved to Photos", systemImage: "checkmark")
+                    case .failed:
+                        Text("Retry Save")
+                    }
+                }
+                .buttonStyle(LLPrimaryButtonStyle())
+                .disabled(photoSaveState == .saving || photoSaveState == .saved)
+                #endif
+
+                if let url = model.heroImageURL(for: capture) {
+                    ShareLink(item: url) {
+                        Text("Share")
+                            .font(.system(size: 15.5, weight: .bold))
+                            .foregroundStyle(LL.accent)
+                            .frame(maxWidth: .infinity, minHeight: 50)
+                    }
+                    .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .shadow(color: .black.opacity(0.05), radius: 1, y: 1)
+                }
+            }
+            if case .failed(let message) = photoSaveState {
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    /// Interval shoots: every source frame the camera kept, exportable to
+    /// Photos in one batched library change.
+    private func originalsSection(for capture: AppModel.CaptureProject) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LLSectionHeader("Originals")
+            VStack(spacing: 0) {
+                LLRow(
+                    title: "Source photos",
+                    subtitle: originalsSubtitle(for: capture),
+                    showsDivider: false
+                ) {
+                    originalsControl(for: capture)
+                }
+            }
+            .llCard()
+        }
+    }
+
+    private func originalsSubtitle(for capture: AppModel.CaptureProject) -> String {
+        if case .failed(let message) = originalsSaveState { return message }
+        return "\(capture.sourceMediaCount) photos"
+    }
+
+    @ViewBuilder private func originalsControl(for capture: AppModel.CaptureProject) -> some View {
+        #if os(iOS)
+        switch originalsSaveState {
+        case .saving:
+            ProgressView()
+                .controlSize(.small)
+        case .saved:
+            Label("Saved", systemImage: "checkmark")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+        case .idle, .failed:
+            Button(originalsSaveState == .idle ? "Save all to Photos" : "Retry") {
+                saveOriginals(capture)
+            }
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(LL.accent)
+            .buttonStyle(.plain)
+        }
+        #else
+        EmptyView()
+        #endif
     }
 
     private func versionRow(_ blend: AppModel.BlendProject) -> some View {
@@ -321,11 +440,15 @@ struct ProjectDetailView: View {
             } label: {
                 Label("Open", systemImage: "arrow.up.forward.app")
             }
-            Button {
-                model.openBlend(blend)
-                model.stage = .configure
-            } label: {
-                Label("New version from these settings", systemImage: "slider.horizontal.3")
+            // Photo results are single stacked shots — no re-processing, so
+            // the settings-based "New version" path stays off for them.
+            if model.capture(for: blend)?.isPhotoCapture != true {
+                Button {
+                    model.openBlend(blend)
+                    model.stage = .configure
+                } label: {
+                    Label("New version from these settings", systemImage: "slider.horizontal.3")
+                }
             }
             Button(role: .destructive) {
                 versionPendingDelete = blend
@@ -352,7 +475,7 @@ struct ProjectDetailView: View {
             }
             .buttonStyle(.plain)
 
-            LLRow(title: "Storage", subtitle: "original + versions") {
+            LLRow(title: "Storage", subtitle: storageSubtitle(for: capture)) {
                 Text(storageBytes.map { LLFormat.bytes($0) } ?? "—")
                     .font(.system(size: 14))
                     .foregroundStyle(.secondary)
@@ -373,7 +496,20 @@ struct ProjectDetailView: View {
 
     // MARK: - Labels
 
+    private func storageSubtitle(for capture: AppModel.CaptureProject) -> String {
+        if capture.isPhotoCapture {
+            // The burst frames stay on disk as stacking material; own that in
+            // the storage line instead of surfacing them as media.
+            return capture.sourceMediaCount > 1 ? "photo + burst frames" : "photo"
+        }
+        return "original + versions"
+    }
+
     private func originalBadge(for capture: AppModel.CaptureProject) -> String {
+        // One photo, one badge — never a frame count.
+        if capture.isPhotoCapture {
+            return "PHOTO"
+        }
         if capture.kind == .photos {
             return "ORIGINAL · \(capture.sourceMediaCount) photos"
         }
@@ -383,7 +519,16 @@ struct ProjectDetailView: View {
         return "ORIGINAL"
     }
 
-    private func formatBadge(for capture: AppModel.CaptureProject) -> String {
+    private func formatBadge(for capture: AppModel.CaptureProject) -> String? {
+        if capture.isPhotoCapture {
+            // Pixel size when the stacked version recorded it; otherwise no
+            // second badge — "PHOTO" already says it all.
+            if let blend = model.blends(for: capture).first(where: { $0.kind == .image }),
+               let width = blend.width, let height = blend.height {
+                return AppModel.CaptureProject.resolutionLabel(width: width, height: height)
+            }
+            return nil
+        }
         var parts: [String] = []
         if let width = capture.sourceWidth, let height = capture.sourceHeight {
             parts.append(AppModel.CaptureProject.resolutionLabel(width: width, height: height))
@@ -422,6 +567,9 @@ struct ProjectDetailView: View {
 
     private var deleteProjectMessage: String {
         guard let capture else { return "" }
+        if capture.isPhotoCapture {
+            return "This permanently deletes the photo. There's no undo."
+        }
         let count = model.blends(for: capture).count
         let versionText = count == 1 ? "1 version" : "\(count) versions"
         return "This permanently deletes the original and \(versionText). There's no undo."
@@ -430,13 +578,42 @@ struct ProjectDetailView: View {
     // MARK: - Actions
 
     private func playOriginal(_ capture: AppModel.CaptureProject) {
-        guard let url = model.mediaURL(for: capture) else { return }
+        guard let url = heroMediaURL(for: capture) else { return }
         previewItem = MediaPreviewItem(
             title: capture.displayTitle,
             subtitle: capture.formatLine,
             url: url,
             kind: model.mediaKind(for: capture)
         )
+    }
+
+    private func savePhoto(_ capture: AppModel.CaptureProject) {
+        #if os(iOS)
+        guard let url = model.heroImageURL(for: capture) else { return }
+        photoSaveState = .saving
+        Task {
+            do {
+                try await model.saveSourceClip(at: url)
+                photoSaveState = .saved
+            } catch {
+                photoSaveState = .failed(error.localizedDescription)
+            }
+        }
+        #endif
+    }
+
+    private func saveOriginals(_ capture: AppModel.CaptureProject) {
+        #if os(iOS)
+        originalsSaveState = .saving
+        Task {
+            do {
+                try await model.saveOriginalsToPhotos(for: capture)
+                originalsSaveState = .saved
+            } catch {
+                originalsSaveState = .failed(error.localizedDescription)
+            }
+        }
+        #endif
     }
 
     private func previewClip(for capture: AppModel.CaptureProject, index: Int, url: URL) {

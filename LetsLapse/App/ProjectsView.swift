@@ -96,7 +96,11 @@ struct ProjectsView: View {
     }
 
     private func preview(_ capture: AppModel.CaptureProject) {
-        guard let url = model.mediaURL(for: capture) else { return }
+        // A Photo-mode capture previews as its one photo, not a burst frame.
+        let url = capture.isPhotoCapture
+            ? model.heroImageURL(for: capture)
+            : model.mediaURL(for: capture)
+        guard let url else { return }
         previewItem = MediaPreviewItem(
             title: capture.displayTitle,
             subtitle: capture.formatLine,
@@ -156,7 +160,7 @@ private struct ProjectCard: View {
             Button(action: onOpen) {
                 HStack(spacing: 12) {
                     ZStack(alignment: .bottomTrailing) {
-                        ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
+                        ProjectThumbnailView(url: thumbnailURL, kind: model.mediaKind(for: capture))
                             .frame(width: 86, height: 64)
                         MediaBadge(text: durationBadge)
                             .scaleEffect(0.82, anchor: .bottomTrailing)
@@ -174,7 +178,9 @@ private struct ProjectCard: View {
                             .lineLimit(1)
                         Text(versionsLine(count: versions.count))
                             .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(versions.isEmpty ? Color.secondary : LL.accent)
+                            .foregroundStyle(
+                                versions.isEmpty || capture.isPhotoCapture
+                                    ? Color.secondary : LL.accent)
                             .padding(.top, 2)
                     }
                     Spacer(minLength: 0)
@@ -185,42 +191,45 @@ private struct ProjectCard: View {
             }
             .buttonStyle(.plain)
 
-            ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: 8) {
-                    ForEach(versions) { blend in
-                        Button {
-                            onOpenVersion(blend)
-                        } label: {
-                            ZStack(alignment: .bottomLeading) {
-                                ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
-                                    .frame(width: 96, height: 54)
-                                MediaBadge(text: blend.badgeLabel, tint: LL.amber)
-                                    .scaleEffect(0.78, anchor: .bottomLeading)
-                                    .padding(4)
+            // A photo is one asset — no version strip, nothing to add.
+            if !capture.isPhotoCapture {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(versions) { blend in
+                            Button {
+                                onOpenVersion(blend)
+                            } label: {
+                                ZStack(alignment: .bottomLeading) {
+                                    ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
+                                        .frame(width: 96, height: 54)
+                                    MediaBadge(text: blend.badgeLabel, tint: LL.amber)
+                                        .scaleEffect(0.78, anchor: .bottomLeading)
+                                        .padding(4)
+                                }
                             }
+                            .buttonStyle(.plain)
+                        }
+
+                        Button(action: onNewVersion) {
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(
+                                    Color.primary.opacity(0.18),
+                                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
+                                )
+                                .frame(width: versions.isEmpty ? 96 : 54, height: 54)
+                                .overlay {
+                                    Image(systemName: "plus")
+                                        .font(.system(size: 18, weight: .medium))
+                                        .foregroundStyle(LL.accent)
+                                }
+                                .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .accessibilityLabel("New version")
                     }
-
-                    Button(action: onNewVersion) {
-                        RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(
-                                Color.primary.opacity(0.18),
-                                style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
-                            )
-                            .frame(width: versions.isEmpty ? 96 : 54, height: 54)
-                            .overlay {
-                                Image(systemName: "plus")
-                                    .font(.system(size: 18, weight: .medium))
-                                    .foregroundStyle(LL.accent)
-                            }
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("New version")
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 12)
                 }
-                .padding(.horizontal, 14)
-                .padding(.bottom, 12)
             }
         }
         .llCard(cornerRadius: 18)
@@ -228,12 +237,15 @@ private struct ProjectCard: View {
             Button {
                 onPreview()
             } label: {
-                Label("Play original", systemImage: "play.rectangle")
+                Label(capture.isPhotoCapture ? "View photo" : "Play original",
+                      systemImage: capture.isPhotoCapture ? "photo" : "play.rectangle")
             }
-            Button {
-                onNewVersion()
-            } label: {
-                Label("New version", systemImage: "plus")
+            if !capture.isPhotoCapture {
+                Button {
+                    onNewVersion()
+                } label: {
+                    Label("New version", systemImage: "plus")
+                }
             }
             Button {
                 onOpen()
@@ -252,7 +264,16 @@ private struct ProjectCard: View {
         }
     }
 
+    /// A photo project's tile is the photo itself; everything else shows its
+    /// source media.
+    private var thumbnailURL: URL? {
+        capture.isPhotoCapture ? model.heroImageURL(for: capture) : model.mediaURL(for: capture)
+    }
+
     private var durationBadge: String {
+        if capture.isPhotoCapture {
+            return "Photo"
+        }
         if capture.kind == .photos {
             return "\(capture.sourceMediaCount) photos"
         }
@@ -264,6 +285,10 @@ private struct ProjectCard: View {
 
     private func versionsLine(count: Int) -> String {
         let size = projectBytes.map(LLFormat.bytes)
+        // A photo capture is a single asset: size only, never a version count.
+        if capture.isPhotoCapture {
+            return size ?? "…"
+        }
         switch count {
         case 0: return size ?? "…"
         case 1: return size.map { "1 version · \($0)" } ?? "1 version"

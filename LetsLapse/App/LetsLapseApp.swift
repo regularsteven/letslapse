@@ -25,8 +25,13 @@ struct LetsLapseApp: App {
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedTab: LLTab = .create
+    @State private var galleryPath: [UUID] = []
     @State private var projectsPath: [UUID] = []
     @State private var settingsPath: [SettingsDestination] = []
+    /// Owns the camera presentation so that selecting the Create tab can open
+    /// the camera straight away, over the Create screen (the tab's home).
+    @State private var showCamera = false
+    @State private var cameraIntent = CaptureIntent()
     #if os(macOS)
     @State private var lastStage: AppModel.Stage = .home
     #endif
@@ -63,6 +68,14 @@ struct ContentView: View {
             guard requested != nil else { return }
             selectedTab = .projects
         }
+        #if os(iOS)
+        // Selecting the Create tab opens the camera straight away — the Create
+        // screen lives behind it as the tab's home and is revealed on close.
+        .onChange(of: selectedTab) { tab in
+            if tab == .create { openCameraForCreateTab() }
+        }
+        .onAppear(perform: openCameraOnLaunch)
+        #endif
         #if os(macOS)
         .onChange(of: model.stage) { newStage in
             // A flow can start from any tab (e.g. "New version" in Projects);
@@ -78,6 +91,30 @@ struct ContentView: View {
         .onAppear(perform: applyUIPreviewHooks)
         #endif
     }
+
+    #if os(iOS)
+    /// Open the camera as the Create tab's front surface. Only when the tab is
+    /// at rest (no job flow layered over it) — a running or parked flow keeps
+    /// the screen it's on.
+    private func openCameraForCreateTab() {
+        guard model.stage == .home else { return }
+        cameraIntent = CaptureIntent()
+        showCamera = true
+    }
+
+    /// Create is the launch tab and its purpose is the camera, so present it on
+    /// first appear too — but never when a DEBUG preview hook is steering the
+    /// app to a specific screen for screenshots.
+    private func openCameraOnLaunch() {
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO"]
+        if hookKeys.contains(where: { environment[$0] != nil }) { return }
+        #endif
+        guard selectedTab == .create else { return }
+        openCameraForCreateTab()
+    }
+    #endif
 
     #if DEBUG
     /// Drive the app into a specific screen from `simctl launch` env vars,
@@ -132,6 +169,8 @@ struct ContentView: View {
                 switch selectedTab {
                 case .create:
                     createContent
+                case .gallery:
+                    GalleryView(path: $galleryPath)
                 case .projects:
                     ProjectsView(path: $projectsPath)
                 case .settings:
@@ -157,7 +196,7 @@ struct ContentView: View {
     private var createContent: some View {
         if model.stage == .home {
             NavigationStack {
-                CreateView()
+                CreateView(showCapture: $showCamera, captureIntent: $cameraIntent)
             }
         } else {
             FlowView()
@@ -168,11 +207,16 @@ struct ContentView: View {
     private var tabs: some View {
         TabView(selection: $selectedTab) {
             NavigationStack {
-                CreateView()
+                CreateView(showCapture: $showCamera, captureIntent: $cameraIntent)
                     .hiddenSystemTabBar()
             }
             .tabItem { Label(LLTab.create.title, systemImage: LLTab.create.systemImage) }
             .tag(LLTab.create)
+
+            GalleryView(path: $galleryPath)
+                .hiddenSystemTabBar()
+                .tabItem { Label(LLTab.gallery.title, systemImage: LLTab.gallery.systemImage) }
+                .tag(LLTab.gallery)
 
             ProjectsView(path: $projectsPath)
                 .hiddenSystemTabBar()
@@ -197,10 +241,17 @@ struct ContentView: View {
         case .create:
             // Abandons a parked Adjust or Result and returns to the Create
             // root. A running job stays put — its Cancel button is the only
-            // way to stop it.
+            // way to stop it. Otherwise (already home) reopen the camera, so a
+            // tap on the current tab brings the camera back up.
             if model.stage == .configure || model.stage == .done {
                 model.reset()
+            } else {
+                #if os(iOS)
+                openCameraForCreateTab()
+                #endif
             }
+        case .gallery:
+            galleryPath = []
         case .projects:
             projectsPath = []
         case .settings:

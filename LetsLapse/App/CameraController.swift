@@ -1,5 +1,8 @@
 import Foundation
 import AVFoundation
+import CoreLocation
+import ImageIO
+import LetsLapseKit
 #if os(iOS)
 import UIKit
 #endif
@@ -89,7 +92,19 @@ final class CameraController: NSObject, ObservableObject {
     private var intervalTimer: DispatchSourceTimer?
     private var photoDirectory: URL?
     private var photoURLs: [URL] = []   // sessionQueue-confined
+    // Photo-mode frame cap: stop after this many stills land. nil = an
+    // open-ended Interval shoot. `intervalFramesRequested` counts capture
+    // requests so the repeating timer stops scheduling once the burst is out
+    // (photos land asynchronously, so requests, not writes, gate scheduling).
+    // `intervalActive` guards the finish path so a cap-reached finish and a
+    // user stop can't both emit. All three are sessionQueue-confined.
+    private var intervalFrameCap: Int?
+    private var intervalFramesRequested = 0
+    private var intervalActive = false
     private var videoStabilizationRequested = true
+    /// When set, captured stills are geotagged with the latest location fix.
+    /// Set from the capture screen; read on the session queue when a photo lands.
+    var gpsTaggingEnabled = false
     // 10/12/15 are acquisition rates for the blend pipeline: sparse temporal
     // sampling with up to a full-interval shutter, meant to be conformed or
     // blended rather than played as-is.
@@ -1444,7 +1459,12 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: - Interval photos
 
-    func startInterval(every seconds: Double) {
+    /// Starts an interval photo session. `frameCap` (Photo mode) auto-stops the
+    /// session once that many stills have landed — 1 for a single snapshot, or
+    /// the blend depth for a steadied burst that stacks in post. A capped burst
+    /// runs at a faster fixed rate than an open-ended Interval shoot, so it
+    /// allows a shorter minimum spacing.
+    func startInterval(every seconds: Double, frameCap: Int? = nil) {
         sessionQueue.async {
             guard self.intervalTimer == nil else { return }
             let directory = FileManager.default.temporaryDirectory
@@ -1452,14 +1472,23 @@ final class CameraController: NSObject, ObservableObject {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             self.photoDirectory = directory
             self.photoURLs = []
+            self.intervalFrameCap = frameCap
+            self.intervalFramesRequested = 0
+            self.intervalActive = true
             DispatchQueue.main.async {
                 self.photoCount = 0
                 self.isIntervalRunning = true
             }
+            let period = frameCap != nil ? max(0.05, seconds) : max(0.5, seconds)
             let timer = DispatchSource.makeTimerSource(queue: self.sessionQueue)
-            timer.schedule(deadline: .now(), repeating: max(0.5, seconds))
+            timer.schedule(deadline: .now(), repeating: period)
             timer.setEventHandler { [weak self] in
                 guard let self else { return }
+                // A capped session stops requesting once the whole burst is
+                // out; the remaining stills are still in flight.
+                if let cap = self.intervalFrameCap, self.intervalFramesRequested >= cap {
+                    return
+                }
                 #if os(iOS)
                 if let connection = self.photoOutput.connection(with: .video),
                    connection.isVideoOrientationSupported {
@@ -1471,6 +1500,14 @@ final class CameraController: NSObject, ObservableObject {
                     settings.maxPhotoDimensions = photoDimensions
                 }
                 self.photoOutput.capturePhoto(with: settings, delegate: self)
+                self.intervalFramesRequested += 1
+                // Burst complete: stop the repeating timer now. The session
+                // finalizes when the last requested still is written (see the
+                // capture delegate).
+                if let cap = self.intervalFrameCap, self.intervalFramesRequested >= cap {
+                    self.intervalTimer?.cancel()
+                    self.intervalTimer = nil
+                }
             }
             timer.resume()
             self.intervalTimer = timer
@@ -1480,14 +1517,26 @@ final class CameraController: NSObject, ObservableObject {
     func stopInterval() {
         cancelScheduledStop()
         sessionQueue.async {
-            self.intervalTimer?.cancel()
-            self.intervalTimer = nil
-            let urls = self.photoURLs
-            DispatchQueue.main.async {
-                self.isIntervalRunning = false
-                if urls.count >= 2 {
-                    self.onFinishPhotos?(urls)
-                }
+            self.finishIntervalOnQueue()
+        }
+    }
+
+    /// sessionQueue-confined. Cancels the timer, emits the captured stills and
+    /// clears interval state — exactly once (guarded by `intervalActive`), so a
+    /// cap-reached finish and a user stop never double-emit. A single frame is
+    /// valid output (Photo mode's snapshot), so there is no minimum-frame floor.
+    private func finishIntervalOnQueue() {
+        guard self.intervalActive else { return }
+        self.intervalActive = false
+        self.intervalTimer?.cancel()
+        self.intervalTimer = nil
+        let urls = self.photoURLs
+        self.intervalFrameCap = nil
+        self.intervalFramesRequested = 0
+        DispatchQueue.main.async {
+            self.isIntervalRunning = false
+            if urls.count >= 1 {
+                self.onFinishPhotos?(urls)
             }
         }
     }
@@ -1574,20 +1623,21 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: - Live Blend engine (Interval's blend/DNG pipeline)
 
-    /// Starts a Live Blend run: every `interval` seconds, `framesPerBlend`
-    /// frames are averaged into one output image. With `preferDNG` and a
-    /// Bayer-RAW-capable source, frames come from RAW photo captures and the
-    /// output is a blended DNG; otherwise the processed video stream is
-    /// tapped and the output is JPEG. The run hands its outputs over through
-    /// `onFinishLiveBlend` exactly like interval capture hands over
-    /// `onFinishPhotos`.
-    func startLiveBlend(every interval: Double, framesPerBlend: Int, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions()) {
+    /// Starts a Live Blend run: every `interval` seconds, the depth's worth
+    /// of frames — a fixed count, Safe mode's learned count, or everything
+    /// unthrottled capture manages — is averaged into one output image. With
+    /// `preferDNG` and a Bayer-RAW-capable source, frames come from RAW
+    /// photo captures and the output is a blended DNG; otherwise the
+    /// processed video stream is tapped and the output is JPEG. The run
+    /// hands its outputs over through `onFinishLiveBlend` exactly like
+    /// interval capture hands over `onFinishPhotos`.
+    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions()) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
 
             #if os(iOS)
             if preferDNG, self.deviceSupportsBayerRAW() {
-                self.startLiveBlendDNG(every: interval, framesPerBlend: framesPerBlend, options: options)
+                self.startLiveBlendDNG(every: interval, depth: depth, options: options)
                 return
             }
             #endif
@@ -1596,13 +1646,41 @@ final class CameraController: NSObject, ObservableObject {
             }
             self.startLiveBlendStandard(
                 every: interval,
-                framesPerBlend: framesPerBlend,
+                depth: depth,
                 requestedOutputFormat: preferDNG ? "dng" : "standard")
         }
     }
 
+    /// Safe mode's per-window frame target for the *actual* pipeline the run
+    /// landed on: the current bucket's learned count, falling back to the
+    /// most conservative learned count for this interval when conditions
+    /// drift into an unlearned bucket mid-session, and to a 2-frame floor
+    /// only if learning was reset mid-run (the UI gates Safe on a usable
+    /// profile before start).
+    private static func throttledFrameTarget(pipeline: String, interval: Double) -> () -> Int {
+        {
+            let store = BlendProfileStore.shared
+            let bucket = ThermalBucket(thermalState: ProcessInfo.processInfo.thermalState)
+            if let learned = store.safeFrameCount(pipeline: pipeline, bucket: bucket, intervalSeconds: interval) {
+                return learned
+            }
+            let fallback = store.conservativeFrameCount(pipeline: pipeline, intervalSeconds: interval) ?? 2
+            LLog("liveblend: no \(bucket.rawValue) profile for \(pipeline) @ \(interval)s — safe target \(fallback)")
+            return fallback
+        }
+    }
+
+    /// Routes a controller's unthrottled-window lessons into the profile
+    /// store under the pipeline that produced them.
+    private static func learningRecorder(pipeline: String, interval: Double) -> (ThermalBucket, BlendLearningSample) -> Void {
+        { bucket, sample in
+            BlendProfileStore.shared.record(
+                sample, pipeline: pipeline, bucket: bucket, intervalSeconds: interval)
+        }
+    }
+
     /// sessionQueue-confined: the video-tap JPEG path.
-    private func startLiveBlendStandard(every interval: Double, framesPerBlend: Int, requestedOutputFormat: String) {
+    private func startLiveBlendStandard(every interval: Double, depth: BlendDepth, requestedOutputFormat: String) {
             if self.liveBlendOutput == nil {
                 let output = AVCaptureVideoDataOutput()
                 output.videoSettings = [
@@ -1619,7 +1697,7 @@ final class CameraController: NSObject, ObservableObject {
             }
             guard let output = self.liveBlendOutput else {
                 LLog("liveblend: session refused the video data output")
-                self.publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+                self.publishLiveBlendStartFailure(interval: interval, depth: depth)
                 return
             }
 
@@ -1629,7 +1707,7 @@ final class CameraController: NSObject, ObservableObject {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             } catch {
                 LLog("liveblend: could not create temp directory: \(error)")
-                self.publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+                self.publishLiveBlendStartFailure(interval: interval, depth: depth)
                 return
             }
 
@@ -1638,23 +1716,30 @@ final class CameraController: NSObject, ObservableObject {
             }
             let configuration = LiveBlendController.Configuration(
                 intervalSeconds: interval,
-                framesPerBlend: framesPerBlend,
+                blendDepth: depth,
                 outputDirectory: directory,
                 logURL: Self.liveBlendLogURL(),
                 cameraName: self.videoDevice?.localizedName ?? "unknown camera",
                 captureWidth: Int(dimensions?.width ?? 0),
                 captureHeight: Int(dimensions?.height ?? 0),
                 configuredFrameRate: self.selectedFrameRate,
-                requestedOutputFormat: requestedOutputFormat)
+                requestedOutputFormat: requestedOutputFormat,
+                throttledFrameTarget: Self.throttledFrameTarget(pipeline: "standard", interval: interval),
+                gpsMetadata: { [weak self] in
+                    guard let self, self.gpsTaggingEnabled,
+                          let location = LocationService.shared.latestLocation else { return nil }
+                    return location.exifGPSDictionary()
+                })
 
             let controller: LiveBlendController
             do {
                 controller = try LiveBlendController(configuration: configuration)
             } catch {
                 LLog("liveblend: controller init failed: \(error)")
-                self.publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+                self.publishLiveBlendStartFailure(interval: interval, depth: depth)
                 return
             }
+            controller.onLearningSample = Self.learningRecorder(pipeline: "standard", interval: interval)
             controller.onDiagnostics = { [weak self] snapshot in
                 guard let self else { return }
                 if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
@@ -1691,7 +1776,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.liveBlendOutputCount = 0
                 self.liveBlendDiagnostics = LiveBlendDiagnosticsSnapshot(
                     requestedIntervalSeconds: interval,
-                    requestedFramesPerBlend: framesPerBlend)
+                    requestedFramesPerBlend: configuration.initialDisplayFrames)
             }
     }
 
@@ -1706,7 +1791,7 @@ final class CameraController: NSObject, ObservableObject {
     /// session to a RAW-capable photo configuration for the run (restored on
     /// finish), then RAW photo captures feed a linear-space average — one
     /// blended DNG per interval.
-    private func startLiveBlendDNG(every interval: Double, framesPerBlend: Int, options: LiveBlendCaptureOptions) {
+    private func startLiveBlendDNG(every interval: Double, depth: BlendDepth, options: LiveBlendCaptureOptions) {
         let previousPreset = session.sessionPreset
         session.beginConfiguration()
         session.sessionPreset = .photo
@@ -1717,7 +1802,7 @@ final class CameraController: NSObject, ObservableObject {
             session.commitConfiguration()
             applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
             LLog("liveblend-dng: photo configuration offers no Bayer RAW — standard output")
-            startLiveBlendStandard(every: interval, framesPerBlend: framesPerBlend, requestedOutputFormat: "dng")
+            startLiveBlendStandard(every: interval, depth: depth, requestedOutputFormat: "dng")
             return
         }
         dngRunPreviousPreset = previousPreset
@@ -1762,7 +1847,7 @@ final class CameraController: NSObject, ObservableObject {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
             LLog("liveblend-dng: could not create temp directory: \(error)")
-            publishLiveBlendStartFailure(interval: interval, framesPerBlend: framesPerBlend)
+            publishLiveBlendStartFailure(interval: interval, depth: depth)
             return
         }
         let dimensions = videoDevice.map {
@@ -1770,7 +1855,7 @@ final class CameraController: NSObject, ObservableObject {
         }
         let configuration = LiveBlendRawController.Configuration(
             intervalSeconds: interval,
-            framesPerBlend: framesPerBlend,
+            blendDepth: depth,
             outputDirectory: directory,
             logURL: Self.liveBlendLogURL(),
             cameraName: videoDevice?.localizedName ?? "unknown camera",
@@ -1781,11 +1866,19 @@ final class CameraController: NSObject, ObservableObject {
             burstScheduling: options.burstScheduling,
             bracketedRAW: options.bracketedRAW,
             responsiveCapture: responsiveApplied,
-            maxBracketFrames: bracketMax)
+            maxBracketFrames: bracketMax,
+            throttledFrameTarget: Self.throttledFrameTarget(pipeline: "dng", interval: interval),
+            gpsProvider: { [weak self] in
+                guard let self, self.gpsTaggingEnabled,
+                      let location = LocationService.shared.latestLocation else { return nil }
+                return (location.coordinate.latitude, location.coordinate.longitude,
+                        location.altitude, location.timestamp)
+            })
         let controller = LiveBlendRawController(
             configuration: configuration,
             photoOutput: photoOutput,
             captureExecutor: { [weak self] block in self?.sessionQueue.async(execute: block) })
+        controller.onLearningSample = Self.learningRecorder(pipeline: "dng", interval: interval)
         controller.onDiagnostics = { [weak self] snapshot in
             guard let self else { return }
             if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
@@ -1808,7 +1901,7 @@ final class CameraController: NSObject, ObservableObject {
             self.liveBlendOutputCount = 0
             var snapshot = LiveBlendDiagnosticsSnapshot(
                 requestedIntervalSeconds: interval,
-                requestedFramesPerBlend: framesPerBlend)
+                requestedFramesPerBlend: configuration.initialDisplayFrames)
             snapshot.outputFormatLabel = "DNG"
             self.liveBlendDiagnostics = snapshot
         }
@@ -1866,11 +1959,11 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    private func publishLiveBlendStartFailure(interval: Double, framesPerBlend: Int) {
+    private func publishLiveBlendStartFailure(interval: Double, depth: BlendDepth) {
         DispatchQueue.main.async {
             var snapshot = LiveBlendDiagnosticsSnapshot(
                 requestedIntervalSeconds: interval,
-                requestedFramesPerBlend: framesPerBlend)
+                requestedFramesPerBlend: depth.fixedFrames ?? 0)
             snapshot.status = .captureFailed
             self.liveBlendDiagnostics = snapshot
         }
@@ -1969,6 +2062,31 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
     }
 }
 
+extension CameraController {
+    /// Writes a captured still to disk. When GPS tagging is on and a fix is
+    /// available, the JPEG is copied through ImageIO with a GPS dictionary
+    /// added (pixels untouched — the original encoded image is preserved).
+    /// Any failure falls back to writing the raw data unmodified.
+    fileprivate func writeCapturedPhoto(_ data: Data, to url: URL) -> Bool {
+        guard gpsTaggingEnabled, let location = LocationService.shared.latestLocation else {
+            return (try? data.write(to: url)) != nil
+        }
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let uti = CGImageSourceGetType(source),
+              let destination = CGImageDestinationCreateWithURL(url as CFURL, uti, 1, nil) else {
+            return (try? data.write(to: url)) != nil
+        }
+        let properties: [CFString: Any] = [
+            kCGImagePropertyGPSDictionary: location.exifGPSDictionary()
+        ]
+        CGImageDestinationAddImageFromSource(destination, source, 0, properties as CFDictionary)
+        if CGImageDestinationFinalize(destination) {
+            return true
+        }
+        return (try? data.write(to: url)) != nil
+    }
+}
+
 extension CameraController: AVCapturePhotoCaptureDelegate {
     func photoOutput(
         _ output: AVCapturePhotoOutput,
@@ -1980,9 +2098,16 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
             guard let directory = self.photoDirectory else { return }
             let url = directory.appendingPathComponent(
                 String(format: "frame-%05d.jpg", self.photoURLs.count))
-            if (try? data.write(to: url)) != nil {
+            if self.writeCapturedPhoto(data, to: url) {
                 self.photoURLs.append(url)
-                DispatchQueue.main.async { self.photoCount = self.photoURLs.count }
+                let count = self.photoURLs.count
+                DispatchQueue.main.async { self.photoCount = count }
+                // Photo-mode frame cap: the timer stops scheduling once the
+                // burst is requested (intervalTimer == nil); finalize when the
+                // last requested still has landed.
+                if let cap = self.intervalFrameCap, count >= cap, self.intervalTimer == nil {
+                    self.finishIntervalOnQueue()
+                }
             }
         }
     }
@@ -2012,6 +2137,12 @@ enum RecordingSettingsStore {
     /// never written anymore.
     private static let liveBlendIntervalSecondsKey = "letslapse.capture.liveBlendIntervalSeconds"
     private static let liveBlendFramesPerBlendKey = "letslapse.capture.liveBlendFramesPerBlend"
+    private static let blendDepthKey = "letslapse.capture.blendDepth"
+    /// Photo mode's dials — its blend-frame count and whether Bulb (hold-open)
+    /// is armed. Kept separate from Interval's `blendDepth` (which carries the
+    /// adaptive Psycho/Safe cases Photo doesn't offer).
+    private static let photoBlendDepthKey = "letslapse.capture.photoBlendDepth"
+    private static let photoBulbModeKey = "letslapse.capture.photoBulbMode"
 
     // Settings-owned values, not part of the remembered-shoot snapshot: they
     // apply regardless of `isEnabled` and survive `clear()`.
@@ -2073,19 +2204,49 @@ enum RecordingSettingsStore {
 
     private static func intervalKey(for mode: CaptureMode) -> String? {
         switch mode {
-        case .video: return nil
+        // Video has no spacing, and Photo drives its own fixed burst rate —
+        // neither remembers a user interval.
+        case .video, .photo: return nil
         case .interval: return intervalSecondsKey
         }
     }
 
-    static var framesPerBlend: Int? {
-        let value = UserDefaults.standard.integer(forKey: liveBlendFramesPerBlendKey)
-        return (1...60).contains(value) ? value : nil
+    /// Falls back to the pre-adaptive numeric key so an upgrade keeps the
+    /// remembered fixed count.
+    static var blendDepth: BlendDepth? {
+        if let token = UserDefaults.standard.string(forKey: blendDepthKey),
+           let depth = BlendDepth(token: token) {
+            return depth
+        }
+        let legacy = UserDefaults.standard.integer(forKey: liveBlendFramesPerBlendKey)
+        return (1...60).contains(legacy) ? .fixed(legacy) : nil
     }
 
-    static func save(framesPerBlend: Int) {
+    static func save(blendDepth: BlendDepth) {
         guard isEnabled else { return }
-        UserDefaults.standard.set(framesPerBlend, forKey: liveBlendFramesPerBlendKey)
+        UserDefaults.standard.set(blendDepth.token, forKey: blendDepthKey)
+    }
+
+    /// Photo mode's blend-frame count (1 = Off). Same 1...240 sanity bound the
+    /// custom frame rate uses; out-of-range or unset returns nil so the caller
+    /// keeps its default.
+    static var photoBlendDepth: Int? {
+        let value = UserDefaults.standard.integer(forKey: photoBlendDepthKey)
+        return (1...240).contains(value) ? value : nil
+    }
+
+    static func save(photoBlendDepth: Int) {
+        guard isEnabled else { return }
+        UserDefaults.standard.set(photoBlendDepth, forKey: photoBlendDepthKey)
+    }
+
+    static var photoBulbMode: Bool? {
+        UserDefaults.standard.object(forKey: photoBulbModeKey) as? Bool
+    }
+
+    static func save(photoBulbMode: Bool) {
+        guard isEnabled else { return }
+        UserDefaults.standard.set(photoBulbMode, forKey: photoBulbModeKey)
     }
 
     static var lens: CameraController.Lens? {
@@ -2140,6 +2301,7 @@ enum RecordingSettingsStore {
             modeKey, lensKey, resolutionWidthKey, resolutionHeightKey,
             frameRateKey, rampFrameRateKey, stabilizationKey,
             intervalSecondsKey, liveBlendIntervalSecondsKey, liveBlendFramesPerBlendKey,
+            blendDepthKey, photoBlendDepthKey, photoBulbModeKey,
         ] {
             defaults.removeObject(forKey: key)
         }

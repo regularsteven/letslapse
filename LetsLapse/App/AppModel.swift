@@ -30,6 +30,11 @@ final class AppModel: ObservableObject {
         static let liveBlendBracketedRAW = "letslapse.liveBlendBracketedRAW"
     }
 
+    /// `mode` marker for a one-tap Photo-mode capture — the burst that was
+    /// auto-blended into a single image with no Adjust step. Detects photo
+    /// captures across launches (persisted in the manifest via `mode`).
+    static let photoCaptureMode = "Photo"
+
     enum CaptureKind: String, Codable {
         case video
         case photos
@@ -105,6 +110,16 @@ final class AppModel: ObservableObject {
             sourceFileNames.filter { !$0.hasSuffix(".json") }.count
         }
 
+        /// A one-tap Photo-mode capture: a single photo. With Blend Off the
+        /// captured frame is the photo itself; with blend on, the burst was
+        /// auto-blended into one image at capture time. Either way the
+        /// project reads as ONE asset — no versions, no photo counts, no
+        /// source-clip list, no re-processing (burst frames stay on disk as
+        /// stacking material, not user-facing media).
+        var isPhotoCapture: Bool {
+            kind == .photos && mode == AppModel.photoCaptureMode
+        }
+
         /// A project title people can recognize: the custom name, an imported
         /// file's name, or a dated fallback.
         var displayTitle: String {
@@ -114,6 +129,7 @@ final class AppModel: ObservableObject {
                 if !base.isEmpty { return base }
             }
             let stamp = createdAt.formatted(.dateTime.day().month(.abbreviated).hour().minute())
+            if isPhotoCapture { return "Photo \(stamp)" }
             return kind == .photos ? "Stack \(stamp)" : "Capture \(stamp)"
         }
 
@@ -130,7 +146,8 @@ final class AppModel: ObservableObject {
                 }
                 return parts.joined(separator: " · ")
             case .photos:
-                return "Interval · \(sourceMediaCount) photos"
+                // A Photo-mode capture is one photo — never a frame count.
+                return isPhotoCapture ? "Photo" : "Interval · \(sourceMediaCount) photos"
             }
         }
 
@@ -339,6 +356,16 @@ final class AppModel: ObservableObject {
     @Published var currentCaptureID: UUID?
     @Published var resultBlendID: UUID?
 
+    /// Interval tail-frame review. When `tailFramesToExclude` > 0 the final N
+    /// interval frames read as shaky at capture time — most often the user
+    /// grabbing the phone to end the shoot. Surfaced as a quiet, recoverable
+    /// banner on the Adjust screen; the frames stay on disk either way.
+    @Published var tailFramesToExclude: Int = 0
+    @Published var totalIntervalFrames: Int = 0
+    /// Frame indices to exclude from the blend. Set before `startProcessing`;
+    /// filtered out of the `.photos` URL list. Never deletes the originals.
+    @Published var excludedFrameIndices: Set<Int> = []
+
     // Blend options
     /// Which codec each source clip contributes to the blend. `nil` = automatic
     /// (best surviving encoding per clip). Only meaningful once a clip has more
@@ -490,6 +517,18 @@ final class AppModel: ObservableObject {
             .sorted { $0.createdAt > $1.createdAt }
     }
 
+    /// The image that stands for a photo-kind capture: its newest image
+    /// version when one exists, else the captured frame itself. For a
+    /// Photo-mode capture this IS the photo — the one user-facing asset
+    /// (Blend Off keeps the frame; a blended shot's photo is the stack).
+    func heroImageURL(for capture: CaptureProject) -> URL? {
+        guard capture.kind == .photos else { return nil }
+        if let blend = blends(for: capture).first(where: { $0.kind == .image }) {
+            return mediaURL(for: blend)
+        }
+        return mediaURL(for: capture)
+    }
+
     func capture(for blend: BlendProject) -> CaptureProject? {
         captures.first { $0.id == blend.captureID }
     }
@@ -605,12 +644,23 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Flag the trailing shaky frames from an interval shoot for review on the
+    /// Adjust screen. Called after `setSource`, so the fresh-source `openCapture`
+    /// (which clears these) has already run and won't wipe the flag.
+    func flagTailFrames(count: Int, total: Int) {
+        tailFramesToExclude = count
+        totalIntervalFrames = total
+    }
+
     func reset() {
         blendTask?.cancel()
         blendTask = nil
         source = nil
         currentCaptureID = nil
         photoBlendDepth = 1
+        excludedFrameIndices = []
+        tailFramesToExclude = 0
+        totalIntervalFrames = 0
         resultBlendID = nil
         progress = 0
         resultVideoURL = nil
@@ -646,6 +696,9 @@ final class AppModel: ObservableObject {
             source = try source(for: capture)
             currentCaptureID = capture.id
             photoBlendDepth = 1
+            excludedFrameIndices = []
+            tailFramesToExclude = 0
+            totalIntervalFrames = 0
             resultBlendID = nil
             resultVideoURL = nil
             resultImage = nil
@@ -669,6 +722,9 @@ final class AppModel: ObservableObject {
             blendSourceCodec = nil
             source = try source(for: capture)
             currentCaptureID = capture.id
+            excludedFrameIndices = []
+            tailFramesToExclude = 0
+            totalIntervalFrames = 0
             resultBlendID = blend.id
             resultVideoURL = nil
             resultImage = nil
@@ -916,6 +972,7 @@ final class AppModel: ObservableObject {
         let linear = linearLight
         let trim = source.isVideo && trimVideoEnds ? max(0, trimHeadTailSeconds) : 0
         let photoDepth = photoBlendDepth
+        let excluded = excludedFrameIndices
         let parameters = currentBlendParameters()
         blendTask = Task { [weak self] in
             do {
@@ -927,16 +984,23 @@ final class AppModel: ObservableObject {
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(liveSource, ramp: ramp, fps: fps, linear: linear)
                 case .photos(let urls):
-                    if photoDepth >= urls.count {
+                    // Tail-frame review drops the flagged shaky frames from the
+                    // blend — they stay on disk, just out of this render.
+                    let filteredURLs = excluded.isEmpty
+                        ? urls
+                        : urls.enumerated()
+                            .filter { !excluded.contains($0.offset) }
+                            .map { $0.element }
+                    if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
                         // into one frame: the classic single long exposure.
-                        output = try await self.stackPhotos(urls: urls, linear: linear)
+                        output = try await self.stackPhotos(urls: filteredURLs, linear: linear)
                     } else {
                         // A depth of 1 gives a straight timelapse; larger
                         // depths blend consecutive stills into each frame for
                         // motion blur. Output is a video sequence.
                         output = try await self.blendPhotosSequence(
-                            urls: urls, ramp: .constant(photoDepth), fps: fps, linear: linear)
+                            urls: filteredURLs, ramp: .constant(photoDepth), fps: fps, linear: linear)
                     }
                 }
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
@@ -953,6 +1017,119 @@ final class AppModel: ObservableObject {
                 self?.processingStartedAt = nil
                 self?.errorMessage = (error as? LapseError)?.errorDescription ?? error.localizedDescription
                 self?.stage = .configure
+            }
+        }
+    }
+
+    /// Photo mode's one-tap path: turn a freshly captured burst into a single
+    /// photo, skipping Adjust entirely. With Blend Off (depth ≤ 1) the
+    /// captured frame is simply registered as the photo — no re-encode, its
+    /// camera EXIF/GPS intact. With blend on, the burst is stacked into one
+    /// image (which carries the first frame's EXIF/GPS) and the burst frames
+    /// are preserved on disk as stacking material; originals are never
+    /// deleted.
+    /// With `presentResult` false the job runs without driving the flow stages
+    /// — the camera stays on screen and the finished photo lands quietly in
+    /// Projects, so the user can shoot the next frame straight away.
+    func processPhotoBurst(urls: [URL], blendDepth: Int, linear: Bool, presentResult: Bool = true) async {
+        // Preserve the burst as a photo capture so its frames stay on disk and
+        // the blend has a project to belong to.
+        let capture: CaptureProject
+        do {
+            capture = try registerCapture(from: .photos(urls), mode: Self.photoCaptureMode)
+        } catch {
+            errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
+            stage = .home
+            return
+        }
+
+        // Blend from the in-project copies, not the temporary burst URLs.
+        let captureSource: Source
+        do {
+            captureSource = try source(for: capture)
+        } catch {
+            errorMessage = "Couldn't open that capture: \(error.localizedDescription)"
+            stage = .home
+            return
+        }
+        let sourceURLs: [URL]
+        if case .photos(let resolved) = captureSource {
+            sourceURLs = resolved
+        } else {
+            sourceURLs = urls
+        }
+
+        // Blend Off: the captured frame IS the photo — one asset, one file,
+        // its camera EXIF and GPS untouched. No stacking pass, no version.
+        if blendDepth <= 1 {
+            if presentResult, let photoURL = sourceURLs.first {
+                currentCaptureID = capture.id
+                resultBlendID = nil
+                resultVideoURL = nil
+                resultImageURL = photoURL
+                resultImage = loadImage(at: photoURL)
+                resultSummary = "Photo"
+                errorMessage = nil
+                stage = .done
+            }
+            return
+        }
+
+        blendSourceCodec = nil
+        source = captureSource
+        currentCaptureID = capture.id
+        photoBlendDepth = max(1, blendDepth)
+        linearLight = linear
+        excludedFrameIndices = []
+        tailFramesToExclude = 0
+        totalIntervalFrames = 0
+
+        // Straight to processing — no configure step, the depth is decided.
+        // When the camera is staying up (`presentResult` false) the flow stages
+        // are left untouched (home), so nothing layers over the viewfinder.
+        if presentResult {
+            stage = .processing
+        }
+        progress = 0
+        statusMessage = "Blending photos..."
+        jobFolderURL = nil
+        jobLogLines = []
+        resultVideoURL = nil
+        resultImage = nil
+        resultImageURL = nil
+        resultSummary = nil
+        resultBlendID = nil
+        errorMessage = nil
+        processingStartedAt = Date()
+        processingTotalInputFrames = sourceURLs.count
+        processingETASeconds = nil
+        processingFramesDone = nil
+        processingFramesTotal = nil
+
+        let captureID = capture.id
+        let parameters = currentBlendParameters()
+        blendTask = Task { [weak self] in
+            do {
+                guard let self else { return }
+                // Fold every captured frame into one long exposure — the same
+                // single-image path Adjust uses when the depth spans the burst.
+                let output = try await self.stackPhotos(urls: sourceURLs, linear: linear)
+                let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
+                self.apply(output, from: blend)
+                self.processingStartedAt = nil
+                if presentResult {
+                    self.stage = .done
+                }
+            } catch is CancellationError {
+                self?.processingStartedAt = nil
+                self?.stage = .home
+            } catch LapseError.cancelled {
+                self?.processingStartedAt = nil
+                self?.stage = .home
+            } catch {
+                self?.processingStartedAt = nil
+                self?.errorMessage = (error as? LapseError)?.errorDescription ?? error.localizedDescription
+                self?.stage = .home
             }
         }
     }
@@ -1427,6 +1604,27 @@ final class AppModel: ObservableObject {
     /// exposure. No longer the default for interval capture — kept for callers
     /// that explicitly want one frame out.
     private func stackPhotos(urls: [URL], linear: Bool) async throws -> ProcessingOutput {
+        // A single frame has nothing to accumulate — the stacker needs at least
+        // two — so load it straight through (blend=1 / one-frame-burst edge).
+        if urls.count == 1, let only = urls.first {
+            guard let image = loadImage(at: only) else { throw LapseError.noInputFrames }
+            let output = FileManager.default.temporaryDirectory
+                .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).png")
+            try ImageExporter.write(
+                image, to: output, format: .png,
+                metadata: ImageExporter.carryoverMetadata(from: only))
+            progress = 1
+            return ProcessingOutput(
+                kind: .image,
+                url: output,
+                image: image,
+                summary: "1 photo · \(image.width)×\(image.height)",
+                inputFrames: 1,
+                outputFrames: 1,
+                width: image.width,
+                height: image.height
+            )
+        }
         let image = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> CGImage in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
@@ -1438,7 +1636,11 @@ final class AppModel: ObservableObject {
         }.value
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).png")
-        try ImageExporter.write(image, to: output, format: .png)
+        // The stack spans every frame; the first frame's EXIF (capture time =
+        // start of the synthetic exposure) and GPS stand for the whole.
+        try ImageExporter.write(
+            image, to: output, format: .png,
+            metadata: urls.first.flatMap { ImageExporter.carryoverMetadata(from: $0) })
         let summary = "\(urls.count) photos stacked · \(image.width)×\(image.height)"
         return ProcessingOutput(
             kind: .image,
@@ -2314,6 +2516,42 @@ final class AppModel: ObservableObject {
     func saveAllSourceClips(for capture: CaptureProject) async throws {
         for url in sourceClipURLs(for: capture) {
             try await saveSourceClip(at: url)
+        }
+    }
+
+    /// Saves every original source asset of a capture to Photos — interval
+    /// frames, video clips, or sequence segments — in one library change, so
+    /// a few hundred stills don't pay a per-file transaction each.
+    func saveOriginalsToPhotos(for capture: CaptureProject) async throws {
+        let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
+        guard status == .authorized || status == .limited else {
+            throw SourceClipSaveError.accessDenied
+        }
+        let urls: [URL]
+        switch try? source(for: capture) {
+        case .photos(let frames):
+            urls = frames
+        case .video(let url):
+            urls = [url]
+        case .liveSequence(let sequence):
+            urls = sequence.segmentURLs
+        case nil:
+            throw SourceClipSaveError.saveFailed("the original files are missing")
+        }
+        do {
+            try await PHPhotoLibrary.shared().performChanges {
+                for url in urls {
+                    let isImage = UTType(filenameExtension: url.pathExtension)?
+                        .conforms(to: .image) ?? false
+                    if isImage {
+                        PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                    } else {
+                        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    }
+                }
+            }
+        } catch {
+            throw SourceClipSaveError.saveFailed(error.localizedDescription)
         }
     }
 

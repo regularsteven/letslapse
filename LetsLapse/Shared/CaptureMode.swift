@@ -4,6 +4,10 @@ import Foundation
 /// so the Watch remote speaks the same vocabulary (mode selection and state
 /// mirroring use the raw values on the wire).
 enum CaptureMode: String, CaseIterable, Identifiable {
+    /// The simple mode — one tap, one photo (or a short steadied burst that
+    /// stacks into a single long exposure). Listed first: it's the least
+    /// involved way to capture.
+    case photo = "Photo"
     case interval = "Interval"
     case video = "Video"
     var id: String { rawValue }

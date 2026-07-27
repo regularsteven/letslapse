@@ -258,6 +258,7 @@ public enum DNGAuthor {
         headroomStops: Int = 0,
         compress: Bool = false,
         cameraColor: [DNGTagValue]? = nil,
+        gps: [DNGTagValue]? = nil,
         preview: Preview?,
         to url: URL
     ) throws {
@@ -332,6 +333,7 @@ public enum DNGAuthor {
             image: rgb16, width: width, height: height,
             samplesPerPixel: 3, photometric: 34892,
             reference: reference, preview: preview,
+            gps: gps,
             compressedStrip: payloadOverride)
         do {
             try data.write(to: url, options: .atomic)
@@ -384,6 +386,7 @@ public enum DNGAuthor {
         cfaPattern: [UInt8],
         cameraColor: [DNGTagValue],
         headroomStops: Int = 0,
+        gps: [DNGTagValue]? = nil,
         preview: Preview?,
         to url: URL
     ) throws {
@@ -461,6 +464,7 @@ public enum DNGAuthor {
             tileSize: tileSize, tilesAcross: tilesAcross, tilesDown: tilesDown,
             tiles: tiles,
             ifd0Tags: ifd0Tags, rawTags: rawTags,
+            gps: gps,
             preview: preview)
         do {
             try data.write(to: url, options: .atomic)
@@ -479,8 +483,12 @@ public enum DNGAuthor {
         tiles: [Data],
         ifd0Tags: [DNGTagValue],
         rawTags: [DNGTagValue],
+        gps: [DNGTagValue]? = nil,
         preview: Preview?
     ) throws -> Data {
+        let hasGPS = !(gps?.isEmpty ?? true)
+        let gpsIFD = IFDBuilder()
+        if let gps { for entry in gps { gpsIFD.add(entry) } }
         let rawIFD = IFDBuilder()
         rawIFD.addLong(254, 0)
         rawIFD.addLong(256, UInt32(width))
@@ -522,6 +530,9 @@ public enum DNGAuthor {
         for tag in ifd0Tags {
             ifd0.add(tag)
         }
+        if hasGPS {
+            ifd0.addLong(34853, 0) // GPSInfoIFDPointer, patched to the GPS IFD
+        }
         if !ifd0.contains(50708) {
             let name = Data("LetsLapse Live Blend\0".utf8)
             ifd0.add(DNGTagValue(tag: 50708, type: 2, count: UInt32(name.count), payload: name))
@@ -530,7 +541,9 @@ public enum DNGAuthor {
         let header = 8
         let ifd0Table = header
         let ifd0End = ifd0Table + ifd0.tableSize + ifd0.valueSize
-        let rawTable = ifd0End
+        let gpsTable = ifd0End
+        let gpsEnd = hasGPS ? gpsTable + gpsIFD.tableSize + gpsIFD.valueSize : gpsTable
+        let rawTable = gpsEnd
         let rawEnd = hasPreview ? rawTable + rawIFD.tableSize + rawIFD.valueSize : rawTable
         let previewStrip = (rawEnd + 1) & ~1
         var cursor = ((previewStrip + (preview?.rgb.count ?? 0)) + 1) & ~1
@@ -547,11 +560,17 @@ public enum DNGAuthor {
             ifd0.patchLong(273, UInt32(previewStrip))
             ifd0.patchLong(330, UInt32(rawTable))
         }
+        if hasGPS {
+            ifd0.patchLong(34853, UInt32(gpsTable))
+        }
 
         var output = Data(capacity: cursor)
         output.append(contentsOf: [0x49, 0x49, 42, 0])
         output.appendU32(UInt32(ifd0Table))
         output.append(ifd0.serialize(tableOffset: ifd0Table))
+        if hasGPS {
+            output.append(gpsIFD.serialize(tableOffset: gpsTable))
+        }
         if hasPreview {
             output.append(rawIFD.serialize(tableOffset: rawTable))
         }
@@ -672,6 +691,7 @@ public enum DNGAuthor {
         photometric: UInt16,
         reference: DNGReference,
         preview: Preview?,
+        gps: [DNGTagValue]? = nil,
         compressedStrip: CompressedStrip? = nil
     ) throws -> Data {
         guard image.count == width * height * 2 * samplesPerPixel else {
@@ -716,6 +736,10 @@ public enum DNGAuthor {
             exifIFD.add(entry)
         }
 
+        let hasGPS = !(gps?.isEmpty ?? true)
+        let gpsIFD = IFDBuilder()
+        if let gps { for entry in gps { gpsIFD.add(entry) } }
+
         let ifd0 = IFDBuilder()
         if let preview {
             ifd0.addLong(254, 1)
@@ -744,6 +768,9 @@ public enum DNGAuthor {
         if hasExif {
             ifd0.addLong(34665, 0) // patched
         }
+        if hasGPS {
+            ifd0.addLong(34853, 0) // GPSInfoIFDPointer, patched
+        }
         // Spec-required identity tags, injected only when the reference
         // lacks them (a synthetic test reference might).
         if !ifd0.contains(50706) {
@@ -754,14 +781,16 @@ public enum DNGAuthor {
             ifd0.add(DNGTagValue(tag: 50708, type: 2, count: UInt32(name.count), payload: name))
         }
 
-        // Layout: header, IFD0, [EXIF], [raw IFD], preview strip, raw strip.
+        // Layout: header, IFD0, [EXIF], [GPS], [raw IFD], preview strip, raw strip.
         let singleIFD = preview == nil
         let header = 8
         let ifd0Table = header
         let ifd0Values = ifd0Table + ifd0.tableSize
         let exifTable = ifd0Values + ifd0.valueSize
         let exifEnd = hasExif ? exifTable + exifIFD.tableSize + exifIFD.valueSize : exifTable
-        let rawTable = exifEnd
+        let gpsTable = exifEnd
+        let gpsEnd = hasGPS ? gpsTable + gpsIFD.tableSize + gpsIFD.valueSize : gpsTable
+        let rawTable = gpsEnd
         let rawEnd = singleIFD ? rawTable : rawTable + rawIFD.tableSize + rawIFD.valueSize
         let previewStrip = (rawEnd + 1) & ~1
         let rawStrip = ((previewStrip + (preview?.rgb.count ?? 0)) + 1) & ~1
@@ -777,6 +806,9 @@ public enum DNGAuthor {
         if hasExif {
             ifd0.patchLong(34665, UInt32(exifTable))
         }
+        if hasGPS {
+            ifd0.patchLong(34853, UInt32(gpsTable))
+        }
 
         var output = Data(capacity: rawStrip + strip.count)
         output.append(contentsOf: [0x49, 0x49, 42, 0])
@@ -784,6 +816,9 @@ public enum DNGAuthor {
         output.append(ifd0.serialize(tableOffset: ifd0Table))
         if hasExif {
             output.append(exifIFD.serialize(tableOffset: exifTable))
+        }
+        if hasGPS {
+            output.append(gpsIFD.serialize(tableOffset: gpsTable))
         }
         if !singleIFD {
             output.append(rawIFD.serialize(tableOffset: rawTable))
@@ -794,6 +829,204 @@ public enum DNGAuthor {
         }
         while output.count < rawStrip { output.append(0) }
         output.append(strip)
+        return output
+    }
+
+    // MARK: - GPS
+
+    /// One GPS sub-IFD field before byte-order serialization, kept neutral so
+    /// the same values feed both the little-endian authored writer and the
+    /// endian-matched injector for pass-through Apple originals.
+    private struct GPSField {
+        let tag: UInt16
+        let type: UInt16
+        let count: UInt32
+        enum Value {
+            /// ASCII / BYTE payloads, stored verbatim (never byte-swapped).
+            case bytes(Data)
+            /// RATIONAL values as (numerator, denominator) pairs.
+            case rationals([(UInt32, UInt32)])
+        }
+        let value: Value
+    }
+
+    /// The GPS sub-IFD fields (EXIF GPS spec) for one location fix. Latitude
+    /// and longitude are degrees/minutes/seconds; time and date stamps are
+    /// UTC — matching `CLLocation.exifGPSDictionary()` on the JPEG path.
+    private static func gpsFields(
+        latitude: Double, longitude: Double, altitude: Double, timestamp: Date
+    ) -> [GPSField] {
+        func dms(_ value: Double) -> [(UInt32, UInt32)] {
+            let magnitude = abs(value)
+            let degrees = UInt32(magnitude.rounded(.down))
+            let minutesTotal = (magnitude - Double(degrees)) * 60
+            let minutes = UInt32(minutesTotal.rounded(.down))
+            let seconds = (minutesTotal - Double(minutes)) * 60
+            return [(degrees, 1), (minutes, 1), (UInt32((seconds * 10000).rounded()), 10000)]
+        }
+        func ref(_ string: String) -> Data {
+            var data = Data(string.utf8)
+            data.append(0)
+            return data
+        }
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(identifier: "UTC")!
+        let parts = calendar.dateComponents([.year, .month, .day, .hour, .minute, .second], from: timestamp)
+        var dateStamp = Data(String(format: "%04d:%02d:%02d",
+                                     parts.year ?? 0, parts.month ?? 0, parts.day ?? 0).utf8)
+        dateStamp.append(0)
+        return [
+            GPSField(tag: 0, type: 1, count: 4, value: .bytes(Data([2, 3, 0, 0]))),
+            GPSField(tag: 1, type: 2, count: 2, value: .bytes(ref(latitude >= 0 ? "N" : "S"))),
+            GPSField(tag: 2, type: 5, count: 3, value: .rationals(dms(latitude))),
+            GPSField(tag: 3, type: 2, count: 2, value: .bytes(ref(longitude >= 0 ? "E" : "W"))),
+            GPSField(tag: 4, type: 5, count: 3, value: .rationals(dms(longitude))),
+            GPSField(tag: 5, type: 1, count: 1, value: .bytes(Data([altitude >= 0 ? 0 : 1]))),
+            GPSField(tag: 6, type: 5, count: 1, value: .rationals([(UInt32((abs(altitude) * 100).rounded()), 100)])),
+            GPSField(tag: 7, type: 5, count: 3, value: .rationals([
+                (UInt32(parts.hour ?? 0), 1), (UInt32(parts.minute ?? 0), 1), (UInt32(parts.second ?? 0), 1),
+            ])),
+            GPSField(tag: 29, type: 2, count: UInt32(dateStamp.count), value: .bytes(dateStamp)),
+        ]
+    }
+
+    /// The GPS sub-IFD as little-endian TIFF tags, for embedding in an
+    /// authored DNG via IFD0's GPSInfoIFDPointer (34853). Emits raw tags
+    /// because the DNG writer is hand-rolled rather than routed through
+    /// ImageIO's `kCGImagePropertyGPSDictionary`.
+    public static func gpsTags(
+        latitude: Double, longitude: Double, altitude: Double, timestamp: Date
+    ) -> [DNGTagValue] {
+        gpsFields(latitude: latitude, longitude: longitude, altitude: altitude, timestamp: timestamp)
+            .map { field in
+                var payload = Data()
+                switch field.value {
+                case .bytes(let bytes):
+                    payload = bytes
+                case .rationals(let rationals):
+                    for (numerator, denominator) in rationals {
+                        payload.appendU32(numerator)
+                        payload.appendU32(denominator)
+                    }
+                }
+                return DNGTagValue(tag: field.tag, type: field.type, count: field.count, payload: payload)
+            }
+    }
+
+    /// Adds a GPS sub-IFD to an already-encoded DNG without touching its
+    /// pixel data — for the pass-through paths that write a captured Apple
+    /// original byte-for-byte. A rebuilt IFD0 (the original entries plus the
+    /// GPS pointer) and the GPS IFD are appended, and the TIFF header is
+    /// repointed at the rebuilt IFD0, so every existing offset stays valid and
+    /// the raw image is left exactly as captured. Honours the source byte
+    /// order (iPhone originals are big-endian "MM"). Returns the input
+    /// unchanged if it can't be parsed or already carries a GPS IFD.
+    public static func dngByInsertingGPS(
+        into data: Data,
+        latitude: Double, longitude: Double, altitude: Double, timestamp: Date
+    ) -> Data {
+        guard data.count >= 8 else { return data }
+        let bigEndian: Bool
+        switch (data[data.startIndex], data[data.startIndex + 1]) {
+        case (0x49, 0x49): bigEndian = false
+        case (0x4D, 0x4D): bigEndian = true
+        default: return data
+        }
+        func readU16(_ offset: Int) -> UInt16 {
+            let base = data.startIndex + offset
+            let first = UInt16(data[base]); let second = UInt16(data[base + 1])
+            return bigEndian ? (first << 8) | second : (second << 8) | first
+        }
+        func readU32(_ offset: Int) -> UInt32 {
+            let base = data.startIndex + offset
+            let bytes = (0..<4).map { UInt32(data[base + $0]) }
+            return bigEndian
+                ? (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]
+                : (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0]
+        }
+        func u16(_ value: UInt16) -> [UInt8] {
+            let bytes: [UInt8] = [UInt8(value >> 8), UInt8(value & 0xFF)]
+            return bigEndian ? bytes : bytes.reversed()
+        }
+        func u32(_ value: UInt32) -> [UInt8] {
+            let bytes: [UInt8] = [
+                UInt8((value >> 24) & 0xFF), UInt8((value >> 16) & 0xFF),
+                UInt8((value >> 8) & 0xFF), UInt8(value & 0xFF),
+            ]
+            return bigEndian ? bytes : bytes.reversed()
+        }
+
+        guard readU16(2) == 42 else { return data }
+        let ifd0Offset = Int(readU32(4))
+        guard ifd0Offset >= 8, ifd0Offset + 2 <= data.count else { return data }
+        let entryCount = Int(readU16(ifd0Offset))
+        let tableStart = ifd0Offset + 2
+        guard tableStart + entryCount * 12 + 4 <= data.count else { return data }
+        // Copy each 12-byte entry record verbatim (already in file byte order);
+        // their spilled-value offsets point into the untouched original.
+        var entries: [(tag: UInt16, record: Data)] = []
+        entries.reserveCapacity(entryCount + 1)
+        for index in 0..<entryCount {
+            let recordStart = data.startIndex + tableStart + index * 12
+            let tag = readU16(tableStart + index * 12)
+            if tag == 34853 { return data } // already geotagged
+            entries.append((tag, data.subdata(in: recordStart..<recordStart + 12)))
+        }
+        let nextIFDOffset = readU32(tableStart + entryCount * 12)
+
+        // GPS IFD is appended first, then the rebuilt IFD0. Word-align both.
+        let fields = gpsFields(latitude: latitude, longitude: longitude, altitude: altitude, timestamp: timestamp)
+        let gpsOffset = (data.count + 1) & ~1
+        let gpsTableSize = 2 + fields.count * 12 + 4
+        let gpsValueBase = gpsOffset + gpsTableSize
+        var gpsTable = Data()
+        var gpsSpill = Data()
+        gpsTable.append(contentsOf: u16(UInt16(fields.count)))
+        for field in fields {
+            gpsTable.append(contentsOf: u16(field.tag))
+            gpsTable.append(contentsOf: u16(field.type))
+            gpsTable.append(contentsOf: u32(field.count))
+            switch field.value {
+            case .bytes(let bytes) where bytes.count <= 4:
+                var inline = Array(bytes)
+                while inline.count < 4 { inline.append(0) }
+                gpsTable.append(contentsOf: inline)
+            case .bytes(let bytes):
+                gpsTable.append(contentsOf: u32(UInt32(gpsValueBase + gpsSpill.count)))
+                gpsSpill.append(bytes)
+                if gpsSpill.count % 2 == 1 { gpsSpill.append(0) }
+            case .rationals(let rationals):
+                gpsTable.append(contentsOf: u32(UInt32(gpsValueBase + gpsSpill.count)))
+                for (numerator, denominator) in rationals {
+                    gpsSpill.append(contentsOf: u32(numerator))
+                    gpsSpill.append(contentsOf: u32(denominator))
+                }
+            }
+        }
+        gpsTable.append(contentsOf: u32(0)) // no next IFD
+
+        let ifd0PrimeOffset = (gpsOffset + gpsTable.count + gpsSpill.count + 1) & ~1
+        var pointerRecord = Data()
+        pointerRecord.append(contentsOf: u16(34853))
+        pointerRecord.append(contentsOf: u16(4))              // LONG
+        pointerRecord.append(contentsOf: u32(1))              // count
+        pointerRecord.append(contentsOf: u32(UInt32(gpsOffset))) // inline value
+        var merged = entries
+        merged.append((34853, pointerRecord))
+        merged.sort { $0.tag < $1.tag } // TIFF requires ascending tag order
+        var ifd0Prime = Data()
+        ifd0Prime.append(contentsOf: u16(UInt16(merged.count)))
+        for entry in merged { ifd0Prime.append(entry.record) }
+        ifd0Prime.append(contentsOf: u32(nextIFDOffset))
+
+        var output = Data(data)
+        let headerPatch = u32(UInt32(ifd0PrimeOffset))
+        for offset in 0..<4 { output[output.startIndex + 4 + offset] = headerPatch[offset] }
+        while output.count < gpsOffset { output.append(0) }
+        output.append(gpsTable)
+        output.append(gpsSpill)
+        while output.count < ifd0PrimeOffset { output.append(0) }
+        output.append(ifd0Prime)
         return output
     }
 

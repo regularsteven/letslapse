@@ -50,9 +50,13 @@ enum CreateEffect: String, CaseIterable, Identifiable {
 
 struct CreateView: View {
     @EnvironmentObject var model: AppModel
+    /// The camera presentation is owned by ContentView so that selecting the
+    /// Create tab can open the camera directly (skipping this screen). This
+    /// screen is the tab's "home" behind the camera; its own Record-now and
+    /// effect entries still drive the same binding.
+    @Binding var showCapture: Bool
+    @Binding var captureIntent: CaptureIntent
     @State private var isImporting = false
-    @State private var showCapture = false
-    @State private var captureIntent = CaptureIntent()
     @State private var importingProject = false
     #if os(iOS)
     @State private var videoItem: PhotosPickerItem?

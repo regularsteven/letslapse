@@ -163,30 +163,40 @@ struct ResultView: View {
 
     // MARK: - Next steps
 
+    /// A Photo-mode result is a single auto-blended shot with no Adjust step —
+    /// re-processing isn't a thing, so its "New version" row stays hidden.
+    private var isPhotoResult: Bool {
+        model.currentCapture?.isPhotoCapture == true
+    }
+
     private var nextSteps: some View {
         VStack(spacing: 0) {
-            Button {
-                model.stage = .configure
-            } label: {
-                HStack {
-                    Label("New version from original", systemImage: "arrow.counterclockwise")
-                        .font(.system(size: 15.5, weight: .semibold))
-                        .foregroundStyle(LL.accent)
-                    Spacer()
-                    if let hint = suggestionHint {
-                        Text(hint)
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
+            if !isPhotoResult {
+                Button {
+                    model.stage = .configure
+                } label: {
+                    HStack {
+                        Label("New version from original", systemImage: "arrow.counterclockwise")
+                            .font(.system(size: 15.5, weight: .semibold))
+                            .foregroundStyle(LL.accent)
+                        Spacer()
+                        if let hint = suggestionHint {
+                            Text(hint)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
                     }
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 13)
+                    .contentShape(Rectangle())
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 13)
-                .contentShape(Rectangle())
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
 
             if canCompare {
-                Divider().padding(.leading, 16)
+                if !isPhotoResult {
+                    Divider().padding(.leading, 16)
+                }
 
                 Button {
                     compareWithOriginal()

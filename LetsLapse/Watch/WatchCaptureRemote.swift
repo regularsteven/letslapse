@@ -27,7 +27,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var intervalSeconds: Double = 2
     /// Matches the phone's default (10); the phone's state push corrects
     /// any drift on connection.
-    @Published private(set) var framesPerBlend = 10
+    @Published private(set) var blendDepth: BlendDepth = .fixed(10)
+    /// Mirrors Photo mode's Bulb (hold-open) toggle. When true, the shutter is
+    /// a start/stop toggle over one long exposure.
+    @Published private(set) var isBulbMode = false
     @Published private(set) var captureCount = 0
     @Published private(set) var stopAtUnit: ScheduledStopUnit?
     @Published private(set) var stopAtDeadline: Date?
@@ -238,7 +241,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             playHaptic(.click)
         case "setFramesPerBlend":
             if let frames = sent[WatchMessageKey.value] as? Double {
-                framesPerBlend = Int(frames)
+                blendDepth = .fixed(Int(frames))
             }
             playHaptic(.click)
         case "scheduleStop":
@@ -331,8 +334,16 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         if let seconds = payload[WatchMessageKey.intervalSeconds] as? Double, seconds > 0 {
             intervalSeconds = seconds
         }
-        if let frames = payload[WatchMessageKey.framesPerBlend] as? Int, frames > 0 {
-            framesPerBlend = frames
+        // The token names the depth (fixed counts, Psycho, Safe); phone
+        // builds from before the adaptive depths only send the numeric key.
+        if let token = payload[WatchMessageKey.blendDepth] as? String,
+           let depth = BlendDepth(token: token) {
+            blendDepth = depth
+        } else if let frames = payload[WatchMessageKey.framesPerBlend] as? Int, frames > 0 {
+            blendDepth = .fixed(frames)
+        }
+        if let bulb = payload[WatchMessageKey.isBulbMode] as? Bool {
+            isBulbMode = bulb
         }
         if let count = payload[WatchMessageKey.captureCount] as? Int {
             captureCount = count

@@ -29,6 +29,11 @@ enum WatchMessageKey {
     static let captureMode = "captureMode"
     static let intervalSeconds = "intervalSeconds"
     static let framesPerBlend = "framesPerBlend"
+    static let blendDepth = "blendDepth"
+    /// Photo mode's Bulb (hold-open) toggle, mirrored so the Watch can label
+    /// its start/stop control. The generic start/stop commands drive it — the
+    /// phone routes a stop to `stopInterval` while the Bulb burst runs.
+    static let isBulbMode = "isBulbMode"
     static let captureCount = "captureCount"
     static let stopAtUnit = "stopAtUnit"
     static let stopAtDeadline = "stopAtDeadline"

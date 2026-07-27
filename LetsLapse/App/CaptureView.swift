@@ -1,5 +1,6 @@
 import SwiftUI
 import AVFoundation
+import LetsLapseKit
 #if os(iOS)
 import UIKit
 #else
@@ -12,23 +13,29 @@ struct CaptureView: View {
     var intent: CaptureIntent = CaptureIntent()
 
     @EnvironmentObject var model: AppModel
+    @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
     @Environment(\.dismiss) private var dismiss
     #if os(iOS)
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
     #endif
     @StateObject private var camera = CameraController()
+    /// Device-motion primitive for Photo mode's capture-when-steady gate (and
+    /// the live "waiting for steady" indicator).
+    @StateObject private var steadiness = SteadinessMonitor()
 
     @State private var mode: CaptureMode
     @State private var sequenceMode: LiveCaptureSequence.Mode
     @State private var interval: Double = 2
-    /// Interval mode's blend dial: source frames per output image, 1 = no
-    /// blending. Default 10: the capture benchmark showed bracketed RAW
-    /// delivers 10 frames in ~0.65s, and dense sampling is what reads as
-    /// motion blur — 3-5 spread samples read as ghosts.
-    @State private var framesPerBlend = 10
-    private let blendFrameOptions: [(frames: Int, label: String)] = [
-        (1, "No blending"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
-    ]
+    /// Interval mode's blend dial: fixed source-frame counts plus the
+    /// adaptive depths (Psycho/Safe). Default 10: the capture benchmark
+    /// showed bracketed RAW delivers 10 frames in ~0.65s, and dense sampling
+    /// is what reads as motion blur — 3-5 spread samples read as ghosts.
+    @State private var blendDepth: BlendDepth = .fixed(10)
+    /// Where Safe falls back when its profile basis disappears (interval or
+    /// format change, learning reset) — the last deliberate fixed choice.
+    @State private var lastFixedBlendFrames = 10
+    @State private var showPsychoNotice = false
+    private static let psychoNoticeShownKey = "letslapse.capture.psychoNoticeShown"
     private let captureIntervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
     @State private var orientation = currentCaptureOrientation()
     @State private var now = Date()
@@ -48,6 +55,41 @@ struct CaptureView: View {
     /// Deadline of a pending delayed start; nil when none. Tapping the
     /// shutter while pending cancels instead of stacking starts.
     @State private var delayedStartAt: Date?
+    /// Photo mode: whether the shutter waits for the device to settle before
+    /// firing, and whether it is currently waiting (drives the viewfinder
+    /// steady indicator).
+    @State private var photoCaptureWhenSteady = false
+    @State private var isWaitingForSteady = false
+    /// Photo mode's blend depth: how many frames the burst captures and stacks
+    /// into the final image. A capture-time setting (not a post-capture one),
+    /// so it lives here rather than on the model. Default 10 — dense sampling
+    /// reads as motion blur. The picker offers the same discrete presets as
+    /// Interval (20 · 10 · 5 · 3 · Off), where Off (depth 1) is a single frame.
+    @State private var photoBlendDepth = 10
+    /// Bulb: hold the shutter open. The first press starts an uncapped burst,
+    /// the second stops it and stacks everything captured into one long
+    /// exposure (or, with blend Off, keeps just the last frame).
+    @State private var photoBulbMode = false
+    /// Live frame counter during a Photo-mode burst, shown as "5 / 10" over the
+    /// viewfinder. Reset at capture start, driven by `camera.photoCount`.
+    @State private var photoBurstProgress = 0
+    /// A DNG Photo shot runs the live-blend RAW pipeline, which is open-ended;
+    /// a capped shot arms this so the first finished output stops the run. Bulb
+    /// leaves it false — the user's second tap stops it.
+    @State private var photoDNGAutoStop = false
+    /// Photo's discrete blend presets, high→low, ending at "Off" (a single
+    /// un-stacked frame, depth 1) — the same dial vocabulary Interval uses.
+    private static let photoBlendOptions: [(frames: Int, label: String)] = [
+        (20, "20 frames"), (10, "10 frames"), (5, "5 frames"), (3, "3 frames"), (1, "Off"),
+    ]
+    /// Photo mode captures at a fixed fast burst rate — the blend (if any) is
+    /// stacked in post, so the frames want dense sampling, not user spacing.
+    private static let photoBurstInterval = 1.0 / 10.0
+    /// A DNG Bulb run wants one open-ended output window that the user's stop
+    /// closes, not a new blended DNG every few seconds — so its window interval
+    /// is set effectively infinite (one day). Unthrottled capture fills that
+    /// single window until the shutter is tapped again.
+    private static let photoBulbDNGInterval = 86_400.0
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(intent: CaptureIntent = CaptureIntent()) {
@@ -65,8 +107,19 @@ struct CaptureView: View {
             if let seconds = RecordingSettingsStore.intervalSeconds(for: mode) {
                 _interval = State(initialValue: seconds)
             }
-            if let frames = RecordingSettingsStore.framesPerBlend {
-                _framesPerBlend = State(initialValue: frames)
+            if let depth = RecordingSettingsStore.blendDepth {
+                // A remembered Safe depth is re-gated once the camera is up
+                // (`revalidateSafeDepth`) — conditions may have changed.
+                _blendDepth = State(initialValue: depth)
+                if let fixed = depth.fixedFrames {
+                    _lastFixedBlendFrames = State(initialValue: fixed)
+                }
+            }
+            if let photoDepth = RecordingSettingsStore.photoBlendDepth {
+                _photoBlendDepth = State(initialValue: photoDepth)
+            }
+            if let bulb = RecordingSettingsStore.photoBulbMode {
+                _photoBulbMode = State(initialValue: bulb)
             }
         }
     }
@@ -143,13 +196,54 @@ struct CaptureView: View {
         }
         // The viewfinder must show what a DNG shoot will capture — the full
         // 4:3 sensor — so arming/disarming DNG re-configures the preview.
-        .onChange(of: model.intervalOutputFormat) { _ in updateAspectPreview() }
-        .onChange(of: camera.liveBlendDNGSupport) { _ in updateAspectPreview() }
+        // Format and DNG-support changes also switch the profile pool Safe
+        // mode draws from, so its basis gets re-checked.
+        .onChange(of: model.intervalOutputFormat) { _ in
+            updateAspectPreview()
+            revalidateSafeDepth()
+        }
+        .onChange(of: camera.liveBlendDNGSupport) { _ in
+            updateAspectPreview()
+            revalidateSafeDepth()
+        }
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
+            revalidateSafeDepth()
         }
-        .onChange(of: framesPerBlend) { frames in
-            RecordingSettingsStore.save(framesPerBlend: frames)
+        .onChange(of: blendDepth) { depth in
+            RecordingSettingsStore.save(blendDepth: depth)
+        }
+        // Photo mode's dials persist under the same "remember settings" gate,
+        // so a Photo shooter reopens with their blend count and Bulb choice.
+        .onChange(of: photoBlendDepth) { depth in
+            RecordingSettingsStore.save(photoBlendDepth: depth)
+        }
+        .onChange(of: photoBulbMode) { isBulb in
+            RecordingSettingsStore.save(photoBulbMode: isBulb)
+        }
+        // A capped DNG Photo shot ends itself: once its single blended DNG is
+        // out, stop the open-ended live-blend run. Bulb leaves the flag off.
+        .onChange(of: camera.liveBlendOutputCount) { count in
+            guard mode == .photo, photoDNGAutoStop, count >= 1 else { return }
+            photoDNGAutoStop = false
+            camera.stopLiveBlend()
+        }
+        // Tail-frame detection: tag each captured Interval frame with its
+        // motion reading. Photo mode has its own steady gate and never needs a
+        // tail log, so only plain-JPEG Interval sessions log here. (macOS is
+        // inert — the monitor never moves, so the tail count stays 0.)
+        .onChange(of: camera.photoCount) { count in
+            // Photo mode: mirror the burst count into the viewfinder overlay.
+            if mode == .photo {
+                photoBurstProgress = count
+            }
+            guard mode == .interval, count > 0 else { return }
+            steadiness.logCapture(index: count - 1)
+        }
+        .alert("Psycho blending", isPresented: $showPsychoNotice) {
+            Button("Got it") {}
+        } message: {
+            Text("Psycho captures as many frames as your device can manage each interval, ignoring thermal limits, for maximum motion blur. Your device may get warm during long sessions. This mode also teaches the app where your device throttles, which powers Safe mode.")
         }
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
@@ -195,7 +289,8 @@ struct CaptureView: View {
         .onChange(of: model.intervalOutputFormat) { _ in updateWatchContext() }
         .onChange(of: camera.liveBlendDNGSupport) { _ in updateWatchContext() }
         .onChange(of: interval) { _ in updateWatchModeContext() }
-        .onChange(of: framesPerBlend) { _ in updateWatchModeContext() }
+        .onChange(of: blendDepth) { _ in updateWatchModeContext() }
+        .onChange(of: photoBulbMode) { _ in updateWatchModeContext() }
         .onChange(of: camera.photoCount) { _ in updateWatchModeContext() }
         .onChange(of: camera.liveBlendOutputCount) { _ in updateWatchModeContext() }
         .onChange(of: camera.scheduledStop) { _ in updateWatchScheduledStop() }
@@ -224,6 +319,16 @@ struct CaptureView: View {
         // anyway, so re-saving is a no-op there.
         RecordingSettingsStore.save(captureMode: mode)
         #if os(iOS)
+        // Geotagging: request permission if needed, start streaming fixes so a
+        // location is ready to bake into stills, and arm the camera's tagger.
+        camera.gpsTaggingEnabled = gpsEnabled
+        if gpsEnabled {
+            let location = LocationService.shared
+            if location.authorizationStatus == .notDetermined {
+                location.requestPermission()
+            }
+            location.startUpdates()
+        }
         watchRemote.activate()
         watchRemote.setCommandHandler(handleWatchCommand)
         updateWatchRecordingState()
@@ -240,26 +345,94 @@ struct CaptureView: View {
         }
         camera.onFinishVideo = { url in
             camera.stop()
+            #if os(iOS)
+            // Flush the GPX track collected during the take into a sidecar
+            // next to the captured video (same base name, .gpx extension).
+            if gpsEnabled {
+                let points = LocationService.shared.stopGPXPolling()
+                if !points.isEmpty {
+                    let gpxURL = url.deletingPathExtension().appendingPathExtension("gpx")
+                    try? GPXWriter.write(points: points, to: gpxURL)
+                }
+            }
+            #endif
             dismiss()
             model.setSource(.video(url), mode: camera.activeFormatDescription)
         }
         camera.onFinishPhotos = { urls in
+            steadiness.stop()
+            // Photo mode never visits Adjust: its burst auto-blends into one
+            // image immediately, with the depth already chosen on the capture
+            // screen. It also never leaves the camera — the session stays live
+            // (no `camera.stop()`, no `dismiss()`) so the next shot can start at
+            // once, and the blend runs in the background into a saved project.
+            if mode == .photo {
+                let depth = photoBlendDepth
+                // Blend Off keeps a single frame — the most recent. A capped
+                // Photo snapshot already delivers exactly one; an open Bulb run
+                // may have captured many, so trim to the last before it stacks.
+                let framesToBlend = depth <= 1 ? Array(urls.suffix(1)) : urls
+                Task {
+                    await model.processPhotoBurst(
+                        urls: framesToBlend, blendDepth: depth, linear: model.linearLight,
+                        presentResult: false)
+                }
+                return
+            }
             camera.stop()
+            // Interval tail-frame flag: if the final contiguous run of frames
+            // read as shaky at capture time (typically a phone-grab to end the
+            // shoot), flag them for a quiet, recoverable review on the Adjust
+            // screen. Only Interval sessions log motion; Photo mode runs its own
+            // steady gate and auto-stops, so its `captureLog` stays empty here.
+            let tail = Self.trailingNoisyCount(
+                from: steadiness.captureLog, threshold: steadiness.stillThreshold)
             dismiss()
             model.setSource(.photos(urls), mode: "Interval · JPEG")
+            // A minimum run of 2 filters a lone bad frame (a passing cloud, a
+            // single bump); the half-session ceiling keeps a shaky handheld
+            // shoot from reading as a tail event.
+            if tail >= 2 && tail < urls.count / 2 {
+                model.flagTailFrames(count: tail, total: urls.count)
+            }
         }
         camera.onFinishLiveBlend = { result in
+            // Photo mode: the live-blend RAW pipeline already produced one
+            // blended DNG (the last window if a stop raced an extra one). It IS
+            // the photo — register it as a one-asset Photo capture, no further
+            // stacking, and keep the camera live for the next shot (the JPEG
+            // photo path's behaviour). Blend Off already emitted one untouched
+            // DNG, so depth 1 here means "keep the frame as captured".
+            if mode == .photo {
+                let dngURLs = Array(result.frameURLs.suffix(1))
+                guard !dngURLs.isEmpty else { return }
+                Task {
+                    await model.processPhotoBurst(
+                        urls: dngURLs, blendDepth: 1, linear: model.linearLight,
+                        presentResult: false)
+                }
+                return
+            }
             camera.stop()
             dismiss()
             // The experiment log rides along as a JSON sidecar (the project
             // model filters .json from media), so shared/imported projects
             // carry their own capture diagnostics.
             let format = result.outputFormat == "dng" ? "DNG" : "JPEG"
-            let blend = framesPerBlend > 1 ? " · \(framesPerBlend)-frame blend" : ""
+            let blend: String
+            switch blendDepth {
+            case .fixed(let frames):
+                blend = frames > 1 ? " · \(frames)-frame blend" : ""
+            case .unthrottled:
+                blend = " · Psycho blend"
+            case .throttled:
+                blend = " · Safe blend"
+            }
             model.setSource(
                 .photos(result.frameURLs + [result.logURL]),
                 mode: "Interval · \(format)\(blend)")
         }
+        revalidateSafeDepth()
         orientation = currentCaptureOrientation()
         #if os(iOS)
         // Deliver orientation-change notifications so the grid overlay's aspect
@@ -281,16 +454,67 @@ struct CaptureView: View {
             && camera.liveBlendDNGSupport.isSupported
     }
 
+    /// A Photo shot should land as DNG when the format is selected and the
+    /// source can deliver Bayer RAW — the same gate Interval uses.
+    private var wantsPhotoDNG: Bool {
+        model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+    }
+
+    /// The blend pipeline the current dials would run — the profile pool
+    /// Safe mode draws from.
+    private var activeBlendPipeline: String {
+        model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+            ? "dng" : "standard"
+    }
+
+    /// Safe mode needs a usable profile for this device, pipeline, interval
+    /// and the thermal conditions right now — it refuses to guess without a
+    /// basis, so the menu entry is disabled until Psycho has taught one.
+    private var safeDepthAvailable: Bool {
+        BlendProfileStore.shared.hasUsableProfile(
+            pipeline: activeBlendPipeline,
+            bucket: ThermalBucket(thermalState: ProcessInfo.processInfo.thermalState),
+            intervalSeconds: interval)
+    }
+
+    /// Safe's basis can vanish while it is selected (interval change, format
+    /// change, learning reset, a remembered setting from another day): fall
+    /// back to the last deliberate fixed choice rather than guessing.
+    private func revalidateSafeDepth() {
+        if blendDepth == .throttled, !safeDepthAvailable {
+            blendDepth = .fixed(lastFixedBlendFrames)
+        }
+    }
+
     private func updateAspectPreview() {
         camera.setPhotoAspectPreview(wantsPhotoAspectPreview)
     }
 
     private func cleanUpOnDisappear() {
+        // Idempotent — the finish handlers already stop it, but a mid-session
+        // close (or a Photo-mode exit) shouldn't leave motion updates running.
+        steadiness.stop()
         #if os(iOS)
+        LocationService.shared.stopUpdates()
         watchRemote.setCommandHandler(nil)
         UIApplication.shared.isIdleTimerDisabled = false
         UIDevice.current.endGeneratingDeviceOrientationNotifications()
         #endif
+    }
+
+    /// The final contiguous run of frames whose capture-time motion exceeded
+    /// `threshold`, walking backwards from the last frame. Stops at the first
+    /// steady frame, so a single bad frame mid-sequence never counts — only a
+    /// genuine tail (the phone-grab that ends a shoot) does.
+    static func trailingNoisyCount(
+        from log: [(captureIndex: Int, magnitude: Double)],
+        threshold: Double
+    ) -> Int {
+        var count = 0
+        for entry in log.reversed() {
+            if entry.magnitude > threshold { count += 1 } else { break }
+        }
+        return count
     }
 
     // MARK: - Portrait
@@ -342,6 +566,10 @@ struct CaptureView: View {
                         .padding(.horizontal, 16)
                 } else {
                     speedChipsRow
+                }
+            } else if mode == .photo {
+                if !isCapturing {
+                    photoControlsRow
                 }
             } else {
                 intervalStatusRow
@@ -398,6 +626,10 @@ struct CaptureView: View {
                     Group {
                         if mode == .video {
                             landscapeEstimateChips
+                        } else if mode == .photo {
+                            if !isCapturing {
+                                photoControlsRow
+                            }
                         } else {
                             landscapeIntervalRow
                         }
@@ -434,6 +666,15 @@ struct CaptureView: View {
     /// in landscape, so they stack vertically instead of rotating 90°.
     private var landscapeModeToggle: some View {
         VStack(spacing: 10) {
+            Button {
+                guard !isCapturing else { return }
+                mode = .photo
+            } label: {
+                Text("PHOTO")
+                    .foregroundStyle(mode == .photo ? LL.amber : .white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+
             Button {
                 guard !isCapturing else { return }
                 mode = .interval
@@ -493,6 +734,26 @@ struct CaptureView: View {
                     RuleOfThirdsGrid()
                         .frame(width: fitted.width, height: fitted.height)
                 }
+                if mode == .photo && isWaitingForSteady {
+                    SteadyGateOverlay(isStill: steadiness.isStill, magnitude: steadiness.magnitude)
+                }
+                if mode == .photo && camera.isIntervalRunning {
+                    // A capped Photo burst counts toward its depth ("5 / 10");
+                    // a Bulb run is open-ended, so it just tallies frames.
+                    Text(photoBulbMode ? "\(photoBurstProgress)" : "\(photoBurstProgress) / \(photoBlendDepth)")
+                        .font(.system(size: 28, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .shadow(radius: 4)
+                }
+                if mode == .photo && camera.isLiveBlendRunning {
+                    // DNG shots run the RAW pipeline, which reports no per-frame
+                    // tally — show the state instead (Bulb stays live until the
+                    // shutter is tapped again).
+                    Text(photoBulbMode ? "Capturing DNG…" : "Blending DNG…")
+                        .font(.system(size: 20, weight: .semibold, design: .rounded))
+                        .foregroundColor(.white)
+                        .shadow(radius: 4)
+                }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
@@ -502,8 +763,8 @@ struct CaptureView: View {
     }
 
     /// Swipe across the viewfinder to change modes, matching the mode row's
-    /// order (INTERVAL · VIDEO): swipe left moves right along the row, swipe
-    /// right moves left. The 40 pt floor keeps taps and menu touches free.
+    /// order (PHOTO · INTERVAL · VIDEO): swipe left steps right along the row,
+    /// swipe right steps left. The 40 pt floor keeps taps and menu touches free.
     private var modeSwipeGesture: some Gesture {
         DragGesture(minimumDistance: 40)
             .onEnded { value in
@@ -511,8 +772,18 @@ struct CaptureView: View {
                 let dx = value.translation.width
                 let dy = value.translation.height
                 guard abs(dx) > abs(dy) * 1.5, abs(dx) > 60 else { return }
-                mode = dx < 0 ? .video : .interval
+                stepMode(forward: dx < 0)
             }
+    }
+
+    /// The mode row's left-to-right order — swipes and the selector share it.
+    private static let modeOrder: [CaptureMode] = [.photo, .interval, .video]
+
+    private func stepMode(forward: Bool) {
+        guard let index = Self.modeOrder.firstIndex(of: mode) else { return }
+        let next = forward ? index + 1 : index - 1
+        guard Self.modeOrder.indices.contains(next) else { return }
+        mode = Self.modeOrder[next]
     }
 
     /// Pinch steps through the lenses one stop per threshold crossed:
@@ -596,10 +867,10 @@ struct CaptureView: View {
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
                 }
-                if mode == .interval {
-                    // The output format is part of the pill in Interval —
+                if mode == .interval || mode == .photo {
+                    // The output format is part of the pill in the still modes —
                     // DNG in amber (it changes what lands on disk), JPEG in
-                    // the ordinary weight.
+                    // the ordinary weight. Photo mirrors Interval exactly.
                     if model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported {
                         Text("· DNG")
                             .font(.system(size: 13, weight: .semibold))
@@ -842,7 +1113,7 @@ struct CaptureView: View {
         HStack(spacing: 12) {
             if camera.isLiveBlendRunning {
                 CameraPill(
-                    text: "\(camera.liveBlendOutputCount) \(framesPerBlend > 1 ? "blends" : "photos")",
+                    text: "\(camera.liveBlendOutputCount) \(blendDepth.blends ? "blends" : "photos")",
                     tint: LL.amber, bold: true, monospaced: true)
             } else {
                 CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber, bold: true, monospaced: true)
@@ -912,22 +1183,64 @@ struct CaptureView: View {
                 .foregroundStyle(.white.opacity(0.45))
                 .fixedSize()
             Menu {
-                ForEach(blendFrameOptions, id: \.frames) { option in
+                ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
                     Button {
-                        framesPerBlend = option.frames
+                        blendDepth = .fixed(option.frames)
+                        lastFixedBlendFrames = option.frames
                     } label: {
-                        if framesPerBlend == option.frames {
+                        if blendDepth == .fixed(option.frames) {
                             Label(blendOptionLabel(option), systemImage: "checkmark")
                         } else {
                             Text(blendOptionLabel(option))
                         }
                     }
                 }
+                Divider()
+                Button {
+                    selectPsychoDepth()
+                } label: {
+                    if blendDepth == .unthrottled {
+                        Label("Psycho · as many as it can", systemImage: "checkmark")
+                    } else {
+                        Text("Psycho · as many as it can")
+                    }
+                }
+                // Safe without a matching profile would be a guess; it stays
+                // disabled until Psycho runs have taught one for this
+                // pipeline, interval and thermal state.
+                Button {
+                    blendDepth = .throttled
+                } label: {
+                    if blendDepth == .throttled {
+                        Label("Safe · learned limit", systemImage: "checkmark")
+                    } else {
+                        Text("Safe · learned limit")
+                    }
+                }
+                .disabled(!safeDepthAvailable)
             } label: {
-                pickerMenuLabel(framesPerBlend == 1 ? "Off" : "\(framesPerBlend) frames")
+                pickerMenuLabel(blendDepthMenuLabel)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
+        }
+    }
+
+    private var blendDepthMenuLabel: String {
+        switch blendDepth {
+        case .fixed(1): return "Off"
+        case .fixed(let frames): return "\(frames) frames"
+        case .unthrottled: return "Psycho"
+        case .throttled: return "Safe"
+        }
+    }
+
+    /// First selection shows the honest warmth-and-learning note, once.
+    private func selectPsychoDepth() {
+        blendDepth = .unthrottled
+        if !UserDefaults.standard.bool(forKey: Self.psychoNoticeShownKey) {
+            UserDefaults.standard.set(true, forKey: Self.psychoNoticeShownKey)
+            showPsychoNotice = true
         }
     }
 
@@ -935,13 +1248,29 @@ struct CaptureView: View {
         option.frames == 1 ? option.label : "\(option.frames) frames · \(option.label)"
     }
 
-    /// The trailing "into one image" only makes sense while blending.
+    /// The trailing caption only makes sense while blending; the adaptive
+    /// depths say what drives their count instead.
     @ViewBuilder
     private var blendCaption: some View {
-        if framesPerBlend > 1 {
-            Text("into one image")
+        if let text = blendCaptionText {
+            Text(text)
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.4))
+        }
+    }
+
+    private var blendCaptionText: String? {
+        switch blendDepth {
+        case .fixed(let frames):
+            return frames > 1 ? "into one image" : nil
+        case .unthrottled:
+            return "max frames into one image"
+        case .throttled:
+            let learned = BlendProfileStore.shared.safeFrameCount(
+                pipeline: activeBlendPipeline,
+                bucket: ThermalBucket(thermalState: ProcessInfo.processInfo.thermalState),
+                intervalSeconds: interval)
+            return learned.map { "≈\($0) frames into one image" } ?? "learned limit"
         }
     }
 
@@ -964,8 +1293,10 @@ struct CaptureView: View {
     @ViewBuilder
     private var blendDiagnosticsReadout: some View {
         if camera.isLiveBlendRunning, let diagnostics = camera.liveBlendDiagnostics {
+            // Unthrottled windows have no target — the readout drops the
+            // "/N" rather than showing a made-up ceiling.
             VStack(alignment: .leading, spacing: 2) {
-                Text("frames \(diagnostics.currentWindowSelectedFrames)/\(diagnostics.requestedFramesPerBlend) · last \(diagnostics.lastCapturedFrames.map(String.init) ?? "–")")
+                Text("frames \(diagnostics.currentWindowSelectedFrames)\(diagnostics.requestedFramesPerBlend > 0 ? "/\(diagnostics.requestedFramesPerBlend)" : "") · last \(diagnostics.lastCapturedFrames.map(String.init) ?? "–")")
                 Text("out \(diagnostics.lastOutputIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "–") (req \(String(format: "%.1f s", diagnostics.requestedIntervalSeconds)))")
                 Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–")\(diagnostics.outputFormatLabel.map { " · \($0)" } ?? "") · \(diagnostics.status.rawValue)")
                     .foregroundStyle(blendStatusTint(diagnostics.status))
@@ -999,6 +1330,14 @@ struct CaptureView: View {
         let spacing: CGFloat = 22
         #endif
         return HStack(spacing: spacing) {
+            Button {
+                mode = .photo
+            } label: {
+                Text("PHOTO")
+                    .foregroundStyle(mode == .photo ? LL.amber : .white.opacity(0.5))
+            }
+            .buttonStyle(.plain)
+
             Button {
                 mode = .interval
             } label: {
@@ -1046,6 +1385,59 @@ struct CaptureView: View {
         }
     }
 
+    // MARK: - Photo controls
+
+    /// Photo mode's single dial: the blend depth, with Bulb folded in as the
+    /// top option. The dropdown mirrors Interval's discrete presets
+    /// (Bulb · 20 · 10 · 5 · 3 · Off), so the two modes read identically.
+    /// Selecting Bulb arms hold-open capture; any numeric option (or Off)
+    /// disarms it and sets the stack depth. Photo captures at a fixed fast
+    /// burst, so there's no spacing picker. The capture-when-steady toggle
+    /// lives in the shutter-row controls (`steadyToggleCircle`) unchanged.
+    private var photoControlsRow: some View {
+        HStack(spacing: 8) {
+            Text("BLEND")
+                .font(.system(size: 10, weight: .bold))
+                .kerning(0.8)
+                .foregroundStyle(.white.opacity(0.45))
+                .fixedSize()
+            Menu {
+                Button {
+                    photoBulbMode = true
+                } label: {
+                    if photoBulbMode {
+                        Label("Bulb", systemImage: "checkmark")
+                    } else {
+                        Text("Bulb")
+                    }
+                }
+                ForEach(Self.photoBlendOptions, id: \.frames) { option in
+                    Button {
+                        photoBulbMode = false
+                        photoBlendDepth = option.frames
+                    } label: {
+                        if !photoBulbMode && photoBlendDepth == option.frames {
+                            Label(option.label, systemImage: "checkmark")
+                        } else {
+                            Text(option.label)
+                        }
+                    }
+                }
+            } label: {
+                pickerMenuLabel(photoBlendMenuLabel)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+        }
+    }
+
+    /// Photo's blend-menu label — "Bulb" when armed, "Off" for a single frame,
+    /// else the count.
+    private var photoBlendMenuLabel: String {
+        if photoBulbMode { return "Bulb" }
+        return photoBlendDepth <= 1 ? "Off" : "\(photoBlendDepth) frames"
+    }
+
     // MARK: - Shutter row
 
     private var shutterButton: some View {
@@ -1071,11 +1463,7 @@ struct CaptureView: View {
                     Circle()
                         .fill(Color.red)
                         .frame(width: 60, height: 60)
-                    if let label = shutterDelayLabel {
-                        Text(label)
-                            .font(.system(size: 17, weight: .bold).monospacedDigit())
-                            .foregroundStyle(.white)
-                    }
+                    shutterBadge
                 }
             }
             .contentShape(Circle())
@@ -1091,6 +1479,30 @@ struct CaptureView: View {
             return "\(max(1, Int(deadline.timeIntervalSince(now).rounded(.up))))"
         }
         return shutterDelayEnabled ? "2s" : nil
+    }
+
+    /// Centered readout on the idle shutter: the armed capture-when-steady hand
+    /// and the self-timer countdown/"2s", sharing the same slot and type
+    /// treatment. The hand icon stands in for text at the same placement.
+    @ViewBuilder
+    private var shutterBadge: some View {
+        HStack(spacing: 5) {
+            if mode == .photo && photoBulbMode {
+                Text("BULB")
+                    .font(.system(size: 14, weight: .heavy))
+                    .foregroundStyle(.white)
+            }
+            if photoCaptureWhenSteady {
+                Image(systemName: "hand.raised.fill")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            if let label = shutterDelayLabel {
+                Text(label)
+                    .font(.system(size: 17, weight: .bold).monospacedDigit())
+                    .foregroundStyle(.white)
+            }
+        }
     }
 
     /// On-phone shutter taps honor the 2 s delay when armed (and a tap
@@ -1119,6 +1531,11 @@ struct CaptureView: View {
                 camera.stopRecording()
             } else {
                 framingStartedAt = Date()
+                #if os(iOS)
+                // Begin logging a GPX track for the take; flushed to a sidecar
+                // in the video-finish handler.
+                if gpsEnabled { LocationService.shared.startGPXPolling() }
+                #endif
                 camera.startRecording(mode: sequenceMode)
             }
         case .interval:
@@ -1130,7 +1547,116 @@ struct CaptureView: View {
                 framingStartedAt = Date()
                 startIntervalCapture()
             }
+        case .photo:
+            if camera.isLiveBlendRunning {
+                // A DNG shot is mid-flight — a capped stack (which also
+                // auto-stops) or an open Bulb window. This press ends it; the
+                // blended DNG lands in `onFinishLiveBlend`.
+                photoDNGAutoStop = false
+                camera.stopLiveBlend()
+            } else if camera.isIntervalRunning {
+                // A burst is mid-flight — a capped steadied stack or an open
+                // Bulb exposure. Either way this press ends it; a Bulb run then
+                // stacks everything captured in `onFinishPhotos`.
+                camera.stopInterval()
+            } else if isWaitingForSteady {
+                // Still arming the steady gate — cancel the wait; the gate
+                // resolves as "not settled" and the capture aborts.
+                steadiness.stop()
+            } else if photoBulbMode {
+                Task { await fireBulbCapture() }
+            } else {
+                Task { await firePhotoCapture() }
+            }
         }
+    }
+
+    /// Bulb: optionally hold for the device to settle, then start an uncapped
+    /// plain-still burst that runs until the user taps the shutter again.
+    private func fireBulbCapture() async {
+        steadiness.start()
+        defer { steadiness.stop() }
+
+        if photoCaptureWhenSteady {
+            isWaitingForSteady = true
+            let didSettle = await steadiness.waitUntilSteady(timeout: 15)
+            isWaitingForSteady = false
+            if !didSettle { return }  // timed out or cancelled — don't start
+        }
+
+        startBulbCapture()
+    }
+
+    private func startBulbCapture() {
+        framingStartedAt = Date()
+        photoBurstProgress = 0
+        // DNG Bulb: one open-ended live-blend RAW window that stacks every
+        // captured frame into a single blended DNG when the user stops. No
+        // auto-stop — the second shutter tap closes it (see `shutterAction`).
+        if wantsPhotoDNG {
+            photoDNGAutoStop = false
+            camera.startLiveBlend(
+                every: Self.photoBulbDNGInterval,
+                depth: .unthrottled,
+                preferDNG: true,
+                options: liveBlendDNGOptions)
+            return
+        }
+        // Uncapped plain-still burst on the photo-output timer: the engine
+        // floors uncapped spacing to 0.5 s, so this samples at ~2 fps until
+        // stopped, and the stills stack into one long exposure in post — the
+        // same `onFinishPhotos` → `processPhotoBurst` path a capped Photo burst
+        // uses.
+        camera.startInterval(every: Self.photoBurstInterval, frameCap: nil)
+    }
+
+    /// The DNG capture experiments (bracketed RAW, tight burst, fast capture)
+    /// apply to Photo-mode DNG shots exactly as they do to Interval.
+    private var liveBlendDNGOptions: LiveBlendCaptureOptions {
+        LiveBlendCaptureOptions(
+            responsiveCapture: model.liveBlendResponsiveCapture,
+            burstScheduling: model.liveBlendBurstCapture,
+            bracketedRAW: model.liveBlendBracketedRAW)
+    }
+
+    /// Photo mode: optionally hold for the device to settle, then fire a
+    /// capped-frame still capture. A single snapshot (blend off) captures one
+    /// frame; a steadied burst captures `photoBlendDepth` frames that stack
+    /// into one long exposure in post.
+    private func firePhotoCapture() async {
+        steadiness.start()
+        defer { steadiness.stop() }
+
+        // Only a blended capture benefits from the steady hold — a single
+        // snapshot fires straight away.
+        if photoCaptureWhenSteady && photoBlendDepth > 1 {
+            isWaitingForSteady = true
+            let didSettle = await steadiness.waitUntilSteady(timeout: 15)
+            isWaitingForSteady = false
+            if !didSettle { return }  // timed out or cancelled — don't fire
+        }
+
+        startPhotoCapture()
+    }
+
+    private func startPhotoCapture() {
+        framingStartedAt = Date()
+        photoBurstProgress = 0
+        // DNG: run the live-blend RAW pipeline for one window — it blends
+        // `photoBlendDepth` RAW frames into a single DNG (or emits one
+        // untouched DNG with blend Off, depth 1), exactly as Interval does.
+        // The first finished output auto-stops the run (see the output-count
+        // change handler); the result is registered as a one-asset Photo.
+        if wantsPhotoDNG {
+            photoDNGAutoStop = true
+            camera.startLiveBlend(
+                every: Self.photoBurstInterval,
+                depth: .fixed(max(1, photoBlendDepth)),
+                preferDNG: true,
+                options: liveBlendDNGOptions)
+            return
+        }
+        startIntervalCapture(photoModeFrameCap: max(1, photoBlendDepth))
     }
 
     /// Routes an Interval shoot to the engine its dials call for:
@@ -1140,20 +1666,32 @@ struct CaptureView: View {
     /// handles a 1-frame DNG window as untouched originals. DNG on an
     /// unsupported source degrades per dial: blends fall back to the JPEG
     /// video tap, unblended shoots to real JPEG stills.
-    private func startIntervalCapture() {
+    private func startIntervalCapture(photoModeFrameCap: Int? = nil) {
+        // Photo mode captures plain stills at a fast fixed burst and auto-stops
+        // after its frame cap; any blend happens in post from those stills, so
+        // it never touches the live-blend pipeline or the DNG path.
+        if let cap = photoModeFrameCap {
+            camera.startInterval(every: Self.photoBurstInterval, frameCap: cap)
+            return
+        }
+        // A remembered Safe depth can outlive its basis; never start a
+        // shoot on a guess.
+        revalidateSafeDepth()
         let wantsDNG = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
-        if !wantsDNG && framesPerBlend == 1 {
+        if !wantsDNG && blendDepth == .fixed(1) {
+            // Only the plain-JPEG interval path finishes through
+            // `onFinishPhotos`, so arm the motion log here — each frame is
+            // tagged in the `photoCount` handler, the tail analysed at finish.
+            steadiness.resetLog()
+            steadiness.start()
             camera.startInterval(every: interval)
             return
         }
         camera.startLiveBlend(
             every: interval,
-            framesPerBlend: framesPerBlend,
+            depth: blendDepth,
             preferDNG: wantsDNG,
-            options: LiveBlendCaptureOptions(
-                responsiveCapture: model.liveBlendResponsiveCapture,
-                burstScheduling: model.liveBlendBurstCapture,
-                bracketedRAW: model.liveBlendBracketedRAW))
+            options: liveBlendDNGOptions)
     }
 
     /// Left of the shutter: the burst/marker trigger while recording,
@@ -1184,8 +1722,29 @@ struct CaptureView: View {
             .buttonStyle(.plain)
             .accessibilityLabel((camera.activeSequenceMode ?? sequenceMode) == .ramp ? "Toggle speed burst" : "Toggle marker")
         } else {
-            exposureLockCircle
+            // The grid toggle lives here now (moved from the shutter row's
+            // trailing slot), beside the AE/AF lock — the left-side controls.
+            HStack(spacing: 8) {
+                gridToggleCircle
+                exposureLockCircle
+            }
         }
+    }
+
+    /// Rule-of-thirds grid toggle — a left-side control matching the exposure
+    /// lock's circular chrome.
+    private var gridToggleCircle: some View {
+        Button {
+            showGrid.toggle()
+        } label: {
+            Image(systemName: showGrid ? "grid.circle.fill" : "grid.circle")
+                .font(.system(size: 20))
+                .foregroundStyle(showGrid ? LL.amber : .white)
+                .frame(width: 44, height: 44)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Toggle grid")
     }
 
     /// Circular AE/AF lock, sized for the shutter-row slots and the
@@ -1208,8 +1767,8 @@ struct CaptureView: View {
         .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
     }
 
-    /// Right of the shutter: delay + grid toggles idle, the interval/marker
-    /// count while recording.
+    /// Right of the shutter: delay + capture-when-steady toggles idle, the
+    /// interval/marker count while recording.
     @ViewBuilder
     private var trailingControl: some View {
         if camera.isRecording {
@@ -1236,19 +1795,27 @@ struct CaptureView: View {
                 .buttonStyle(.plain)
                 .accessibilityLabel(shutterDelayEnabled ? "Turn off 2 second delay" : "Turn on 2 second delay")
 
-                Button {
-                    showGrid.toggle()
-                } label: {
-                    Image(systemName: showGrid ? "grid.circle.fill" : "grid.circle")
-                        .font(.system(size: 20))
-                        .foregroundStyle(showGrid ? LL.amber : .white)
-                        .frame(width: 44, height: 44)
-                        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Toggle grid")
+                // Capture-when-steady toggle, in the grid button's old slot.
+                steadyToggleCircle
             }
         }
+    }
+
+    /// Capture-when-steady toggle — a circular icon button matching the 2 s
+    /// delay button's shape and on/off treatment. Present in every mode; the
+    /// gate itself still only fires in Photo (see `firePhotoCapture`).
+    private var steadyToggleCircle: some View {
+        Button {
+            photoCaptureWhenSteady.toggle()
+        } label: {
+            Image(systemName: photoCaptureWhenSteady ? "hand.raised.fill" : "hand.raised")
+                .font(.system(size: 18))
+                .foregroundStyle(photoCaptureWhenSteady ? LL.amber : .white)
+                .frame(width: 44, height: 44)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(photoCaptureWhenSteady ? "Turn off capture when steady" : "Turn on capture when steady")
     }
 
     // MARK: - Target capture
@@ -1320,10 +1887,14 @@ struct CaptureView: View {
 
     // MARK: - Manual exposure
 
-    /// Landscape-rail variant: the lock circle plus the frozen readout.
-    /// Fine ISO/focus tuning lives in portrait or on the Watch crown.
+    /// Landscape-rail variant: the steady + grid toggles and the lock circle,
+    /// plus the frozen readout. Fine ISO/focus tuning lives in portrait or on
+    /// the Watch crown. The steady toggle sits here in landscape since the
+    /// shutter-row trailing controls are portrait-only.
     private var landscapeExposureControl: some View {
         VStack(spacing: 6) {
+            steadyToggleCircle
+            gridToggleCircle
             exposureLockCircle
 
             if camera.isExposureLocked {
@@ -1449,9 +2020,12 @@ struct CaptureView: View {
             guard !isCapturing, let value, captureIntervalOptions.contains(value) else { return }
             interval = value
         case .setFramesPerBlend:
+            // The Watch picker only offers the fixed counts; the adaptive
+            // depths are set on the phone, where Safe's gating lives.
             guard !isCapturing, let value,
-                  blendFrameOptions.contains(where: { $0.frames == Int(value) }) else { return }
-            framesPerBlend = Int(value)
+                  BlendDepth.fixedOptions.contains(where: { $0.frames == Int(value) }) else { return }
+            blendDepth = .fixed(Int(value))
+            lastFixedBlendFrames = Int(value)
         case .scheduleStop:
             guard isCapturing, let value,
                   let token = payload[WatchMessageKey.stopAtUnit] as? String,
@@ -1509,7 +2083,8 @@ struct CaptureView: View {
         watchRemote.setModeContext(
             mode: mode,
             intervalSeconds: interval,
-            framesPerBlend: framesPerBlend,
+            blendDepth: blendDepth,
+            isBulbMode: mode == .photo && photoBulbMode,
             captureCount: count)
     }
 
@@ -1568,6 +2143,41 @@ private struct CameraPill: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 6)
             .background(Color.black.opacity(0.5), in: Capsule())
+    }
+}
+
+/// Photo mode's "waiting for steady" indicator — a pulsing centered badge that
+/// reads amber while the device is moving and flips to green the instant it
+/// settles, just before the shutter fires. The countdown text's steadiness twin.
+private struct SteadyGateOverlay: View {
+    var isStill: Bool
+    var magnitude: Double
+    @State private var pulse = false
+
+    var body: some View {
+        VStack(spacing: 10) {
+            ZStack {
+                Circle()
+                    .stroke((isStill ? Color.green : LL.amber).opacity(0.6), lineWidth: 2)
+                    .frame(width: 64, height: 64)
+                    .scaleEffect(pulse ? 1.12 : 0.9)
+                    .opacity(pulse ? 0.2 : 0.85)
+                Image(systemName: isStill ? "checkmark" : "waveform")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(isStill ? Color.green : LL.amber)
+            }
+            Text(isStill ? "Steady" : "Waiting for steady")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+        }
+        .padding(18)
+        .background(Color.black.opacity(0.45), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .onAppear {
+            withAnimation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true)) {
+                pulse = true
+            }
+        }
+        .accessibilityLabel(isStill ? "Steady" : "Waiting for steady")
     }
 }
 
@@ -1643,10 +2253,11 @@ private struct FormatSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                // Choices with downstream consequences come first: Interval's
-                // output format decides whether resolution is even selectable,
-                // and Video's stabilization filters the format list below it.
-                if mode == .interval {
+                // Choices with downstream consequences come first: the still
+                // modes' output format decides whether resolution is even
+                // selectable, and Video's stabilization filters the format list
+                // below it. Photo mirrors Interval here — same output controls.
+                if mode == .interval || mode == .photo {
                     Section {
                         Picker("Output", selection: $model.intervalOutputFormat) {
                             Text("JPEG").tag(IntervalOutputFormat.jpeg)
@@ -1673,7 +2284,7 @@ private struct FormatSheet: View {
                         ))
                     }
 
-                    if mode == .interval && model.intervalOutputFormat == .dng,
+                    if (mode == .interval || mode == .photo) && model.intervalOutputFormat == .dng,
                        camera.liveBlendDNGSupport.isSupported,
                        let sensor = camera.liveBlendDNGSupport.sensorDimensions {
                         // DNG captures the sensor's full photo frame — the

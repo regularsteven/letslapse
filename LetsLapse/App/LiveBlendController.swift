@@ -1,6 +1,7 @@
 import Foundation
 import AVFoundation
 import CoreMedia
+import ImageIO
 import os
 import LetsLapseKit
 
@@ -75,7 +76,12 @@ struct LiveBlendSessionLog: Codable {
         var captureHeight: Int
         var configuredFrameRate: Int
         var requestedIntervalSeconds: Double
+        /// The fixed frames-per-blend, or 0 for the adaptive depths (see
+        /// `blendDepth`).
         var requestedFramesPerBlend: Int
+        /// "fixed" / "unthrottled" / "throttled"; nil in logs from before
+        /// the adaptive depths existed.
+        var blendDepth: String? = nil
         /// What the user asked for ("standard"/"dng") vs what this session
         /// actually produces — a visible record of any fallback.
         var requestedOutputFormat: String = "standard"
@@ -96,6 +102,7 @@ struct LiveBlendSessionLog: Codable {
         var requestedIntervalSeconds: Double
         /// Completion-to-completion spacing; nil for the first output.
         var actualIntervalSeconds: Double? = nil
+        /// This window's resolved frame target; 0 = unlimited (unthrottled).
         var requestedFrames: Int
         var capturedFrames: Int
         var missedRateLimited: Int
@@ -113,6 +120,12 @@ struct LiveBlendSessionLog: Codable {
         var fileBytes: Int? = nil
         var memoryFootprintBytes: Int? = nil
         var thermalState: String
+        /// Thermal state when the window opened — the learning system's
+        /// primary predictor; `thermalState` above is read at close.
+        var thermalStateAtStart: String? = nil
+        /// An unthrottled window stopped capturing at the app's memory
+        /// budget rather than the device's rate.
+        var memoryCapped: Bool? = nil
         var partial: Bool
         var fallbackSingleFrame: Bool = false
         var failed: Bool = false
@@ -140,6 +153,28 @@ struct LiveBlendSessionLog: Codable {
     var summary: Summary?
 }
 
+extension LiveBlendSessionLog.OutputEntry {
+    /// The thermal bucket this window opened in, when the entry recorded it.
+    var startBucket: ThermalBucket? {
+        thermalStateAtStart.flatMap(ThermalBucket.init(thermalStateName:))
+    }
+
+    /// The learning sample a completed unthrottled window contributes.
+    /// Distress = the thermal state rose from the window's start, sits at
+    /// serious+, or the output cadence drifted well past the interval.
+    func learningSample(intervalSeconds: Double, capped: Bool) -> BlendLearningSample {
+        let stateNow = ProcessInfo.processInfo.thermalState
+        let rose = startBucket.map { ThermalBucket(thermalState: stateNow) > $0 } ?? false
+        let drifted = (actualIntervalSeconds ?? 0) > intervalSeconds * 1.3
+        return BlendLearningSample(
+            date: Date(),
+            framesCaptured: capturedFrames,
+            throttleDetected: rose || stateNow == .serious || stateNow == .critical || drifted,
+            capped: capped,
+            blendMillis: blendMillis)
+    }
+}
+
 // MARK: - Live Blend controller (experimental spike)
 
 /// Drives one Live Blend capture run: selects frames from the camera stream on
@@ -155,7 +190,7 @@ struct LiveBlendSessionLog: Codable {
 final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferDelegate {
     struct Configuration {
         var intervalSeconds: Double
-        var framesPerBlend: Int
+        var blendDepth: BlendDepth
         var outputDirectory: URL
         var logURL: URL
         var cameraName: String
@@ -165,7 +200,23 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// "dng" when the user asked for DNG but this (standard) path ran as
         /// the fallback — recorded in the log header.
         var requestedOutputFormat: String = "standard"
+        /// Safe mode's frame target, consulted once at each window open;
+        /// nil for the other depths.
+        var throttledFrameTarget: (() -> Int)? = nil
+        /// Geotag source: the EXIF GPS dictionary for the current fix, or nil
+        /// when tagging is off or no fix exists yet. Called on the blend queue
+        /// as each output is written, so every blended frame carries the fix
+        /// from its own moment — matching the plain-still capture path.
+        var gpsMetadata: (() -> [String: Any]?)? = nil
+
+        /// What readouts show before the first window resolves: the fixed
+        /// count, or 0 (unlimited/unresolved) for the adaptive depths.
+        var initialDisplayFrames: Int { blendDepth.fixedFrames ?? 0 }
     }
+
+    /// Unthrottled windows have no target grid, so backpressure alone bounds
+    /// enqueued-but-unblended frames.
+    private static let unthrottledPendingCap = 8
 
     /// One compiled kernel set for the app lifetime; nil only when Metal is
     /// unavailable, which `init` turns into a thrown error.
@@ -180,6 +231,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     var onDiagnostics: ((LiveBlendDiagnosticsSnapshot) -> Void)?
     /// nil result = nothing to register (zero outputs, or a discarded run).
     var onFinished: ((LiveBlendCaptureResult?) -> Void)?
+    /// Fired on the blend queue for each completed unthrottled window — what
+    /// the learning profiles are built from.
+    var onLearningSample: ((ThermalBucket, BlendLearningSample) -> Void)?
 
     // Cross-queue state. `generation` invalidates queued blend work on
     // discard; `pending` counts enqueued-but-unprocessed frames for
@@ -196,6 +250,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private struct WindowRecord {
         var index: Int
         var startSeconds: Double
+        /// Resolved at window open; nil = unthrottled (take every frame).
+        var frameTarget: Int? = nil
+        var thermalStateAtStart = "unknown"
         var frameTimes: [Double] = []
         var missedRateLimited = 0
         var droppedProcessingBehind = 0
@@ -241,7 +298,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         self.window = WindowRecord(index: 0, startSeconds: 0)
         self.diagnostics = OSAllocatedUnfairLock(initialState: LiveBlendDiagnosticsSnapshot(
             requestedIntervalSeconds: configuration.intervalSeconds,
-            requestedFramesPerBlend: configuration.framesPerBlend))
+            requestedFramesPerBlend: configuration.initialDisplayFrames))
         self.log = LiveBlendSessionLog(header: LiveBlendSessionLog.Header(
             startedAt: Date(),
             deviceModel: LiveBlendController.deviceModelIdentifier(),
@@ -252,7 +309,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             captureHeight: configuration.captureHeight,
             configuredFrameRate: configuration.configuredFrameRate,
             requestedIntervalSeconds: configuration.intervalSeconds,
-            requestedFramesPerBlend: configuration.framesPerBlend,
+            requestedFramesPerBlend: configuration.initialDisplayFrames,
+            blendDepth: configuration.blendDepth.familyName,
             requestedOutputFormat: configuration.requestedOutputFormat,
             outputFormat: "standard"))
         super.init()
@@ -266,7 +324,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             self.startedAtHost = .now()
             self.lastFrameAtHost = .now()
             self.armWatchdog()
-            LLog("liveblend: start interval=\(self.configuration.intervalSeconds)s frames=\(self.configuration.framesPerBlend) log=\(self.configuration.logURL.path)")
+            LLog("liveblend: start interval=\(self.configuration.intervalSeconds)s depth=\(self.configuration.blendDepth.token) log=\(self.configuration.logURL.path)")
             self.blendQueue.async { self.rewriteLog() }
         }
     }
@@ -305,7 +363,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 sessionStartPTS = pts
                 windowStartSeconds = 0
                 nextTargetIndex = 0
-                window = WindowRecord(index: windowIndex, startSeconds: 0)
+                window = openWindow(index: windowIndex, startSeconds: 0)
             }
             guard let start = sessionStartPTS else { return }
             let t = pts - start
@@ -322,25 +380,30 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             if t >= windowStartSeconds + interval {
                 let jumped = Int((t - windowStartSeconds) / interval)
                 windowStartSeconds += Double(jumped) * interval
-                window = WindowRecord(index: windowIndex, startSeconds: windowStartSeconds)
+                window = openWindow(index: windowIndex, startSeconds: windowStartSeconds)
                 nextTargetIndex = 0
                 blendQueue.async { self.skippedWindows += jumped }
             }
 
-            // Selection: the first pending target this frame crosses selects
-            // it; any further targets crossed by the same frame were missed
-            // (camera slower than the requested sampling rate).
-            guard nextTargetIndex < configuration.framesPerBlend, t >= targetSeconds(nextTargetIndex) else { return }
-            nextTargetIndex += 1
-            while nextTargetIndex < configuration.framesPerBlend, t >= targetSeconds(nextTargetIndex) {
-                window.missedRateLimited += 1
+            // Selection. A fixed/Safe window spreads its target count across
+            // the interval on a grid — the first pending target this frame
+            // crosses selects it; further targets crossed by the same frame
+            // were missed (camera slower than the requested sampling rate).
+            // An unthrottled window has no grid: every frame the camera
+            // delivers is a candidate, bounded only by backpressure.
+            if let target = window.frameTarget {
+                guard nextTargetIndex < target, t >= targetSeconds(nextTargetIndex, of: target) else { return }
                 nextTargetIndex += 1
+                while nextTargetIndex < target, t >= targetSeconds(nextTargetIndex, of: target) {
+                    window.missedRateLimited += 1
+                    nextTargetIndex += 1
+                }
             }
 
             // Backpressure: one window's worth of frames plus slack may wait
             // for the blender; beyond that the writer has fallen behind and
             // new selections are dropped, never queued.
-            if pending.withLock({ $0 }) >= configuration.framesPerBlend + 3 {
+            if pending.withLock({ $0 }) >= (window.frameTarget.map { $0 + 3 } ?? Self.unthrottledPendingCap) {
                 window.droppedProcessingBehind += 1
                 return
             }
@@ -373,9 +436,27 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         window.droppedByCamera += 1
     }
 
-    private func targetSeconds(_ index: Int) -> Double {
-        let spacing = configuration.intervalSeconds / Double(configuration.framesPerBlend)
+    private func targetSeconds(_ index: Int, of target: Int) -> Double {
+        let spacing = configuration.intervalSeconds / Double(target)
         return windowStartSeconds + (Double(index) + 0.5) * spacing
+    }
+
+    /// Opens a window: resolves its frame target (Safe mode re-evaluates
+    /// per interval, here) and stamps the thermal state the learning system
+    /// keys on. videoQueue.
+    private func openWindow(index: Int, startSeconds: Double) -> WindowRecord {
+        let target: Int?
+        switch configuration.blendDepth {
+        case .fixed(let frames): target = frames
+        case .unthrottled: target = nil
+        case .throttled: target = max(1, configuration.throttledFrameTarget?() ?? 2)
+        }
+        pushDiagnostics { $0.requestedFramesPerBlend = target ?? 0 }
+        return WindowRecord(
+            index: index,
+            startSeconds: startSeconds,
+            frameTarget: target,
+            thermalStateAtStart: LiveBlendController.thermalStateName())
     }
 
     /// Hands the current window to the blend queue and opens the next one.
@@ -395,7 +476,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             windowStartSeconds += configuration.intervalSeconds
         }
         nextTargetIndex = 0
-        window = WindowRecord(index: windowIndex, startSeconds: windowStartSeconds)
+        window = openWindow(index: windowIndex, startSeconds: windowStartSeconds)
     }
 
     // MARK: Watchdog (videoQueue)
@@ -444,7 +525,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             windowStartSeconds: record.startSeconds,
             windowEndSeconds: record.startSeconds + configuration.intervalSeconds,
             requestedIntervalSeconds: configuration.intervalSeconds,
-            requestedFrames: configuration.framesPerBlend,
+            requestedFrames: record.frameTarget ?? 0,
             capturedFrames: blender.frameCount,
             missedRateLimited: record.missedRateLimited,
             droppedProcessingBehind: record.droppedProcessingBehind,
@@ -456,6 +537,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             frameSpacingMaxSeconds: spacings.max(),
             thermalState: LiveBlendController.thermalStateName(),
             partial: record.partial)
+        entry.thermalStateAtStart = record.thermalStateAtStart
         accumulateFailuresThisWindow = 0
 
         if entry.capturedFrames == 0 {
@@ -472,7 +554,10 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 let url = configuration.outputDirectory
                     .appendingPathComponent(String(format: "frame-%05d.jpg", outputIndex))
                 let encodeStart = ProcessInfo.processInfo.systemUptime
-                try ImageExporter.write(image, to: url, format: .jpeg)
+                let metadata = configuration.gpsMetadata?().map {
+                    [kCGImagePropertyGPSDictionary: $0 as Any]
+                }
+                try ImageExporter.write(image, to: url, format: .jpeg, metadata: metadata)
                 entry.encodeMillis = (ProcessInfo.processInfo.systemUptime - encodeStart) * 1000
                 let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
                 entry.fileBytes = (attributes?[.size] as? NSNumber)?.intValue
@@ -505,6 +590,16 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         log.outputs.append(entry)
         rewriteLog()
 
+        // Every completed unthrottled window is a lesson: what this device
+        // managed under these conditions feeds the Safe-mode profiles.
+        if configuration.blendDepth == .unthrottled,
+           !entry.failed, !entry.partial, entry.capturedFrames > 0,
+           let bucket = entry.startBucket {
+            onLearningSample?(bucket, entry.learningSample(
+                intervalSeconds: configuration.intervalSeconds,
+                capped: entry.droppedProcessingBehind > 0))
+        }
+
         let status = status(after: entry)
         pushDiagnostics {
             $0.lastCapturedFrames = entry.capturedFrames
@@ -530,7 +625,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
         if entry.droppedProcessingBehind > 0 { return .processingBehind }
         if entry.missedRateLimited > 0 { return .cameraRateLimited }
-        if entry.capturedFrames < entry.requestedFrames { return .reducedFrameCount }
+        if entry.requestedFrames > 0, entry.capturedFrames < entry.requestedFrames { return .reducedFrameCount }
         return .healthy
     }
 

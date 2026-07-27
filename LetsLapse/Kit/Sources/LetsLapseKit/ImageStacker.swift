@@ -441,15 +441,46 @@ public enum ImageFormat: String, CaseIterable, Sendable {
 }
 
 public enum ImageExporter {
-    public static func write(_ image: CGImage, to url: URL, format: ImageFormat, quality: Double = 0.95) throws {
+    public static func write(
+        _ image: CGImage,
+        to url: URL,
+        format: ImageFormat,
+        quality: Double = 0.95,
+        metadata: [CFString: Any]? = nil
+    ) throws {
         guard let destination = CGImageDestinationCreateWithURL(
             url as CFURL, format.utType.identifier as CFString, 1, nil) else {
             throw LapseError.imageEncodeFailed("could not create \(format.rawValue) destination")
         }
-        let properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
+        var properties: [CFString: Any] = [kCGImageDestinationLossyCompressionQuality: quality]
+        for (key, value) in metadata ?? [:] {
+            properties[key] = value
+        }
         CGImageDestinationAddImage(destination, image, properties as CFDictionary)
         guard CGImageDestinationFinalize(destination) else {
             throw LapseError.imageEncodeFailed("could not write \(url.lastPathComponent)")
         }
+    }
+
+    /// The metadata worth carrying from a source photo into an image derived
+    /// from it: the EXIF block (capture time, exposure), the GPS fix, and the
+    /// TIFF camera identity — minus orientation, which a derived image has
+    /// already baked into its pixels (`loadImage` applies the transform).
+    public static func carryoverMetadata(from url: URL) -> [CFString: Any]? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any]
+        else { return nil }
+        var metadata: [CFString: Any] = [:]
+        if let exif = properties[kCGImagePropertyExifDictionary] {
+            metadata[kCGImagePropertyExifDictionary] = exif
+        }
+        if let gps = properties[kCGImagePropertyGPSDictionary] {
+            metadata[kCGImagePropertyGPSDictionary] = gps
+        }
+        if var tiff = properties[kCGImagePropertyTIFFDictionary] as? [CFString: Any] {
+            tiff.removeValue(forKey: kCGImagePropertyTIFFOrientation)
+            metadata[kCGImagePropertyTIFFDictionary] = tiff
+        }
+        return metadata.isEmpty ? nil : metadata
     }
 }

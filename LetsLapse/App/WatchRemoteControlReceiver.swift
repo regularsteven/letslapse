@@ -35,6 +35,8 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var captureMode: CaptureMode = .video
     private var intervalSeconds: Double = 2
     private var framesPerBlend = 5
+    private var blendDepthToken = "5"
+    private var isBulbMode = false
     private var captureCount = 0
     private var stopAtUnit: ScheduledStopUnit?
     private var stopAtDeadline: Date?
@@ -92,21 +94,30 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     /// The capture mode and its per-mode dials, mirrored so the Watch can
-    /// select a mode and show the interval/frames it will start with.
+    /// select a mode and show the interval/depth it will start with. The
+    /// numeric frames key keeps carrying the fixed counts (0 for adaptive
+    /// depths, which stale Watch builds ignore); the token names the depth
+    /// for builds that know Psycho/Safe.
     @MainActor
     func setModeContext(
         mode: CaptureMode,
         intervalSeconds: Double,
-        framesPerBlend: Int,
+        blendDepth: BlendDepth,
+        isBulbMode: Bool,
         captureCount: Int
     ) {
+        let framesPerBlend = blendDepth.fixedFrames ?? 0
         let changed = self.captureMode != mode
             || self.intervalSeconds != intervalSeconds
             || self.framesPerBlend != framesPerBlend
+            || self.blendDepthToken != blendDepth.token
+            || self.isBulbMode != isBulbMode
             || self.captureCount != captureCount
         self.captureMode = mode
         self.intervalSeconds = intervalSeconds
         self.framesPerBlend = framesPerBlend
+        self.blendDepthToken = blendDepth.token
+        self.isBulbMode = isBulbMode
         self.captureCount = captureCount
         if changed {
             publishState()
@@ -240,6 +251,8 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.captureMode] = captureMode.rawValue
         payload[WatchMessageKey.intervalSeconds] = intervalSeconds
         payload[WatchMessageKey.framesPerBlend] = framesPerBlend
+        payload[WatchMessageKey.blendDepth] = blendDepthToken
+        payload[WatchMessageKey.isBulbMode] = isBulbMode
         payload[WatchMessageKey.captureCount] = captureCount
         if let stopAtUnit {
             payload[WatchMessageKey.stopAtUnit] = stopAtUnit.rawValue

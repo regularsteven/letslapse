@@ -24,6 +24,7 @@ struct AdjustView: View {
                         estimateCard
                         advancedRow
                     } else {
+                        tailFrameBanner
                         stackCard
                     }
 
@@ -301,6 +302,25 @@ struct AdjustView: View {
         return "Each output frame averages \(model.constantWindow) real frames — that's where the blur comes from."
     }
 
+    // MARK: - Tail-frame review
+
+    /// Quiet, non-blocking prompt: the interval shoot ended on a run of shaky
+    /// frames (usually the phone-grab that stopped it). Excluding drops them
+    /// from the blend; the originals stay on disk either way.
+    @ViewBuilder private var tailFrameBanner: some View {
+        if model.tailFramesToExclude > 0 {
+            TailFrameBanner(
+                count: model.tailFramesToExclude,
+                onExclude: {
+                    let start = model.totalIntervalFrames - model.tailFramesToExclude
+                    model.excludedFrameIndices = Set(start..<model.totalIntervalFrames)
+                    model.tailFramesToExclude = 0
+                },
+                onKeep: { model.tailFramesToExclude = 0 }
+            )
+        }
+    }
+
     // MARK: - Photos stack
 
     private var stackCard: some View {
@@ -470,6 +490,54 @@ struct AdjustView: View {
             return "Create \(frames)-frame timelapse"
         }
         return "Create timelapse"
+    }
+}
+
+// MARK: - Tail-frame banner
+
+/// A compact, dismissible prompt — not a sheet or alert. Sits above the stack
+/// card and offers to drop the shaky frames that ended the shoot, or keep them.
+private struct TailFrameBanner: View {
+    var count: Int
+    var onExclude: () -> Void
+    var onKeep: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "waveform")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(LL.amber)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text("\(count) shaky \(count == 1 ? "frame" : "frames") at the end")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(.primary)
+                Text("Looks like a phone-grab as you stopped — drop them?")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.85)
+            }
+
+            Spacer(minLength: 8)
+
+            Button("Keep", action: onKeep)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+
+            Button(action: onExclude) {
+                Text("Exclude")
+                    .font(.system(size: 12.5, weight: .bold))
+                    .foregroundStyle(.black)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(LL.amber, in: Capsule())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(12)
+        .llCard()
     }
 }
 

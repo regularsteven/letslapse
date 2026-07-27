@@ -13,10 +13,11 @@ struct WatchControlView: View {
 
     private let amber = Color(red: 1, green: 0.7, blue: 0.25)
     // Mirrors of the phone's option lists; the phone rejects anything else.
+    // The picker offers the fixed counts only — the adaptive depths
+    // (Psycho/Safe) are chosen on the phone, where Safe's gating lives, and
+    // show here as labels.
     private let intervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
-    private let frameOptions: [(frames: Int, label: String)] = [
-        (1, "No blending"), (3, "Light"), (5, "Standard"), (10, "High"), (20, "Experimental"),
-    ]
+    private let frameOptions = BlendDepth.fixedOptions
 
     var body: some View {
         Group {
@@ -55,6 +56,15 @@ struct WatchControlView: View {
 
                 modeSelector
 
+                if remote.isBulbMode {
+                    Label("Bulb · start, then slide to stop", systemImage: "circle.circle")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(amber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                        .padding(.vertical, 2)
+                }
+
                 if remote.captureMode == .interval {
                     intervalRow
                     framesRow
@@ -88,10 +98,12 @@ struct WatchControlView: View {
     }
 
     /// The capture modes as tappable rows — same vocabulary as the phone's
-    /// mode buttons, selected row marked in amber.
+    /// mode buttons, selected row marked in amber. Photo is a phone-only mode
+    /// (it gates on device motion the wrist can't stand in for), so it isn't
+    /// offered here.
     private var modeSelector: some View {
         VStack(spacing: 4) {
-            ForEach(CaptureMode.allCases) { mode in
+            ForEach(CaptureMode.allCases.filter { $0 != .photo }) { mode in
                 Button {
                     remote.setCaptureMode(mode)
                 } label: {
@@ -165,7 +177,7 @@ struct WatchControlView: View {
                 Text("Blend")
                     .font(.system(size: 12, weight: .semibold))
                 Spacer()
-                Text(remote.framesPerBlend == 1 ? "Off" : "\(remote.framesPerBlend) frames")
+                Text(blendDepthLabel)
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(amber)
             }
@@ -185,7 +197,7 @@ struct WatchControlView: View {
                     HStack {
                         Text(option.frames == 1 ? option.label : "\(option.frames) · \(option.label)")
                         Spacer()
-                        if remote.framesPerBlend == option.frames {
+                        if remote.blendDepth == .fixed(option.frames) {
                             Image(systemName: "checkmark")
                                 .foregroundStyle(amber)
                         }
@@ -421,7 +433,7 @@ struct WatchControlView: View {
     /// Interval's counterpart of the burst toggle's slot: how many outputs
     /// have landed so far.
     private var captureCountBadge: some View {
-        Text("\(remote.captureCount) \(remote.framesPerBlend > 1 ? "blends" : "photos")")
+        Text("\(remote.captureCount) \(remote.blendDepth.blends ? "blends" : "photos")")
             .font(.system(size: 13, weight: .bold).monospacedDigit())
             .foregroundStyle(amber)
             .lineLimit(1)
@@ -430,11 +442,26 @@ struct WatchControlView: View {
             .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    private var blendDepthLabel: String {
+        switch remote.blendDepth {
+        case .fixed(1): return "Off"
+        case .fixed(let frames): return "\(frames) frames"
+        case .unthrottled: return "Psycho"
+        case .throttled: return "Safe"
+        }
+    }
+
     private var runSettingsLine: String {
+        if remote.isBulbMode {
+            return remote.blendDepth == .fixed(1) ? "Bulb · single frame" : "Bulb · long exposure"
+        }
         let every = "every \(intervalLabel(remote.intervalSeconds))"
-        return remote.framesPerBlend > 1
-            ? "\(every) · \(remote.framesPerBlend) fr"
-            : every
+        switch remote.blendDepth {
+        case .fixed(1): return every
+        case .fixed(let frames): return "\(every) · \(frames) fr"
+        case .unthrottled: return "\(every) · Psycho"
+        case .throttled: return "\(every) · Safe"
+        }
     }
 
     /// One amber dot per burst/marker interval, pulsing while one is open.

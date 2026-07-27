@@ -8,12 +8,14 @@ enum SettingsDestination: String, Hashable {
     case largeOriginals
     case performance
     case diagnostics
+    case blendLearning
 }
 
 /// Creative defaults and recording up top, storage in the middle, and the
 /// engine (performance, diagnostics) demoted to Advanced.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
     @State private var storage: AppModel.LibraryStorage?
     @State private var isClearingCache = false
     @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
@@ -41,6 +43,10 @@ struct SettingsView: View {
                 recordingCard
                     .padding(.bottom, 12)
 
+                LLSectionHeader("Location")
+                locationCard
+                    .padding(.bottom, 12)
+
                 LLSectionHeader("Storage")
                 storageCard
                     .padding(.bottom, 12)
@@ -64,6 +70,7 @@ struct SettingsView: View {
             case .largeOriginals: LargeOriginalsView()
             case .performance: PerformanceSettingsView()
             case .diagnostics: DiagnosticsView()
+            case .blendLearning: BlendLearningView()
             }
         }
         #if os(iOS)
@@ -235,6 +242,23 @@ struct SettingsView: View {
         )
     }
 
+    // MARK: - Location
+
+    private var locationCard: some View {
+        VStack(spacing: 0) {
+            LLRow(
+                title: "Geotag captures",
+                subtitle: "Save GPS coordinates in photo EXIF and write a GPX track sidecar next to captured video.",
+                showsDivider: false
+            ) {
+                Toggle("", isOn: $gpsEnabled)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+        }
+        .llCard()
+    }
+
     private func menuValueLabel(_ text: String) -> some View {
         HStack(spacing: 4) {
             Text(text)
@@ -344,6 +368,16 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
             }
+
+            NavigationLink(value: SettingsDestination.blendLearning) {
+                LLRow(title: "Blend learning", subtitle: "What Psycho intervals have taught Safe mode on this device") {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
             NavigationLink(value: SettingsDestination.performance) {
                 LLRow(title: "Performance", subtitle: "CPU workers, GPU batches") {
@@ -482,14 +516,21 @@ private struct LargeOriginalsView: View {
                         model.requestedProjectDetailID = capture.id
                     } label: {
                         HStack(spacing: 12) {
-                            ProjectThumbnailView(url: model.mediaURL(for: capture), kind: model.mediaKind(for: capture))
+                            ProjectThumbnailView(
+                                url: capture.isPhotoCapture
+                                    ? model.heroImageURL(for: capture)
+                                    : model.mediaURL(for: capture),
+                                kind: model.mediaKind(for: capture))
                                 .frame(width: 64, height: 46)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(capture.displayTitle)
                                     .font(.system(size: 15, weight: .semibold))
                                     .lineLimit(1)
                                 let versionCount = model.blends(for: capture).count
-                                Text("\(capture.formatLine) · \(versionCount) version\(versionCount == 1 ? "" : "s")")
+                                // A photo capture is one asset — no version tally.
+                                Text(capture.isPhotoCapture
+                                        ? capture.formatLine
+                                        : "\(capture.formatLine) · \(versionCount) version\(versionCount == 1 ? "" : "s")")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -593,6 +634,88 @@ private struct PerformanceSettingsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+}
+
+// MARK: - Blend learning
+
+/// What unthrottled ("Psycho") intervals have taught about this device: one
+/// profile per pipeline × interval × starting thermal state, with the safe
+/// count Safe mode would apply. Reset exists for unusual conditions (a new
+/// case, a heatwave) — day-to-day, recent runs already outweigh old ones.
+private struct BlendLearningView: View {
+    @State private var summaries = BlendProfileStore.shared.summariesForCurrentDevice()
+    @State private var confirmingReset = false
+
+    var body: some View {
+        Form {
+            if summaries.isEmpty {
+                Section {
+                    Text("Nothing learned yet.")
+                        .foregroundStyle(.secondary)
+                } footer: {
+                    Text("Set BLEND to Psycho on an Interval shoot. Every interval it captures teaches the app what this device manages at that spacing and temperature — once a profile has \(BlendLearningProfile.minSamplesForPrediction) runs, Safe mode unlocks for those conditions.")
+                }
+            } else {
+                Section {
+                    ForEach(summaries) { summary in
+                        HStack(alignment: .firstTextBaseline) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(title(for: summary))
+                                Text("\(summary.sampleCount) run\(summary.sampleCount == 1 ? "" : "s") · best \(summary.bestFrames) · worst \(summary.worstFrames)")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer()
+                            Text(valueLabel(for: summary))
+                                .foregroundStyle(summary.safeFrameCount == nil ? .secondary : .primary)
+                                .monospacedDigit()
+                        }
+                    }
+                } footer: {
+                    Text("Safe mode applies the learned count for the current conditions, re-checked every interval. Recent runs weigh heaviest; best and worst keep the extremes on record.")
+                }
+
+                Section {
+                    Button("Reset learning", role: .destructive) {
+                        confirmingReset = true
+                    }
+                } footer: {
+                    Text("Removes every learned profile on this device. Safe mode locks again until Psycho re-teaches it.")
+                }
+            }
+        }
+        .navigationTitle("Blend learning")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .alert("Reset blend learning?", isPresented: $confirmingReset) {
+            Button("Reset", role: .destructive) {
+                BlendProfileStore.shared.resetAll()
+                summaries = BlendProfileStore.shared.summariesForCurrentDevice()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("Every learned profile on this device is removed, and Safe mode locks until Psycho re-teaches it.")
+        }
+        .onAppear {
+            summaries = BlendProfileStore.shared.summariesForCurrentDevice()
+        }
+    }
+
+    private func title(for summary: BlendProfileStore.ProfileSummary) -> String {
+        let interval = summary.key.intervalSeconds
+        let intervalText = interval == interval.rounded(.down)
+            ? "\(Int(interval)) s" : String(format: "%.1f s", interval)
+        let pipeline = summary.key.pipeline == "dng" ? "DNG" : "JPEG"
+        return "Every \(intervalText) · \(summary.key.thermalBucket.rawValue.capitalized) · \(pipeline)"
+    }
+
+    private func valueLabel(for summary: BlendProfileStore.ProfileSummary) -> String {
+        if let safe = summary.safeFrameCount {
+            return "Safe ≈ \(safe)"
+        }
+        return "learning \(summary.sampleCount)/\(BlendLearningProfile.minSamplesForPrediction)"
     }
 }
 

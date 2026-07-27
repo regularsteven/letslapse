@@ -234,6 +234,7 @@ struct LLRow<Trailing: View>: View {
 
 enum LLTab: String, CaseIterable, Identifiable {
     case create
+    case gallery
     case projects
     case settings
 
@@ -242,6 +243,7 @@ enum LLTab: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .create: return "Create"
+        case .gallery: return "Gallery"
         case .projects: return "Projects"
         case .settings: return "Settings"
         }
@@ -250,6 +252,7 @@ enum LLTab: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .create: return "record.circle"
+        case .gallery: return "photo.on.rectangle.angled"
         case .projects: return "square.stack"
         case .settings: return "line.3.horizontal"
         }
