@@ -4,6 +4,7 @@ import SwiftUI
 /// Recording (giant no-look controls), Unreachable (explains the fix).
 struct WatchControlView: View {
     @EnvironmentObject private var remote: WatchCaptureRemote
+    @Environment(\.scenePhase) private var scenePhase
     @State private var now = Date()
     @State private var isoAdjust: Double = 0
     @State private var showIntervalPicker = false
@@ -31,6 +32,14 @@ struct WatchControlView: View {
         }
         .onAppear {
             remote.refreshState()
+        }
+        // A watchOS app suspends on wrist-down and resumes on wrist-up without
+        // firing `onAppear`, so a resume mid-shoot would otherwise keep showing
+        // whatever state was last known. Re-pull whenever we return to active.
+        .onChange(of: scenePhase) { phase in
+            if phase == .active {
+                remote.reconnect()
+            }
         }
         .onReceive(timer) { date in
             now = date

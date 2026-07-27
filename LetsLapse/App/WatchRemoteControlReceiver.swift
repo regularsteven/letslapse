@@ -296,8 +296,16 @@ extension WatchRemoteControlReceiver: WCSessionDelegate {
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
-        DispatchQueue.main.async {
-            self.isReachable = session.isReachable
+        let reachable = session.isReachable
+        Task { @MainActor in
+            self.isReachable = reachable
+            // The Watch just came within reach — it may have missed the state
+            // pushed when a shoot began out of range. Send a fresh snapshot now
+            // so its live-message channel gets the current recording state
+            // immediately, not only when it thinks to ask.
+            if reachable {
+                self.publishState()
+            }
         }
     }
 

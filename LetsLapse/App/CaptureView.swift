@@ -90,6 +90,18 @@ struct CaptureView: View {
     /// is set effectively infinite (one day). Unthrottled capture fills that
     /// single window until the shutter is tapped again.
     private static let photoBulbDNGInterval = 86_400.0
+    /// A capped Photo DNG shot runs the live-blend RAW pipeline for exactly one
+    /// window, so that window must last long enough to gather its `frames` RAW
+    /// captures — plus the first-frame latency after the session switches to
+    /// the RAW photo configuration — before it closes and emits the blend.
+    /// Captures fire back-to-back (burst), so the headroom is idle wait, not
+    /// extra frames; the run auto-stops the instant the single DNG lands. Too
+    /// short a window (the 0.1 s photo-burst spacing) closes empty before the
+    /// first RAW even arrives, and three empty windows trip the engine's
+    /// self-stop, ending the run with no output and no DNG saved.
+    private static func photoDNGWindowSeconds(forFrames frames: Int) -> Double {
+        max(1.0, 0.6 + Double(frames) * 0.25)
+    }
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(intent: CaptureIntent = CaptureIntent()) {
@@ -1642,18 +1654,26 @@ struct CaptureView: View {
     private func startPhotoCapture() {
         framingStartedAt = Date()
         photoBurstProgress = 0
-        // DNG: run the live-blend RAW pipeline for one window — it blends
-        // `photoBlendDepth` RAW frames into a single DNG (or emits one
-        // untouched DNG with blend Off, depth 1), exactly as Interval does.
-        // The first finished output auto-stops the run (see the output-count
-        // change handler); the result is registered as a one-asset Photo.
+        // DNG: run the live-blend RAW pipeline for a single window — it blends
+        // `photoBlendDepth` RAW frames into one DNG (or emits one untouched DNG
+        // with blend Off, depth 1), exactly as Interval does. The first
+        // finished output auto-stops the run (see the output-count change
+        // handler) and it registers as a one-asset Photo, camera left live.
+        //
+        // A one-shot needs a window long enough to gather its frames and it
+        // fires them back-to-back — burst is forced here regardless of the
+        // Interval capture options so the single window fills fast and never
+        // closes empty.
         if wantsPhotoDNG {
+            let frames = max(1, photoBlendDepth)
+            var options = liveBlendDNGOptions
+            options.burstScheduling = true
             photoDNGAutoStop = true
             camera.startLiveBlend(
-                every: Self.photoBurstInterval,
-                depth: .fixed(max(1, photoBlendDepth)),
+                every: Self.photoDNGWindowSeconds(forFrames: frames),
+                depth: .fixed(frames),
                 preferDNG: true,
-                options: liveBlendDNGOptions)
+                options: options)
             return
         }
         startIntervalCapture(photoModeFrameCap: max(1, photoBlendDepth))

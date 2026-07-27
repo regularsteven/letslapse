@@ -431,6 +431,14 @@ extension WatchCaptureRemote: WCSessionDelegate {
         Task { @MainActor in
             self.isReachable = session.isReachable
             self.statusText = session.isReachable ? "Ready" : "Phone unavailable"
+            // The phone can come within reach after we've already activated
+            // (screen wakes, capture screen opens, we drift back into range).
+            // Activation's one-shot `refreshState` is long past by then, so
+            // pull the live capture state now — otherwise a shoot that began
+            // while we were out of reach reads as idle until a manual ping.
+            if session.isReachable {
+                self.refreshState()
+            }
         }
     }
 
