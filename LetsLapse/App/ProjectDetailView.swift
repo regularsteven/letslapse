@@ -164,7 +164,15 @@ struct ProjectDetailView: View {
 
         return ScrollView {
             VStack(spacing: 14) {
-                heroCard(for: capture)
+                // A photo capture leads with its graded preview + preset strip;
+                // everything else keeps the plain hero.
+                if capture.isPhotoCapture {
+                    PhotoGradingCard(captureID: capture.id) { url in
+                        previewGradedPhoto(capture, url: url)
+                    }
+                } else {
+                    heroCard(for: capture)
+                }
 
                 // A Photo-mode capture is ONE photo — no clip list, no
                 // versions, no re-processing. Just save, share, manage.
@@ -589,17 +597,28 @@ struct ProjectDetailView: View {
 
     private func savePhoto(_ capture: AppModel.CaptureProject) {
         #if os(iOS)
-        guard let url = model.heroImageURL(for: capture) else { return }
         photoSaveState = .saving
         Task {
             do {
-                try await model.saveSourceClip(at: url)
+                // Bakes in the selected grade; Original saves the raw bytes.
+                try await model.saveGradedPhoto(for: capture)
                 photoSaveState = .saved
             } catch {
                 photoSaveState = .failed(error.localizedDescription)
             }
         }
         #endif
+    }
+
+    /// Full-screen the photo. The preview sheet shows the untouched original —
+    /// the grade lives in the detail preview and the export.
+    private func previewGradedPhoto(_ capture: AppModel.CaptureProject, url: URL) {
+        previewItem = MediaPreviewItem(
+            title: capture.displayTitle,
+            subtitle: capture.formatLine,
+            url: url,
+            kind: .image
+        )
     }
 
     private func saveOriginals(_ capture: AppModel.CaptureProject) {
@@ -678,6 +697,110 @@ struct ProjectDetailView: View {
         } catch {
             deletionFailure = error.localizedDescription
         }
+    }
+}
+
+// MARK: - Photo grading card
+
+/// A photo capture's graded preview with the preset strip beneath it. The
+/// image renders the selected `PhotoPreset` live off the original file; tapping
+/// a chip re-grades in place and persists the choice. The stored original is
+/// never modified — the grade is re-derived each time and only baked in on
+/// export.
+private struct PhotoGradingCard: View {
+    @EnvironmentObject var model: AppModel
+    let captureID: UUID
+    var onExpand: (URL) -> Void
+
+    /// The graded preview, downscaled for speed; nil until the first render.
+    @State private var rendered: CGImage?
+
+    private var capture: AppModel.CaptureProject? {
+        model.captures.first { $0.id == captureID }
+    }
+
+    var body: some View {
+        if let capture, let url = model.heroImageURL(for: capture) {
+            let preset = model.photoPreset(for: capture)
+            VStack(spacing: 10) {
+                imageCard(url: url)
+                    .task(id: "\(url.path)|\(preset.rawValue)") {
+                        await render(url: url, preset: preset)
+                    }
+                presetStrip(capture: capture, active: preset)
+            }
+        }
+    }
+
+    private func imageCard(url: URL) -> some View {
+        ZStack {
+            Group {
+                if let rendered {
+                    Image(decorative: rendered, scale: 1)
+                        .resizable()
+                        .scaledToFill()
+                } else {
+                    // Falls back to the ungraded thumbnail while the first
+                    // grade renders.
+                    ProjectThumbnailView(url: url, kind: .image)
+                }
+            }
+            .frame(height: 210)
+            .frame(maxWidth: .infinity)
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+
+            Button {
+                onExpand(url)
+            } label: {
+                Image(systemName: "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 19))
+                    .foregroundStyle(.white)
+                    .frame(width: 52, height: 52)
+                    .background(.black.opacity(0.45), in: Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View photo")
+        }
+        .overlay(alignment: .topLeading) {
+            MediaBadge(text: "PHOTO")
+                .padding(12)
+        }
+    }
+
+    private func presetStrip(capture: AppModel.CaptureProject, active: PhotoPreset) -> some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(PhotoPreset.strip) { preset in
+                    let isActive = preset == active
+                    Button {
+                        model.setPhotoPreset(preset, for: capture)
+                    } label: {
+                        Text(preset.displayName)
+                            .font(.system(size: 13.5, weight: .semibold))
+                            .foregroundStyle(isActive ? Color.white : Color.primary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 8)
+                            .background(
+                                Capsule().fill(isActive ? LL.accent : LL.cardBackground)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(preset.displayName) grade")
+                    .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                }
+            }
+            .padding(.horizontal, 2)
+            .padding(.vertical, 2)
+        }
+    }
+
+    private func render(url: URL, preset: PhotoPreset) async {
+        let cgImage = await Task.detached(priority: .userInitiated) {
+            PhotoGrader.render(url: url, preset: preset, maxDimension: 1400)
+        }.value
+        // Ignore a nil render (e.g. missing file) so the thumbnail fallback
+        // stays visible rather than blanking out.
+        if let cgImage { rendered = cgImage }
     }
 }
 

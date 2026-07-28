@@ -186,6 +186,58 @@ final class CameraController: NSObject, ObservableObject {
     /// while a DNG shoot is armed, the 16:9 video format otherwise.
     @Published var previewDimensions: CaptureResolution?
 
+    /// "Capture Flat" for video: when true, video capture uses Apple Log on
+    /// devices that support it (iPhone 15 Pro and later). Set from the capture
+    /// screen (video mode + Capture Flat on). Stills ignore this — their flat
+    /// pass is a post-capture Core Image grade (`FlatCapture`), not a sensor
+    /// colour space. Toggling re-applies the colour space to the live session.
+    @Published var appleLogEnabled = false {
+        didSet {
+            guard appleLogEnabled != oldValue else { return }
+            applyVideoColorSpace()
+        }
+    }
+
+    /// True when the current camera device offers Apple Log on any of its
+    /// formats — the gate for showing the Capture Flat toggle in Video mode.
+    /// Devices without Log support (older iPhones, the Mac) return false and the
+    /// toggle stays hidden.
+    var supportsAppleLog: Bool {
+        #if os(iOS)
+        if #available(iOS 17.2, *) {
+            return videoDevice?.formats.contains {
+                $0.supportedColorSpaces.contains(.appleLog)
+            } ?? false
+        }
+        #endif
+        return false
+    }
+
+    /// Applies the requested video colour space (Apple Log when enabled and the
+    /// *active* format supports it, otherwise sRGB) to the live device. No-op
+    /// while recording — the format/colour space must not change mid-take.
+    /// Called on `appleLogEnabled` changes and re-asserted after every
+    /// `activeFormat` switch (which resets the colour space to the default).
+    private func applyVideoColorSpace() {
+        #if os(iOS)
+        guard #available(iOS 17.2, *) else { return }
+        sessionQueue.async {
+            guard let device = self.videoDevice, !self.movieOutput.isRecording else { return }
+            let target: AVCaptureColorSpace =
+                (self.appleLogEnabled && device.activeFormat.supportedColorSpaces.contains(.appleLog))
+                ? .appleLog : .sRGB
+            guard device.activeColorSpace != target else { return }
+            do {
+                try device.lockForConfiguration()
+                device.activeColorSpace = target
+                device.unlockForConfiguration()
+            } catch {
+                LLog("applyVideoColorSpace failed: \(error.localizedDescription)")
+            }
+        }
+        #endif
+    }
+
     /// A pending "stop at…" set from the Watch remote. Time-based stops hold
     /// a deadline; frame-based stops in Interval/Live Blend hold an absolute
     /// output-count target. Enforced here (not on the Watch) so the stop
@@ -815,6 +867,19 @@ final class CameraController: NSObject, ObservableObject {
                 photoOutput.maxPhotoDimensions = photoDimensions
             }
             reassertExposureLock(on: device)
+            #if os(iOS)
+            // Setting `activeFormat` resets the device to its default colour
+            // space, so re-assert Apple Log if Capture Flat is on and the new
+            // format supports it (otherwise sRGB).
+            if #available(iOS 17.2, *) {
+                let target: AVCaptureColorSpace =
+                    (appleLogEnabled && match.format.supportedColorSpaces.contains(.appleLog))
+                    ? .appleLog : .sRGB
+                if device.activeColorSpace != target {
+                    device.activeColorSpace = target
+                }
+            }
+            #endif
             publishLiveBlendDNGSupport()
             return true
         } catch {
@@ -2019,6 +2084,13 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
 #endif
 
 extension CameraController: AVCaptureFileOutputRecordingDelegate {
+    /// Video "Capture Flat" on hardware that can't shoot Apple Log: grade the
+    /// recorded movie on save instead. Log-capable devices already flatten at
+    /// the sensor (`appleLogEnabled`), so there's nothing to do for them here.
+    private var shouldSoftwareFlattenVideo: Bool {
+        UserDefaults.standard.bool(forKey: FlatCapture.storageKey) && !supportsAppleLog
+    }
+
     func fileOutput(
         _ output: AVCaptureFileOutput,
         didFinishRecordingTo outputFileURL: URL,
@@ -2028,6 +2100,11 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         sessionQueue.async {
             let fileExists = FileManager.default.fileExists(atPath: outputFileURL.path)
             if fileExists {
+                // Flatten in place before hand-off so downstream (segment list,
+                // onFinishVideo) sees the graded file at the same URL.
+                if self.shouldSoftwareFlattenVideo, !self.isDiscardingSequence {
+                    _ = VideoFlatten.flattenInPlace(outputFileURL)
+                }
                 self.finishSegment(outputFileURL: outputFileURL)
             }
 
@@ -2068,7 +2145,17 @@ extension CameraController {
     /// added (pixels untouched — the original encoded image is preserved).
     /// Any failure falls back to writing the raw data unmodified.
     fileprivate func writeCapturedPhoto(_ data: Data, to url: URL) -> Bool {
-        guard gpsTaggingEnabled, let location = LocationService.shared.latestLocation else {
+        let gpsDictionary: Any? = (gpsTaggingEnabled
+            ? LocationService.shared.latestLocation?.exifGPSDictionary()
+            : nil)
+        // "Capture Flat": bake a low-contrast, desaturated grade into the JPEG
+        // at save time (GPS carried along). On failure, fall through to writing
+        // the original encoded bytes unmodified.
+        if UserDefaults.standard.bool(forKey: FlatCapture.storageKey),
+           FlatCapture.write(jpegData: data, to: url, gps: gpsDictionary) {
+            return true
+        }
+        guard let gpsDictionary else {
             return (try? data.write(to: url)) != nil
         }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil),
@@ -2077,7 +2164,7 @@ extension CameraController {
             return (try? data.write(to: url)) != nil
         }
         let properties: [CFString: Any] = [
-            kCGImagePropertyGPSDictionary: location.exifGPSDictionary()
+            kCGImagePropertyGPSDictionary: gpsDictionary
         ]
         CGImageDestinationAddImageFromSource(destination, source, 0, properties as CFDictionary)
         if CGImageDestinationFinalize(destination) {

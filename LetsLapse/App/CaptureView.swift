@@ -14,6 +14,10 @@ struct CaptureView: View {
 
     @EnvironmentObject var model: AppModel
     @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
+    /// "Capture Flat" — a flat/log capture profile. Drives Apple Log for video
+    /// (via `camera.appleLogEnabled`) and a save-time grade for JPEG stills
+    /// (read in `CameraController`'s write path). See the format sheet.
+    @AppStorage(FlatCapture.storageKey) private var captureFlat = false
     @Environment(\.dismiss) private var dismiss
     #if os(iOS)
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
@@ -199,6 +203,7 @@ struct CaptureView: View {
         .onChange(of: mode) { newMode in
             RecordingSettingsStore.save(captureMode: newMode)
             updateAspectPreview()
+            syncAppleLog()
             guard RecordingSettingsStore.isEnabled else { return }
             if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
                 interval = seconds
@@ -213,6 +218,10 @@ struct CaptureView: View {
         .onChange(of: model.intervalOutputFormat) { _ in
             updateAspectPreview()
             revalidateSafeDepth()
+        }
+        // Capture Flat drives Apple Log for video; re-sync when it's toggled.
+        .onChange(of: captureFlat) { _ in
+            syncAppleLog()
         }
         .onChange(of: camera.liveBlendDNGSupport) { _ in
             updateAspectPreview()
@@ -455,7 +464,15 @@ struct CaptureView: View {
         #endif
         camera.start()
         updateAspectPreview()
+        syncAppleLog()
         framingStartedAt = Date()
+    }
+
+    /// Apple Log is video-only and requires a supporting device: enable it just
+    /// for Video mode with Capture Flat on. Still modes get their flatness from
+    /// a save-time JPEG grade instead, so Log stays off there.
+    private func syncAppleLog() {
+        camera.appleLogEnabled = (mode == .video && captureFlat && camera.supportsAppleLog)
     }
 
     /// True when the next Interval shoot will capture DNG — the session
@@ -2268,7 +2285,30 @@ private struct FormatSheet: View {
     @ObservedObject var model: AppModel
     @Binding var mode: CaptureMode
     @Binding var sequenceMode: LiveCaptureSequence.Mode
+    @AppStorage(FlatCapture.storageKey) private var captureFlat = false
     @Environment(\.dismiss) private var dismiss
+
+    /// Capture Flat is offered for JPEG stills (a save-time Core Image grade)
+    /// and for all Video captures. Log-capable hardware (iPhone 15 Pro+) uses
+    /// Apple Log at the sensor; every other device gets an equivalent flat grade
+    /// baked into the movie at save time (`VideoFlatten`). It stays hidden only
+    /// for DNG, which is already fully adjustable in post.
+    private var showsCaptureFlat: Bool {
+        if mode == .video { return true }
+        return model.intervalOutputFormat == .jpeg
+    }
+
+    /// Explains what "Capture Flat" does for the active mode. Video wording
+    /// depends on whether the sensor can shoot Apple Log or we grade the movie
+    /// on save instead.
+    private var captureFlatFooter: String {
+        guard mode == .video else {
+            return "Applies a low-contrast, desaturated grade as the JPEG is saved, keeping more room to colour-grade later."
+        }
+        return camera.supportsAppleLog
+            ? "Records in Apple Log — a flat, low-contrast profile with maximum grading latitude. Best paired with a colour grade in post."
+            : "Bakes a low-contrast, desaturated grade into the movie as it saves, keeping more room to colour-grade later."
+    }
 
     var body: some View {
         NavigationStack {
@@ -2342,6 +2382,21 @@ private struct FormatSheet: View {
                 } footer: {
                     if mode == .video && camera.availableResolutions.contains(where: { $0.isProRes }) {
                         Text("* ProRes — very large files")
+                    }
+                }
+
+                if showsCaptureFlat {
+                    Section {
+                        Toggle(isOn: $captureFlat) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Capture Flat")
+                                Text("Optimised for post-production editing")
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    } footer: {
+                        Text(captureFlatFooter)
                     }
                 }
 

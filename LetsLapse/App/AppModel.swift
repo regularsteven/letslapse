@@ -93,6 +93,11 @@ final class AppModel: ObservableObject {
         /// Extra codec variants per source clip, keyed by the clip's original
         /// relative file name. Absent (nil) until a clip is first converted.
         var clipEncodings: [String: [ClipEncoding]]?
+        /// The non-destructive colour grade applied to a Photo-mode capture,
+        /// stored as a `PhotoPreset` raw name. Optional so projects saved
+        /// before grading existed still decode; nil resolves to the default
+        /// ("Natural" — grading is on by default).
+        var selectedPreset: String?
 
         var summary: String {
             switch kind {
@@ -2488,6 +2493,45 @@ final class AppModel: ObservableObject {
             }
         }
     }
+
+    // MARK: - Photo colour grading
+
+    /// The grade currently selected for a Photo-mode capture (default when the
+    /// project predates grading or stored an unknown value).
+    func photoPreset(for capture: CaptureProject) -> PhotoPreset {
+        PhotoPreset.resolve(capture.selectedPreset)
+    }
+
+    /// Selects a colour grade for a photo capture and persists it. The stored
+    /// original file is never touched — only the preset name changes.
+    func setPhotoPreset(_ preset: PhotoPreset, for capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard captures[index].selectedPreset != preset.rawValue else { return }
+        captures[index].selectedPreset = preset.rawValue
+        try? persistLibrary()
+    }
+
+    #if os(iOS)
+    /// Saves a photo capture to Photos with its selected grade baked in. When
+    /// the grade is `Original` the file's bytes are saved unchanged (preserving
+    /// a DNG as a DNG); any other preset renders a graded JPEG and saves that,
+    /// leaving the on-disk original alone.
+    func saveGradedPhoto(for capture: CaptureProject) async throws {
+        guard let url = heroImageURL(for: capture) else {
+            throw SourceClipSaveError.saveFailed("the photo is missing")
+        }
+        let preset = photoPreset(for: capture)
+        guard preset != .original else {
+            try await saveSourceClip(at: url)
+            return
+        }
+        let graded = try await Task.detached(priority: .userInitiated) {
+            try PhotoGrader.renderJPEG(url: url, preset: preset)
+        }.value
+        defer { try? FileManager.default.removeItem(at: graded) }
+        try await saveSourceClip(at: graded)
+    }
+    #endif
 
     /// Saves a single source clip or still to the Photos library. Requests
     /// add-only authorisation first and throws a descriptive error on denial
