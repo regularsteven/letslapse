@@ -107,6 +107,7 @@ enum GalleryFilter: String, CaseIterable {
 private struct GalleryTile: View {
     var hero: (url: URL, kind: AppModel.MediaKind)?
     @State private var image: Image?
+    @State private var failed = false
 
     var body: some View {
         GeometryReader { proxy in
@@ -116,6 +117,10 @@ private struct GalleryTile: View {
                     image
                         .resizable()
                         .scaledToFill()
+                } else if failed || hero == nil {
+                    Image(systemName: hero?.kind == .video ? "film" : "photo")
+                        .font(.title3)
+                        .foregroundStyle(.secondary)
                 }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -123,8 +128,10 @@ private struct GalleryTile: View {
         }
         .task(id: hero?.url) {
             image = nil
+            failed = false
             guard let hero else { return }
             image = await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
+            failed = image == nil
         }
     }
 }

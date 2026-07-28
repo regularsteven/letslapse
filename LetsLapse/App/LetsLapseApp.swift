@@ -123,6 +123,7 @@ struct ContentView: View {
         let environment = ProcessInfo.processInfo.environment
         switch environment["LL_TAB"] {
         case "projects": selectedTab = .projects
+        case "gallery": selectedTab = .gallery
         case "settings": selectedTab = .settings
         case "create": selectedTab = .create
         default: break

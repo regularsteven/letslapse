@@ -17,7 +17,7 @@ struct MediaPreviewItem: Identifiable, Hashable {
 struct ProjectThumbnailView: View {
     var url: URL?
     var kind: AppModel.MediaKind
-    @State private var thumbnail: CGImage?
+    @State private var thumbnail: Image?
 
     var body: some View {
         // The base rectangle defines the reported size; the fill image lives
@@ -26,7 +26,7 @@ struct ProjectThumbnailView: View {
             .fill(.quaternary)
             .overlay {
                 if let thumbnail {
-                    Image(decorative: thumbnail, scale: 1)
+                    thumbnail
                         .resizable()
                         .scaledToFill()
                 } else {
@@ -39,7 +39,7 @@ struct ProjectThumbnailView: View {
             .task(id: url) {
                 thumbnail = nil
                 guard let url else { return }
-                thumbnail = await ProjectThumbnailGenerator.thumbnail(for: url, kind: kind)
+                thumbnail = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind)
             }
     }
 }
@@ -102,6 +102,7 @@ struct ProjectMediaPreviewSheet: View {
 private struct ProjectPreviewImage: View {
     var url: URL
     @State private var image: CGImage?
+    @State private var failed = false
 
     var body: some View {
         ZStack {
@@ -111,12 +112,23 @@ private struct ProjectPreviewImage: View {
                 Image(decorative: image, scale: 1)
                     .resizable()
                     .scaledToFit()
+            } else if failed {
+                VStack(spacing: 8) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.title2)
+                    Text("Couldn't load this image")
+                        .font(.footnote)
+                }
+                .foregroundStyle(.secondary)
             } else {
                 ProgressView()
             }
         }
         .task(id: url) {
-            image = await ProjectThumbnailGenerator.fullImage(at: url)
+            image = nil
+            failed = false
+            image = await ProjectThumbnailGenerator.displayImage(at: url)
+            failed = image == nil
         }
     }
 }
@@ -133,10 +145,22 @@ enum ProjectThumbnailGenerator {
         }.value
     }
 
-    static func fullImage(at url: URL) async -> CGImage? {
-        await Task.detached(priority: .utility) {
+    /// A screen-sized decode for the full-screen preview. Goes through the
+    /// thumbnail API rather than `CGImageSourceCreateImageAtIndex` for two
+    /// reasons: it applies the EXIF/TIFF orientation (a raw index-0 decode
+    /// draws the app's DNG captures sideways), and it bounds memory — a
+    /// full-resolution RAW decode is ~50 MB where 2560 px is plenty for any
+    /// display.
+    static func displayImage(at url: URL) async -> CGImage? {
+        await Task.detached(priority: .userInitiated) {
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            return CGImageSourceCreateImageAtIndex(source, 0, nil)
+            let options: [CFString: Any] = [
+                kCGImageSourceCreateThumbnailFromImageAlways: true,
+                kCGImageSourceCreateThumbnailWithTransform: true,
+                kCGImageSourceShouldCacheImmediately: true,
+                kCGImageSourceThumbnailMaxPixelSize: 2560,
+            ]
+            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
         }.value
     }
 

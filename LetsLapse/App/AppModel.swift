@@ -2479,25 +2479,12 @@ final class AppModel: ObservableObject {
         }
     }
 
-    #if os(iOS)
-    enum SourceClipSaveError: LocalizedError {
-        case accessDenied
-        case saveFailed(String)
-
-        var errorDescription: String? {
-            switch self {
-            case .accessDenied:
-                return "Photos access was denied. Enable it in Settings to save clips."
-            case .saveFailed(let reason):
-                return "Couldn't save the clip: \(reason)"
-            }
-        }
-    }
-
     // MARK: - Photo colour grading
 
     /// The grade currently selected for a Photo-mode capture (default when the
-    /// project predates grading or stored an unknown value).
+    /// project predates grading or stored an unknown value). Platform-neutral:
+    /// the grading card renders on macOS too — only the Photos export below is
+    /// iOS-only.
     func photoPreset(for capture: CaptureProject) -> PhotoPreset {
         PhotoPreset.resolve(capture.selectedPreset)
     }
@@ -2512,6 +2499,19 @@ final class AppModel: ObservableObject {
     }
 
     #if os(iOS)
+    enum SourceClipSaveError: LocalizedError {
+        case accessDenied
+        case saveFailed(String)
+
+        var errorDescription: String? {
+            switch self {
+            case .accessDenied:
+                return "Photos access was denied. Enable it in Settings to save clips."
+            case .saveFailed(let reason):
+                return "Couldn't save the clip: \(reason)"
+            }
+        }
+    }
     /// Saves a photo capture to Photos with its selected grade baked in. When
     /// the grade is `Original` the file's bytes are saved unchanged (preserving
     /// a DNG as a DNG); any other preset renders a graded JPEG and saves that,
@@ -2531,7 +2531,6 @@ final class AppModel: ObservableObject {
         defer { try? FileManager.default.removeItem(at: graded) }
         try await saveSourceClip(at: graded)
     }
-    #endif
 
     /// Saves a single source clip or still to the Photos library. Requests
     /// add-only authorisation first and throws a descriptive error on denial

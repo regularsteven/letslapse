@@ -144,6 +144,9 @@ enum PhotoGrader {
     private static let cache: NSCache<NSString, Box> = {
         let cache = NSCache<NSString, Box>()
         cache.countLimit = 24
+        // Previews are ~8 MB each; keep the whole cache well under what
+        // would pressure a phone that is also running a capture session.
+        cache.totalCostLimit = 192 * 1024 * 1024
         return cache
     }()
 
@@ -169,7 +172,11 @@ enum PhotoGrader {
               let cgImage = context.createCGImage(output, from: output.extent) else {
             return nil
         }
-        cache.setObject(Box(cgImage), forKey: key)
+        // Full-resolution renders are one-shot exports (~50 MB each); caching
+        // one would evict every preview and pin huge memory for nothing.
+        if maxDimension != nil {
+            cache.setObject(Box(cgImage), forKey: key, cost: cgImage.bytesPerRow * cgImage.height)
+        }
         return cgImage
     }
 
