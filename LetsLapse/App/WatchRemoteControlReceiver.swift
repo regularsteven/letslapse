@@ -26,6 +26,12 @@ enum WatchRecordingState: String {
 final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     static let shared = WatchRemoteControlReceiver()
 
+    /// Serial queue for the blocking WatchConnectivity calls. `updateApplicationContext`
+    /// synchronously waits on WC's XPC (its internal `applicationContext` getter uses
+    /// `addOperations:waitUntilFinished:`), so calling it on the main thread hangs the
+    /// UI and trips the 10s scene-update watchdog (0x8BADF00D) when the WC daemon is busy.
+    private static let wcQueue = DispatchQueue(label: "com.letslapse.watch-connectivity")
+
     @Published private(set) var recordingState: WatchRecordingState = .idle
     @Published private(set) var isReachable = false
 
@@ -276,10 +282,16 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private func publishState() {
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
+        // Build the payload here (reads @MainActor state), but push it to the
+        // Watch off the main thread: updateApplicationContext blocks on WC's XPC
+        // and will hang the UI (watchdog kill) if run on the main thread.
         let payload = statePayload()
-        try? session.updateApplicationContext(payload)
-        if session.isReachable {
-            session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
+        Self.wcQueue.async {
+            guard session.activationState == .activated else { return }
+            try? session.updateApplicationContext(payload)
+            if session.isReachable {
+                session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
+            }
         }
     }
 }

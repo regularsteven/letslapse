@@ -83,6 +83,21 @@ final class CameraController: NSObject, ObservableObject {
     let session = AVCaptureSession()
 
     private let sessionQueue = DispatchQueue(label: "com.letslapse.capture")
+
+    #if os(iOS)
+    /// Last interface-derived capture orientation, cached so the capture queue
+    /// can read it without touching `UIApplication`/`UIScene` — those are
+    /// main-thread-only and crash when read from `sessionQueue` (e.g. the
+    /// interval timer tick). Written on the main thread by `setVideoOrientation`
+    /// as SwiftUI rotates; lock-protected for cross-thread reads.
+    private let orientationLock = NSLock()
+    private var _latestCaptureOrientation: AVCaptureVideoOrientation = .portrait
+    private var latestCaptureOrientation: AVCaptureVideoOrientation {
+        get { orientationLock.lock(); defer { orientationLock.unlock() }; return _latestCaptureOrientation }
+        set { orientationLock.lock(); _latestCaptureOrientation = newValue; orientationLock.unlock() }
+    }
+    #endif
+
     private let movieOutput = AVCaptureMovieFileOutput()
     private let photoOutput = AVCapturePhotoOutput()
     private var videoInput: AVCaptureDeviceInput?
@@ -1034,6 +1049,11 @@ final class CameraController: NSObject, ObservableObject {
     /// rotation, so it never depends on device-motion notifications.
     func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
         LLog("setVideoOrientation(\(orientation.rawValue)) [outputs+stabilization]")
+        #if os(iOS)
+        // Cache the interface-derived orientation so capture-queue work
+        // (interval tick, segment/blend start) never has to read UIKit.
+        latestCaptureOrientation = orientation
+        #endif
         sessionQueue.async {
             #if os(iOS)
             let connections = [
@@ -1053,10 +1073,12 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     #if os(iOS)
-    /// The orientation to bake into recordings/stills right now, derived
-    /// from the interface orientation.
+    /// The orientation to bake into recordings/stills right now. Returns the
+    /// cached interface orientation (updated on the main thread by
+    /// `setVideoOrientation`) rather than reading `UIApplication` — this is
+    /// called from `sessionQueue`, where UIKit access is illegal and crashes.
     private func captureOrientation() -> AVCaptureVideoOrientation {
-        currentCaptureOrientation()
+        latestCaptureOrientation
     }
     #endif
 
