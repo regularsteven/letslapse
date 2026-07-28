@@ -475,10 +475,11 @@ struct CaptureView: View {
         camera.appleLogEnabled = (mode == .video && captureFlat && camera.supportsAppleLog)
     }
 
-    /// True when the next Interval shoot will capture DNG — the session
+    /// True when the next still shoot will capture DNG — the session
     /// should be framing on the full 4:3 sensor, not the 16:9 video format.
+    /// Photo and Interval share the gate: both run the same DNG pipeline.
     private var wantsPhotoAspectPreview: Bool {
-        mode == .interval
+        (mode == .interval || mode == .photo)
             && model.intervalOutputFormat == .dng
             && camera.liveBlendDNGSupport.isSupported
     }
@@ -922,8 +923,9 @@ struct CaptureView: View {
         .accessibilityLabel("Capture format")
     }
 
-    /// Video reads "2160p · 30"; Interval drops the frame rate — stills
-    /// have no base rate, the pill's trailing token carries the format.
+    /// Video reads "1080p · 30"; the still modes drop the frame rate —
+    /// stills have no base rate, the pill's trailing token carries the
+    /// format — and state pixels ("1920×1080"), not the video names.
     /// With DNG armed the shoot captures the full sensor, so the pill
     /// presents the sensor frame ("12MP 4:3"), not the video format.
     private var formatSummary: String {
@@ -935,7 +937,7 @@ struct CaptureView: View {
            let sensor = camera.liveBlendDNGSupport.sensorDimensions {
             return sensorSummaryLabel(sensor)
         }
-        return camera.selectedResolution.label
+        return camera.selectedResolution.stillLabel
     }
 
     // MARK: - Speed chips (idle)
@@ -2091,10 +2093,10 @@ struct CaptureView: View {
     }
 
     private func updateWatchContext() {
-        // Mirror the format pill: Video reads "2160p · 30 fps", Interval
-        // reads the still format ("12MP 4:3 · DNG" / "1080p · JPEG").
+        // Mirror the format pill: Video reads "4K · 30 fps", the still modes
+        // read the still format ("12MP 4:3 · DNG" / "1920×1080 · JPEG").
         let formatLine: String
-        if mode == .interval {
+        if mode != .video {
             let dngActive = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
             formatLine = "\(formatSummary) · \(dngActive ? "DNG" : "JPEG")"
         } else {
@@ -2262,18 +2264,7 @@ private func sensorSummaryLabel(_ sensor: CameraController.CaptureResolution) ->
 }
 
 private func sensorAspectLabel(_ sensor: CameraController.CaptureResolution) -> String {
-    let ratio = Double(sensor.width) / Double(max(sensor.height, 1))
-    // Sensors sometimes report a few extra readout pixels (4224×3024), so
-    // match the photographic ratios with tolerance before reducing exactly.
-    let common: [(label: String, value: Double)] = [
-        ("4:3", 4.0 / 3.0), ("3:2", 1.5), ("16:9", 16.0 / 9.0), ("1:1", 1.0),
-    ]
-    if let match = common.first(where: { abs($0.value - ratio) < 0.02 }) {
-        return match.label
-    }
-    func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
-    let divisor = max(gcd(Int(sensor.width), Int(sensor.height)), 1)
-    return "\(Int(sensor.width) / divisor):\(Int(sensor.height) / divisor)"
+    sensor.aspectRatioLabel
 }
 
 /// Advanced capture format, off the viewfinder entirely. Shows each mode
@@ -2283,6 +2274,7 @@ private func sensorAspectLabel(_ sensor: CameraController.CaptureResolution) -> 
 private struct FormatSheet: View {
     @ObservedObject var camera: CameraController
     @ObservedObject var model: AppModel
+    @ObservedObject private var resolutionPrefs = ResolutionPreferences.shared
     @Binding var mode: CaptureMode
     @Binding var sequenceMode: LiveCaptureSequence.Mode
     @AppStorage(FlatCapture.storageKey) private var captureFlat = false
@@ -2308,6 +2300,38 @@ private struct FormatSheet: View {
         return camera.supportsAppleLog
             ? "Records in Apple Log — a flat, low-contrast profile with maximum grading latitude. Best paired with a colour grade in post."
             : "Bakes a low-contrast, desaturated grade into the movie as it saves, keeping more room to colour-grade later."
+    }
+
+    /// Video speaks its own vocabulary ("4K", the ProRes star); the still
+    /// modes state the actual pixel frame their JPEGs will have. Display
+    /// ratios (a Manage resolutions preference) rides along per vocabulary.
+    private func resolutionPickerLabel(_ resolution: CameraController.CaptureResolution) -> String {
+        var label: String
+        if mode == .video {
+            label = resolution.label
+        } else {
+            label = resolution.stillLabel
+        }
+        if resolutionPrefs.displaysRatios(in: ResolutionPreferences.domain(for: mode)) {
+            label += " (\(resolution.aspectRatioLabel))"
+        }
+        if mode == .video, resolution.isProRes {
+            label += " *"
+        }
+        return label
+    }
+
+    /// The device list trimmed to the user's Manage resolutions choices.
+    /// The active selection always stays offered (hiding it elsewhere must
+    /// not leave the picker pointing at a missing row), and the still modes
+    /// drop ProRes entries — that's video-only vocabulary.
+    private var pickerResolutions: [CameraController.CaptureResolution] {
+        let domain = ResolutionPreferences.domain(for: mode)
+        return camera.availableResolutions.filter { resolution in
+            if resolution == camera.selectedResolution { return true }
+            if mode != .video && resolution.isProRes { return false }
+            return resolutionPrefs.isVisible(resolution, in: domain)
+        }
     }
 
     var body: some View {
@@ -2358,8 +2382,8 @@ private struct FormatSheet: View {
                         }
                     } else {
                         Picker("Resolution", selection: $camera.selectedResolution) {
-                            ForEach(camera.availableResolutions) { resolution in
-                                Text(mode == .video && resolution.isProRes ? "\(resolution.label) *" : resolution.label).tag(resolution)
+                            ForEach(pickerResolutions) { resolution in
+                                Text(resolutionPickerLabel(resolution)).tag(resolution)
                             }
                         }
                         .onChange(of: camera.selectedResolution) { resolution in
@@ -2377,10 +2401,16 @@ private struct FormatSheet: View {
                             camera.selectFrameRate(fps)
                         }
                     }
+
+                    NavigationLink {
+                        ManageResolutionsView(initialDomain: ResolutionPreferences.domain(for: mode))
+                    } label: {
+                        Text("Manage resolutions")
+                    }
                 } header: {
                     Text("Format")
                 } footer: {
-                    if mode == .video && camera.availableResolutions.contains(where: { $0.isProRes }) {
+                    if mode == .video && pickerResolutions.contains(where: { $0.isProRes }) {
                         Text("* ProRes — very large files")
                     }
                 }

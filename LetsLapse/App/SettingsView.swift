@@ -9,6 +9,7 @@ enum SettingsDestination: String, Hashable {
     case performance
     case diagnostics
     case blendLearning
+    case manageResolutions
 }
 
 /// Creative defaults and recording up top, storage in the middle, and the
@@ -71,6 +72,7 @@ struct SettingsView: View {
             case .performance: PerformanceSettingsView()
             case .diagnostics: DiagnosticsView()
             case .blendLearning: BlendLearningView()
+            case .manageResolutions: ManageResolutionsView()
             }
         }
         #if os(iOS)
@@ -203,6 +205,19 @@ struct SettingsView: View {
                 }
             }
             #endif
+
+            NavigationLink(value: SettingsDestination.manageResolutions) {
+                LLRow(
+                    title: "Manage resolutions",
+                    subtitle: "Choose which resolutions Capture Format offers — separate lists for stills and video"
+                ) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
 
             LLRow(
                 title: "Record audio",

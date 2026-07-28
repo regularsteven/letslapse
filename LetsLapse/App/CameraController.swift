@@ -75,8 +75,95 @@ final class CameraController: NSObject, ObservableObject {
             }
         }
 
+        /// The same frame in still-photo vocabulary: the video names
+        /// ("4K", "1080p") belong to Video mode; stills state pixels.
+        var stillLabel: String {
+            "\(width)×\(height)"
+        }
+
+        /// "4:3" / "16:9" — the photographic ratios are matched with
+        /// tolerance (sensors report a few extra readout pixels, 4224×3024),
+        /// anything else reduces exactly.
+        var aspectRatioLabel: String {
+            let ratio = Double(width) / Double(max(height, 1))
+            let common: [(label: String, value: Double)] = [
+                ("4:3", 4.0 / 3.0), ("3:2", 1.5), ("16:9", 16.0 / 9.0), ("1:1", 1.0),
+            ]
+            if let match = common.first(where: { abs($0.value - ratio) < 0.02 }) {
+                return match.label
+            }
+            func gcd(_ a: Int, _ b: Int) -> Int { b == 0 ? a : gcd(b, a % b) }
+            let divisor = max(gcd(Int(width), Int(height)), 1)
+            return "\(Int(width) / divisor):\(Int(height) / divisor)"
+        }
+
         var pixelCount: Int64 {
             Int64(width) * Int64(height)
+        }
+    }
+
+    /// A resolution the hardware offers, with the capability facts the
+    /// manage-resolutions screen sections by. Probed straight from device
+    /// format lists — no running session needed, so Settings can show the
+    /// list without spinning up the camera.
+    struct ResolutionCapability: Identifiable {
+        var resolution: CaptureResolution
+        var supportsStabilization: Bool
+        var id: String { resolution.id }
+    }
+
+    /// Every resolution this device's cameras offer, mirroring the criteria
+    /// `supportedFrameRatesByResolution` applies to the live format list
+    /// (minimum frame, a usable frame rate) — minus its stabilization filter,
+    /// which the manage screen presents as sections instead. Unioned across
+    /// the back lenses so the list is the device's full vocabulary, not one
+    /// lens's.
+    static func resolutionCapabilities() -> [ResolutionCapability] {
+        #if os(iOS)
+        let devices = Lens.allCases.compactMap {
+            AVCaptureDevice.default($0.deviceType, for: .video, position: .back)
+        }
+        #else
+        let devices = AVCaptureDevice.default(for: .video).map { [$0] } ?? []
+        #endif
+        var candidates = preferredFrameRates
+        if let custom = RecordingSettingsStore.customFrameRate, !candidates.contains(custom) {
+            candidates.append(custom)
+        }
+        var byID: [String: ResolutionCapability] = [:]
+        for device in devices {
+            for format in device.formats {
+                let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+                guard dims.width >= 640, dims.height >= 480 else { continue }
+                guard !supportedFrameRates(for: format, candidates: candidates).isEmpty else { continue }
+                let subType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+                let resolution = CaptureResolution(
+                    width: dims.width,
+                    height: dims.height,
+                    isProRes: proResFourCCs.contains(subType)
+                )
+                #if os(iOS)
+                // Mirrors `stabilizationMode(for:)` — cinematic or standard.
+                let stabilized = format.isVideoStabilizationModeSupported(.cinematic)
+                    || format.isVideoStabilizationModeSupported(.standard)
+                #else
+                let stabilized = false
+                #endif
+                let existing = byID[resolution.id]
+                byID[resolution.id] = ResolutionCapability(
+                    resolution: resolution,
+                    supportsStabilization: (existing?.supportsStabilization ?? false) || stabilized
+                )
+            }
+        }
+        return byID.values.sorted {
+            if $0.resolution.pixelCount == $1.resolution.pixelCount {
+                if $0.resolution.width == $1.resolution.width {
+                    return !$0.resolution.isProRes && $1.resolution.isProRes
+                }
+                return $0.resolution.width > $1.resolution.width
+            }
+            return $0.resolution.pixelCount > $1.resolution.pixelCount
         }
     }
 
@@ -123,8 +210,13 @@ final class CameraController: NSObject, ObservableObject {
     // 10/12/15 are acquisition rates for the blend pipeline: sparse temporal
     // sampling with up to a full-interval shutter, meant to be conformed or
     // blended rather than played as-is.
-    private let preferredFrameRates = [10, 12, 15, 24, 25, 30, 50, 60, 100, 120, 240]
-    private let frameRateTolerance = 0.2
+    private static let preferredFrameRates = [10, 12, 15, 24, 25, 30, 50, 60, 100, 120, 240]
+    private static let frameRateTolerance = 0.2
+    /// ProRes codec subtypes (FourCC): 'apcn' 422, 'apch' 422 HQ,
+    /// 'apcs' 422 LT, 'apco' 422 Proxy, 'ap4h' 4444, 'ap4x' 4444 XQ.
+    private static let proResFourCCs: Set<FourCharCode> = [
+        0x6170636e, 0x61706368, 0x61706373, 0x6170636f, 0x61703468, 0x61703478,
+    ]
     private var activeSequence: LiveCaptureSequence?
     private var activeSequenceDirectory: URL?
     private var activeSequenceStartedAt: Date?
@@ -782,7 +874,7 @@ final class CameraController: NSObject, ObservableObject {
         for device: AVCaptureDevice
     ) -> [CaptureResolution: Set<Int>] {
         var supportedRates: [CaptureResolution: Set<Int>] = [:]
-        var candidateFrameRates = preferredFrameRates
+        var candidateFrameRates = Self.preferredFrameRates
         if let custom = RecordingSettingsStore.customFrameRate,
            !candidateFrameRates.contains(custom) {
             candidateFrameRates.append(custom)
@@ -796,24 +888,19 @@ final class CameraController: NSObject, ObservableObject {
             let dims = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             guard dims.width >= 640, dims.height >= 480 else { continue }
             let subType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
-            // ProRes codec subtypes (FourCC): 'apcn' 422, 'apch' 422 HQ,
-            // 'apcs' 422 LT, 'apco' 422 Proxy, 'ap4h' 4444, 'ap4x' 4444 XQ.
-            let proResFourCCs: Set<FourCharCode> = [
-                0x6170636e, 0x61706368, 0x61706373, 0x6170636f, 0x61703468, 0x61703478,
-            ]
             let resolution = CaptureResolution(
                 width: dims.width,
                 height: dims.height,
-                isProRes: proResFourCCs.contains(subType)
+                isProRes: Self.proResFourCCs.contains(subType)
             )
-            let rates = supportedFrameRates(for: format, candidates: candidateFrameRates)
+            let rates = Self.supportedFrameRates(for: format, candidates: candidateFrameRates)
             guard !rates.isEmpty else { continue }
             supportedRates[resolution, default: []].formUnion(rates)
         }
         return supportedRates
     }
 
-    private func supportedFrameRates(
+    private static func supportedFrameRates(
         for format: AVCaptureDevice.Format,
         candidates: [Int]
     ) -> Set<Int> {
@@ -832,7 +919,7 @@ final class CameraController: NSObject, ObservableObject {
         return rates
     }
 
-    private func supportsFrameRate(_ fps: Double, in range: AVFrameRateRange) -> Bool {
+    private static func supportsFrameRate(_ fps: Double, in range: AVFrameRateRange) -> Bool {
         fps >= range.minFrameRate - frameRateTolerance
             && fps <= range.maxFrameRate + frameRateTolerance
     }
@@ -961,7 +1048,7 @@ final class CameraController: NSObject, ObservableObject {
                     && dims.height == resolution.height
                     && stabilizationMatches
                     && format.videoSupportedFrameRateRanges.contains { range in
-                        supportsFrameRate(targetFPS, in: range)
+                        Self.supportsFrameRate(targetFPS, in: range)
                     }
             }
             .map { format in
