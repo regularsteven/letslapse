@@ -2040,6 +2040,11 @@ struct CaptureView: View {
             }
         case .triggerMoment:
             camera.triggerLiveMoment()
+        case .timedBurst:
+            // Watch "burst Ns": the phone owns the auto-revert timer so it
+            // fires even if the Watch sleeps mid-burst.
+            guard let value, value > 0 else { return }
+            camera.triggerTimedLiveMoment(duration: min(value, 30))
         case .lockExposure:
             camera.lockExposureAndFocus()
         case .unlockExposure:

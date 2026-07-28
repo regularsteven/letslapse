@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" color="#0A0F1C">
+  <!-- LetsLapse monochrome mark (full). Recolour via the root `color` attribute / CSS `color`. -->
+  <g transform="rotate(-5 512 486)">
+    <rect x="284" y="788" width="32" height="100" rx="9" fill="currentColor"/>
+    <rect x="708" y="788" width="32" height="100" rx="9" fill="currentColor"/>
+  </g>
+  <circle cx="512" cy="486" r="376" fill="none" stroke="currentColor" stroke-width="44"/>
+  <g transform="rotate(-5 512 486)">
+    <rect x="346" y="636" width="42" height="126" rx="11" fill="currentColor"/>
+    <rect x="636" y="636" width="42" height="126" rx="11" fill="currentColor"/>
+    <rect x="296" y="286" width="432" height="352" rx="20" fill="none" stroke="currentColor" stroke-width="42"/>
+  </g>
+  <circle cx="478" cy="452" r="118" fill="currentColor"/>
+</svg>

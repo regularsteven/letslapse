@@ -11,7 +11,14 @@ enum WatchRecordingState: String {
 
 @MainActor
 final class WatchCaptureRemote: NSObject, ObservableObject {
-    @Published private(set) var recordingState: WatchRecordingState = .idle
+    @Published private(set) var recordingState: WatchRecordingState = .idle {
+        didSet {
+            guard recordingState != oldValue else { return }
+            #if os(watchOS)
+            syncKeepAwake()
+            #endif
+        }
+    }
     @Published private(set) var recordingStartedAt: Date?
     @Published private(set) var isReachable = false
     @Published private(set) var statusText = "Connecting"
@@ -23,6 +30,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var isRampActive = false
     @Published private(set) var isRampHighRate = false
     @Published private(set) var isCameraActive = false
+    /// Seconds of the timed burst now running (1/2/4), nil when none — drives
+    /// the highlighted chip in the burst row. Local optimism only; it clears
+    /// the moment the phone reports the ramp back at base rate.
+    @Published private(set) var timedBurstSeconds: Int?
     @Published private(set) var captureMode: CaptureMode = .video
     @Published private(set) var intervalSeconds: Double = 2
     /// Matches the phone's default (10); the phone's state push corrects
@@ -48,6 +59,15 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
 
     override init() {
         super.init()
+        #if os(watchOS)
+        // Shoots are hands-off by design: stretch the frontmost grace period
+        // (2 → 8 minutes) so a wrist-down doesn't immediately cost the
+        // connection. The extended runtime session below covers the rest.
+        WKExtension.shared().isFrontmostTimeoutExtended = true
+        #if DEBUG
+        applyDebugPreviewStateIfRequested()
+        #endif
+        #endif
         activate()
     }
 
@@ -74,6 +94,12 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
 
     func triggerMoment() {
         send(command: "triggerMoment")
+    }
+
+    /// Burst for a fixed window: the phone flips to the ramp rate and reverts
+    /// to the base rate on its own after `seconds` — no second tap needed.
+    func triggerTimedBurst(seconds: Int) {
+        send(command: "timedBurst", value: Double(seconds))
     }
 
     func lockExposure() {
@@ -208,6 +234,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             segmentCount = 0
             isRampActive = false
             isRampHighRate = false
+            timedBurstSeconds = nil
             playHaptic(.stop)
         case "triggerMoment":
             if recordingState == .recording {
@@ -216,6 +243,21 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 if isRampActive {
                     rampIntervalCount = max(1, rampIntervalCount + 1)
                     markerCount = rampIntervalCount
+                }
+                // A manual toggle takes over from any timed burst.
+                timedBurstSeconds = nil
+                playHaptic(.click)
+            }
+        case "timedBurst":
+            if recordingState == .recording {
+                if !isRampActive {
+                    isRampActive = true
+                    isRampHighRate = sequenceMode == "ramp"
+                    rampIntervalCount = max(1, rampIntervalCount + 1)
+                    markerCount = rampIntervalCount
+                }
+                if let seconds = sent[WatchMessageKey.value] as? Double {
+                    timedBurstSeconds = Int(seconds)
                 }
                 playHaptic(.click)
             }
@@ -296,12 +338,73 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
 
     func reconnect() {
         activate()
+        #if os(watchOS)
+        // Also the re-entry point after wrist-up: an extended runtime session
+        // that expired (1 h cap) or failed to start while inactive can only
+        // be replaced while the app is frontmost — which is exactly now.
+        syncKeepAwake()
+        #endif
         if WCSession.default.activationState == .activated, WCSession.default.isReachable {
             refreshState()
         } else {
             statusText = "Connecting"
         }
     }
+
+    // MARK: - Keep-awake
+
+    #if os(watchOS)
+    /// Keeps the app running through wrist-down while a shoot records. watchOS
+    /// offers no way to hold the display awake, but an extended runtime
+    /// session keeps the app alive and frontmost with the session connected,
+    /// so a wrist-raise lands straight back on live controls instead of a
+    /// reconnect. Needs the `mindfulness` entry in `WKBackgroundModes`.
+    private var extendedSession: WKExtendedRuntimeSession?
+
+    private func syncKeepAwake() {
+        if recordingState == .recording {
+            startExtendedSessionIfNeeded()
+        } else {
+            endExtendedSession()
+        }
+    }
+
+    private func startExtendedSessionIfNeeded() {
+        if let extendedSession,
+           extendedSession.state == .running || extendedSession.state == .scheduled {
+            return
+        }
+        let session = WKExtendedRuntimeSession()
+        session.delegate = self
+        session.start()
+        extendedSession = session
+    }
+
+    private func endExtendedSession() {
+        extendedSession?.invalidate()
+        extendedSession = nil
+    }
+    #endif
+
+    #if os(watchOS) && DEBUG
+    /// `SIMCTL_CHILD_LL_UI_PREVIEW=recording` fakes a live ramp shoot so the
+    /// recording screen can be screenshotted in the Watch simulator without a
+    /// paired phone actually capturing.
+    private func applyDebugPreviewStateIfRequested() {
+        guard ProcessInfo.processInfo.environment["LL_UI_PREVIEW"] == "recording" else { return }
+        isReachable = true
+        isCameraActive = true
+        captureMode = .video
+        sequenceMode = "ramp"
+        captureFPS = 24
+        plannedSpeed = 30
+        outputFPS = 30
+        formatLine = "4K · 24 fps"
+        rampIntervalCount = 2
+        recordingStartedAt = Date().addingTimeInterval(-83)
+        recordingState = .recording
+    }
+    #endif
 
     private func applySequenceState(_ payload: [String: Any]) {
         if let mode = payload[WatchMessageKey.sequenceMode] as? String {
@@ -317,7 +420,15 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             segmentCount = count
         }
         if let isActive = payload[WatchMessageKey.isRampActive] as? Bool {
+            if isRampActive, !isActive, timedBurstSeconds != nil {
+                // The phone's timed revert just landed — a tick on the wrist
+                // beats glancing down to watch the rate flip back.
+                playHaptic(.click)
+            }
             isRampActive = isActive
+            if !isActive {
+                timedBurstSeconds = nil
+            }
         }
         if let isHighRate = payload[WatchMessageKey.isRampHighRate] as? Bool {
             isRampHighRate = isHighRate
@@ -401,6 +512,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             segmentCount = 0
             isRampActive = false
             isRampHighRate = false
+            timedBurstSeconds = nil
         }
     }
 
@@ -465,3 +577,25 @@ extension WatchCaptureRemote: WCSessionDelegate {
         }
     }
 }
+
+#if os(watchOS)
+extension WatchCaptureRemote: WKExtendedRuntimeSessionDelegate {
+    nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {}
+
+    nonisolated func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {}
+
+    nonisolated func extendedRuntimeSession(
+        _ extendedRuntimeSession: WKExtendedRuntimeSession,
+        didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason,
+        error: Error?
+    ) {
+        // Expired (1 h cap), superseded, or refused because the app wasn't
+        // frontmost — drop the handle so the next sync can start a fresh one.
+        Task { @MainActor in
+            if self.extendedSession === extendedRuntimeSession {
+                self.extendedSession = nil
+            }
+        }
+    }
+}
+#endif

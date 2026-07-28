@@ -225,6 +225,10 @@ final class CameraController: NSObject, ObservableObject {
     private var activeSegmentURL: URL?
     private var segmentURLs: [URL] = []
     private var pendingRampFrameRate: Int?
+    /// Cancellation token for Watch-timed bursts: every manual toggle, new
+    /// timed press, or sequence teardown bumps it, orphaning any auto-revert
+    /// still scheduled. Confined to `sessionQueue`.
+    private var timedBurstGeneration = 0
     private var isFinishingSequence = false
     private var isDiscardingSequence = false
     private var rampIntervalActive = false
@@ -1425,29 +1429,87 @@ final class CameraController: NSObject, ObservableObject {
 
     func triggerLiveMoment() {
         sessionQueue.async {
-            guard let sequence = self.activeSequence,
-                  self.movieOutput.isRecording,
-                  let startedAt = self.activeSequenceStartedAt else { return }
+            // A manual toggle supersedes any timed burst: its pending
+            // auto-revert must not fire on top of what the user just chose.
+            self.timedBurstGeneration += 1
+            self.performLiveMomentToggle()
+        }
+    }
 
-            switch sequence.mode {
-            case .marker:
-                self.toggleRampInterval(at: Date(), sequenceStartedAt: startedAt)
-            case .ramp:
-                guard self.pendingRampFrameRate == nil else { return }
-                let shouldTurnRampOn = !self.rampIntervalActive
-                let targetFrameRate = shouldTurnRampOn
-                    ? (sequence.rampFrameRate ?? self.selectedRampFrameRate)
-                    : sequence.baseFrameRate
-                let currentFrameRate = self.activeRecordingFrameRate ?? self.selectedFrameRate
-                guard targetFrameRate != currentFrameRate else { return }
-                if shouldTurnRampOn {
-                    self.openRampInterval(at: Date(), sequenceStartedAt: startedAt)
-                } else {
-                    self.closeOpenRampInterval(at: Date())
+    /// The Watch's "burst Ns" press: jump to the burst rate now (if not
+    /// already there) and revert to the base rate after `duration`. The timer
+    /// lives here rather than on the Watch so the revert still lands when the
+    /// Watch sleeps mid-burst. Pressing again reschedules the revert; a
+    /// manual toggle cancels it.
+    func triggerTimedLiveMoment(duration: TimeInterval) {
+        sessionQueue.async {
+            guard self.activeSequence != nil else { return }
+            self.timedBurstGeneration += 1
+            self.beginTimedBurst(duration: duration, generation: self.timedBurstGeneration)
+        }
+    }
+
+    /// Opens the timed burst, waiting out any segment switch already in
+    /// flight (`pendingRampFrameRate` can't be interrupted). The revert is
+    /// scheduled only once the burst actually opens, so "1s" buys a full
+    /// second at the burst rate, not a second minus switch latency.
+    private func beginTimedBurst(duration: TimeInterval, generation: Int, attempt: Int = 0) {
+        guard generation == timedBurstGeneration, activeSequence != nil else { return }
+        if !rampIntervalActive {
+            if pendingRampFrameRate != nil || !movieOutput.isRecording {
+                guard attempt < 20 else { return }
+                sessionQueue.asyncAfter(deadline: .now() + 0.15) {
+                    self.beginTimedBurst(duration: duration, generation: generation, attempt: attempt + 1)
                 }
-                self.pendingRampFrameRate = targetFrameRate
-                self.movieOutput.stopRecording()
+                return
             }
+            performLiveMomentToggle()
+            // The toggle can refuse (e.g. burst rate equals the base rate) —
+            // nothing opened, so there is nothing to revert.
+            guard rampIntervalActive else { return }
+        }
+        sessionQueue.asyncAfter(deadline: .now() + duration) {
+            self.endTimedBurst(generation: generation)
+        }
+    }
+
+    private func endTimedBurst(generation: Int, attempt: Int = 0) {
+        guard generation == timedBurstGeneration,
+              activeSequence != nil,
+              rampIntervalActive else { return }
+        if pendingRampFrameRate != nil || !movieOutput.isRecording {
+            guard attempt < 20 else { return }
+            sessionQueue.asyncAfter(deadline: .now() + 0.15) {
+                self.endTimedBurst(generation: generation, attempt: attempt + 1)
+            }
+            return
+        }
+        performLiveMomentToggle()
+    }
+
+    private func performLiveMomentToggle() {
+        guard let sequence = activeSequence,
+              movieOutput.isRecording,
+              let startedAt = activeSequenceStartedAt else { return }
+
+        switch sequence.mode {
+        case .marker:
+            toggleRampInterval(at: Date(), sequenceStartedAt: startedAt)
+        case .ramp:
+            guard pendingRampFrameRate == nil else { return }
+            let shouldTurnRampOn = !rampIntervalActive
+            let targetFrameRate = shouldTurnRampOn
+                ? (sequence.rampFrameRate ?? selectedRampFrameRate)
+                : sequence.baseFrameRate
+            let currentFrameRate = activeRecordingFrameRate ?? selectedFrameRate
+            guard targetFrameRate != currentFrameRate else { return }
+            if shouldTurnRampOn {
+                openRampInterval(at: Date(), sequenceStartedAt: startedAt)
+            } else {
+                closeOpenRampInterval(at: Date())
+            }
+            pendingRampFrameRate = targetFrameRate
+            movieOutput.stopRecording()
         }
     }
 
@@ -1600,6 +1662,7 @@ final class CameraController: NSObject, ObservableObject {
 
     private func resetLiveCaptureState() {
         restoreBaseFrameRateIfNeeded()
+        timedBurstGeneration += 1
         activeSequence = nil
         activeSequenceDirectory = nil
         activeSequenceStartedAt = nil

@@ -6,6 +6,7 @@ enum WatchCaptureCommand: String {
     case startRecording
     case stopRecording
     case triggerMoment
+    case timedBurst
     case lockExposure
     case unlockExposure
     case setISO

@@ -283,8 +283,32 @@ struct WatchControlView: View {
 
     // MARK: - Recording
 
+    /// Scrolls so the timed-burst row fits above the stop slider even on the
+    /// small cases — everything stays reachable, nothing gets clipped.
     private var recordingScreen: some View {
-        VStack(spacing: 7) {
+        ScrollView {
+            recordingControls
+        }
+        .focusable(remote.isExposureLocked)
+        .digitalCrownRotation(
+            $isoAdjust,
+            from: remote.isoMin,
+            through: remote.isoMax,
+            by: 50,
+            sensitivity: .medium
+        )
+        .onChange(of: isoAdjust) { newValue in
+            guard remote.isExposureLocked else { return }
+            remote.setISO(newValue)
+        }
+        .onChange(of: remote.isExposureLocked) { locked in
+            if locked { isoAdjust = remote.lockedISO }
+        }
+        .onAppear { isoAdjust = remote.lockedISO }
+    }
+
+    private var recordingControls: some View {
+        VStack(spacing: 6) {
             HStack {
                 HStack(spacing: 5) {
                     Circle()
@@ -324,6 +348,10 @@ struct WatchControlView: View {
                 }
             }
 
+            if remote.captureMode == .video && remote.sequenceMode == "ramp" {
+                timedBurstRow
+            }
+
             SlideToStop(
                 enabled: !remote.isSending && remote.isReachable,
                 label: slideToStopLabel
@@ -344,22 +372,6 @@ struct WatchControlView: View {
             }
         }
         .padding(.horizontal, 6)
-        .focusable(remote.isExposureLocked)
-        .digitalCrownRotation(
-            $isoAdjust,
-            from: remote.isoMin,
-            through: remote.isoMax,
-            by: 50,
-            sensitivity: .medium
-        )
-        .onChange(of: isoAdjust) { newValue in
-            guard remote.isExposureLocked else { return }
-            remote.setISO(newValue)
-        }
-        .onChange(of: remote.isExposureLocked) { locked in
-            if locked { isoAdjust = remote.lockedISO }
-        }
-        .onAppear { isoAdjust = remote.lockedISO }
     }
 
     /// Mid-shoot AE/AF lock — amber = locked, so you can grab a lock the moment
@@ -437,6 +449,39 @@ struct WatchControlView: View {
 
     private var baseRateLabel: String {
         remote.captureFPS > 0 ? "\(remote.captureFPS)" : "base"
+    }
+
+    /// One press = burst at the ramp rate for that many seconds, then the
+    /// phone drops back to the base rate on its own — for moments too quick
+    /// to toggle twice by hand. The phone owns the timer, so the revert lands
+    /// even if the watch sleeps mid-burst.
+    private var timedBurstRow: some View {
+        HStack(spacing: 6) {
+            timedBurstButton(seconds: 1)
+            timedBurstButton(seconds: 2)
+            timedBurstButton(seconds: 4)
+        }
+    }
+
+    private func timedBurstButton(seconds: Int) -> some View {
+        let isActive = remote.isRampHighRate && remote.timedBurstSeconds == seconds
+        return Button {
+            remote.triggerTimedBurst(seconds: seconds)
+        } label: {
+            Text("⚡\(seconds)s")
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(isActive ? .black : .white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: 30)
+        }
+        .buttonStyle(.plain)
+        .background(
+            isActive ? amber : Color.white.opacity(0.12),
+            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+        )
+        .disabled(remote.isSending || !remote.isReachable)
+        .accessibilityLabel("Burst \(seconds) second\(seconds == 1 ? "" : "s")")
     }
 
     /// Interval's counterpart of the burst toggle's slot: how many outputs

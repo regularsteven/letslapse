@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" color="#0A0F1C">
+  <!-- LetsLapse monochrome mark (simplified, for renders below ~40px: ring, lens, feet only). -->
+  <circle cx="512" cy="486" r="358" fill="none" stroke="currentColor" stroke-width="74"/>
+  <g transform="rotate(-5 512 486)">
+    <rect x="288" y="806" width="38" height="96" rx="12" fill="currentColor"/>
+    <rect x="698" y="806" width="38" height="96" rx="12" fill="currentColor"/>
+  </g>
+  <circle cx="478" cy="452" r="142" fill="currentColor"/>
+</svg>

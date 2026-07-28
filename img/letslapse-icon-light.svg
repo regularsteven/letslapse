@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- LetsLapse app icon — Light mode. From "True to Form" treatment 3b. -->
+  <defs>
+    <linearGradient id="bgLight" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#E7ECF5"/>
+      <stop offset="0.6" stop-color="#CED7E6"/>
+      <stop offset="1" stop-color="#B2BFD4"/>
+    </linearGradient>
+    <linearGradient id="lensGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1E1C48"/>
+      <stop offset="0.26" stop-color="#4A4A93"/>
+      <stop offset="0.42" stop-color="#150332"/>
+      <stop offset="0.72" stop-color="#0C0322"/>
+      <stop offset="1" stop-color="#001C4C"/>
+    </linearGradient>
+    <linearGradient id="pipeLight" x1="0.1" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#FFFFFF"/>
+      <stop offset="0.55" stop-color="#FAFCFF"/>
+      <stop offset="1" stop-color="#E4EBF5"/>
+    </linearGradient>
+    <linearGradient id="boardGrad" x1="0" y1="0" x2="0.4" y2="1">
+      <stop offset="0" stop-color="#15406C"/>
+      <stop offset="1" stop-color="#071B33"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bgLight)"/>
+  <g transform="rotate(-5 512 486)">
+    <rect x="281" y="790" width="34" height="112" rx="9" fill="#8797AF"/>
+    <rect x="709" y="790" width="34" height="112" rx="9" fill="#8797AF"/>
+    <rect x="269" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+    <rect x="697" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+  </g>
+  <circle cx="512" cy="486" r="402" fill="url(#pipeLight)"/>
+  <circle cx="512" cy="486" r="402" fill="none" stroke="#93A3BC" stroke-width="8"/>
+  <g transform="rotate(-5 512 486)">
+    <rect x="340" y="640" width="48" height="134" rx="12" fill="#123A61"/>
+    <rect x="636" y="640" width="48" height="134" rx="12" fill="#123A61"/>
+    <rect x="325" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+    <rect x="621" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+    <rect x="242" y="234" width="540" height="456" rx="18" fill="url(#boardGrad)"/>
+    <rect x="242" y="234" width="540" height="456" rx="18" fill="none" stroke="#31719F" stroke-width="7"/>
+    <g fill="#F0A32C">
+      <rect x="274" y="266" width="32" height="32" rx="8"/>
+      <rect x="718" y="266" width="32" height="32" rx="8"/>
+      <rect x="274" y="626" width="32" height="32" rx="8"/>
+      <rect x="718" y="626" width="32" height="32" rx="8"/>
+    </g>
+  </g>
+  <circle cx="478" cy="452" r="196" fill="none" stroke="#F0A32C" stroke-width="14"/>
+  <circle cx="478" cy="452" r="173" fill="url(#lensGrad)"/>
+  <circle cx="478" cy="452" r="173" fill="none" stroke="#000000" stroke-width="9" opacity="0.35"/>
+  <ellipse cx="422" cy="392" rx="72" ry="42" fill="#FFFFFF" opacity="0.2" transform="rotate(-38 422 392)"/>
+</svg>
