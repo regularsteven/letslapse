@@ -106,6 +106,10 @@ struct CaptureView: View {
     private static func photoDNGWindowSeconds(forFrames frames: Int) -> Double {
         max(1.0, 0.6 + Double(frames) * 0.25)
     }
+    /// Lower-left recent-capture tile: the newest project's hero asset and the
+    /// URL it was resolved from (also the "is there anything to show" flag).
+    @State private var recentThumbnail: Image?
+    @State private var recentHeroURL: URL?
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     init(intent: CaptureIntent = CaptureIntent()) {
@@ -148,6 +152,8 @@ struct CaptureView: View {
                 // layout (never .position/.frame-to-a-rect), so it is neither
                 // recreated on rotation (no delay) nor blanked in landscape.
                 // `.resizeAspect` letterboxes it; the chrome sits over the bars.
+                // The offset only slides the finished layer — it never resizes
+                // it — so top-anchoring costs nothing at the capture layer.
                 CameraPreview(
                     session: camera.session,
                     camera: camera,
@@ -155,6 +161,7 @@ struct CaptureView: View {
                     videoGravity: .resizeAspect
                 )
                 .allowsHitTesting(false)
+                .offset(y: previewTopAnchorOffset(in: geometry.size))
 
                 Group {
                     if geometry.size.width > geometry.size.height {
@@ -188,6 +195,11 @@ struct CaptureView: View {
         }
         .onAppear(perform: configureOnAppear)
         .onDisappear(perform: cleanUpOnDisappear)
+        // Keep the recent-capture tile current: a new project (any mode) takes
+        // the slot, and a Photo shot's blend replaces its own hero moments after
+        // the capture itself lands.
+        .onChange(of: model.captures.first?.id) { _ in refreshRecentCapture() }
+        .onChange(of: model.blends.count) { _ in refreshRecentCapture() }
         .onReceive(tick) { date in
             now = date
             checkTarget()
@@ -339,6 +351,7 @@ struct CaptureView: View {
         // it explicitly, and the plain entry resolved to the remembered mode
         // anyway, so re-saving is a no-op there.
         RecordingSettingsStore.save(captureMode: mode)
+        refreshRecentCapture()
         #if os(iOS)
         // Geotagging: request permission if needed, start streaming fixes so a
         // location is ready to bake into stills, and arm the camera's tagger.
@@ -552,11 +565,12 @@ struct CaptureView: View {
     private func portraitLayout(in size: CGSize) -> some View {
         VStack(spacing: 0) {
             portraitTopBar
+                .frame(height: Self.portraitTopBarHeight)
                 .padding(.horizontal, 16)
                 .padding(.top, 10)
                 .padding(.bottom, 8)
 
-            viewfinder
+            viewfinder(in: size)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             portraitControls
@@ -568,6 +582,32 @@ struct CaptureView: View {
                 authorizationMessage
             }
         }
+    }
+
+    /// The portrait chrome row above the viewfinder. Pinned to the close
+    /// button's height so the preview, which is anchored directly under it,
+    /// doesn't shift when the shorter recording pill takes that slot.
+    private static let portraitTopBarHeight: CGFloat = 38
+    /// Where the preview's top edge sits in portrait: the top bar plus its
+    /// padding (10 above, 8 below).
+    private static var portraitPreviewTopInset: CGFloat { 10 + portraitTopBarHeight + 8 }
+
+    /// Portrait slides the letterboxed preview up so its top edge meets the
+    /// top bar instead of sitting centered with a black band above it. All the
+    /// slack then collects at the bottom, under the image, where the controls
+    /// and the recent-capture tile live. Landscape already fills the height, so
+    /// there is nothing to reclaim there.
+    private func previewTopAnchorOffset(in size: CGSize) -> CGFloat {
+        guard size.height > size.width else { return 0 }
+        let fitted = aspectFitSize(
+            aspectRatio: previewAspectRatio,
+            maxWidth: size.width,
+            maxHeight: size.height
+        )
+        let letterbox = (size.height - fitted.height) / 2
+        // Never push it down: a preview taller than the screen already starts
+        // above the top bar.
+        return min(0, Self.portraitPreviewTopInset - letterbox)
     }
 
     private var portraitTopBar: some View {
@@ -613,16 +653,28 @@ struct CaptureView: View {
             exposurePanel
             #endif
 
-            HStack {
+            // Shutter row, Apple-camera order: recent capture · accessories ·
+            // shutter · accessories. A 60 pt tile plus two 44 pt circles a side
+            // doesn't fit either side of a centered shutter on a 393 pt screen,
+            // so the accessory pairs stack into single columns here (they are
+            // already single buttons in the landscape rail). The trailing clear
+            // block mirrors the tile so the shutter stays centered.
+            HStack(spacing: 0) {
+                recentCaptureButton
+                    .frame(width: Self.recentTileSize)
+                Spacer(minLength: 10)
                 leadingControl
-                    .frame(width: 96)
+                    .frame(width: 44)
                 Spacer()
                 shutterButton
                 Spacer()
                 trailingControl
-                    .frame(width: 96)
+                    .frame(width: 44)
+                Spacer(minLength: 10)
+                Color.clear
+                    .frame(width: Self.recentTileSize, height: 1)
             }
-            .padding(.horizontal, 24)
+            .padding(.horizontal, 16)
         }
     }
 
@@ -645,12 +697,15 @@ struct CaptureView: View {
                 if !isCapturing {
                     zoomChips
                 }
+                // Lower-left corner, same as portrait.
+                recentCaptureButton
+                    .padding(.top, 14)
             }
             .padding(.vertical, 16)
             .frame(width: 108)
 
             // Viewfinder with the estimate/interval chips in the safe corner
-            viewfinder
+            viewfinder(in: size)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .bottomLeading) {
                     Group {
@@ -751,18 +806,28 @@ struct CaptureView: View {
     /// the persistent layer behind `body`'s ZStack; only the grid draws here.
     /// It also hosts the framing gestures: swipe between modes, pinch through
     /// the lenses.
-    private var viewfinder: some View {
+    private func viewfinder(in screenSize: CGSize) -> some View {
         GeometryReader { geometry in
+            // The grid has to trace the live image, so it is measured the way
+            // the preview is: in portrait against the whole screen, then pinned
+            // to the top of this region — which begins exactly where the
+            // top-anchored preview does. Landscape leaves both centered.
+            let isPortrait = screenSize.height > screenSize.width
             let fitted = aspectFitSize(
                 aspectRatio: previewAspectRatio,
-                maxWidth: geometry.size.width,
-                maxHeight: geometry.size.height
+                maxWidth: isPortrait ? screenSize.width : geometry.size.width,
+                maxHeight: isPortrait ? screenSize.height : geometry.size.height
             )
             ZStack {
                 Color.clear
                 if showGrid {
                     RuleOfThirdsGrid()
                         .frame(width: fitted.width, height: fitted.height)
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: isPortrait ? .top : .center
+                        )
                 }
                 if mode == .photo && isWaitingForSteady {
                     SteadyGateOverlay(isStill: steadiness.isStill, magnitude: steadiness.magnitude)
@@ -1469,6 +1534,64 @@ struct CaptureView: View {
         return photoBlendDepth <= 1 ? "Off" : "\(photoBlendDepth) frames"
     }
 
+    // MARK: - Recent capture tile
+
+    /// Side of the lower-left recent-capture tile.
+    private static let recentTileSize: CGFloat = 60
+
+    /// The newest project, whatever its kind, as a tappable tile — the camera's
+    /// way out to everything already shot, the way Apple's camera does it. It
+    /// carries no state of its own: `refreshRecentCapture` keeps it in step with
+    /// the library, and it's invisible until there is something to show.
+    private var recentCaptureButton: some View {
+        Button(action: openGallery) {
+            Rectangle()
+                .fill(Color.white.opacity(0.12))
+                .overlay {
+                    if let recentThumbnail {
+                        recentThumbnail
+                            .resizable()
+                            .scaledToFill()
+                    }
+                }
+                .frame(width: Self.recentTileSize, height: Self.recentTileSize)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .stroke(.white.opacity(0.35), lineWidth: 1)
+                }
+        }
+        .buttonStyle(.plain)
+        .opacity(recentHeroURL == nil ? 0 : 1)
+        .allowsHitTesting(recentHeroURL != nil)
+        .accessibilityLabel("Open gallery")
+        .accessibilityHidden(recentHeroURL == nil)
+    }
+
+    /// Resolve the newest project's hero asset and decode its thumbnail. Cheap
+    /// to call repeatedly: an unchanged hero returns before touching the disk,
+    /// and the decode itself goes through the shared cache the grids use.
+    private func refreshRecentCapture() {
+        let hero = model.captures.first.flatMap { model.heroAsset(for: $0) }
+        guard hero?.url != recentHeroURL else { return }
+        recentHeroURL = hero?.url
+        recentThumbnail = nil
+        guard let hero else { return }
+        Task {
+            let image = await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
+            // A newer capture may have landed while this one decoded.
+            guard recentHeroURL == hero.url else { return }
+            recentThumbnail = image
+        }
+    }
+
+    /// Leave the camera for the Gallery. The camera is presented over the tabs,
+    /// so it has to dismiss itself as well as move the selection.
+    private func openGallery() {
+        closeCapture()
+        model.requestedTab = .gallery
+    }
+
     // MARK: - Shutter row
 
     private var shutterButton: some View {
@@ -1763,7 +1886,9 @@ struct CaptureView: View {
         } else {
             // The grid toggle lives here now (moved from the shutter row's
             // trailing slot), beside the AE/AF lock — the left-side controls.
-            HStack(spacing: 8) {
+            // Stacked, not side by side: the recent-capture tile took the
+            // outer half of this slot.
+            VStack(spacing: 8) {
                 gridToggleCircle
                 exposureLockCircle
             }
@@ -1818,7 +1943,8 @@ struct CaptureView: View {
                 .frame(width: 44, height: 44)
                 .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
         } else {
-            HStack(spacing: 8) {
+            // Stacked to match the leading column (see `leadingControl`).
+            VStack(spacing: 8) {
                 Button {
                     shutterDelayEnabled.toggle()
                     if !shutterDelayEnabled {

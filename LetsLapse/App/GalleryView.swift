@@ -25,21 +25,6 @@ struct GalleryView: View {
         }
     }
 
-    /// The single asset that represents a capture in the grid.
-    /// - Photo mode: latest blended image, else the first source frame.
-    /// - Interval: latest blended image, else the source frame.
-    /// - Video: the source video (thumbnailed to its first frame).
-    private func heroURL(for capture: AppModel.CaptureProject) -> (url: URL, kind: AppModel.MediaKind)? {
-        if capture.kind == .photos {
-            guard let url = model.heroImageURL(for: capture) else { return nil }
-            return (url, .image)
-        }
-        if let url = model.mediaURL(for: capture) {
-            return (url, .video)
-        }
-        return nil
-    }
-
     var body: some View {
         NavigationStack(path: $path) {
             VStack(spacing: 0) {
@@ -67,7 +52,7 @@ struct GalleryView: View {
                         spacing: 2
                     ) {
                         ForEach(filteredCaptures) { capture in
-                            GalleryTile(hero: heroURL(for: capture))
+                            GalleryTile(hero: model.heroAsset(for: capture))
                                 .aspectRatio(1, contentMode: .fit)
                                 .onTapGesture { path.append(capture.id) }
                         }

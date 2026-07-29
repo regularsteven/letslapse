@@ -500,6 +500,12 @@ final class AppModel: ObservableObject {
     /// (e.g. Result → Done). ContentView consumes and clears it.
     @Published var requestedProjectDetailID: UUID?
 
+    /// Set by screens that want a specific tab brought front — the camera's
+    /// recent-capture tile asking for the Gallery. ContentView consumes and
+    /// clears it. Screens presented over the tabs (the camera is a full-screen
+    /// cover) must dismiss themselves as well; this only moves the selection.
+    @Published var requestedTab: LLTab?
+
     private var blendTask: Task<Void, Never>?
 
     init() {
@@ -532,6 +538,19 @@ final class AppModel: ObservableObject {
             return mediaURL(for: blend)
         }
         return mediaURL(for: capture)
+    }
+
+    /// The single asset that stands for a capture wherever it is shown as one
+    /// tile — the Gallery grid, and the camera's recent-capture button.
+    /// Photo/Interval captures resolve to their hero image (newest blend, else
+    /// the captured frame); video captures to the source video.
+    func heroAsset(for capture: CaptureProject) -> (url: URL, kind: MediaKind)? {
+        if capture.kind == .photos {
+            guard let url = heroImageURL(for: capture) else { return nil }
+            return (url, .image)
+        }
+        guard let url = mediaURL(for: capture) else { return nil }
+        return (url, .video)
     }
 
     func capture(for blend: BlendProject) -> CaptureProject? {

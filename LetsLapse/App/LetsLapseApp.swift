@@ -68,6 +68,14 @@ struct ContentView: View {
             guard requested != nil else { return }
             selectedTab = .projects
         }
+        // A screen layered over the tabs (the camera's recent-capture tile)
+        // asking for a different tab. It dismisses itself; this moves the
+        // selection under it.
+        .onChange(of: model.requestedTab) { requested in
+            guard let requested else { return }
+            model.requestedTab = nil
+            selectedTab = requested
+        }
         #if os(iOS)
         // Selecting the Create tab opens the camera straight away — the Create
         // screen lives behind it as the tab's home and is revealed on close.
