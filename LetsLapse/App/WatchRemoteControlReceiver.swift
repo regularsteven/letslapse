@@ -37,7 +37,15 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     @Published private(set) var isReachable = false
 
     private var isActivated = false
-    private var commandHandler: ((WatchCaptureCommand, [String: Any]) -> Void)?
+    /// False until the scene reports in — also the resting state of a
+    /// background launch (Watch message wakes a not-running app), where no
+    /// scene ever connects and commands must be refused, not "accepted".
+    private var isAppActive = false
+    /// Runs the command against the live capture screen; returns whether it
+    /// actually did anything, so a guard-dropped command isn't reported as
+    /// "accepted" (the Watch applies optimistic state on accepted replies —
+    /// a false accept leaves it showing a recording that never started).
+    private var commandHandler: ((WatchCaptureCommand, [String: Any]) -> Bool)?
     private var recordingStartedAt: Date?
     private var captureMode: CaptureMode = .video
     private var intervalSeconds: Double = 2
@@ -56,6 +64,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var isRampHighRate = false
     private var formatLine: String?
     private var captureFPS = 0
+    private var baseFPS = 0
     private var plannedSpeed = 0
     private var outputFPS = 0
     private var isExposureLocked = false
@@ -78,12 +87,24 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     @MainActor
-    func setCommandHandler(_ handler: ((WatchCaptureCommand, [String: Any]) -> Void)?) {
+    func setCommandHandler(_ handler: ((WatchCaptureCommand, [String: Any]) -> Bool)?) {
         let wasActive = commandHandler != nil
         commandHandler = handler
         if wasActive != (handler != nil) {
             publishState()
         }
+    }
+
+    /// Scene-phase mirror: `.background` is "away", everything else counts as
+    /// active (Control Center over a live camera is still a usable camera).
+    /// Backgrounding publishes immediately so the Watch's "Ready" screen
+    /// doesn't keep pointing at a phone that's locked in a pocket.
+    @MainActor
+    func setAppActive(_ active: Bool) {
+        guard isAppActive != active else { return }
+        isAppActive = active
+        LLog("watch-link appActive=\(active)")
+        publishState()
     }
 
     /// The pending "stop at…" mirrored to the Watch; all-nil clears it.
@@ -132,20 +153,25 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     /// What the Watch shows before/while recording: the locked format, the
-    /// planned speed, and the numbers its live estimate needs.
+    /// planned speed, and the numbers its live estimate needs. `captureFPS`
+    /// is the active segment's rate (flips to the burst rate mid-burst);
+    /// `baseFPS` is the sequence's resting rate the base chip labels with.
     @MainActor
     func setCaptureContext(
         formatLine: String?,
         captureFPS: Int,
+        baseFPS: Int,
         plannedSpeed: Int,
         outputFPS: Int
     ) {
         let changed = self.formatLine != formatLine
             || self.captureFPS != captureFPS
+            || self.baseFPS != baseFPS
             || self.plannedSpeed != plannedSpeed
             || self.outputFPS != outputFPS
         self.formatLine = formatLine
         self.captureFPS = captureFPS
+        self.baseFPS = baseFPS
         self.plannedSpeed = plannedSpeed
         self.outputFPS = outputFPS
         if changed {
@@ -214,11 +240,20 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             return response(status: "ok")
         }
 
+        guard isAppActive else {
+            return response(status: "unavailable", message: "LetsLapse is in the background on iPhone")
+        }
+
         guard let commandHandler else {
             return response(status: "unavailable", message: "Capture screen is not active")
         }
 
-        commandHandler(command, message)
+        guard commandHandler(command, message) else {
+            // The handler's guards dropped it (already recording, bad value,
+            // wrong mode for the command) — never report that as accepted.
+            LLog("watch-link rejected command=\(command.rawValue)")
+            return response(status: "rejected", message: "Command not available right now")
+        }
         return response(status: "accepted")
     }
 
@@ -248,11 +283,16 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.segmentCount] = segmentCount
         payload[WatchMessageKey.isRampActive] = isRampActive
         payload[WatchMessageKey.isRampHighRate] = isRampHighRate
-        payload[WatchMessageKey.cameraActive] = commandHandler != nil
+        // "Camera ready" requires the app on screen, not just the capture view
+        // alive in a backgrounded hierarchy — backgrounding doesn't fire
+        // onDisappear, so the handler alone would keep saying ready forever.
+        payload[WatchMessageKey.cameraActive] = commandHandler != nil && isAppActive
+        payload[WatchMessageKey.phoneAppState] = isAppActive ? "active" : "background"
         if let formatLine {
             payload[WatchMessageKey.formatLine] = formatLine
         }
         payload[WatchMessageKey.captureFPS] = captureFPS
+        payload[WatchMessageKey.baseFPS] = baseFPS
         payload[WatchMessageKey.plannedSpeed] = plannedSpeed
         payload[WatchMessageKey.outputFPS] = outputFPS
         payload[WatchMessageKey.captureMode] = captureMode.rawValue
@@ -288,10 +328,21 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         // and will hang the UI (watchdog kill) if run on the main thread.
         let payload = statePayload()
         Self.wcQueue.async {
-            guard session.activationState == .activated else { return }
-            try? session.updateApplicationContext(payload)
+            guard session.activationState == .activated else {
+                // Not lost for good: activationDidComplete re-publishes the
+                // (already updated) cache once the session comes up.
+                LLog("watch-link publish dropped, session not activated yet")
+                return
+            }
+            do {
+                try session.updateApplicationContext(payload)
+            } catch {
+                LLog("watch-link updateApplicationContext failed: \(error)")
+            }
             if session.isReachable {
-                session.sendMessage(payload, replyHandler: nil, errorHandler: nil)
+                session.sendMessage(payload, replyHandler: nil, errorHandler: { error in
+                    LLog("watch-link state push failed: \(error)")
+                })
             }
         }
     }
@@ -303,13 +354,24 @@ extension WatchRemoteControlReceiver: WCSessionDelegate {
         activationDidCompleteWith activationState: WCSessionActivationState,
         error: Error?
     ) {
-        DispatchQueue.main.async {
-            self.isReachable = session.isReachable
+        let reachable = session.isReachable
+        LLog("watch-link activated state=\(activationState.rawValue) reachable=\(reachable) error=\(error.map(String.init(describing:)) ?? "none")")
+        Task { @MainActor in
+            self.isReachable = reachable
+            // Cold launch opens the camera before async activation completes,
+            // so the capture screen's first pushes were all dropped. The cache
+            // behind them is current — flush it now, or a Watch already staring
+            // at its "open the camera" screen never hears the camera is up
+            // (its side sees no reachability change when the phone app opens).
+            if activationState == .activated {
+                self.publishState()
+            }
         }
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {
         let reachable = session.isReachable
+        LLog("watch-link reachability -> \(reachable)")
         Task { @MainActor in
             self.isReachable = reachable
             // The Watch just came within reach — it may have missed the state
@@ -333,6 +395,7 @@ extension WatchRemoteControlReceiver: WCSessionDelegate {
         didReceiveMessage message: [String: Any],
         replyHandler: @escaping ([String: Any]) -> Void
     ) {
+        LLog("watch-link received command=\((message[WatchMessageKey.command] as? String) ?? "?")")
         Task { @MainActor in
             replyHandler(self.handle(message))
         }

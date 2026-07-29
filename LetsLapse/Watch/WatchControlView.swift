@@ -6,6 +6,7 @@ struct WatchControlView: View {
     @EnvironmentObject private var remote: WatchCaptureRemote
     @Environment(\.scenePhase) private var scenePhase
     @State private var now = Date()
+    @State private var lastAutoRefreshAt = Date.distantPast
     @State private var isoAdjust: Double = 0
     @State private var showIntervalPicker = false
     @State private var showFramesPicker = false
@@ -43,7 +44,21 @@ struct WatchControlView: View {
         }
         .onReceive(timer) { date in
             now = date
+            autoRefreshIfDisconnected(at: date)
         }
+    }
+
+    /// While the "open the camera" screen is up, quietly re-ask the phone every
+    /// few seconds. Connection loss is often one dropped message — a single
+    /// missed round-trip previously parked this screen until a manual ping,
+    /// even mid-recording. Screen-gated, so it costs nothing once connected.
+    private func autoRefreshIfDisconnected(at date: Date) {
+        guard remote.recordingState != .recording,
+              !(remote.isReachable && remote.isCameraActive),
+              !remote.isSending,
+              date.timeIntervalSince(lastAutoRefreshAt) >= 4 else { return }
+        lastAutoRefreshAt = date
+        remote.refreshState()
     }
 
     // MARK: - Ready
@@ -447,8 +462,13 @@ struct WatchControlView: View {
         .disabled(remote.isSending || !remote.isReachable)
     }
 
+    /// Labels from the sequence's resting rate, never `captureFPS` — that one
+    /// tracks the active segment and reads the burst rate mid-burst, which
+    /// mislabeled this chip "120" during and just after a burst. Falls back
+    /// to `captureFPS` for phone builds that predate the baseFPS key.
     private var baseRateLabel: String {
-        remote.captureFPS > 0 ? "\(remote.captureFPS)" : "base"
+        if remote.baseFPS > 0 { return "\(remote.baseFPS)" }
+        return remote.captureFPS > 0 ? "\(remote.captureFPS)" : "base"
     }
 
     /// One press = burst at the ramp rate for that many seconds, then the
@@ -583,6 +603,8 @@ struct WatchControlView: View {
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
             Spacer(minLength: 0)
+            // Never disabled: this is the recovery control. A stuck send used
+            // to gray it out exactly when the user needed it most.
             Button {
                 remote.reconnect()
             } label: {
@@ -592,7 +614,6 @@ struct WatchControlView: View {
             }
             .buttonStyle(.plain)
             .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .disabled(remote.isSending)
         }
         .padding(.horizontal, 6)
     }

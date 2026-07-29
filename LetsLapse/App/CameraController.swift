@@ -263,6 +263,11 @@ final class CameraController: NSObject, ObservableObject {
     @Published var segmentCount = 0
     @Published var isRampActive = false
     @Published var isRampHighRate = false
+    /// The running ramp sequence's locked base rate, nil when idle.
+    /// `selectedFrameRate` tracks the ACTIVE segment (it reads the burst rate
+    /// mid-burst), so anything that must keep naming the resting rate — the
+    /// Watch's base chip — reads this instead.
+    @Published private(set) var activeBaseFrameRate: Int?
     @Published var rampSpans: [RampSpan] = []
     @Published var isExposureLocked: Bool = false
     @Published var lockedISO: Float = 0
@@ -1384,11 +1389,12 @@ final class CameraController: NSObject, ObservableObject {
                 width: self.selectedResolution.width,
                 height: self.selectedResolution.height
             )
+            let baseFrameRate = self.selectedFrameRate
             self.activeSequence = LiveCaptureSequence(
                 mode: mode,
                 createdAt: startedAt,
                 lockedResolution: resolution,
-                baseFrameRate: self.selectedFrameRate,
+                baseFrameRate: baseFrameRate,
                 rampFrameRate: mode == .ramp ? self.selectedRampFrameRate : nil,
                 segments: [],
                 markers: [],
@@ -1411,6 +1417,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.segmentCount = 1
                 self.isRampActive = false
                 self.isRampHighRate = false
+                self.activeBaseFrameRate = baseFrameRate
                 self.rampSpans = []
             }
         }
@@ -1450,14 +1457,17 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     /// Opens the timed burst, waiting out any segment switch already in
-    /// flight (`pendingRampFrameRate` can't be interrupted). The revert is
-    /// scheduled only once the burst actually opens, so "1s" buys a full
-    /// second at the burst rate, not a second minus switch latency.
+    /// flight (`pendingRampFrameRate` can't be interrupted). A stale open is
+    /// worse than none (a burst nobody asked for anymore firing seconds
+    /// late), so unlike the revert below this wait gives up — loudly.
     private func beginTimedBurst(duration: TimeInterval, generation: Int, attempt: Int = 0) {
         guard generation == timedBurstGeneration, activeSequence != nil else { return }
         if !rampIntervalActive {
             if pendingRampFrameRate != nil || !movieOutput.isRecording {
-                guard attempt < 20 else { return }
+                guard attempt < 20 else {
+                    LLog("timedBurst open abandoned: segment switch still in flight after 3s")
+                    return
+                }
                 sessionQueue.asyncAfter(deadline: .now() + 0.15) {
                     self.beginTimedBurst(duration: duration, generation: generation, attempt: attempt + 1)
                 }
@@ -1468,6 +1478,25 @@ final class CameraController: NSObject, ObservableObject {
             // nothing opened, so there is nothing to revert.
             guard rampIntervalActive else { return }
         }
+        armTimedBurstRevert(duration: duration, generation: generation)
+    }
+
+    /// Starts the countdown only once the burst-rate segment is actually
+    /// rolling: the marker opens instantly, but the switch behind it first
+    /// finalizes the previous segment — minutes of footage take a while — and
+    /// "2s" must buy two seconds AT the burst rate, not two seconds of mostly
+    /// switch latency.
+    private func armTimedBurstRevert(duration: TimeInterval, generation: Int) {
+        guard generation == timedBurstGeneration,
+              activeSequence != nil,
+              rampIntervalActive else { return }
+        guard pendingRampFrameRate == nil, movieOutput.isRecording else {
+            sessionQueue.asyncAfter(deadline: .now() + 0.15) {
+                self.armTimedBurstRevert(duration: duration, generation: generation)
+            }
+            return
+        }
+        LLog("timedBurst rolling: revert in \(duration)s")
         sessionQueue.asyncAfter(deadline: .now() + duration) {
             self.endTimedBurst(generation: generation)
         }
@@ -1478,12 +1507,16 @@ final class CameraController: NSObject, ObservableObject {
               activeSequence != nil,
               rampIntervalActive else { return }
         if pendingRampFrameRate != nil || !movieOutput.isRecording {
-            guard attempt < 20 else { return }
+            // Never give up: finalizing a long previous segment can outlast
+            // any fixed retry budget, and a missed revert pins the rest of
+            // the recording at the burst rate.
+            if attempt == 0 { LLog("timedBurst revert waiting on segment switch") }
             sessionQueue.asyncAfter(deadline: .now() + 0.15) {
                 self.endTimedBurst(generation: generation, attempt: attempt + 1)
             }
             return
         }
+        if attempt > 0 { LLog("timedBurst revert ran after \(attempt) deferrals") }
         performLiveMomentToggle()
     }
 
@@ -1681,6 +1714,7 @@ final class CameraController: NSObject, ObservableObject {
             self.segmentCount = 0
             self.isRampActive = false
             self.isRampHighRate = false
+            self.activeBaseFrameRate = nil
             self.rampSpans = []
         }
     }

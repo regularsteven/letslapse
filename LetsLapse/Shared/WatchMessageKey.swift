@@ -18,6 +18,10 @@ enum WatchMessageKey {
     static let cameraActive = "cameraActive"
     static let formatLine = "formatLine"
     static let captureFPS = "captureFPS"
+    /// The ramp sequence's locked base rate. `captureFPS` mirrors the ACTIVE
+    /// segment (it reads the burst rate mid-burst), so the Watch's base chip
+    /// labels itself from this instead.
+    static let baseFPS = "baseFPS"
     static let plannedSpeed = "plannedSpeed"
     static let outputFPS = "outputFPS"
     static let isExposureLocked = "isExposureLocked"
@@ -34,6 +38,10 @@ enum WatchMessageKey {
     /// its start/stop control. The generic start/stop commands drive it — the
     /// phone routes a stop to `stopInterval` while the Bulb burst runs.
     static let isBulbMode = "isBulbMode"
+    /// "active" while the phone app is on screen (foreground or briefly
+    /// covered by Control Center), "background" once it truly leaves. Lets the
+    /// Watch tell "app open on another tab" from "phone locked in a pocket".
+    static let phoneAppState = "phoneAppState"
     static let captureCount = "captureCount"
     static let stopAtUnit = "stopAtUnit"
     static let stopAtDeadline = "stopAtDeadline"

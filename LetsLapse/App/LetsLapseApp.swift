@@ -3,6 +3,17 @@ import SwiftUI
 @main
 struct LetsLapseApp: App {
     @StateObject private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
+
+    init() {
+        #if os(iOS)
+        // Activate in init, not view onAppear: when the Watch messages a
+        // not-running phone app, iOS launches it in the background to deliver —
+        // no UI is built there, so an onAppear-tied activation never runs and
+        // the Watch's message dies with a timeout.
+        WatchRemoteControlReceiver.shared.activate()
+        #endif
+    }
 
     var body: some Scene {
         WindowGroup {
@@ -10,7 +21,12 @@ struct LetsLapseApp: App {
                 .environmentObject(model)
                 #if os(iOS)
                 .onAppear {
-                    WatchRemoteControlReceiver.shared.activate()
+                    WatchRemoteControlReceiver.shared.setAppActive(scenePhase != .background)
+                }
+                // .inactive still counts as active: Control Center or the app
+                // switcher over a live camera shouldn't read as "phone away".
+                .onChange(of: scenePhase) { phase in
+                    WatchRemoteControlReceiver.shared.setAppActive(phase != .background)
                 }
                 #endif
         }

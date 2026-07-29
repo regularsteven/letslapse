@@ -329,6 +329,7 @@ struct CaptureView: View {
         .onChange(of: camera.scheduledStop) { _ in updateWatchScheduledStop() }
         .onChange(of: camera.selectedResolution) { _ in updateWatchContext() }
         .onChange(of: camera.selectedFrameRate) { _ in updateWatchContext() }
+        .onChange(of: camera.activeBaseFrameRate) { _ in updateWatchContext() }
         .onChange(of: model.constantWindow) { _ in updateWatchContext() }
         .onChange(of: camera.isExposureLocked) { _ in updateWatchExposure() }
         .onChange(of: camera.lockedISO) { _ in updateWatchExposure() }
@@ -2148,14 +2149,18 @@ struct CaptureView: View {
     // MARK: - Watch
 
     #if os(iOS)
-    private func handleWatchCommand(_ command: WatchCaptureCommand, payload: [String: Any]) {
+    /// Returns whether the command actually ran — a guard-dropped command must
+    /// reply "rejected", because the Watch applies optimistic state to
+    /// "accepted" (a false accept leaves it showing a phantom recording).
+    private func handleWatchCommand(_ command: WatchCaptureCommand, payload: [String: Any]) -> Bool {
         let value = payload[WatchMessageKey.value] as? Double
         switch command {
         case .startRecording:
             // Starts whatever mode the capture screen is in — the same
             // dispatch as the on-phone shutter, not a forced video recording.
-            guard !isCapturing else { return }
+            guard !isCapturing else { return false }
             shutterAction()
+            return true
         case .stopRecording:
             if camera.isRecording {
                 camera.stopRecording()
@@ -2163,50 +2168,67 @@ struct CaptureView: View {
                 camera.stopInterval()
             } else if camera.isLiveBlendRunning {
                 camera.stopLiveBlend()
+            } else {
+                return false
             }
+            return true
         case .triggerMoment:
+            guard isCapturing else { return false }
             camera.triggerLiveMoment()
+            return true
         case .timedBurst:
             // Watch "burst Ns": the phone owns the auto-revert timer so it
             // fires even if the Watch sleeps mid-burst.
-            guard let value, value > 0 else { return }
+            guard isCapturing, let value, value > 0 else { return false }
             camera.triggerTimedLiveMoment(duration: min(value, 30))
+            return true
         case .lockExposure:
             camera.lockExposureAndFocus()
+            return true
         case .unlockExposure:
             camera.unlockExposureAndFocus()
+            return true
         case .setISO:
-            camera.setISO(Float(value ?? 0))
+            guard let value else { return false }
+            camera.setISO(Float(value))
+            return true
         case .setLensPosition:
-            camera.setLensPosition(Float(value ?? 0.5))
+            guard let value else { return false }
+            camera.setLensPosition(Float(value))
+            return true
         case .setCaptureMode:
             // token-tolerant: a stale Watch build may still send the retired
             // "Live Blend" mode, which resolves to Interval.
             guard !isCapturing,
                   let token = payload[WatchMessageKey.captureMode] as? String,
-                  let newMode = CaptureMode(token: token) else { return }
+                  let newMode = CaptureMode(token: token) else { return false }
             mode = newMode
+            return true
         case .setIntervalSeconds:
-            guard !isCapturing, let value, captureIntervalOptions.contains(value) else { return }
+            guard !isCapturing, let value, captureIntervalOptions.contains(value) else { return false }
             interval = value
+            return true
         case .setFramesPerBlend:
             // The Watch picker only offers the fixed counts; the adaptive
             // depths are set on the phone, where Safe's gating lives.
             guard !isCapturing, let value,
-                  BlendDepth.fixedOptions.contains(where: { $0.frames == Int(value) }) else { return }
+                  BlendDepth.fixedOptions.contains(where: { $0.frames == Int(value) }) else { return false }
             blendDepth = .fixed(Int(value))
             lastFixedBlendFrames = Int(value)
+            return true
         case .scheduleStop:
             guard isCapturing, let value,
                   let token = payload[WatchMessageKey.stopAtUnit] as? String,
-                  let unit = ScheduledStopUnit(rawValue: token) else { return }
+                  let unit = ScheduledStopUnit(rawValue: token) else { return false }
             camera.scheduleStop(unit: unit, amount: value)
+            return true
         case .cancelScheduledStop:
             camera.cancelScheduledStop()
+            return true
         case .state:
-            updateWatchRecordingState()
-            updateWatchModeContext()
-            updateWatchScheduledStop()
+            // Never reached: the receiver answers `state` from its cache
+            // before consulting this handler. Kept for exhaustiveness.
+            return true
         }
     }
 
@@ -2236,6 +2258,7 @@ struct CaptureView: View {
         watchRemote.setCaptureContext(
             formatLine: formatLine,
             captureFPS: camera.selectedFrameRate,
+            baseFPS: camera.activeBaseFrameRate ?? camera.selectedFrameRate,
             plannedSpeed: model.constantWindow,
             outputFPS: model.outputFPS
         )
