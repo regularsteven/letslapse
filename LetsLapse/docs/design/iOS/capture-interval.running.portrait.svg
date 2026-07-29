@@ -1,0 +1,103 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (running, DNG blend) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (intervalRunningPills, blendDiagnosticsReadout). Live-blend engine mid-run: output/elapsed pills plus the monospaced diagnostics readout. Close button stays (interval runs are not camera.isRecording); format pill locks; mode row hidden; shutter is the stop square. The leading/trailing toggle columns remain.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder 4:3 (DNG) -->
+      <g id="viewfinder">
+        <rect x="0" y="115" width="393" height="524" fill="url(#sky)"/>
+        <circle cx="132" cy="300" r="28" fill="#FFB340" opacity="0.9"/>
+        <circle cx="132" cy="300" r="48" fill="#FFB340" opacity="0.15"/>
+        <polygon points="0,440 70,392 150,432 235,366 310,424 393,382 393,639 0,639" fill="#141A24"/>
+        <polygon points="0,510 85,470 185,516 268,482 393,510 393,639 0,639" fill="#0B0E14"/>
+        <rect x="0" y="562" width="393" height="77" fill="#080A0E"/>
+      </g>
+
+      <!-- top bar: close stays; format pill locked -->
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <rect x="237" y="70" width="140" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="251" y="92" font-size="13" class="sb" fill="#FFF" opacity="0.55">12MP 4:3</text>
+          <text x="313" y="92" font-size="13" class="sb" fill="#FFB340" opacity="0.6">· DNG</text>
+          <g data-symbol="lock.fill" transform="translate(356,80)">
+            <rect x="0" y="5" width="10" height="8" rx="1.5" fill="#FFF" opacity="0.4"/>
+            <path d="M2 5 v-1.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.6"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- running pills + diagnostics -->
+      <g id="interval-running">
+        <g id="running-pills">
+          <rect x="103" y="600" width="94" height="26" rx="13" fill="#000" opacity="0.5"/>
+          <text x="150" y="617" font-size="11.5" class="b m" fill="#FFB340" text-anchor="middle">24 blends</text>
+          <rect x="209" y="600" width="66" height="26" rx="13" fill="#000" opacity="0.5"/>
+          <text x="242" y="617" font-size="11.5" class="m" fill="#FFF" opacity="0.7" text-anchor="middle">10:02</text>
+        </g>
+        <g id="blend-diagnostics">
+          <rect x="72" y="634" width="249" height="63" rx="8" fill="#000" opacity="0.5"/>
+          <text x="82" y="650" font-size="10.5" class="m" fill="#FFF" opacity="0.75">frames 10/10 · last 10</text>
+          <text x="82" y="666" font-size="10.5" class="m" fill="#FFF" opacity="0.75">out 2.05 s (req 2.0 s)</text>
+          <text x="82" y="682" font-size="10.5" class="m" fill="#FFF" opacity="0.75">blend 312 ms · DNG · healthy</text>
+        </g>
+      </g>
+
+      <!-- shutter row (mode row hidden while capturing) -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#3A3123"/>
+            <polygon points="16,772 40,750 62,768 76,758 76,788 16,788" fill="#241E15"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <g id="grid-toggle" data-symbol="grid.circle">
+          <circle cx="108" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
+        </g>
+        <g id="exposure-lock" data-symbol="lock.open">
+          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <rect x="102" y="783" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/>
+          <path d="M105 783 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/>
+        </g>
+        <g id="shutter" data-symbol="stop button">
+          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <rect x="180.5" y="742" width="32" height="32" rx="8" fill="#FF3B30"/>
+        </g>
+        <g id="delay-toggle" data-symbol="timer">
+          <circle cx="285" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="285" cy="733" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
+          <path d="M285 733 v-6 M282 723 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
+        </g>
+        <g id="steady-toggle" data-symbol="hand.raised">
+          <circle cx="285" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M280 789 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — intervalRunningPills · blendDiagnosticsReadout</text>
+</svg>

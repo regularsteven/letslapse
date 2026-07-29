@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Manage resolutions · portrait</title>
+  <desc>Mirrors App/ManageResolutionsView.swift: segmented domain picker (Photo + Interval | Video), per-resolution visibility toggles (stills speak pixels; the last visible row is locked on), Display ratios toggle. Pushed from Settings or the capture format sheet.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- inline nav -->
+      <g id="nav-bar">
+        <path d="M22 76 l-9 10 9 10" stroke="#C36A00" stroke-width="2.6" fill="none" stroke-linecap="round"/>
+        <text x="30" y="91" font-size="17" fill="#C36A00">Settings</text>
+        <text x="196.5" y="91" font-size="17" class="sb" fill="#000" text-anchor="middle">Manage resolutions</text>
+      </g>
+
+      <!-- domain picker -->
+      <g id="domain-picker">
+        <rect x="16" y="122" width="361" height="32" rx="9" fill="#E3E3E8"/>
+        <rect x="18" y="124" width="178" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
+        <text x="107" y="142" font-size="13" class="sb" fill="#000" text-anchor="middle">Photo + Interval</text>
+        <text x="287" y="142" font-size="13" fill="#000" text-anchor="middle">Video</text>
+        <text x="32" y="176" font-size="12.5" fill="#6D6D72">Only ticked resolutions are offered in Capture Format. The</text>
+        <text x="32" y="191" font-size="12.5" fill="#6D6D72">resolution currently in use stays offered until you pick another.</text>
+      </g>
+
+      <!-- resolutions -->
+      <text x="32" y="226" font-size="13" fill="#6D6D72" letter-spacing="0.5">RESOLUTIONS</text>
+      <g id="resolutions-card">
+        <rect x="16" y="234" width="361" height="220" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="row-4032">
+          <text x="32" y="266" font-size="16" fill="#000">4032×3024 (4:3)</text>
+          <rect x="316" y="248" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351" cy="263.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <line x1="32" y1="289" x2="377" y2="289" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-3840">
+          <text x="32" y="321" font-size="16" fill="#000">3840×2160 (16:9)</text>
+          <rect x="316" y="303" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351" cy="318.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <line x1="32" y1="344" x2="377" y2="344" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-1920">
+          <text x="32" y="376" font-size="16" fill="#000">1920×1080 (16:9)</text>
+          <rect x="316" y="358" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351" cy="373.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <line x1="32" y1="399" x2="377" y2="399" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-1280">
+          <text x="32" y="431" font-size="16" fill="#000">1280×720 (16:9)</text>
+          <rect x="316" y="413" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+          <circle cx="332" cy="428.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+      </g>
+
+      <!-- display ratios -->
+      <g id="display-ratios-card">
+        <rect x="16" y="478" width="361" height="56" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="512" font-size="16" fill="#000">Display ratios</text>
+        <rect x="316" y="491" width="51" height="31" rx="15.5" fill="#34C759"/>
+        <circle cx="351" cy="506.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="558" font-size="12.5" fill="#6D6D72">Shows each resolution with its aspect ratio — 4032×3024 (4:3).</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Manage resolutions · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ManageResolutionsView.swift — domain segmented control · visibility toggles</text>
+</svg>

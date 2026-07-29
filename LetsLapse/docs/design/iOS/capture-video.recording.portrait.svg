@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Video (recording) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (recordingPill, speedMarquee, segmentStrip, leading burst trigger, trailing interval count). Video mode mid-take: red elapsed pill replaces the close button, format pill locks, speed marquee + segment strip replace the chips, mode row hides, shutter shows the stop square.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder 16:9 -->
+      <g id="viewfinder">
+        <rect x="0" y="89" width="393" height="699" fill="url(#sky)"/>
+        <circle cx="132" cy="360" r="30" fill="#FFB340" opacity="0.9"/>
+        <circle cx="132" cy="360" r="52" fill="#FFB340" opacity="0.15"/>
+        <polygon points="0,552 70,500 150,544 235,472 310,534 393,490 393,788 0,788" fill="#141A24"/>
+        <polygon points="0,638 85,594 185,646 268,608 393,640 393,788 0,788" fill="#0B0E14"/>
+        <rect x="0" y="700" width="393" height="88" fill="#080A0E"/>
+      </g>
+
+      <!-- top bar: recording pill / locked format pill -->
+      <g id="top-bar">
+        <g id="recording-pill">
+          <rect x="16" y="71" width="92" height="34" rx="17" fill="#FF3B30" opacity="0.16"/>
+          <rect x="16" y="71" width="92" height="34" rx="17" fill="none" stroke="#FF3B30" stroke-opacity="0.5"/>
+          <circle cx="34" cy="88" r="4" fill="#FF3B30"/>
+          <text x="46" y="93" font-size="14" class="b m" fill="#FFF">02:12</text>
+        </g>
+        <g id="format-pill" opacity="0.8">
+          <rect x="227" y="70" width="150" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="241" y="92" font-size="13" class="sb" fill="#FFF" opacity="0.55">1080p · 30</text>
+          <text x="311" y="92" font-size="13" class="sb" fill="#FFB340" opacity="0.6">· Stab</text>
+          <g data-symbol="lock.fill" transform="translate(356,80)">
+            <rect x="0" y="5" width="10" height="8" rx="1.5" fill="#FFF" opacity="0.4"/>
+            <path d="M2 5 v-1.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.6"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- speed marquee (centered, monospaced) -->
+      <g id="speed-marquee" class="m" font-size="12.5">
+        <text x="196.5" y="633" text-anchor="middle">
+          <tspan fill="#FFF" opacity="0.45">25× → 5.3s</tspan>
+          <tspan dx="14" fill="#FFB340" font-weight="700">50× → 2.6s</tspan>
+          <tspan dx="14" fill="#FFF" opacity="0.45">100× → 1.3s</tspan>
+        </text>
+      </g>
+
+      <!-- segment strip -->
+      <g id="segment-strip">
+        <rect x="16" y="646" width="361" height="14" rx="4" fill="#3B3B3D"/>
+        <rect x="52" y="648" width="24" height="10" rx="2" fill="#FFB340"/>
+        <rect x="170" y="648" width="38" height="10" rx="2" fill="#FFB340"/>
+        <rect x="344" y="648" width="30" height="10" rx="2" fill="#FFB340"/>
+        <text x="16" y="678" font-size="10" fill="#FFF" opacity="0.45">30 fps base</text>
+        <text x="377" y="678" font-size="10" fill="#FFB340" text-anchor="end">▲ 120 fps burst live · 3</text>
+      </g>
+
+      <!-- shutter row (mode row hidden while capturing) -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#3A3123"/>
+            <polygon points="16,772 40,750 62,768 76,758 76,788 16,788" fill="#241E15"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <g id="burst-trigger" data-symbol="ramp trigger (rate label)">
+          <circle cx="108" cy="758" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <text x="108" y="762" font-size="12" class="b" fill="#FFB340" text-anchor="middle">120</text>
+        </g>
+        <g id="shutter" data-symbol="stop button">
+          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <rect x="180.5" y="742" width="32" height="32" rx="8" fill="#FF3B30"/>
+        </g>
+        <g id="interval-count">
+          <circle cx="285" cy="758" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <text x="285" y="763" font-size="14" class="b m" fill="#FFB340" text-anchor="middle">3</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (recording) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — recordingPill · speedMarquee · segmentStrip</text>
+</svg>

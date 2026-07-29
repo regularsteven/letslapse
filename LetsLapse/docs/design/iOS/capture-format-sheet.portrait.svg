@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture format sheet (Video mode) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (FormatSheet), Video mode, large detent, dark scheme (inherited from the capture screen): Format section (Stabilization, Resolution, Frame rate, Manage resolutions), Capture Flat toggle with Apple Log footer, Speed bursts section. In Photo/Interval mode the sheet instead leads with the JPEG/DNG Output format segmented control and drops the frame-rate/burst rows.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="24" y="94" width="393" height="782" rx="10"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- dimmed capture screen behind -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)" opacity="0.35">
+      <rect x="0" y="30" width="393" height="60" fill="#232B3B"/>
+    </g>
+
+    <!-- sheet -->
+    <g clip-path="url(#sheet)">
+      <rect x="24" y="94" width="393" height="782" fill="#1C1C1E"/>
+      <g transform="translate(24,94)">
+        <rect x="178.5" y="6" width="36" height="5" rx="2.5" fill="#FFF" opacity="0.25"/>
+        <text x="196.5" y="36" font-size="17" class="sb" fill="#FFF" text-anchor="middle">Capture format</text>
+        <text x="377" y="36" font-size="17" class="sb" fill="#C36A00" text-anchor="end">Done</text>
+
+        <!-- FORMAT -->
+        <text x="32" y="76" font-size="13" fill="#98989E" letter-spacing="0.5">FORMAT</text>
+        <g id="format-card">
+          <rect x="16" y="84" width="361" height="180" rx="12" fill="#2C2C2E"/>
+          <text x="32" y="112" font-size="16" fill="#FFF">Stabilization</text>
+          <rect x="316" y="97" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351" cy="112.5" r="13.5" fill="#FFF"/>
+          <line x1="32" y1="129" x2="377" y2="129" stroke="#FFF" stroke-opacity="0.1"/>
+          <text x="32" y="157" font-size="16" fill="#FFF">Resolution</text>
+          <text x="352" y="157" font-size="15" fill="#98989E" text-anchor="end">4K</text>
+          <path d="M359 147 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#98989E" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+          <line x1="32" y1="174" x2="377" y2="174" stroke="#FFF" stroke-opacity="0.1"/>
+          <text x="32" y="202" font-size="16" fill="#FFF">Frame rate</text>
+          <text x="352" y="202" font-size="15" fill="#98989E" text-anchor="end">30 fps</text>
+          <path d="M359 192 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#98989E" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <line x1="32" y1="219" x2="377" y2="219" stroke="#FFF" stroke-opacity="0.1"/>
+          <text x="32" y="247" font-size="16" fill="#FFF">Manage resolutions</text>
+          <path d="M363 235 l6 7 -6 7" stroke="#5A5A5E" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
+        <text x="32" y="284" font-size="12.5" fill="#98989E">* ProRes — very large files</text>
+
+        <!-- CAPTURE FLAT -->
+        <g id="capture-flat-card">
+          <rect x="16" y="304" width="361" height="66" rx="12" fill="#2C2C2E"/>
+          <text x="32" y="331" font-size="16" fill="#FFF">Capture Flat</text>
+          <text x="32" y="348" font-size="12" fill="#98989E">Optimised for post-production editing</text>
+          <rect x="316" y="321" width="51" height="31" rx="15.5" fill="#39393D"/>
+          <circle cx="332" cy="336.5" r="13.5" fill="#FFF"/>
+        </g>
+        <text x="32" y="392" font-size="12.5" fill="#98989E">Records in Apple Log — a flat, low-contrast profile with</text>
+        <text x="32" y="407" font-size="12.5" fill="#98989E">maximum grading latitude. Best paired with a colour grade in post.</text>
+
+        <!-- SPEED BURSTS -->
+        <text x="32" y="443" font-size="13" fill="#98989E" letter-spacing="0.5">SPEED BURSTS</text>
+        <g id="speed-bursts-card">
+          <rect x="16" y="451" width="361" height="90" rx="12" fill="#2C2C2E"/>
+          <text x="32" y="479" font-size="16" fill="#FFF">Speed bursts</text>
+          <text x="352" y="479" font-size="15" fill="#98989E" text-anchor="end">Switch sensor rate</text>
+          <path d="M359 469 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#98989E" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+          <line x1="32" y1="496" x2="377" y2="496" stroke="#FFF" stroke-opacity="0.1"/>
+          <text x="32" y="524" font-size="16" fill="#FFF">Burst frame rate</text>
+          <text x="352" y="524" font-size="15" fill="#98989E" text-anchor="end">120 fps</text>
+          <path d="M359 514 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#98989E" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        </g>
+        <text x="32" y="565" font-size="12.5" fill="#98989E">While recording, the burst button (and Apple Watch) switches the</text>
+        <text x="32" y="580" font-size="12.5" fill="#98989E">sensor to the burst rate — those moments stay slow and sharp in</text>
+        <text x="32" y="595" font-size="12.5" fill="#98989E">the final clip.</text>
+
+        <!-- Photo/Interval variant note -->
+        <g id="variant-note" opacity="0.55">
+          <rect x="16" y="640" width="361" height="64" rx="12" fill="none" stroke="#98989E" stroke-dasharray="5 4"/>
+          <text x="32" y="666" font-size="12" fill="#98989E">Photo / Interval mode: an OUTPUT FORMAT section (JPEG | DNG</text>
+          <text x="32" y="681" font-size="12" fill="#98989E">segmented) leads the sheet; DNG fixes Resolution to the sensor frame.</text>
+        </g>
+      </g>
+    </g>
+    <g transform="translate(24,24)">
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture format sheet (Video) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — FormatSheet (dark scheme, large detent)</text>
+</svg>

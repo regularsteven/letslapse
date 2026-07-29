@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Project detail (video) · portrait</title>
+  <desc>Mirrors App/ProjectDetailView.swift: inline nav with ⋯ menu, hero card with play + ORIGINAL/format badges, Source Clips card (Manage for ProRes/multi-encoding clips), New version primary button, Versions rows, management card. Floating tab bar stays over pushed screens.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <linearGradient id="hero" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- inline nav bar -->
+      <g id="nav-bar">
+        <path d="M22 76 l-9 10 9 10" stroke="#C36A00" stroke-width="2.6" fill="none" stroke-linecap="round" data-symbol="chevron.backward"/>
+        <text x="30" y="91" font-size="17" fill="#C36A00">Projects</text>
+        <text x="196.5" y="91" font-size="17" class="sb" fill="#000" text-anchor="middle">Sunset over harbour</text>
+        <g data-symbol="ellipsis.circle">
+          <circle cx="367" cy="86" r="11" fill="none" stroke="#C36A00" stroke-width="1.8"/>
+          <circle cx="361.5" cy="86" r="1.6" fill="#C36A00"/><circle cx="367" cy="86" r="1.6" fill="#C36A00"/><circle cx="372.5" cy="86" r="1.6" fill="#C36A00"/>
+        </g>
+      </g>
+
+      <!-- hero card -->
+      <g id="hero-card">
+        <rect x="16" y="112" width="361" height="210" rx="18" fill="url(#hero)"/>
+        <circle cx="120" cy="180" r="22" fill="#FFB340" opacity="0.85"/>
+        <polygon points="16,268 90,224 170,262 250,222 330,258 377,238 377,322 16,322" fill="#1A222E"/>
+        <polygon points="16,296 120,266 240,300 340,276 377,292 377,322 16,322" fill="#10151D"/>
+        <circle cx="196.5" cy="217" r="26" fill="#000" opacity="0.45"/>
+        <path d="M190 206 l19 11 -19 11 z" fill="#FFF" data-symbol="play.fill"/>
+        <rect x="28" y="124" width="118" height="22" rx="11" fill="#000" opacity="0.5"/>
+        <text x="87" y="139" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">ORIGINAL · 0:36</text>
+        <rect x="243" y="288" width="122" height="22" rx="11" fill="#000" opacity="0.5"/>
+        <text x="304" y="303" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">1920×1080 · 30 fps</text>
+      </g>
+
+      <!-- source clips -->
+      <text x="20" y="349" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE CLIP</text>
+      <g id="source-clips-card">
+        <rect x="16" y="358" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="368" width="58" height="42" rx="7" fill="#33415A"/>
+        <path d="M50 383 l12 7 -12 7 z" fill="#FFF" opacity="0.8"/>
+        <text x="100" y="386" font-size="14.5" class="sb" fill="#000">Clip 1</text>
+        <text x="100" y="403" font-size="11.5" fill="#6D6D72">ProRes · 2.9 GB</text>
+        <text x="363" y="393" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Manage</text>
+      </g>
+
+      <!-- new version button -->
+      <g id="new-version">
+        <rect x="16" y="434" width="361" height="50" rx="14" fill="#C36A00"/>
+        <path d="M158 459 v-14 M151 452 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
+        <text x="172" y="465" font-size="16" class="b" fill="#FFF">New version</text>
+      </g>
+
+      <!-- versions -->
+      <text x="20" y="513" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">VERSIONS · 2</text>
+      <g id="versions-card">
+        <rect x="16" y="522" width="361" height="124" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="version-row-1">
+          <rect x="30" y="532" width="58" height="42" rx="7" fill="#31404E"/>
+          <text x="100" y="550" font-size="14.5" class="sb" fill="#000">v2 · 100× · 1.2 s</text>
+          <text x="100" y="567" font-size="11.5" fill="#6D6D72">30 fps · from ProRes · yesterday</text>
+          <text x="363" y="557" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+        </g>
+        <line x1="100" y1="584" x2="377" y2="584" stroke="#000" stroke-opacity="0.08"/>
+        <g id="version-row-2">
+          <rect x="30" y="594" width="58" height="42" rx="7" fill="#3B4653"/>
+          <text x="100" y="612" font-size="14.5" class="sb" fill="#000">v1 · 50× · 2.4 s</text>
+          <text x="100" y="629" font-size="11.5" fill="#6D6D72">30 fps · true-light · 2 days ago</text>
+          <text x="363" y="619" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+        </g>
+      </g>
+
+      <!-- management card -->
+      <g id="management-card">
+        <rect x="16" y="660" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="688" font-size="16" fill="#000">Rename project</text>
+        <path d="M363 676 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="704" x2="377" y2="704" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="729" font-size="16" fill="#000">Storage</text>
+        <text x="32" y="744" font-size="11.5" fill="#6D6D72">original + versions</text>
+        <text x="361" y="733" font-size="14" fill="#6D6D72" text-anchor="end">4.6 GB</text>
+        <line x1="32" y1="756" x2="377" y2="756" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="782" font-size="16" fill="#FF3B30">Delete project…</text>
+      </g>
+
+      <!-- floating tab bar (Projects selected) over content -->
+      <g id="tab-bar" opacity="0.98">
+        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g fill="none" stroke="#8E8E93">
+          <circle cx="54" cy="776" r="8" stroke-width="1.6"/><circle cx="54" cy="776" r="3.4" fill="#8E8E93" stroke="none"/>
+          <text x="54" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g fill="none" stroke="#8E8E93">
+          <rect x="143" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 150 775)"/>
+          <rect x="147" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 154 778)"/>
+          <text x="150" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <rect x="200" y="761" width="92" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g fill="none" stroke="#C36A00">
+          <rect x="239" y="768" width="14" height="10" rx="2" stroke-width="1.6"/>
+          <path d="M240.5 781 h11 M242.5 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="246" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g stroke="#8E8E93">
+          <path d="M334 771 h16 M334 776.5 h16 M334 782 h16" stroke-width="1.8" stroke-linecap="round"/>
+          <text x="342" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail (video) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — heroCard · sourceClipsSection · versionRow · managementCard</text>
+</svg>

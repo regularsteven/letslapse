@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · portrait</title>
+  <desc>Mirrors App/SettingsView.swift: Creative defaults (Default speed, Output frame rate, True-light), Recording (Remember recording settings, Manage resolutions, Record audio), Location (Geotag captures), Storage (library bar + legend, Review large originals, Clear cache). Advanced card scrolls below the fold. With DNG output selected, Recording gains the DNG experiment rows + Capture benchmark. Drawn with DNG off.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <text x="20" y="101" font-size="34" class="b" fill="#000">Settings</text>
+
+      <!-- creative defaults -->
+      <text x="20" y="130" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">CREATIVE DEFAULTS</text>
+      <g id="creative-defaults-card">
+        <rect x="16" y="138" width="361" height="138" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="166" font-size="16" fill="#000">Default speed</text>
+        <text x="352" y="166" font-size="15" fill="#6D6D72" text-anchor="end">25×</text>
+        <path d="M359 156 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+        <line x1="32" y1="182" x2="377" y2="182" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="210" font-size="16" fill="#000">Output frame rate</text>
+        <text x="352" y="210" font-size="15" fill="#6D6D72" text-anchor="end">30 fps</text>
+        <path d="M359 200 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="226" x2="377" y2="226" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="249" font-size="16" fill="#000">True-light blending</text>
+        <text x="32" y="264" font-size="11.5" fill="#6D6D72">Blends in linear light — smoother highlights</text>
+        <rect x="316" y="236" width="51" height="31" rx="15.5" fill="#34C759"/>
+        <circle cx="351" cy="251.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+      </g>
+
+      <!-- recording -->
+      <text x="20" y="304" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">RECORDING</text>
+      <g id="recording-card">
+        <rect x="16" y="312" width="361" height="188" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="338" font-size="16" fill="#000">Remember recording settings</text>
+        <text x="32" y="353" font-size="11.5" fill="#6D6D72">Start each shoot in your last-used mode with its settings —</text>
+        <text x="32" y="366" font-size="11.5" fill="#6D6D72">lens, resolution, frame rate, stabilization, interval spacing…</text>
+        <rect x="316" y="330" width="51" height="31" rx="15.5" fill="#34C759"/>
+        <circle cx="351" cy="345.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <line x1="32" y1="380" x2="377" y2="380" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="406" font-size="16" fill="#000">Manage resolutions</text>
+        <text x="32" y="421" font-size="11.5" fill="#6D6D72">Choose which resolutions Capture Format offers —</text>
+        <text x="32" y="434" font-size="11.5" fill="#6D6D72">separate lists for stills and video</text>
+        <path d="M363 410 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="446" x2="377" y2="446" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="470" font-size="16" fill="#000">Record audio</text>
+        <text x="32" y="485" font-size="11.5" fill="#6D6D72">Capture microphone sound with video shoots.</text>
+        <rect x="316" y="456" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+        <circle cx="332" cy="471.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+      </g>
+
+      <!-- location -->
+      <text x="20" y="528" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">LOCATION</text>
+      <g id="location-card">
+        <rect x="16" y="536" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="562" font-size="16" fill="#000">Geotag captures</text>
+        <text x="32" y="577" font-size="11.5" fill="#6D6D72">Save GPS in photo EXIF · GPX track sidecar next to video</text>
+        <rect x="316" y="552" width="51" height="31" rx="15.5" fill="#34C759"/>
+        <circle cx="351" cy="567.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+      </g>
+
+      <!-- storage -->
+      <text x="20" y="626" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">STORAGE</text>
+      <g id="storage-card">
+        <rect x="16" y="634" width="361" height="166" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="661" font-size="16" fill="#000">LetsLapse library</text>
+        <text x="361" y="661" font-size="15" fill="#6D6D72" text-anchor="end">12.6 GB</text>
+        <g id="storage-bar">
+          <rect x="32" y="672" width="329" height="8" rx="4" fill="#E4E4E9"/>
+          <rect x="32" y="672" width="214" height="8" fill="#C36A00"/>
+          <rect x="246" y="672" width="100" height="8" fill="#FFB340"/>
+          <rect x="32" y="672" width="329" height="8" rx="4" fill="none"/>
+        </g>
+        <g id="legend" font-size="11" fill="#6D6D72">
+          <circle cx="36" cy="694" r="3.5" fill="#C36A00"/><text x="44" y="698">Originals 8.2 GB</text>
+          <circle cx="140" cy="694" r="3.5" fill="#FFB340"/><text x="148" y="698">Versions 3.9 GB</text>
+          <circle cx="240" cy="694" r="3.5" fill="#B9B9C0"/><text x="248" y="698">Cache 542 MB</text>
+        </g>
+        <line x1="32" y1="710" x2="377" y2="710" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="737" font-size="16" fill="#000">Review large originals</text>
+        <path d="M363 725 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="753" x2="377" y2="753" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="780" font-size="16" fill="#C36A00">Clear cache (542 MB)</text>
+      </g>
+      <!-- ADVANCED section (Custom frame rate · Blend learning · Performance · Diagnostics) scrolls below the fold -->
+
+      <!-- floating tab bar (Settings selected) -->
+      <g id="tab-bar">
+        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g fill="none" stroke="#8E8E93">
+          <circle cx="54" cy="776" r="8" stroke-width="1.6"/><circle cx="54" cy="776" r="3.4" fill="#8E8E93" stroke="none"/>
+          <text x="54" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g fill="none" stroke="#8E8E93">
+          <rect x="143" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 150 775)"/>
+          <rect x="147" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 154 778)"/>
+          <text x="150" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g fill="none" stroke="#8E8E93">
+          <rect x="239" y="768" width="14" height="10" rx="2" stroke-width="1.6"/>
+          <path d="M240.5 781 h11 M242.5 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="246" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <rect x="296" y="761" width="92" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g stroke="#C36A00">
+          <path d="M334 771 h16 M334 776.5 h16 M334 782 h16" stroke-width="1.8" stroke-linecap="round"/>
+          <text x="342" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — creativeDefaultsCard · recordingCard · locationCard · storageCard</text>
+</svg>

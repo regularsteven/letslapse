@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>watchOS · Unreachable</title>
+  <desc>Mirrors Watch/WatchControlView.swift unreachableScreen: explains the precondition (the phone's capture screen must be open) with a Ping iPhone recovery button that is never disabled. The screen quietly re-asks the phone every ~4s while shown.</desc>
+  <defs>
+    <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="38" y="16" width="224" height="264" rx="60" fill="none" stroke="#3A3A3F" stroke-width="4"/>
+  <rect x="264" y="86" width="10" height="36" rx="5" fill="#3A3A3F"/>
+  <rect x="264" y="150" width="7" height="44" rx="3.5" fill="#3A3A3F"/>
+
+  <g clip-path="url(#wscreen)">
+    <rect x="46" y="24" width="208" height="248" fill="#000"/>
+    <g transform="translate(46,24)">
+      <!-- iphone glyph -->
+      <g data-symbol="iphone" stroke="#98989E" stroke-width="2" fill="none">
+        <rect x="92" y="52" width="24" height="40" rx="5"/>
+        <path d="M100 87 h8" stroke-linecap="round"/>
+      </g>
+
+      <text x="104" y="118" font-size="13" class="sb" fill="#FFF" text-anchor="middle">Open the camera on iPhone</text>
+      <text x="104" y="138" font-size="11" fill="#98989E" text-anchor="middle">The remote works while the</text>
+      <text x="104" y="152" font-size="11" fill="#98989E" text-anchor="middle">LetsLapse capture screen is open.</text>
+
+      <!-- ping button (recovery control — never disabled) -->
+      <g id="ping-button">
+        <rect x="12" y="196" width="186" height="34" rx="12" fill="#FFF" opacity="0.12"/>
+        <text x="104" y="217" font-size="13" class="sb" fill="#FFF" text-anchor="middle">Ping iPhone</text>
+      </g>
+    </g>
+  </g>
+
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Unreachable · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors Watch/WatchControlView.swift — unreachableScreen · Ping iPhone recovery</text>
+</svg>

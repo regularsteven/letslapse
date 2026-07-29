@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Result · portrait</title>
+  <desc>Mirrors App/ResultView.swift: player card with version badge, green saved banner ("Saved as v2 in …" + View project), Save to Photos / Share pair, next-steps card (New version from original with suggestion hint, Compare with original), Done. Flow screen — no tab bar.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="player"><rect x="16" y="103" width="361" height="300" rx="20"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- player card -->
+      <g id="player-card">
+        <g clip-path="url(#player)">
+          <rect x="16" y="103" width="361" height="300" fill="#0E1218"/>
+          <rect x="16" y="151" width="361" height="204" fill="#33415A"/>
+          <circle cx="120" cy="210" r="20" fill="#FFB340" opacity="0.85"/>
+          <polygon points="16,300 100,258 190,296 280,254 377,290 377,355 16,355" fill="#1A222E"/>
+          <circle cx="196.5" cy="253" r="27" fill="#000" opacity="0.5"/>
+          <path d="M190 242 l20 11 -20 11 z" fill="#FFF" data-symbol="play.fill"/>
+          <rect x="24" y="371" width="345" height="4" rx="2" fill="#FFF" opacity="0.25"/>
+          <rect x="24" y="371" width="60" height="4" rx="2" fill="#FFF" opacity="0.8"/>
+        </g>
+        <rect x="28" y="115" width="168" height="22" rx="11" fill="#000" opacity="0.5"/>
+        <text x="112" y="130" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">25× · 1.4s · 30 fps · 1080p</text>
+      </g>
+
+      <!-- saved banner -->
+      <g id="saved-banner">
+        <rect x="16" y="419" width="361" height="46" rx="14" fill="#34C759" opacity="0.12"/>
+        <rect x="16" y="419" width="361" height="46" rx="14" fill="none" stroke="#34C759" stroke-opacity="0.35"/>
+        <path d="M30 442 l5 5 9 -10" stroke="#34C759" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+        <text x="54" y="447" font-size="13.5" fill="#000">Saved as <tspan class="b">v3</tspan> in <tspan class="b">Sunset over harbour</tspan></text>
+        <text x="363" y="447" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">View project</text>
+      </g>
+
+      <!-- save / share -->
+      <g id="actions">
+        <rect x="16" y="479" width="175.5" height="50" rx="14" fill="#C36A00"/>
+        <text x="103.75" y="509" font-size="15" class="b" fill="#FFF" text-anchor="middle">Save to Photos</text>
+        <rect x="201.5" y="479" width="175.5" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+        <text x="289.25" y="509" font-size="15.5" class="b" fill="#C36A00" text-anchor="middle">Share</text>
+      </g>
+
+      <!-- next steps -->
+      <g id="next-steps">
+        <rect x="16" y="545" width="361" height="98" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="row-new-version">
+          <path d="M39 566 a8.5 8.5 0 1 1 -8 12 M31 566 v6 h6" stroke="#C36A00" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="arrow.counterclockwise"/>
+          <text x="56" y="580" font-size="15.5" class="sb" fill="#C36A00">New version from original</text>
+          <text x="361" y="580" font-size="12" fill="#6D6D72" text-anchor="end">try 50× → 0.7s</text>
+        </g>
+        <line x1="32" y1="594" x2="377" y2="594" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-compare">
+          <text x="32" y="625" font-size="15.5" fill="#6D6D72">Compare with original</text>
+          <path d="M363 613 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- done -->
+      <g id="done">
+        <rect x="16" y="738" width="361" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+        <text x="196.5" y="768" font-size="15.5" class="sb" fill="#6D6D72" text-anchor="middle">Done</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Result · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ResultView.swift — playerCard · savedBanner · nextSteps</text>
+</svg>

@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Adjust — New version (video source) · portrait</title>
+  <desc>Mirrors App/AdjustView.swift for a video source: FlowHeader, source card with Change, Blend-from codec chips (shown when converted encodings exist), Speed preset chips with character words, ink estimate card with BeforeAfterBar, Advanced row, bottom CTA. Flow screens overlay the tabs full-screen — no tab bar.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- flow header -->
+      <g id="flow-header">
+        <circle cx="33" cy="88" r="17" fill="#FFF" filter="url(#soft)"/>
+        <path d="M37 80 l-8 8 8 8" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
+        <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New version</text>
+      </g>
+
+      <!-- source card -->
+      <g id="source-card">
+        <rect x="16" y="115" width="361" height="72" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="28" y="127" width="64" height="48" rx="7" fill="#33415A"/>
+        <circle cx="48" cy="141" r="7" fill="#FFB340" opacity="0.85"/>
+        <polygon points="28,163 52,151 74,161 92,153 92,175 28,175" fill="#1E2632"/>
+        <text x="104" y="147" font-size="14.5" class="sb" fill="#000">Sunset over harbour</text>
+        <text x="104" y="164" font-size="12" fill="#6D6D72">0:36 min · 1080p · 30 fps · shot 2 days ago</text>
+        <text x="363" y="155" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Change</text>
+      </g>
+
+      <!-- blend from -->
+      <text x="20" y="216" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLEND FROM</text>
+      <g id="blend-from-chips">
+        <rect x="16" y="226" width="62" height="33" rx="16.5" fill="#C36A00"/>
+        <text x="47" y="247" font-size="13" class="b" fill="#000" text-anchor="middle">Auto</text>
+        <rect x="86" y="226" width="74" height="33" rx="16.5" fill="#E4E4E9"/>
+        <text x="123" y="247" font-size="13" fill="#000" text-anchor="middle">ProRes</text>
+        <rect x="168" y="226" width="70" height="33" rx="16.5" fill="#E4E4E9"/>
+        <text x="203" y="247" font-size="13" fill="#000" text-anchor="middle">H.264</text>
+        <text x="16" y="281" font-size="12" fill="#6D6D72">Uses the best surviving copy of each clip.</text>
+      </g>
+
+      <!-- speed -->
+      <text x="20" y="316" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SPEED</text>
+      <g id="speed-chips">
+        <rect x="16" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="48.9" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">10×</text>
+        <text x="48.9" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">subtle</text>
+        <rect x="89.8" y="326" width="65.8" height="47" rx="12" fill="#1C1C1E"/>
+        <text x="122.7" y="347" font-size="15" class="b" fill="#FFB340" text-anchor="middle">25×</text>
+        <text x="122.7" y="362" font-size="10.5" fill="#FFF" opacity="0.6" text-anchor="middle">smooth</text>
+        <rect x="163.6" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="196.5" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">50×</text>
+        <text x="196.5" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">flowing</text>
+        <rect x="237.4" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="270.3" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">100×</text>
+        <text x="270.3" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">streaks</text>
+        <rect x="311.2" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="344.1" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">···</text>
+        <text x="344.1" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">custom</text>
+      </g>
+
+      <!-- estimate card (ink) -->
+      <g id="estimate-card">
+        <rect x="16" y="387" width="361" height="152" rx="16" fill="#1C1C1E"/>
+        <text x="32" y="411" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
+        <text x="345" y="411" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">30 fps ⌄</text>
+        <text x="32" y="443" font-size="28" class="b" fill="#FFF">1.4 seconds</text>
+        <text x="196" y="441" font-size="14" class="sb" fill="#FFB340">· smooth motion</text>
+        <g id="before-after-bar">
+          <rect x="32" y="466" width="180" height="8" rx="4" fill="#3D3D3F"/>
+          <text x="222" y="474" font-size="11" fill="#FFF" opacity="0.4">0:36</text>
+          <path d="M252 470 h10 m-4 -3.5 4 3.5 -4 3.5" stroke="#FFF" stroke-opacity="0.3" stroke-width="1.4" fill="none"/>
+          <rect x="272" y="466" width="10" height="8" rx="4" fill="#FFB340"/>
+          <text x="290" y="474" font-size="11" class="b" fill="#FFB340">1.4s</text>
+        </g>
+        <text x="32" y="503" font-size="11" fill="#FFF" opacity="0.45">Each output frame averages 25 real frames — that's</text>
+        <text x="32" y="517" font-size="11" fill="#FFF" opacity="0.45">where the blur comes from.</text>
+      </g>
+
+      <!-- advanced row -->
+      <g id="advanced-row">
+        <rect x="16" y="553" width="361" height="49" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="583" font-size="15.5" fill="#000">Advanced</text>
+        <text x="340" y="582" font-size="12" fill="#6D6D72" text-anchor="end">Ramp · Trim · True-light</text>
+        <path d="M357 570 l6 7.5 -6 7.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      </g>
+
+      <!-- bottom CTA -->
+      <g id="bottom-bar">
+        <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
+        <rect x="16" y="738" width="361" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="768" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 1.4 s clip</text>
+        <text x="196.5" y="806" font-size="11.5" fill="#6D6D72" text-anchor="middle">Your original is kept — you can always make another version.</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — New version (video) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — sourceCard · blendFromSection · speedSection · estimateCard</text>
+</svg>

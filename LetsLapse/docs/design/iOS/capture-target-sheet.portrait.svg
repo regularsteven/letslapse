@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture for a target (sheet) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (CaptureTargetSheet), 470pt detent over the dimmed camera: clip-length slider, speed chips, "Record for" summary card with countdown-ring note, auto-stop toggle, Start capture. Reached from the Target… chip in Video mode's speed row.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="24" y="406" width="393" height="470" rx="10"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- dimmed capture screen behind -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)" opacity="0.3">
+      <rect x="0" y="89" width="393" height="290" fill="url(#sky)"/>
+      <circle cx="132" cy="240" r="26" fill="#FFB340" opacity="0.9"/>
+    </g>
+    <rect x="24" y="24" width="393" height="852" fill="#000" opacity="0.3"/>
+
+    <!-- sheet (470pt detent) -->
+    <g clip-path="url(#sheet)">
+      <rect x="24" y="406" width="393" height="470" fill="#1C1C1F"/>
+      <g transform="translate(24,406)">
+        <rect x="178.5" y="10" width="36" height="4" rx="2" fill="#FFF" opacity="0.25"/>
+
+        <text x="20" y="47" font-size="19" class="b" fill="#FFF">Capture for a target</text>
+        <text x="20" y="66" font-size="13" fill="#FFF" opacity="0.5">Pick the clip you want — we'll tell you how long to record.</text>
+
+        <g id="clip-length">
+          <text x="20" y="97" font-size="14" fill="#FFF">Clip length</text>
+          <text x="373" y="97" font-size="14" class="b" fill="#FFB340" text-anchor="end">6.0 s</text>
+          <rect x="20" y="110" width="353" height="4" rx="2" fill="#48484A"/>
+          <rect x="20" y="110" width="62" height="4" rx="2" fill="#FFB340"/>
+          <circle cx="82" cy="112" r="13" fill="#FFF"/>
+        </g>
+
+        <text x="20" y="152" font-size="14" fill="#FFF">Speed</text>
+        <g id="speed-chips">
+          <rect x="20" y="162" width="82" height="35" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="61" y="184" font-size="13" fill="#FFF" text-anchor="middle">25×</text>
+          <rect x="110" y="162" width="82" height="35" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="151" y="184" font-size="13" fill="#FFF" text-anchor="middle">50×</text>
+          <rect x="200" y="162" width="82" height="35" rx="10" fill="#FFB340"/>
+          <text x="241" y="184" font-size="13" class="b" fill="#000" text-anchor="middle">100×</text>
+          <rect x="290" y="162" width="83" height="35" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="331.5" y="184" font-size="13" fill="#FFF" text-anchor="middle">200×</text>
+        </g>
+
+        <g id="summary-card">
+          <rect x="20" y="215" width="353" height="64" rx="14" fill="#FFB340" opacity="0.12"/>
+          <rect x="20" y="215" width="353" height="64" rx="14" fill="none" stroke="#FFB340" stroke-opacity="0.35"/>
+          <g data-symbol="timer" stroke="#FFB340" stroke-width="2" fill="none" stroke-linecap="round">
+            <circle cx="44" cy="247" r="10"/><path d="M44 247 v-7 M40.5 235.5 h7"/>
+          </g>
+          <text x="66" y="243" font-size="15" class="b" fill="#FFF">Record for 10:00</text>
+          <text x="66" y="262" font-size="12" fill="#FFF" opacity="0.55">6.0 s · 30 fps output · at 30 fps capture · ring shows the countdown</text>
+        </g>
+
+        <g id="auto-stop">
+          <text x="20" y="318" font-size="14" fill="#FFF">Stop automatically at target</text>
+          <rect x="322" y="300" width="51" height="31" rx="15.5" fill="#FFB340"/>
+          <circle cx="357" cy="315.5" r="13.5" fill="#FFF"/>
+        </g>
+
+        <g id="start-capture">
+          <rect x="20" y="345" width="353" height="50" rx="14" fill="#FFB340"/>
+          <text x="196.5" y="375" font-size="16" class="b" fill="#000" text-anchor="middle">Start capture</text>
+        </g>
+      </g>
+    </g>
+    <g transform="translate(24,24)">
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture for a target (sheet) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — CaptureTargetSheet (470pt detent)</text>
+</svg>

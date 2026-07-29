@@ -1,0 +1,93 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Gallery · portrait</title>
+  <desc>Mirrors App/GalleryView.swift: manual large title, segmented filter (All · Photos · Interval · Video), 3-column square hero grid with 2pt gaps (pinch changes 2–5 columns), floating tab bar. Tiles show each project's hero asset; failed/empty tiles show a photo or film glyph.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <text x="20" y="106" font-size="34" class="b" fill="#000">Gallery</text>
+
+      <!-- segmented filter -->
+      <g id="filter">
+        <rect x="16" y="120" width="361" height="32" rx="9" fill="#E3E3E8"/>
+        <rect x="18" y="122" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
+        <text x="61" y="140" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
+        <text x="151" y="140" font-size="13" fill="#000" text-anchor="middle">Photos</text>
+        <text x="241" y="140" font-size="13" fill="#000" text-anchor="middle">Interval</text>
+        <text x="331" y="140" font-size="13" fill="#000" text-anchor="middle">Video</text>
+      </g>
+
+      <!-- 3-column grid, 2pt gaps, tile 129.7 -->
+      <g id="grid">
+        <!-- row 1 -->
+        <rect x="0" y="160" width="129.6" height="129.6" fill="#3D4A5C"/><circle cx="40" cy="200" r="12" fill="#FFB340" opacity="0.85"/><polygon points="0,262 45,236 90,258 129.6,240 129.6,289.6 0,289.6" fill="#232B36"/>
+        <rect x="131.6" y="160" width="129.6" height="129.6" fill="#4A3B2E"/><polygon points="131.6,250 180,222 226,246 261.2,232 261.2,289.6 131.6,289.6" fill="#2E2419"/>
+        <rect x="263.2" y="160" width="129.6" height="129.6" fill="#2E3A46"/><ellipse cx="328" cy="212" rx="34" ry="12" fill="#9FC2E8" opacity="0.4"/>
+        <!-- row 2 -->
+        <rect x="0" y="291.6" width="129.6" height="129.6" fill="#55402F"/><circle cx="88" cy="330" r="14" fill="#FFD9A0" opacity="0.8"/>
+        <rect x="131.6" y="291.6" width="129.6" height="129.6" fill="#26303C"/><polygon points="131.6,392 175,360 215,384 261.2,366 261.2,421.2 131.6,421.2" fill="#161D25"/>
+        <rect x="263.2" y="291.6" width="129.6" height="129.6" fill="#3B3F35"/><rect x="285" y="352" width="86" height="3" fill="#E8E4D8" opacity="0.5"/>
+        <!-- row 3 -->
+        <rect x="0" y="423.2" width="129.6" height="129.6" fill="#31404E"/><polygon points="0,520 52,492 96,514 129.6,500 129.6,552.8 0,552.8" fill="#1C2530"/>
+        <rect x="131.6" y="423.2" width="129.6" height="129.6" fill="#463522"/><circle cx="196" cy="470" r="11" fill="#FFB340" opacity="0.8"/>
+        <rect x="263.2" y="423.2" width="129.6" height="129.6" fill="#EDEDF0"/>
+        <g data-symbol="film" stroke="#9A9AA0" stroke-width="2" fill="none"><rect x="314" y="476" width="28" height="24" rx="3"/><path d="M321 476 v24 M335 476 v24 M314 488 h28"/></g>
+        <!-- row 4 -->
+        <rect x="0" y="554.8" width="129.6" height="129.6" fill="#232C38"/><ellipse cx="60" cy="600" rx="30" ry="10" fill="#8FB4DE" opacity="0.35"/>
+        <rect x="131.6" y="554.8" width="129.6" height="129.6" fill="#4E4638"/><polygon points="131.6,656 184,628 224,650 261.2,636 261.2,684.4 131.6,684.4" fill="#332D22"/>
+        <rect x="263.2" y="554.8" width="129.6" height="129.6" fill="#39424E"/><circle cx="330" cy="596" r="12" fill="#FFC670" opacity="0.7"/>
+        <!-- row 5 (scrolls behind tab bar) -->
+        <rect x="0" y="686.4" width="129.6" height="129.6" fill="#44352B"/>
+        <rect x="131.6" y="686.4" width="129.6" height="129.6" fill="#2B3540"/>
+        <rect x="263.2" y="686.4" width="129.6" height="129.6" fill="#50483A"/>
+      </g>
+
+      <!-- floating tab bar (Gallery selected) -->
+      <g id="tab-bar">
+        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <circle cx="54" cy="776" r="8" stroke-width="1.6" data-symbol="record.circle"/><circle cx="54" cy="776" r="3.4" fill="#8E8E93" stroke="none"/>
+          <text x="54" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <rect x="104" y="761" width="92" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-gallery" fill="none" stroke="#C36A00">
+          <rect x="143" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 150 775)" data-symbol="photo.on.rectangle.angled"/>
+          <rect x="147" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 154 778)"/>
+          <text x="150" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <rect x="239" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="square.stack"/>
+          <path d="M240.5 781 h11 M242.5 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="246" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-settings" stroke="#8E8E93">
+          <path d="M334 771 h16 M334 776.5 h16 M334 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <text x="342" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Gallery · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/GalleryView.swift — GalleryFilter segmented control · 3-column GalleryTile grid</text>
+</svg>

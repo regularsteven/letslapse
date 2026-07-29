@@ -1,0 +1,60 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>watchOS · Ready (Interval) </title>
+  <desc>Mirrors Watch/WatchControlView.swift readyScreen: green "Ready · camera open" status, format/speed detail line, mode selector (Photo is phone-only and not offered), Every + Blend rows (Interval only), giant START button. The Lock exposure control scrolls below the fold. Canvas 208×248 pt (46mm).</desc>
+  <defs>
+    <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <!-- watch body -->
+  <rect x="38" y="16" width="224" height="264" rx="60" fill="none" stroke="#3A3A3F" stroke-width="4"/>
+  <rect x="264" y="86" width="10" height="36" rx="5" fill="#3A3A3F"/>
+  <rect x="264" y="150" width="7" height="44" rx="3.5" fill="#3A3A3F"/>
+
+  <g clip-path="url(#wscreen)">
+    <rect x="46" y="24" width="208" height="248" fill="#000"/>
+    <g transform="translate(46,24)">
+      <!-- status -->
+      <text x="12" y="22" font-size="12" class="sb" fill="#FFF" opacity="0.85">LetsLapse</text>
+      <text x="196" y="22" font-size="13" class="sb" fill="#FFF" text-anchor="end">9:41</text>
+
+      <!-- ready label -->
+      <g id="ready-label">
+        <path d="M52 36 l4 4 7 -8" stroke="#34C759" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+        <text x="70" y="41" font-size="13" class="sb" fill="#34C759">Ready · camera open</text>
+      </g>
+      <text x="104" y="57" font-size="11" fill="#98989E" text-anchor="middle">12MP 4:3 · DNG · 25× planned</text>
+
+      <!-- mode selector (Interval · Video — Photo is phone-only) -->
+      <g id="mode-selector">
+        <rect x="8" y="66" width="192" height="28" rx="8" fill="#FFB340" opacity="0.22"/>
+        <text x="18" y="84" font-size="12" class="sb" fill="#FFF">Interval</text>
+        <path d="M182 78 l3.5 3.5 6 -7" stroke="#FFB340" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+        <rect x="8" y="98" width="192" height="28" rx="8" fill="#FFF" opacity="0.08"/>
+        <text x="18" y="116" font-size="12" class="sb" fill="#FFF">Video</text>
+      </g>
+
+      <!-- interval + frames rows -->
+      <g id="every-row">
+        <rect x="8" y="130" width="192" height="28" rx="8" fill="#FFF" opacity="0.08"/>
+        <text x="18" y="148" font-size="12" class="sb" fill="#FFF">Every</text>
+        <text x="190" y="148" font-size="12" class="sb" fill="#FFB340" text-anchor="end">2 s</text>
+      </g>
+      <g id="frames-row">
+        <rect x="8" y="162" width="192" height="28" rx="8" fill="#FFF" opacity="0.08"/>
+        <text x="18" y="180" font-size="12" class="sb" fill="#FFF">Blend</text>
+        <text x="190" y="180" font-size="12" class="sb" fill="#FFB340" text-anchor="end">10 frames</text>
+      </g>
+
+      <!-- START button (scrolls; Lock exposure sits below the fold) -->
+      <g id="start-button" data-symbol="start record">
+        <circle cx="104" cy="242" r="46" fill="none" stroke="#FFF" stroke-opacity="0.9" stroke-width="3"/>
+        <circle cx="104" cy="242" r="39" fill="#FF3B30"/>
+        <text x="104" y="247" font-size="13" class="b" fill="#FFF" text-anchor="middle">START</text>
+      </g>
+    </g>
+  </g>
+
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Ready (Interval) · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors Watch/WatchControlView.swift — readyScreen · modeSelector · intervalRow · framesRow</text>
+</svg>

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Processing · portrait</title>
+  <desc>Mirrors App/ProcessingView.swift: blurred source preview with amber progress ring, four-stage checklist (Preparing footage ✓ · Blending frames ● with live counts · Encoding video ○ · Saving to project ○), ETA line, red-tinted Cancel with reassurance caption. Flow screen — no tab bar.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="prev"><rect x="16" y="107" width="361" height="260" rx="20"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="blur2"><feGaussianBlur stdDeviation="2.5"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- preview card with progress ring -->
+      <g id="preview-card">
+        <g clip-path="url(#prev)">
+          <rect x="16" y="107" width="361" height="260" fill="#33415A"/>
+          <g filter="url(#blur2)">
+            <circle cx="120" cy="180" r="24" fill="#FFB340" opacity="0.8"/>
+            <polygon points="16,300 100,252 190,294 280,250 377,286 377,367 16,367" fill="#1A222E"/>
+          </g>
+          <rect x="16" y="107" width="361" height="260" fill="#000" opacity="0.45"/>
+        </g>
+        <g id="progress-ring">
+          <circle cx="196.5" cy="237" r="54" fill="#000" opacity="0.35"/>
+          <circle cx="196.5" cy="237" r="46" fill="none" stroke="#FFF" stroke-opacity="0.2" stroke-width="8"/>
+          <path d="M196.5 191 a46 46 0 0 1 44.9 56.1" stroke="#FFB340" stroke-width="8" fill="none" stroke-linecap="round"/>
+          <text x="196.5" y="243" font-size="17" class="b m" fill="#FFF" text-anchor="middle">34%</text>
+        </g>
+      </g>
+
+      <!-- stage checklist -->
+      <g id="stage-checklist">
+        <rect x="16" y="383" width="361" height="172" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="stage-preparing">
+          <path d="M32 409 l5 5 9 -10" stroke="#34C759" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+          <text x="58" y="415" font-size="15" fill="#000">Preparing footage</text>
+        </g>
+        <g id="stage-blending">
+          <circle cx="39" cy="451" r="4.5" fill="#FFB340"/>
+          <text x="58" y="456" font-size="15" class="sb" fill="#000">Blending frames</text>
+          <text x="361" y="456" font-size="13" class="m" fill="#6D6D72" text-anchor="end">1,240 / 3,600</text>
+        </g>
+        <g id="stage-encoding">
+          <circle cx="39" cy="493" r="4.5" fill="none" stroke="#A9A9AE" stroke-width="1.2"/>
+          <text x="58" y="498" font-size="15" fill="#9C9CA1">Encoding video</text>
+        </g>
+        <g id="stage-saving">
+          <circle cx="39" cy="535" r="4.5" fill="none" stroke="#A9A9AE" stroke-width="1.2"/>
+          <text x="58" y="540" font-size="15" fill="#9C9CA1">Saving to project</text>
+        </g>
+      </g>
+
+      <!-- ETA -->
+      <text x="196.5" y="585" font-size="13" fill="#6D6D72" text-anchor="middle">About 4 minutes left</text>
+
+      <!-- cancel -->
+      <g id="cancel">
+        <rect x="16" y="738" width="361" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+        <text x="196.5" y="768" font-size="15.5" class="sb" fill="#FF3B30" text-anchor="middle">Cancel</text>
+        <text x="196.5" y="806" font-size="11.5" fill="#6D6D72" text-anchor="middle">Cancelling discards this version. Your original is safe.</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Processing · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProcessingView.swift — previewCard ring · stageChecklist · ETA</text>
+</svg>
