@@ -281,12 +281,18 @@ struct CaptureView: View {
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             // Refresh the orientation the grid overlay sizes against, and nudge
-            // a re-render so the preview re-reads its window orientation. The
-            // preview itself drives the capture connections in `updateUIView`.
-            let device = UIDevice.current.orientation.rawValue
+            // a re-render so the preview re-reads its window orientation.
+            let device = UIDevice.current.orientation
             let next = currentCaptureOrientation()
-            LLog("orientationNotif device=\(device) computed=\(next.rawValue) (was \(orientation.rawValue))")
+            LLog("orientationNotif device=\(device.rawValue) computed=\(next.rawValue) (was \(orientation.rawValue))")
             orientation = next
+            // Capture tagging follows the physical pose (system-camera
+            // behavior, correct even under rotation lock). Cache-only — the
+            // heavy connection/stabilization pass mid-session stalled the
+            // source (a7bab45); capture runs re-assert connections at start.
+            if let physical = effectiveCaptureOrientation(device: device) {
+                camera.updateCaptureOrientation(physical)
+            }
         }
         .onChange(of: camera.isRecording) { isRecording in
             if !isRecording {
@@ -471,10 +477,15 @@ struct CaptureView: View {
         orientation = currentCaptureOrientation()
         #if os(iOS)
         // Deliver orientation-change notifications so the grid overlay's aspect
-        // stays correct and the preview gets nudged to re-read its window
-        // orientation on rotation. The preview drives the capture connections.
+        // stays correct, the preview gets nudged to re-read its window
+        // orientation, and capture tagging can follow the physical pose.
         UIDevice.current.beginGeneratingDeviceOrientationNotifications()
-        camera.setVideoOrientation(orientation)
+        // Seed capture orientation from the physical pose when it's already
+        // known (correct under rotation lock), else the interface. Safe to run
+        // the full connection + stabilization pass here — capture hasn't
+        // started; later rotations only refresh the cache.
+        let captureSeed = effectiveCaptureOrientation(device: UIDevice.current.orientation) ?? orientation
+        camera.setVideoOrientation(captureSeed)
         #endif
         camera.start()
         updateAspectPreview()

@@ -19,13 +19,14 @@ public enum VideoSynthesizer {
         width: Int = 320,
         height: Int = 240,
         fps: Double = 30,
-        pattern: Pattern = .ramp
+        pattern: Pattern = .ramp,
+        fileType: AVFileType = .mov
     ) throws {
         guard frames > 0 else { throw LapseError.noInputFrames }
         try? FileManager.default.removeItem(at: url)
         let writer: AVAssetWriter
         do {
-            writer = try AVAssetWriter(outputURL: url, fileType: .mov)
+            writer = try AVAssetWriter(outputURL: url, fileType: fileType)
         } catch {
             throw LapseError.writerFailed(error.localizedDescription)
         }

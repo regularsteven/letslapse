@@ -294,6 +294,10 @@ public enum DNGAuthor {
         var ifd0Tags: [DNGTagValue] = [
             DNGTagValue(tag: 50706, type: 1, count: 4, payload: Data([1, 4, 0, 0])),
             DNGTagValue(tag: 50707, type: 1, count: 4, payload: Data([1, 1, 0, 0])),
+            // Orientation (274) = 1: authored pixels are display-oriented (the
+            // CIRAWFilter decode already applied the reference DNG's tag), so
+            // declare "up" explicitly instead of leaving readers to default it.
+            DNGTagValue(tag: 274, type: 3, count: 1, payload: { var d = Data(); d.appendU16(1); return d }()),
         ]
         if let cameraColor {
             ifd0Tags.append(contentsOf: cameraColor)
@@ -434,6 +438,10 @@ public enum DNGAuthor {
         var ifd0Tags: [DNGTagValue] = [
             DNGTagValue(tag: 50706, type: 1, count: 4, payload: Data([1, 4, 0, 0])),
             DNGTagValue(tag: 50707, type: 1, count: 4, payload: Data([1, 1, 0, 0])),
+            // Orientation (274) = 1: the re-mosaiced Bayer plane comes from the
+            // display-oriented working image, not sensor-native geometry, so
+            // "up" is the truthful tag (see CameraColorTransform.carriedTags).
+            DNGTagValue(tag: 274, type: 3, count: 1, payload: { var d = Data(); d.appendU16(1); return d }()),
         ]
         ifd0Tags.append(contentsOf: cameraColor)
         if headroomStops > 0 {
@@ -1025,6 +1033,156 @@ public enum DNGAuthor {
         while output.count < gpsOffset { output.append(0) }
         output.append(gpsTable)
         output.append(gpsSpill)
+        while output.count < ifd0PrimeOffset { output.append(0) }
+        output.append(ifd0Prime)
+        return output
+    }
+
+    // MARK: Orientation (tag 274) byte-level editing
+
+    /// Geometry of IFD0 and its Orientation entry (if any), shared by the
+    /// orientation getter/setter. nil when the container can't be parsed.
+    private struct IFD0Scan {
+        let bigEndian: Bool
+        let tableStart: Int
+        let entryCount: Int
+        /// Byte offset of the existing tag-274 entry record, with its type
+        /// and count; nil when IFD0 carries no Orientation tag.
+        let orientationEntry: (offset: Int, type: UInt16, count: UInt32)?
+        let nextIFDOffset: UInt32
+    }
+
+    private static func tiffReadU16(_ data: Data, _ offset: Int, bigEndian: Bool) -> UInt16 {
+        let base = data.startIndex + offset
+        let first = UInt16(data[base]); let second = UInt16(data[base + 1])
+        return bigEndian ? (first << 8) | second : (second << 8) | first
+    }
+
+    private static func tiffReadU32(_ data: Data, _ offset: Int, bigEndian: Bool) -> UInt32 {
+        let base = data.startIndex + offset
+        let bytes = (0..<4).map { UInt32(data[base + $0]) }
+        return bigEndian
+            ? (bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]
+            : (bytes[3] << 24) | (bytes[2] << 16) | (bytes[1] << 8) | bytes[0]
+    }
+
+    private static func tiffBytes(_ value: UInt16, bigEndian: Bool) -> [UInt8] {
+        let bytes: [UInt8] = [UInt8(value >> 8), UInt8(value & 0xFF)]
+        return bigEndian ? bytes : bytes.reversed()
+    }
+
+    private static func tiffBytes(_ value: UInt32, bigEndian: Bool) -> [UInt8] {
+        let bytes: [UInt8] = [
+            UInt8((value >> 24) & 0xFF), UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 8) & 0xFF), UInt8(value & 0xFF),
+        ]
+        return bigEndian ? bytes : bytes.reversed()
+    }
+
+    private static func scanIFD0(_ data: Data) -> IFD0Scan? {
+        guard data.count >= 8 else { return nil }
+        let bigEndian: Bool
+        switch (data[data.startIndex], data[data.startIndex + 1]) {
+        case (0x49, 0x49): bigEndian = false
+        case (0x4D, 0x4D): bigEndian = true
+        default: return nil
+        }
+        guard tiffReadU16(data, 2, bigEndian: bigEndian) == 42 else { return nil }
+        let ifd0Offset = Int(tiffReadU32(data, 4, bigEndian: bigEndian))
+        guard ifd0Offset >= 8, ifd0Offset + 2 <= data.count else { return nil }
+        let entryCount = Int(tiffReadU16(data, ifd0Offset, bigEndian: bigEndian))
+        let tableStart = ifd0Offset + 2
+        guard tableStart + entryCount * 12 + 4 <= data.count else { return nil }
+        var orientationEntry: (offset: Int, type: UInt16, count: UInt32)?
+        for index in 0..<entryCount {
+            let entryOffset = tableStart + index * 12
+            guard tiffReadU16(data, entryOffset, bigEndian: bigEndian) == 274 else { continue }
+            orientationEntry = (
+                offset: entryOffset,
+                type: tiffReadU16(data, entryOffset + 2, bigEndian: bigEndian),
+                count: tiffReadU32(data, entryOffset + 4, bigEndian: bigEndian))
+            break
+        }
+        return IFD0Scan(
+            bigEndian: bigEndian,
+            tableStart: tableStart,
+            entryCount: entryCount,
+            orientationEntry: orientationEntry,
+            nextIFDOffset: tiffReadU32(data, tableStart + entryCount * 12, bigEndian: bigEndian))
+    }
+
+    /// The IFD0 Orientation (EXIF/TIFF tag 274) of an encoded DNG/TIFF —
+    /// 1 ("up") when the tag is absent or the container can't be parsed,
+    /// matching the TIFF default.
+    public static func dngOrientation(in data: Data) -> UInt16 {
+        guard let scan = scanIFD0(data),
+              let entry = scan.orientationEntry,
+              entry.count == 1
+        else { return 1 }
+        switch entry.type {
+        case 3: return tiffReadU16(data, entry.offset + 8, bigEndian: scan.bigEndian)
+        case 4: return UInt16(clamping: tiffReadU32(data, entry.offset + 8, bigEndian: scan.bigEndian))
+        default: return 1
+        }
+    }
+
+    /// Returns a copy of `data` with IFD0 Orientation (tag 274) set, without
+    /// touching pixel data — the metadata-only rotate for both Apple
+    /// pass-through originals and app-authored DNGs.
+    ///
+    /// When the tag already exists as an inline SHORT/LONG, its value bytes
+    /// are overwritten in place (file size unchanged; TIFF 6 stores sub-4-byte
+    /// values left-justified in the entry's value field, in file byte order).
+    /// Otherwise IFD0 is rebuilt append-only the same way `dngByInsertingGPS`
+    /// works: entry records copied verbatim, the new record merged in
+    /// ascending tag order, the rebuilt table appended at word-aligned EOF and
+    /// the TIFF header repointed — every existing offset stays valid. Unlike
+    /// the GPS injector this throws on unparseable input: a user-initiated
+    /// rotate must surface failure rather than silently no-op.
+    public static func dngBySettingOrientation(_ data: Data, to orientation: UInt16) throws -> Data {
+        guard let scan = scanIFD0(data) else {
+            throw DNGError.malformedDNG("unparseable TIFF header or IFD0")
+        }
+
+        if let entry = scan.orientationEntry, entry.count == 1, entry.type == 3 || entry.type == 4 {
+            var output = Data(data)
+            let valueBytes = entry.type == 3
+                ? tiffBytes(orientation, bigEndian: scan.bigEndian)
+                : tiffBytes(UInt32(orientation), bigEndian: scan.bigEndian)
+            for (index, byte) in valueBytes.enumerated() {
+                output[output.startIndex + entry.offset + 8 + index] = byte
+            }
+            return output
+        }
+
+        // Absent (app-authored files before orientation support) or an exotic
+        // shape: rebuild IFD0 without any old 274 record and append.
+        var entries: [(tag: UInt16, record: Data)] = []
+        entries.reserveCapacity(scan.entryCount + 1)
+        for index in 0..<scan.entryCount {
+            let recordStart = data.startIndex + scan.tableStart + index * 12
+            let tag = tiffReadU16(data, scan.tableStart + index * 12, bigEndian: scan.bigEndian)
+            if tag == 274 { continue }
+            entries.append((tag, data.subdata(in: recordStart..<recordStart + 12)))
+        }
+        var orientationRecord = Data()
+        orientationRecord.append(contentsOf: tiffBytes(UInt16(274), bigEndian: scan.bigEndian))
+        orientationRecord.append(contentsOf: tiffBytes(UInt16(3), bigEndian: scan.bigEndian)) // SHORT
+        orientationRecord.append(contentsOf: tiffBytes(UInt32(1), bigEndian: scan.bigEndian)) // count
+        orientationRecord.append(contentsOf: tiffBytes(orientation, bigEndian: scan.bigEndian))
+        orientationRecord.append(contentsOf: [0, 0]) // inline value padding
+        entries.append((274, orientationRecord))
+        entries.sort { $0.tag < $1.tag } // TIFF requires ascending tag order
+
+        let ifd0PrimeOffset = (data.count + 1) & ~1
+        var ifd0Prime = Data()
+        ifd0Prime.append(contentsOf: tiffBytes(UInt16(entries.count), bigEndian: scan.bigEndian))
+        for entry in entries { ifd0Prime.append(entry.record) }
+        ifd0Prime.append(contentsOf: tiffBytes(scan.nextIFDOffset, bigEndian: scan.bigEndian))
+
+        var output = Data(data)
+        let headerPatch = tiffBytes(UInt32(ifd0PrimeOffset), bigEndian: scan.bigEndian)
+        for offset in 0..<4 { output[output.startIndex + 4 + offset] = headerPatch[offset] }
         while output.count < ifd0PrimeOffset { output.append(0) }
         output.append(ifd0Prime)
         return output

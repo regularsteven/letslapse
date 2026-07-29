@@ -93,6 +93,9 @@ private struct GalleryTile: View {
     var hero: (url: URL, kind: AppModel.MediaKind)?
     @State private var image: Image?
     @State private var failed = false
+    /// Re-runs the load when thumbnails are invalidated (a rotate rewrites
+    /// files in place, so the URL alone can't retrigger the task).
+    @ObservedObject private var cache = ProjectThumbnailCache.shared
 
     var body: some View {
         GeometryReader { proxy in
@@ -111,7 +114,7 @@ private struct GalleryTile: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
         }
-        .task(id: hero?.url) {
+        .task(id: "\(hero?.url.path ?? "-")|\(cache.generation)") {
             image = nil
             failed = false
             guard let hero else { return }

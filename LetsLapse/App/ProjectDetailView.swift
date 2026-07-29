@@ -25,6 +25,8 @@ struct ProjectDetailView: View {
     @State private var storageBytes: Int64?
     @State private var confirmingPurge = false
     @State private var isPurging = false
+    @State private var isRotating = false
+    @State private var rotateFailure: String?
 
     /// Save-to-Photos progress, tracked separately for the photo asset and
     /// the originals row so one export doesn't repaint the other.
@@ -101,6 +103,17 @@ struct ProjectDetailView: View {
             Button("OK", role: .cancel) {}
         } message: {
             Text(exportFailure ?? "")
+        }
+        .alert(
+            "Couldn't rotate",
+            isPresented: Binding(
+                get: { rotateFailure != nil },
+                set: { if !$0 { rotateFailure = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("\(rotateFailure ?? "") Some files may already be rotated — tapping Rotate again completes the pass once the problem is fixed.")
         }
         .sheet(item: $exportedArchive) { archive in
             VStack(spacing: 14) {
@@ -239,6 +252,12 @@ struct ProjectDetailView: View {
                     } label: {
                         Label("Rename project", systemImage: "pencil")
                     }
+                    Button {
+                        rotateProject()
+                    } label: {
+                        Label("Rotate 90°", systemImage: "rotate.right")
+                    }
+                    .disabled(isRotating || isPurging)
                     #if os(iOS)
                     if capture.kind == .video {
                         Button {
@@ -246,7 +265,7 @@ struct ProjectDetailView: View {
                         } label: {
                             Label("Convert ProRes → H.264, delete originals", systemImage: "arrow.down.circle")
                         }
-                        .disabled(isPurging)
+                        .disabled(isPurging || isRotating)
                     }
                     #endif
                     Button {
@@ -261,7 +280,7 @@ struct ProjectDetailView: View {
                         Label("Delete project…", systemImage: "trash")
                     }
                 } label: {
-                    if isPurging || isExportingArchive {
+                    if isPurging || isExportingArchive || isRotating {
                         ProgressView()
                     } else {
                         Image(systemName: "ellipsis.circle")
@@ -691,6 +710,19 @@ struct ProjectDetailView: View {
         }
     }
 
+    private func rotateProject() {
+        guard let capture else { return }
+        isRotating = true
+        Task {
+            do {
+                try await model.rotateProjectMedia(capture)
+            } catch {
+                rotateFailure = error.localizedDescription
+            }
+            isRotating = false
+        }
+    }
+
     private func delete(_ blend: AppModel.BlendProject) {
         do {
             try model.deleteBlend(blend)
@@ -714,6 +746,10 @@ private struct PhotoGradingCard: View {
 
     /// The graded preview, downscaled for speed; nil until the first render.
     @State private var rendered: CGImage?
+    /// Re-renders after a rotate rewrites the original in place (same URL, so
+    /// the path/preset id alone can't retrigger; PhotoGrader's own cache is
+    /// mtime-keyed and self-heals).
+    @ObservedObject private var thumbnailCache = ProjectThumbnailCache.shared
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
@@ -724,7 +760,7 @@ private struct PhotoGradingCard: View {
             let preset = model.photoPreset(for: capture)
             VStack(spacing: 10) {
                 imageCard(url: url)
-                    .task(id: "\(url.path)|\(preset.rawValue)") {
+                    .task(id: "\(url.path)|\(preset.rawValue)|\(thumbnailCache.generation)") {
                         await render(url: url, preset: preset)
                     }
                 presetStrip(capture: capture, active: preset)

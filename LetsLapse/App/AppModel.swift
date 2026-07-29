@@ -1971,8 +1971,10 @@ final class AppModel: ObservableObject {
     }
 
     private func loadImage(at url: URL) -> CGImage? {
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        return CGImageSourceCreateImageAtIndex(source, 0, nil)
+        // EXIF-orientation-aware load (a bare index-0 decode draws captured
+        // originals sideways — the result preview and single-frame stack
+        // output both read camera files).
+        try? ImageStacker.loadImage(at: url)
     }
 
     private func refreshVideoMetadata(for captureID: UUID) async {
@@ -2196,6 +2198,95 @@ final class AppModel: ObservableObject {
 
     /// One-tap storage reclaim: convert every ProRes clip in a capture to H.264
     /// and delete the ProRes originals. Skips clips already free of ProRes.
+    enum RotateScope {
+        /// Sources plus every already-rendered blend and encoding, so all
+        /// thumbnails, versions and exports stay coherent.
+        case wholeProject
+        /// Originals only; existing rendered outputs keep their orientation.
+        case sourcesOnly
+    }
+
+    /// Every file that must rotate together for one project, grouped by
+    /// rotation mechanism.
+    private struct RotatableMedia {
+        var stills: [URL] = []
+        var dngs: [URL] = []
+        var videos: [URL] = []
+        var all: [URL] { stills + dngs + videos }
+    }
+
+    private func rotatableMedia(for capture: CaptureProject, scope: RotateScope) -> RotatableMedia {
+        var media = RotatableMedia()
+        func classify(_ url: URL) {
+            guard FileManager.default.fileExists(atPath: url.path) else { return }
+            switch url.pathExtension.lowercased() {
+            case "dng": media.dngs.append(url)
+            case "jpg", "jpeg", "heic", "heif", "png": media.stills.append(url)
+            case "mov", "qt", "mp4", "m4v": media.videos.append(url)
+            default: break
+            }
+        }
+
+        let root = captureFolderURL(for: capture.id)
+        switch capture.kind {
+        case .photos:
+            for name in capture.sourceFileNames where !name.hasSuffix(".json") {
+                classify(root.appendingPathComponent(name))
+            }
+        case .video:
+            // Every surviving encoding of every clip, so ProRes originals and
+            // H.264/HEVC conversions stay in step.
+            for clipName in sourceClipNames(for: capture) {
+                for encoding in encodings(for: capture, clip: clipName) {
+                    classify(encodingURL(for: capture, encoding))
+                }
+            }
+        }
+        if scope == .wholeProject {
+            for blend in blends(for: capture) {
+                classify(mediaURL(for: blend))
+            }
+        }
+        return media
+    }
+
+    /// Rotates every media file of a project 90° clockwise, metadata-only:
+    /// EXIF/TIFF orientation for stills and DNGs, `preferredTransform` for
+    /// video — nothing is re-encoded (PNG blends rotate losslessly). Stops at
+    /// the first failure; files already processed stay rotated, and because
+    /// the walk order is deterministic, tapping Rotate again after fixing the
+    /// problem completes the same pass.
+    func rotateProjectMedia(_ capture: CaptureProject, scope: RotateScope = .wholeProject) async throws {
+        let media = rotatableMedia(for: capture, scope: scope)
+        // Even a partial rotate changed files — refresh thumbnails regardless.
+        defer { ProjectThumbnailCache.shared.invalidate(urls: media.all) }
+        try await Task.detached(priority: .userInitiated) {
+            for url in media.stills { try MediaRotator.rotateStill90CW(at: url) }
+            for url in media.dngs { try MediaRotator.rotateDNG90CW(at: url) }
+            for url in media.videos { try await MediaRotator.rotateVideo90CW(at: url) }
+        }.value
+
+        // Swap the persisted dimensions so format badges match immediately.
+        if let index = captures.firstIndex(where: { $0.id == capture.id }),
+           let width = captures[index].sourceWidth,
+           let height = captures[index].sourceHeight {
+            captures[index].sourceWidth = height
+            captures[index].sourceHeight = width
+        }
+        for index in blends.indices where blends[index].captureID == capture.id {
+            if let width = blends[index].width, let height = blends[index].height {
+                blends[index].width = height
+                blends[index].height = width
+            }
+        }
+        try persistLibrary()
+        if capture.kind == .video {
+            // Belt and braces: re-derive video dimensions from the transforms
+            // actually on disk (also persists).
+            await refreshVideoMetadata(for: capture.id)
+        }
+    }
+
     func convertAllProResToH264Purging(for capture: CaptureProject) async throws {
         for clipName in sourceClipNames(for: capture) {
             let originalURL = captureFolderURL(for: capture.id).appendingPathComponent(clipName)

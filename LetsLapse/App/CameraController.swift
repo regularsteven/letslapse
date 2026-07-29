@@ -172,17 +172,24 @@ final class CameraController: NSObject, ObservableObject {
     private let sessionQueue = DispatchQueue(label: "com.letslapse.capture")
 
     #if os(iOS)
-    /// Last interface-derived capture orientation, cached so the capture queue
-    /// can read it without touching `UIApplication`/`UIScene` — those are
+    /// Last known capture orientation, cached so the capture queue can read it
+    /// without touching `UIApplication`/`UIScene`/`UIDevice` — those are
     /// main-thread-only and crash when read from `sessionQueue` (e.g. the
-    /// interval timer tick). Written on the main thread by `setVideoOrientation`
-    /// as SwiftUI rotates; lock-protected for cross-thread reads.
+    /// interval timer tick). Seeded by `setVideoOrientation` when the capture
+    /// screen appears, then kept fresh on every rotation by the lightweight
+    /// `updateCaptureOrientation`; lock-protected for cross-thread reads.
     private let orientationLock = NSLock()
     private var _latestCaptureOrientation: AVCaptureVideoOrientation = .portrait
     private var latestCaptureOrientation: AVCaptureVideoOrientation {
         get { orientationLock.lock(); defer { orientationLock.unlock() }; return _latestCaptureOrientation }
         set { orientationLock.lock(); _latestCaptureOrientation = newValue; orientationLock.unlock() }
     }
+
+    /// Orientation locked at `startRecording` for every segment of the
+    /// sequence — `stitchVideos` applies segment 0's transform to the whole
+    /// composition, so segments must agree even if the device rotates mid-run.
+    /// sessionQueue-confined.
+    private var activeSequenceOrientation: AVCaptureVideoOrientation?
     #endif
 
     private let movieOutput = AVCaptureMovieFileOutput()
@@ -1140,9 +1147,12 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     /// Point the movie and photo output connections at `orientation` so
-    /// recordings and stills are written the right way up. Driven from the
-    /// preview's `updateUIView`, which fires in step with every SwiftUI
-    /// rotation, so it never depends on device-motion notifications.
+    /// recordings and stills are written the right way up. Called once when the
+    /// capture screen appears — the connection + stabilization pass is safe
+    /// before capture starts, but stalled the live source when driven per
+    /// rotation (a7bab45). Mid-session rotations go through the cache-only
+    /// `updateCaptureOrientation` instead; each capture run re-asserts its
+    /// output connection from the cache at start.
     func setVideoOrientation(_ orientation: AVCaptureVideoOrientation) {
         LLog("setVideoOrientation(\(orientation.rawValue)) [outputs+stabilization]")
         #if os(iOS)
@@ -1169,9 +1179,19 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     #if os(iOS)
+    /// Refresh the cached capture orientation only — no output-connection or
+    /// stabilization work, so it is safe on every rotation mid-session (the
+    /// full reconfigure in `setVideoOrientation` stalled the live source when
+    /// driven per rotation; see a7bab45). Output connections are (re)asserted
+    /// from this cache at each capture-run start.
+    func updateCaptureOrientation(_ orientation: AVCaptureVideoOrientation) {
+        LLog("updateCaptureOrientation(\(orientation.rawValue)) [cache only]")
+        latestCaptureOrientation = orientation
+    }
+
     /// The orientation to bake into recordings/stills right now. Returns the
-    /// cached interface orientation (updated on the main thread by
-    /// `setVideoOrientation`) rather than reading `UIApplication` — this is
+    /// cached orientation (updated on the main thread by `setVideoOrientation`
+    /// and `updateCaptureOrientation`) rather than reading UIKit — this is
     /// called from `sessionQueue`, where UIKit access is illegal and crashes.
     private func captureOrientation() -> AVCaptureVideoOrientation {
         latestCaptureOrientation
@@ -1407,6 +1427,11 @@ final class CameraController: NSObject, ObservableObject {
             self.isFinishingSequence = false
             self.isDiscardingSequence = false
             self.rampIntervalActive = false
+            #if os(iOS)
+            // One orientation per sequence: every segment records with the
+            // pose the run started in (see activeSequenceOrientation).
+            self.activeSequenceOrientation = self.captureOrientation()
+            #endif
             self.startNextSegment(frameRate: self.selectedFrameRate)
             DispatchQueue.main.async {
                 self.recordingStartedAt = startedAt
@@ -1602,10 +1627,11 @@ final class CameraController: NSObject, ObservableObject {
         _ = applyCaptureFormat(resolution: selectedResolution, fps: frameRate)
         #if os(iOS)
         // A new segment reuses the movie output connection; re-assert the
-        // orientation so a fresh connection never records the wrong way up.
+        // run-locked orientation so a fresh connection never records the wrong
+        // way up and mid-run rotation can't flip later segments.
         if let connection = movieOutput.connection(with: .video),
            connection.isVideoOrientationSupported {
-            connection.videoOrientation = captureOrientation()
+            connection.videoOrientation = activeSequenceOrientation ?? captureOrientation()
         }
         #endif
         applyVideoStabilization()
@@ -1699,6 +1725,9 @@ final class CameraController: NSObject, ObservableObject {
         activeSequence = nil
         activeSequenceDirectory = nil
         activeSequenceStartedAt = nil
+        #if os(iOS)
+        activeSequenceOrientation = nil
+        #endif
         activeSegmentStartedAt = nil
         activeRecordingFrameRate = nil
         activeSegmentURL = nil
@@ -1751,6 +1780,13 @@ final class CameraController: NSObject, ObservableObject {
                 self.isIntervalRunning = true
             }
             let period = frameCap != nil ? max(0.05, seconds) : max(0.5, seconds)
+            #if os(iOS)
+            // One orientation per run: mixed EXIF orientations across a burst
+            // would change post-rotation frame sizes and fail the blend
+            // pipeline's size guard, so every tick stamps the pose the run
+            // started in.
+            let runOrientation = self.captureOrientation()
+            #endif
             let timer = DispatchSource.makeTimerSource(queue: self.sessionQueue)
             timer.schedule(deadline: .now(), repeating: period)
             timer.setEventHandler { [weak self] in
@@ -1761,9 +1797,11 @@ final class CameraController: NSObject, ObservableObject {
                     return
                 }
                 #if os(iOS)
+                // Per-tick re-assert is cheap and heals any connection rebuild
+                // mid-run; the value stays run-locked.
                 if let connection = self.photoOutput.connection(with: .video),
                    connection.isVideoOrientationSupported {
-                    connection.videoOrientation = self.captureOrientation()
+                    connection.videoOrientation = runOrientation
                 }
                 #endif
                 let settings = AVCapturePhotoSettings()
@@ -2112,6 +2150,15 @@ final class CameraController: NSObject, ObservableObject {
         }
         let bracketMax = Int(photoOutput.maxBracketedCapturePhotoCount)
         LLog("liveblend-dng: capture options responsive=\(responsiveApplied) burst=\(options.burstScheduling) bracketed=\(options.bracketedRAW) bracketMax=\(bracketMax)")
+        // Lock the RAW orientation for the run, after both configuration
+        // passes above — the .photo preset switch and fast-capture setup can
+        // rebuild the photo connection. Apple stamps TIFF tag 274 from this
+        // value into every pass-through DNG, and CIRAWFilter bakes it into
+        // the decoded working image for authored blends.
+        if let connection = photoOutput.connection(with: .video),
+           connection.isVideoOrientationSupported {
+            connection.videoOrientation = captureOrientation()
+        }
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("liveblend-dng-\(Int(Date().timeIntervalSince1970))")
         do {
@@ -2267,9 +2314,8 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
 
 /// Map an interface orientation to a capture orientation. Straight case-for-case
 /// (UIInterfaceOrientation and AVCaptureVideoOrientation share raw values for
-/// the same physical orientation). Deliberately interface-driven — sniffing the
-/// physical device orientation was unreliable (iPhones never expose an
-/// upside-down interface).
+/// the same physical orientation). Used for the preview and as the seed/fallback
+/// for capture tagging when the physical pose is unknown.
 func effectiveCaptureOrientation(interface: UIInterfaceOrientation) -> AVCaptureVideoOrientation {
     switch interface {
     case .landscapeLeft:
@@ -2280,6 +2326,27 @@ func effectiveCaptureOrientation(interface: UIInterfaceOrientation) -> AVCapture
         return .portraitUpsideDown
     default:
         return .portrait
+    }
+}
+
+/// Map the physical device orientation to a capture orientation — what the
+/// system camera tags with, so captures come out right even under the system
+/// rotation lock (where the interface never rotates). nil for faceUp/faceDown/
+/// unknown: the caller keeps the last meaningful pose. Note the landscape
+/// inversion — UIDeviceOrientation.landscapeLeft (home side right) is the same
+/// physical pose as AVCaptureVideoOrientation.landscapeRight.
+func effectiveCaptureOrientation(device: UIDeviceOrientation) -> AVCaptureVideoOrientation? {
+    switch device {
+    case .portrait:
+        return .portrait
+    case .portraitUpsideDown:
+        return .portraitUpsideDown
+    case .landscapeLeft:
+        return .landscapeRight
+    case .landscapeRight:
+        return .landscapeLeft
+    default:
+        return nil
     }
 }
 

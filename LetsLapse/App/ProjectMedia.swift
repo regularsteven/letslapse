@@ -18,6 +18,9 @@ struct ProjectThumbnailView: View {
     var url: URL?
     var kind: AppModel.MediaKind
     @State private var thumbnail: Image?
+    /// Re-runs the load when thumbnails are invalidated (files rewritten in
+    /// place keep their URL, so the URL alone can't retrigger the task).
+    @ObservedObject private var cache = ProjectThumbnailCache.shared
 
     var body: some View {
         // The base rectangle defines the reported size; the fill image lives
@@ -36,7 +39,7 @@ struct ProjectThumbnailView: View {
                 }
             }
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-            .task(id: url) {
+            .task(id: "\(url?.path ?? "-")|\(cache.generation)") {
                 thumbnail = nil
                 guard let url else { return }
                 thumbnail = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind)

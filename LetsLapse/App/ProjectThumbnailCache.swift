@@ -27,6 +27,11 @@ final class ProjectThumbnailCache: ObservableObject {
     /// Keys include the modification date, so a file that later appears or
     /// changes retries naturally.
     private var failedKeys: Set<String> = []
+    /// Bumped whenever cached thumbnails are invalidated (e.g. a project
+    /// rotate rewrote files in place). Views fold this into their `.task(id:)`
+    /// so a same-URL content change still re-requests the thumbnail; the disk
+    /// tier needs nothing — its keys carry the file's modification date.
+    @Published private(set) var generation = 0
 
     private init() {
         cache.countLimit = 300
@@ -60,6 +65,17 @@ final class ProjectThumbnailCache: ObservableObject {
 
     private func remember(_ image: CGImage, forKey key: NSURL) {
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
+    }
+
+    /// Drop in-memory thumbnails for files rewritten in place. The disk tier
+    /// self-heals (mtime-keyed); `failedKeys` is cleared wholesale — cheap,
+    /// and correctness beats re-paying a few doomed decodes.
+    func invalidate(urls: [URL]) {
+        for url in urls {
+            cache.removeObject(forKey: url as NSURL)
+        }
+        failedKeys.removeAll()
+        generation += 1
     }
 }
 

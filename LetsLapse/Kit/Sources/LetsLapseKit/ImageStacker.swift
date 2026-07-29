@@ -322,7 +322,8 @@ public final class ImageStacker {
     /// preview (a few hundred pixels), so when the primary image is larger
     /// than what came back, fall through to a full decode — rendering a DNG
     /// project from its preview JPEGs was how blended raws looked unblended.
-    static func loadImage(at url: URL) throws -> CGImage {
+    /// Public so the app's own full-size loads stay orientation-correct too.
+    public static func loadImage(at url: URL) throws -> CGImage {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, [kCGImageSourceShouldCache: false] as CFDictionary) else {
             throw LapseError.imageLoadFailed(url)
         }
