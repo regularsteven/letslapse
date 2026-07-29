@@ -246,6 +246,11 @@ final class CameraController: NSObject, ObservableObject {
     private var lockedISOValue: Float = 0
     private var lockedShutterValue: Double = 0
     private var lockedLensValue: Float = 0.5
+    // The exposure the lock froze at — the zero point `setExposureOffset`
+    // works either side of. Fixed at lock time (not updated as the offset is
+    // dragged) so the brightness slider's centre keeps meaning "as locked".
+    private var anchorISOValue: Float = 0
+    private var anchorShutterValue: Double = 0
 
     @Published var isAuthorized: Bool?
     @Published var isRecording = false
@@ -1300,6 +1305,9 @@ final class CameraController: NSObject, ObservableObject {
                 self.lockedISOValue = iso
                 self.lockedShutterValue = duration.seconds
                 self.lockedLensValue = lens
+                // Re-anchor the brightness slider on every fresh lock.
+                self.anchorISOValue = iso
+                self.anchorShutterValue = duration.seconds
                 let minISO = format.minISO
                 let maxISO = format.maxISO
                 DispatchQueue.main.async {
@@ -1367,6 +1375,62 @@ final class CameraController: NSObject, ObservableObject {
         }
         #else
         _ = iso
+        #endif
+    }
+
+    /// Move exposure a number of stops either side of the value the lock froze
+    /// at — positive brightens, negative darkens. The gain is spent on ISO
+    /// first (it costs no motion blur and no frame pacing) and only the
+    /// remainder on shutter duration, so the control still travels when ISO is
+    /// already pinned: the daylight case, where the lock lands on the sensor's
+    /// minimum ISO and ISO alone could only ever brighten.
+    func setExposureOffset(stops: Float) {
+        #if os(iOS)
+        sessionQueue.async {
+            guard let device = self.videoDevice,
+                  device.isExposureModeSupported(.custom) else { return }
+            // A lock taken before this build (or a stale anchor) falls back to
+            // wherever the device is now, so the slider is never dead.
+            let anchorISO = self.anchorISOValue > 0 ? self.anchorISOValue : device.iso
+            let anchorSeconds = self.anchorShutterValue > 0
+                ? self.anchorShutterValue
+                : device.exposureDuration.seconds
+            guard anchorISO > 0, anchorSeconds > 0 else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                let format = device.activeFormat
+                let gain = pow(2.0, Double(stops))
+                let wantedISO = Double(anchorISO) * gain
+                let iso = min(max(Float(wantedISO), format.minISO), format.maxISO)
+                // Whatever the ISO clamp couldn't deliver goes to the shutter.
+                let remaining = wantedISO / Double(iso)
+                // Same frame-interval clamp `reassertExposureLock` applies: a
+                // shutter longer than the frame duration drags the delivered
+                // rate below the requested fps.
+                var maxSeconds = format.maxExposureDuration.seconds
+                let frameDuration = device.activeVideoMaxFrameDuration
+                if frameDuration.isValid, frameDuration.seconds > 0 {
+                    maxSeconds = min(maxSeconds, frameDuration.seconds)
+                }
+                let seconds = min(
+                    max(anchorSeconds * remaining, format.minExposureDuration.seconds),
+                    maxSeconds
+                )
+                let duration = CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000)
+                device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+                self.exposureLocked = true
+                self.lockedISOValue = iso
+                self.lockedShutterValue = seconds
+                DispatchQueue.main.async {
+                    self.isExposureLocked = true
+                    self.lockedISO = iso
+                    self.lockedShutterSeconds = seconds
+                }
+            } catch {}
+        }
+        #else
+        _ = stops
         #endif
     }
 

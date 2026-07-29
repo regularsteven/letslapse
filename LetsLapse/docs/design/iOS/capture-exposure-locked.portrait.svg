@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Video (idle) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (portraitLayout, portraitTopBar, speedChipsRow, modeRow, shutter row). Video mode, not recording. speedChipsRow is the Target… button alone — the fixed speed presets were removed. 16:9 preview nearly fills the safe area (y 89–788); chrome sits over it. Status bar hidden on capture screens; safe-area top 59, bottom 34.</desc>
+  <title>iOS · Capture — exposure locked (brightness + focus) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (exposurePanel). Shown in Video mode for the frame, but the panel is mode-independent — it appears in Photo, Interval and Video alike, the moment the AE/AF lock circle is tapped. Brightness is an offset in stops around the exposure the lock froze at (CameraController.setExposureOffset), range -3…+3 EV, so its thumb rests at the CENTER of the track and can travel both ways; it is not the absolute ISO the slider used to bind to. The readout gains a "+1.5 EV" token only once the thumb leaves center. The panel sits between the mode row and the shutter row, pushing the rows above it up by its height; the shutter row stays put.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -16,7 +16,7 @@
     <rect x="24" y="24" width="393" height="852" fill="#000"/>
     <g transform="translate(24,24)">
 
-      <!-- viewfinder: 1080p 16:9 in portrait = 393×699, centered in safe area -->
+      <!-- viewfinder: 1080p 16:9 in portrait = 393×699, top-anchored under the top bar -->
       <g id="viewfinder">
         <rect x="0" y="89" width="393" height="699" fill="url(#sky)"/>
         <circle cx="132" cy="360" r="30" fill="#FFB340" opacity="0.9"/>
@@ -42,26 +42,47 @@
         </g>
       </g>
 
-      <!-- speed row: the per-preset chips (10× · 25× · 50× · 100×) are gone;
-           speed is set from the Target sheet, so only its entry point is here,
-           centered in the controls stack -->
+      <!-- speed row (Target… only) — pushed up by the panel's height -->
       <g id="speed-chips">
-        <rect x="160.5" y="639" width="72" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-        <text x="196.5" y="657" font-size="12.5" fill="#FFF" text-anchor="middle">Target…</text>
+        <rect x="160.5" y="535" width="72" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+        <text x="196.5" y="553" font-size="12.5" fill="#FFF" text-anchor="middle">Target…</text>
       </g>
 
-      <!-- mode row + zoom chips -->
+      <!-- mode row + zoom chips — pushed up by the panel's height -->
       <g id="mode-row" font-size="13" class="sb">
-        <text x="44" y="697" fill="#FFF" opacity="0.5" letter-spacing="0.3">PHOTO</text>
-        <text x="105" y="697" fill="#FFF" opacity="0.5" letter-spacing="0.3">INTERVAL</text>
-        <text x="185" y="697" fill="#FFB340" letter-spacing="0.3">VIDEO</text>
+        <text x="44" y="593" fill="#FFF" opacity="0.5" letter-spacing="0.3">PHOTO</text>
+        <text x="105" y="593" fill="#FFF" opacity="0.5" letter-spacing="0.3">INTERVAL</text>
+        <text x="185" y="593" fill="#FFB340" letter-spacing="0.3">VIDEO</text>
         <g id="zoom-chips" data-symbol="lens buttons">
-          <circle cx="256" cy="692" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
-          <text x="256" y="696" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">.5×</text>
-          <circle cx="294" cy="692" r="15" fill="none" stroke="#FFB340" stroke-opacity="0.8"/>
-          <text x="294" y="696" font-size="12" class="sb" fill="#FFB340" text-anchor="middle">1×</text>
-          <circle cx="332" cy="692" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
-          <text x="332" y="696" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">3×</text>
+          <circle cx="256" cy="588" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="256" y="592" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">.5×</text>
+          <circle cx="294" cy="588" r="15" fill="none" stroke="#FFB340" stroke-opacity="0.8"/>
+          <text x="294" y="592" font-size="12" class="sb" fill="#FFB340" text-anchor="middle">1×</text>
+          <circle cx="332" cy="588" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="332" y="592" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">3×</text>
+        </g>
+      </g>
+
+      <!-- exposure panel: readout + brightness (EV offset) + focus -->
+      <g id="exposure-panel">
+        <!-- locked readout; the "· +1.5 EV" token appears only off-center -->
+        <text x="16" y="621" font-size="12" class="m" fill="#FFB340">ISO 800 · 1/60</text>
+
+        <g id="brightness-slider" data-symbol="sun.max.fill">
+          <circle cx="27" cy="648" r="5.5" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.4"/>
+          <path d="M27 639 v3 M27 654 v3 M18 648 h3 M33 648 h3 M20.6 641.6 l2.1 2.1 M31.3 652.3 l2.1 2.1 M33.4 641.6 l-2.1 2.1 M22.7 652.3 l-2.1 2.1" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.4" stroke-linecap="round"/>
+          <!-- track: thumb rests at the CENTER of -3…+3 EV, room either way -->
+          <rect x="48" y="646" width="329" height="4" rx="2" fill="#FFF" opacity="0.25"/>
+          <rect x="48" y="646" width="164.5" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="212.5" cy="648" r="11" fill="#FFF"/>
+        </g>
+
+        <g id="focus-slider" data-symbol="camera.macro">
+          <rect x="21" y="680" width="12" height="12" rx="3" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.4"/>
+          <circle cx="27" cy="686" r="3" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.4"/>
+          <rect x="48" y="684" width="329" height="4" rx="2" fill="#FFF" opacity="0.25"/>
+          <rect x="48" y="684" width="204" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="252" cy="686" r="11" fill="#FFF"/>
         </g>
       </g>
 
@@ -79,10 +100,11 @@
           <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
           <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
         </g>
-        <g id="exposure-lock" data-symbol="lock.open">
-          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <rect x="102" y="783" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/>
-          <path d="M105 783 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/>
+        <!-- locked: amber fill, lock.fill in ink -->
+        <g id="exposure-lock" data-symbol="lock.fill">
+          <circle cx="108" cy="784" r="22" fill="#FFB340"/>
+          <rect x="102" y="783" width="12" height="9" rx="2" fill="#000"/>
+          <path d="M104.5 783 v-3.5 a3.5 3.5 0 0 1 7 0 v3.5" fill="none" stroke="#000" stroke-width="1.8"/>
         </g>
         <g id="shutter" data-symbol="record button">
           <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
@@ -106,6 +128,6 @@
   </g>
 
   <!-- caption -->
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (idle) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — portraitLayout · speedChipsRow · modeRow</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — exposure locked · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — exposurePanel · brightness is ±3 EV around the lock, thumb centered</text>
 </svg>

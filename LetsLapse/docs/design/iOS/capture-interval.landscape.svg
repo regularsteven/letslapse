@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (idle, DNG) · landscape</title>
-  <desc>Mirrors App/CaptureView.swift (landscapeLayout): left rail (close, format pill, zoom chips, recent tile), centered 4:3 viewfinder with the interval dials in the bottom-leading corner on a dark capsule, right rail (stacked mode labels, shutter, steady/grid/lock column). Landscape is a known WIP area — the format pill is wider than the 108pt rail and overlaps the viewfinder edge.</desc>
+  <desc>Mirrors App/CaptureView.swift (landscapeLayout): left rail (close, format pill, zoom chips, recent tile), centered 4:3 viewfinder with the interval dials in the bottom-leading corner on a dark capsule, right rail (stacked mode labels, shutter, steady/delay/grid/lock column). Landscape is a known WIP area — the format pill is wider than the 108pt rail and overlaps the viewfinder edge.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="83" y="296" width="60" height="60" rx="12"/></clipPath>
@@ -75,22 +75,30 @@
           <text x="734" y="74" fill="#FFF" opacity="0.5" letter-spacing="0.6">VIDEO</text>
         </g>
         <g id="shutter" data-symbol="record button">
-          <circle cx="734" cy="186" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
-          <circle cx="734" cy="186" r="30" fill="#FF3B30"/>
+          <circle cx="734" cy="129" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <circle cx="734" cy="129" r="30" fill="#FF3B30"/>
         </g>
+        <!-- landscapeExposureControl: the same four framing toggles portrait
+             carries in its two shutter-row columns — steady · 2 s delay ·
+             grid · AE/AF lock -->
         <g id="steady-toggle" data-symbol="hand.raised">
-          <circle cx="734" cy="256" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <path d="M729 261 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+          <circle cx="734" cy="205" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M729 210 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+        <g id="delay-toggle" data-symbol="timer">
+          <circle cx="734" cy="255" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="734" cy="256" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
+          <path d="M734 256 v-6 M731 246 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
         </g>
         <g id="grid-toggle" data-symbol="grid.circle">
-          <circle cx="734" cy="306" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <circle cx="734" cy="306" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
-          <path d="M727.5 302.7 h13 M727.5 309.3 h13 M730.7 299.5 v13 M737.3 299.5 v13" stroke="#FFF" stroke-width="1.2"/>
+          <circle cx="734" cy="305" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="734" cy="305" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <path d="M727.5 301.7 h13 M727.5 308.3 h13 M730.7 298.5 v13 M737.3 298.5 v13" stroke="#FFF" stroke-width="1.2"/>
         </g>
         <g id="exposure-lock" data-symbol="lock.open">
-          <circle cx="734" cy="356" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <rect x="728" y="355" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/>
-          <path d="M731 355 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/>
+          <circle cx="734" cy="355" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <rect x="728" y="354" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/>
+          <path d="M731 354 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/>
         </g>
       </g>
 

@@ -64,6 +64,11 @@ struct CaptureView: View {
     /// steady indicator).
     @State private var photoCaptureWhenSteady = false
     @State private var isWaitingForSteady = false
+    /// Brightness offset, in stops, either side of the exposure the AE lock
+    /// froze at. 0 is the centre of the slider — "as locked" — so the control
+    /// can travel both ways; re-taking the lock re-centres it.
+    @State private var exposureStops: Float = 0
+    private static let exposureStopsRange: ClosedRange<Float> = -3...3
     /// Photo mode's blend depth: how many frames the burst captures and stacks
     /// into the final image. A capture-time setting (not a post-capture one),
     /// so it lives here rather than on the model. Default 10 — dense sampling
@@ -337,7 +342,12 @@ struct CaptureView: View {
         .onChange(of: camera.selectedFrameRate) { _ in updateWatchContext() }
         .onChange(of: camera.activeBaseFrameRate) { _ in updateWatchContext() }
         .onChange(of: model.constantWindow) { _ in updateWatchContext() }
-        .onChange(of: camera.isExposureLocked) { _ in updateWatchExposure() }
+        .onChange(of: camera.isExposureLocked) { locked in
+            // A fresh lock re-anchors the camera's exposure, so the brightness
+            // slider returns to its centre with it.
+            if locked { exposureStops = 0 }
+            updateWatchExposure()
+        }
         .onChange(of: camera.lockedISO) { _ in updateWatchExposure() }
         .onChange(of: camera.lockedLensPosition) { _ in updateWatchExposure() }
         #else
@@ -1019,58 +1029,21 @@ struct CaptureView: View {
 
     // MARK: - Speed chips (idle)
 
+    /// Video's idle row. The per-preset speed chips (10× · 25× · 50× · 100×)
+    /// are gone — speed is set from the Target sheet, which picks it from the
+    /// clip length you actually want — so only that entry point remains here.
     private var speedChipsRow: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 6) {
-                Text("SPEED")
-                    .font(.system(size: 10, weight: .bold))
-                    .kerning(0.8)
-                    .foregroundStyle(.white.opacity(0.45))
-                    .padding(.trailing, 2)
-
-                ForEach(SpeedMath.presets, id: \.self) { preset in
-                    let isSelected = model.constantWindow == preset && !model.useRamp
-                    Button {
-                        model.useRamp = false
-                        model.constantWindow = preset
-                    } label: {
-                        Group {
-                            if isSelected {
-                                Text("\(preset)× → \(estimateText(for: preset))")
-                                    .foregroundColor(.black)
-                                    .fontWeight(.bold)
-                            } else {
-                                Text("\(preset)× ")
-                                    .foregroundColor(.white)
-                                    + Text("→ \(estimateText(for: preset))")
-                                    .foregroundColor(.white.opacity(0.45))
-                            }
-                        }
-                        .font(.system(size: 12.5))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(
-                            isSelected ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
-                            in: Capsule()
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                Button {
-                    showTargetSheet = true
-                } label: {
-                    Text("Target…")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 16)
+        Button {
+            showTargetSheet = true
+        } label: {
+            Text("Target…")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
         }
+        .buttonStyle(.plain)
     }
 
     /// Live "what would this be" per speed. While recording it tracks the
@@ -1957,25 +1930,30 @@ struct CaptureView: View {
         } else {
             // Stacked to match the leading column (see `leadingControl`).
             VStack(spacing: 8) {
-                Button {
-                    shutterDelayEnabled.toggle()
-                    if !shutterDelayEnabled {
-                        delayedStartAt = nil
-                    }
-                } label: {
-                    Image(systemName: "timer")
-                        .font(.system(size: 18))
-                        .foregroundStyle(shutterDelayEnabled ? LL.amber : .white)
-                        .frame(width: 44, height: 44)
-                        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(shutterDelayEnabled ? "Turn off 2 second delay" : "Turn on 2 second delay")
-
+                shutterDelayCircle
                 // Capture-when-steady toggle, in the grid button's old slot.
                 steadyToggleCircle
             }
         }
+    }
+
+    /// 2 s self-timer toggle — its own control so the portrait shutter row and
+    /// the landscape rail can both carry it (the rail was missing it).
+    private var shutterDelayCircle: some View {
+        Button {
+            shutterDelayEnabled.toggle()
+            if !shutterDelayEnabled {
+                delayedStartAt = nil
+            }
+        } label: {
+            Image(systemName: "timer")
+                .font(.system(size: 18))
+                .foregroundStyle(shutterDelayEnabled ? LL.amber : .white)
+                .frame(width: 44, height: 44)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(shutterDelayEnabled ? "Turn off 2 second delay" : "Turn on 2 second delay")
     }
 
     /// Capture-when-steady toggle — a circular icon button matching the 2 s
@@ -2064,13 +2042,14 @@ struct CaptureView: View {
 
     // MARK: - Manual exposure
 
-    /// Landscape-rail variant: the steady + grid toggles and the lock circle,
-    /// plus the frozen readout. Fine ISO/focus tuning lives in portrait or on
-    /// the Watch crown. The steady toggle sits here in landscape since the
-    /// shutter-row trailing controls are portrait-only.
+    /// Landscape-rail variant: all four framing toggles — grid, AE/AF lock,
+    /// 2 s delay and capture-when-steady — plus the frozen readout, matching
+    /// portrait's shutter-row pair of columns. Fine brightness/focus tuning
+    /// lives in portrait or on the Watch crown.
     private var landscapeExposureControl: some View {
         VStack(spacing: 6) {
             steadyToggleCircle
+            shutterDelayCircle
             gridToggleCircle
             exposureLockCircle
 
@@ -2094,7 +2073,14 @@ struct CaptureView: View {
     }
 
     private var exposureReadout: String {
-        "ISO \(Int(camera.lockedISO.rounded())) · \(shutterText(camera.lockedShutterSeconds))"
+        var text = "ISO \(Int(camera.lockedISO.rounded())) · \(shutterText(camera.lockedShutterSeconds))"
+        // Only once the brightness slider has been moved off its centre — at
+        // rest the readout is the locked exposure itself, and "+0.0 EV" would
+        // be noise.
+        if abs(exposureStops) >= 0.05 {
+            text += String(format: " · %+.1f EV", exposureStops)
+        }
+        return text
     }
 
     private func shutterText(_ seconds: Double) -> String {
@@ -2120,9 +2106,10 @@ struct CaptureView: View {
                     Spacer()
                 }
 
-                if isoSliderRange.lowerBound < isoSliderRange.upperBound {
-                    exposureSlider(icon: "sun.max.fill", value: isoBinding, range: isoSliderRange)
-                }
+                exposureSlider(
+                    icon: "sun.max.fill",
+                    value: exposureStopsBinding,
+                    range: Self.exposureStopsRange)
                 exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
             }
             .padding(.horizontal, 16)
@@ -2144,12 +2131,19 @@ struct CaptureView: View {
         }
     }
 
-    private var isoSliderRange: ClosedRange<Float> {
-        camera.isoRange
-    }
-
-    private var isoBinding: Binding<Float> {
-        Binding(get: { camera.lockedISO }, set: { camera.setISO($0) })
+    /// Brightness rides at the centre of its travel: the slider is an offset in
+    /// stops around the exposure the lock froze at, not the absolute ISO. An
+    /// absolute-ISO slider sat pinned at the far left in daylight — the lock
+    /// lands on the sensor's minimum ISO there, so the whole control could only
+    /// brighten. The camera spends the offset on ISO first and the shutter
+    /// after (`setExposureOffset`), so both halves of the travel do something.
+    private var exposureStopsBinding: Binding<Float> {
+        Binding(
+            get: { exposureStops },
+            set: { stops in
+                exposureStops = stops
+                camera.setExposureOffset(stops: stops)
+            })
     }
 
     private var focusBinding: Binding<Float> {
