@@ -2525,6 +2525,21 @@ final class AppModel: ObservableObject {
 
     // MARK: - Project archives (share / import)
 
+    enum ExportError: LocalizedError {
+        case insufficientStorage(available: Int64, needed: Int64)
+
+        var errorDescription: String? {
+            switch self {
+            case .insufficientStorage(let available, let needed):
+                return """
+                Not enough storage to export this project. It needs \
+                \(LLFormat.bytes(needed)) but only \(LLFormat.bytes(available)) is available. \
+                Free up space and try again.
+                """
+            }
+        }
+    }
+
     /// Builds a portable `.lapse` archive of one project: `project.json`
     /// (capture + its blend entries) beside the project's `source/` and
     /// `blends/` trees. The manifest is written into the project folder for
@@ -2550,6 +2565,17 @@ final class AppModel: ObservableObject {
         defer { try? FileManager.default.removeItem(at: manifestURL) }
 
         try await Task.detached(priority: .userInitiated) {
+            // lzfse shrinks the tree, but stills/ProRes barely compress, so the
+            // uncompressed size is the honest bar: better to refuse up front
+            // than to fill the disk and fail mid-write.
+            let needed = Self.directorySize(folder)
+            let available = (try? archiveURL
+                .deletingLastPathComponent()
+                .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                .volumeAvailableCapacityForImportantUsage) ?? 0
+            if needed > 0, available < needed {
+                throw ExportError.insufficientStorage(available: available, needed: needed)
+            }
             try ProjectArchive.write(contentsOf: folder, to: archiveURL)
         }.value
         return archiveURL

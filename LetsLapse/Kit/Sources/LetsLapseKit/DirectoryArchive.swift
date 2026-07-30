@@ -26,18 +26,41 @@ public enum DirectoryArchive {
             permissions: FilePermissions(rawValue: 0o644)) else {
             throw DirectoryArchiveError.streamSetupFailed
         }
-        defer { try? writeStream.close() }
         guard let compressStream = ArchiveByteStream.compressionStream(using: .lzfse, writingTo: writeStream) else {
+            try? writeStream.close()
             throw DirectoryArchiveError.streamSetupFailed
         }
-        defer { try? compressStream.close() }
         guard let encodeStream = ArchiveStream.encodeStream(writingTo: compressStream) else {
+            try? compressStream.close()
+            try? writeStream.close()
             throw DirectoryArchiveError.streamSetupFailed
         }
-        defer { try? encodeStream.close() }
-        try encodeStream.writeDirectoryContents(
-            archiveFrom: FilePath(directory.path),
-            keySet: .defaultForArchive)
+
+        // AppleArchive buffers and flushes on worker threads, so a full disk
+        // (or any other write failure) surfaces from `close()` rather than from
+        // the write call. Close all three in order whatever happens — leaking
+        // them would leak the file descriptor — then rethrow the first failure
+        // so a truncated archive is never reported as a success.
+        var failure: Error?
+        do {
+            try encodeStream.writeDirectoryContents(
+                archiveFrom: FilePath(directory.path),
+                keySet: .defaultForArchive)
+        } catch {
+            failure = error
+        }
+        let closers: [() throws -> Void] = [encodeStream.close, compressStream.close, writeStream.close]
+        for close in closers {
+            do {
+                try close()
+            } catch {
+                if failure == nil { failure = error }
+            }
+        }
+        if let failure {
+            try? FileManager.default.removeItem(at: archiveURL)
+            throw failure
+        }
     }
 
     public static func extract(_ archiveURL: URL, to directory: URL) throws {
