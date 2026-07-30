@@ -8,6 +8,10 @@ struct CaptureAssetGrid<Item: Identifiable>: View {
     var items: [Item]
     /// The asset a tile shows; nil renders the neutral placeholder.
     var asset: (Item) -> (url: URL, kind: AppModel.MediaKind)?
+    /// A colour grade to render still tiles through — one project's grade, when
+    /// the grid belongs to a project. The Gallery passes nil: its tiles are one
+    /// per project and each is its own finished asset.
+    var grade: PhotoGrade? = nil
     var onTap: (Item) -> Void
 
     /// Shared with the Gallery on purpose — one zoom level for every grid.
@@ -20,7 +24,7 @@ struct CaptureAssetGrid<Item: Identifiable>: View {
                 spacing: 2
             ) {
                 ForEach(items) { item in
-                    CaptureAssetTile(hero: asset(item))
+                    CaptureAssetTile(hero: asset(item), grade: grade)
                         .aspectRatio(1, contentMode: .fit)
                         .onTapGesture { onTap(item) }
                 }
@@ -41,6 +45,10 @@ struct CaptureAssetGrid<Item: Identifiable>: View {
 /// scrolling doesn't re-decode. Shows a neutral placeholder until ready.
 private struct CaptureAssetTile: View {
     var hero: (url: URL, kind: AppModel.MediaKind)?
+    /// When set (and not a no-op), still tiles render through this grade instead
+    /// of coming from the shared thumbnail cache — the cache is keyed by file
+    /// alone, and a graded tile is not the file.
+    var grade: PhotoGrade? = nil
     @State private var image: Image?
     @State private var failed = false
     /// Which asset `image` belongs to, so a reload for the same one can keep it
@@ -67,7 +75,7 @@ private struct CaptureAssetTile: View {
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
         }
-        .task(id: "\(hero?.url.path ?? "-")|\(cache.generation)") {
+        .task(id: "\(hero?.url.path ?? "-")|\(cache.generation)|\(grade?.cacheToken ?? "-")") {
             // Only blank for a different asset: re-requesting the same one
             // (cache invalidated, or the cell was rebuilt) keeps what's on
             // screen, so a cache purge doesn't flash the whole grid to gray.
@@ -77,7 +85,7 @@ private struct CaptureAssetTile: View {
                 loadedPath = hero?.url.path
             }
             guard let hero else { return }
-            let loaded = await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
+            let loaded = await load(hero)
             if let loaded {
                 image = loaded
                 failed = false
@@ -85,6 +93,27 @@ private struct CaptureAssetTile: View {
                 failed = true
             }
         }
+    }
+
+    /// A graded still is rendered per tile; everything else comes from the shared
+    /// thumbnail cache. Tile-sized renders are cheap, and only a project whose
+    /// grade is actually set pays for them.
+    private func load(_ hero: (url: URL, kind: AppModel.MediaKind)) async -> Image? {
+        guard let grade, !grade.isIdentity, hero.kind == .image else {
+            return await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
+        }
+        let rendered = await MediaWorkQueue.shared.run {
+            PhotoGrader.render(
+                url: hero.url, preset: grade.preset, adjustments: grade.adjustments,
+                maxDimension: 480)
+        }
+        // The outer nil is the work queue's "didn't run", the inner one a failed
+        // render; either way fall back to the ungraded thumbnail rather than
+        // leaving a gray tile.
+        guard let rendered, let cgImage = rendered else {
+            return await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
+        }
+        return Image(decorative: cgImage, scale: 1)
     }
 }
 
@@ -103,16 +132,34 @@ struct CaptureFrame: Identifiable, Hashable {
 /// individual photos, which until now were only reachable as a batch export.
 /// Tapping a tile opens the fullscreen viewer, where any single frame can go to
 /// Photos on its own.
+///
+/// Every frame is shown through the project's colour grade, so this grid and the
+/// project card agree about what the shoot looks like; the files themselves are
+/// untouched.
 struct CapturePhotoGrid: View {
     var title: String
     var frames: [CaptureFrame]
+    /// The project these frames belong to, for its grade. Optional so a caller
+    /// with no project context can still browse a plain set of files.
+    var captureID: UUID?
 
+    @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     @State private var viewing: CaptureFrame?
 
-    init(title: String, urls: [URL]) {
+    init(title: String, urls: [URL], captureID: UUID? = nil) {
         self.title = title
         self.frames = urls.enumerated().map { CaptureFrame(index: $0.offset, url: $0.element) }
+        self.captureID = captureID
+    }
+
+    /// The grade to render frames through, or nil when this grid isn't a
+    /// project's (or the project's grade is a no-op).
+    private var grade: PhotoGrade? {
+        guard let captureID,
+              let capture = model.captures.first(where: { $0.id == captureID }) else { return nil }
+        let grade = model.photoGrade(for: capture)
+        return grade.isIdentity ? nil : grade
     }
 
     var body: some View {
@@ -131,6 +178,7 @@ struct CapturePhotoGrid: View {
                     CaptureAssetGrid(
                         items: frames,
                         asset: { ($0.url, AppModel.MediaKind.image) },
+                        grade: grade,
                         onTap: { viewing = $0 }
                     )
                 }
@@ -148,11 +196,11 @@ struct CapturePhotoGrid: View {
         }
         #if os(iOS)
         .fullScreenCover(item: $viewing) { frame in
-            CaptureFrameViewer(frames: frames, start: frame)
+            CaptureFrameViewer(frames: frames, start: frame, captureID: captureID)
         }
         #else
         .sheet(item: $viewing) { frame in
-            CaptureFrameViewer(frames: frames, start: frame)
+            CaptureFrameViewer(frames: frames, start: frame, captureID: captureID)
                 .frame(minWidth: 520, minHeight: 420)
         }
         #endif
@@ -162,16 +210,32 @@ struct CapturePhotoGrid: View {
 /// The fullscreen frame viewer: swipe through a project's photos, save the one
 /// on screen to Photos. Save state is per frame, so paging away from a saved
 /// photo doesn't claim the next one is saved too.
+///
+/// The frame is shown as the project grades it, and Save writes what is on
+/// screen — a graded JPEG, or the file's own bytes when the grade is untouched.
 private struct CaptureFrameViewer: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     var frames: [CaptureFrame]
+    var captureID: UUID?
     @State private var selection: Int
     @State private var saveStates: [Int: SaveState] = [:]
 
-    init(frames: [CaptureFrame], start: CaptureFrame) {
+    init(frames: [CaptureFrame], start: CaptureFrame, captureID: UUID? = nil) {
         self.frames = frames
+        self.captureID = captureID
         _selection = State(initialValue: start.id)
+    }
+
+    private var capture: AppModel.CaptureProject? {
+        guard let captureID else { return nil }
+        return model.captures.first { $0.id == captureID }
+    }
+
+    private var grade: PhotoGrade? {
+        guard let capture else { return nil }
+        let grade = model.photoGrade(for: capture)
+        return grade.isIdentity ? nil : grade
     }
 
     private enum SaveState: Equatable {
@@ -201,14 +265,16 @@ private struct CaptureFrameViewer: View {
         #if os(iOS)
         TabView(selection: $selection) {
             ForEach(frames) { frame in
-                ProjectPreviewImage(url: frame.url, background: AnyShapeStyle(Color.black))
+                ProjectPreviewImage(
+                    url: frame.url, background: AnyShapeStyle(Color.black), grade: grade)
                     .tag(frame.id)
             }
         }
         .tabViewStyle(.page(indexDisplayMode: .never))
         #else
         if let current {
-            ProjectPreviewImage(url: current.url, background: AnyShapeStyle(Color.black))
+            ProjectPreviewImage(
+                url: current.url, background: AnyShapeStyle(Color.black), grade: grade)
         }
         #endif
     }
@@ -308,7 +374,13 @@ private struct CaptureFrameViewer: View {
         saveStates[frame.id] = .saving
         Task {
             do {
-                try await model.saveSourceClip(at: frame.url)
+                // Saves what the viewer is showing: the grade baked into a
+                // temporary JPEG, or the frame's own bytes when it is untouched.
+                if let capture {
+                    try await model.saveGradedAsset(at: frame.url, for: capture)
+                } else {
+                    try await model.saveSourceClip(at: frame.url)
+                }
                 saveStates[frame.id] = .saved
             } catch {
                 saveStates[frame.id] = .failed(error.localizedDescription)

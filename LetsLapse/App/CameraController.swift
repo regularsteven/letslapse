@@ -211,8 +211,9 @@ final class CameraController: NSObject, ObservableObject {
     private var intervalFramesRequested = 0
     private var intervalActive = false
     private var videoStabilizationRequested = true
-    /// When set, captured stills are geotagged with the latest location fix.
-    /// Set from the capture screen; read on the session queue when a photo lands.
+    /// When set, captured media is geotagged: stills with the latest location
+    /// fix, recorded movies with the fix the take started from.
+    /// Set from the capture screen; read on the session queue as each file lands.
     var gpsTaggingEnabled = false
     // 10/12/15 are acquisition rates for the blend pipeline: sparse temporal
     // sampling with up to a full-interval shutter, meant to be conformed or
@@ -1466,6 +1467,11 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             guard !self.movieOutput.isRecording else { return }
             let startedAt = Date()
+            // Geotagging: open this take's fix tracking now, so the location
+            // baked into every segment is where the recording started — the fix
+            // already in hand if it's accurate enough, else the first accurate
+            // one to arrive while shooting.
+            if self.gpsTaggingEnabled { LocationService.shared.beginRecordingFix() }
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("live-capture-\(Int(startedAt.timeIntervalSince1970))")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -2441,6 +2447,15 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
                 // onFinishVideo) sees the graded file at the same URL.
                 if self.shouldSoftwareFlattenVideo, !self.isDiscardingSequence {
                     _ = VideoFlatten.flattenInPlace(outputFileURL)
+                }
+                // Geotag the segment last: the flatten above re-encodes the
+                // file and wouldn't carry the location atom through. Written
+                // into the movie's own header because a `.gpx` sidecar doesn't
+                // follow the clip into its project folder — and because the
+                // movie's own metadata is where Photos looks for a clip's place.
+                if self.gpsTaggingEnabled, !self.isDiscardingSequence,
+                   let location = LocationService.shared.recordingLocation {
+                    MovieLocation.inject(location, into: outputFileURL)
                 }
                 self.finishSegment(outputFileURL: outputFileURL)
             }

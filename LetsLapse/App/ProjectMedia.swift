@@ -119,9 +119,14 @@ struct ProjectMediaPreviewSheet: View {
 /// The full-image loader behind both the preview sheet and the fullscreen frame
 /// viewer. `background` is what shows while the decode runs — the sheet wants a
 /// card-coloured plate, the fullscreen viewer black.
+///
+/// `grade`, when set, renders the still through a project's colour grade instead
+/// of decoding it plainly, so a graded project's frames look the same here as on
+/// its detail card. The file on disk is untouched either way.
 struct ProjectPreviewImage: View {
     var url: URL
     var background: AnyShapeStyle = AnyShapeStyle(.quaternary)
+    var grade: PhotoGrade?
     @State private var image: CGImage?
     @State private var failed = false
 
@@ -145,10 +150,25 @@ struct ProjectPreviewImage: View {
                 ProgressView()
             }
         }
-        .task(id: url) {
+        .task(id: "\(url.path)|\(grade?.cacheToken ?? "-")") {
             image = nil
             failed = false
-            image = await ProjectThumbnailGenerator.displayImage(at: url)
+            if let grade, !grade.isIdentity {
+                let rendered = await MediaWorkQueue.shared.run {
+                    PhotoGrader.render(
+                        url: url, preset: grade.preset, adjustments: grade.adjustments,
+                        maxDimension: 2560)
+                }
+                // Falls back to the plain decode if the grade couldn't render,
+                // so a frame still appears.
+                if let graded = rendered.flatMap({ $0 }) {
+                    image = graded
+                } else {
+                    image = await ProjectThumbnailGenerator.displayImage(at: url)
+                }
+            } else {
+                image = await ProjectThumbnailGenerator.displayImage(at: url)
+            }
             // A cancelled load (the sheet was dismissed) isn't a failure.
             if !Task.isCancelled {
                 failed = image == nil

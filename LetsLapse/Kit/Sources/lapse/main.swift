@@ -143,7 +143,8 @@ do {
         let core = try BlendCore()
         let stacker = ImageStacker(core: core)
         let started = Date()
-        let image = try stacker.stack(imageURLs: inputs, linearLight: !gamma) { progressToStderr($0) }
+        let image = try stacker.stack(
+            imageURLs: inputs, linearLight: !gamma, progress: { progressToStderr($0) })
         try ImageExporter.write(image, to: output, format: format)
         let elapsed = Date().timeIntervalSince(started)
         print("stacked \(inputs.count) images (\(image.width)x\(image.height)) in \(String(format: "%.1f", elapsed))s")

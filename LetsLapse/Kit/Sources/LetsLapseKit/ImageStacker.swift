@@ -27,9 +27,21 @@ public final class ImageStacker {
     /// bounded no matter how many frames go in. With `linearLight` (default)
     /// frames are linearized before averaging, matching how a real long
     /// exposure integrates light.
-    public func stack(imageURLs: [URL], linearLight: Bool = true, progress: ((Double) -> Void)? = nil) throws -> CGImage {
+    ///
+    /// `loadFrame` replaces the built-in decode, so a caller can put each frame
+    /// through its own pass — the app hands in a loader that bakes the project's
+    /// colour grade — while the streaming and memory behaviour stays the same.
+    /// It must return frames at the size `loadImage(at:)` would, since the first
+    /// one sizes the stack.
+    public func stack(
+        imageURLs: [URL],
+        linearLight: Bool = true,
+        loadFrame: ((URL) throws -> CGImage)? = nil,
+        progress: ((Double) -> Void)? = nil
+    ) throws -> CGImage {
         try stackImages(count: imageURLs.count, linearLight: linearLight, progress: progress) { index in
-            try ImageStacker.loadImage(at: imageURLs[index])
+            let url = imageURLs[index]
+            return try loadFrame?(url) ?? ImageStacker.loadImage(at: url)
         }
     }
 
@@ -98,12 +110,20 @@ public final class ImageStacker {
     /// stacking. Images are streamed off disk one at a time, so memory stays
     /// bounded no matter how many go in. Returns the written file's frame count
     /// and pixel dimensions.
+    ///
+    /// `loadFrame` replaces the built-in decode for every frame, which is how the
+    /// app bakes a project's colour grade into a timelapse: each still is graded
+    /// on its way to the accumulator, so the written video carries the grade and
+    /// the originals on disk stay untouched. Frames must come back at the size
+    /// `loadImage(at:)` would give — the first one sizes the writer, and a
+    /// mismatch below throws rather than writing a corrupt file.
     public func stackSequence(
         imageURLs: [URL],
         ramp: BlendRamp,
         outputFPS: Double,
         linearLight: Bool = true,
         outputURL: URL,
+        loadFrame: ((URL) throws -> CGImage)? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
@@ -112,8 +132,12 @@ public final class ImageStacker {
         let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
         guard !schedule.isEmpty else { throw LapseError.noInputFrames }
 
+        let load: (URL) throws -> CGImage = { url in
+            try loadFrame?(url) ?? ImageStacker.loadImage(at: url)
+        }
+
         // Size the writer from the first still (orientation already baked in).
-        let firstImage = try ImageStacker.loadImage(at: imageURLs[0])
+        let firstImage = try load(imageURLs[0])
         let width = firstImage.width
         let height = firstImage.height
 
@@ -162,7 +186,7 @@ public final class ImageStacker {
             for offset in 0..<window {
                 let index = inputIndex + offset
                 try autoreleasepool {
-                    let image = index == 0 ? firstImage : try ImageStacker.loadImage(at: imageURLs[index])
+                    let image = index == 0 ? firstImage : try load(imageURLs[index])
                     guard image.width == width, image.height == height else {
                         throw LapseError.sizeMismatch(
                             expectedWidth: width, expectedHeight: height,

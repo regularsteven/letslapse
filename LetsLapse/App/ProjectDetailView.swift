@@ -9,7 +9,15 @@ struct ProjectDetailView: View {
     let captureID: UUID
 
     @State private var previewItem: MediaPreviewItem?
+    /// The photo opened in the grading viewer. Separate from `previewItem`
+    /// because a photo capture gets the editor, not the plain preview sheet.
+    @State private var gradingPhoto: GradingPhoto?
     @State private var isRenaming = false
+
+    private struct GradingPhoto: Identifiable {
+        let url: URL
+        var id: String { url.path }
+    }
     @State private var renameText = ""
     @State private var confirmingProjectDelete = false
     @State private var versionPendingDelete: AppModel.BlendProject?
@@ -59,6 +67,19 @@ struct ProjectDetailView: View {
         }
         .sheet(item: $previewItem) { item in
             ProjectMediaPreviewSheet(item: item)
+        }
+        .sheet(item: $gradingPhoto) { photo in
+            PhotoViewerView(
+                captureID: captureID,
+                url: photo.url,
+                title: capture?.displayTitle ?? "Photo"
+            )
+            .environmentObject(model)
+            #if os(macOS)
+            // Minimums only — the grading viewer is resizable, so a wide window
+            // gets the side-by-side layout.
+            .frame(minWidth: 720, minHeight: 480)
+            #endif
         }
         .alert("Rename project", isPresented: $isRenaming) {
             TextField("Project name", text: $renameText)
@@ -154,7 +175,8 @@ struct ProjectDetailView: View {
             if let capture {
                 CapturePhotoGrid(
                     title: capture.displayTitle,
-                    urls: model.sourceFrameURLs(for: capture)
+                    urls: model.sourceFrameURLs(for: capture),
+                    captureID: capture.id
                 )
                 #if os(macOS)
                 .frame(minWidth: 520, minHeight: 480)
@@ -167,6 +189,23 @@ struct ProjectDetailView: View {
                 storageBytes = bytes
             }
         }
+        #if DEBUG
+        // `LL_VIEWER=1` opens the grading viewer straight away and
+        // `LL_VIEWER=expanded` opens it with the Customise panel down, so both
+        // states can be screenshot-verified against their SVG without tap
+        // automation — the same trick as the other LL_* hooks in LetsLapseApp.
+        // Works for a photo capture and for an interval shoot's first frame,
+        // which are the two kinds that have a frame file to open.
+        .task {
+            let hook = ProcessInfo.processInfo.environment["LL_VIEWER"]
+            guard hook == "1" || hook == "expanded",
+                  let capture, capture.kind == .photos,
+                  let url = capture.isPhotoCapture
+                    ? model.heroImageURL(for: capture)
+                    : model.sourceFrameURLs(for: capture).first else { return }
+            gradingPhoto = GradingPhoto(url: url)
+        }
+        #endif
     }
 
     /// Recompute storage whenever versions or per-clip encodings change.
@@ -191,15 +230,21 @@ struct ProjectDetailView: View {
 
         return ScrollView {
             VStack(spacing: 14) {
-                // A photo capture leads with its graded preview + preset strip;
-                // everything else keeps the plain hero.
-                if capture.isPhotoCapture {
-                    PhotoGradingCard(captureID: capture.id) { url in
-                        previewGradedPhoto(capture, url: url)
-                    }
-                } else {
-                    heroCard(for: capture)
-                }
+                // Every mode leads with its graded preview and preset strip —
+                // the grade is non-destructive and applies to photo, interval
+                // and video alike. Photo and interval open the grading viewer
+                // from the preview (they have frame files to open); a video
+                // project plays its original and customises in the card.
+                GradingCard(
+                    captureID: capture.id,
+                    badge: originalBadge(for: capture),
+                    // A Photo capture's card carries the one PHOTO pill and
+                    // nothing else — its pixel size is a property of the stack,
+                    // not of the asset the card is showing.
+                    formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
+                    onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
+                    onPlay: { playOriginal(capture) }
+                )
 
                 // A Photo-mode capture is ONE photo — no clip list, no
                 // versions, no re-processing. Just save, share, manage.
@@ -300,38 +345,6 @@ struct ProjectDetailView: View {
                         Image(systemName: "ellipsis.circle")
                     }
                 }
-            }
-        }
-    }
-
-    private func heroCard(for capture: AppModel.CaptureProject) -> some View {
-        ZStack {
-            ProjectThumbnailView(url: heroMediaURL(for: capture), kind: model.mediaKind(for: capture))
-                .frame(height: 210)
-                .frame(maxWidth: .infinity)
-                .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
-
-            Button {
-                playOriginal(capture)
-            } label: {
-                Image(systemName: capture.isPhotoCapture
-                        ? "arrow.up.left.and.arrow.down.right" : "play.fill")
-                    .font(.system(size: 19))
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.45), in: Circle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(capture.isPhotoCapture ? "View photo" : "Play original")
-        }
-        .overlay(alignment: .topLeading) {
-            MediaBadge(text: originalBadge(for: capture))
-                .padding(12)
-        }
-        .overlay(alignment: .bottomTrailing) {
-            if let badge = formatBadge(for: capture) {
-                MediaBadge(text: badge)
-                    .padding(12)
             }
         }
     }
@@ -656,15 +669,10 @@ struct ProjectDetailView: View {
         #endif
     }
 
-    /// Full-screen the photo. The preview sheet shows the untouched original —
-    /// the grade lives in the detail preview and the export.
+    /// Opens the grading viewer: the photo at size, rendered through its
+    /// current grade, with the preset strip and the adjustment sliders.
     private func previewGradedPhoto(_ capture: AppModel.CaptureProject, url: URL) {
-        previewItem = MediaPreviewItem(
-            title: capture.displayTitle,
-            subtitle: capture.formatLine,
-            url: url,
-            kind: .image
-        )
+        gradingPhoto = GradingPhoto(url: url)
     }
 
     private func saveOriginals(_ capture: AppModel.CaptureProject) {
@@ -759,17 +767,35 @@ struct ProjectDetailView: View {
     }
 }
 
-// MARK: - Photo grading card
+// MARK: - Grading card
 
-/// A photo capture's graded preview with the preset strip beneath it. The
-/// image renders the selected `PhotoPreset` live off the original file; tapping
-/// a chip re-grades in place and persists the choice. The stored original is
-/// never modified — the grade is re-derived each time and only baked in on
-/// export.
-private struct PhotoGradingCard: View {
+/// A capture's graded preview with the preset strip beneath it, for every mode.
+///
+/// The preview renders the project's `PhotoPreset` and `PhotoAdjustments` live —
+/// off the photo for a Photo capture, off the first source frame for an interval
+/// shoot, and off a frame pulled out of the movie for a video capture. Tapping a
+/// chip re-grades in place and persists the choice. Nothing on disk is modified:
+/// the grade is re-derived each time and baked in only where a new file is
+/// written (a rendered version, or an export).
+///
+/// Photo and interval captures have frame files, so their preview opens the
+/// grading viewer — presets, sliders and white balance at size. A video project
+/// has no such viewer (its preview button plays the movie), so it carries the
+/// Customise controls in the card itself: inline below the strip in a narrow
+/// layout, and in a sheet once the card is wide enough that an inline panel
+/// would push the preview off a short screen.
+private struct GradingCard: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject private var presetStore = CustomPresetStore.shared
     let captureID: UUID
-    var onExpand: (URL) -> Void
+    /// The ORIGINAL/PHOTO pill over the top-left of the preview.
+    var badge: String
+    /// The resolution/fps pill over the bottom-right, when there is one.
+    var formatBadge: String?
+    /// Photo and interval: open the grading viewer on this frame.
+    var onOpenViewer: (URL) -> Void
+    /// Video: play the original.
+    var onPlay: () -> Void
 
     /// The graded preview, downscaled for speed; nil until the first render.
     @State private var rendered: CGImage?
@@ -778,24 +804,145 @@ private struct PhotoGradingCard: View {
     /// mtime-keyed and self-heals).
     @ObservedObject private var thumbnailCache = ProjectThumbnailCache.shared
 
+    /// A video project's sliders live here while they move, and are written back
+    /// to the project at the end of the debounce — the same arrangement as the
+    /// grading viewer, so a drag isn't fighting the manifest for every tick.
+    @State private var draft: PhotoAdjustments = .neutral
+    @State private var isDraftOwned = false
+    @State private var isCustomiseExpanded = false
+    @State private var isCustomising = false
+    @State private var isNamingPreset = false
+    @State private var newPresetName = ""
+    @State private var cardWidth: CGFloat = 0
+
+    /// Past this width the Customise panel presents as a sheet instead of
+    /// expanding inline — the same threshold, for the same reason, as the
+    /// grading viewer's side rail.
+    private let wideLayoutThreshold: CGFloat = 500
+    /// How long the controls have to be still before the grade is written and
+    /// the preview re-rendered.
+    private let renderDebounce: Duration = .milliseconds(100)
+
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
     }
 
+    /// What the card previews, and how it has to be decoded.
+    private enum Preview: Equatable {
+        case still(URL)
+        case movie(URL)
+
+        var url: URL {
+            switch self {
+            case .still(let url), .movie(let url): return url
+            }
+        }
+
+        var isMovie: Bool {
+            if case .movie = self { return true }
+            return false
+        }
+    }
+
     var body: some View {
-        if let capture, let url = model.heroImageURL(for: capture) {
-            let preset = model.photoPreset(for: capture)
+        if let capture {
+            // A project whose files have gone missing has no frame to grade;
+            // the card still draws, with the placeholder hero and no button, so
+            // the screen doesn't lose its top card.
+            let preview = preview(for: capture)
+            let grade = PhotoGrade(
+                preset: model.photoPreset(for: capture),
+                adjustments: adjustments(for: capture))
             VStack(spacing: 10) {
-                imageCard(url: url)
-                    .task(id: "\(url.path)|\(preset.rawValue)|\(thumbnailCache.generation)") {
-                        await render(url: url, preset: preset)
-                    }
-                presetStrip(capture: capture, active: preset)
+                imageCard(preview: preview)
+                presetStrip(capture: capture, active: grade.preset, adjustments: grade.adjustments)
+                if capture.kind == .video {
+                    customiseControls(capture: capture)
+                }
+            }
+            .overlay {
+                // Non-participating width probe: the sheet-vs-inline choice for
+                // the Customise panel needs the card's real width, and a
+                // GeometryReader in an overlay reads it without taking part in
+                // the layout.
+                GeometryReader { proxy in
+                    Color.clear
+                        .onAppear { cardWidth = proxy.size.width }
+                        .onChange(of: proxy.size.width) { cardWidth = $0 }
+                }
+                .allowsHitTesting(false)
+            }
+            .task(id: "\(preview?.url.path ?? "-")|\(grade.cacheToken)|\(thumbnailCache.generation)") {
+                // Debounce: a slider drag re-keys this task on every tick, so a
+                // burst collapses into one manifest write and one render.
+                try? await Task.sleep(for: renderDebounce)
+                guard !Task.isCancelled else { return }
+                if isDraftOwned {
+                    model.setPhotoAdjustments(draft, for: capture)
+                }
+                if let preview {
+                    await render(preview, grade: grade)
+                }
+            }
+            .sheet(isPresented: $isCustomising) {
+                customiseSheet(capture: capture)
+            }
+            #if DEBUG
+            // `LL_CUSTOMISE=1` drops a video project's Customise panel open on
+            // launch, so the expanded card can be screenshot-verified against
+            // its SVG without tap automation.
+            .task {
+                guard ProcessInfo.processInfo.environment["LL_CUSTOMISE"] == "1",
+                      capture.kind == .video else { return }
+                isCustomiseExpanded = true
+            }
+            #endif
+            .alert("Save as preset", isPresented: $isNamingPreset) {
+                TextField("Preset name", text: $newPresetName)
+                Button("Save") {
+                    presetStore.save(
+                        name: newPresetName,
+                        basePreset: model.photoPreset(for: capture),
+                        adjustments: adjustments(for: capture))
+                    newPresetName = ""
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("Saves this grade so you can apply it to another project.")
             }
         }
     }
 
-    private func imageCard(url: URL) -> some View {
+    /// The frame the grade is previewed on.
+    ///
+    /// An interval project previews its **first source frame**, not its hero:
+    /// once it has a stacked image version that version becomes the hero, and it
+    /// is a finished render that already carries whatever grade produced it —
+    /// grading it again on screen would show the grade twice.
+    private func preview(for capture: AppModel.CaptureProject) -> Preview? {
+        switch capture.kind {
+        case .video:
+            return model.mediaURL(for: capture).map(Preview.movie)
+        case .photos:
+            if capture.isPhotoCapture {
+                return model.heroImageURL(for: capture).map(Preview.still)
+            }
+            return model.sourceFrameURLs(for: capture).first.map(Preview.still)
+        }
+    }
+
+    /// The adjustments on screen: the card's own while a video project's sliders
+    /// are being worked, otherwise the project's stored values. Photo and
+    /// interval captures always read the project, since their sliders live in the
+    /// viewer and this card has to follow whatever that wrote.
+    private func adjustments(for capture: AppModel.CaptureProject) -> PhotoAdjustments {
+        guard capture.kind == .video, isDraftOwned else {
+            return model.photoAdjustments(for: capture)
+        }
+        return draft
+    }
+
+    private func imageCard(preview: Preview?) -> some View {
         ZStack {
             Group {
                 if let rendered {
@@ -805,51 +952,188 @@ private struct PhotoGradingCard: View {
                 } else {
                     // Falls back to the ungraded thumbnail while the first
                     // grade renders.
-                    ProjectThumbnailView(url: url, kind: .image)
+                    ProjectThumbnailView(
+                        url: preview?.url, kind: preview?.isMovie == true ? .video : .image)
                 }
             }
             .frame(height: 210)
             .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
-            Button {
-                onExpand(url)
-            } label: {
-                Image(systemName: "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 19))
-                    .foregroundStyle(.white)
-                    .frame(width: 52, height: 52)
-                    .background(.black.opacity(0.45), in: Circle())
+            if let preview {
+                Button {
+                    switch preview {
+                    case .movie:
+                        onPlay()
+                    case .still(let url):
+                        onOpenViewer(url)
+                    }
+                } label: {
+                    Image(systemName: preview.isMovie
+                            ? "play.fill" : "arrow.up.left.and.arrow.down.right")
+                        .font(.system(size: 19))
+                        .foregroundStyle(.white)
+                        .frame(width: 52, height: 52)
+                        .background(.black.opacity(0.45), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(preview.isMovie ? "Play original" : "View photo")
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel("View photo")
         }
         .overlay(alignment: .topLeading) {
-            MediaBadge(text: "PHOTO")
+            MediaBadge(text: badge)
                 .padding(12)
+        }
+        .overlay(alignment: .bottomTrailing) {
+            if let formatBadge {
+                MediaBadge(text: formatBadge)
+                    .padding(12)
+            }
         }
     }
 
-    private func presetStrip(capture: AppModel.CaptureProject, active: PhotoPreset) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
+    // MARK: Customise (video)
+
+    /// The binding the sliders write to: it takes ownership of the values on the
+    /// first edit and re-keys the render/persist task on every change.
+    private func adjustmentsBinding(for capture: AppModel.CaptureProject) -> Binding<PhotoAdjustments> {
+        Binding(
+            get: { adjustments(for: capture) },
+            set: { newValue in
+                draft = newValue
+                isDraftOwned = true
+            }
+        )
+    }
+
+    @ViewBuilder private func customiseControls(capture: AppModel.CaptureProject) -> some View {
+        let isWide = cardWidth >= wideLayoutThreshold
+        Button {
+            if isWide {
+                isCustomising = true
+            } else {
+                withAnimation(.easeInOut(duration: 0.2)) { isCustomiseExpanded.toggle() }
+            }
+        } label: {
+            HStack {
+                Text("Customise")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.primary)
+                if !adjustments(for: capture).isNeutral {
+                    Circle()
+                        .fill(LL.accent)
+                        .frame(width: 6, height: 6)
+                        .accessibilityLabel("edited")
+                }
+                Spacer()
+                Image(systemName: isWide ? "chevron.right" : "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .rotationEffect(.degrees(isWide || isCustomiseExpanded ? 0 : -90))
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+
+        if isCustomiseExpanded, !isWide {
+            VStack(spacing: 10) {
+                PhotoAdjustmentsPanel(adjustments: adjustmentsBinding(for: capture))
+                savePresetButton
+            }
+            .transition(.opacity.combined(with: .move(edge: .top)))
+        }
+    }
+
+    private func customiseSheet(capture: AppModel.CaptureProject) -> some View {
+        NavigationStack {
+            ScrollView {
+                VStack(spacing: 12) {
+                    PhotoAdjustmentsPanel(adjustments: adjustmentsBinding(for: capture))
+                    savePresetButton
+                }
+                .padding(16)
+            }
+            .background(LL.screenBackground)
+            .navigationTitle("Customise")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { isCustomising = false }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 360, minHeight: 460)
+        #endif
+    }
+
+    private var savePresetButton: some View {
+        VStack(spacing: 6) {
+            Button {
+                newPresetName = ""
+                isNamingPreset = true
+            } label: {
+                Label("Save as Preset", systemImage: "square.and.arrow.down")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(LL.accent)
+            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+
+            if let error = presetStore.lastError {
+                Text(error)
+                    .font(.footnote)
+                    .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private func presetStrip(
+        capture: AppModel.CaptureProject,
+        active: PhotoPreset,
+        adjustments: PhotoAdjustments
+    ) -> some View {
+        // A saved grade owns the highlight when the project matches it exactly,
+        // so its base preset's chip doesn't light up alongside it.
+        let activeCustom = presetStore.matching(basePreset: active, adjustments: adjustments)
+        return ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(PhotoPreset.strip) { preset in
-                    let isActive = preset == active
-                    Button {
+                    chip(
+                        label: preset.displayName,
+                        isActive: preset == active && activeCustom == nil,
+                        accessibilityLabel: "\(preset.displayName) grade"
+                    ) {
                         model.setPhotoPreset(preset, for: capture)
-                    } label: {
-                        Text(preset.displayName)
-                            .font(.system(size: 13.5, weight: .semibold))
-                            .foregroundStyle(isActive ? Color.white : Color.primary)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 8)
-                            .background(
-                                Capsule().fill(isActive ? LL.accent : LL.cardBackground)
-                            )
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("\(preset.displayName) grade")
-                    .accessibilityAddTraits(isActive ? [.isSelected] : [])
+                }
+                ForEach(presetStore.presets) { custom in
+                    chip(
+                        label: custom.name,
+                        isActive: activeCustom?.id == custom.id,
+                        accessibilityLabel: "\(custom.name) saved grade"
+                    ) {
+                        model.applyCustomPreset(custom, for: capture)
+                        // A saved grade sets the sliders too, so the card's own
+                        // copy has to follow it or the panel would keep showing
+                        // the values it replaced.
+                        draft = custom.adjustments
+                        isDraftOwned = capture.kind == .video
+                    }
+                    .contextMenu {
+                        Button(role: .destructive) {
+                            presetStore.delete(custom)
+                        } label: {
+                            Label("Delete preset", systemImage: "trash")
+                        }
+                    }
                 }
             }
             .padding(.horizontal, 2)
@@ -857,9 +1141,38 @@ private struct PhotoGradingCard: View {
         }
     }
 
-    private func render(url: URL, preset: PhotoPreset) async {
-        let cgImage = await MediaWorkQueue.shared.run {
-            PhotoGrader.render(url: url, preset: preset, maxDimension: 1400)
+    private func chip(
+        label: String,
+        isActive: Bool,
+        accessibilityLabel: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 13.5, weight: .semibold))
+                .foregroundStyle(isActive ? Color.white : Color.primary)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(Capsule().fill(isActive ? LL.accent : LL.cardBackground))
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(accessibilityLabel)
+        .accessibilityAddTraits(isActive ? [.isSelected] : [])
+    }
+
+    /// Renders the preview: a still through the image grader, a movie through one
+    /// graded frame pulled out with `AVAssetImageGenerator`.
+    private func render(_ preview: Preview, grade: PhotoGrade) async {
+        let cgImage = await MediaWorkQueue.shared.run { () -> CGImage? in
+            switch preview {
+            case .still(let url):
+                return PhotoGrader.render(
+                    url: url, preset: grade.preset, adjustments: grade.adjustments,
+                    maxDimension: 1400)
+            case .movie(let url):
+                return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
+            }
         }
         // Ignore a nil render (missing file, or the view went away mid-decode)
         // so the thumbnail fallback stays visible rather than blanking out.
@@ -998,13 +1311,16 @@ private struct SourceClipRow: View {
         #endif
     }
 
+    /// Saves the clip to Photos with the project's grade baked into a temporary
+    /// copy. An ungraded project still hands Photos the clip's own bytes.
     private func save(_ url: URL) {
         #if os(iOS)
+        guard let capture else { return }
         isSaving = true
         saveState = .idle
         Task {
             do {
-                try await model.saveSourceClip(at: url)
+                try await model.saveGradedAsset(at: url, for: capture)
                 saveState = .saved
             } catch {
                 saveState = .failed(error.localizedDescription)
@@ -1232,7 +1548,8 @@ private struct ManageClipSheet: View {
         isBusy = true
         Task {
             do {
-                try await model.saveSourceClip(at: model.encodingURL(for: capture, encoding))
+                try await model.saveGradedAsset(
+                    at: model.encodingURL(for: capture, encoding), for: capture)
             } catch {
                 errorMessage = error.localizedDescription
             }

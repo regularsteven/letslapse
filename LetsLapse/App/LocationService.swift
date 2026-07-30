@@ -27,6 +27,39 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         return _latestLocation
     }
 
+    /// The take's first fix good enough to trust — see
+    /// `MovieLocation.accuracyThreshold`. Seeded at record-start with the fix
+    /// already in hand, then filled by the first accurate update to arrive
+    /// during the take. Behind the same lock as `latestLocation`: the camera
+    /// reads it on the session queue as each segment finishes.
+    nonisolated(unsafe) private var _recordingFix: CLLocation?
+    /// The take's first fix at any accuracy — the same point the GPX sidecar
+    /// would open with. Stands in when nothing ever cleared the threshold,
+    /// since a coarse pin beats no pin at all.
+    nonisolated(unsafe) private var _recordingFallbackFix: CLLocation?
+
+    /// Where the recording in progress (or the one that just finished) started,
+    /// for baking into the movie file and stamping on its Photos asset.
+    ///
+    /// For a moving shot — a car timelapse — this is deliberately the position
+    /// the take began at, not a track: one clip carries one place.
+    nonisolated var recordingLocation: CLLocation? {
+        snapshotLock.lock()
+        defer { snapshotLock.unlock() }
+        return _recordingFix ?? _recordingFallbackFix
+    }
+
+    /// Opens fix tracking for a new take, discarding the previous take's. A fix
+    /// already in hand is used immediately when it's accurate enough; otherwise
+    /// the first accurate update during recording wins.
+    nonisolated func beginRecordingFix() {
+        snapshotLock.lock()
+        defer { snapshotLock.unlock() }
+        let current = _latestLocation
+        _recordingFix = current.flatMap { MovieLocation.isAccurate($0) ? $0 : nil }
+        _recordingFallbackFix = current
+    }
+
     override init() {
         super.init()
         manager.delegate = self
@@ -64,6 +97,8 @@ final class LocationService: NSObject, ObservableObject, CLLocationManagerDelega
         guard let loc = locations.last else { return }
         snapshotLock.lock()
         _latestLocation = loc
+        if _recordingFix == nil, MovieLocation.isAccurate(loc) { _recordingFix = loc }
+        if _recordingFallbackFix == nil { _recordingFallbackFix = loc }
         snapshotLock.unlock()
         Task { @MainActor in
             self.currentLocation = loc

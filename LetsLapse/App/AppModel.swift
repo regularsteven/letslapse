@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import CoreGraphics
+import CoreLocation
 import ImageIO
 import LetsLapseKit
 import VideoToolbox
@@ -98,6 +99,12 @@ final class AppModel: ObservableObject {
         /// before grading existed still decode; nil resolves to the default
         /// ("Natural" — grading is on by default).
         var selectedPreset: String?
+        /// The manual grade layered on top of `selectedPreset` — the photo
+        /// viewer's sliders and white-balance picker. Optional for the same
+        /// reason as `selectedPreset`: projects saved before the sliders
+        /// existed have no value, and nil resolves to `.neutral` (the preset
+        /// on its own). Read it through `AppModel.photoAdjustments(for:)`.
+        var adjustments: PhotoAdjustments?
 
         var summary: String {
             switch kind {
@@ -1029,10 +1036,15 @@ final class AppModel: ObservableObject {
         let photoDepth = photoBlendDepth
         let excluded = excludedFrameIndices
         let parameters = currentBlendParameters()
+        // The project's colour grade is baked into whatever this run writes:
+        // stills are graded frame by frame on their way into the blend, a movie
+        // gets one composition pass over the finished clip. The capture's own
+        // files are never touched.
+        let grade = currentCapture.map { photoGrade(for: $0) } ?? .identity
         blendTask = Task { [weak self] in
             do {
                 guard let self else { return }
-                let output: ProcessingOutput
+                var output: ProcessingOutput
                 switch source {
                 case .video(let url):
                     output = try await self.blendVideo(url: url, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: trim)
@@ -1049,13 +1061,33 @@ final class AppModel: ObservableObject {
                     if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
                         // into one frame: the classic single long exposure.
-                        output = try await self.stackPhotos(urls: filteredURLs, linear: linear)
+                        output = try await self.stackPhotos(
+                            urls: filteredURLs, linear: linear, grade: grade)
                     } else {
                         // A depth of 1 gives a straight timelapse; larger
                         // depths blend consecutive stills into each frame for
                         // motion blur. Output is a video sequence.
                         output = try await self.blendPhotosSequence(
-                            urls: filteredURLs, ramp: .constant(photoDepth), fps: fps, linear: linear)
+                            urls: filteredURLs, ramp: .constant(photoDepth), fps: fps,
+                            linear: linear, grade: grade)
+                    }
+                }
+                // A video blend grades the finished clip rather than the source:
+                // one short pass over a few seconds of output instead of a full
+                // re-encode of the original before it is even blended.
+                if source.isVideo, output.kind == .video, !grade.isIdentity {
+                    self.statusMessage = "Baking the \(grade.preset.displayName) grade..."
+                    let ungraded = output.url
+                    output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade)
+                    output.summary += " · \(grade.preset.displayName) grade baked in"
+                    // The ungraded intermediate is scratch, and on iOS this runs
+                    // on a phone that may be tight on space — but only remove it
+                    // when it is our own temp file, never a Mac job folder's
+                    // output the runner may still be reporting on.
+                    if output.url != ungraded,
+                       ungraded.deletingLastPathComponent().standardizedFileURL
+                        == FileManager.default.temporaryDirectory.standardizedFileURL {
+                        try? FileManager.default.removeItem(at: ungraded)
                     }
                 }
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
@@ -1168,7 +1200,11 @@ final class AppModel: ObservableObject {
                 guard let self else { return }
                 // Fold every captured frame into one long exposure — the same
                 // single-image path Adjust uses when the depth spans the burst.
-                let output = try await self.stackPhotos(urls: sourceURLs, linear: linear)
+                // `.identity`: a Photo-mode grade stays non-destructive — the
+                // stack is the project's asset and is graded for display and on
+                // export, never baked into the stored file.
+                let output = try await self.stackPhotos(
+                    urls: sourceURLs, linear: linear, grade: .identity)
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
                 self.apply(output, from: blend)
                 self.processingStartedAt = nil
@@ -1619,11 +1655,16 @@ final class AppModel: ObservableObject {
     /// Blends a sequence of interval stills into a timelapse video. Each output
     /// frame averages `ramp`-worth of consecutive stills, so `constantWindow`
     /// doubles as the blend depth (1 = crisp timelapse, higher = motion blur).
+    ///
+    /// `grade` is baked in frame by frame on the way into the blend, which is
+    /// where an interval project's colour grade becomes permanent: the written
+    /// video carries it, the stills on disk stay exactly as captured.
     private func blendPhotosSequence(
         urls: [URL],
         ramp: BlendRamp,
         fps: Double,
-        linear: Bool
+        linear: Bool,
+        grade: PhotoGrade = .identity
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).mp4")
@@ -1635,14 +1676,18 @@ final class AppModel: ObservableObject {
                 ramp: ramp,
                 outputFPS: fps,
                 linearLight: linear,
-                outputURL: output
-            ) { fraction in
-                Task { @MainActor in
-                    self?.progress = fraction
-                }
-            }
+                outputURL: output,
+                loadFrame: Self.gradedFrameLoader(grade),
+                progress: { fraction in
+                    Task { @MainActor in
+                        self?.progress = fraction
+                    }
+                })
         }.value
-        let summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
+        var summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
+        if !grade.isIdentity {
+            summary += " · \(grade.preset.displayName) grade baked in"
+        }
         return ProcessingOutput(
             kind: .video,
             url: output,
@@ -1655,14 +1700,36 @@ final class AppModel: ObservableObject {
         )
     }
 
+    /// A loader that grades every frame on its way into a blend, or nil for an
+    /// untouched grade so the stacker keeps its own decode path.
+    ///
+    /// Built inside the detached blend task from the grade value alone, so no
+    /// closure crosses the concurrency boundary with it.
+    nonisolated private static func gradedFrameLoader(_ grade: PhotoGrade) -> ((URL) throws -> CGImage)? {
+        guard !grade.isIdentity else { return nil }
+        return { url in try PhotoGrader.renderForBlend(url: url, grade: grade) }
+    }
+
     /// Legacy single-image stack: averages every still into one synthetic long
     /// exposure. No longer the default for interval capture — kept for callers
     /// that explicitly want one frame out.
-    private func stackPhotos(urls: [URL], linear: Bool) async throws -> ProcessingOutput {
+    ///
+    /// `grade` bakes the project's colour grade into the stack. Photo mode passes
+    /// the identity grade on purpose: its stack IS the project's one asset, and
+    /// its grade stays non-destructive — re-derived for the preview and baked
+    /// only when the photo is exported.
+    private func stackPhotos(
+        urls: [URL],
+        linear: Bool,
+        grade: PhotoGrade = .identity
+    ) async throws -> ProcessingOutput {
         // A single frame has nothing to accumulate — the stacker needs at least
         // two — so load it straight through (blend=1 / one-frame-burst edge).
         if urls.count == 1, let only = urls.first {
-            guard let image = loadImage(at: only) else { throw LapseError.noInputFrames }
+            let single = grade.isIdentity
+                ? loadImage(at: only)
+                : try? PhotoGrader.renderForBlend(url: only, grade: grade)
+            guard let image = single else { throw LapseError.noInputFrames }
             let output = FileManager.default.temporaryDirectory
                 .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).png")
             try ImageExporter.write(
@@ -1683,11 +1750,15 @@ final class AppModel: ObservableObject {
         let image = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> CGImage in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
-            return try stacker.stack(imageURLs: urls, linearLight: linear) { fraction in
-                Task { @MainActor in
-                    self?.progress = fraction
-                }
-            }
+            return try stacker.stack(
+                imageURLs: urls,
+                linearLight: linear,
+                loadFrame: Self.gradedFrameLoader(grade),
+                progress: { fraction in
+                    Task { @MainActor in
+                        self?.progress = fraction
+                    }
+                })
         }.value
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).png")
@@ -1696,7 +1767,10 @@ final class AppModel: ObservableObject {
         try ImageExporter.write(
             image, to: output, format: .png,
             metadata: urls.first.flatMap { ImageExporter.carryoverMetadata(from: $0) })
-        let summary = "\(urls.count) photos stacked · \(image.width)×\(image.height)"
+        var summary = "\(urls.count) photos stacked · \(image.width)×\(image.height)"
+        if !grade.isIdentity {
+            summary += " · \(grade.preset.displayName) grade baked in"
+        }
         return ProcessingOutput(
             kind: .image,
             url: output,
@@ -2649,22 +2723,55 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - Photo colour grading
+    // MARK: - Colour grading
 
-    /// The grade currently selected for a Photo-mode capture (default when the
-    /// project predates grading or stored an unknown value). Platform-neutral:
-    /// the grading card renders on macOS too — only the Photos export below is
-    /// iOS-only.
+    /// The grade currently selected for a capture — Photo, Interval or Video
+    /// (default when the project predates grading or stored an unknown value).
+    /// Platform-neutral: the grading card renders on macOS too — only the Photos
+    /// export below is iOS-only.
     func photoPreset(for capture: CaptureProject) -> PhotoPreset {
         PhotoPreset.resolve(capture.selectedPreset)
     }
 
-    /// Selects a colour grade for a photo capture and persists it. The stored
-    /// original file is never touched — only the preset name changes.
+    /// The project's whole grade — preset plus sliders — as one value, for the
+    /// render and export paths that take both together.
+    func photoGrade(for capture: CaptureProject) -> PhotoGrade {
+        PhotoGrade(preset: photoPreset(for: capture), adjustments: photoAdjustments(for: capture))
+    }
+
+    /// Selects a colour grade for a capture and persists it. The stored original
+    /// files are never touched — only the preset name changes.
     func setPhotoPreset(_ preset: PhotoPreset, for capture: CaptureProject) {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         guard captures[index].selectedPreset != preset.rawValue else { return }
         captures[index].selectedPreset = preset.rawValue
+        try? persistLibrary()
+    }
+
+    /// The manual slider grade layered on the preset. Projects saved before the
+    /// sliders existed have none, which means "the preset on its own".
+    func photoAdjustments(for capture: CaptureProject) -> PhotoAdjustments {
+        capture.adjustments ?? .neutral
+    }
+
+    /// Stores the manual grade for a photo capture. Like the preset, this only
+    /// records numbers — the file on disk is untouched until an export bakes
+    /// them in.
+    func setPhotoAdjustments(_ adjustments: PhotoAdjustments, for capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard captures[index].adjustments != adjustments else { return }
+        captures[index].adjustments = adjustments
+        try? persistLibrary()
+    }
+
+    /// Applies a saved grade wholesale: its base preset and its slider values,
+    /// in one persisted change.
+    func applyCustomPreset(_ preset: CustomPreset, for capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        guard captures[index].selectedPreset != preset.basePreset.rawValue
+                || captures[index].adjustments != preset.adjustments else { return }
+        captures[index].selectedPreset = preset.basePreset.rawValue
+        captures[index].adjustments = preset.adjustments
         try? persistLibrary()
     }
 
@@ -2682,47 +2789,104 @@ final class AppModel: ObservableObject {
             }
         }
     }
-    /// Saves a photo capture to Photos with its selected grade baked in. When
-    /// the grade is `Original` the file's bytes are saved unchanged (preserving
-    /// a DNG as a DNG); any other preset renders a graded JPEG and saves that,
-    /// leaving the on-disk original alone.
+    /// Saves a photo capture to Photos with its selected grade baked in.
     func saveGradedPhoto(for capture: CaptureProject) async throws {
         guard let url = heroImageURL(for: capture) else {
             throw SourceClipSaveError.saveFailed("the photo is missing")
         }
-        let preset = photoPreset(for: capture)
-        guard preset != .original else {
+        try await saveGradedAsset(at: url, for: capture)
+    }
+
+    /// Saves one of a capture's assets to Photos with the project's grade baked
+    /// into a temporary copy — a still through the image grader, a clip through
+    /// a video composition pass. Every mode's export to Photos comes through
+    /// here: the photo, an interval frame from the browser, a video source clip.
+    ///
+    /// When the grade is `Original` *and* the sliders are neutral the file's own
+    /// bytes are saved unchanged, so an ungraded project still hands Photos its
+    /// DNG as a DNG and its ProRes as ProRes. Anything else is rendered (a still
+    /// becomes a JPEG, a clip is re-encoded), leaving the on-disk original alone.
+    func saveGradedAsset(at url: URL, for capture: CaptureProject) async throws {
+        let grade = photoGrade(for: capture)
+        guard !grade.isIdentity else {
             try await saveSourceClip(at: url)
             return
         }
-        let graded = try await Task.detached(priority: .userInitiated) {
-            try PhotoGrader.renderJPEG(url: url, preset: preset)
-        }.value
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        let graded: URL
+        if isImage {
+            graded = try await Task.detached(priority: .userInitiated) {
+                try PhotoGrader.renderJPEG(
+                    url: url, preset: grade.preset, adjustments: grade.adjustments)
+            }.value
+        } else {
+            graded = try await VideoGrader.bakedCopy(of: url, grade: grade)
+        }
         defer { try? FileManager.default.removeItem(at: graded) }
-        try await saveSourceClip(at: graded)
+        // Grading re-encodes, which leaves the copy without the original's
+        // location, so the fix is read from the file being graded and handed to
+        // Photos alongside it. (The still path bakes GPS into the rendered JPEG
+        // itself, but reading it from the original costs the same and keeps both
+        // kinds on one route.)
+        try await saveSourceClip(at: graded, location: await Self.photosLocation(for: url))
     }
 
     /// Saves a single source clip or still to the Photos library. Requests
     /// add-only authorisation first and throws a descriptive error on denial
     /// or failure. Stills (including DNG) go through the image request —
     /// handing them to the video request is what produced PHPhotosError 3302.
-    func saveSourceClip(at url: URL) async throws {
+    ///
+    /// `location` overrides the fix read from the file, for callers handing over
+    /// a re-encoded copy that no longer carries the original's metadata.
+    func saveSourceClip(at url: URL, location: CLLocation? = nil) async throws {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
             throw SourceClipSaveError.accessDenied
         }
         let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        var location = location
+        if location == nil { location = await Self.photosLocation(for: url) }
         do {
             try await PHPhotoLibrary.shared().performChanges {
                 if isImage {
-                    PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                    let request = PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                    request?.location = location
                 } else {
-                    PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    let request = PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                    request?.location = location
                 }
             }
         } catch {
             throw SourceClipSaveError.saveFailed(error.localizedDescription)
         }
+    }
+
+    /// The location to stamp on an asset created from `url`, read off the file
+    /// itself (off the main thread — this is metadata I/O).
+    ///
+    /// Every file LetsLapse captures carries its fix in its own bytes: EXIF GPS
+    /// for a JPEG, a GPS sub-IFD for a DNG, a QuickTime location atom for a
+    /// recorded movie. Photos does not lift any of them into the new asset's
+    /// `location` on import, though, so the asset lands with no place, no map
+    /// pin and no Places grouping. Setting it on the creation request is what
+    /// makes the fix visible; the file is copied in untouched either way.
+    private static func photosLocation(for url: URL) async -> CLLocation? {
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        return await Task.detached(priority: .userInitiated) {
+            isImage ? CLLocation.fromEXIF(of: url) : MovieLocation.locationForSaving(at: url)
+        }.value
+    }
+
+    /// The fix recorded by the capture this run belongs to, read off its first
+    /// source file — a segment's location atom, or an interval frame's EXIF.
+    /// Stands in for a rendered blend, whose own file carries no metadata.
+    private func currentCaptureLocation() async -> CLLocation? {
+        guard let captureID = currentCaptureID,
+              let capture = captures.first(where: { $0.id == captureID }),
+              let url = sourceClipURLs(for: capture).first
+                ?? sourceFrameURLs(for: capture).first
+        else { return nil }
+        return await Self.photosLocation(for: url)
     }
 
     /// Saves every source clip of a capture to Photos, one after another.
@@ -2735,6 +2899,13 @@ final class AppModel: ObservableObject {
     /// Saves every original source asset of a capture to Photos — interval
     /// frames, video clips, or sequence segments — in one library change, so
     /// a few hundred stills don't pay a per-file transaction each.
+    ///
+    /// Deliberately ungraded: this is the Originals row, and it hands over the
+    /// captured files byte for byte (a DNG stays a DNG). Grading here would mean
+    /// re-rendering a few hundred full-resolution stills into JPEGs on a phone.
+    /// The single-frame Save in the photo browser goes through
+    /// `saveGradedAsset(at:for:)` and does carry the grade — that one is "this
+    /// photo as I'm looking at it".
     func saveOriginalsToPhotos(for capture: CaptureProject) async throws {
         let status = await PHPhotoLibrary.requestAuthorization(for: .addOnly)
         guard status == .authorized || status == .limited else {
@@ -2751,15 +2922,30 @@ final class AppModel: ObservableObject {
         case nil:
             throw SourceClipSaveError.saveFailed("the original files are missing")
         }
+        // Each file's own GPS fix, read up front: the change block has to stay
+        // quick, and a few hundred metadata reads don't belong on the main thread.
+        let locations: [CLLocation?] = await Task.detached(priority: .userInitiated) {
+            urls.map { url in
+                guard UTType(filenameExtension: url.pathExtension)?
+                    .conforms(to: .image) ?? false else {
+                    return MovieLocation.locationForSaving(at: url)
+                }
+                return CLLocation.fromEXIF(of: url)
+            }
+        }.value
         do {
             try await PHPhotoLibrary.shared().performChanges {
-                for url in urls {
+                for (url, location) in zip(urls, locations) {
                     let isImage = UTType(filenameExtension: url.pathExtension)?
                         .conforms(to: .image) ?? false
                     if isImage {
-                        PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: url)
+                        let request = PHAssetChangeRequest
+                            .creationRequestForAssetFromImage(atFileURL: url)
+                        request?.location = location
                     } else {
-                        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: url)
+                        let request = PHAssetChangeRequest
+                            .creationRequestForAssetFromVideo(atFileURL: url)
+                        request?.location = location
                     }
                 }
             }
@@ -2778,12 +2964,27 @@ final class AppModel: ObservableObject {
                 saveConfirmation = "Photos access was denied."
                 return
             }
+            // A blended still carries the source frames' GPS through
+            // `ImageExporter.carryoverMetadata`; hand it to Photos as a location
+            // too. A rendered clip is a fresh encode with no metadata of its
+            // own, so it borrows the fix from the capture it was blended from.
+            var location: CLLocation?
+            if videoURL == nil, let imageURL {
+                location = await Self.photosLocation(for: imageURL)
+            } else if let videoURL {
+                location = await Self.photosLocation(for: videoURL)
+                if location == nil { location = await currentCaptureLocation() }
+            }
             do {
                 try await PHPhotoLibrary.shared().performChanges {
                     if let videoURL {
-                        PHAssetChangeRequest.creationRequestForAssetFromVideo(atFileURL: videoURL)
+                        let request = PHAssetChangeRequest
+                            .creationRequestForAssetFromVideo(atFileURL: videoURL)
+                        request?.location = location
                     } else if let imageURL {
-                        PHAssetChangeRequest.creationRequestForAssetFromImage(atFileURL: imageURL)
+                        let request = PHAssetChangeRequest
+                            .creationRequestForAssetFromImage(atFileURL: imageURL)
+                        request?.location = location
                     }
                 }
                 saveConfirmation = "Saved to Photos."
