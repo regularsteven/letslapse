@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Project photos · fullscreen viewer · portrait</title>
+  <desc>Mirrors App/CapturePhotoGrid.swift (CaptureFrameViewer), a fullScreenCover from the CapturePhotoGrid sheet. Swipe pages through one project's frames via TabView(.page) with indexDisplayMode .never — the "3 of 184" counter replaces the page dots. The frame is decoded by ProjectPreviewImage (App/ProjectMedia.swift) at 2560px with EXIF orientation applied, scaledToFit, so a 3:4 still letterboxes against black. Status bar is hidden; the bars respect the safe area (top 59 / bottom 34). Save to Photos is per frame — state is keyed by frame index, so paging off a saved photo does not mark the next one saved: idle "Save to Photos" (accent capsule) → "Saving…" → "Saved to Photos" with a checkmark (capsule drops to white 18%, control disabled) → "Retry save" with the error above the capsule in red. Both bars carry a black 35% scrim, which is invisible against the letterboxed black backdrop — the rects are drawn as #000 here so their geometry is still specified.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- paged frame: 3:4 still, scaledToFit into 393×852 → 393×524, centred -->
+      <g id="frame" clip-path="none">
+        <rect x="0" y="164" width="393" height="524" fill="#7E5F38"/>
+        <circle cx="120" cy="300" r="34" fill="#FFD094" opacity="0.8"/>
+        <polygon points="0,505 98,455 196,500 294,448 393,492 393,688 0,688" fill="#2A2118"/>
+        <polygon points="0,580 118,542 246,590 338,556 393,576 393,688 0,688" fill="#191309"/>
+      </g>
+
+      <!-- top bar: Done + frame counter (black 35% scrim over the image) -->
+      <g id="top-bar">
+        <rect x="0" y="59" width="393" height="48" fill="#000"/>
+        <text x="20" y="88" font-size="15.5" class="sb" fill="#FFF">Done</text>
+        <text x="373" y="88" font-size="13" class="sb" fill="#FFF" fill-opacity="0.75" text-anchor="end">3 of 184</text>
+      </g>
+
+      <!-- bottom bar: per-frame Save to Photos -->
+      <g id="bottom-bar">
+        <rect x="0" y="738" width="393" height="80" fill="#000"/>
+        <g id="save-button">
+          <rect x="112.5" y="750" width="168" height="44" rx="22" fill="#C36A00"/>
+          <g data-symbol="square.and.arrow.down" stroke="#FFF" stroke-width="1.9" fill="none" stroke-linecap="round">
+            <path d="M132 765 v13 M127 773 l5 5 5 -5"/>
+            <path d="M125 762 v-3 h14 v3" stroke-opacity="0.9"/>
+          </g>
+          <text x="148" y="777" font-size="15" class="sb" fill="#FFF">Save to Photos</text>
+        </g>
+      </g>
+
+      <!-- hardware: Dynamic Island stays, status bar is hidden -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project photos · fullscreen viewer · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CapturePhotoGrid.swift — CaptureFrameViewer · per-frame Save to Photos · ProjectPreviewImage</text>
+</svg>

@@ -581,6 +581,20 @@ final class AppModel: ObservableObject {
         blendOutputURL(for: blend)
     }
 
+    /// Every source still backing a photo-kind capture, in capture order — the
+    /// interval shoot's individual frames. Unlike `source(for:)` this never
+    /// throws on a missing file and never touches the filesystem: it is read
+    /// from view bodies, where a `stat` per frame across a few hundred frames
+    /// would land on the main thread. Frames that have gone away simply render
+    /// as the grid's placeholder tile.
+    func sourceFrameURLs(for capture: CaptureProject) -> [URL] {
+        guard capture.kind == .photos else { return [] }
+        let root = captureFolderURL(for: capture.id)
+        return capture.sourceFileNames
+            .filter { !$0.hasSuffix(".json") }
+            .map { root.appendingPathComponent($0) }
+    }
+
     /// The individual source video segments backing a capture. Live sequences
     /// have several; single imports have one; photo stacks have none.
     func sourceClipURLs(for capture: CaptureProject) -> [URL] {

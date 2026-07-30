@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Projects · portrait</title>
-  <desc>Mirrors App/ProjectsView.swift (ProjectCard): one card per original with an always-visible version thumbnail strip and a dashed "+" new-version tile. Photo captures are one asset — no strip. Swipe-to-delete on cards; context menu for preview/new version/details/delete.</desc>
+  <desc>Mirrors App/ProjectsView.swift (header, ProjectCard) + App/CaptureFilterBar.swift (CaptureFilterBar): manual large title and the shared segmented capture filter (All · Photos · Interval · Video) share one list row, so the spacing rhythm is identical to the Gallery tab — 15pt above the title, 8pt above and below the filter bar, first card flush at 160. One card per original with an always-visible version thumbnail strip and a dashed "+" new-version tile; photo captures are one asset, so no strip. Swipe-to-delete on cards; context menu for preview/new version/details/delete. Card rows hang their 14pt rhythm below them (listRowInsets top 0 / bottom 14).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -20,61 +20,74 @@
         <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
       </g>
 
-      <text x="20" y="101" font-size="34" class="b" fill="#000">Projects</text>
+      <!-- header row: title + shared filter bar in ONE list row, so no row
+           inset can open a gap between them (matches gallery.portrait.svg) -->
+      <text x="20" y="106" font-size="34" class="b" fill="#000">Projects</text>
 
-      <!-- card 1: video project with 2 versions -->
+      <!-- segmented filter — shared CaptureFilterBar, same geometry as Gallery -->
+      <g id="filter">
+        <rect x="16" y="120" width="361" height="32" rx="9" fill="#E3E3E8"/>
+        <rect x="18" y="122" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
+        <text x="61" y="140" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
+        <text x="151" y="140" font-size="13" fill="#000" text-anchor="middle">Photos</text>
+        <text x="241" y="140" font-size="13" fill="#000" text-anchor="middle">Interval</text>
+        <text x="331" y="140" font-size="13" fill="#000" text-anchor="middle">Video</text>
+      </g>
+
+      <!-- card 1: video project with 2 versions — first card flush at 160,
+           8pt below the filter bar, exactly where the Gallery grid starts -->
       <g id="card-video-project">
-        <rect x="16" y="120" width="361" height="164" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="132" width="86" height="64" rx="8" fill="#3D4A5C"/>
-        <circle cx="56" cy="152" r="9" fill="#FFB340" opacity="0.85"/>
-        <polygon points="30,180 60,164 92,178 116,168 116,196 30,196" fill="#232B36"/>
-        <rect x="62" y="178" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="87" y="189" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
-        <text x="128" y="149" font-size="16" class="b" fill="#000">Sunset over harbour</text>
-        <text x="128" y="166" font-size="12" fill="#6D6D72">1080p · 30 fps · 2 days ago</text>
-        <text x="128" y="184" font-size="12" class="sb" fill="#C36A00">2 versions · 1.4 GB</text>
+        <rect x="16" y="160" width="361" height="164" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="172" width="86" height="64" rx="8" fill="#3D4A5C"/>
+        <circle cx="56" cy="192" r="9" fill="#FFB340" opacity="0.85"/>
+        <polygon points="30,220 60,204 92,218 116,208 116,236 30,236" fill="#232B36"/>
+        <rect x="62" y="218" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="87" y="229" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
+        <text x="128" y="189" font-size="16" class="b" fill="#000">Sunset over harbour</text>
+        <text x="128" y="206" font-size="12" fill="#6D6D72">1080p · 30 fps · 2 days ago</text>
+        <text x="128" y="224" font-size="12" class="sb" fill="#C36A00">2 versions · 1.4 GB</text>
         <g id="version-strip">
-          <rect x="30" y="208" width="96" height="54" rx="9" fill="#31404E"/>
-          <rect x="34" y="244" width="34" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="51" y="254" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
-          <rect x="134" y="208" width="96" height="54" rx="9" fill="#3B4653"/>
-          <rect x="138" y="244" width="40" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="158" y="254" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">100×</text>
-          <rect x="238" y="208" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <path d="M265 227 v16 M257 235 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+          <rect x="30" y="248" width="96" height="54" rx="9" fill="#31404E"/>
+          <rect x="34" y="284" width="34" height="14" rx="7" fill="#000" opacity="0.5"/>
+          <text x="51" y="294" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+          <rect x="134" y="248" width="96" height="54" rx="9" fill="#3B4653"/>
+          <rect x="138" y="284" width="40" height="14" rx="7" fill="#000" opacity="0.5"/>
+          <text x="158" y="294" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">100×</text>
+          <rect x="238" y="248" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M265 267 v16 M257 275 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
         </g>
       </g>
 
-      <!-- card 2: interval project with 1 version -->
+      <!-- card 2: interval project with 1 version — 14pt below card 1 -->
       <g id="card-interval-project">
-        <rect x="16" y="296" width="361" height="164" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="308" width="86" height="64" rx="8" fill="#4A3B2E"/>
-        <circle cx="60" cy="330" r="8" fill="#FFD9A0" opacity="0.8"/>
-        <polygon points="30,356 62,340 94,354 116,346 116,372 30,372" fill="#2E2419"/>
-        <rect x="48" y="354" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="80" y="365" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
-        <text x="128" y="325" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
-        <text x="128" y="342" font-size="12" fill="#6D6D72">Interval · DNG · 10-frame blend · yesterday</text>
-        <text x="128" y="360" font-size="12" class="sb" fill="#C36A00">1 version · 3.1 GB</text>
+        <rect x="16" y="338" width="361" height="164" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="350" width="86" height="64" rx="8" fill="#4A3B2E"/>
+        <circle cx="60" cy="372" r="8" fill="#FFD9A0" opacity="0.8"/>
+        <polygon points="30,398 62,382 94,396 116,388 116,414 30,414" fill="#2E2419"/>
+        <rect x="48" y="396" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="80" y="407" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
+        <text x="128" y="367" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
+        <text x="128" y="384" font-size="12" fill="#6D6D72">Interval · DNG · 10-frame blend · yesterday</text>
+        <text x="128" y="402" font-size="12" class="sb" fill="#C36A00">1 version · 3.1 GB</text>
         <g id="version-strip-2">
-          <rect x="30" y="384" width="96" height="54" rx="9" fill="#463522"/>
-          <rect x="34" y="420" width="52" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="60" y="430" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
-          <rect x="134" y="384" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <path d="M161 403 v16 M153 411 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+          <rect x="30" y="426" width="96" height="54" rx="9" fill="#463522"/>
+          <rect x="34" y="462" width="52" height="14" rx="7" fill="#000" opacity="0.5"/>
+          <text x="60" y="472" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
+          <rect x="134" y="426" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M161 445 v16 M153 453 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
         </g>
       </g>
 
-      <!-- card 3: photo project (single asset — no strip) -->
+      <!-- card 3: photo project (single asset — no strip) — 14pt below card 2 -->
       <g id="card-photo-project">
-        <rect x="16" y="472" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="484" width="86" height="64" rx="8" fill="#26303C"/>
-        <ellipse cx="73" cy="510" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
-        <rect x="60" y="530" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="86" y="541" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
-        <text x="128" y="501" font-size="16" class="b" fill="#000">Long exposure — falls</text>
-        <text x="128" y="518" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
-        <text x="128" y="536" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
+        <rect x="16" y="516" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="528" width="86" height="64" rx="8" fill="#26303C"/>
+        <ellipse cx="73" cy="554" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
+        <rect x="60" y="574" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="86" y="585" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <text x="128" y="545" font-size="16" class="b" fill="#000">Long exposure — falls</text>
+        <text x="128" y="562" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
+        <text x="128" y="580" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
       </g>
 
       <!-- floating tab bar (Projects selected) -->
@@ -109,5 +122,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — ProjectCard · version strip · dashed new-version tile</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + CaptureFilterBar) · ProjectCard · version strip · dashed new-version tile</text>
 </svg>

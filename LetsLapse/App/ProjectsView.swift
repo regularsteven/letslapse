@@ -10,20 +10,27 @@ struct ProjectsView: View {
     @Binding var path: [UUID]
     @State private var previewItem: MediaPreviewItem?
     @State private var deleteFailure: String?
+    @State private var filter: CaptureFilter = .all
 
     var body: some View {
         NavigationStack(path: $path) {
             List {
-                Group {
-                    Text("Projects")
-                        .font(.system(size: 34, weight: .bold))
-                        .padding(.horizontal, 4)
-                        .padding(.top, 8)
+                // Title and filter bar share ONE row, so the List's per-row
+                // insets can't open a gap between them (or under the bar) that
+                // the Gallery — a plain VStack — doesn't have.
+                header
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 0, trailing: 16))
 
+                Group {
+                    let visible = model.captures.filtered(by: filter)
                     if model.captures.isEmpty {
                         emptyState
+                    } else if visible.isEmpty {
+                        filteredEmptyState
                     } else {
-                        ForEach(model.captures) { capture in
+                        ForEach(visible) { capture in
                             ProjectCard(
                                 capture: capture,
                                 onOpen: { path.append(capture.id) },
@@ -47,7 +54,10 @@ struct ProjectsView: View {
                 }
                 .listRowBackground(Color.clear)
                 .listRowSeparator(.hidden)
-                .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 7, trailing: 16))
+                // All of the 14pt card rhythm hangs below each row, so the
+                // first card sits flush against the filter bar's own 8pt of
+                // bottom padding — exactly where the Gallery grid starts.
+                .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 14, trailing: 16))
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
@@ -78,6 +88,31 @@ struct ProjectsView: View {
         }
     }
 
+    /// The Gallery's `VStack(spacing: 0)` header, reproduced as a single list
+    /// row: 34pt title 15pt from the top (7 row inset + 8 here), 20pt in from
+    /// the leading edge (16 row inset + 4 here), then the filter bar, whose own
+    /// 8pt vertical padding is the only spacing above and below it.
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Text("Projects")
+                .font(.system(size: 34, weight: .bold))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.leading, 4)
+                .padding(.trailing, 4)
+                .padding(.top, 8)
+
+            // Same segmented filter the Gallery grid uses, so the two tabs
+            // narrow a library the same way.
+            if model.captures.isEmpty {
+                // Nothing to filter — stand in for the bar's bottom padding so
+                // the empty-state card doesn't butt against the title.
+                Color.clear.frame(height: 8)
+            } else {
+                CaptureFilterBar(selection: $filter)
+            }
+        }
+    }
+
     private var emptyState: some View {
         VStack(spacing: 12) {
             Image(systemName: "square.stack")
@@ -91,6 +126,25 @@ struct ProjectsView: View {
                 .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, minHeight: 240)
+        .padding(20)
+        .llCard(cornerRadius: 18)
+    }
+
+    /// The library has projects, just none of this kind — say so rather than
+    /// repeating the "record something" pitch.
+    private var filteredEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "line.3.horizontal.decrease.circle")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(filter.emptyMessage)
+                .font(.headline)
+            Button("Show all") { filter = .all }
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(LL.accent)
+                .buttonStyle(.plain)
+        }
+        .frame(maxWidth: .infinity, minHeight: 200)
         .padding(20)
         .llCard(cornerRadius: 18)
     }

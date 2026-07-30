@@ -2,18 +2,21 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
-Last full sync: 2026-07-29, working tree of `ios-app` (uncommitted WIP included).
+Last full sync: 2026-07-30, working tree of `ios-app` (uncommitted WIP included).
 
 ## Tabs
 
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
 | Create (tab home) | [create-home.portrait.svg](create-home.portrait.svg) | `App/CreateView.swift` | ✅ |
-| Gallery | [gallery.portrait.svg](gallery.portrait.svg) | `App/GalleryView.swift` | ✅ |
-| Projects | [projects.portrait.svg](projects.portrait.svg) | `App/ProjectsView.swift` | ✅ |
+| Gallery | [gallery.portrait.svg](gallery.portrait.svg) | `App/GalleryView.swift` + `App/CaptureFilterBar.swift` + `App/CapturePhotoGrid.swift` (`CaptureAssetGrid`) | ✅ |
+| Projects | [projects.portrait.svg](projects.portrait.svg) | `App/ProjectsView.swift` (`header`, `ProjectCard`) + `App/CaptureFilterBar.swift` | ✅ |
+| Projects · filter matched nothing | — | `App/ProjectsView.swift` (`filteredEmptyState`) — "No videos" + Show all, in place of the card list | 🟡 |
 | Settings | [settings.portrait.svg](settings.portrait.svg) | `App/SettingsView.swift` | ✅ |
 
 Note: on iOS, selecting the Create tab opens the camera immediately; Create home is the surface behind/under the camera, revealed on close.
+
+Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video segmented control) and `CaptureAssetGrid` / `CaptureAssetTile` (the square thumbnail grid) are used by more than one screen, so their geometry is specified once in [gallery.portrait.svg](gallery.portrait.svg) and reused verbatim in [projects.portrait.svg](projects.portrait.svg) and [project-photos.portrait.svg](project-photos.portrait.svg). A change to either component makes all three stale. Both tabs share the same top rhythm: 15pt above the title, 8pt above and below the filter bar, content flush after it.
 
 ## Capture (full-screen camera, always dark)
 
@@ -43,8 +46,11 @@ Note: on iOS, selecting the Create tab opens the camera immediately; Create home
 
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
-| Project detail (video/interval) | [project-detail.portrait.svg](project-detail.portrait.svg) | `App/ProjectDetailView.swift` | ✅ |
+| Project detail (video) | [project-detail.portrait.svg](project-detail.portrait.svg) | `App/ProjectDetailView.swift` (`heroCard`, `sourceClipsSection`, `versionRow`, `managementCard`) | ✅ |
+| Project detail (interval) | [project-detail.interval.portrait.svg](project-detail.interval.portrait.svg) | `App/ProjectDetailView.swift` (`heroCard`, `originalsSection` — Save all to Photos + View all photos) | ✅ |
 | Project detail (photo) | [project-detail.photo.portrait.svg](project-detail.photo.portrait.svg) | `App/ProjectDetailView.swift` (`PhotoGradingCard`, `photoActions`) | ✅ |
+| Project photos (interval frames, sheet) | [project-photos.portrait.svg](project-photos.portrait.svg) | `App/CapturePhotoGrid.swift` (`CapturePhotoGrid`, `CaptureAssetGrid`, `CaptureAssetTile`) | ✅ |
+| Project photos · fullscreen viewer | [project-photos.viewer.portrait.svg](project-photos.viewer.portrait.svg) | `App/CapturePhotoGrid.swift` (`CaptureFrameViewer`) + `App/ProjectMedia.swift` (`ProjectPreviewImage`) | ✅ |
 | Adjust (video source) | [adjust.portrait.svg](adjust.portrait.svg) | `App/AdjustView.swift` | ✅ |
 | Adjust (photos source) | [adjust.photos.portrait.svg](adjust.photos.portrait.svg) | `App/AdjustView.swift` (`stackCard`, `TailFrameBanner`) | ✅ |
 | Processing | [processing.portrait.svg](processing.portrait.svg) | `App/ProcessingView.swift` | ✅ |

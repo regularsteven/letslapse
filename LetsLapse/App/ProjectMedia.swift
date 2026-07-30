@@ -116,15 +116,19 @@ struct ProjectMediaPreviewSheet: View {
     }
 }
 
-private struct ProjectPreviewImage: View {
+/// The full-image loader behind both the preview sheet and the fullscreen frame
+/// viewer. `background` is what shows while the decode runs — the sheet wants a
+/// card-coloured plate, the fullscreen viewer black.
+struct ProjectPreviewImage: View {
     var url: URL
+    var background: AnyShapeStyle = AnyShapeStyle(.quaternary)
     @State private var image: CGImage?
     @State private var failed = false
 
     var body: some View {
         ZStack {
             Rectangle()
-                .fill(.quaternary)
+                .fill(background)
             if let image {
                 Image(decorative: image, scale: 1)
                     .resizable()

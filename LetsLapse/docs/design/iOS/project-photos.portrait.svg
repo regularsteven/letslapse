@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Project photos (interval frames) · portrait</title>
+  <desc>Mirrors App/CapturePhotoGrid.swift (CapturePhotoGrid + CaptureAssetGrid + CaptureAssetTile), presented as a sheet from ProjectDetailView's "View all photos" row. An unfiltered square grid over ONE interval project's source frames — the same CaptureAssetGrid the Gallery tab uses, differing only in data source (frame URLs, not project heroes) and tap action (opens the fullscreen viewer, not a detail push). 3 columns at 2pt gaps, edge to edge; pinch changes 2–5 columns and shares the Gallery's gallery.columnCount preference. Inline nav title is the project's displayTitle; Done dismisses. Sample frames show one dusk shoot in capture order, so the grid reads as a sequence.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="24" y="94" width="393" height="782" rx="10"/></clipPath>
+    <g id="hz"><polygon points="0,96 32,74 66,92 100,72 129.6,86 129.6,129.6 0,129.6"/></g>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- dimmed project detail behind the sheet -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)" opacity="0.35">
+      <rect x="0" y="60" width="393" height="34" fill="#F2F2F7"/>
+      <text x="30" y="91" font-size="17" fill="#C36A00">Projects</text>
+      <text x="196.5" y="91" font-size="17" class="sb" fill="#000" text-anchor="middle">Interval — harbour dusk</text>
+    </g>
+    <g id="status-bar" fill="#FFF" transform="translate(24,24)">
+      <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+      <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+      <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+      <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+    </g>
+
+    <!-- sheet -->
+    <g clip-path="url(#sheet)">
+      <rect x="24" y="94" width="393" height="782" fill="#F2F2F7"/>
+      <g transform="translate(24,94)">
+        <rect x="178.5" y="6" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
+        <text x="196.5" y="36" font-size="17" class="sb" fill="#000" text-anchor="middle">Interval — harbour dusk</text>
+        <text x="377" y="36" font-size="17" class="sb" fill="#C36A00" text-anchor="end">Done</text>
+
+        <!-- CaptureAssetGrid: 3 columns, 2pt gaps, tile 129.6 pt, edge to edge -->
+        <g id="frame-grid">
+          <!-- row 1 · frames 1–3 -->
+          <rect x="0" y="56" width="129.6" height="129.6" fill="#8E6B3E"/><use href="#hz" x="0" y="56" fill="#17110B" opacity="0.85"/><circle cx="40" cy="86" r="9" fill="#FFD9A0" opacity="0.85"/>
+          <rect x="131.6" y="56" width="129.6" height="129.6" fill="#86653B"/><use href="#hz" x="131.6" y="56" fill="#17110B" opacity="0.85"/><circle cx="171.6" cy="89.2" r="9" fill="#FFD59A" opacity="0.82"/>
+          <rect x="263.2" y="56" width="129.6" height="129.6" fill="#7E5F38"/><use href="#hz" x="263.2" y="56" fill="#17110B" opacity="0.85"/><circle cx="303.2" cy="92.4" r="9" fill="#FFD094" opacity="0.79"/>
+          <!-- row 2 · frames 4–6 -->
+          <rect x="0" y="187.6" width="129.6" height="129.6" fill="#765935"/><use href="#hz" x="0" y="187.6" fill="#17110B" opacity="0.85"/><circle cx="40" cy="227.2" r="9" fill="#FCC98C" opacity="0.76"/>
+          <rect x="131.6" y="187.6" width="129.6" height="129.6" fill="#6E5332"/><use href="#hz" x="131.6" y="187.6" fill="#17110B" opacity="0.85"/><circle cx="171.6" cy="230.4" r="9" fill="#F8C285" opacity="0.73"/>
+          <rect x="263.2" y="187.6" width="129.6" height="129.6" fill="#664D2F"/><use href="#hz" x="263.2" y="187.6" fill="#17110B" opacity="0.85"/><circle cx="303.2" cy="233.6" r="9" fill="#F4BB7E" opacity="0.7"/>
+          <!-- row 3 · frames 7–9 -->
+          <rect x="0" y="319.2" width="129.6" height="129.6" fill="#5E472C"/><use href="#hz" x="0" y="319.2" fill="#17110B" opacity="0.85"/><circle cx="40" cy="368.4" r="9" fill="#F0B477" opacity="0.66"/>
+          <rect x="131.6" y="319.2" width="129.6" height="129.6" fill="#564129"/><use href="#hz" x="131.6" y="319.2" fill="#17110B" opacity="0.85"/><circle cx="171.6" cy="371.6" r="9" fill="#EBAC70" opacity="0.63"/>
+          <rect x="263.2" y="319.2" width="129.6" height="129.6" fill="#4E3B26"/><use href="#hz" x="263.2" y="319.2" fill="#17110B" opacity="0.85"/><circle cx="303.2" cy="374.8" r="9" fill="#E6A469" opacity="0.6"/>
+          <!-- row 4 · frames 10–12 -->
+          <rect x="0" y="450.8" width="129.6" height="129.6" fill="#463523"/><use href="#hz" x="0" y="450.8" fill="#17110B" opacity="0.85"/><circle cx="40" cy="509.6" r="9" fill="#DF9B61" opacity="0.56"/>
+          <rect x="131.6" y="450.8" width="129.6" height="129.6" fill="#3E2F20"/><use href="#hz" x="131.6" y="450.8" fill="#17110B" opacity="0.85"/><circle cx="171.6" cy="512.8" r="9" fill="#D8925A" opacity="0.52"/>
+          <rect x="263.2" y="450.8" width="129.6" height="129.6" fill="#36291D"/><use href="#hz" x="263.2" y="450.8" fill="#17110B" opacity="0.85"/><circle cx="303.2" cy="516" r="9" fill="#D08A54" opacity="0.48"/>
+          <!-- row 5 · frames 13–15 (sun at / below the horizon) -->
+          <rect x="0" y="582.4" width="129.6" height="129.6" fill="#2E231A"/><use href="#hz" x="0" y="582.4" fill="#17110B" opacity="0.85"/><circle cx="40" cy="650.8" r="9" fill="#C68150" opacity="0.42"/>
+          <rect x="131.6" y="582.4" width="129.6" height="129.6" fill="#2A2018"/><use href="#hz" x="131.6" y="582.4" fill="#17110B" opacity="0.85"/><circle cx="171.6" cy="654" r="9" fill="#BC7A4C" opacity="0.36"/>
+          <rect x="263.2" y="582.4" width="129.6" height="129.6" fill="#261D16"/><use href="#hz" x="263.2" y="582.4" fill="#17110B" opacity="0.85"/>
+          <!-- row 6 · frames 16–18 (scrolls off the bottom of the sheet) -->
+          <rect x="0" y="714" width="129.6" height="129.6" fill="#221A14"/><use href="#hz" x="0" y="714" fill="#17110B" opacity="0.85"/>
+          <rect x="131.6" y="714" width="129.6" height="129.6" fill="#1E1712"/><use href="#hz" x="131.6" y="714" fill="#17110B" opacity="0.85"/>
+          <rect x="263.2" y="714" width="129.6" height="129.6" fill="#1A1410"/><use href="#hz" x="263.2" y="714" fill="#17110B" opacity="0.85"/>
+        </g>
+      </g>
+    </g>
+
+    <!-- hardware -->
+    <g transform="translate(24,24)">
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project photos (interval frames) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CapturePhotoGrid.swift — CapturePhotoGrid sheet · CaptureAssetGrid · CaptureAssetTile</text>
+</svg>

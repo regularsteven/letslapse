@@ -27,6 +27,7 @@ struct ProjectDetailView: View {
     @State private var isPurging = false
     @State private var isRotating = false
     @State private var rotateFailure: String?
+    @State private var isBrowsingOriginals = false
 
     /// Save-to-Photos progress, tracked separately for the photo asset and
     /// the originals row so one export doesn't repaint the other.
@@ -148,6 +149,17 @@ struct ProjectDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Every ProRes clip is re-encoded to H.264 and the ProRes original is deleted to reclaim space. This can't be undone.")
+        }
+        .sheet(isPresented: $isBrowsingOriginals) {
+            if let capture {
+                CapturePhotoGrid(
+                    title: capture.displayTitle,
+                    urls: model.sourceFrameURLs(for: capture)
+                )
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
         }
         .task(id: storageToken) {
             guard let capture else { return }
@@ -392,19 +404,32 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Interval shoots: every source frame the camera kept, exportable to
-    /// Photos in one batched library change.
+    /// Interval shoots: every source frame the camera kept — exportable to
+    /// Photos in one batched library change, and now browsable one frame at a
+    /// time (the batch export used to be the only way to reach them).
     private func originalsSection(for capture: AppModel.CaptureProject) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             LLSectionHeader("Originals")
             VStack(spacing: 0) {
                 LLRow(
                     title: "Source photos",
-                    subtitle: originalsSubtitle(for: capture),
-                    showsDivider: false
+                    subtitle: originalsSubtitle(for: capture)
                 ) {
                     originalsControl(for: capture)
                 }
+
+                Button {
+                    isBrowsingOriginals = true
+                } label: {
+                    LLRow(title: "View all photos", showsDivider: false) {
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .disabled(capture.sourceMediaCount == 0)
             }
             .llCard()
         }
