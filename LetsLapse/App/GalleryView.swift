@@ -93,6 +93,9 @@ private struct GalleryTile: View {
     var hero: (url: URL, kind: AppModel.MediaKind)?
     @State private var image: Image?
     @State private var failed = false
+    /// Which asset `image` belongs to, so a reload for the same one can keep it
+    /// on screen while it runs.
+    @State private var loadedPath: String?
     /// Re-runs the load when thumbnails are invalidated (a rotate rewrites
     /// files in place, so the URL alone can't retrigger the task).
     @ObservedObject private var cache = ProjectThumbnailCache.shared
@@ -115,11 +118,22 @@ private struct GalleryTile: View {
             .clipped()
         }
         .task(id: "\(hero?.url.path ?? "-")|\(cache.generation)") {
-            image = nil
-            failed = false
+            // Only blank for a different asset: re-requesting the same one
+            // (cache invalidated, or the cell was rebuilt) keeps what's on
+            // screen, so a cache purge doesn't flash the whole grid to gray.
+            if loadedPath != hero?.url.path {
+                image = nil
+                failed = false
+                loadedPath = hero?.url.path
+            }
             guard let hero else { return }
-            image = await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
-            failed = image == nil
+            let loaded = await ProjectThumbnailCache.shared.thumbnail(for: hero.url, kind: hero.kind)
+            if let loaded {
+                image = loaded
+                failed = false
+            } else if !Task.isCancelled, image == nil {
+                failed = true
+            }
         }
     }
 }

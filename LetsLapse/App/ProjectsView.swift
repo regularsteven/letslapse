@@ -260,7 +260,11 @@ private struct ProjectCard: View {
             }
         }
         .task(id: versions.count) {
-            projectBytes = await model.storageBytes(for: capture)
+            // nil is a cancelled walk (this row scrolled away) — leave the size
+            // that is already on screen alone rather than showing "…" again.
+            if let bytes = await model.storageBytes(for: capture) {
+                projectBytes = bytes
+            }
         }
     }
 

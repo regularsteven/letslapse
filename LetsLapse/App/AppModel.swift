@@ -893,10 +893,21 @@ final class AppModel: ObservableObject {
         var totalBytes: Int64 { originalsBytes + versionsBytes + cacheBytes }
     }
 
-    func computeLibraryStorage() async -> LibraryStorage {
+    /// Per-project folder sizes already walked this session, keyed by capture.
+    /// A project's size only changes when its files do, and every one of those
+    /// paths persists the library — so `persistLibrary` drops this and the next
+    /// card that appears re-walks. Without it, every reappearance of a row in
+    /// Projects (or the whole of Settings › Large originals) re-enumerated a
+    /// folder that can hold a hundred 19 MB DNGs.
+    private var projectStorageBytes: [UUID: Int64] = [:]
+
+    /// Walks the whole library — every project folder and every cache item — so
+    /// it goes through the bounded queue and gives up when the screen that asked
+    /// for it closes. Returns nil in that case.
+    func computeLibraryStorage() async -> LibraryStorage? {
         let root = projectsRootURL
         let temporary = FileManager.default.temporaryDirectory
-        return await Task.detached(priority: .utility) {
+        return await MediaWorkQueue.shared.run {
             var storage = LibraryStorage()
             let fileManager = FileManager.default
             if let folders = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
@@ -911,14 +922,20 @@ final class AppModel: ObservableObject {
                 }
             }
             return storage
-        }.value
+        }
     }
 
-    func storageBytes(for capture: CaptureProject) async -> Int64 {
+    /// Bytes on disk for one project. Returns nil when the walk was cancelled
+    /// (the row scrolled away, the screen closed) — callers must keep whatever
+    /// they were showing rather than reading nil as "no files".
+    func storageBytes(for capture: CaptureProject) async -> Int64? {
+        if let known = projectStorageBytes[capture.id] { return known }
         let folder = captureFolderURL(for: capture.id)
-        return await Task.detached(priority: .utility) {
-            Self.directorySize(folder)
-        }.value
+        guard let bytes = await MediaWorkQueue.shared.run({ Self.directorySize(folder) }) else {
+            return nil
+        }
+        projectStorageBytes[capture.id] = bytes
+        return bytes
     }
 
     /// Deletes reproducible temp files (imports, live-capture staging, blend
@@ -1909,6 +1926,9 @@ final class AppModel: ObservableObject {
     }
 
     private func persistLibrary() throws {
+        // Every path that adds, converts, rotates or deletes a project's files
+        // ends here, so this is the one place that has to drop the size cache.
+        projectStorageBytes.removeAll()
         try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
         let manifest = LibraryManifest(captures: captures, blends: blends)
         let encoder = JSONEncoder()

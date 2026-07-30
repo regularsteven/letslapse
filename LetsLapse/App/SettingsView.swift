@@ -84,7 +84,9 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         #endif
         .task {
-            storage = await model.computeLibraryStorage()
+            if let walked = await model.computeLibraryStorage() {
+                storage = walked
+            }
         }
         #if os(macOS)
         .onAppear {
@@ -355,7 +357,9 @@ struct SettingsView: View {
         isClearingCache = true
         Task {
             await model.clearCache()
-            storage = await model.computeLibraryStorage()
+            if let walked = await model.computeLibraryStorage() {
+                storage = walked
+            }
             isClearingCache = false
         }
     }
@@ -582,7 +586,13 @@ private struct LargeOriginalsView: View {
         #endif
         .task {
             for capture in model.captures {
-                sizes[capture.id] = await model.storageBytes(for: capture)
+                // A library can hold hundreds of projects and each walk touches
+                // every file in one; stop the moment the screen is closed rather
+                // than working through the rest of the list unseen.
+                if Task.isCancelled { return }
+                if let bytes = await model.storageBytes(for: capture) {
+                    sizes[capture.id] = bytes
+                }
             }
         }
         .alert(item: $pendingDelete) { capture in

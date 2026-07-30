@@ -157,7 +157,10 @@ enum PhotoGrader {
         let key = cacheKey(url: url, preset: preset, maxDimension: maxDimension)
         if let cached = cache.object(forKey: key) { return cached.image }
 
-        guard var image = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else {
+        guard var image = sourceImage(url: url, maxDimension: maxDimension) else {
+            MediaWorkQueue.note(
+                "grade source load failed for \(url.lastPathComponent) exists=\(FileManager.default.fileExists(atPath: url.path))",
+                isError: true)
             return nil
         }
         if let maxDimension {
@@ -178,6 +181,37 @@ enum PhotoGrader {
             cache.setObject(Box(cgImage), forKey: key, cost: cgImage.bytesPerRow * cgImage.height)
         }
         return cgImage
+    }
+
+    /// The still to grade, loaded at a size that suits what it is for.
+    ///
+    /// Previews decode through ImageIO at a bounded pixel size — the same call
+    /// the thumbnails use, and on this app's own DNGs (Bayer, no embedded
+    /// preview) the only one that behaves. `CIImage(contentsOf:)` hands back a
+    /// lazy full-sensor RAW, so a 12 MP capture wanted a ~200 MB Core Image
+    /// render before being scaled down to a 1400 px card: slow on a phone, and
+    /// on a phone already holding a library's worth of thumbnails it simply
+    /// failed, which is why a DNG project's detail card showed the placeholder
+    /// while its preset strip sat there working.
+    ///
+    /// Export passes no bound and keeps the full-resolution RAW path.
+    private static func sourceImage(url: URL, maxDimension: CGFloat?) -> CIImage? {
+        guard let maxDimension else {
+            return CIImage(contentsOf: url, options: [.applyOrientationProperty: true])
+        }
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            // Bakes the EXIF/TIFF orientation into the pixels, matching what
+            // `.applyOrientationProperty` does on the full-resolution path.
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
+        ]
+        guard let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+        return CIImage(cgImage: decoded)
     }
 
     /// Renders `url` through `preset` at full resolution and writes it to a

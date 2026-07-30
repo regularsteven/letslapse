@@ -18,6 +18,9 @@ struct ProjectThumbnailView: View {
     var url: URL?
     var kind: AppModel.MediaKind
     @State private var thumbnail: Image?
+    /// Which asset `thumbnail` belongs to, so a reload for the *same* asset can
+    /// keep the current image on screen while it runs.
+    @State private var loadedPath: String?
     /// Re-runs the load when thumbnails are invalidated (files rewritten in
     /// place keep their URL, so the URL alone can't retrigger the task).
     @ObservedObject private var cache = ProjectThumbnailCache.shared
@@ -40,9 +43,20 @@ struct ProjectThumbnailView: View {
             }
             .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
             .task(id: "\(url?.path ?? "-")|\(cache.generation)") {
-                thumbnail = nil
+                // Only blank for a *different* asset. Re-requesting the same one
+                // (cache invalidated, or the row was rebuilt) used to clear here
+                // first, which turned any cache purge into a wall of gray tiles
+                // even when the reload was about to succeed.
+                if loadedPath != url?.path {
+                    thumbnail = nil
+                    loadedPath = url?.path
+                }
                 guard let url else { return }
-                thumbnail = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind)
+                // nil means "no answer" — a failed decode or a cancelled load —
+                // so never overwrite an image already on screen with it.
+                if let image = await ProjectThumbnailCache.shared.thumbnail(for: url, kind: kind) {
+                    thumbnail = image
+                }
             }
     }
 }
@@ -131,21 +145,25 @@ private struct ProjectPreviewImage: View {
             image = nil
             failed = false
             image = await ProjectThumbnailGenerator.displayImage(at: url)
-            failed = image == nil
+            // A cancelled load (the sheet was dismissed) isn't a failure.
+            if !Task.isCancelled {
+                failed = image == nil
+            }
         }
     }
 }
 
+/// The decoders behind the thumbnail cache and the full-screen preview. Both
+/// entry points block for as long as the decode takes, so they run on
+/// `MediaWorkQueue` — never on the main actor or the cooperative pool.
 enum ProjectThumbnailGenerator {
-    static func thumbnail(for url: URL, kind: AppModel.MediaKind) async -> CGImage? {
-        await Task.detached(priority: .utility) {
-            switch kind {
-            case .video:
-                return videoThumbnail(for: url)
-            case .image:
-                return imageThumbnail(for: url, maxPixelSize: 480)
-            }
-        }.value
+    static func thumbnail(for url: URL, kind: AppModel.MediaKind) -> CGImage? {
+        switch kind {
+        case .video:
+            return videoThumbnail(for: url)
+        case .image:
+            return imageThumbnail(for: url, maxPixelSize: 480)
+        }
     }
 
     /// A screen-sized decode for the full-screen preview. Goes through the
@@ -155,7 +173,7 @@ enum ProjectThumbnailGenerator {
     /// full-resolution RAW decode is ~50 MB where 2560 px is plenty for any
     /// display.
     static func displayImage(at url: URL) async -> CGImage? {
-        await Task.detached(priority: .userInitiated) {
+        let image = await MediaWorkQueue.shared.run { () -> CGImage? in
             guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
             let options: [CFString: Any] = [
                 kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -164,7 +182,13 @@ enum ProjectThumbnailGenerator {
                 kCGImageSourceThumbnailMaxPixelSize: 2560,
             ]
             return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
-        }.value
+        }
+        // Outer nil is a cancelled load, inner nil a failed decode.
+        guard let decoded = image else { return nil }
+        if decoded == nil {
+            MediaWorkQueue.note("display decode failed for \(url.lastPathComponent)", isError: true)
+        }
+        return decoded
     }
 
     private static func videoThumbnail(for url: URL) -> CGImage? {

@@ -151,7 +151,9 @@ struct ProjectDetailView: View {
         }
         .task(id: storageToken) {
             guard let capture else { return }
-            storageBytes = await model.storageBytes(for: capture)
+            if let bytes = await model.storageBytes(for: capture) {
+                storageBytes = bytes
+            }
         }
     }
 
@@ -831,12 +833,12 @@ private struct PhotoGradingCard: View {
     }
 
     private func render(url: URL, preset: PhotoPreset) async {
-        let cgImage = await Task.detached(priority: .userInitiated) {
+        let cgImage = await MediaWorkQueue.shared.run {
             PhotoGrader.render(url: url, preset: preset, maxDimension: 1400)
-        }.value
-        // Ignore a nil render (e.g. missing file) so the thumbnail fallback
-        // stays visible rather than blanking out.
-        if let cgImage { rendered = cgImage }
+        }
+        // Ignore a nil render (missing file, or the view went away mid-decode)
+        // so the thumbnail fallback stays visible rather than blanking out.
+        if let cgImage, let image = cgImage { rendered = image }
     }
 }
 
@@ -906,9 +908,11 @@ private struct SourceClipRow: View {
         .task(id: storageKey(capture)) {
             let urls = model.encodings(for: capture, clip: clipName)
                 .map { model.encodingURL(for: capture, $0) }
-            totalSize = await Task.detached(priority: .utility) {
+            if let bytes = await MediaWorkQueue.shared.run({
                 urls.reduce(Int64(0)) { $0 + AppModel.directorySize($1) }
-            }.value
+            }) {
+                totalSize = bytes
+            }
         }
         .task(id: displayURL) {
             let originalURL = model.encodingURL(
