@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · portrait</title>
-  <desc>Mirrors App/SettingsView.swift: Creative defaults (Default speed, Output frame rate, True-light), Recording (Remember recording settings, Manage resolutions, Record audio), Location (Geotag captures), Storage (library bar + legend, Review large originals, Clear cache). Advanced card scrolls below the fold. With DNG output selected, Recording gains the DNG experiment rows + Capture benchmark. Drawn with DNG off.</desc>
+  <desc>Mirrors App/SettingsView.swift: Creative defaults (Default speed, Output frame rate, True-light), Video (Default ramp, Remember last — the burst slow-motion ramp), Recording (Remember recording settings, Manage resolutions, Record audio), Location (Geotag captures), Storage (library bar + legend, Review large originals, Clear cache). Storage and Advanced scroll below the fold. With DNG output selected, Recording gains the DNG experiment rows + Capture benchmark. Drawn with DNG off and the ramp default Off.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -40,61 +40,80 @@
         <circle cx="351" cy="251.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
       </g>
 
-      <!-- recording -->
-      <text x="20" y="304" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">RECORDING</text>
-      <g id="recording-card">
-        <rect x="16" y="312" width="361" height="188" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="338" font-size="16" fill="#000">Remember recording settings</text>
-        <text x="32" y="353" font-size="11.5" fill="#6D6D72">Start each shoot in your last-used mode with its settings —</text>
-        <text x="32" y="366" font-size="11.5" fill="#6D6D72">lens, resolution, frame rate, stabilization, interval spacing…</text>
-        <rect x="316" y="330" width="51" height="31" rx="15.5" fill="#34C759"/>
-        <circle cx="351" cy="345.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+      <!-- video (burst ramp) -->
+      <text x="20" y="304" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">VIDEO</text>
+      <g id="burst-ramp-card">
+        <rect x="16" y="312" width="361" height="130" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="338" font-size="16" fill="#000">Default ramp</text>
+        <text x="32" y="353" font-size="11.5" fill="#6D6D72">Eases burst clips into and out of slow motion instead of</text>
+        <text x="32" y="366" font-size="11.5" fill="#6D6D72">cutting straight to it.</text>
+        <text x="352" y="338" font-size="15" fill="#6D6D72" text-anchor="end">Off</text>
+        <path d="M359 328 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
         <line x1="32" y1="380" x2="377" y2="380" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="406" font-size="16" fill="#000">Manage resolutions</text>
-        <text x="32" y="421" font-size="11.5" fill="#6D6D72">Choose which resolutions Capture Format offers —</text>
-        <text x="32" y="434" font-size="11.5" fill="#6D6D72">separate lists for stills and video</text>
-        <path d="M363 410 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-        <line x1="32" y1="446" x2="377" y2="446" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="470" font-size="16" fill="#000">Record audio</text>
-        <text x="32" y="485" font-size="11.5" fill="#6D6D72">Capture microphone sound with video shoots.</text>
-        <rect x="316" y="456" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
-        <circle cx="332" cy="471.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="406" font-size="16" fill="#000">Remember last</text>
+        <text x="32" y="421" font-size="11.5" fill="#6D6D72">A project's ramp becomes the next default.</text>
+        <rect x="316" y="398" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+        <circle cx="332" cy="413.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+      </g>
+      <!-- With Remember last ON the Default ramp menu is disabled (read-only) and
+           its subtitle reads "Following the last ramp you set on a project." -->
+
+      <!-- recording -->
+      <text x="20" y="470" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">RECORDING</text>
+      <g id="recording-card">
+        <rect x="16" y="478" width="361" height="188" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="504" font-size="16" fill="#000">Remember recording settings</text>
+        <text x="32" y="519" font-size="11.5" fill="#6D6D72">Start each shoot in your last-used mode with its settings —</text>
+        <text x="32" y="532" font-size="11.5" fill="#6D6D72">lens, resolution, frame rate, stabilization, interval spacing…</text>
+        <rect x="316" y="496" width="51" height="31" rx="15.5" fill="#34C759"/>
+        <circle cx="351" cy="511.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <line x1="32" y1="546" x2="377" y2="546" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="572" font-size="16" fill="#000">Manage resolutions</text>
+        <text x="32" y="587" font-size="11.5" fill="#6D6D72">Choose which resolutions Capture Format offers —</text>
+        <text x="32" y="600" font-size="11.5" fill="#6D6D72">separate lists for stills and video</text>
+        <path d="M363 576 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="612" x2="377" y2="612" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="636" font-size="16" fill="#000">Record audio</text>
+        <text x="32" y="651" font-size="11.5" fill="#6D6D72">Capture microphone sound with video shoots.</text>
+        <rect x="316" y="622" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+        <circle cx="332" cy="637.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
       </g>
 
       <!-- location -->
-      <text x="20" y="528" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">LOCATION</text>
+      <text x="20" y="694" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">LOCATION</text>
       <g id="location-card">
-        <rect x="16" y="536" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="562" font-size="16" fill="#000">Geotag captures</text>
-        <text x="32" y="577" font-size="11.5" fill="#6D6D72">Save GPS in photo EXIF · GPX track sidecar next to video</text>
-        <rect x="316" y="552" width="51" height="31" rx="15.5" fill="#34C759"/>
-        <circle cx="351" cy="567.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="702" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="728" font-size="16" fill="#000">Geotag captures</text>
+        <text x="32" y="743" font-size="11.5" fill="#6D6D72">Save GPS in photo EXIF · GPX track sidecar next to video</text>
+        <rect x="316" y="718" width="51" height="31" rx="15.5" fill="#34C759"/>
+        <circle cx="351" cy="733.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
       </g>
 
       <!-- storage -->
-      <text x="20" y="626" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">STORAGE</text>
+      <text x="20" y="792" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">STORAGE</text>
       <g id="storage-card">
-        <rect x="16" y="634" width="361" height="166" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="661" font-size="16" fill="#000">LetsLapse library</text>
-        <text x="361" y="661" font-size="15" fill="#6D6D72" text-anchor="end">12.6 GB</text>
+        <rect x="16" y="800" width="361" height="166" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="827" font-size="16" fill="#000">LetsLapse library</text>
+        <text x="361" y="827" font-size="15" fill="#6D6D72" text-anchor="end">12.6 GB</text>
         <g id="storage-bar">
-          <rect x="32" y="672" width="329" height="8" rx="4" fill="#E4E4E9"/>
-          <rect x="32" y="672" width="214" height="8" fill="#C36A00"/>
-          <rect x="246" y="672" width="100" height="8" fill="#FFB340"/>
-          <rect x="32" y="672" width="329" height="8" rx="4" fill="none"/>
+          <rect x="32" y="838" width="329" height="8" rx="4" fill="#E4E4E9"/>
+          <rect x="32" y="838" width="214" height="8" fill="#C36A00"/>
+          <rect x="246" y="838" width="100" height="8" fill="#FFB340"/>
+          <rect x="32" y="838" width="329" height="8" rx="4" fill="none"/>
         </g>
         <g id="legend" font-size="11" fill="#6D6D72">
-          <circle cx="36" cy="694" r="3.5" fill="#C36A00"/><text x="44" y="698">Originals 8.2 GB</text>
-          <circle cx="140" cy="694" r="3.5" fill="#FFB340"/><text x="148" y="698">Versions 3.9 GB</text>
-          <circle cx="240" cy="694" r="3.5" fill="#B9B9C0"/><text x="248" y="698">Cache 542 MB</text>
+          <circle cx="36" cy="860" r="3.5" fill="#C36A00"/><text x="44" y="864">Originals 8.2 GB</text>
+          <circle cx="140" cy="860" r="3.5" fill="#FFB340"/><text x="148" y="864">Versions 3.9 GB</text>
+          <circle cx="240" cy="860" r="3.5" fill="#B9B9C0"/><text x="248" y="864">Cache 542 MB</text>
         </g>
-        <line x1="32" y1="710" x2="377" y2="710" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="737" font-size="16" fill="#000">Review large originals</text>
-        <path d="M363 725 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-        <line x1="32" y1="753" x2="377" y2="753" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="780" font-size="16" fill="#C36A00">Clear cache (542 MB)</text>
+        <line x1="32" y1="876" x2="377" y2="876" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="903" font-size="16" fill="#000">Review large originals</text>
+        <path d="M363 891 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="919" x2="377" y2="919" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="946" font-size="16" fill="#C36A00">Clear cache (542 MB)</text>
       </g>
-      <!-- ADVANCED section (Custom frame rate · Blend learning · Performance · Diagnostics) scrolls below the fold -->
+      <!-- STORAGE (drawn above, now starting under the tab bar) and the ADVANCED section
+           (Custom frame rate · Blend learning · Performance · Diagnostics) scroll below the fold -->
 
       <!-- floating tab bar (Settings selected) -->
       <g id="tab-bar">
@@ -128,5 +147,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — creativeDefaultsCard · recordingCard · locationCard · storageCard</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — creativeDefaultsCard · burstRampCard · recordingCard · locationCard · storageCard</text>
 </svg>

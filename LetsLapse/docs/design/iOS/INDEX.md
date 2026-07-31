@@ -2,7 +2,7 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
-Last full sync: 2026-07-30, working tree of `ios-app` (uncommitted WIP included) — including colour grading extended from Photo to Interval and Video (every project detail leads with the grading card).
+Last full sync: 2026-07-31, working tree of `ios-app` (uncommitted WIP included) — adding burst slow-motion ramps: a Video section in Settings and a Slow-motion ramp row in New version, above Advanced. Project detail carries no ramp UI.
 
 ## Tabs
 
@@ -12,7 +12,7 @@ Last full sync: 2026-07-30, working tree of `ios-app` (uncommitted WIP included)
 | Gallery | [gallery.portrait.svg](gallery.portrait.svg) | `App/GalleryView.swift` + `App/CaptureFilterBar.swift` + `App/CapturePhotoGrid.swift` (`CaptureAssetGrid`) | ✅ |
 | Projects | [projects.portrait.svg](projects.portrait.svg) | `App/ProjectsView.swift` (`header`, `ProjectCard`) + `App/CaptureFilterBar.swift` | ✅ |
 | Projects · filter matched nothing | — | `App/ProjectsView.swift` (`filteredEmptyState`) — "No videos" + Show all, in place of the card list | 🟡 |
-| Settings | [settings.portrait.svg](settings.portrait.svg) | `App/SettingsView.swift` | ✅ |
+| Settings | [settings.portrait.svg](settings.portrait.svg) | `App/SettingsView.swift` (`creativeDefaultsCard`, `burstRampCard`, `recordingCard`, `locationCard`, `storageCard`) | ✅ |
 
 Note: on iOS, selecting the Create tab opens the camera immediately; Create home is the surface behind/under the camera, revealed on close.
 
@@ -60,7 +60,7 @@ Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video se
 | Photo grading viewer · Save as preset (alert) | — | `App/PhotoViewerView.swift` (`isNamingPreset` — TextField alert) | 🟡 |
 | Project photos (interval frames, sheet) | [project-photos.portrait.svg](project-photos.portrait.svg) | `App/CapturePhotoGrid.swift` (`CapturePhotoGrid`, `CaptureAssetGrid`, `CaptureAssetTile`) | ✅ |
 | Project photos · fullscreen viewer | [project-photos.viewer.portrait.svg](project-photos.viewer.portrait.svg) | `App/CapturePhotoGrid.swift` (`CaptureFrameViewer`) + `App/ProjectMedia.swift` (`ProjectPreviewImage`) | ✅ |
-| Adjust (video source) | [adjust.portrait.svg](adjust.portrait.svg) | `App/AdjustView.swift` | ✅ |
+| Adjust (video source) | [adjust.portrait.svg](adjust.portrait.svg) | `App/AdjustView.swift` (`sourceCard`, `blendFromSection`, `speedSection`, `estimateCard`, `burstRampRow`, `advancedRow`) | ✅ |
 | Adjust (photos source) | [adjust.photos.portrait.svg](adjust.photos.portrait.svg) | `App/AdjustView.swift` (`stackCard`, `TailFrameBanner`) | ✅ |
 | Processing | [processing.portrait.svg](processing.portrait.svg) | `App/ProcessingView.swift` | ✅ |
 | Result | [result.portrait.svg](result.portrait.svg) | `App/ResultView.swift` | ✅ |

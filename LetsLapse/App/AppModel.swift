@@ -29,6 +29,8 @@ final class AppModel: ObservableObject {
         static let liveBlendResponsiveCapture = "letslapse.liveBlendResponsiveCapture"
         static let liveBlendBurstCapture = "letslapse.liveBlendBurstCapture"
         static let liveBlendBracketedRAW = "letslapse.liveBlendBracketedRAW"
+        static let burstRampDefault = "letslapse.burstRampDefault"
+        static let burstRampRememberLast = "letslapse.burstRampRememberLast"
     }
 
     /// `mode` marker for a one-tap Photo-mode capture — the burst that was
@@ -105,6 +107,13 @@ final class AppModel: ObservableObject {
         /// existed have no value, and nil resolves to `.neutral` (the preset
         /// on its own). Read it through `AppModel.photoAdjustments(for:)`.
         var adjustments: PhotoAdjustments?
+        /// How long this project's burst clips ease into and out of slow
+        /// motion, in seconds. Optional in both directions: nil means "follow
+        /// the app default" (resolved at render time), 0 means "this project
+        /// explicitly wants hard cuts". Projects saved before ramps existed
+        /// decode as nil and behave exactly as they always did.
+        /// Read it through `AppModel.effectiveBurstRamp(for:)`.
+        var burstRampDuration: Double?
 
         var summary: String {
             switch kind {
@@ -413,6 +422,26 @@ final class AppModel: ObservableObject {
     }
     @Published var trimHeadTailSeconds = UserDefaults.standard.object(forKey: DefaultsKey.trimHeadTailSeconds) as? Double ?? 1 {
         didSet { UserDefaults.standard.set(trimHeadTailSeconds, forKey: DefaultsKey.trimHeadTailSeconds) }
+    }
+
+    /// The burst ramp every video project starts on, in seconds. nil = off,
+    /// which is the shipping default: a project that says nothing about ramps
+    /// renders exactly as it did before ramps existed.
+    @Published var burstRampDefault: Double? =
+        UserDefaults.standard.object(forKey: DefaultsKey.burstRampDefault) as? Double {
+        didSet {
+            if let burstRampDefault, burstRampDefault > 0 {
+                UserDefaults.standard.set(burstRampDefault, forKey: DefaultsKey.burstRampDefault)
+            } else {
+                UserDefaults.standard.removeObject(forKey: DefaultsKey.burstRampDefault)
+            }
+        }
+    }
+    /// When on, changing a project's ramp also becomes the new default, so the
+    /// next shoot starts where the last one ended.
+    @Published var burstRampRememberLast =
+        UserDefaults.standard.bool(forKey: DefaultsKey.burstRampRememberLast) {
+        didSet { UserDefaults.standard.set(burstRampRememberLast, forKey: DefaultsKey.burstRampRememberLast) }
     }
 
     // Recording options
@@ -904,6 +933,109 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
+    // MARK: - Burst ramps
+
+    /// What a render will actually ask for on this project: its own setting
+    /// when it has one, otherwise the app default, otherwise no ramp at all.
+    func effectiveBurstRamp(for capture: CaptureProject?) -> Double {
+        let value = capture?.burstRampDuration ?? burstRampDefault ?? 0
+        return min(max(0, value), BurstRamp.maxDuration)
+    }
+
+    /// Stores a project's ramp. `nil` puts it back on the app default; `0` is
+    /// an explicit "hard cuts on this one". With "remember last" on, an
+    /// explicit choice also becomes the new app default.
+    func setBurstRamp(_ seconds: Double?, for capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        let normalized = seconds.map { min(max(0, $0), BurstRamp.maxDuration) }
+        if captures[index].burstRampDuration != normalized {
+            captures[index].burstRampDuration = normalized
+            try? persistLibrary()
+        }
+        // "Use default" is the absence of a choice — there is nothing to
+        // remember, and writing it back would erase the remembered value.
+        if burstRampRememberLast, let normalized {
+            burstRampDefault = normalized > 0 ? normalized : nil
+        }
+    }
+
+    /// The burst material in a video project and what the current ramp setting
+    /// does to it. nil when the project has no burst clips to ramp — the
+    /// control has nothing to act on and the views hide it.
+    ///
+    /// Touches the filesystem (the sequence sidecar), so call it from a `task`
+    /// rather than a view body.
+    struct BurstRampInfo: Equatable {
+        /// Number of burst clips in the project.
+        var clipCount: Int
+        /// The shortest burst clip's length in the finished timeline — the one
+        /// that decides whether the ramp has to be capped.
+        var shortestOutputDuration: Double
+        var slowFactor: Double
+        /// What the project's current setting resolves to.
+        var requestedRamp: Double
+        /// What that clip can actually carry; 0 when it is too short for any.
+        var appliedRamp: Double
+
+        var isCapped: Bool { requestedRamp > 0 && appliedRamp < requestedRamp - 0.001 }
+    }
+
+    func burstRampInfo(for capture: CaptureProject) -> BurstRampInfo? {
+        guard capture.kind == .video, let sequence = liveCaptureSequence(for: capture) else { return nil }
+        let fps = Double(outputFPS)
+        guard fps > 0 else { return nil }
+
+        // How long each burst clip runs in the stitched timeline, and how far
+        // from real time it is there. The blend writes a burst's frames out
+        // one-for-one at the output rate, so a 2s burst shot at 120 fps lands
+        // as 2 × (120/25) seconds of footage playing 4.8× slow.
+        var clips: [(duration: Double, slowFactor: Double)] = []
+        switch sequence.mode {
+        case .ramp:
+            for segment in sequence.segments where segment.frameRate > sequence.baseFrameRate {
+                let real = max(0, segment.relativeEnd - segment.relativeStart)
+                let slowFactor = Double(segment.frameRate) / fps
+                clips.append((real * slowFactor, slowFactor))
+            }
+        case .marker:
+            let slowFactor = Double(sequence.baseFrameRate) / fps
+            let sequenceEnd = sequence.segments.first?.relativeEnd
+            for interval in sequence.rampIntervals {
+                guard let end = interval.relativeEnd ?? sequenceEnd else { continue }
+                let real = max(0, end - interval.relativeStart)
+                clips.append((real * slowFactor, slowFactor))
+            }
+        }
+        // A burst that isn't actually slower than the output rate has nothing
+        // to ease into.
+        clips = clips.filter { $0.slowFactor > 1 && $0.duration > 0 }
+        guard let shortest = clips.min(by: { $0.duration < $1.duration }) else { return nil }
+
+        let requested = effectiveBurstRamp(for: capture)
+        return BurstRampInfo(
+            clipCount: clips.count,
+            shortestOutputDuration: shortest.duration,
+            slowFactor: shortest.slowFactor,
+            requestedRamp: requested,
+            appliedRamp: BurstRamp.appliedRamp(
+                requested: requested,
+                burstOutputDuration: shortest.duration,
+                slowFactor: shortest.slowFactor)
+        )
+    }
+
+    /// The recorded shape of a video shoot — segments, markers, ramp intervals
+    /// — without resolving any of its media files. nil for imports and for
+    /// captures made before sequences were written.
+    private func liveCaptureSequence(for capture: CaptureProject) -> LiveCaptureSequence? {
+        let metadataURL = captureFolderURL(for: capture.id)
+            .appendingPathComponent("source/sequence.json")
+        guard let data = try? Data(contentsOf: metadataURL) else { return nil }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return try? decoder.decode(LiveCaptureSequence.self, from: data)
+    }
+
     // MARK: - Storage
 
     struct LibraryStorage: Equatable {
@@ -1041,6 +1173,9 @@ final class AppModel: ObservableObject {
         // gets one composition pass over the finished clip. The capture's own
         // files are never touched.
         let grade = currentCapture.map { photoGrade(for: $0) } ?? .identity
+        // Resolved once, here: the project's own ramp when it has one, else the
+        // app default, else none.
+        let burstRamp = effectiveBurstRamp(for: currentCapture)
         blendTask = Task { [weak self] in
             do {
                 guard let self else { return }
@@ -1049,7 +1184,8 @@ final class AppModel: ObservableObject {
                 case .video(let url):
                     output = try await self.blendVideo(url: url, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: trim)
                 case .liveSequence(let liveSource):
-                    output = try await self.blendLiveSequence(liveSource, ramp: ramp, fps: fps, linear: linear)
+                    output = try await self.blendLiveSequence(
+                        liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
@@ -1315,12 +1451,14 @@ final class AppModel: ObservableObject {
         _ source: LiveCaptureSource,
         ramp: BlendRamp,
         fps: Double,
-        linear: Bool
+        linear: Bool,
+        burstRamp: Double
     ) async throws -> ProcessingOutput {
         guard !source.segmentURLs.isEmpty else { throw LapseError.noInputFrames }
 
         guard source.sequence.mode == .ramp else {
-            return try await blendMarkerSequence(source, ramp: ramp, fps: fps, linear: linear)
+            return try await blendMarkerSequence(
+                source, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp)
         }
 
         let segmentURLByName = source.resolvedByOriginalName
@@ -1330,7 +1468,7 @@ final class AppModel: ObservableObject {
             return try await blendVideo(url: fallbackURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
         }
 
-        var processedURLs: [URL] = []
+        var processedPieces: [StitchPiece] = []
         var inputFrames = 0
         var outputFrames = 0
         var outputWidth: Int?
@@ -1352,7 +1490,13 @@ final class AppModel: ObservableObject {
                 linear: linear,
                 trimHeadTailSeconds: 0
             )
-            processedURLs.append(segmentOutput.url)
+            // A burst segment's frames go out one-for-one at the output rate,
+            // so it lands in the timeline running frameRate/fps times slow —
+            // the gap the ramp eases across.
+            let slowFactor = Double(segment.frameRate) / fps
+            processedPieces.append(StitchPiece(
+                url: segmentOutput.url,
+                slowFactor: isRampOn && slowFactor > 1 ? slowFactor : nil))
             inputFrames += segmentOutput.inputFrames ?? 0
             outputFrames += segmentOutput.outputFrames ?? 0
             outputWidth = outputWidth ?? segmentOutput.width
@@ -1360,22 +1504,26 @@ final class AppModel: ObservableObject {
             progress = Double(index + 1) / Double(max(1, totalSegments)) * 0.9
         }
 
-        statusMessage = "Stitching \(processedURLs.count) processed segments..."
+        statusMessage = "Stitching \(processedPieces.count) processed segments..."
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
-        let stitched = try await stitchVideos(processedURLs, to: output)
+        let stitched = try await stitchVideos(processedPieces, to: output, burstRamp: burstRamp)
         progress = 1
 
-        let summary = "\(inputFrames) frames in → \(outputFrames) frames out · "
+        let finalFrames = stitchedOutputFrames(
+            blended: outputFrames, stitchedDuration: stitched.duration,
+            fps: fps, burstRamp: burstRamp, pieces: processedPieces)
+        let summary = "\(inputFrames) frames in → \(finalFrames) frames out · "
             + "\(stitched.width)×\(stitched.height) · "
             + "\(source.sequence.rampIntervals.count) ramp intervals stitched"
+            + burstRampSummary(burstRamp, pieces: processedPieces)
         return ProcessingOutput(
             kind: .video,
             url: output,
             image: nil,
             summary: summary,
             inputFrames: inputFrames,
-            outputFrames: outputFrames,
+            outputFrames: finalFrames,
             width: outputWidth ?? stitched.width,
             height: outputHeight ?? stitched.height
         )
@@ -1390,7 +1538,8 @@ final class AppModel: ObservableObject {
         _ source: LiveCaptureSource,
         ramp: BlendRamp,
         fps: Double,
-        linear: Bool
+        linear: Bool,
+        burstRamp: Double
     ) async throws -> ProcessingOutput {
         guard let sourceURL = source.primaryVideoURL else { throw LapseError.noInputFrames }
         let pieces = try await markerSequencePieces(for: source, sourceURL: sourceURL)
@@ -1398,7 +1547,10 @@ final class AppModel: ObservableObject {
             return try await blendVideo(url: sourceURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
         }
 
-        var processedURLs: [URL] = []
+        // Marker mode records the whole run at the base rate; a marked interval
+        // becomes slow motion by going out frame-for-frame at the output rate.
+        let slowFactor = Double(source.sequence.baseFrameRate) / fps
+        var processedPieces: [StitchPiece] = []
         var inputFrames = 0
         var outputFrames = 0
         var outputWidth: Int?
@@ -1425,7 +1577,9 @@ final class AppModel: ObservableObject {
                 linear: linear,
                 trimHeadTailSeconds: 0
             )
-            processedURLs.append(pieceOutput.url)
+            processedPieces.append(StitchPiece(
+                url: pieceOutput.url,
+                slowFactor: piece.isRampOn && slowFactor > 1 ? slowFactor : nil))
             inputFrames += pieceOutput.inputFrames ?? 0
             outputFrames += pieceOutput.outputFrames ?? 0
             outputWidth = outputWidth ?? pieceOutput.width
@@ -1433,22 +1587,26 @@ final class AppModel: ObservableObject {
             progress = Double(index + 1) / Double(max(1, pieces.count)) * 0.9
         }
 
-        statusMessage = "Stitching \(processedURLs.count) processed marker intervals..."
+        statusMessage = "Stitching \(processedPieces.count) processed marker intervals..."
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-marker-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
-        let stitched = try await stitchVideos(processedURLs, to: output)
+        let stitched = try await stitchVideos(processedPieces, to: output, burstRamp: burstRamp)
         progress = 1
 
-        let summary = "\(inputFrames) frames in → \(outputFrames) frames out · "
+        let finalFrames = stitchedOutputFrames(
+            blended: outputFrames, stitchedDuration: stitched.duration,
+            fps: fps, burstRamp: burstRamp, pieces: processedPieces)
+        let summary = "\(inputFrames) frames in → \(finalFrames) frames out · "
             + "\(stitched.width)×\(stitched.height) · "
             + "\(source.sequence.rampIntervals.count) marker ramp intervals stitched"
+            + burstRampSummary(burstRamp, pieces: processedPieces)
         return ProcessingOutput(
             kind: .video,
             url: output,
             image: nil,
             summary: summary,
             inputFrames: inputFrames,
-            outputFrames: outputFrames,
+            outputFrames: finalFrames,
             width: outputWidth ?? stitched.width,
             height: outputHeight ?? stitched.height
         )
@@ -1564,8 +1722,70 @@ final class AppModel: ObservableObject {
         }
     }
 
-    private func stitchVideos(_ urls: [URL], to outputURL: URL) async throws -> (width: Int, height: Int) {
-        guard !urls.isEmpty else { throw LapseError.noInputFrames }
+    /// A stitch failure people (and logs) can act on. `AVAssetExportSession`'s
+    /// own `localizedDescription` is almost always the useless "The operation
+    /// could not be completed" — the code and the underlying error are what
+    /// actually say which part of the composition it choked on.
+    private static func exportFailureDescription(_ error: Error?) -> String {
+        guard let error else { return "sequence export failed" }
+        let nsError = error as NSError
+        var parts = [nsError.localizedDescription]
+        if let reason = nsError.localizedFailureReason { parts.append(reason) }
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            parts.append("underlying \(underlying.domain) \(underlying.code)")
+        }
+        parts.append("(\(nsError.domain) \(nsError.code))")
+        let description = parts.joined(separator: " · ")
+        LLog("stitch export failed: \(description)")
+        return description
+    }
+
+    /// The version's real frame count. A ramp retimes the burst clips inside
+    /// the stitch, so the frames the blend wrote no longer describe the file
+    /// that came out — and `BlendProject.outputSeconds`, which the version
+    /// badge shows, is derived from this.
+    private func stitchedOutputFrames(
+        blended: Int,
+        stitchedDuration: Double,
+        fps: Double,
+        burstRamp: Double,
+        pieces: [StitchPiece]
+    ) -> Int {
+        guard burstRamp > 0,
+              pieces.contains(where: { $0.slowFactor != nil }),
+              stitchedDuration.isFinite, stitchedDuration > 0, fps > 0 else { return blended }
+        return max(1, Int((stitchedDuration * fps).rounded()))
+    }
+
+    /// The version summary's note about ramped bursts, empty when the render
+    /// had none to ramp or ramps are off.
+    private func burstRampSummary(_ burstRamp: Double, pieces: [StitchPiece]) -> String {
+        let bursts = pieces.filter { $0.slowFactor != nil }.count
+        guard burstRamp > 0, bursts > 0 else { return "" }
+        return " · \(BurstRamp.label(burstRamp)) ramp on \(bursts) burst\(bursts == 1 ? "" : "s")"
+    }
+
+    /// One processed clip on its way into the stitch, and what it is: a burst
+    /// clip carries the factor by which it already plays slower than real time,
+    /// which is what a ramp eases in and out of. nil = ordinary footage, never
+    /// retimed.
+    private struct StitchPiece {
+        var url: URL
+        var slowFactor: Double?
+    }
+
+    /// Lays the processed clips end to end and exports one file.
+    ///
+    /// `burstRamp` (seconds, 0 = off) puts a smooth ease on both ends of every
+    /// burst clip in the timeline instead of cutting straight into slow motion.
+    /// It is a pure retime of the composition — the ramp lives inside the burst
+    /// clip's own footage and never reaches the clips either side of it.
+    private func stitchVideos(
+        _ pieces: [StitchPiece],
+        to outputURL: URL,
+        burstRamp: Double = 0
+    ) async throws -> (width: Int, height: Int, duration: Double) {
+        guard !pieces.isEmpty else { throw LapseError.noInputFrames }
         try? FileManager.default.removeItem(at: outputURL)
 
         let composition = AVMutableComposition()
@@ -1582,11 +1802,13 @@ final class AppModel: ObservableObject {
         // Created lazily on the first segment that carries sound (Record
         // audio setting); a failed audio insert never fails the stitch.
         var audioCompositionTrack: AVMutableCompositionTrack?
+        /// Where each burst clip landed, for the retiming pass below.
+        var burstPlacements: [(start: CMTime, duration: CMTime, slowFactor: Double)] = []
 
-        for (index, url) in urls.enumerated() {
-            let asset = AVURLAsset(url: url)
+        for (index, piece) in pieces.enumerated() {
+            let asset = AVURLAsset(url: piece.url)
             guard let track = try await asset.loadTracks(withMediaType: .video).first else {
-                throw LapseError.noVideoTrack(url)
+                throw LapseError.noVideoTrack(piece.url)
             }
             let duration = try await asset.load(.duration)
             try compositionTrack.insertTimeRange(
@@ -1607,6 +1829,9 @@ final class AppModel: ObservableObject {
                     at: cursor
                 )
             }
+            if let slowFactor = piece.slowFactor {
+                burstPlacements.append((cursor, duration, slowFactor))
+            }
             cursor = cursor + duration
 
             if index == 0 {
@@ -1619,6 +1844,39 @@ final class AppModel: ObservableObject {
             }
         }
         compositionTrack.preferredTransform = transform
+
+        if burstRamp > 0, !burstPlacements.isEmpty {
+            // Only tracks the burst clips were actually inserted into. An audio
+            // track that a `try?` insert skipped, or that ran short, must not be
+            // scaled — its ranges wouldn't line up with the picture's.
+            var tracks: [AVMutableCompositionTrack] = [compositionTrack]
+            if let audioCompositionTrack, audioCompositionTrack.timeRange.end >= cursor {
+                tracks.append(audioCompositionTrack)
+            } else if audioCompositionTrack != nil {
+                LLog("burst-ramp: audio track is short of the stitch — ramping picture only")
+            }
+            // Retiming a range moves everything after it, so the placements
+            // recorded above only stay valid while working backwards.
+            for placement in burstPlacements.reversed() {
+                guard let plan = BurstRamp.plan(
+                    requestedRamp: burstRamp,
+                    burstOutputDuration: placement.duration.seconds,
+                    slowFactor: placement.slowFactor
+                ) else {
+                    LLog("burst-ramp: \(String(format: "%.2f", placement.duration.seconds))s clip "
+                         + "at \(String(format: "%.2f", placement.slowFactor))× takes no ramp")
+                    continue
+                }
+                let scaled = BurstRamp.apply(
+                    plan,
+                    to: tracks,
+                    startingAt: placement.start,
+                    duration: placement.duration)
+                LLog("burst-ramp: \(String(format: "%.2f", plan.appliedRamp))s ease over "
+                     + "\(scaled)/\(plan.steps.count) steps on the clip at "
+                     + "\(String(format: "%.2f", placement.start.seconds))s")
+            }
+        }
 
         guard let export = AVAssetExportSession(
             asset: composition,
@@ -1638,8 +1896,7 @@ final class AppModel: ObservableObject {
                     continuation.resume()
                 case .failed:
                     continuation.resume(throwing: LapseError.writerFailed(
-                        exportBox.session.error?.localizedDescription ?? "sequence export failed"
-                    ))
+                        Self.exportFailureDescription(exportBox.session.error)))
                 case .cancelled:
                     continuation.resume(throwing: LapseError.cancelled)
                 default:
@@ -1649,7 +1906,14 @@ final class AppModel: ObservableObject {
         }
 
         let size = outputSize ?? .zero
-        return (Int(abs(size.width).rounded()), Int(abs(size.height).rounded()))
+        // Read back from the composition rather than summing the inputs: a ramp
+        // retimes the burst clips, so the file that just landed is shorter than
+        // the clips that went into it.
+        return (
+            Int(abs(size.width).rounded()),
+            Int(abs(size.height).rounded()),
+            composition.duration.seconds
+        )
     }
 
     /// Blends a sequence of interval stills into a timelapse video. Each output

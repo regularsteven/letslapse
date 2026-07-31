@@ -7,6 +7,10 @@ struct AdjustView: View {
     @EnvironmentObject var model: AppModel
     @State private var showAdvanced = false
     @State private var showCustomSpeed = false
+    /// This shoot's burst material and what the current ramp does to it. Read
+    /// off the sequence sidecar, so it is loaded in a task rather than
+    /// recomputed inside the body.
+    @State private var burstRamp: AppModel.BurstRampInfo?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -22,6 +26,11 @@ struct AdjustView: View {
                         blendFromSection
                         speedSection
                         estimateCard
+                        // Only for a shoot that actually recorded burst clips —
+                        // there is nothing to ease into otherwise.
+                        if let burstRamp {
+                            burstRampRow(info: burstRamp)
+                        }
                         advancedRow
                     } else {
                         tailFrameBanner
@@ -53,6 +62,21 @@ struct AdjustView: View {
             CustomSpeedSheet()
                 .environmentObject(model)
         }
+        .task(id: burstRampToken) {
+            burstRamp = model.currentCapture.flatMap { model.burstRampInfo(for: $0) }
+        }
+    }
+
+    /// Re-read the burst material whenever anything that moves the cap moves:
+    /// the project's own ramp, the app default behind it, or the output rate
+    /// that decides how long a burst runs on screen.
+    private var burstRampToken: Int {
+        var hasher = Hasher()
+        hasher.combine(model.currentCaptureID)
+        hasher.combine(model.currentCapture?.burstRampDuration)
+        hasher.combine(model.burstRampDefault)
+        hasher.combine(model.outputFPS)
+        return hasher.finalize()
     }
 
     // MARK: - Source
@@ -419,6 +443,96 @@ struct AdjustView: View {
         if singleImage { return "all \(photoCount) → one still" }
         if noBlend { return "no blend" }
         return "\(depth) photos → 1 frame"
+    }
+
+    // MARK: - Burst ramp
+
+    /// How long each burst clip eases into and out of slow motion, with a note
+    /// when the burst's own length — not the setting — is deciding it. Sits
+    /// directly above Advanced: it shapes this render, like speed does.
+    private func burstRampRow(info: AppModel.BurstRampInfo) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Slow-motion ramp")
+                        .font(.system(size: 15.5))
+                        .foregroundStyle(.primary)
+                    Text(info.clipCount == 1
+                         ? "Eases the burst in and out of slow motion."
+                         : "Eases all \(info.clipCount) bursts in and out of slow motion.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer(minLength: 8)
+                Menu {
+                    if let capture = model.currentCapture {
+                        Button {
+                            model.setBurstRamp(nil, for: capture)
+                        } label: {
+                            burstRampOption(
+                                "Default (\(BurstRamp.label(model.burstRampDefault)))",
+                                isSelected: capture.burstRampDuration == nil)
+                        }
+                        Button {
+                            model.setBurstRamp(0, for: capture)
+                        } label: {
+                            burstRampOption("Off", isSelected: capture.burstRampDuration == 0)
+                        }
+                        ForEach(BurstRamp.choices, id: \.self) { seconds in
+                            Button {
+                                model.setBurstRamp(seconds, for: capture)
+                            } label: {
+                                burstRampOption(
+                                    BurstRamp.label(seconds),
+                                    isSelected: capture.burstRampDuration == seconds)
+                            }
+                        }
+                    }
+                } label: {
+                    HStack(spacing: 4) {
+                        Text(model.currentCapture?.burstRampDuration.map { BurstRamp.label($0) }
+                             ?? "Default (\(BurstRamp.label(model.burstRampDefault)))")
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 10, weight: .semibold))
+                    }
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+
+            if let note = burstRampNote(info) {
+                Text(note)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+            }
+        }
+        .llCard()
+    }
+
+    @ViewBuilder private func burstRampOption(_ title: String, isSelected: Bool) -> some View {
+        if isSelected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
+        }
+    }
+
+    /// Says so when the burst's own length is deciding the ramp — a 0.4s burst
+    /// can't carry a 1s ease at each end.
+    private func burstRampNote(_ info: AppModel.BurstRampInfo) -> String? {
+        guard info.requestedRamp > 0 else { return nil }
+        if info.appliedRamp <= 0 {
+            return "Shortest burst is only \(BurstRamp.preciseLabel(info.shortestOutputDuration)) — too short to ramp."
+        }
+        guard info.isCapped else { return nil }
+        return "Capped to \(BurstRamp.preciseLabel(info.appliedRamp)) — the shortest burst runs \(BurstRamp.preciseLabel(info.shortestOutputDuration))."
     }
 
     // MARK: - Advanced

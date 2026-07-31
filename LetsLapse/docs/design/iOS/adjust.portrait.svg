@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Adjust — New version (video source) · portrait</title>
-  <desc>Mirrors App/AdjustView.swift for a video source: FlowHeader, source card with Change, Blend-from codec chips (shown when converted encodings exist), Speed preset chips with character words, ink estimate card with BeforeAfterBar, Advanced row, bottom CTA. Flow screens overlay the tabs full-screen — no tab bar.</desc>
+  <desc>Mirrors App/AdjustView.swift for a video source: FlowHeader, source card with Change, Blend-from codec chips (shown when converted encodings exist), Speed preset chips with character words, ink estimate card with BeforeAfterBar, the burst Slow-motion ramp row (only for a shoot that recorded burst clips — how long each burst eases into and out of slow motion, "Default (…)" until this project overrides the app setting, with a note when the burst is too short for the length asked for), Advanced row, bottom CTA. Flow screens overlay the tabs full-screen — no tab bar.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -88,12 +88,25 @@
         <text x="32" y="517" font-size="11" fill="#FFF" opacity="0.45">where the blur comes from.</text>
       </g>
 
+      <!-- burst ramp: only present when the shoot actually recorded burst clips -->
+      <g id="burst-ramp-row">
+        <rect x="16" y="553" width="361" height="74" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="580" font-size="15.5" fill="#000">Slow-motion ramp</text>
+        <text x="32" y="596" font-size="12" fill="#6D6D72">Eases all 2 bursts in and out of slow motion.</text>
+        <text x="352" y="588" font-size="14" fill="#6D6D72" text-anchor="end">Default (Off)</text>
+        <path d="M359 578 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+        <text x="32" y="612" font-size="11.5" fill="#6D6D72">Capped to 0.55s — the shortest burst runs 2.4s.</text>
+      </g>
+      <!-- The menu reads "Default (<app default>)" until the project picks its own,
+           then "Off" / "0.25s" … "2s". The note line appears only when the burst is
+           too short for the ramp asked for; without it the card is 56pt tall. -->
+
       <!-- advanced row -->
       <g id="advanced-row">
-        <rect x="16" y="553" width="361" height="49" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="583" font-size="15.5" fill="#000">Advanced</text>
-        <text x="340" y="582" font-size="12" fill="#6D6D72" text-anchor="end">Ramp · Trim · True-light</text>
-        <path d="M357 570 l6 7.5 -6 7.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <rect x="16" y="641" width="361" height="49" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="671" font-size="15.5" fill="#000">Advanced</text>
+        <text x="340" y="670" font-size="12" fill="#6D6D72" text-anchor="end">Ramp · Trim · True-light</text>
+        <path d="M357 658 l6 7.5 -6 7.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
       </g>
 
       <!-- bottom CTA -->
@@ -111,5 +124,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — New version (video) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — sourceCard · blendFromSection · speedSection · estimateCard</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — sourceCard · blendFromSection · speedSection · estimateCard · burstRampRow · advancedRow</text>
 </svg>

@@ -40,6 +40,10 @@ struct SettingsView: View {
                 creativeDefaultsCard
                     .padding(.bottom, 12)
 
+                LLSectionHeader("Video")
+                burstRampCard
+                    .padding(.bottom, 12)
+
                 LLSectionHeader("Recording")
                 recordingCard
                     .padding(.bottom, 12)
@@ -145,6 +149,62 @@ struct SettingsView: View {
                 showsDivider: false
             ) {
                 Toggle("", isOn: $model.linearLight)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+        }
+        .llCard()
+    }
+
+    // MARK: - Burst ramp
+
+    /// Where new video projects start on burst ramps. A project can always
+    /// override it; with "Remember last" on, the override becomes this.
+    private var burstRampCard: some View {
+        VStack(spacing: 0) {
+            LLRow(
+                title: "Default ramp",
+                subtitle: model.burstRampRememberLast
+                    ? "Following the last ramp you set on a project."
+                    : "Eases burst clips into and out of slow motion instead of cutting straight to it."
+            ) {
+                Menu {
+                    Button {
+                        model.burstRampDefault = nil
+                    } label: {
+                        if model.burstRampDefault == nil {
+                            Label("Off", systemImage: "checkmark")
+                        } else {
+                            Text("Off")
+                        }
+                    }
+                    ForEach(BurstRamp.choices, id: \.self) { seconds in
+                        Button {
+                            model.burstRampDefault = seconds
+                        } label: {
+                            if model.burstRampDefault == seconds {
+                                Label(BurstRamp.label(seconds), systemImage: "checkmark")
+                            } else {
+                                Text(BurstRamp.label(seconds))
+                            }
+                        }
+                    }
+                } label: {
+                    menuValueLabel(BurstRamp.label(model.burstRampDefault))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+                // Read-only while the projects themselves are driving it —
+                // the value still shows, it just isn't the thing to edit.
+                .disabled(model.burstRampRememberLast)
+            }
+
+            LLRow(
+                title: "Remember last",
+                subtitle: "A project's ramp becomes the next default.",
+                showsDivider: false
+            ) {
+                Toggle("", isOn: $model.burstRampRememberLast)
                     .labelsHidden()
                     .tint(.green)
             }
