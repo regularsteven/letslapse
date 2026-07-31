@@ -2,7 +2,7 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
-Last full sync: 2026-07-30, working tree of `ios-app` (uncommitted WIP included).
+Last full sync: 2026-07-30, working tree of `ios-app` (uncommitted WIP included) — including colour grading extended from Photo to Interval and Video (every project detail leads with the grading card).
 
 ## Tabs
 
@@ -15,6 +15,10 @@ Last full sync: 2026-07-30, working tree of `ios-app` (uncommitted WIP included)
 | Settings | [settings.portrait.svg](settings.portrait.svg) | `App/SettingsView.swift` | ✅ |
 
 Note: on iOS, selecting the Create tab opens the camera immediately; Create home is the surface behind/under the camera, revealed on close.
+
+Note: two different screens are called a "viewer" and are easy to confuse. `project-photos.viewer.*` (plural) is the interval-frame pager — swipe through a shoot's source frames, save one to Photos. `project-photo.viewer.*` (singular) is the grading viewer — presets, sliders, white balance — opened for a Photo-mode capture or an interval shoot's first frame. They share no code.
+
+Note: grading is a property of every project, not just Photo mode. `GradingCard` (the graded preview + preset strip) tops all three project-detail variants, so a change to it makes all three stale. Photo and interval open `PhotoViewerView` from the card; video customises in the card itself, through the same `PhotoAdjustmentsPanel` the viewer uses.
 
 Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video segmented control) and `CaptureAssetGrid` / `CaptureAssetTile` (the square thumbnail grid) are used by more than one screen, so their geometry is specified once in [gallery.portrait.svg](gallery.portrait.svg) and reused verbatim in [projects.portrait.svg](projects.portrait.svg) and [project-photos.portrait.svg](project-photos.portrait.svg). A change to either component makes all three stale. Both tabs share the same top rhythm: 15pt above the title, 8pt above and below the filter bar, content flush after it.
 
@@ -46,9 +50,14 @@ Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video se
 
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
-| Project detail (video) | [project-detail.portrait.svg](project-detail.portrait.svg) | `App/ProjectDetailView.swift` (`heroCard`, `sourceClipsSection`, `versionRow`, `managementCard`) | ✅ |
-| Project detail (interval) | [project-detail.interval.portrait.svg](project-detail.interval.portrait.svg) | `App/ProjectDetailView.swift` (`heroCard`, `originalsSection` — Save all to Photos + View all photos) | ✅ |
-| Project detail (photo) | [project-detail.photo.portrait.svg](project-detail.photo.portrait.svg) | `App/ProjectDetailView.swift` (`PhotoGradingCard`, `photoActions`) | ✅ |
+| Project detail (video) | [project-detail.video.portrait.svg](project-detail.video.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard` incl. `customiseControls`, `sourceClipsSection`, `versionRow`, `managementCard`) | ✅ |
+| Project detail (interval) | [project-detail.interval.portrait.svg](project-detail.interval.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard`, `originalsSection` — Save all to Photos + View all photos) | ✅ |
+| Project detail (photo) | [project-detail.photo.portrait.svg](project-detail.photo.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard`, `photoActions`) | ✅ |
+| Project detail (video) · Customise expanded | — | `App/ProjectDetailView.swift` (`GradingCard.customiseControls` inline panel, and its ≥500pt sheet branch) — panel geometry is specified by [project-photo.viewer.expanded.portrait.svg](project-photo.viewer.expanded.portrait.svg) (same `PhotoAdjustmentsPanel`) | 🟡 |
+| Photo grading viewer · Customise collapsed | [project-photo.viewer.portrait.svg](project-photo.viewer.portrait.svg) | `App/PhotoViewerView.swift` (stacked layout, `presetStrip`, `customiseDisclosure`) | ✅ |
+| Photo grading viewer · Customise expanded | [project-photo.viewer.expanded.portrait.svg](project-photo.viewer.expanded.portrait.svg) | `App/PhotoViewerView.swift` (`PhotoAdjustmentsPanel`, shared with the video card) | ✅ |
+| Photo grading viewer · side rail | [project-photo.viewer.landscape.svg](project-photo.viewer.landscape.svg) | `App/PhotoViewerView.swift` (wide branch, ≥500pt available width — iPhone landscape, the iPad sheet, a widened Mac window) | ✅ |
+| Photo grading viewer · Save as preset (alert) | — | `App/PhotoViewerView.swift` (`isNamingPreset` — TextField alert) | 🟡 |
 | Project photos (interval frames, sheet) | [project-photos.portrait.svg](project-photos.portrait.svg) | `App/CapturePhotoGrid.swift` (`CapturePhotoGrid`, `CaptureAssetGrid`, `CaptureAssetTile`) | ✅ |
 | Project photos · fullscreen viewer | [project-photos.viewer.portrait.svg](project-photos.viewer.portrait.svg) | `App/CapturePhotoGrid.swift` (`CaptureFrameViewer`) + `App/ProjectMedia.swift` (`ProjectPreviewImage`) | ✅ |
 | Adjust (video source) | [adjust.portrait.svg](adjust.portrait.svg) | `App/AdjustView.swift` | ✅ |

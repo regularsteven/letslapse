@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Photo grading viewer · Customise expanded · portrait</title>
+  <desc>Mirrors App/PhotoViewerView.swift (sliderPanel → PhotoAdjustmentsPanel) with the Customise panel open — the stacked layout's second state. The panel itself is a shared view: a video project shows the same one inside its project-detail card (project-detail.video.portrait.svg), so this drawing specifies both. The panel pushes the image pane down to 144pt rather than replacing it: the photo stays on screen while the sliders move. Five sliders, all shown at their neutral values, which are the values that make each Core Image filter a no-op: Highlights -1…0 (thumb hard right, CIHighlightShadowAdjust inputHighlightAmount 1.0), Shadows 0…1 (thumb left, inputShadowAmount 0.0), Vibrance -1…1 (thumb centred, CIVibrance inputAmount 0), Clarity 0…1 (thumb left, CIUnsharpMask intensity 0), Vignette 0…1 (thumb left, CIVignette intensity 0). Readouts show the value ×100 with a sign, "0" when neutral and secondary-coloured. White Bal. is a menu Picker over As Shot · Auto · Sunny · Cloudy · Fluorescent · Tungsten; As Shot is a true no-op and the named illuminants re-balance relative to the file's own as-shot temperature (solved from the DNG AsShotNeutral tag, or D65 for a JPEG). Reset adjustments is disabled while the grade is already neutral. Every change is debounced 100ms before it re-renders the preview and writes to the project manifest.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="24" y="94" width="393" height="782" rx="10"/></clipPath>
+    <clipPath id="photo"><rect x="166.5" y="156" width="108" height="144"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)" opacity="0.4">
+      <text x="196.5" y="60" font-size="17" class="sb" fill="#000" text-anchor="middle">Photo of rocks</text>
+    </g>
+
+    <g clip-path="url(#sheet)">
+      <rect x="24" y="94" width="393" height="782" fill="#F2F2F7"/>
+      <g transform="translate(24,94)">
+        <rect x="178.5" y="6" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
+
+        <g id="title-bar">
+          <rect x="0" y="14" width="393" height="48" fill="#F7F7FA"/>
+          <rect x="0" y="61.5" width="393" height="0.5" fill="#000" opacity="0.12"/>
+          <text x="20" y="44" font-size="15.5" class="sb" fill="#C36A00">Done</text>
+          <text x="196.5" y="44" font-size="15.5" class="sb" fill="#000" text-anchor="middle">Photo of rocks</text>
+        </g>
+
+        <!-- image pane squeezed to 144pt; the 3:4 still is 108pt wide -->
+        <rect x="0" y="62" width="393" height="144" fill="#000"/>
+      </g>
+    </g>
+
+    <g clip-path="url(#photo)">
+      <rect x="166.5" y="156" width="108" height="144" fill="#8FB4CE"/>
+      <rect x="166.5" y="156" width="108" height="66" fill="#A9C8DC"/>
+      <ellipse cx="200" cy="184" rx="36" ry="14" fill="#E4EEF4" opacity="0.75"/>
+      <polygon points="166.5,228 190,206 212,232 238,200 258,220 274.5,206 274.5,300 166.5,300" fill="#C9C6BE"/>
+      <polygon points="166.5,254 188,240 208,258 228,242 248,262 274.5,248 274.5,300 166.5,300" fill="#B4B1A8"/>
+      <g fill="#3E5B33">
+        <polygon points="184,214 194,246 174,246"/>
+        <polygon points="184,236 197,272 171,272"/>
+        <polygon points="230,258 239,286 221,286"/>
+      </g>
+    </g>
+
+    <g clip-path="url(#sheet)">
+      <g transform="translate(24,94)">
+        <!-- preset chip strip -->
+        <g id="preset-strip">
+          <rect x="18" y="220" width="76" height="33" rx="16.5" fill="#C36A00"/>
+          <text x="56" y="241.5" font-size="13.5" class="sb" fill="#FFF" text-anchor="middle">Natural</text>
+          <rect x="102" y="220" width="77" height="33" rx="16.5" fill="#FFF"/>
+          <text x="140.5" y="241.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Cinema</text>
+          <rect x="187" y="220" width="66" height="33" rx="16.5" fill="#FFF"/>
+          <text x="220" y="241.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Matte</text>
+          <rect x="261" y="220" width="61" height="33" rx="16.5" fill="#FFF"/>
+          <text x="291.5" y="241.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Vivid</text>
+          <rect x="330" y="220" width="90" height="33" rx="16.5" fill="#FFF"/>
+          <text x="375" y="241.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Original</text>
+        </g>
+
+        <!-- Customise disclosure, expanded (chevron.down at rest) -->
+        <g id="customise">
+          <rect x="16" y="267" width="361" height="50" rx="12" fill="#FFF"/>
+          <text x="30" y="297.5" font-size="15" class="sb" fill="#000">Customise</text>
+          <path d="M346 289 l6 7 6 -7" stroke="#6D6D72" stroke-width="2.2" fill="none"
+                stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
+
+        <!-- slider panel -->
+        <g id="slider-panel">
+          <rect x="16" y="331" width="361" height="373" rx="12" fill="#FFF"/>
+
+          <!-- Highlights: -1…0, neutral = 0 = hard right -->
+          <text x="30" y="358" font-size="13.5" fill="#6D6D72">Highlights</text>
+          <text x="363" y="358" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="30" y="376" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
+          <rect x="30" y="376" width="319" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="349" cy="378" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <!-- Shadows: 0…1, neutral = 0 = left -->
+          <text x="30" y="415" font-size="13.5" fill="#6D6D72">Shadows</text>
+          <text x="363" y="415" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="30" y="433" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
+          <circle cx="44" cy="435" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <!-- Vibrance: -1…1, neutral = 0 = centre -->
+          <text x="30" y="472" font-size="13.5" fill="#6D6D72">Vibrance</text>
+          <text x="363" y="472" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="30" y="490" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
+          <rect x="30" y="490" width="166.5" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="196.5" cy="492" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <!-- Clarity: 0…1, neutral = 0 = left -->
+          <text x="30" y="529" font-size="13.5" fill="#6D6D72">Clarity</text>
+          <text x="363" y="529" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="30" y="547" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
+          <circle cx="44" cy="549" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <!-- Vignette: 0…1, neutral = 0 = left -->
+          <text x="30" y="586" font-size="13.5" fill="#6D6D72">Vignette</text>
+          <text x="363" y="586" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="30" y="604" width="333" height="4" rx="2" fill="#000" opacity="0.16"/>
+          <circle cx="44" cy="606" r="13.5" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <!-- White balance menu picker -->
+          <text x="30" y="645" font-size="13.5" fill="#6D6D72">White Bal.</text>
+          <text x="345" y="645" font-size="15" class="sb" fill="#C36A00" text-anchor="end">As Shot</text>
+          <g data-symbol="chevron.up.chevron.down" stroke="#C36A00" stroke-width="1.8" fill="none"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M354 641.5 l4 -4 4 4 M354 647.5 l4 4 4 -4"/>
+          </g>
+
+          <!-- disabled while the grade is already neutral -->
+          <text x="30" y="683" font-size="13" class="sb" fill="#6D6D72">Reset adjustments</text>
+        </g>
+
+        <!-- Save as Preset -->
+        <g id="save-preset">
+          <rect x="16" y="718" width="361" height="50" rx="12" fill="#FFF"/>
+          <g data-symbol="square.and.arrow.down" stroke="#C36A00" stroke-width="1.9" fill="none" stroke-linecap="round">
+            <path d="M141 736 v13 M136 744 l5 5 5 -5"/>
+            <path d="M134 733 v-3 h14 v3" stroke-opacity="0.9"/>
+          </g>
+          <text x="157" y="748.5" font-size="15" class="sb" fill="#C36A00">Save as Preset</text>
+        </g>
+      </g>
+    </g>
+
+    <g transform="translate(24,24)">
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Photo grading viewer · Customise expanded · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift (PhotoAdjustmentsPanel) — 5 sliders at neutral · White Bal. picker · Reset disabled</text>
+</svg>

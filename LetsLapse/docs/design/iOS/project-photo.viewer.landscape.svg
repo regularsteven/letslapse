@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Photo grading viewer · side rail · landscape</title>
+  <desc>Mirrors App/PhotoViewerView.swift in its wide layout — the branch taken whenever the available width reaches 500pt: iPhone landscape (852pt), the iPad sheet (~578pt), or a widened Mac window. The threshold is 500 rather than 600 because the iPad sheet presents at ~578pt and a 600pt cutover left it stacked; the widest iPhone portrait is 440pt, so both stay firmly on the right side. The controls move into a side rail beside the image instead of stacking under it, and the sliders are shown outright with no Customise disclosure, because a rail has the height for them. Rail width is min(340, width × 0.42): 340pt at the 852pt iPhone-landscape width drawn here, and ~243pt on the iPad sheet. The rail scrolls on its own. Sliders, readouts, White Bal. picker and Save as Preset are identical to the portrait expanded state (see project-photo.viewer.expanded.portrait.svg) — only the arrangement changes. Shown at the neutral grade with Natural selected.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
+    <clipPath id="photo"><rect x="151" y="72" width="258" height="345"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="852" height="393" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- title bar spans the full width above both panes -->
+      <g id="title-bar">
+        <rect x="0" y="0" width="852" height="48" fill="#F7F7FA"/>
+        <rect x="0" y="47.5" width="852" height="0.5" fill="#000" opacity="0.12"/>
+        <text x="62" y="30" font-size="15.5" class="sb" fill="#C36A00">Done</text>
+        <text x="426" y="30" font-size="15.5" class="sb" fill="#000" text-anchor="middle">Photo of rocks</text>
+      </g>
+
+      <!-- image pane: 852 - 340 rail = 512pt wide -->
+      <rect x="0" y="48" width="512" height="345" fill="#000"/>
+      <rect x="511.5" y="48" width="0.5" height="345" fill="#000" opacity="0.15"/>
+    </g>
+  </g>
+
+  <!-- the graded still, scaledToFit into the 512×345 pane → 3:4 gives 259×345 -->
+  <g clip-path="url(#photo)">
+    <rect x="151" y="72" width="258" height="345" fill="#8FB4CE"/>
+    <rect x="151" y="72" width="258" height="150" fill="#A9C8DC"/>
+    <ellipse cx="236" cy="136" rx="82" ry="30" fill="#E4EEF4" opacity="0.75"/>
+    <ellipse cx="348" cy="114" rx="60" ry="22" fill="#E4EEF4" opacity="0.6"/>
+    <polygon points="151,242 210,196 258,238 312,180 356,220 407,190 407,417 151,417" fill="#C9C6BE"/>
+    <polygon points="151,288 194,258 231,292 276,262 316,298 366,266 407,288 407,417 151,417" fill="#B4B1A8"/>
+    <path d="M336 180 l21 -12 v249 h-21 z" fill="#6E6B64"/>
+    <g fill="#3E5B33">
+      <polygon points="186,180 206,248 166,248"/>
+      <polygon points="186,216 210,290 162,290"/>
+      <polygon points="186,262 214,352 158,352"/>
+      <polygon points="272,290 288,352 256,352"/>
+    </g>
+    <rect x="183" y="248" width="5" height="150" fill="#4A3B2A"/>
+  </g>
+
+  <g clip-path="url(#screen)">
+    <g transform="translate(24,24)">
+      <!-- side rail: 340pt, controls shown outright (no Customise disclosure) -->
+      <g id="control-rail">
+        <rect x="512" y="48" width="340" height="345" fill="#F2F2F7"/>
+
+        <!-- preset chip strip, scrolls horizontally within the rail -->
+        <rect x="530" y="62" width="76" height="33" rx="16.5" fill="#C36A00"/>
+        <text x="568" y="83.5" font-size="13.5" class="sb" fill="#FFF" text-anchor="middle">Natural</text>
+        <rect x="614" y="62" width="77" height="33" rx="16.5" fill="#FFF"/>
+        <text x="652.5" y="83.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Cinema</text>
+        <rect x="699" y="62" width="66" height="33" rx="16.5" fill="#FFF"/>
+        <text x="732" y="83.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Matte</text>
+        <rect x="773" y="62" width="61" height="33" rx="16.5" fill="#FFF"/>
+        <text x="803.5" y="83.5" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Vivid</text>
+
+        <!-- slider panel -->
+        <g id="slider-panel">
+          <rect x="528" y="109" width="308" height="228" rx="12" fill="#FFF"/>
+
+          <text x="542" y="130" font-size="12" fill="#6D6D72">Highlights</text>
+          <text x="822" y="130" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="542" y="139" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
+          <rect x="542" y="139" width="269" height="3.5" rx="1.75" fill="#C36A00"/>
+          <circle cx="811" cy="140.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <text x="542" y="170" font-size="12" fill="#6D6D72">Shadows</text>
+          <text x="822" y="170" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="542" y="179" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
+          <circle cx="553" cy="180.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <text x="542" y="210" font-size="12" fill="#6D6D72">Vibrance</text>
+          <text x="822" y="210" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="542" y="219" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
+          <rect x="542" y="219" width="140" height="3.5" rx="1.75" fill="#C36A00"/>
+          <circle cx="682" cy="220.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <text x="542" y="250" font-size="12" fill="#6D6D72">Clarity</text>
+          <text x="822" y="250" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="542" y="259" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
+          <circle cx="553" cy="260.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <text x="542" y="290" font-size="12" fill="#6D6D72">Vignette</text>
+          <text x="822" y="290" font-size="11.5" class="sb" fill="#6D6D72" text-anchor="end">0</text>
+          <rect x="542" y="299" width="280" height="3.5" rx="1.75" fill="#000" opacity="0.16"/>
+          <circle cx="553" cy="300.75" r="10" fill="#FFF" stroke="#000" stroke-opacity="0.12"/>
+
+          <text x="542" y="326" font-size="12" fill="#6D6D72">White Bal.</text>
+          <text x="806" y="326" font-size="13.5" class="sb" fill="#C36A00" text-anchor="end">As Shot</text>
+          <g data-symbol="chevron.up.chevron.down" stroke="#C36A00" stroke-width="1.7" fill="none"
+             stroke-linecap="round" stroke-linejoin="round">
+            <path d="M813 323 l3.5 -3.5 3.5 3.5 M813 328.5 l3.5 3.5 3.5 -3.5"/>
+          </g>
+        </g>
+
+        <!-- Save as Preset -->
+        <g id="save-preset">
+          <rect x="528" y="349" width="308" height="40" rx="12" fill="#FFF"/>
+          <g data-symbol="square.and.arrow.down" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round">
+            <path d="M636 362 v11 M631.5 369 l4.5 4.5 4.5 -4.5"/>
+            <path d="M630 359.5 v-2.5 h12 v2.5" stroke-opacity="0.9"/>
+          </g>
+          <text x="650" y="374" font-size="14" class="sb" fill="#C36A00">Save as Preset</text>
+        </g>
+      </g>
+
+      <!-- hardware: landscape home indicator -->
+      <rect x="359" y="381" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="450" y="447" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Photo grading viewer · side rail · landscape · 852×393 pt</text>
+  <text x="450" y="465" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift — wide branch at ≥500pt · rail min(340, width×0.42) · sliders always visible</text>
+</svg>
