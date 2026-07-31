@@ -226,7 +226,11 @@ enum ProjectThumbnailGenerator {
         )
     }
 
-    private static func imageThumbnail(for url: URL, maxPixelSize: Int) -> CGImage? {
+    /// A bounded, orientation-corrected still decode. Internal rather than
+    /// private because the motion preview needs a *sized* decode it can afford
+    /// to run at frame rate — 480 px is a tile and 2560 px is too slow to hold
+    /// 12 fps on a phone.
+    static func imageThumbnail(for url: URL, maxPixelSize: Int) -> CGImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,

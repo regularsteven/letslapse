@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Project detail (photo) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, photoActions): a photo capture is ONE asset — graded preview with the preset strip (Natural · Cinema · Matte · Vivid · Original), Save to Photos + Share, management card. No clip list, no versions, no New version button. The preview renders the project's preset AND its PhotoAdjustments sliders, so it matches what the grading viewer shows. Any saved CustomPreset appears as a further chip after Original (none saved in this drawing, which is the default state); a built-in chip is highlighted only when no saved preset matches the current preset+adjustments exactly, and long-pressing a custom chip offers Delete preset. The expand button on the preview opens App/PhotoViewerView.swift — see project-photo.viewer.portrait.svg — not the plain media preview sheet. `GradingCard` is shared by all three modes: the interval and video variants show the same strip over their own preview (project-detail.interval.portrait.svg, project-detail.video.portrait.svg). A photo capture's card carries the one PHOTO pill and no format badge, unlike those two.</desc>
+  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, photoActions, originalsSection in its burst wording): a photo capture is ONE asset — graded preview with the preset strip (Natural · Cinema · Matte · Vivid · Original), Save to Photos + Share, then the Burst frames card, then the management card. No clip list, no versions, no New version button. The Burst frames card is drawn only for a BLENDED shot (sourceMediaCount &gt; 1), where the frames that stacked into the photo are still on disk: "Frames behind this photo" carries the batched, ungraded Save all to Photos, and "View all frames" opens CapturePhotoGrid over them, each tile through the project's grade, each frame savable on its own. With Blend Off the shot is a single frame — that frame IS the photo above — so the whole card is absent and the management card sits at y=449 as it did before. The preview renders the project's preset AND its PhotoAdjustments sliders, so it matches what the grading viewer shows. Any saved CustomPreset appears as a further chip after Original (none saved in this drawing, which is the default state); a built-in chip is highlighted only when no saved preset matches the current preset+adjustments exactly, and long-pressing a custom chip offers Delete preset. The expand button on the preview opens App/PhotoViewerView.swift — see project-photo.viewer.portrait.svg — not the plain media preview sheet. `GradingCard` is shared by all three modes: the interval and video variants show the same strip over their own preview (project-detail.interval.portrait.svg, project-detail.video.portrait.svg). A photo capture's card carries the one PHOTO pill and no format badge, unlike those two.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -70,17 +70,33 @@
         <text x="289.25" y="413" font-size="15.5" class="b" fill="#C36A00" text-anchor="middle">Share</text>
       </g>
 
+      <!-- burst frames: only drawn when the shot was blended (sourceMediaCount > 1) -->
+      <text x="20" y="462" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BURST FRAMES</text>
+      <g id="burst-frames-card">
+        <rect x="16" y="471" width="361" height="96" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="row-burst-frames">
+          <text x="32" y="496" font-size="16" fill="#000">Frames behind this photo</text>
+          <text x="32" y="511" font-size="11.5" fill="#6D6D72">8 frames</text>
+          <text x="363" y="500" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Save all to Photos</text>
+        </g>
+        <line x1="32" y1="523" x2="377" y2="523" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-view-all-frames">
+          <text x="32" y="551" font-size="16" fill="#000">View all frames</text>
+          <path d="M363 538 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        </g>
+      </g>
+
       <!-- management card -->
       <g id="management-card">
-        <rect x="16" y="449" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="477" font-size="16" fill="#000">Rename project</text>
-        <path d="M363 465 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
-        <line x1="32" y1="493" x2="377" y2="493" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="518" font-size="16" fill="#000">Storage</text>
-        <text x="32" y="533" font-size="11.5" fill="#6D6D72">photo + burst frames</text>
-        <text x="361" y="522" font-size="14" fill="#6D6D72" text-anchor="end">48 MB</text>
-        <line x1="32" y1="545" x2="377" y2="545" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="571" font-size="16" fill="#FF3B30">Delete project…</text>
+        <rect x="16" y="581" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="609" font-size="16" fill="#000">Rename project</text>
+        <path d="M363 597 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        <line x1="32" y1="625" x2="377" y2="625" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="650" font-size="16" fill="#000">Storage</text>
+        <text x="32" y="665" font-size="11.5" fill="#6D6D72">photo + burst frames</text>
+        <text x="361" y="654" font-size="14" fill="#6D6D72" text-anchor="end">48 MB</text>
+        <line x1="32" y1="677" x2="377" y2="677" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="703" font-size="16" fill="#FF3B30">Delete project…</text>
       </g>
 
       <!-- floating tab bar (Projects selected) -->
@@ -115,5 +131,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail (photo) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — GradingCard · presetStrip · photoActions</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — GradingCard · presetStrip · photoActions · originalsSection (burst) · managementCard</text>
 </svg>

@@ -33,6 +33,27 @@ struct LetsLapseApp: App {
         #if os(macOS)
         .defaultSize(width: 760, height: 680)
         #endif
+
+        #if os(macOS)
+        // The grading viewer opens as its own window on the Mac — macOS sheets
+        // are fixed-size, and an editor wants free resizing and full screen.
+        // One window per photo: reopening the same photo fronts its window.
+        WindowGroup(for: PhotoEditorWindowRequest.self) { $request in
+            if let request {
+                PhotoViewerView(
+                    captureID: request.captureID,
+                    url: request.url,
+                    title: request.title
+                )
+                .environmentObject(model)
+                .navigationTitle(request.title)
+                // Floor only. The rail is fixed at 340pt, so 720 leaves the
+                // image pane a workable ~380pt at the smallest.
+                .frame(minWidth: 720, minHeight: 480)
+            }
+        }
+        .defaultSize(width: 1000, height: 700)
+        #endif
     }
 }
 

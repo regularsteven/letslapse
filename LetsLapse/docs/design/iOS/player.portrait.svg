@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Fullscreen media player (video) · portrait</title>
+  <desc>Mirrors App/FullscreenMediaSheet.swift (FullscreenMediaSheet chrome + FullscreenVideoPage) — the one in-app player, presented as a fullScreenCover on iOS/iPadOS and as a sheet on macOS (which has no fullScreenCover). Every playback tap on project detail lands here: the grading card's play button, a source clip row, a version row. Black to the edges, status bar hidden. Chrome: a 36pt circular × top-left, the "n of m" position between, and a 36pt circular share button top-right (share is omitted, and its space held, for the two items that exist only in memory — a stitched multi-segment take and an interval motion preview — since there is no single file to hand over). Below the video, a scrubber appears once AVPlayerItem.duration resolves above zero: an accent slider with elapsed left and total right, over a 35% black plate. Playback autoplays, loops (actionAtItemEnd = .none plus a seek on AVPlayerItemDidPlayToEndTime), and only the visible page plays — the pager pauses the others. VideoPlayer's own transport also appears on tap and auto-hides; this scrubber is the sheet's, always on. Swipe left/right pages through the siblings the caller passed (the project's other source clips, its other versions) via TabView .page(indexDisplayMode: .never), so the dots are NOT drawn — position is text. Swipe down past 120pt dismisses (a DragGesture that only claims clearly vertical drags, so paging keeps horizontal ones). A non-identity project grade is applied live through VideoGrader.composition — nothing is baked, nothing is written to disk. Two variants are not drawn: `.intervalMotion` replaces the scrubber with a transport row (play/pause circle · "12 / 184" · "12 fps preview"), and `.photo` with a capture id hands the whole surface to PhotoViewerView, whose own Done bar replaces this chrome.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <linearGradient id="frame" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E5470"/><stop offset="0.6" stop-color="#22303F"/><stop offset="1" stop-color="#161D26"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- the movie, letterboxed against black: 16:9 inside the full-bleed page -->
+      <g id="video">
+        <rect x="0" y="315" width="393" height="221" fill="url(#frame)"/>
+        <circle cx="118" cy="372" r="23" fill="#FFB340" opacity="0.85"/>
+        <polygon points="0,470 88,428 168,464 248,424 330,460 393,438 393,536 0,536" fill="#1A222E"/>
+        <polygon points="0,498 118,468 238,502 338,478 393,494 393,536 0,536" fill="#10151D"/>
+      </g>
+
+      <!-- chrome: close · position · share -->
+      <g id="top-bar">
+        <circle cx="34" cy="71" r="18" fill="#000" opacity="0.4"/>
+        <path d="M28 65 l12 12 M40 65 l-12 12" stroke="#FFF" stroke-width="2.2" stroke-linecap="round" data-symbol="xmark"/>
+        <text x="196.5" y="76" font-size="13" class="sb" fill="#FFF" fill-opacity="0.75" text-anchor="middle">2 of 4</text>
+        <circle cx="359" cy="71" r="18" fill="#000" opacity="0.4"/>
+        <g data-symbol="square.and.arrow.up" stroke="#FFF" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M359 62 v12"/>
+          <path d="M354.5 66.5 l4.5 -4.5 4.5 4.5"/>
+          <path d="M352 71 v8 h14 v-8"/>
+        </g>
+      </g>
+
+      <!-- scrubber: drawn only once the item's duration is known -->
+      <g id="scrubber">
+        <rect x="0" y="742" width="393" height="86" fill="#000" opacity="0.35"/>
+        <line x1="20" y1="768" x2="373" y2="768" stroke="#FFF" stroke-opacity="0.25" stroke-width="4" stroke-linecap="round"/>
+        <line x1="20" y1="768" x2="152" y2="768" stroke="#C36A00" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="152" cy="768" r="10" fill="#FFF"/>
+        <text x="20" y="795" font-size="11.5" class="sb" fill="#FFF" fill-opacity="0.75">0:13</text>
+        <text x="373" y="795" font-size="11.5" class="sb" fill="#FFF" fill-opacity="0.75" text-anchor="end">0:36</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.5"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Fullscreen media player (video) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/FullscreenMediaSheet.swift — FullscreenMediaSheet (topBar · pager) · FullscreenVideoPage (VideoPlayer · scrubber)</text>
+</svg>

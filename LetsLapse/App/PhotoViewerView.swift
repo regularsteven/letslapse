@@ -1,12 +1,29 @@
 import SwiftUI
 
+#if os(macOS)
+/// Identifies one photo-editor window on the Mac: which capture, which file,
+/// and the title to show. `Codable` so macOS can restore the window across
+/// relaunches; `Hashable` so reopening the same photo fronts the existing
+/// window instead of spawning a second one.
+struct PhotoEditorWindowRequest: Hashable, Codable {
+    let captureID: UUID
+    let url: URL
+    let title: String
+}
+#endif
+
 /// The full-screen photo viewer with grading controls: the graded image, the
 /// preset chip strip, and a Customise panel of sliders that re-render the
 /// preview live.
 ///
+/// On iOS/iPadOS it presents as a sheet with its own Done bar. On macOS it is
+/// the content of its own resizable window (`PhotoEditorWindowRequest` scene in
+/// `LetsLapseApp`), so the window chrome owns the title and close and no Done
+/// bar is drawn.
+///
 /// Layout follows the available width rather than the device: past
 /// `wideLayoutThreshold` the controls move into a side rail beside the image
-/// (iPhone landscape, iPad, a widened Mac window); below it they stack under
+/// (iPhone landscape, iPad, always on the Mac); below it they stack under
 /// the image and the slider panel collapses so the photo is never pushed off
 /// screen.
 struct PhotoViewerView: View {
@@ -45,6 +62,17 @@ struct PhotoViewerView: View {
     /// obvious room for the rail. 500 puts both firmly on the right side, with
     /// ~60pt of clearance below and ~78pt above.
     private let wideLayoutThreshold: CGFloat = 500
+
+    /// Side-rail width. Fixed on macOS — resizing the window grows the photo,
+    /// never the controls. Capped-proportional on iOS/iPadOS, where the
+    /// presented widths vary more (a 578pt iPad sheet gets a 243pt rail).
+    private func railWidth(in totalWidth: CGFloat) -> CGFloat {
+        #if os(macOS)
+        return 340
+        #else
+        return min(340, totalWidth * 0.42)
+        #endif
+    }
     /// How long the controls have to be still before a render starts. Long
     /// enough that dragging a slider doesn't queue a render per frame, short
     /// enough to feel live.
@@ -68,7 +96,7 @@ struct PhotoViewerView: View {
                         imagePane
                         Divider()
                         controlRail(isWide: true)
-                            .frame(width: min(340, proxy.size.width * 0.42))
+                            .frame(width: railWidth(in: proxy.size.width))
                     }
                 } else {
                     VStack(spacing: 0) {
@@ -85,7 +113,11 @@ struct PhotoViewerView: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .background(LL.screenBackground)
+        #if os(iOS)
+        // The sheet draws its own Done bar; on macOS the window's own title
+        // bar and close button do this job.
         .safeAreaInset(edge: .top, spacing: 0) { titleBar }
+        #endif
         .task {
             // Seed once from the project, then let this view own the values —
             // re-seeding on every model change would fight the sliders.
@@ -127,8 +159,9 @@ struct PhotoViewerView: View {
         }
     }
 
-    // MARK: - Title bar
+    // MARK: - Title bar (iOS sheet only)
 
+    #if os(iOS)
     private var titleBar: some View {
         HStack {
             Button("Done") { dismiss() }
@@ -150,6 +183,7 @@ struct PhotoViewerView: View {
         .padding(.vertical, 12)
         .background(.bar)
     }
+    #endif
 
     // MARK: - Image
 

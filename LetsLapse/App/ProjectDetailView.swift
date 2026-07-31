@@ -6,11 +6,18 @@ import LetsLapseKit
 struct ProjectDetailView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     let captureID: UUID
 
-    @State private var previewItem: MediaPreviewItem?
-    /// The photo opened in the grading viewer. Separate from `previewItem`
-    /// because a photo capture gets the editor, not the plain preview sheet.
+    /// What the fullscreen player is showing. Every in-app playback path on this
+    /// screen — the hero's play button, a source clip row, a version row — goes
+    /// through it.
+    @State private var fullscreenMedia: FullscreenMediaRequest?
+    /// The photo opened in the grading viewer (iOS sheet only — on macOS the
+    /// viewer opens as its own window). Separate from `fullscreenMedia` because
+    /// the viewer is the grading *editor*, not playback.
     @State private var gradingPhoto: GradingPhoto?
     @State private var isRenaming = false
 
@@ -65,9 +72,10 @@ struct ProjectDetailView: View {
                 .background(LL.screenBackground)
             }
         }
-        .sheet(item: $previewItem) { item in
-            ProjectMediaPreviewSheet(item: item)
-        }
+        .fullscreenMedia($fullscreenMedia, model: model)
+        #if os(iOS)
+        // macOS has no grading sheet: `previewGradedPhoto` opens the viewer in
+        // its own resizable window instead (see the scene in `LetsLapseApp`).
         .sheet(item: $gradingPhoto) { photo in
             PhotoViewerView(
                 captureID: captureID,
@@ -75,12 +83,8 @@ struct ProjectDetailView: View {
                 title: capture?.displayTitle ?? "Photo"
             )
             .environmentObject(model)
-            #if os(macOS)
-            // Minimums only — the grading viewer is resizable, so a wide window
-            // gets the side-by-side layout.
-            .frame(minWidth: 720, minHeight: 480)
-            #endif
         }
+        #endif
         .alert("Rename project", isPresented: $isRenaming) {
             TextField("Project name", text: $renameText)
             Button("Save") {
@@ -203,7 +207,7 @@ struct ProjectDetailView: View {
                   let url = capture.isPhotoCapture
                     ? model.heroImageURL(for: capture)
                     : model.sourceFrameURLs(for: capture).first else { return }
-            gradingPhoto = GradingPhoto(url: url)
+            previewGradedPhoto(capture, url: url)
         }
         #endif
     }
@@ -243,13 +247,27 @@ struct ProjectDetailView: View {
                     // not of the asset the card is showing.
                     formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
                     onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
-                    onPlay: { playOriginal(capture) }
+                    onPlay: { playOriginal(capture) },
+                    // Interval only: the shoot has frames to play as motion, so
+                    // its card leads with Play and keeps the editor as a second
+                    // affordance. Photo has one still and video has a movie —
+                    // neither has a sequence to preview.
+                    onPlaySequence: capture.kind == .photos && !capture.isPhotoCapture
+                        ? { previewSequence(capture) } : nil
                 )
 
                 // A Photo-mode capture is ONE photo — no clip list, no
                 // versions, no re-processing. Just save, share, manage.
                 if capture.isPhotoCapture {
                     photoActions(for: capture)
+                    // A blended Photo shot stacks a burst into its one asset and
+                    // keeps the frames on disk. They stay stacking material —
+                    // no versions, no re-processing — but they are reachable
+                    // now, one frame at a time. An unblended shot captured a
+                    // single frame, which *is* the photo above: nothing to open.
+                    if capture.sourceMediaCount > 1 {
+                        originalsSection(for: capture)
+                    }
                 } else {
                     if capture.kind == .video, !clipNames.isEmpty {
                         sourceClipsSection(for: capture, clipNames: clipNames)
@@ -281,7 +299,7 @@ struct ProjectDetailView: View {
                         } else {
                             VStack(spacing: 0) {
                                 ForEach(versions) { blend in
-                                    versionRow(blend)
+                                    versionRow(blend, in: capture)
                                     if blend.id != versions.last?.id {
                                         Divider().padding(.leading, 84)
                                     }
@@ -362,7 +380,7 @@ struct ProjectDetailView: View {
             VStack(spacing: 0) {
                 ForEach(Array(clipNames.enumerated()), id: \.element) { index, clipName in
                     SourceClipRow(captureID: capture.id, index: index, clipName: clipName) { url in
-                        previewClip(for: capture, index: index, url: url)
+                        previewClip(for: capture, url: url)
                     }
                     if clipName != clipNames.last {
                         Divider().padding(.leading, 84)
@@ -417,15 +435,20 @@ struct ProjectDetailView: View {
         }
     }
 
-    /// Interval shoots: every source frame the camera kept — exportable to
-    /// Photos in one batched library change, and now browsable one frame at a
-    /// time (the batch export used to be the only way to reach them).
+    /// Every source frame the camera kept — exportable to Photos in one batched
+    /// library change, and browsable one frame at a time (the batch export used
+    /// to be the only way to reach them).
+    ///
+    /// Interval shoots call these the originals. A Photo-mode shot calls them
+    /// burst frames: they are the stacking material behind its one photo, not a
+    /// set of photos in their own right.
     private func originalsSection(for capture: AppModel.CaptureProject) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LLSectionHeader("Originals")
+        let isBurst = capture.isPhotoCapture
+        return VStack(alignment: .leading, spacing: 8) {
+            LLSectionHeader(isBurst ? "Burst frames" : "Originals")
             VStack(spacing: 0) {
                 LLRow(
-                    title: "Source photos",
+                    title: isBurst ? "Frames behind this photo" : "Source photos",
                     subtitle: originalsSubtitle(for: capture)
                 ) {
                     originalsControl(for: capture)
@@ -434,7 +457,7 @@ struct ProjectDetailView: View {
                 Button {
                     isBrowsingOriginals = true
                 } label: {
-                    LLRow(title: "View all photos", showsDivider: false) {
+                    LLRow(title: isBurst ? "View all frames" : "View all photos", showsDivider: false) {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(.tertiary)
@@ -450,7 +473,8 @@ struct ProjectDetailView: View {
 
     private func originalsSubtitle(for capture: AppModel.CaptureProject) -> String {
         if case .failed(let message) = originalsSaveState { return message }
-        return "\(capture.sourceMediaCount) photos"
+        let count = capture.sourceMediaCount
+        return capture.isPhotoCapture ? "\(count) frames" : "\(count) photos"
     }
 
     @ViewBuilder private func originalsControl(for capture: AppModel.CaptureProject) -> some View {
@@ -476,21 +500,34 @@ struct ProjectDetailView: View {
         #endif
     }
 
-    private func versionRow(_ blend: AppModel.BlendProject) -> some View {
+    private func versionRow(_ blend: AppModel.BlendProject, in capture: AppModel.CaptureProject) -> some View {
         HStack(spacing: 12) {
-            ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
-                .frame(width: 58, height: 42)
+            // The row plays; Open still goes to the result screen, where the
+            // version's settings and its export paths live.
+            Button {
+                previewVersion(blend, in: capture)
+            } label: {
+                HStack(spacing: 12) {
+                    ProjectThumbnailView(
+                        url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
+                        .frame(width: 58, height: 42)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(versionTitle(blend))
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .lineLimit(1)
-                Text(versionSubtitle(blend))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(versionTitle(blend))
+                            .font(.system(size: 14.5, weight: .semibold))
+                            .lineLimit(1)
+                        Text(versionSubtitle(blend))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+            .accessibilityLabel("Play v\(model.versionNumber(for: blend))")
+
             Button("Open") {
                 model.openBlend(blend)
             }
@@ -644,14 +681,58 @@ struct ProjectDetailView: View {
 
     // MARK: - Actions
 
+    /// Plays the capture's own footage.
+    ///
+    /// A recording written as several segments plays as the one take it was:
+    /// the player stitches them into an in-memory composition. Only the first
+    /// segment used to play, silently, which read as a shoot that had lost most
+    /// of itself.
     private func playOriginal(_ capture: AppModel.CaptureProject) {
-        guard let url = heroMediaURL(for: capture) else { return }
-        previewItem = MediaPreviewItem(
-            title: capture.displayTitle,
-            subtitle: capture.formatLine,
-            url: url,
-            kind: model.mediaKind(for: capture)
-        )
+        // The original is ungraded on disk, so the player applies the project's
+        // grade live — the same grade the card above it is previewing.
+        let grade = model.photoGrade(for: capture)
+        guard capture.kind == .video else {
+            guard let url = heroMediaURL(for: capture) else { return }
+            fullscreenMedia = FullscreenMediaRequest(
+                .photo(url: url), captureID: capture.id, title: capture.displayTitle)
+            return
+        }
+        // Already resolved to each clip's active encoding, so what plays is what
+        // the source-clip rows are showing.
+        let segments = model.sourceClipURLs(for: capture)
+        let content: FullscreenContent
+        if segments.count > 1 {
+            content = .videoSequence(urls: segments, grade: grade)
+        } else if let url = segments.first ?? heroMediaURL(for: capture) {
+            content = .video(url: url, grade: grade)
+        } else {
+            return
+        }
+        fullscreenMedia = FullscreenMediaRequest(
+            content, captureID: capture.id, title: capture.displayTitle)
+    }
+
+    /// Plays an interval shoot as motion, straight from its frames — what it
+    /// will look like as a clip, without spending a render to find out.
+    private func previewSequence(_ capture: AppModel.CaptureProject) {
+        let frames = model.sourceFrameURLs(for: capture)
+        guard !frames.isEmpty else { return }
+        fullscreenMedia = FullscreenMediaRequest(
+            .intervalMotion(frames: frames, fps: previewFPS(for: capture)),
+            captureID: capture.id,
+            title: capture.displayTitle)
+    }
+
+    /// The rate the motion preview runs at: the frame rate this project's newest
+    /// rendered version used, so the preview matches what the shoot has already
+    /// been made into. Nothing rendered yet — a plain 12 fps, fast enough to
+    /// read as motion and slow enough to see each frame.
+    private func previewFPS(for capture: AppModel.CaptureProject) -> Double {
+        if let fps = model.blends(for: capture).first(where: { $0.kind == .video })?.outputFPS,
+           fps > 0 {
+            return Double(fps)
+        }
+        return 12
     }
 
     private func savePhoto(_ capture: AppModel.CaptureProject) {
@@ -671,8 +752,14 @@ struct ProjectDetailView: View {
 
     /// Opens the grading viewer: the photo at size, rendered through its
     /// current grade, with the preset strip and the adjustment sliders.
+    /// A sheet on iOS/iPadOS; a freely resizable window on macOS.
     private func previewGradedPhoto(_ capture: AppModel.CaptureProject, url: URL) {
+        #if os(macOS)
+        openWindow(value: PhotoEditorWindowRequest(
+            captureID: captureID, url: url, title: capture.displayTitle))
+        #else
         gradingPhoto = GradingPhoto(url: url)
+        #endif
     }
 
     private func saveOriginals(_ capture: AppModel.CaptureProject) {
@@ -689,13 +776,42 @@ struct ProjectDetailView: View {
         #endif
     }
 
-    private func previewClip(for capture: AppModel.CaptureProject, index: Int, url: URL) {
-        previewItem = MediaPreviewItem(
-            title: "Clip \(index + 1)",
-            subtitle: capture.formatLine,
-            url: url,
-            kind: .video
-        )
+    /// Opens a source clip in the player, with the project's other clips as the
+    /// swipeable set. The siblings are resolved the same way the rows are — by
+    /// active encoding — so what plays is the file the row is showing.
+    private func previewClip(for capture: AppModel.CaptureProject, url: URL) {
+        let grade = model.photoGrade(for: capture)
+        let urls = model.sourceClipNames(for: capture).compactMap {
+            model.activeEncodingURL(for: capture, clip: $0)
+        }
+        let items = (urls.isEmpty ? [url] : urls).map {
+            FullscreenContent.video(url: $0, grade: grade)
+        }
+        fullscreenMedia = FullscreenMediaRequest(
+            items: items,
+            index: urls.firstIndex(of: url) ?? 0,
+            captureID: capture.id,
+            title: capture.displayTitle)
+    }
+
+    /// Opens a rendered version in the player.
+    ///
+    /// Deliberately **ungraded**: a version has the grade that produced it baked
+    /// in at render time (`AppModel` bakes stills frame by frame and video with
+    /// `VideoGrader.bakedCopy`), so re-applying the project's current grade here
+    /// would show it twice — and twice over the *wrong* grade for a version made
+    /// before the grade last changed.
+    private func previewVersion(_ blend: AppModel.BlendProject, in capture: AppModel.CaptureProject) {
+        let versions = model.blends(for: capture).filter { $0.kind == blend.kind }
+        let urls = versions.map { model.mediaURL(for: $0) }
+        let url = model.mediaURL(for: blend)
+        let items: [FullscreenContent] = urls.map {
+            blend.kind == .video ? .video(url: $0, grade: nil) : .photo(url: $0)
+        }
+        fullscreenMedia = FullscreenMediaRequest(
+            items: items.isEmpty ? [.video(url: url, grade: nil)] : items,
+            index: urls.firstIndex(of: url) ?? 0,
+            title: capture.displayTitle)
     }
 
     private func startRename(_ capture: AppModel.CaptureProject) {
@@ -796,6 +912,11 @@ private struct GradingCard: View {
     var onOpenViewer: (URL) -> Void
     /// Video: play the original.
     var onPlay: () -> Void
+    /// Interval: play the shoot as motion from its frames. When this is set the
+    /// card shows two affordances — Play in the middle, Edit photo below it —
+    /// because an interval project has both a sequence to watch and a frame to
+    /// grade. nil leaves the single-button card every other mode has.
+    var onPlaySequence: (() -> Void)?
 
     /// The graded preview, downscaled for speed; nil until the first render.
     @State private var rendered: CGImage?
@@ -961,23 +1082,25 @@ private struct GradingCard: View {
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             if let preview {
+                heroButton(preview: preview)
+            }
+        }
+        .overlay(alignment: .bottomLeading) {
+            // An interval shoot's second affordance: Play is the main act, and
+            // the frame editor sits under it rather than losing its place to it.
+            if case .still(let url) = preview, onPlaySequence != nil {
                 Button {
-                    switch preview {
-                    case .movie:
-                        onPlay()
-                    case .still(let url):
-                        onOpenViewer(url)
-                    }
+                    onOpenViewer(url)
                 } label: {
-                    Image(systemName: preview.isMovie
-                            ? "play.fill" : "arrow.up.left.and.arrow.down.right")
-                        .font(.system(size: 19))
+                    Label("Edit photo", systemImage: "slider.horizontal.3")
+                        .font(.system(size: 12.5, weight: .semibold))
                         .foregroundStyle(.white)
-                        .frame(width: 52, height: 52)
-                        .background(.black.opacity(0.45), in: Circle())
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .background(.black.opacity(0.45), in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .accessibilityLabel(preview.isMovie ? "Play original" : "View photo")
+                .padding(12)
             }
         }
         .overlay(alignment: .topLeading) {
@@ -990,6 +1113,40 @@ private struct GradingCard: View {
                     .padding(12)
             }
         }
+    }
+
+    /// The middle of the preview: play the movie, play the sequence, or open the
+    /// still — whichever this project's material actually is.
+    @ViewBuilder private func heroButton(preview: Preview) -> some View {
+        switch preview {
+        case .movie:
+            heroCircle(systemImage: "play.fill", label: "Play original", action: onPlay)
+        case .still(let url):
+            if let onPlaySequence {
+                heroCircle(
+                    systemImage: "play.fill", label: "Preview sequence", action: onPlaySequence)
+            } else {
+                heroCircle(
+                    systemImage: "arrow.up.left.and.arrow.down.right",
+                    label: "View photo") { onOpenViewer(url) }
+            }
+        }
+    }
+
+    private func heroCircle(
+        systemImage: String,
+        label: String,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 19))
+                .foregroundStyle(.white)
+                .frame(width: 52, height: 52)
+                .background(.black.opacity(0.45), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 
     // MARK: Customise (video)
@@ -1221,23 +1378,30 @@ private struct SourceClipRow: View {
         let stored = capture.clipEncodings?[clipName] ?? []
         let manage = originalIsProRes || stored.count > 1
         return HStack(spacing: 12) {
+            // The whole row plays, not just the thumbnail. Save/Manage stays a
+            // sibling button rather than living inside this one's label — a
+            // button nested in another button's label doesn't get the tap.
             Button { onPlay(displayURL) } label: {
-                ProjectThumbnailView(url: displayURL, kind: .video)
-                    .frame(width: 58, height: 42)
+                HStack(spacing: 12) {
+                    ProjectThumbnailView(url: displayURL, kind: .video)
+                        .frame(width: 58, height: 42)
+
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Clip \(index + 1)")
+                            .font(.system(size: 14.5, weight: .semibold))
+                            .lineLimit(1)
+                        Text(subtitle(capture: capture, manage: manage))
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(saveState.isError ? Color.red : .secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Play clip \(index + 1)")
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Clip \(index + 1)")
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .lineLimit(1)
-                Text(subtitle(capture: capture, manage: manage))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(saveState.isError ? Color.red : .secondary)
-                    .lineLimit(1)
-            }
-            Spacer()
             control(manage: manage, displayURL: displayURL)
         }
         .padding(.horizontal, 14)

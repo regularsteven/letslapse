@@ -2,7 +2,7 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
-Last full sync: 2026-07-31, working tree of `ios-app` (uncommitted WIP included) — adding burst slow-motion ramps: a Video section in Settings and a Slow-motion ramp row in New version, above Advanced. Project detail carries no ramp UI.
+Last full sync: 2026-07-31, working tree of `ios-app` (uncommitted WIP included) — playback unification: one fullscreen player ([player.portrait.svg](player.portrait.svg)) behind every playback tap on project detail, whole-row tap targets on clip and version rows, an interval card that leads with Play and keeps "Edit photo" as a second affordance, and a Burst frames card on a blended Photo shot.
 
 ## Tabs
 
@@ -19,6 +19,8 @@ Note: on iOS, selecting the Create tab opens the camera immediately; Create home
 Note: two different screens are called a "viewer" and are easy to confuse. `project-photos.viewer.*` (plural) is the interval-frame pager — swipe through a shoot's source frames, save one to Photos. `project-photo.viewer.*` (singular) is the grading viewer — presets, sliders, white balance — opened for a Photo-mode capture or an interval shoot's first frame. They share no code.
 
 Note: grading is a property of every project, not just Photo mode. `GradingCard` (the graded preview + preset strip) tops all three project-detail variants, so a change to it makes all three stale. Photo and interval open `PhotoViewerView` from the card; video customises in the card itself, through the same `PhotoAdjustmentsPanel` the viewer uses.
+
+Note: a third fullscreen surface exists — `FullscreenMediaSheet` (`App/FullscreenMediaSheet.swift`), the in-app **player**, drawn in [player.portrait.svg](player.portrait.svg). Project detail routes every playback tap into it (hero play button, source clip rows, version rows, and an interval shoot's motion preview); it is black, edge to edge, close top-left, share top-right, pages left/right through the tapped item's siblings and down to dismiss. It is not the grading editor and not the frame pager — a still opens the editor only when the caller hands it a capture id, which versions deliberately don't.
 
 Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video segmented control) and `CaptureAssetGrid` / `CaptureAssetTile` (the square thumbnail grid) are used by more than one screen, so their geometry is specified once in [gallery.portrait.svg](gallery.portrait.svg) and reused verbatim in [projects.portrait.svg](projects.portrait.svg) and [project-photos.portrait.svg](project-photos.portrait.svg). A change to either component makes all three stale. Both tabs share the same top rhythm: 15pt above the title, 8pt above and below the filter bar, content flush after it.
 
@@ -50,9 +52,11 @@ Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video se
 
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
-| Project detail (video) | [project-detail.video.portrait.svg](project-detail.video.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard` incl. `customiseControls`, `sourceClipsSection`, `versionRow`, `managementCard`) | ✅ |
-| Project detail (interval) | [project-detail.interval.portrait.svg](project-detail.interval.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard`, `originalsSection` — Save all to Photos + View all photos) | ✅ |
-| Project detail (photo) | [project-detail.photo.portrait.svg](project-detail.photo.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard`, `photoActions`) | ✅ |
+| Project detail (video) | [project-detail.video.portrait.svg](project-detail.video.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard` incl. `customiseControls`, `sourceClipsSection`, `versionRow` — whole row taps to play, `managementCard`) | ✅ |
+| Project detail (interval) | [project-detail.interval.portrait.svg](project-detail.interval.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard` with both affordances — `heroButton` play + the Edit photo pill, `originalsSection` — Save all to Photos + View all photos) | ✅ |
+| Project detail (photo) | [project-detail.photo.portrait.svg](project-detail.photo.portrait.svg) | `App/ProjectDetailView.swift` (`GradingCard`, `photoActions`, and — for a blended shot only — `originalsSection` in its "Burst frames" wording) | ✅ |
+| Fullscreen media player (video) | [player.portrait.svg](player.portrait.svg) | `App/FullscreenMediaSheet.swift` (`FullscreenMediaSheet` chrome + `FullscreenVideoPage` scrubber) — the one in-app player: source clips, versions, the hero's play button | ✅ |
+| Fullscreen media player · interval motion | — | `App/FullscreenMediaSheet.swift` (`FrameSequencePage`) — same chrome, transport row instead of a scrubber: play/pause · "12 / 184" · "12 fps preview" | 🟡 |
 | Project detail (video) · Customise expanded | — | `App/ProjectDetailView.swift` (`GradingCard.customiseControls` inline panel, and its ≥500pt sheet branch) — panel geometry is specified by [project-photo.viewer.expanded.portrait.svg](project-photo.viewer.expanded.portrait.svg) (same `PhotoAdjustmentsPanel`) | 🟡 |
 | Photo grading viewer · Customise collapsed | [project-photo.viewer.portrait.svg](project-photo.viewer.portrait.svg) | `App/PhotoViewerView.swift` (stacked layout, `presetStrip`, `customiseDisclosure`) | ✅ |
 | Photo grading viewer · Customise expanded | [project-photo.viewer.expanded.portrait.svg](project-photo.viewer.expanded.portrait.svg) | `App/PhotoViewerView.swift` (`PhotoAdjustmentsPanel`, shared with the video card) | ✅ |

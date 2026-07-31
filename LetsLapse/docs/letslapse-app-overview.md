@@ -4,17 +4,19 @@ A handover document for developers, designers, and agents. It explains what Lets
 
 File references are relative to the `LetsLapse/` directory of the repository (e.g. `App/AppModel.swift`) unless noted. The Swift app lives on the `ios-app` branch; the repository's `main` branch holds the original Raspberry Pi LetsLapse project (Python capture/blend scripts and a web UI), which is preserved untouched. The Swift app is a fresh native implementation of the same blending idea with the CPU pipeline replaced by a Metal compute kernel.
 
+Every screen in the app is mirrored by an SVG design spec under `docs/design/<platform>/`. Those specs are the contract for UI work — see `docs/design/README.md` and the per-platform `INDEX.md` before changing layout, copy, colours or controls.
+
 ---
 
 ## 1. What LetsLapse is
 
-LetsLapse is a capture-and-blend app. It shoots video or interval photos (or imports them), then performs GPU-accelerated frame blending to produce three kinds of output:
+LetsLapse is a capture-and-blend app. It shoots video, interval photos, or single photos (or imports them), then performs GPU-accelerated frame blending to produce three kinds of output:
 
 1. **Motion-blurred timelapses** — many source frames averaged into each output frame. Hours become seconds and motion melts into streaks, because the averaging itself *is* physically plausible motion blur.
 2. **Speed ramps** — the number of frames averaged per output frame changes across the clip, so playback speed (and blur) rises or falls smoothly. Combined with live "moments" captured at a high hardware frame rate, a single recording can rush past at 100× and dive into slow motion for the parts that matter.
 3. **Synthetic long exposures** — N stills stacked into one low-noise image (noise falls by roughly √N), the classic "silky water / light trails" look without an ND filter.
 
-Every original capture is preserved as a **project**; every generated output is a **version** of that project. Nothing is a dead end — any version can be regenerated from the original with different settings.
+Every original capture is preserved as a **project**; every generated output is a **version** of that project. Nothing is a dead end — any version can be regenerated from the original with different settings. Colour grades and geotags ride along as *metadata* on the project, so neither ever rewrites a captured file.
 
 ### Platforms and targets
 
@@ -25,7 +27,12 @@ Every original capture is preserved as a **project**; every generated output is 
 | Blend engine | `LetsLapseKit` (local Swift package in `Kit/`) | iOS 16+, macOS 13+ | UI-free; the app, the CLI, and any future caller drive the same library |
 | Command line | `lapse` (executable product of the Kit package) | macOS | Blend/stack/synth/info from the shell |
 
-The Xcode project uses Xcode 16 folder-synchronized groups: target membership follows the folders `App/`, `Watch/`, and `Shared/`. The `Shared/` folder (`WatchMessageKey.swift`, `CaptureMode.swift` — capture modes, scheduled-stop units, Interval output formats — and `BlendDepth.swift`, the blend-depth dial vocabulary) is compiled into both the app and the watch target.
+The Xcode project uses Xcode 16 folder-synchronized groups: target membership follows the folders `App/`, `Watch/`, and `Shared/`. The `Shared/` folder is compiled into both the app and the watch target:
+
+- `WatchMessageKey.swift` — the WatchConnectivity wire contract (string keys only).
+- `CaptureMode.swift` — the three capture modes, scheduled-stop units, and Interval output formats.
+- `BlendDepth.swift` — the blend-depth dial vocabulary, including the adaptive depths.
+- `SteadinessMonitor.swift` — the device-motion primitive behind Photo mode's capture-when-steady gate and Interval's tail-frame detection. `CMMotionManager` only exists on iOS/watchOS, so the motion internals are compiled out on macOS and the monitor degrades to an inert stand-in that never blocks.
 
 ---
 
@@ -66,6 +73,8 @@ At matched frame rates, speed N× is exactly N× compression. Blur strength and 
 
 A ramp from 1 → 40 starts as an unblended (potentially slow-motion, if from high-fps source) sequence and accelerates into a heavily motion-blurred hyperlapse — blur growing exactly as speed does, because they are the same number.
 
+This is the *blend* ramp, and it is a separate mechanism from the **burst slow-motion ramp** (§4.4), which retimes an already-slow-motion burst clip inside the stitch rather than changing how many frames get averaged.
+
 ### 2.4 Linear-light averaging
 
 Blending averages in **linear light** by default — the physically correct simulation of a long exposure, since camera sensors count photons linearly while video/JPEG pixels are gamma-encoded. Averaging gamma-encoded values darkens and dulls highlights (a bright light streaking across a dark scene should stay bright).
@@ -78,6 +87,8 @@ Stills follow the same math with two shapes (`Kit/Sources/LetsLapseKit/ImageStac
 
 - **Stack to one image** — all stills averaged into one `CGImage` (synthetic long exposure). Streams one image at a time inside an autorelease pool, so hundreds of stills never sit in memory together. EXIF orientation is baked at load (`kCGImageSourceCreateThumbnailWithTransform`), so portrait shots stack upright. Export as PNG/JPEG/HEIC. Derived images keep their provenance: `ImageExporter.carryoverMetadata` lifts the source frame's EXIF/GPS/TIFF blocks (minus orientation, already baked into the pixels) into the output, so a stacked shot keeps its capture time and geotag.
 - **Stack to a sequence** — a `WindowSchedule` over the stills produces a blended timelapse video (always H.264/.mp4). Window depth 1 gives a crisp timelapse; deeper windows add motion blur; depth ≥ photo count collapses to the single-image case (the UI presents this as one continuous "Blend depth" slider from "Crisp" to "Long exposure").
+
+Both shapes accept an injected `loadFrame` closure, which is how the colour grade reaches the engine: `AppModel.gradedFrameLoader(_:)` hands `ImageStacker` a loader that runs each still through `PhotoGrader.renderForBlend` on its way into the accumulator (§4.5). An identity grade passes nil and the plain loader runs, so an ungraded blend costs exactly what it always did.
 
 ### 2.6 Why this approach — the benefits
 
@@ -102,19 +113,30 @@ flowchart TB
     end
 
     subgraph AppTarget["LetsLapse app (iOS / iPadOS / macOS)"]
-        UI["SwiftUI views<br/>Create · Capture · Adjust · Processing · Result · Projects · Settings"]
-        AM["AppModel (@MainActor ObservableObject)<br/>stage machine · library persistence · blend orchestration · clip encodings"]
+        UI["SwiftUI views<br/>Create · Capture · Gallery · Projects · Settings<br/>Adjust · Processing · Result · PhotoViewer · Fullscreen"]
+        AM["AppModel (@MainActor ObservableObject)<br/>stage machine · library persistence · blend orchestration<br/>clip encodings · grades · export guards"]
         CC["CameraController (AVFoundation)<br/>iOS-centric capture"]
-        LBC["LiveBlendController<br/>(macOS only, live blend spike)"]
+        LBC["LiveBlendController / LiveBlendRawController<br/>(live JPEG / DNG blending)"]
         WRR["WatchRemoteControlReceiver<br/>(iOS only, WCSession)"]
         MJR["MacVideoJobRunner<br/>(macOS only, disk-backed jobs)"]
+        GRD["Grading<br/>PhotoPreset · PhotoGrader · VideoGrader<br/>CustomPresetStore · FlatCapture / VideoFlatten"]
+        LOC["Location<br/>LocationService · MovieLocation<br/>CLLocation+EXIF · GPXWriter/Reader"]
+        MWQ["MediaWorkQueue<br/>bounded, cancellable browsing I/O"]
+        TC["ProjectThumbnailCache<br/>memory + disk JPEG tier"]
         UI --> AM
         UI --> CC
+        UI --> GRD
+        UI --> TC
         CC -->|finished media| AM
-        CC -->|sample buffers| LBC
+        CC -->|sample buffers / RAW| LBC
+        CC --> LOC
         WRR -->|commands| CC
         CC -->|state| WRR
         AM --> MJR
+        AM --> GRD
+        AM --> LOC
+        TC --> MWQ
+        GRD --> MWQ
     end
 
     subgraph Kit["LetsLapseKit (Swift package)"]
@@ -123,6 +145,8 @@ flowchart TB
         BC["BlendCore + FrameAccumulator<br/>Metal device, pipelines, texture cache"]
         MK["BlendKernels.metal<br/>sum · divide"]
         PBB["PixelBufferBlender<br/>streaming live average"]
+        DNG["DNGAuthor · CameraColorTransform<br/>LosslessJPEG · BayerAccumulator"]
+        MR["MediaRotator · DirectoryArchive<br/>ImageExporter · BlendLearning"]
         VS["VideoSynthesizer<br/>test clips"]
         VB --> BC
         IS --> BC
@@ -134,12 +158,15 @@ flowchart TB
     CLI --> IS
     AM --> VB
     AM --> IS
+    AM --> MR
     MJR --> IS
     LBC --> PBB
+    LBC --> DNG
+    GRD -->|graded frame loader| IS
     WCR <-->|"WatchConnectivity<br/>(shared WatchMessageKey contract)"| WRR
 ```
 
-The engine is UI-free: frames in → blend schedule → frames out. The GUI, the CLI, and any future caller drive the same `LetsLapseKit` library.
+The engine is UI-free: frames in → blend schedule → frames out. The GUI, the CLI, and any future caller drive the same `LetsLapseKit` library. Grading, geotagging, thumbnails and the work queue all live in the app layer — they are product concerns, not engine concerns, and the one place they reach into the Kit is the injected frame loader.
 
 ### 3.2 Which engine path runs when
 
@@ -151,9 +178,9 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 | macOS with a **constant** window | `MacVideoJobRunner` (App) | Disk-backed, resumable job with a visible job folder, manifest, and logs (see §5.2) |
 | Interval/imported photos, depth ≥ count | `ImageStacker.stack` | One long-exposure image (PNG) |
 | Interval/imported photos, depth < count | `ImageStacker.stackSequence` | Blended timelapse video (H.264/.mp4) |
-| Live capture sequence (ramp/marker "moments") | `blendLiveSequence` / `blendMarkerSequence` in AppModel | Per-segment/per-slice blends stitched with `AVMutableComposition` (see §4.3) |
+| Live capture sequence (ramp/marker "moments") | `blendLiveSequence` / `blendMarkerSequence` in AppModel | Per-segment/per-slice blends stitched with `AVMutableComposition`, then burst-ramped (see §4.3, §4.4) |
 
-`OutputCodec` (`Kit/Sources/LetsLapseKit/VideoBlender.swift`) supports `h264`, `hevc`, `prores` (ProRes 422), `jpeg` — `.mp4` for the first two, `.mov` for the rest. The CLI exposes all four for blends; the app currently pins blend output to H.264 and uses HEVC/ProRes in the *source conversion* feature (§4.6) instead.
+`OutputCodec` (`Kit/Sources/LetsLapseKit/VideoBlender.swift`) supports `h264`, `hevc`, `prores` (ProRes 422), `jpeg` — `.mp4` for the first two, `.mov` for the rest. The CLI exposes all four for blends; the app currently pins blend output to H.264 and uses HEVC/ProRes in the *source conversion* feature (§4.10) instead.
 
 ### 3.3 The streaming pipeline in detail (`VideoBlender`)
 
@@ -168,16 +195,38 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 
 ### 3.4 Verification
 
-`Kit/Tests/LetsLapseKitTests/` (run with `swift test` inside `Kit/`; five suites plus a synthesizer helper):
+`Kit/Tests/LetsLapseKitTests/` (run with `swift test` inside `Kit/`) holds **18 test files** plus a `TestHelpers` / `VideoSynthesizer` support pair. Grouped by what they defend:
+
+**Blend engine**
 
 - `AccumulatorTests` — exact averaged values through the real GPU and blit readback.
 - `PixelBufferBlenderTests` — the live streaming average (§5.4): byte-space and linear-light averages checked against reference transfer functions; parity with `ImageStacker.stack` within one 8-bit step; window reuse, discard, and single-frame fallback.
 - `StackerTests` — ~√N noise reduction on synthetic noise; linear-light identity round-trip; size-mismatch and empty-input errors.
 - `VideoBlenderTests` — frame counts for constant and ramped blends against the schedule; linear-light output values (±0.06 tolerance for H.264/BT.709-vs-sRGB); trim; monotonic progress ending at 1.0.
 - `WindowScheduleTests` — schedules always sum exactly to input frames; monotonic ramp growth; clamping; curve shapes.
-- `VideoSynthesizer` provides deterministic inputs: a `ramp` pattern (gray level 0.1→0.9 across the clip, for numeric checks) and a `box` pattern (white box sweeping over gray, for eyeballing motion blur). Tests skip gracefully on machines without Metal.
+- `BlendLearningTests` — the adaptive-depth learner (§5.5): sample decay, percentile safe counts, best/worst bounds, the 3-run gate.
 
-Not currently covered: HEVC/ProRes/JPEG output paths, `stackSequence`, the CLI, `MacVideoJobRunner`, and `LiveBlendController` (its Kit blender is tested; the frame-selection/watchdog/logging layer is not).
+**DNG / RAW pipeline** (§6)
+
+- `DNGAuthorTests` — authoring a DNG from a blended raster: tag layout, two-pass preview, endianness.
+- `DNGOrientationTests` — that no `Orientation` tag is emitted and decoded samples stay display-oriented.
+- `LinearDNGTests` — the 16-bit LinearRaw path and its metadata.
+- `CompressedBayerDNGTests` — the re-mosaic + Compression 7 path end to end, round-tripped through ImageIO.
+- `LosslessJPEGTests` — an independent T.81 Annex H decoder written only for the tests, proving bit-exactness down to the SSSS=16 edge case.
+- `DeflateProbeTests` — the documented proof that ImageIO cannot decode Deflate-compressed integer LinearRaw (why the byte-perfect Deflate writer stays behind a flag).
+- `CameraColorTransformTests` — dual-illuminant interpolation, Bradford adaptation, and white-point normalization against the DNG spec.
+
+**Media, metadata, files**
+
+- `GPSTaggingTests` — ISO 6709 round-trips, EXIF GPS signing by hemisphere, and the movie-atom inject/read cycle (§4.6).
+- `ImageExporterMetadataTests` — that EXIF/GPS/TIFF carryover lands on derived images and that orientation is not double-applied.
+- `OrientationTests` — orientation handling across load, bake, and export.
+- `MediaRotatorTests` — the metadata-only "Rotate 90°" transform.
+- `DirectoryArchiveTests` — `.lapse` archive round-trips, including that stream `close()` failures propagate rather than being swallowed.
+
+`VideoSynthesizer` provides deterministic inputs: a `ramp` pattern (gray level 0.1→0.9 across the clip, for numeric checks) and a `box` pattern (white box sweeping over gray, for eyeballing motion blur). GPU tests skip gracefully on machines without Metal; the DNG real-file tests skip cleanly when the local reference captures aren't present (§6.6).
+
+Not currently covered at unit level: HEVC/ProRes/JPEG output paths, `stackSequence`, the CLI, `MacVideoJobRunner`, `LiveBlendController`/`LiveBlendRawController` (their Kit pieces are tested; the frame-selection/watchdog/logging layers are not), and the grading and thumbnail layers.
 
 ---
 
@@ -185,11 +234,12 @@ Not currently covered: HEVC/ProRes/JPEG output paths, `stackSequence`, the CLI, 
 
 ### 4.1 Navigation shell
 
-`App/LetsLapseApp.swift` builds a three-tab `TabView` (enum `LLTab`) with a custom floating tab bar, plus a full-screen **flow overlay** for the creation pipeline:
+`App/LetsLapseApp.swift` builds a **four-tab** `TabView` (enum `LLTab` in `App/DesignSystem.swift`) with a custom floating tab bar, plus a full-screen **flow overlay** for the creation pipeline:
 
-- **Create** — effect-first home; entry to capture and import.
+- **Create** — the camera. On iOS/iPadOS, selecting the Create tab (and launching the app, since Create is the launch tab) presents the capture screen immediately; the effect-first Create home lives *behind* it and is revealed when the camera closes. `openCameraForCreateTab()` only fires when `stage == .home`, so a running or parked flow keeps the screen it's on, and the DEBUG preview hooks (§9) suppress the auto-open so a screenshot run lands where it was told to.
+- **Gallery** — every capture in the library as one filterable square grid (§4.7).
 - **Projects** — originals grouped with their generated versions.
-- **Settings** — creative defaults, storage, advanced/diagnostics.
+- **Settings** — creative defaults, video, recording, location, storage, advanced/diagnostics.
 
 The linear flow is a state machine on `AppModel.Stage`:
 
@@ -205,7 +255,9 @@ stateDiagram-v2
     home --> done : open an existing version (openBlend rehydrates its settings)
 ```
 
-Whenever `stage != .home`, `FlowView` overlays the tabs with `AdjustView` (configure), `ProcessingView`, or `ResultView`; the floating tab bar hides. iOS suppresses the system tab bar in favor of the floating pill; on macOS the native tab chrome is kept. A cross-tab deep-link (`requestedProjectDetailID`) lets Result and Settings jump straight to a project's detail page.
+Whenever `stage != .home`, `FlowView` overlays the tabs with `AdjustView` (configure), `ProcessingView`, or `ResultView`; the floating tab bar hides. iOS suppresses the system tab bar in favor of the floating pill; on macOS the flow lives *inside* the Create tab instead, so the tab chrome stays clickable and switching away parks the flow rather than killing it (§5). Cross-tab deep links (`requestedProjectDetailID`, `requestedTab`) let Result, Settings, and the capture screen's recent-capture tile jump straight to another tab or a project's detail page.
+
+On macOS there is one extra scene: a `WindowGroup(for: PhotoEditorWindowRequest.self)` hosting the grading editor, because Mac sheets are never user-resizable and an editor wants free resizing and full screen (§4.5).
 
 ### 4.2 Create: effect-first
 
@@ -218,22 +270,35 @@ Whenever `stage != .home`, `FlowView` overlays the tabs with `AdjustView` (confi
 | Speed ramp | "Speed rises or falls across the clip" | live "moments" capture (ramp mode) |
 | Custom blend | "Every dial, no presets" | nothing forced |
 
-Below the cards: **Record now**, **Import a video**, **Import photos to stack** (up to 500, minimum 2). iOS imports use `PhotosPicker` (movies copied to a temp file via a `Transferable` so the engine reads without holding photo-library scope); capture presents as a full-screen cover.
+Below the cards: **Record now**, **Import a video**, **Import photos to stack** (up to 500, minimum 2), and **Import a LetsLapse project…** (§4.10). iOS imports use `PhotosPicker` (movies copied to a temp file via a `Transferable` so the engine reads without holding photo-library scope); capture presents as a full-screen cover.
 
 ### 4.3 Capture
 
-`App/CameraController.swift` (~1,400 lines) owns a single `AVCaptureSession` driven on a serial queue; `App/CaptureView.swift` is the full-screen dark UI. Highlights:
+`App/CameraController.swift` (~2,748 lines) owns a single `AVCaptureSession` driven on a serial queue; `App/CaptureView.swift` (~2,933 lines) is the full-screen dark UI. Highlights:
 
-- **Formats.** Available resolutions (4K/1080p/720p…) and frame rates are discovered from the device's real formats, filtered to preferred rates `[24, 25, 30, 50, 60, 100, 120, 240]` plus each range's maximum — genuine high-frame-rate capture up to 240 fps where hardware allows. Stabilization filters the format list when enabled.
+- **Formats.** Available resolutions (4K/1080p/720p…) and frame rates are discovered from the device's real formats, filtered to preferred rates `[24, 25, 30, 50, 60, 100, 120, 240]` plus each range's maximum — genuine high-frame-rate capture up to 240 fps where hardware allows. Stabilization filters the format list when enabled. The list is further filtered by the user's own **Manage resolutions** allowlist (§4.12).
 - **ProRes awareness.** ProRes-capable formats (detected by FourCC: `apcn/apch/apcs/apco/ap4h/ap4x`) appear as separate entries marked `*` with the footer "* ProRes — very large files", so users understand the trade before shooting. Recording itself uses `AVCaptureMovieFileOutput` with system codec defaults; ProRes arises when the active format is a ProRes format.
-- **Exposure/ISO lock.** "Lock AE/AF" captures the current ISO/shutter/focus as a manual custom exposure (iOS), unlocking sliders for ISO (within the format's real range) and focus. Critically, the lock is **re-asserted after every format switch** (`reassertExposureLock`) because setting `activeFormat` resets exposure to auto — this keeps multi-format "moments" captures flicker-free. White balance locks alongside.
-- **Orientation.** Deliberately avoids `AVCaptureDeviceRotationCoordinator` and device motion. The window's `interfaceOrientation` is the single source of truth: the preview layer's rotation is applied in the SwiftUI representable's `updateUIView`, and output connections are oriented **at capture start** rather than continuously — reconfiguring a live session mid-rotation stalled the source. (A manual "Flip 180°" upside-down-mount toggle existed until July 2026; it was removed as not good enough in practice.)
-- **Two capture modes.**
-  - **Video** records *live capture sequences* with two "moments" behaviors (`LiveCaptureSequence.Mode`):
-    - **Marker mode** — one continuous recording; tapping the moment button (phone or watch) marks intervals. At blend time the marked slices are extracted and kept at real speed (window 1) while everything else gets the user's speed; the pieces are stitched with `AVMutableComposition`.
-    - **Ramp mode** — the moment button toggles a hardware **frame-rate burst** (base rate → e.g. 120/240 fps), recording separate segments per rate (`segment-%03d.mov` + a `sequence.json` sidecar describing segments, markers, and ramp intervals). At blend time, high-rate segments play every frame — a 240 fps burst rendered at 25 fps is ~9.6× slow motion — while base-rate segments get the timelapse blend, then all are stitched. One recording session yields a hyperlapse that dives into slow motion on demand.
-  - **Interval** captures stills on a timer (0.5 s–10 s presets, floor 0.5 s) with two dials — **EVERY** (spacing) and **BLEND** (frames per output image: fixed counts with "Off" = 1, plus the adaptive **Psycho**/**Safe** depths, §5.5) — and an output format (JPEG or DNG) chosen in the format sheet. The four combinations route to different engines behind one shutter (`startIntervalCapture()`): plain JPEG shoots use the photo-output dispatch timer (`frame-%05d.jpg`, Apple's full processed-still pipeline); JPEG blends run the video-tap Live Blend engine (§5.4); DNG shoots — blended or untouched — run the Bayer RAW pipeline (§6, iOS/iPadOS only; unsupported sources degrade per dial, blends to the video tap, unblended shoots to real JPEG stills). All variants feed the same photo-stacking paths. (Live Blend was a third mode until July 2026; it merged into Interval as the BLEND dial — `CaptureMode(token:)` maps the retired wire/persistence value onto Interval.)
-- **Capture UI.** Persistent aspect-fit preview; speed chips with live output-length estimates per speed; a segment strip visualizing burst spans during recording; a target sheet (auto-stop with countdown ring); zoom as discrete lens chips (.5×/1×/3× where hardware exists — the only lens picker; the format sheet has none); grid overlay (strong white lines, legible over daylight scenes); format pill (locked while capturing — video reads "2160p · 30 · Stab", interval reads resolution plus a JPEG/DNG token, DNG in amber); idle timer disabled during capture. **Viewfinder gestures**: swipe left/right switches Interval↔Video (matching the mode row's order), and pinch steps through the lenses one stop per threshold — pinch in walks .5×→1×→3×, pinch out walks back, stopping at the ends. **Shutter-row controls**: AE/AF lock is the circular button left of the shutter (readout + ISO/focus sliders appear above once locked, any mode); right of the shutter sit a **2 s delay toggle** (timer icon; the red button shows "2s" when armed and counts down after the tap — a tap during the countdown cancels; Watch remote starts are deliberately immediate) and the grid toggle. There is no project-thumbnail shortcut on the capture screen. The format sheet is mode-aware and ordered so consequences flow downhill: Interval shows Output format (JPEG/DNG, with a support/fallback footer) *above* Format; Video shows Stabilization *above* Resolution (it filters the format list) then frame rate, plus the speed-burst behavior. Arming DNG is presented honestly as the 4:3 sensor capture it is: the session switches to the photo configuration while framing (restored on disarm/mode switch, reasserted across lens changes and after each run), the viewfinder letterboxes to the published live-feed dimensions (`previewDimensions`), the pill reads the sensor frame ("12MP 4:3 · DNG"), and the sheet replaces the video-format Resolution picker with the probed sensor resolution ("4032×3024 · 12MP 4:3"). Last-used capture setup persists via `RecordingSettingsStore` (opt-out in Settings): the mode itself (Video/Interval) plus lens/resolution/rate/burst-rate/stabilization, interval spacing and blend depth (a token covering fixed counts and Psycho/Safe; upgrades migrate the old numeric frames key, and further back the retired Live Blend mode's remembered spacing). The plain Record-now entry reopens in the remembered mode; effect cards still force theirs.
+- **Exposure lock as an EV offset.** "Lock AE/AF" captures the current ISO/shutter/focus as a manual custom exposure (iOS) and freezes those values as an **anchor**. What the user then gets is not a raw ISO slider but a **±3 EV brightness offset centred on the locked exposure** (`CameraController.setExposureOffset(stops:)`): the gain is spent on ISO first (it costs no motion blur and no frame pacing) and only the remainder on shutter duration, so the control still travels in daylight where the lock lands on the sensor's minimum ISO and ISO alone could only ever brighten. The shutter is clamped to the frame interval so a long exposure can't drag the delivered rate below the requested fps. The readout shows the locked exposure plus a signed `EV` term (omitted at exactly 0.0). Critically, the lock is **re-asserted after every format switch** (`reassertExposureLock`) because setting `activeFormat` resets exposure to auto — this keeps multi-format "moments" captures flicker-free. White balance locks alongside.
+- **Orientation.** Deliberately avoids `AVCaptureDeviceRotationCoordinator` and device motion. The window's `interfaceOrientation` is the single source of truth: the preview layer's rotation is applied in the SwiftUI representable's `updateUIView`, and output connections are oriented **at capture start** rather than continuously — reconfiguring a live session mid-rotation stalled the source.
+- **Audio.** A permission-gated **Record audio** setting (Settings → Recording) adds or removes the microphone input on the session. It is off until the user turns it on, and turning it on requests microphone access first — a refusal snaps the toggle back rather than lying about it. Audio then follows the media: segments carry their audio track, the live-sequence stitch builds an audio composition track from the first segment that has one, and per-clip codec conversion passes audio through verbatim. Only the frame-averaging blends are video-only — averaging N frames into one has no audio analogue.
+
+**Three capture modes** (`CaptureMode` in `Shared/CaptureMode.swift`, in dial order):
+
+- **Photo** — listed first, and a full mode rather than a sub-feature of Interval: one tap, one photo. A `SteadinessMonitor` gate waits for the device to settle before firing, then a short fast burst is captured and auto-stacked into a single long exposure (Blend Off writes the single captured frame instead, byte-for-byte). A Photo project is **ONE asset** everywhere in the app — no frame counts, no versions, no New-version affordance (§4.10).
+- **Interval** — stills on a timer (0.5 s–10 s presets, floor 0.5 s) with two dials — **EVERY** (spacing) and **BLEND** (frames per output image: fixed counts with "Off" = 1, plus the adaptive **Psycho**/**Safe** depths, §5.5) — and an output format (JPEG or DNG) chosen in the format sheet. The four combinations route to different engines behind one shutter (`startIntervalCapture()`): plain JPEG shoots use the photo-output dispatch timer (`frame-%05d.jpg`, Apple's full processed-still pipeline); JPEG blends run the video-tap Live Blend engine (§5.4); DNG shoots — blended or untouched — run the Bayer RAW pipeline (`frame-%05d.dng`, §6, iOS/iPadOS only; unsupported sources degrade per dial). All variants feed the same photo-stacking paths. (Live Blend was a mode of its own until July 2026; it merged into Interval as the BLEND dial — `CaptureMode(token:)` maps the retired wire/persistence value onto Interval.)
+- **Video** — records *live capture sequences* with two "moments" behaviors (`LiveCaptureSequence.Mode`):
+  - **Marker mode** — one continuous recording; tapping the moment button (phone or watch) marks intervals. At blend time the marked slices are extracted and kept at real speed (window 1) while everything else gets the user's speed; the pieces are stitched with `AVMutableComposition`.
+  - **Ramp mode** — the moment button toggles a hardware **frame-rate burst** (base rate → e.g. 120/240 fps), recording separate segments per rate (`segment-%03d.mov` + a `sequence.json` sidecar describing segments, markers, and ramp intervals). At blend time, high-rate segments play every frame — a 240 fps burst rendered at 25 fps is ~9.6× slow motion — while base-rate segments get the timelapse blend, then all are stitched and the burst clips are eased in and out (§4.4). One recording session yields a hyperlapse that dives into slow motion on demand.
+
+**Capture UI.** Persistent aspect-fit preview; speed chips with live output-length estimates per speed; a segment strip visualizing burst spans during recording; a target sheet (auto-stop with countdown ring); zoom as discrete lens chips (.5×/1×/3× where hardware exists — the only lens picker; the format sheet has none); grid overlay; format pill (locked while capturing — video reads "2160p · 30 · Stab", interval reads resolution plus a JPEG/DNG token, DNG in amber); idle timer disabled during capture.
+
+**Viewfinder gestures**: swipe left/right switches modes (matching the mode row's order), and pinch steps through the lenses one stop per threshold.
+
+**Shutter row**, left to right: a **recent-capture button** (`recentCaptureButton`) — a rounded thumbnail of the newest project's hero asset in the lower corner, which opens the Gallery tab; it fades out entirely and stops taking hits when the library is empty. Then the AE/AF lock circle (readout + EV/focus sliders appear above once locked, any mode), the shutter, and right of it a **2 s delay toggle** (the red button shows "2s" when armed and counts down after the tap — a tap during the countdown cancels; Watch remote starts are deliberately immediate) and the grid toggle. In landscape the same controls move to side rails so the image is never covered.
+
+The format sheet is mode-aware and ordered so consequences flow downhill: Interval shows Output format (JPEG/DNG, with a support/fallback footer) *above* Format; Video shows Stabilization *above* Resolution (it filters the format list) then frame rate, plus the speed-burst behavior. Arming DNG is presented honestly as the 4:3 sensor capture it is: the session switches to the photo configuration while framing (restored on disarm/mode switch, reasserted across lens changes and after each run), the viewfinder letterboxes to the published live-feed dimensions (`previewDimensions`), the pill reads the sensor frame ("12MP 4:3 · DNG"), and the sheet replaces the video-format Resolution picker with the probed sensor resolution ("4032×3024 · 12MP 4:3").
+
+Last-used capture setup persists via `RecordingSettingsStore` (opt-out in Settings): the mode itself plus lens/resolution/rate/burst-rate/stabilization, interval spacing and blend depth (a token covering fixed counts and Psycho/Safe; upgrades migrate the old numeric frames key, and further back the retired Live Blend mode's remembered spacing). The plain Record-now entry reopens in the remembered mode; effect cards still force theirs.
 
 Finished media hands off to `AppModel.setSource(...)` / `setSequenceSource(...)`, which registers a project on disk and enters the flow at `configure`.
 
@@ -250,78 +315,229 @@ Finished media hands off to `AppModel.setSource(...)` / `setSequenceSource(...)`
 | **True-light blending** toggle | `linearLight` |
 | **Trim video ends** (0.1–30 s from both ends) | reader `timeRange` trim (removes grab-and-stop shake) |
 | **Blend depth** slider for photos (Crisp ↔ Long exposure) | window over stills; depth ≥ count → single image |
-| **Blend from** codec chips (Auto/ProRes/HEVC/H.264) | which stored source encoding feeds the blend (§4.6) |
+| **Blend from** codec chips (Auto/ProRes/HEVC/H.264) | which stored source encoding feeds the blend (§4.10) |
+| **Slow-motion ramp** menu (Default / Off / 0.25 s → 2.0 s) | `CaptureProject.burstRampDuration` → `BurstRamp.plan(...)` |
 
 The estimate card explains the technique in one sentence ("Each output frame averages N real frames — that's where the blur comes from") and the CTA is outcome-named: "Create 12s clip" / "Create long exposure". Advanced options live behind a sheet so the default path stays simple — the design principle is *outcome first, mechanics on request*.
 
-### 4.5 Processing and Result
+#### Burst slow-motion ramps
+
+A ramp-mode shoot's burst segments are already slow motion by the time they reach the stitch — the blend writes their frames out one-for-one while their neighbours are heavily time-compressed — so the joins read as two hard cuts. `App/BurstRamp.swift` eases them instead, and it does so as a **pure retime of the composition**: no pixels are rewritten and nothing is re-encoded beyond the stitch export that was already happening.
+
+- **The curve** is the standard smoothstep `f(t) = 3t² − 2t³` — flat at both ends, so the ramp leaves real time and arrives at the slow-motion rate without a velocity kink. AVFoundation scales whole time ranges rather than continuous functions, so the curve is sampled as up to `curveSegments = 40` constant-speed steps per ramp side, each applied with `scaleTimeRange(_:toDuration:)`. A ramp too short to carry 40 steps at ≥ 1/24 s each gets proportionally fewer, larger steps (minimum 3) — forty sub-frame segments is exactly the shape `AVAssetExportSession` gives up on.
+- **Order matters, and it runs backwards.** `scaleTimeRange` rewrites the track's timeline from the scaled range onward, so `BurstRamp.apply` walks the steps last-to-first: every range it is about to touch is still exactly where `insertTimeRange` put it. The same reasoning applies across clips — a composition with several bursts has its plans applied back to front too.
+- **Two clamps.** The obvious one: two ramps can't each be longer than half the clip. The one that isn't obvious: a ramp plays *faster* than the clip it rides on, so a second of ramp spends `costFactor` seconds of footage. The applied length is therefore `min(requested, burstOutputDuration / 2, burstOutputDuration / (2 × costFactor))`, re-taken against the sampling density actually used. Below `minimumDuration` (0.1 s) the clip gets no ramp at all rather than a token one. Adjust reports the capped figure ("capped to 0.62s") so the number on screen is the number that will render.
+- **Audio follows the picture** only when it can: the ramp is applied to every composition track the burst clip spans, and an audio track that is short of the stitch is skipped with a log line rather than dragging the picture out of sync.
+- **Where the value lives.** `CaptureProject.burstRampDuration: Double?` — nil means "follow the app default" (resolved at render time), 0 means "this project explicitly wants hard cuts". App defaults are `letslapse.burstRampDefault: Double?` and `letslapse.burstRampRememberLast: Bool` (a project's ramp becomes the next default), surfaced in Settings → Video. The Adjust row sits above Advanced and steps in 0.25 s increments to 2.0 s.
+
+### 4.5 Colour grading
+
+Grading is **non-destructive throughout**: a grade is stored as metadata on the `CaptureProject` and re-derived on demand. Pixels are only ever baked when a *new* file is written — a rendered version, a Save to Photos, a share.
+
+**`PhotoPreset`** (`App/PhotoPreset.swift`) is the built-in look, as a short chain of Core Image parametric filters — no LUT or `.cube` files anywhere:
+
+| Preset | Character | Chain |
+|---|---|---|
+| `.natural` *(default)* | Gentle balance | highlights −0.15, shadows +0.15, warm to 6100 K, saturation ×1.10 |
+| `.cinema` | Filmic | highlights −0.25, shadows +0.25, cool to 7200 K, saturation ×0.85, contrast ×0.97 |
+| `.matte` | Faded | highlights −0.10, shadows +0.20, saturation ×0.92, contrast ×0.88, blacks lifted 0.055 / whites crushed 0.04 |
+| `.vivid` | Punchy | highlights −0.10, shadows +0.05, vibrance +0.3, saturation ×1.12, contrast ×1.08 |
+| `.original` | Pass-through | the file exactly as captured |
+
+**`PhotoAdjustments`** is the manual grade layered on top — five sliders and a white-balance picker, each field's neutral value being the one that makes its filter a no-op:
+
+| Control | Range | Filter |
+|---|---|---|
+| Highlights | −1 … 0 | `CIHighlightShadowAdjust` (`1 + value`) |
+| Shadows | 0 … 1 | `CIHighlightShadowAdjust` |
+| Vibrance | −1 … 1 | `CIVibrance` |
+| Clarity | 0 … 1 | `CIUnsharpMask`, radius 40 px scaled by image size, max intensity 0.5 |
+| Vignette | 0 … 1 | `CIVignette`, max intensity 2.0, radius 1.5 |
+| White balance | `As Shot` · `Auto` · `Sunny 5500K` · `Cloudy 6500K` · `Fluorescent 4000K` · `Tungsten 3200K` | `CITemperatureAndTint`, or a damped grey-world estimate for `Auto` |
+
+Order matters and is fixed: white balance first (it is a property of the light), then tone, then colour, then the two spatial effects — the vignette last so it darkens the finished picture rather than being clarity's input. Ranges were calibrated against a 12 MP iPhone DNG with a Lightroom edit of the same frame as the target. `PhotoAdjustments` decodes field by field, so a project written before a slider existed still loads with that slider neutral.
+
+**`PhotoGrade`** bundles the two — `preset + adjustments` — with `isIdentity` (nothing would move a pixel, so every render is skipped and every export hands over the original bytes) and `cacheToken` (a short stable string used both as a render-cache key and as the `task(id:)` that re-renders a preview when the grade changes).
+
+**`PhotoGrader`** is the still renderer:
+
+- `filterChain(preset:adjustments:asShotKelvin:)` returns a plain `(CIImage) -> CIImage`, which is what lets the video path, the blend loader and the preview cards all share one definition of "the grade".
+- `render(url:preset:adjustments:maxDimension:)` memoises per (file, modification time, grade, size) in a 24-entry / 192 MB `NSCache`, so flicking between chips is instant after the first render of each. Previews decode through ImageIO at a bounded pixel size — the only path that behaves on this app's own DNGs, which embed no preview and would otherwise want a ~200 MB full-sensor Core Image render for a 1400 px card. Export passes `nil` and keeps the full-resolution RAW path; full-resolution renders are deliberately not cached.
+- `asShotKelvin(url:)` solves the capture's own colour temperature from the DNG's `AsShotNeutral` and its two calibration matrices via the spec's iteration (Standard Illuminant A at 2856 K and D65 at 6504 K, McCamy's cubic for CCT), falling back to D65 for files with no such tag. Calibrated against a reference DNG whose as-shot CCT solves to 5021 K. That value is the anchor every other white-balance option is expressed relative to — which is what makes `As Shot` an exact no-op.
+- `renderJPEG(...)` writes a full-resolution graded JPEG to temp for a Photos export, carrying the source's EXIF/GPS/TIFF blocks across (a `CGImageDestination` copies nothing on its own — without this the handed-over JPEG has no capture time and no location) and declaring orientation "up" because the decode already baked it.
+- `renderForBlend(url:grade:)` grades one frame on its way into a blend, decoding through `ImageStacker.loadImage` so a graded frame and an ungraded one are the same pixel size — which the stacker requires of every frame after the first.
+
+**`VideoGrader`** (`App/VideoGrader.swift`) is the video half, running the *same* chain anchored at D65 (a movie carries no as-shot tag):
+
+- `composition(for:grade:)` → an `AVMutableVideoComposition` with a Core Image handler, cropping back to the source extent because the unsharp mask and vignette grow it. Returns nil for an identity grade so callers never pay for a no-op pass.
+- `bakedCopy(of:grade:)` exports a graded copy to temp via `AVAssetExportSession` at `AVAssetExportPresetHighestQuality`, keeping the source container (an `.mp4` blend stays `.mp4`, a captured `.mov` stays `.mov`). It is a re-encode — the accepted cost of baking a grade into video. An identity grade returns the source URL unchanged, so callers can invoke it unconditionally and compare before deleting.
+- `gradedFrame(at:grade:)` pulls one representative frame (0.2 s in, matching the ungraded thumbnail) for a preview.
+
+**`CustomPreset` / `CustomPresetStore`** (`App/CustomPreset.swift`) let a user name and keep a grade — base preset plus slider values — saved **app-wide**, not per project, so a look worked out on one photo applies to the next. Backed by `custom_presets.json` in Application Support, written atomically; a save failure surfaces as `lastError` in the UI rather than silently dropping the preset, and a corrupt file resets to empty rather than taking the viewer down. `matching(basePreset:adjustments:)` is how the chip strip knows which custom chip to light up — moving any slider stops matching and deselects the chip on its own.
+
+**Where it appears:**
+
+- **`GradingCard`** (in `App/ProjectDetailView.swift`) is the mode-aware card at the top of project detail, and it replaced the old mode-gated `PhotoGradingCard`. A photo project previews its hero image; an interval project previews its first source frame (and offers *two* affordances — Play the shoot as motion, Edit photo below it); a video project previews a graded frame pulled from the movie. Sliders are held in a local draft while they move and written back to the project at the end of a ~100 ms debounce, so a drag isn't fighting the manifest for every tick. Past 500 pt of card width the Customise panel presents as a sheet instead of expanding inline.
+- **`PhotoViewerView`** (`App/PhotoViewerView.swift`) is the fullscreen grading editor: preset chip strip, custom-preset chips, the five sliders, the white-balance picker, and a "Save as Preset" naming alert. Layout switches at the same **500 pt** threshold — controls stacked under the image below it (iPhone portrait, ≤ 440 pt), a side rail beside it above (iPhone landscape, iPad's ~578 pt sheet, always the Mac). The rail is a fixed 340 pt on macOS (resizing the window grows the photo, never the controls) and `min(340, width × 0.42)` elsewhere. Renders are debounced at ~100 ms and keyed on a bumped token so a burst of slider ticks collapses into one render. On iOS it draws its own Done bar; on macOS it *is* a window (`PhotoEditorWindowRequest`), because Mac sheets can't be resized.
+- **`PhotoAdjustmentsPanel`** is the shared slider/white-balance component, used by both the viewer's rail and the inline card — one definition of the controls, so the two can't drift.
+- **Grids and playback** render through the grade too: `CaptureAssetGrid` takes an optional grade for still tiles (the shared thumbnail cache is keyed by file alone, and a graded tile is not the file), and the fullscreen player attaches `VideoGrader.composition` for a non-identity grade (§4.8).
+
+#### Capture Flat and Apple Log
+
+Two ways to shoot flat, for grading latitude later:
+
+- **`FlatCapture`** (in `App/PhotoPreset.swift`) is the JPEG still path: a low-contrast log-ish grade (highlights −0.20, shadows +0.15, saturation ×0.80, contrast ×0.90) rendered *at save time* into the written JPEG, orientation baked and the GPS dictionary carried across. It returns false rather than throwing, so a failure falls back to writing the original bytes untouched. Driven by the `capture.captureFlat` setting.
+- **`VideoFlatten`** covers video on hardware without Apple Log (a sensor-level colour space on iPhone 15 Pro and newer). Where `camera.appleLogEnabled` can't be used, the recorded movie is post-processed through the same flat grade with an `AVVideoComposition` and written back over the original. It re-encodes (ProRes falls back to H.264/HEVC), which is the accepted trade for giving non-Log hardware the flat profile; a failed export leaves the original untouched so a recording is never lost to it.
+
+### 4.6 Geotagging
+
+Every capture kind can carry a GPS fix, and the fix lives *in the file* rather than in a side table — so it survives sharing, export, and re-import. Gated by the Settings → Location **"Geotag captures"** toggle.
+
+- **`LocationService`** (`App/LocationService.swift`) is the single owner of Core Location. Beyond a live `currentLocation`, it publishes `recordingLocation`: the take's **first `CLLocation` with `horizontalAccuracy ≤ 50 m`**, seeded at record start with the fix already in hand and otherwise filled by the first accurate update to arrive during the take (a coarse fallback fix stands in if nothing ever clears the threshold — a rough pin beats no pin). For a moving shot this is deliberately *where the take began*, not a track: one clip carries one place. The camera writes stills on its own session queue and can't touch main-actor state, so the fixes are also exposed through a lock-guarded `nonisolated` snapshot readable from any queue.
+- **`CLLocation+EXIF.swift`** is the stills carrier: `exifGPSDictionary()` writes the EXIF GPS block (unsigned degrees plus hemisphere references, which is how EXIF stores coordinates), and `fromEXIF(of:)` / `init?(exifGPS:)` read it back, recombining reference and magnitude into a signed coordinate. Getting the sign from the hemisphere rather than assuming it is the whole point — the alternative places the pin in the wrong quadrant of the world.
+- **`MovieLocation.swift`** is the video carrier, because a movie has no EXIF block. It writes `com.apple.quicktime.location.ISO6709` — the atom iOS Camera uses and Photos, Finder and Maps read — in the decimal-degrees ISO 6709 Annex H form (`+51.5074-000.1278+021.000/`), alongside the fix's own horizontal accuracy so a later read recovers the real accuracy rather than assuming one. The injection is **post-capture and re-encode-free**: an APFS clone of the original is taken first (sharing blocks, so it costs no space and no time), `AVMutableMovie.writeHeader(to:fileType:options: .addMovieHeaderToDestination)` replaces only the movie header, and the result is validated (it still reads as a movie with playable video *and* the fix reads back) before the clone is dropped. Anything that fails restores the clone and returns false: a take without a map pin beats a take that won't play. A long 4K take costs milliseconds.
+- **`GPXWriter` / `GPXReader`** write and read a `.gpx` sidecar beside internally captured video, from a ~6 s-cadence point log — the track, as opposed to the single pin in the movie header. `MovieLocation.locationForSaving(at:)` prefers the movie's own atom and falls back to the sidecar's first point.
+- **`AppModel.photosLocation(for:)`** dispatches by capture kind: EXIF for anything that conforms to `.image`, the movie atom (then the GPX sidecar) for anything else. `currentCaptureLocation()` reads the fix back off a run's first source file to stamp a *rendered blend*, whose own file carries no metadata of its own.
+- **Every `PHAssetChangeRequest`** creation path sets `request.location`, so a saved asset lands in Photos already placed on the map — source clips, interval originals, graded stills, and rendered versions alike.
+
+### 4.7 Gallery
+
+`App/GalleryView.swift` is a square thumbnail grid over **every capture in the library**, independent of project structure. Each tile shows the project's hero asset — for Photo/Interval captures the latest blended image, otherwise the source frame or video — and tapping one pushes the same `ProjectDetailView` the Projects tab uses.
+
+- **`CaptureFilterBar`** (`App/CaptureFilterBar.swift`) is the segmented filter — **All · Photos · Interval · Video** — and it is shared with the Projects tab, so the two never disagree about what "Photos" means. The distinction matters because Photo and Interval both live under the `.photos` capture kind: a Photo-mode capture is one asset, an interval shoot is a stack of frames. Each case also carries its own empty-state copy, so "filtered down to nothing" reads differently from "the library is empty".
+- **`CaptureAssetGrid`** (`App/CapturePhotoGrid.swift`) is the generic grid: 2 px gutters, square tiles, and **pinch-to-zoom column count between 2 and 5**, persisted in `gallery.columnCount` and deliberately shared with every other grid in the app — one zoom level, everywhere. Tiles load through `ProjectThumbnailCache` (§4.11) and can render through a project's grade when the grid belongs to one.
+- **`CapturePhotoGrid`** is the per-project variant, over a project's own frames, and **`CaptureFrameViewer`** is its fullscreen frame pager — swipeable on iOS, with per-frame **Save to Photos** and a `ShareLink`.
+
+The Gallery draws its own 34 pt title rather than using a native large title, matching the Projects tab, which hides the navigation bar and does the same; a native title there would sit under a full navigation-bar height of padding and leave the two tabs visibly inconsistent.
+
+### 4.8 Fullscreen playback
+
+`App/FullscreenMediaSheet.swift` is the one in-app playback surface: a `.fullScreenCover` on iOS/iPadOS, a sheet on macOS (which has no `fullScreenCover`), presented through a single `.fullscreenMedia(_:model:)` view modifier that passes the model explicitly so the grading editor inside can never come up without it.
+
+`FullscreenContent` enumerates what it can show:
+
+| Case | What it does |
+|---|---|
+| `.video(url:grade:)` | A movie file. A non-identity grade is attached live as an `AVMutableVideoComposition` on the `AVPlayerItem`, so playback matches the graded card without writing a baked copy. Pass nil for a file that already carries its grade — every rendered version does. |
+| `.videoSequence(urls:grade:)` | A multi-segment recording played as one timeline, stitched into an in-memory `AVMutableComposition` at playback time. Nothing is exported and nothing is written to disk. |
+| `.intervalMotion(frames:fps:)` | An interval shoot played straight from its frames at a chosen fps — watch the shoot as motion without rendering a version first. Frames play through the project's grade. |
+| `.photo(url:)` | A still. With a project context it opens that project's grading editor rather than the plain viewer. |
+
+A `FullscreenMediaRequest` carries the whole swipeable set plus the index that was tapped, an optional `captureID` for grade/editor context, and a title. Its identity includes the starting index, so tapping a different clip in the same set re-presents rather than reusing the open sheet's state.
+
+Behaviour: black, edge to edge, close top-left and share top-right; video autoplays and loops with a scrubber; siblings are reachable by **`TabView` page swipe on iOS** and **chevron buttons on macOS**. Share is offered only for cases with a real file behind them — a stitched sequence and a frame-driven motion preview exist only in memory, and sharing the first segment would be sharing something other than what's on screen. Dismissal is a **swipe-down gesture with offset and fade** rather than `.interactiveDismissDisabled`, which misbehaved alongside the page swipe.
+
+This replaced the old `ProjectMediaPreviewSheet` in `ProjectDetailView`; the older sheet survives in `ProjectsView` and `ResultView`, which present a single item with no siblings and no grade.
+
+### 4.9 Processing and Result
 
 - `App/ProcessingView.swift` — circular progress ring over a blurred source thumbnail, a four-stage checklist (Preparing / Blending — with a live *processed/total* frame counter — / Encoding / Saving; stages are derived from progress thresholds), an ETA, and Cancel ("Cancelling discards this version. Your original is safe."). Blend work runs in a single cancellable `Task`; Kit progress callbacks hop to the main actor.
 - `App/ResultView.swift` — inline `AVPlayer` (or still image), a green "Saved as **vN** in *project*" banner with "View project", Save to Photos, `ShareLink`, and next steps: "New version from original" (with a suggested alternate speed) and "Compare with original". Results are written to temp, then copied into the project's `blends/` folder and recorded in the manifest before the user ever sees them.
 
-### 4.6 Projects, versions, and per-clip encodings
+### 4.10 Projects, versions, and per-clip encodings
 
-`App/ProjectsView.swift` lists one card per original — thumbnail, format line, a horizontal strip of version thumbnails (tap to open, "+" for a new version), swipe-to-delete. `App/ProjectDetailView.swift` is the management layer:
+`App/ProjectsView.swift` lists one card per original — thumbnail, format line, a horizontal strip of version thumbnails (tap to open, "+" for a new version), swipe-to-delete — filtered by the same `CaptureFilterBar` the Gallery uses. `App/ProjectDetailView.swift` (~1,777 lines) is the management layer:
 
-- Hero player for the original; a **Source Clips** section for video projects (each clip playable and saveable — single-clip projects included, so every original has a Save to Photos path).
+- The `GradingCard` hero (§4.5), then a **Source Clips** section for video projects (each clip playable and saveable — single-clip projects included, so every original has a Save to Photos path).
 - **Versions** list — "v3 · 100× · 8s", open, delete, and **"New version from these settings"** (rehydrates that version's parameters into Adjust).
 - **Photo captures read as ONE asset.** A Photo-mode shot never shows frame counts, version tallies, or New-version affordances anywhere (card, detail, gallery, storage list). With Blend Off the captured JPEG *is* the photo — registered as-is, no version created, camera EXIF/GPS untouched; with blend on, the burst auto-stacks into a single image that carries the first frame's EXIF/GPS. The detail screen shows the photo with **Save to Photos** / **Share**; burst frames stay on disk as stacking material, owned by the storage line ("photo + burst frames").
-- **Originals export.** Interval projects get an **Originals** row that saves every source frame to Photos in one batched `PHPhotoLibrary` change (`saveOriginalsToPhotos`) — the export path source stills never had.
+- **Originals export.** Interval projects get an **Originals** row that saves every source frame to Photos in one batched `PHPhotoLibrary` change (`saveOriginalsToPhotos`), deliberately ungraded — it hands over the originals, not a look.
+- **Rotate 90°** — a metadata-only transform via `Kit/.../MediaRotator.swift`; no re-encode, and the thumbnail cache is invalidated by generation counter so a same-URL content change still re-decodes.
 - Rename, storage totals, delete project, and **Share project** — the entire project folder (manifest, originals, versions, sidecar logs) packed into a `.lapse` AppleArchive via `App/ProjectArchive.swift` + `Kit/.../DirectoryArchive.swift`. The Create tab's "Import a LetsLapse project…" row unpacks one on any platform, minting fresh project/version IDs so imports never collide — the workflow that moves device test captures onto a Mac for analysis (§6.6).
 - **Per-clip encoding management.** ProRes originals are wonderful capture masters and terrible distribution files, so each source clip can hold multiple codec variants (`ClipEncoding` in `App/AppModel.swift`, persisted per clip in the manifest):
   - A **Manage** sheet per ProRes clip lists existing formats with sizes, offers **Convert to H.264 / Convert to HEVC** (HEVC is encoded 10-bit Main10; bitrate heuristics ≈ 0.24 bits/pixel/s for H.264, 0.18 for HEVC; audio passthrough), per-format Save to Photos, and deletion — deleting the ProRes original asks for confirmation, and the last remaining encoding can never be deleted.
   - A project-level **"Convert ProRes → H.264, delete originals"** action reclaims storage in one tap.
   - The **"Blend from"** chooser in Adjust (§4.4) appears only when a real choice exists; "Auto" prefers quality (`ProRes → HEVC → H.264`). A converted clip survives deletion of its ProRes master.
 
-### 4.7 Settings
+### 4.11 Performance infrastructure and export guards
 
-`App/SettingsView.swift`: creative defaults (default speed, output fps, true-light), "Remember recording settings", and — once Interval's output format is set to DNG in the capture format sheet, on iOS — the capture-experiment toggles (bracketed RAW / tight burst / responsive — see §6.5) and the **Capture benchmark** entry; a storage card with a segmented bar (Originals / Versions / Cache) plus **Review large originals** (sorted list, deep-links into project detail) and **Clear cache**; Advanced holds **Blend learning** (this device's learned Psycho profiles per pipeline × interval × thermal bucket, each with its Safe count, run count and best/worst bounds — plus a confirmed destructive reset for unusual conditions; see §5.5), **Performance** (CPU worker budget, concurrent blend batches — used by the macOS job runner) and **Diagnostics** (latest job folder path and processing log). Debug/technical detail is deliberately quarantined here, away from the creative path.
+Two pieces exist purely because a real library (170+ projects, 1000+ DNGs) behaves nothing like a test one.
 
-### 4.8 Persistence
+**`MediaWorkQueue`** (`App/MediaWorkQueue.swift`) is a bounded, cancellable `OperationQueue` — width 3 by default, `max(2, min(4, cores / 2))` — carrying all the media I/O the browsing screens do: thumbnail and RAW decodes, and project-folder size walks. It replaced `Task.detached`, which failed in three compounding ways: detached tasks run on the cooperative pool whose width is the core count, and blocking ImageIO/FileManager calls hold those threads for their whole duration, so one screenful of tiles could occupy every thread the runtime has; `Task.detached` ignores the cancellation of the SwiftUI `.task` that started it, so scrolling piled up hundreds of decodes for rows long gone and fresh requests effectively never arrived (a queue minutes deep, with the main actor free the whole time — which is why the UI stayed responsive while every thumbnail sat gray); and unbounded concurrency over ~50 MB DNG decodes is a memory-warning spike, arriving exactly when the caches empty and the whole grid asks again. `MediaWorkQueue.note(...)` is the shared diagnostic channel, tagged 🖼️LL to os_log *and* stdout, so it is readable over Console, `log stream`, and `devicectl … --console` when the phone is attached over Wi-Fi.
+
+**`ProjectThumbnailCache`** (`App/ProjectThumbnailCache.swift`) is a two-tier cache: an in-memory `NSCache<NSURL, CGImage>` (platform-neutral `CGImage`s, one code path for iOS and macOS) over a **disk JPEG tier at `Application Support/LetsLapse/Thumbnails/`**, keyed by the source's path plus modification date. The disk tier exists because this app's own DNG captures embed no preview, so each thumbnail costs a full sensor decode — hundreds of ms on device. Paying that once per asset instead of once per launch is the difference between a grid that fills instantly and one that sits on gray squares. Failed decodes are remembered so scrolling doesn't re-pay a doomed decode, but *not permanently*: ImageIO also fails transiently under memory pressure, so a memory warning or a return to the foreground wipes the slate.
+
+**Storage guard on export.** `AppModel.exportProject` now prechecks free space with `volumeAvailableCapacityForImportantUsage` and throws `AppModel.ExportError.insufficientStorage(available:needed:)` — whose message names both figures in human units — rather than filling the disk and failing halfway. `DirectoryArchive.write` propagates stream `close()` errors instead of swallowing them with `try?` (an out-of-space write failure surfaces from `close()`, not from the writes), closing every stream before rethrowing the first failure so no descriptor leaks, and the partial `.lapse` file is deleted on failure so a truncated archive is never left looking finished.
+
+### 4.12 Settings
+
+`App/SettingsView.swift` is organised into cards under section headers:
+
+- **Creative defaults** — default speed, output fps, true-light blending.
+- **Video** — the burst **slow-motion ramp** default (Off, or 0.25 s–2.0 s) and **Remember last** (a project's ramp becomes the next default; the default row goes read-only while it is on, since the projects themselves are driving it).
+- **Recording** — "Remember recording settings"; **Manage resolutions** (see below); and, once Interval's output format is set to DNG on iOS, the capture-experiment toggles (DNG bracketed RAW / tight burst / fast capture, §6.5) and the **Capture benchmark** entry.
+- **Location** — the **"Geotag captures"** toggle (§4.6): GPS in photo EXIF, a GPX track sidecar beside captured video.
+- **Storage** — a segmented bar (Originals / Versions / Cache) plus **Review large originals** (sorted list, deep-links into project detail) and **Clear cache**.
+- **Advanced** — **Blend learning** (this device's learned Psycho profiles per pipeline × interval × thermal bucket, each with its Safe count, run count and best/worst bounds, plus a confirmed destructive reset; §5.5), **Performance** (CPU worker budget, concurrent blend batches — used by the macOS job runner) and **Diagnostics** (latest job folder path and processing log).
+- **Camera** (macOS only) — authorization status with a deep link to System Settings' privacy pane.
+
+Also here: **Record audio** (§4.3), permission-gated.
+
+**Manage resolutions** (`App/ManageResolutionsView.swift` + `App/ResolutionPreferences.swift`) is a per-category allowlist over the capture format sheet — "I never shoot 720p" lives here instead of being scrolled past on every visit. Two domains, **stills** (Photo and Interval, which capture from the same format list) and **video**, each with its own list and its own "show aspect ratios" preference. **Hidden** IDs are what's stored, not visible ones, so everything starts checked and a resolution a future device adds defaults to visible. The filtering is UI-only — a resolution that is currently selected is always still offered, so a hidden entry can never strand a shoot mid-configuration. Persisted under `letslapse.resolutions.*`.
+
+Debug and technical detail is deliberately quarantined in Settings, away from the creative path.
+
+### 4.13 Persistence
 
 Everything lives in Application Support, JSON-manifested, human-inspectable:
 
 ```
 Application Support/LetsLapse/
-└── Projects/
-    ├── library.json                 # LibraryManifest: [CaptureProject] + [BlendProject]
-    └── <captureUUID>/
-        ├── source/                  # the preserved original
-        │   ├── original.mov         #   imported/recorded video, or
-        │   ├── frame-00001.jpg …    #   interval stills, or
-        │   ├── segment-000.mov …    #   live-sequence segments
-        │   ├── sequence.json        #   live-sequence metadata (modes, segments, markers)
-        │   └── clip-h264.mp4 …      #   additional ClipEncoding variants after conversion
-        └── blends/
-            └── <blendUUID>.mp4|.png # one file per version
+├── Projects/
+│   ├── library.json                 # LibraryManifest: [CaptureProject] + [BlendProject]
+│   └── <captureUUID>/
+│       ├── source/                  # the preserved original
+│       │   ├── original.mov         #   imported/recorded video, or
+│       │   ├── frame-00001.jpg …    #   interval/photo stills (JPEG), or
+│       │   ├── frame-00001.dng …    #   blended or untouched Bayer DNGs, or
+│       │   ├── segment-000.mov …    #   live-sequence segments
+│       │   ├── sequence.json        #   live-sequence metadata (modes, segments, markers)
+│       │   ├── <clip>.gpx           #   GPX track sidecar for a captured take
+│       │   ├── liveblend-*.json     #   per-run experiment log (rides inside the project)
+│       │   └── clip-h264.mp4 …      #   additional ClipEncoding variants after conversion
+│       └── blends/
+│           └── <blendUUID>.mp4|.png # one file per version
+├── Thumbnails/                      # disk JPEG thumbnail tier (path + mtime keyed)
+├── Logs/
+│   └── liveblend-<timestamp>.json   # video-tap Live Blend session logs
+├── blend-profiles.json              # learned Psycho/Safe profiles per device × pipeline × bucket
+└── custom_presets.json              # app-wide named colour grades
 ```
 
 Key model types (all `Codable`, in `App/AppModel.swift` unless noted):
 
-- `CaptureProject` — id, kind (video/photos), created date, original name, mode string, source file names, fps/duration/dimensions, optional custom name, and `clipEncodings: [String: [ClipEncoding]]?`.
+- `CaptureProject` — id, kind (video/photos), created date, original name, mode string, source file names, fps/duration/dimensions, optional custom name, `clipEncodings: [String: [ClipEncoding]]?`, and three grading/render fields, all optional so older manifests still decode:
+  - `selectedPreset: String?` — the `PhotoPreset` raw name; nil resolves to the default (`Natural` — grading is on by default).
+  - `adjustments: PhotoAdjustments?` — the manual grade; nil resolves to `.neutral`. Read through `AppModel.photoAdjustments(for:)`.
+  - `burstRampDuration: Double?` — nil follows the app default, 0 means "hard cuts". Read through `AppModel.effectiveBurstRamp(for:)`.
+  - `isPhotoCapture` is the derived flag that makes a Photo-mode shot read as ONE asset everywhere.
 - `BlendProject` — id, `captureID` (the link back to its original), kind, output file name, and the **full recipe**: speed/ramp/curve, output fps, linear light, trim, source codec, plus result stats (frames in/out, dimensions). This is what makes every version reproducible and re-editable.
 - `LiveCaptureSequence` (`App/LiveCaptureSequence.swift`) — mode (ramp/marker), locked resolution, base and burst frame rates, segments with per-segment frame rate and time range, markers, ramp intervals.
+- `CustomPreset` (`App/CustomPreset.swift`) — id, name, base preset, adjustments; stored app-wide, not per project.
 
-Preferences use `UserDefaults` under `letslapse.*` keys (defaults, performance knobs) and `letslapse.capture.*` (remembered recording settings). Deletion is guarded (can't delete the project that's mid-blend; blend files are path-validated to live inside their project before removal), and cache cleanup recognizes temp prefixes (`live-capture`, `picked-`, `import-`, …).
+Preferences use `UserDefaults` under `letslapse.*` keys (defaults, performance knobs, burst-ramp defaults, resolution allowlists), `letslapse.capture.*` (remembered recording settings), and a few view-owned `@AppStorage` keys (`gallery.columnCount`, `capture.captureFlat`, `camera.appleLogEnabled`). Deletion is guarded (can't delete the project that's mid-blend; blend files are path-validated to live inside their project before removal), and cache cleanup recognizes temp prefixes (`live-capture`, `picked-`, `import-`, `LetsLapse-graded-`, `graded-`, …).
 
 ---
 
 ## 5. The macOS app
 
-The Mac app is the **same target and the same screens** — Create/Projects/Settings, the same flow overlay, the same engine — with platform-appropriate differences rather than a separate codebase:
+The Mac app is the **same target and the same screens** — Create/Gallery/Projects/Settings, the same flow, the same engine — with platform-appropriate differences rather than a separate codebase:
 
 - **Import-first.** Imports use `.fileImporter` and **drag-and-drop onto the Create screen**; capture exists but is reduced (single default camera, coarse exposure lock, fixed landscape orientation, no lens/stabilization chrome) — though Interval's live-blending JPEG path runs there too (§5.4). A Settings card surfaces camera authorization with a deep link to System Settings' privacy pane.
-- **Window & chrome.** Default window 760×680; native tab styling instead of the floating pill; capture presents as a sheet instead of a full-screen cover.
+- **Window & chrome.** Default window 760×680. The flow lives *inside* the Create tab rather than as an overlay, so the tab bar stays clickable throughout — switching away parks the flow, switching back resumes it, and starting a flow from another tab (e.g. "New version" in Projects) brings Create front. Capture presents as a sheet instead of a full-screen cover, and fullscreen playback as a sheet rather than a cover.
+- **The photo editor is a window, not a sheet.** Mac sheets are never user-resizable, so `PhotoViewerView` is hosted by its own `WindowGroup(for: PhotoEditorWindowRequest.self)` — one window per photo, reopening the same photo fronts its window, 1000×700 default, 720×480 floor (the rail is fixed at 340 pt, leaving the image pane a workable ~380 pt at the smallest).
 - **No Watch layer.** `WatchRemoteControlReceiver` is compiled out (`#if os(iOS)`), and the Watch app embeds only into iOS builds.
+- **No Bayer RAW.** Interval DNG is unavailable by SDK decree (§6.1); the Mac always runs the JPEG paths and says so in the format sheet footer.
 
 ### 5.2 MacVideoJobRunner: the disk-backed pipeline
 
-For constant-window video blends, macOS routes through `App/MacVideoJobRunner.swift` instead of the streaming engine — a deliberately different set of trade-offs for desktop-scale footage:
+For constant-window video blends, macOS routes through `App/MacVideoJobRunner.swift` (~876 lines) instead of the streaming engine — a deliberately different set of trade-offs for desktop-scale footage:
 
 - Creates a visible job folder next to the source: `<name>.letslapse/` containing `manifest.json`, `logs/job.log`, `frames/extracted…/`, `passes/blend-NNN-to-001…/`, and `output/`.
 - Stages are checkpointed in the manifest (`created → extracting → extracted → blending → encoding → completed`). Every source frame is extracted to PNG; windows of N PNGs are averaged via `ImageStacker`; blended PNGs are encoded to H.264/.mp4 at 12 Mbps with the source's orientation transform.
 - **Resumable**: a re-run reuses extracted frames and skips any window whose output already exists — an interrupted hour-long job continues instead of restarting.
 - **Parallel**: extraction is pipelined with blending; blend batches run concurrently (each with its own `BlendCore`), throttled by the user's Settings → Performance knobs (CPU worker budget, concurrent blend batches).
+- **Disk-aware**: the runner checks `volumeAvailableCapacityForImportantUsage` against the ~8 MB/frame PNG scratch cost before committing to an extraction pass.
 - **Observable**: progress messages, the job folder path, and rolling log lines feed Settings → Diagnostics. Sources are accessed through security-scoped bookmarks (App Sandbox).
 
 Ramped blends on macOS use the same streaming `VideoBlender` as iOS. The runner is the "big footage on a Mac" path: more disk in exchange for resumability and inspectability.
@@ -353,9 +569,7 @@ Blending moved to **capture time** (July 2026): instead of recording video and a
 - **Instrumentation.** The capture screen shows a live diagnostics readout — frames selected, last blend ms, actual output spacing, and a health status (healthy / reduced frame count / camera rate limited / processing behind / thermal pressure / capture failed). Every run also writes a JSON experiment log to `Application Support/LetsLapse/Logs/liveblend-<timestamp>.json`: a machine/camera/format header, one entry per output (timings, frame spacing, drop counts, memory footprint, thermal state), and a summary — rewritten atomically after every output so a crash loses nothing.
 - **UI.** The BLEND dial beside Interval's EVERY picker on every platform: 1 (No blending) / 3 (Light) / 5 (Standard) / 10 (High, the default) / 20 (Experimental), then **Psycho** and **Safe** (§5.5). The live diagnostics readout appears only while the blend engine runs — plain-JPEG interval shoots never see it; unthrottled windows show "frames N" with no target denominator.
 
----
-
-### 5.5 Adaptive blend depths: Psycho, Safe, and the learning system (July 2026)
+### 5.5 Adaptive blend depths: Psycho, Safe, and the learning system
 
 Beyond the fixed counts, the BLEND dial offers two adaptive depths. Engineering naming stays boring and precise — `BlendDepth.unthrottled` / `.throttled` in code, "Psycho" / "Safe" as pure front-end labels (`Shared/BlendDepth.swift`; swappable without touching behaviour). The blend count is the effective shutter angle, so these are a virtual ND filter pushed to, or held safely under, the device's real limits.
 
@@ -369,7 +583,7 @@ Beyond the fixed counts, the BLEND dial offers two adaptive depths. Engineering 
 
 ---
 
-## 6. Live Blend DNG — the holy-grail pipeline (July 2026)
+## 6. Live Blend DNG — the holy-grail pipeline
 
 The largest single research-and-engineering arc in the app so far: making Live Blend produce **blended RAW DNGs** on iPhone/iPad, so day-to-night ("holy grail") timelapses keep white balance, tint, and exposure as *post* decisions. The reference bar was Adobe's Project Indigo — burst-merged 14 MB DNGs with real motion blur — shot side-by-side on the same iPhone 16 Pro. This section records what was built, what failed, and what was measured, because several findings overturned assumptions the codebase had been carrying.
 
@@ -390,6 +604,8 @@ Other findings that cost real debugging time, recorded so nobody re-learns them:
 ### 6.3 Color: camera-native by the open spec
 
 Early blends carried a fixed sRGB→XYZ `ColorMatrix1`, which Lightroom treated as a generic profile — white-balance extremes drifted visibly versus Indigo in an A/B. The fix (`Kit/Sources/LetsLapseKit/CameraColorTransform.swift`) builds the working-space→camera transform **from the reference DNG's own tags per the open DNG specification**: dual-illuminant `ColorMatrix1/2` interpolation by correlated color temperature (McCamy, iterated with the white point recomputed from the final matrix), Bradford adaptation from D65 to the scene white implied by `AsShotNeutral`, and normalization so working-space white lands exactly on neutral. The output DNG carries the camera's real matrices, calibration illuminants, `AsShotNeutral`, and `NoiseProfile` — so raw developers recognize the camera and give their native WB behavior, anchored per window to track changing light. Two lines were drawn deliberately: no `Orientation` tag is carried (decoded samples are already display-oriented), and Adobe's proprietary embedded profile ("Bonsai", plus the HDR gain-table that earns Indigo its HDR badge) is **not** replicated — everything written comes from the public spec and the camera's own metadata.
+
+The same solver powers the grading system's `As Shot` white balance (§4.5): `PhotoGrader.asShotKelvin` runs the spec's iteration over a file's `AsShotNeutral` and calibration matrices to recover the temperature the camera balanced at.
 
 ### 6.4 Size: re-mosaic + lossless JPEG
 
@@ -427,7 +643,7 @@ A deliberately narrow remote for the iPhone capture screen: **pick the capture m
 
 Three pieces, one shared contract:
 
-- **Shared** — `Shared/WatchMessageKey.swift`, the only file compiled into both targets: string keys for every field in the message dictionaries.
+- **Shared** — `Shared/WatchMessageKey.swift`, string keys for every field in the message dictionaries.
 - **Watch side** — `Watch/WatchCaptureRemote.swift` (`WCSessionDelegate`): sends commands, receives state, and keeps a published mirror of phone state for `Watch/WatchControlView.swift`.
 - **iPhone side** — `App/WatchRemoteControlReceiver.swift` (singleton, iOS-only): receives commands and forwards them to whatever handler is registered; publishes state back.
 
@@ -454,6 +670,7 @@ Protocol details worth knowing:
 
 - **Commands (watch → phone)**: `state` (ping), `startRecording` (starts whatever mode is selected — it dispatches the capture screen's shutter action, never forces Video), `stopRecording`, `triggerMoment`, `lockExposure`, `unlockExposure`, `setISO` (value), `setLensPosition` (value; no watch UI uses it yet), `setCaptureMode`, `setIntervalSeconds`, `setFramesPerBlend`, `scheduleStop` (unit + deadline or target count), `cancelScheduledStop`. Replies carry a status: `accepted`, `ok`, `unavailable` (+ "Capture screen is not active"), or `error`.
 - **State (phone → watch)** rides **both channels at once**: `updateApplicationContext` (durable latest-state, survives backgrounding/relaunch) plus a fire-and-forget `sendMessage` when reachable (low latency). Both funnel into the same apply path on the watch. Payloads carry recording state and start time, capture mode, interval seconds, blend depth (a token naming fixed counts or Psycho/Safe, beside the numeric frames key stale builds read), capture count, any scheduled stop (unit, deadline, target count), sequence mode, marker/burst/segment counts, format line, capture fps, planned speed, output fps, and the full exposure-lock state including the real ISO range.
+- **Publishing is off-main.** `WCSession.updateApplicationContext` can block, and blocking the main thread during capture earns a `0x8BADF00D` watchdog kill that looks for all the world like a broken gallery or a failed save. State pushes hop off the main thread.
 - **Scheduled stops are enforced on the phone** (`CameraController.scheduleStop` — a deadline work item for minutes, a count observer for frames; video converts frame targets via fps). The watch only schedules, cancels, and counts down. Every stop path cancels any pending schedule.
 - **Push triggers are state-changes, not timers** — a cluster of SwiftUI `.onChange` observers in `CaptureView`, deduped by change-detection guards in the receiver. The watch runs its own 1 Hz clock for elapsed time from `recordingStartedAt`, so no periodic traffic is needed.
 - **The availability gate is `commandHandler != nil`.** The receiver activates at app launch and always answers, but only `CaptureView` registers a handler (cleared on disappear). Off the capture screen, commands return `unavailable` and the payload's `cameraActive` goes false — which is exactly what the watch UI keys off.
@@ -462,7 +679,7 @@ Protocol details worth knowing:
 
 `WatchControlView` switches between three screens:
 
-- **Ready** (reachable + camera open): green status, a mode selector (Interval / Video), Interval's setting rows opening picker sheets ("Every" interval seconds; "Blend" frames, Off = no blending — the row reads "Psycho"/"Safe" when the phone is in an adaptive depth, and the picker offers the fixed counts to switch back), format + planned speed line, a 92 pt red START button, and a one-tap exposure lock showing ISO · shutter when locked.
+- **Ready** (reachable + camera open): green status, a mode selector, Interval's setting rows opening picker sheets ("Every" interval seconds; "Blend" frames, Off = no blending — the row reads "Psycho"/"Safe" when the phone is in an adaptive depth, and the picker offers the fixed counts to switch back), format + planned speed line, a 92 pt red START button, and a one-tap exposure lock showing ISO · shutter when locked.
 - **Recording**: REC + elapsed time, a mode-appropriate count ("N photos" / "N blends"), an amber live estimate in video mode ("@100× → 8s" — clip length computed on-watch from elapsed × capture fps ÷ speed ÷ output fps), the exposure lock, and a mode-dependent second button — **burst toggle** (base fps vs "⚡ burst") in ramp mode, **Marker / End marker** in marker mode. Amber dots show captured moments (the active one pulses). **Digital Crown adjusts ISO** (in steps of 50 within the phone-reported range) while exposure is locked. Stopping has deliberate friction: a **slide-to-stop** control (release past 85% travel fires) instead of a tappable button, plus a "Stop at…" sheet scheduling a stop after N minutes or N frames — once armed, the slider label counts down and the button flips to "Cancel Stop at".
 - **Unreachable / camera closed**: "Open the camera on iPhone" with a Ping iPhone button.
 
@@ -472,15 +689,14 @@ Feedback is haptic-first (`.start` / `.stop` / `.click` on accepted commands) wi
 
 ## 8. Design language
 
-Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, shared components):
+Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, shared components):
 
 - **Palette.** Accent burnt orange `rgb(195, 106, 0)` (primary actions, tint), deep accent `rgb(138, 74, 0)`, **amber** `rgb(255, 179, 64)` for highlights — selected values, progress, version badges, and everything "moment"-related on both phone and watch. `ink` `rgb(28, 28, 30)` for dark stat cards. Surfaces track system grouped-background colors so light/dark both work; hairlines are `primary @ 8%`.
 - **Typography.** System font only. 34 pt bold screen titles; ~16 pt rows and buttons; 13 pt semibold uppercase section headers (kerned 0.5); ~12 pt secondary captions; monospaced digits for counts, times, and sizes.
-- **Components.** `LLPrimaryButtonStyle` (accent fill, 50 pt min height, radius 14), `LLSecondaryButtonStyle` (card fill, tinted label), `.llCard()` (radius 16–18, soft shadow), `LLRow` (settings-style rows), `MediaBadge` (translucent capsule over imagery), `FloatingTabBar` (material pill; re-tap pops to root), `FlowHeader`/`FlowChromeButton` for the overlay flow, shared async thumbnails and a media preview sheet.
-- **Vocabulary system.** The app never says "blend window" in the primary path. **Speed** (N×) with character words (*gentle, subtle, smooth, flowing, streaks, trails*), **True-light blending** (linear light), **Blend depth** (photo window), **Moments** (markers/bursts), **versions** (outputs), **projects** (originals + versions). All length math and speed language route through `SpeedMath` so every screen agrees. Technical detail is progressively disclosed: Advanced sheet → Settings → Diagnostics.
+- **Components.** `LLPrimaryButtonStyle` (accent fill, 50 pt min height, radius 14), `LLSecondaryButtonStyle` (card fill, tinted label), `.llCard()` (radius 16–18, soft shadow), `LLRow` (settings-style rows), `LLSectionHeader`, `MediaBadge` (translucent capsule over imagery), `FloatingTabBar` (material pill; re-tap pops to root), `FlowHeader`/`FlowChromeButton` for the overlay flow, `CaptureFilterBar` and `CaptureAssetGrid` for the browsing surfaces, `PhotoAdjustmentsPanel` for grading, and shared async thumbnails.
+- **Vocabulary system.** The app never says "blend window" in the primary path. **Speed** (N×) with character words (*gentle, subtle, smooth, flowing, streaks, trails*), **True-light blending** (linear light), **Blend depth** (photo window), **Moments** (markers/bursts), **Slow-motion ramp** (burst retime), **versions** (outputs), **projects** (originals + versions). All length math and speed language route through `SpeedMath` so every screen agrees. Technical detail is progressively disclosed: Advanced sheet → Settings → Diagnostics.
 - **Capture & watch are dark-first**, chrome kept away from the image; the watch uses red/green/amber state colors and oversized controls for no-look use.
-
-The design history is documented in the repo-root `docs/letslapse-ios-ux-brief.md` (the brief that led to the current effect-first, three-tab design).
+- **Design specs are part of the contract.** Every screen has an SVG mirror in `docs/design/<platform>/`, tracked per screen in that folder's `INDEX.md`. A commit touching SwiftUI layout, copy, colours or controls updates the matching SVG(s) — or states why none applies. If `DesignSystem.swift` changes, the SVGs are stale by definition. The design history behind the current effect-first shape is in the repo-root `docs/letslapse-ios-ux-brief.md`.
 
 ---
 
@@ -490,27 +706,34 @@ The design history is documented in the repo-root `docs/letslapse-ios-ux-brief.m
 
 **Engine:** `cd LetsLapse/Kit && swift build -c release` for the CLI, `swift test` for the suite (GPU tests skip without Metal). No external dependencies anywhere.
 
-**Screenshot / demo hooks** (DEBUG builds read environment variables, handy for simulators and UI review):
+**Screenshot / demo hooks** (DEBUG builds read environment variables, handy for simulators and UI review). Note that setting any of `LL_TAB`, `LL_OPEN`, `LL_SEED`, `LL_DETAIL`, `LL_PUSH`, `LL_CAPTURE` or `LL_AUTO` suppresses the Create tab's auto-open camera, so a hook lands on the screen it names:
 
 | Variable | Effect |
 |---|---|
-| `LL_TAB` = `create` \| `projects` \| `settings` | select a tab at launch |
+| `LL_TAB` = `create` \| `gallery` \| `projects` \| `settings` | select a tab at launch |
 | `LL_OPEN` = `latest` | open the newest capture in Adjust |
 | `LL_SEED` = *path* | load a video file as the active source |
 | `LL_DETAIL` = `latest` | open the newest project's detail page |
-| `LL_PUSH` = *SettingsDestination* | push a Settings sub-screen |
+| `LL_PUSH` = *SettingsDestination* | push a Settings sub-screen (`largeOriginals`, `performance`, `diagnostics`, `blendLearning`, `manageResolutions`) |
 | `LL_SPEED` = *N* | force constant speed N× |
 | `LL_AUTO` = `process` | auto-start processing 1.5 s after configure |
 | `LL_CAPTURE` = `1` | auto-open the capture screen |
+| `LL_VIEWER` = `1` \| `expanded` | open the newest photo/interval project's grading viewer on its hero frame |
+| `LL_CUSTOMISE` = `1` | expand the Customise grading panel on a video project's detail card |
 
 **Where to start reading, by task:**
 
 | Task | Files |
 |---|---|
 | Blend math / engine | `Kit/Sources/LetsLapseKit/BlendRamp.swift`, `FrameAccumulator.swift`, `VideoBlender.swift`, `Metal/BlendKernels.metal` |
-| App state, persistence, jobs | `App/AppModel.swift` (single ~2,100-line source of truth) |
-| Camera behavior | `App/CameraController.swift`, `App/CaptureView.swift`, `App/LiveCaptureSequence.swift` |
-| UI / design changes | `App/DesignSystem.swift`, then the relevant view file |
+| App state, persistence, jobs | `App/AppModel.swift` (single ~3,261-line source of truth) |
+| Camera behavior | `App/CameraController.swift` (~2,748), `App/CaptureView.swift` (~2,933), `App/LiveCaptureSequence.swift` |
+| Colour grading | `App/PhotoPreset.swift`, `App/PhotoAdjustments.swift`, `App/VideoGrader.swift`, `App/CustomPreset.swift`, `App/PhotoViewerView.swift` |
+| Geotagging | `App/LocationService.swift`, `App/MovieLocation.swift`, `App/CLLocation+EXIF.swift`, `App/GPXWriter.swift` |
+| Burst slow-motion ramps | `App/BurstRamp.swift`, then `stitchVideos` in `App/AppModel.swift` |
+| Browsing surfaces | `App/GalleryView.swift`, `App/CapturePhotoGrid.swift`, `App/CaptureFilterBar.swift`, `App/FullscreenMediaSheet.swift` |
+| Browsing performance | `App/MediaWorkQueue.swift`, `App/ProjectThumbnailCache.swift` |
+| UI / design changes | `App/DesignSystem.swift`, then the relevant view file — and the matching SVG under `docs/design/` |
 | Watch protocol | `Shared/WatchMessageKey.swift`, `Watch/WatchCaptureRemote.swift`, `App/WatchRemoteControlReceiver.swift` |
 | macOS batch pipeline | `App/MacVideoJobRunner.swift` |
 | Live Blend (video-tap path) | `App/LiveBlendController.swift`, `Kit/Sources/LetsLapseKit/PixelBufferBlender.swift` |
@@ -524,19 +747,21 @@ The design history is documented in the repo-root `docs/letslapse-ios-ux-brief.m
 
 Honest notes for whoever picks this up:
 
-- **Audio is dropped by design** — time compression makes it meaningless; capture adds no audio input and blends write video-only.
+- **Frame-averaging blends are video-only.** Audio itself is a shipping, permission-gated feature (§4.3) that survives the live-sequence stitch and per-clip conversion — but a time-compressed blend has no audio, because averaging N frames into one has no audio analogue. A stitched ramp-mode version carries sound; a 100× hyperlapse does not.
 - **App blend output is pinned to H.264**; HEVC/ProRes output exists in the engine and CLI but isn't user-selectable at blend time in the app (per-clip *source* conversion is where HEVC/ProRes live today). Blend-quality controls are a known pending stage of the clip-encodings feature.
+- **Baking a grade into video is a re-encode.** `VideoGrader.bakedCopy` runs `AVAssetExportPresetHighestQuality`, so a graded ProRes source lands as H.264/HEVC. Stills are unaffected — a graded still is rendered at full resolution from the original.
 - **VFR sources** are estimated from nominal fps; the blender adapts if the estimate is off, but the schedule (and therefore the exact ramp shape) is built from the estimate.
 - **HDR input** is tone-mapped to 8-bit SDR by the decoder before blending.
-- **Rotation** is driven from the window's interface orientation by design (see §4.3); it is functional but still being refined on edge cases (recent commits note "not perfect").
+- **Rotation** is driven from the window's interface orientation by design (§4.3); it is functional but still being refined on edge cases.
 - **ProRes format matching**: the format matcher filters on dimensions/fps/stabilization but does not re-check the ProRes flag, so selecting a ProRes entry can, in principle, land on a same-dimension non-ProRes format if one also matches.
 - **`WatchRecordingState` is defined twice** (once per side of the WatchConnectivity bridge, since only the key names are shared) — the two enums must be kept in sync manually.
-- **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets. (Live Blend *reports* thermal state in its diagnostics and experiment log but doesn't throttle; the capture benchmark is the only place that waits for cooling.)
+- **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets and `MediaWorkQueue`'s width. (Live Blend *reports* thermal state and learns from it (§5.5) but doesn't throttle mid-window; the capture benchmark is the only place that waits for cooling.)
 - **Processing checklist stages are cosmetic** — derived from progress thresholds, not real pipeline phases.
 - **Interval capture silently discards** sessions with fewer than 2 photos.
-- **Interval DNG is iOS/iPadOS-only by SDK decree** (§6.1) — the Bayer RAW capture API is unavailable on macOS, so Macs always run the JPEG paths. The on-screen diagnostics readout appears only while the blend engine runs.
+- **Interval DNG is iOS/iPadOS-only by SDK decree** (§6.1) — the Bayer RAW capture API is unavailable on macOS, so Macs always run the JPEG paths.
 - **The responsive-capture toggle can wedge the photo output** — reproducibly, after ~15 rapid RAW captures on iPhone 16 Pro (three benchmark runs). It ships off; if a user enables it and windows start failing, the run's three-consecutive-failure auto-stop is the backstop. The wedge clears on session reconfiguration.
 - **The benchmark's pipeline stage is a mirror, not the production function** — `CaptureBenchmark.runPipelineBody` replicates `LiveBlendRawController.processWindow` with finer clocks; a change to one must be made in both or the benchmark silently measures a stale pipeline.
 - **Debug builds inflate the DNG pipeline enormously** (mosaic ~150×, lossless-JPEG write ~30×; Swift bounds-checking in per-pixel loops). Device-representative numbers require a Release build — the shared scheme's Run action is currently set to Release for exactly this reason; flip it back to Debug when you need the debugger.
-- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, `MacVideoJobRunner`, `LiveBlendController`, and `LiveBlendRawController` are untested at unit level — though the DNG pipeline's math is covered by gated real-file tests (§6.6) that skip without the local reference files.
+- **Two preview sheets still coexist.** `FullscreenMediaSheet` (§4.8) is the intended one and owns project detail; the older `ProjectMediaPreviewSheet` survives in `ProjectsView` and `ResultView`. They should converge.
+- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, `MacVideoJobRunner`, `LiveBlendController`, `LiveBlendRawController`, and the whole grading/thumbnail layer are untested at unit level — though the DNG pipeline's math and the GPS carriers are covered (§3.4, §6.6), the DNG real-file tests skipping without the local reference files.
 - The whole app is a strong proof-of-concept moving toward production: no onboarding, no iCloud/sync, no keyframe editing (deliberate), and store-readiness items (privacy strings, App Store assets) are not addressed in this document.

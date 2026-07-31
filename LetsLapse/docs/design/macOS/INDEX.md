@@ -6,4 +6,4 @@ Canvas: 760×680 pt default window (`LetsLapseApp.defaultSize`); capture present
 
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
-| — | — | — | 🟡 |
+| Photo viewer / grading editor | `photo-viewer.svg` | `PhotoViewerView` — own **resizable window** (not a sheet; `PhotoEditorWindowRequest` scene in `LetsLapseApp`), default 1000×700, min 720×480, full-screen capable. Fixed 340pt control rail on the right; image pane takes all remaining space. No in-content Done bar — window chrome owns title & close (iOS sheet keeps its Done bar). | 🟡 |
