@@ -348,11 +348,24 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Where the pipeline actually is — set explicitly by the blend code,
+    /// never inferred from the progress number, so a multi-clip run can't
+    /// walk the checklist in circles as each clip's engine sweeps 0→1.
+    enum ProcessingPhase: Equatable {
+        case preparing
+        case blending(clip: Int, of: Int)
+        case combining(clips: Int)
+        case grading
+        case saving
+    }
+
     var processingStage: ProcessingStage {
-        if progress < 0.02 { return .preparing }
-        if progress < 0.93 { return .blending }
-        if progress < 0.999 { return .encoding }
-        return .saving
+        switch processingPhase {
+        case .preparing: return .preparing
+        case .blending: return .blending
+        case .combining, .grading: return .encoding
+        case .saving: return .saving
+        }
     }
 
     enum LibraryDeletionError: LocalizedError {
@@ -525,12 +538,19 @@ final class AppModel: ObservableObject {
     @Published var jobFolderURL: URL?
     @Published var jobLogLines: [String] = []
     @Published var processingStartedAt: Date?
-    @Published var processingTotalInputFrames: Int?
-    /// Live numbers reported by the macOS job runner; nil on the streaming
-    /// (iOS) path, where the view falls back to extrapolating from progress.
-    @Published var processingETASeconds: Double?
+    /// Explicit pipeline position; drives the checklist and the status line.
+    @Published var processingPhase: ProcessingPhase = .preparing
+    /// Absolute finish estimate — the view counts down against its own clock
+    /// tick. Nil whenever there's no honest signal yet (early in a phase).
+    @Published var processingETADate: Date?
+    /// Whole-run frame counts from the progress plan, on both platforms.
     @Published var processingFramesDone: Int?
     @Published var processingFramesTotal: Int?
+
+    /// The frame-weighted band layout for the run in flight; nil outside one.
+    private var activeProgressPlan: BlendProgressPlan?
+    /// When the current tail stage (stitch/grade export) began, for its ETA.
+    private var tailPhaseStartedAt: Date?
 
     /// Set by screens that want the Projects tab to open a specific project
     /// (e.g. Result → Done). ContentView consumes and clears it.
@@ -736,7 +756,6 @@ final class AppModel: ObservableObject {
         tailFramesToExclude = 0
         totalIntervalFrames = 0
         resultBlendID = nil
-        progress = 0
         resultVideoURL = nil
         resultImage = nil
         resultImageURL = nil
@@ -746,11 +765,7 @@ final class AppModel: ObservableObject {
         jobFolderURL = nil
         jobLogLines = []
         errorMessage = nil
-        processingStartedAt = nil
-        processingTotalInputFrames = nil
-        processingETASeconds = nil
-        processingFramesDone = nil
-        processingFramesTotal = nil
+        resetProcessingProgress()
         stage = .home
     }
 
@@ -1143,10 +1158,92 @@ final class AppModel: ObservableObject {
         return total
     }
 
+    // MARK: - Progress accounting
+
+    /// Returns every piece of run-progress state to idle. Start paths call
+    /// this then stamp `processingStartedAt`; flow teardown leaves it nil.
+    private func resetProcessingProgress() {
+        progress = 0
+        processingPhase = .preparing
+        processingStartedAt = nil
+        processingETADate = nil
+        processingFramesDone = nil
+        processingFramesTotal = nil
+        activeProgressPlan = nil
+        tailPhaseStartedAt = nil
+    }
+
+    /// Establishes the band layout for the run and primes the frame counters.
+    private func beginProgressPlan(_ plan: BlendProgressPlan) {
+        activeProgressPlan = plan
+        processingFramesTotal = plan.totalFrames
+        processingFramesDone = 0
+    }
+
+    /// The single sink for every engine's per-clip fraction: maps it into the
+    /// clip's band of the one global bar. Monotonic — a straggling callback
+    /// from an earlier clip can't drag the bar backwards.
+    private func reportClipProgress(_ clipIndex: Int, fraction: Double) {
+        guard stage == .processing else { return }
+        guard let plan = activeProgressPlan else {
+            progress = max(progress, min(max(fraction, 0), 1))
+            return
+        }
+        progress = max(progress, plan.globalFraction(clip: clipIndex, localFraction: fraction))
+        processingFramesDone = max(
+            processingFramesDone ?? 0,
+            plan.framesDone(clip: clipIndex, localFraction: fraction))
+        updateBlendETA(plan)
+    }
+
+    /// Maps a tail-stage export's 0→1 (stitch, grade bake) into its band.
+    private func reportTailProgress(band: ClosedRange<Double>, fraction: Double) {
+        guard stage == .processing else { return }
+        let clamped = min(max(fraction, 0), 1)
+        progress = max(progress, band.lowerBound + (band.upperBound - band.lowerBound) * clamped)
+        updateTailETA(band)
+    }
+
+    /// Frames-based estimate while blending: the run's pace so far over the
+    /// frames still to read, plus a couple of seconds for each tail stage.
+    /// The padding keeps "Almost done" honest — it can't fire while a stitch
+    /// or grade pass hasn't even started.
+    private func updateBlendETA(_ plan: BlendProgressPlan) {
+        guard let started = processingStartedAt,
+              let done = processingFramesDone, done >= 20,
+              done < plan.totalFrames else { return }
+        let elapsed = Date().timeIntervalSince(started)
+        guard elapsed >= 2 else { return }
+        let remaining = elapsed / Double(done) * Double(plan.totalFrames - done)
+            + 2 * Double(plan.tailStageCount)
+        processingETADate = Date().addingTimeInterval(remaining)
+    }
+
+    /// Stage-local estimate for a tail export from how much of its band has
+    /// filled. Below 5% there's no pace to extrapolate — the view shows the
+    /// phase label instead of a made-up countdown.
+    private func updateTailETA(_ band: ClosedRange<Double>) {
+        guard let started = tailPhaseStartedAt else { return }
+        let width = band.upperBound - band.lowerBound
+        guard width > 0 else { return }
+        let filled = (progress - band.lowerBound) / width
+        guard filled >= 0.05 else {
+            processingETADate = nil
+            return
+        }
+        let elapsed = Date().timeIntervalSince(started)
+        var remaining = elapsed / filled * (1 - filled)
+        var pendingStages = 1 // the save itself
+        if let gradeBand = activeProgressPlan?.gradeBand, band.upperBound <= gradeBand.lowerBound {
+            pendingStages += 1
+        }
+        remaining += 2 * Double(pendingStages)
+        processingETADate = Date().addingTimeInterval(remaining)
+    }
+
     func startProcessing() {
         guard let source, let captureID = currentCaptureID else { return }
         stage = .processing
-        progress = 0
         statusMessage = "Preparing job..."
         jobFolderURL = nil
         jobLogLines = []
@@ -1156,11 +1253,8 @@ final class AppModel: ObservableObject {
         resultSummary = nil
         resultBlendID = nil
         errorMessage = nil
+        resetProcessingProgress()
         processingStartedAt = Date()
-        processingTotalInputFrames = estimatedInputFrames.map { Int($0.rounded()) }
-        processingETASeconds = nil
-        processingFramesDone = nil
-        processingFramesTotal = nil
         let ramp = self.ramp
         let fps = Double(outputFPS)
         let linear = linearLight
@@ -1176,16 +1270,24 @@ final class AppModel: ObservableObject {
         // Resolved once, here: the project's own ramp when it has one, else the
         // app default, else none.
         let burstRamp = effectiveBurstRamp(for: currentCapture)
+        // Whether the run ends with the grade-bake export below — the progress
+        // plan reserves a band for it so the bar doesn't sit full while it runs.
+        let willBakeGrade = source.isVideo && !grade.isIdentity
         blendTask = Task { [weak self] in
             do {
                 guard let self else { return }
                 var output: ProcessingOutput
                 switch source {
                 case .video(let url):
+                    self.beginProgressPlan(.make(
+                        clipFrames: [Int((self.estimatedInputFrames ?? 1).rounded())],
+                        hasStitch: false, hasGrade: willBakeGrade))
+                    self.processingPhase = .blending(clip: 1, of: 1)
                     output = try await self.blendVideo(url: url, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: trim)
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(
-                        liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp)
+                        liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
+                        willBakeGrade: willBakeGrade)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
@@ -1194,6 +1296,11 @@ final class AppModel: ObservableObject {
                         : urls.enumerated()
                             .filter { !excluded.contains($0.offset) }
                             .map { $0.element }
+                    // Stills bake their grade frame by frame inside the blend,
+                    // so no separate grade band exists on this path.
+                    self.beginProgressPlan(.make(
+                        clipFrames: [filteredURLs.count], hasStitch: false, hasGrade: false))
+                    self.processingPhase = .blending(clip: 1, of: 1)
                     if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
                         // into one frame: the classic single long exposure.
@@ -1213,8 +1320,20 @@ final class AppModel: ObservableObject {
                 // re-encode of the original before it is even blended.
                 if source.isVideo, output.kind == .video, !grade.isIdentity {
                     self.statusMessage = "Baking the \(grade.preset.displayName) grade..."
+                    self.processingPhase = .grading
+                    self.tailPhaseStartedAt = Date()
+                    self.processingETADate = nil
+                    let gradeBand = self.activeProgressPlan?.gradeBand
                     let ungraded = output.url
-                    output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade)
+                    output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade) { fraction in
+                        Task { @MainActor [weak self] in
+                            guard let self, let gradeBand else { return }
+                            self.reportTailProgress(band: gradeBand, fraction: fraction)
+                        }
+                    }
+                    if let gradeBand {
+                        self.reportTailProgress(band: gradeBand, fraction: 1)
+                    }
                     output.summary += " · \(grade.preset.displayName) grade baked in"
                     // The ungraded intermediate is scratch, and on iOS this runs
                     // on a phone that may be tight on space — but only remove it
@@ -1226,8 +1345,11 @@ final class AppModel: ObservableObject {
                         try? FileManager.default.removeItem(at: ungraded)
                     }
                 }
+                self.processingPhase = .saving
+                self.processingETADate = nil
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
                 self.apply(output, from: blend)
+                self.progress = 1
                 self.processingStartedAt = nil
                 self.stage = .done
             } catch is CancellationError {
@@ -1313,7 +1435,6 @@ final class AppModel: ObservableObject {
         if presentResult {
             stage = .processing
         }
-        progress = 0
         statusMessage = "Blending photos..."
         jobFolderURL = nil
         jobLogLines = []
@@ -1323,11 +1444,11 @@ final class AppModel: ObservableObject {
         resultSummary = nil
         resultBlendID = nil
         errorMessage = nil
+        resetProcessingProgress()
         processingStartedAt = Date()
-        processingTotalInputFrames = sourceURLs.count
-        processingETASeconds = nil
-        processingFramesDone = nil
-        processingFramesTotal = nil
+        beginProgressPlan(.make(
+            clipFrames: [sourceURLs.count], hasStitch: false, hasGrade: false))
+        processingPhase = .blending(clip: 1, of: 1)
 
         let captureID = capture.id
         let parameters = currentBlendParameters()
@@ -1341,8 +1462,11 @@ final class AppModel: ObservableObject {
                 // export, never baked into the stored file.
                 let output = try await self.stackPhotos(
                     urls: sourceURLs, linear: linear, grade: .identity)
+                self.processingPhase = .saving
+                self.processingETADate = nil
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
                 self.apply(output, from: blend)
+                self.progress = 1
                 self.processingStartedAt = nil
                 if presentResult {
                     self.stage = .done
@@ -1366,7 +1490,8 @@ final class AppModel: ObservableObject {
         ramp: BlendRamp,
         fps: Double,
         linear: Bool,
-        trimHeadTailSeconds: Double
+        trimHeadTailSeconds: Double,
+        clipIndex: Int = 0
     ) async throws -> ProcessingOutput {
         #if os(macOS)
         if ramp.startWindow == ramp.endWindow {
@@ -1387,13 +1512,14 @@ final class AppModel: ObservableObject {
                     // Batches still in flight after a cancel keep reporting;
                     // once the processing screen is gone, drop their updates.
                     guard let self, self.stage == .processing else { return }
-                    self.progress = update.fraction
+                    // The runner's fraction, ETA and frame counts are per-clip
+                    // and stage-shaped; only the fraction feeds the global bar
+                    // (mapped into this clip's band). The rest stays in the
+                    // job log for Diagnostics.
+                    self.reportClipProgress(clipIndex, fraction: update.fraction)
                     self.statusMessage = update.message
                     self.jobFolderURL = update.jobFolderURL
                     self.jobLogLines = update.recentLogLines
-                    self.processingETASeconds = update.etaSeconds
-                    if let done = update.framesDone { self.processingFramesDone = done }
-                    if let total = update.framesTotal { self.processingFramesTotal = total }
                 }
             }
             jobFolderURL = result.jobFolderURL
@@ -1427,7 +1553,7 @@ final class AppModel: ObservableObject {
         )
         let result = try await blender.blend(input: url, to: output, options: options) { fraction in
             Task { @MainActor [weak self] in
-                self?.progress = fraction
+                self?.reportClipProgress(clipIndex, fraction: fraction)
             }
         }
         let trimSummary = trimHeadTailSeconds > 0 ? " · trimmed \(String(format: "%.1f", trimHeadTailSeconds))s each end" : ""
@@ -1452,19 +1578,23 @@ final class AppModel: ObservableObject {
         ramp: BlendRamp,
         fps: Double,
         linear: Bool,
-        burstRamp: Double
+        burstRamp: Double,
+        willBakeGrade: Bool
     ) async throws -> ProcessingOutput {
         guard !source.segmentURLs.isEmpty else { throw LapseError.noInputFrames }
 
         guard source.sequence.mode == .ramp else {
             return try await blendMarkerSequence(
-                source, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp)
+                source, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
+                willBakeGrade: willBakeGrade)
         }
 
         let segmentURLByName = source.resolvedByOriginalName
         let orderedSegments = source.sequence.segments.sorted { $0.index < $1.index }
         guard !orderedSegments.isEmpty else {
             let fallbackURL = source.segmentURLs[0]
+            beginProgressPlan(.make(clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade))
+            processingPhase = .blending(clip: 1, of: 1)
             return try await blendVideo(url: fallbackURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
         }
 
@@ -1475,11 +1605,21 @@ final class AppModel: ObservableObject {
         var outputHeight: Int?
         let totalSegments = orderedSegments.count
 
+        // Segments are wildly uneven — a 4-minute base clip next to a 1.3 s
+        // burst — so the bar is split by each one's frame count, not per clip.
+        let plan = BlendProgressPlan.make(
+            clipFrames: await segmentFrameEstimates(
+                orderedSegments, urlsByName: segmentURLByName,
+                baseFrameRate: source.sequence.baseFrameRate),
+            hasStitch: true, hasGrade: willBakeGrade)
+        beginProgressPlan(plan)
+
         for (index, segment) in orderedSegments.enumerated() {
             guard let segmentURL = segmentURLByName[segment.fileName] else {
                 throw CocoaError(.fileNoSuchFile)
             }
             let isRampOn = segmentIsRampOn(segment, in: source.sequence)
+            processingPhase = .blending(clip: index + 1, of: totalSegments)
             statusMessage = isRampOn
                 ? "Blending ramp segment \(index + 1) / \(totalSegments) at playback speed..."
                 : "Blending base segment \(index + 1) / \(totalSegments)..."
@@ -1488,7 +1628,8 @@ final class AppModel: ObservableObject {
                 ramp: isRampOn ? .constant(1) : ramp,
                 fps: fps,
                 linear: linear,
-                trimHeadTailSeconds: 0
+                trimHeadTailSeconds: 0,
+                clipIndex: index
             )
             // A burst segment's frames go out one-for-one at the output rate,
             // so it lands in the timeline running frameRate/fps times slow —
@@ -1501,14 +1642,25 @@ final class AppModel: ObservableObject {
             outputFrames += segmentOutput.outputFrames ?? 0
             outputWidth = outputWidth ?? segmentOutput.width
             outputHeight = outputHeight ?? segmentOutput.height
-            progress = Double(index + 1) / Double(max(1, totalSegments)) * 0.9
+            reportClipProgress(index, fraction: 1)
         }
 
+        processingPhase = .combining(clips: processedPieces.count)
+        tailPhaseStartedAt = Date()
+        processingETADate = nil
         statusMessage = "Stitching \(processedPieces.count) processed segments..."
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
-        let stitched = try await stitchVideos(processedPieces, to: output, burstRamp: burstRamp)
-        progress = 1
+        let stitchBand = plan.stitchBand ?? min(progress, 0.98)...0.98
+        let stitched = try await stitchVideos(
+            processedPieces, to: output, burstRamp: burstRamp
+        ) { [weak self] fraction in
+            Task { @MainActor in
+                self?.reportTailProgress(band: stitchBand, fraction: fraction)
+            }
+        }
+        try Task.checkCancellation()
+        reportTailProgress(band: stitchBand, fraction: 1)
 
         let finalFrames = stitchedOutputFrames(
             blended: outputFrames, stitchedDuration: stitched.duration,
@@ -1529,6 +1681,47 @@ final class AppModel: ObservableObject {
         )
     }
 
+    /// Per-segment input-frame estimates for the progress plan. The sidecar
+    /// knows each segment's rate and span; a segment it can't size is probed
+    /// from its file, and one the probe can't size either reports 0 so the
+    /// plan gives it the mean weight of the segments it could size.
+    private func segmentFrameEstimates(
+        _ segments: [LiveCaptureSequence.Segment],
+        urlsByName: [String: URL],
+        baseFrameRate: Int
+    ) async -> [Int] {
+        var estimates: [Int] = []
+        for segment in segments {
+            let span = segment.relativeEnd - segment.relativeStart
+            let rate = segment.frameRate > 0
+                ? Double(segment.frameRate)
+                : Double(max(baseFrameRate, 0))
+            if span.isFinite, span > 0, rate > 0 {
+                estimates.append(max(1, Int((span * rate).rounded())))
+                continue
+            }
+            if let url = urlsByName[segment.fileName],
+               let probed = await probeFrameEstimate(url: url, fallbackRate: rate > 0 ? rate : 30) {
+                estimates.append(probed)
+                continue
+            }
+            estimates.append(0)
+        }
+        return estimates
+    }
+
+    private func probeFrameEstimate(url: URL, fallbackRate: Double) async -> Int? {
+        let asset = AVURLAsset(url: url)
+        guard let duration = try? await asset.load(.duration).seconds,
+              duration.isFinite, duration > 0 else { return nil }
+        var rate = fallbackRate
+        if let track = try? await asset.loadTracks(withMediaType: .video).first,
+           let nominal = try? await track.load(.nominalFrameRate), nominal > 0 {
+            rate = Double(nominal)
+        }
+        return max(1, Int((duration * rate).rounded()))
+    }
+
     private struct MarkerSequencePiece {
         var range: ClosedRange<Double>
         var isRampOn: Bool
@@ -1539,11 +1732,14 @@ final class AppModel: ObservableObject {
         ramp: BlendRamp,
         fps: Double,
         linear: Bool,
-        burstRamp: Double
+        burstRamp: Double,
+        willBakeGrade: Bool
     ) async throws -> ProcessingOutput {
         guard let sourceURL = source.primaryVideoURL else { throw LapseError.noInputFrames }
         let pieces = try await markerSequencePieces(for: source, sourceURL: sourceURL)
         guard !pieces.isEmpty else {
+            beginProgressPlan(.make(clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade))
+            processingPhase = .blending(clip: 1, of: 1)
             return try await blendVideo(url: sourceURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
         }
 
@@ -1556,7 +1752,18 @@ final class AppModel: ObservableObject {
         var outputWidth: Int?
         var outputHeight: Int?
 
+        // One recording rate across the whole run, so an interval's duration
+        // is an exact stand-in for its frame count.
+        let pieceRate = Double(max(1, source.sequence.baseFrameRate))
+        let plan = BlendProgressPlan.make(
+            clipFrames: pieces.map {
+                max(1, Int((($0.range.upperBound - $0.range.lowerBound) * pieceRate).rounded()))
+            },
+            hasStitch: true, hasGrade: willBakeGrade)
+        beginProgressPlan(plan)
+
         for (index, piece) in pieces.enumerated() {
+            processingPhase = .blending(clip: index + 1, of: pieces.count)
             statusMessage = piece.isRampOn
                 ? "Rendering marker interval \(index + 1) / \(pieces.count) at playback speed..."
                 : "Blending marker interval \(index + 1) / \(pieces.count)..."
@@ -1575,7 +1782,8 @@ final class AppModel: ObservableObject {
                 ramp: piece.isRampOn ? .constant(1) : ramp,
                 fps: fps,
                 linear: linear,
-                trimHeadTailSeconds: 0
+                trimHeadTailSeconds: 0,
+                clipIndex: index
             )
             processedPieces.append(StitchPiece(
                 url: pieceOutput.url,
@@ -1584,14 +1792,25 @@ final class AppModel: ObservableObject {
             outputFrames += pieceOutput.outputFrames ?? 0
             outputWidth = outputWidth ?? pieceOutput.width
             outputHeight = outputHeight ?? pieceOutput.height
-            progress = Double(index + 1) / Double(max(1, pieces.count)) * 0.9
+            reportClipProgress(index, fraction: 1)
         }
 
+        processingPhase = .combining(clips: processedPieces.count)
+        tailPhaseStartedAt = Date()
+        processingETADate = nil
         statusMessage = "Stitching \(processedPieces.count) processed marker intervals..."
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-marker-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
-        let stitched = try await stitchVideos(processedPieces, to: output, burstRamp: burstRamp)
-        progress = 1
+        let stitchBand = plan.stitchBand ?? min(progress, 0.98)...0.98
+        let stitched = try await stitchVideos(
+            processedPieces, to: output, burstRamp: burstRamp
+        ) { [weak self] fraction in
+            Task { @MainActor in
+                self?.reportTailProgress(band: stitchBand, fraction: fraction)
+            }
+        }
+        try Task.checkCancellation()
+        reportTailProgress(band: stitchBand, fraction: 1)
 
         let finalFrames = stitchedOutputFrames(
             blended: outputFrames, stitchedDuration: stitched.duration,
@@ -1783,7 +2002,8 @@ final class AppModel: ObservableObject {
     private func stitchVideos(
         _ pieces: [StitchPiece],
         to outputURL: URL,
-        burstRamp: Double = 0
+        burstRamp: Double = 0,
+        progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (width: Int, height: Int, duration: Double) {
         guard !pieces.isEmpty else { throw LapseError.noInputFrames }
         try? FileManager.default.removeItem(at: outputURL)
@@ -1889,20 +2109,38 @@ final class AppModel: ObservableObject {
         export.shouldOptimizeForNetworkUse = true
         let exportBox = ExportSessionBox(export)
 
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-            exportBox.session.exportAsynchronously {
-                switch exportBox.session.status {
-                case .completed:
-                    continuation.resume()
-                case .failed:
-                    continuation.resume(throwing: LapseError.writerFailed(
-                        Self.exportFailureDescription(exportBox.session.error)))
-                case .cancelled:
-                    continuation.resume(throwing: LapseError.cancelled)
-                default:
-                    continuation.resume(throwing: LapseError.writerFailed("sequence export did not complete"))
+        // The export is the invisible tail of a multi-clip run: poll its
+        // fraction so the bar keeps moving, and forward Task cancellation so
+        // Cancel actually aborts it instead of letting the version finish and
+        // save behind the sheet.
+        let poller: Task<Void, Never>? = progress.map { report in
+            Task.detached {
+                while !Task.isCancelled {
+                    report(Double(exportBox.session.progress))
+                    try? await Task.sleep(nanoseconds: 250_000_000)
                 }
             }
+        }
+        defer { poller?.cancel() }
+
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                exportBox.session.exportAsynchronously {
+                    switch exportBox.session.status {
+                    case .completed:
+                        continuation.resume()
+                    case .failed:
+                        continuation.resume(throwing: LapseError.writerFailed(
+                            Self.exportFailureDescription(exportBox.session.error)))
+                    case .cancelled:
+                        continuation.resume(throwing: LapseError.cancelled)
+                    default:
+                        continuation.resume(throwing: LapseError.writerFailed("sequence export did not complete"))
+                    }
+                }
+            }
+        } onCancel: {
+            exportBox.session.cancelExport()
         }
 
         let size = outputSize ?? .zero
@@ -1944,7 +2182,7 @@ final class AppModel: ObservableObject {
                 loadFrame: Self.gradedFrameLoader(grade),
                 progress: { fraction in
                     Task { @MainActor in
-                        self?.progress = fraction
+                        self?.reportClipProgress(0, fraction: fraction)
                     }
                 })
         }.value
@@ -2020,7 +2258,7 @@ final class AppModel: ObservableObject {
                 loadFrame: Self.gradedFrameLoader(grade),
                 progress: { fraction in
                     Task { @MainActor in
-                        self?.progress = fraction
+                        self?.reportClipProgress(0, fraction: fraction)
                     }
                 })
         }.value

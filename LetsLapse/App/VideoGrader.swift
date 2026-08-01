@@ -73,7 +73,11 @@ enum VideoGrader {
     /// An identity grade returns `sourceURL` unchanged, so callers can invoke
     /// this unconditionally; compare the result against what you passed in
     /// before deleting anything.
-    static func bakedCopy(of sourceURL: URL, grade: PhotoGrade) async throws -> URL {
+    static func bakedCopy(
+        of sourceURL: URL,
+        grade: PhotoGrade,
+        progress: (@Sendable (Double) -> Void)? = nil
+    ) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
         guard let composition = composition(for: asset, grade: grade) else { return sourceURL }
         guard let export = AVAssetExportSession(
@@ -94,6 +98,17 @@ enum VideoGrader {
         export.shouldOptimizeForNetworkUse = true
 
         let box = ExportBox(export)
+        // The bake is a whole-clip re-encode; polling its fraction is what
+        // keeps the processing bar moving through the grade band.
+        let poller: Task<Void, Never>? = progress.map { report in
+            Task.detached {
+                while !Task.isCancelled {
+                    report(Double(box.session.progress))
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                }
+            }
+        }
+        defer { poller?.cancel() }
         do {
             try await withTaskCancellationHandler {
                 try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in

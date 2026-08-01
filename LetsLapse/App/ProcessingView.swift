@@ -124,21 +124,13 @@ struct ProcessingView: View {
     }
 
     private var blendingCounts: String? {
-        let processed: Int
-        let total: Int
-        if let done = model.processingFramesDone, let runnerTotal = model.processingFramesTotal, runnerTotal > 0 {
-            // Real counts from the macOS job runner.
-            processed = done
-            total = runnerTotal
-        } else if let estimate = model.processingTotalInputFrames, estimate > 0 {
-            processed = min(estimate, Int((Double(estimate) * model.progress).rounded()))
-            total = estimate
-        } else {
-            return nil
-        }
+        // Whole-run counts from the progress plan, both platforms — never a
+        // number synthesized from the ring's position.
+        guard let done = model.processingFramesDone,
+              let total = model.processingFramesTotal, total > 0 else { return nil }
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
-        let processedText = formatter.string(from: NSNumber(value: processed)) ?? "\(processed)"
+        let processedText = formatter.string(from: NSNumber(value: done)) ?? "\(done)"
         let totalText = formatter.string(from: NSNumber(value: total)) ?? "\(total)"
         return "\(processedText) / \(totalText)"
     }
@@ -146,17 +138,33 @@ struct ProcessingView: View {
     // MARK: - ETA
 
     private func timeRemainingText(at now: Date) -> String {
-        if let eta = model.processingETASeconds, eta.isFinite, eta > 0 {
-            return remainingPhrase(eta)
+        if let eta = model.processingETADate {
+            let remaining = eta.timeIntervalSince(now)
+            let phrase = remaining > 0 ? remainingPhrase(remaining) : "Almost done"
+            if case .blending(let clip, let of) = model.processingPhase, of > 1 {
+                return "\(phrase) · Clip \(clip) of \(of)"
+            }
+            return phrase
         }
-        guard let startedAt = model.processingStartedAt, model.progress > 0.04 else {
-            return statusFallback
+        return phaseLabel
+    }
+
+    /// What's actually happening when there's no countdown to show yet.
+    private var phaseLabel: String {
+        switch model.processingPhase {
+        case .preparing:
+            return "Preparing footage..."
+        case .blending(_, 1):
+            return "Blending frames..."
+        case .blending(let clip, let of):
+            return "Blending clip \(clip) of \(of)..."
+        case .combining(let clips):
+            return "Combining \(clips) clips..."
+        case .grading:
+            return "Applying the colour grade..."
+        case .saving:
+            return "Almost done"
         }
-        let elapsed = now.timeIntervalSince(startedAt)
-        guard elapsed > 3 else { return statusFallback }
-        let remaining = elapsed / model.progress * (1 - model.progress)
-        guard remaining.isFinite, remaining > 0 else { return "" }
-        return remainingPhrase(remaining)
     }
 
     private func remainingPhrase(_ remaining: TimeInterval) -> String {
@@ -176,7 +184,4 @@ struct ProcessingView: View {
         return "About \(text) hour\(halfHours == 1 ? "" : "s") left"
     }
 
-    private var statusFallback: String {
-        model.statusMessage.isEmpty ? " " : model.statusMessage
-    }
 }

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Processing · portrait</title>
-  <desc>Mirrors App/ProcessingView.swift: blurred source preview with amber progress ring, four-stage checklist (Preparing footage ✓ · Blending frames ● with live counts · Encoding video ○ · Saving to project ○), ETA line, red-tinted Cancel with reassurance caption. Flow screen — no tab bar.</desc>
+  <desc>Mirrors App/ProcessingView.swift: blurred source preview with amber progress ring, four-stage checklist (Preparing footage ✓ · Blending frames ● with live counts · Encoding video ○ · Saving to project ○), ETA line, red-tinted Cancel with reassurance caption. Flow screen — no tab bar. The ring is ONE monotonic global bar for the whole run: a multi-clip project's bar is partitioned by each clip's frame count (BlendProgressPlan bands), then stitch/grade-bake export bands, then save to 100% — it never resets per clip. The checklist follows AppModel.processingPhase (explicit pipeline state), not progress thresholds, so each stage ticks exactly once. Blending counts are whole-run frames done/total on both platforms. ETA line states: while blending a multi-clip project it suffixes the clip position ("About 4 minutes left · Clip 2 of 5"); when a phase has no honest countdown yet it shows the phase label instead — "Blending clip 2 of 5...", "Combining 5 clips..." (stitch export), "Applying the colour grade..." (grade-bake export), "Almost done" (saving). Never blank, never a raw engine log line.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="prev"><rect x="16" y="107" width="361" height="260" rx="20"/></clipPath>
@@ -62,8 +62,8 @@
         </g>
       </g>
 
-      <!-- ETA -->
-      <text x="196.5" y="585" font-size="13" fill="#6D6D72" text-anchor="middle">About 4 minutes left</text>
+      <!-- ETA · clip position while blending a multi-clip project -->
+      <text x="196.5" y="585" font-size="13" fill="#6D6D72" text-anchor="middle">About 4 minutes left · Clip 2 of 5</text>
 
       <!-- cancel -->
       <g id="cancel">
