@@ -57,8 +57,9 @@ struct LetsLapseApp: App {
     }
 }
 
-/// Three tabs — Create, Projects, Settings — with the version flow
-/// (Adjust → Processing → Result) laid over them whenever a job is active.
+/// Five tabs — Create, Gallery, Projects, Music, Settings — with the version
+/// flow (Adjust → Processing → Result) laid over them whenever a job is active.
+/// Music is an experimental spike and isn't wired to project data yet.
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedTab: LLTab = .create
@@ -171,6 +172,7 @@ struct ContentView: View {
         case "gallery": selectedTab = .gallery
         case "settings": selectedTab = .settings
         case "create": selectedTab = .create
+        case "music": selectedTab = .music
         default: break
         }
         if environment["LL_OPEN"] == "latest", let capture = model.captures.first {
@@ -219,6 +221,8 @@ struct ContentView: View {
                     GalleryView(path: $galleryPath)
                 case .projects:
                     ProjectsView(path: $projectsPath)
+                case .music:
+                    MusicView()
                 case .settings:
                     NavigationStack(path: $settingsPath) {
                         SettingsView()
@@ -269,6 +273,11 @@ struct ContentView: View {
                 .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
                 .tag(LLTab.projects)
 
+            MusicView()
+                .hiddenSystemTabBar()
+                .tabItem { Label(LLTab.music.title, systemImage: LLTab.music.systemImage) }
+                .tag(LLTab.music)
+
             NavigationStack(path: $settingsPath) {
                 SettingsView()
                     .hiddenSystemTabBar()
@@ -300,6 +309,10 @@ struct ContentView: View {
             galleryPath = []
         case .projects:
             projectsPath = []
+        case .music:
+            // A single screen with no stack — nothing to pop, and a reselect
+            // deliberately doesn't stop playback.
+            break
         case .settings:
             settingsPath = []
         }

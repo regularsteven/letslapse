@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Music (spike) · portrait</title>
+  <desc>Mirrors App/MusicView.swift (header, envelopeCard, SpeedEnvelopeGraph, bedCard, playbackCard, LevelMeter): the experimental soundtrack tab. Manual large title with an amber "Experimental" subtitle, then three cards — the speed envelope drawn as a step profile (block width = duration, block height = log2 speed, playhead sweeping while the bed runs), the hand-authored bed with its genre chips and Generate Bed button, and playback with a Play/Stop button and an output level meter. Drawn in the playing state, mid "Fast" section: the ×4 block is active, the feel chip reads "double time", harmony has reached bar 4 (F). Speed maps to feel, never to tempo — ≥2× halves the grid interval, ≤0.5× doubles it. Envelope data is hard-coded (SpeedSection.demo), not read from a project. Layout: title baseline 99, subtitle 121, cards at 164/398/615, tab bar from 755 (five tabs at 66pt).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+    <linearGradient id="meter" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#C36A00"/>
+      <stop offset="1" stop-color="#FFB340"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- header -->
+      <g id="header">
+        <text x="20" y="99" font-size="34" class="b" fill="#000">Music</text>
+        <text x="20" y="121" font-size="13" class="sb" fill="#FFB340">Experimental</text>
+      </g>
+
+      <!-- speed envelope -->
+      <text x="20" y="152" font-size="13" class="sb sec" letter-spacing="0.5">SPEED ENVELOPE</text>
+      <g id="envelope-card">
+        <rect x="16" y="164" width="361" height="190" rx="16" fill="#FFF" filter="url(#card)"/>
+
+        <text x="32" y="195" font-size="15" class="sb" fill="#000">Fast</text>
+        <text x="66" y="195" font-size="13" class="sb sec">×4</text>
+        <rect x="280" y="178" width="81" height="22" rx="11" fill="#C36A00" opacity="0.12"/>
+        <text x="320.5" y="193" font-size="11.5" class="sb" fill="#C36A00" text-anchor="middle">double time</text>
+
+        <!-- step profile: width = duration, height = log2 speed, ink backdrop -->
+        <g id="envelope-graph">
+          <rect x="32" y="210" width="329" height="84" rx="12" fill="#1C1C1E"/>
+          <rect x="32" y="268" width="71.33" height="18" rx="6" fill="#FFB340" opacity="0.42"/>
+          <rect x="105.33" y="251.33" width="35.67" height="34.67" rx="6" fill="#FFB340" opacity="0.42"/>
+          <text x="123.17" y="265.3" font-size="10" class="b" fill="#FFF" opacity="0.72" text-anchor="middle">×1</text>
+          <rect x="143" y="218" width="107" height="68" rx="6" fill="#FFB340"/>
+          <text x="196.5" y="232" font-size="10" class="b" fill="#1C1C1E" text-anchor="middle">×4</text>
+          <rect x="252" y="251.33" width="35.67" height="34.67" rx="6" fill="#FFB340" opacity="0.42"/>
+          <text x="269.83" y="265.3" font-size="10" class="b" fill="#FFF" opacity="0.72" text-anchor="middle">×1</text>
+          <rect x="289.67" y="268" width="71.33" height="18" rx="6" fill="#FFB340" opacity="0.42"/>
+          <!-- playhead, drawn only while the bed runs -->
+          <rect x="195.5" y="216" width="2" height="72" rx="1" fill="#FFF" opacity="0.9"/>
+        </g>
+        <g id="envelope-labels" font-size="9.5" text-anchor="middle">
+          <text x="67.67" y="310" class="sec">Slow</text>
+          <text x="123.17" y="310" class="sec">Ramp ↑</text>
+          <text x="196.5" y="310" class="sb" fill="#C36A00">Fast</text>
+          <text x="269.83" y="310" class="sec">Ramp ↓</text>
+          <text x="325.33" y="310" class="sec">Slow</text>
+        </g>
+
+        <text x="32" y="335" font-size="11.5" class="sec">Chord F · bar 4 of 8</text>
+      </g>
+
+      <!-- bed -->
+      <text x="20" y="386" font-size="13" class="sb sec" letter-spacing="0.5">BED</text>
+      <g id="bed-card">
+        <rect x="16" y="398" width="361" height="173" rx="16" fill="#FFF" filter="url(#card)"/>
+
+        <g id="genre-chips" font-size="13" class="sb" text-anchor="middle">
+          <rect x="32" y="414" width="88" height="30" rx="15" fill="#1C1C1E"/>
+          <text x="76" y="433" class="sb" fill="#FFF">Synthwave</text>
+          <rect x="128" y="414" width="76" height="30" rx="15" fill="#F2F2F7"/>
+          <text x="166" y="433" class="sb" fill="#000">Dubstep</text>
+          <rect x="212" y="414" width="86" height="30" rx="15" fill="#F2F2F7"/>
+          <text x="255" y="433" class="sb" fill="#000">Electronic</text>
+        </g>
+
+        <rect x="32" y="458" width="329" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="489" font-size="16" class="b" fill="#FFF" text-anchor="middle">Generate Bed</text>
+
+        <text x="32" y="534" font-size="13" class="sb" fill="#000">Playing</text>
+        <text x="32" y="552" font-size="11.5" class="sec">Synthwave · 100 BPM · Am–C–G–F · bass, pad, percussion</text>
+      </g>
+
+      <!-- playback -->
+      <text x="20" y="603" font-size="13" class="sb sec" letter-spacing="0.5">PLAYBACK</text>
+      <g id="playback-card">
+        <rect x="16" y="615" width="361" height="134" rx="16" fill="#FFF" filter="url(#card)"/>
+        <rect x="32" y="631" width="329" height="50" rx="14" fill="#8A4A00"/>
+        <text x="196.5" y="662" font-size="16" class="b" fill="#FFF" text-anchor="middle">Stop</text>
+        <g id="level-meter">
+          <rect x="32" y="695" width="329" height="10" rx="5" fill="#1C1C1E" opacity="0.12"/>
+          <rect x="32" y="695" width="204" height="10" rx="5" fill="url(#meter)"/>
+        </g>
+        <text x="32" y="730" font-size="11.5" class="sec">Output level</text>
+      </g>
+
+      <!-- footnote: scrolls behind the tab bar at rest -->
+      <text x="20" y="778" font-size="11.5" class="sec">Dummy envelope. A real version's speed ramp replaces it</text>
+      <text x="20" y="793" font-size="11.5" class="sec">once the mapping feels right.</text>
+
+      <!-- floating tab bar (Music selected) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <circle cx="56.5" cy="776" r="8" stroke-width="1.6" data-symbol="record.circle"/><circle cx="56.5" cy="776" r="3.4" fill="#8E8E93" stroke="none"/>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <rect x="119.5" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 126.5 775)" data-symbol="photo.on.rectangle.angled"/>
+          <rect x="123.5" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 130.5 778)"/>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <rect x="189.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="square.stack"/>
+          <path d="M191 781 h11 M193 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <rect x="233.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-music" fill="none" stroke="#C36A00">
+          <path d="M265 783 V769 c4.6 1.2 8 3 8 6.6" stroke-width="1.6" stroke-linecap="round" data-symbol="music.note"/>
+          <ellipse cx="261.5" cy="782.5" rx="4.6" ry="3.4" transform="rotate(-20 261.5 782.5)" fill="#C36A00" stroke="none"/>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Music</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <path d="M328.5 771 h16 M328.5 776.5 h16 M328.5 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Music (spike) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/MusicView.swift — speed envelope · hand-authored bed · AVAudioEngine playback</text>
+</svg>

@@ -103,26 +103,31 @@
 
       <!-- floating tab bar (Create selected) -->
       <g id="tab-bar">
-        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
-        <rect x="2" y="755" width="389" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
-        <rect x="8" y="761" width="92" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="23.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
         <g id="tab-create" fill="none" stroke="#C36A00">
-          <circle cx="54" cy="776" r="8" stroke-width="1.6" data-symbol="record.circle"/><circle cx="54" cy="776" r="3.4" fill="#C36A00" stroke="none"/>
-          <text x="54" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Create</text>
+          <circle cx="56.5" cy="776" r="8" stroke-width="1.6" data-symbol="record.circle"/><circle cx="56.5" cy="776" r="3.4" fill="#C36A00" stroke="none"/>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Create</text>
         </g>
         <g id="tab-gallery" fill="none" stroke="#8E8E93">
-          <rect x="143" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 150 775)" data-symbol="photo.on.rectangle.angled"/>
-          <rect x="147" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 154 778)"/>
-          <text x="150" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+          <rect x="119.5" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 126.5 775)" data-symbol="photo.on.rectangle.angled"/>
+          <rect x="123.5" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 130.5 778)"/>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
         </g>
         <g id="tab-projects" fill="none" stroke="#8E8E93">
-          <rect x="239" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="square.stack"/>
-          <path d="M240.5 781 h11 M242.5 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
-          <text x="246" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+          <rect x="189.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="square.stack"/>
+          <path d="M191 781 h11 M193 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
         </g>
-        <g id="tab-settings" stroke="#8E8E93">
-          <path d="M334 771 h16 M334 776.5 h16 M334 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
-          <text x="342" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        <g id="tab-music" fill="none" stroke="#8E8E93">
+          <path d="M265 783 V769 c4.6 1.2 8 3 8 6.6" stroke-width="1.6" stroke-linecap="round" data-symbol="music.note"/>
+          <ellipse cx="261.5" cy="782.5" rx="4.6" ry="3.4" transform="rotate(-20 261.5 782.5)" fill="#8E8E93" stroke="none"/>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Music</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <path d="M328.5 771 h16 M328.5 776.5 h16 M328.5 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
         </g>
       </g>
 

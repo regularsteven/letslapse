@@ -236,6 +236,7 @@ enum LLTab: String, CaseIterable, Identifiable {
     case create
     case gallery
     case projects
+    case music
     case settings
 
     var id: String { rawValue }
@@ -245,6 +246,7 @@ enum LLTab: String, CaseIterable, Identifiable {
         case .create: return "Create"
         case .gallery: return "Gallery"
         case .projects: return "Projects"
+        case .music: return "Music"
         case .settings: return "Settings"
         }
     }
@@ -254,6 +256,7 @@ enum LLTab: String, CaseIterable, Identifiable {
         case .create: return "record.circle"
         case .gallery: return "photo.on.rectangle.angled"
         case .projects: return "square.stack"
+        case .music: return "music.note"
         case .settings: return "line.3.horizontal"
         }
     }
@@ -265,6 +268,13 @@ enum LLTab: String, CaseIterable, Identifiable {
 struct FloatingTabBar: View {
     @Binding var selection: LLTab
     var onReselect: (LLTab) -> Void = { _ in }
+
+    /// Derived from the tab count rather than fixed: five tabs at the original
+    /// 92pt would make a 488pt pill, wider than a 393pt iPhone. 66pt keeps the
+    /// bar at 358pt with room either side, and still fits "Projects" at 10.5pt.
+    private var tabWidth: CGFloat {
+        LLTab.allCases.count > 4 ? 66 : 92
+    }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -284,7 +294,7 @@ struct FloatingTabBar: View {
                             .font(.system(size: 10.5, weight: .semibold))
                     }
                     .foregroundStyle(isSelected ? LL.accent : Color.secondary)
-                    .frame(width: 92)
+                    .frame(width: tabWidth)
                     .padding(.vertical, 7)
                     .background(
                         isSelected ? LL.accent.opacity(0.12) : Color.clear,

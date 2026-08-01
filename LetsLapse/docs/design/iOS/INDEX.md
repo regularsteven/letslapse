@@ -12,9 +12,14 @@ Last full sync: 2026-07-31, working tree of `ios-app` (uncommitted WIP included)
 | Gallery | [gallery.portrait.svg](gallery.portrait.svg) | `App/GalleryView.swift` + `App/CaptureFilterBar.swift` + `App/CapturePhotoGrid.swift` (`CaptureAssetGrid`) | ✅ |
 | Projects | [projects.portrait.svg](projects.portrait.svg) | `App/ProjectsView.swift` (`header`, `ProjectCard`) + `App/CaptureFilterBar.swift` | ✅ |
 | Projects · filter matched nothing | — | `App/ProjectsView.swift` (`filteredEmptyState`) — "No videos" + Show all, in place of the card list | 🟡 |
+| Music (spike) | [music.portrait.svg](music.portrait.svg) | `App/MusicView.swift` (`header`, `envelopeCard`, `SpeedEnvelopeGraph`, `bedCard`, `playbackCard`, `LevelMeter`) | ✅ |
 | Settings | [settings.portrait.svg](settings.portrait.svg) | `App/SettingsView.swift` (`creativeDefaultsCard`, `burstRampCard`, `recordingCard`, `locationCard`, `storageCard`) | ✅ |
 
 Note: on iOS, selecting the Create tab opens the camera immediately; Create home is the surface behind/under the camera, revealed on close.
+
+Note: **Music is an experimental spike**, not shipping UX — a self-contained tab that synthesises a soundtrack from a hard-coded speed envelope (`SpeedSection.demo`) via `AVAudioEngine`. It is deliberately not wired to project data, and the screen says "Experimental" in amber under the title so that's visible in-product. Its SVG is a mirror like any other, but expect the whole screen to move or disappear.
+
+Note: the floating tab bar is a shared component drawn in every tab-level screen here, so **any change to `LLTab` restages all of them**. It now carries five tabs (Create · Gallery · Projects · Music · Settings) at 66pt each — down from 92pt, because five 92pt tabs would make a 488pt pill on a 393pt screen. Bar: 358×57 at x 17.5, tab centres 56.5 / 126.5 / 196.5 / 266.5 / 336.5.
 
 Note: two different screens are called a "viewer" and are easy to confuse. `project-photos.viewer.*` (plural) is the interval-frame pager — swipe through a shoot's source frames, save one to Photos. `project-photo.viewer.*` (singular) is the grading viewer — presets, sliders, white balance — opened for a Photo-mode capture or an interval shoot's first frame. They share no code.
 
