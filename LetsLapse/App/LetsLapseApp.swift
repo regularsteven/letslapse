@@ -57,9 +57,10 @@ struct LetsLapseApp: App {
     }
 }
 
-/// Five tabs — Create, Gallery, Projects, Music, Settings — with the version
-/// flow (Adjust → Processing → Result) laid over them whenever a job is active.
-/// Music is an experimental spike and isn't wired to project data yet.
+/// Five tabs — Create, Gallery, Projects, Collections, Settings — with the
+/// blended-clip flow (Adjust → Processing → Result) laid over them whenever a
+/// job is active. Collections is a placeholder while its UX is designed; it
+/// took the parked Music spike's slot (MusicView stays in the codebase).
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedTab: LLTab = .create
@@ -124,7 +125,7 @@ struct ContentView: View {
         #endif
         #if os(macOS)
         .onChange(of: model.stage) { newStage in
-            // A flow can start from any tab (e.g. "New version" in Projects);
+            // A flow can start from any tab (e.g. "New blended clip" in Projects);
             // bring the Create tab front so the flow is on screen.
             if newStage != .home, lastStage == .home {
                 selectedTab = .create
@@ -172,7 +173,7 @@ struct ContentView: View {
         case "gallery": selectedTab = .gallery
         case "settings": selectedTab = .settings
         case "create": selectedTab = .create
-        case "music": selectedTab = .music
+        case "collections": selectedTab = .collections
         default: break
         }
         if environment["LL_OPEN"] == "latest", let capture = model.captures.first {
@@ -221,8 +222,8 @@ struct ContentView: View {
                     GalleryView(path: $galleryPath)
                 case .projects:
                     ProjectsView(path: $projectsPath)
-                case .music:
-                    MusicView()
+                case .collections:
+                    CollectionsView()
                 case .settings:
                     NavigationStack(path: $settingsPath) {
                         SettingsView()
@@ -273,10 +274,10 @@ struct ContentView: View {
                 .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
                 .tag(LLTab.projects)
 
-            MusicView()
+            CollectionsView()
                 .hiddenSystemTabBar()
-                .tabItem { Label(LLTab.music.title, systemImage: LLTab.music.systemImage) }
-                .tag(LLTab.music)
+                .tabItem { Label(LLTab.collections.title, systemImage: LLTab.collections.systemImage) }
+                .tag(LLTab.collections)
 
             NavigationStack(path: $settingsPath) {
                 SettingsView()
@@ -309,9 +310,8 @@ struct ContentView: View {
             galleryPath = []
         case .projects:
             projectsPath = []
-        case .music:
-            // A single screen with no stack — nothing to pop, and a reselect
-            // deliberately doesn't stop playback.
+        case .collections:
+            // A single placeholder screen with no stack — nothing to pop.
             break
         case .settings:
             settingsPath = []

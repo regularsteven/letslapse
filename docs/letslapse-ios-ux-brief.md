@@ -1,5 +1,7 @@
 # LetsLapse iOS UX Brief
 
+> **Status (2026-08-01): superseded — kept for history.** This was the brief for the 2026-07 redesign, which has shipped: the app now uses a Create · Gallery · Projects · Collections · Settings shape (this document's Capture/Job/Library/Blends inventory no longer exists), gained a Photo capture mode, and renamed generated outputs from "versions" to **blended clips**. The current designer brief is [`letslapse-collections-ux-brief.md`](letslapse-collections-ux-brief.md); the current-state handover is `LetsLapse/docs/letslapse-app-overview.md`.
+
 Prepared for a product/UI designer to review the current LetsLapse iOS app and propose a clearer, more polished user experience. This brief describes the current screens, flows, interaction model, and known design decisions from the app implementation. It is intended to be used alongside screenshots of the app as it exists today.
 
 ## Context

@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Collections (placeholder) · portrait</title>
+  <desc>Mirrors App/CollectionsView.swift (header, comingSoonCard): the Collections tab placeholder shown while the real Collections UX (gather blended clips from projects into an arrangeable timeline, export as one video) is designed. Manual large title with an amber "Coming soon" subtitle, then a single empty-state card — film.stack glyph, "No collections yet" headline, footnote explainer — matching the Projects tab's empty-state pattern. Layout: title baseline 99, subtitle 121, card at 164 (min-height 240 content + 20pt padding = 280 tall); tab bar from 755 (five tabs at 66pt, Collections selected). This screen replaced the parked Music spike in the fifth tab slot.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- header -->
+      <g id="header">
+        <text x="20" y="99" font-size="34" class="b" fill="#000">Collections</text>
+        <text x="20" y="121" font-size="13" class="sb" fill="#FFB340">Coming soon</text>
+      </g>
+
+      <!-- empty-state card (comingSoonCard) -->
+      <g id="coming-soon-card">
+        <rect x="16" y="164" width="361" height="280" rx="18" fill="#FFF" filter="url(#card)"/>
+        <g id="film-stack-glyph" fill="none" stroke="#8E8E93" stroke-width="2">
+          <rect x="179.5" y="249" width="34" height="24" rx="5" data-symbol="film.stack"/>
+          <path d="M187 252 v18 M206 252 v18" stroke-width="1.4" opacity="0.7"/>
+          <path d="M184 280 h25 M188.5 287 h16" stroke-linecap="round"/>
+        </g>
+        <text x="196.5" y="310" font-size="17" class="sb" fill="#000" text-anchor="middle">No collections yet</text>
+        <text x="196.5" y="331" font-size="13" fill="#6D6D72" text-anchor="middle">A collection strings blended clips from your projects</text>
+        <text x="196.5" y="347" font-size="13" fill="#6D6D72" text-anchor="middle">into one timeline, and exports as a single video.</text>
+      </g>
+
+      <!-- floating tab bar (Collections selected) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <circle cx="56.5" cy="776" r="8" stroke-width="1.6" data-symbol="record.circle"/><circle cx="56.5" cy="776" r="3.4" fill="#8E8E93" stroke="none"/>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <rect x="119.5" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 126.5 775)" data-symbol="photo.on.rectangle.angled"/>
+          <rect x="123.5" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 130.5 778)"/>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <rect x="189.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="square.stack"/>
+          <path d="M191 781 h11 M193 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <rect x="233.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-collections" fill="none" stroke="#C36A00">
+          <rect x="259.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="film.stack"/>
+          <path d="M262.5 769.5 v7 M270.5 769.5 v7" stroke-width="1" opacity="0.7"/>
+          <path d="M261 781 h11 M263 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <path d="M328.5 771 h16 M328.5 776.5 h16 M328.5 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collections (placeholder) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionsView.swift — placeholder: header (Coming soon) · empty-state card</text>
+</svg>

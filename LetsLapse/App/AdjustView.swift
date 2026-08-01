@@ -14,7 +14,7 @@ struct AdjustView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            FlowHeader(title: "New version") {
+            FlowHeader(title: "New blended clip") {
                 model.reset()
             }
 
@@ -580,7 +580,7 @@ struct AdjustView: View {
             }
             .buttonStyle(LLPrimaryButtonStyle())
 
-            Text("Your original is kept — you can always make another version.")
+            Text("Your original is kept — you can always make another blended clip.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.secondary)
         }

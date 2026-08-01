@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// One card per original, versions always visible as a thumbnail strip —
+/// One card per original, blended clips always visible as a thumbnail strip —
 /// Library and Blends unified, with no expand/collapse state at all.
 /// A List (restyled to match the ScrollView look) so cards get native
 /// swipe-to-delete.
@@ -120,7 +120,7 @@ struct ProjectsView: View {
                 .foregroundStyle(.secondary)
             Text("No projects yet")
                 .font(.headline)
-            Text("Record or import something in Create — every original becomes a project here, with all its versions.")
+            Text("Record or import something in Create — every original becomes a project here, with all its blended clips.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)
@@ -279,7 +279,7 @@ private struct ProjectCard: View {
                                 .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .accessibilityLabel("New version")
+                        .accessibilityLabel("New blended clip")
                     }
                     .padding(.horizontal, 14)
                     .padding(.bottom, 12)
@@ -298,7 +298,7 @@ private struct ProjectCard: View {
                 Button {
                     onNewVersion()
                 } label: {
-                    Label("New version", systemImage: "plus")
+                    Label("New blended clip", systemImage: "plus")
                 }
             }
             Button {
@@ -349,8 +349,8 @@ private struct ProjectCard: View {
         }
         switch count {
         case 0: return size ?? "…"
-        case 1: return size.map { "1 version · \($0)" } ?? "1 version"
-        default: return size.map { "\(count) versions · \($0)" } ?? "\(count) versions"
+        case 1: return size.map { "1 blended clip · \($0)" } ?? "1 blended clip"
+        default: return size.map { "\(count) blended clips · \($0)" } ?? "\(count) blended clips"
         }
     }
 }

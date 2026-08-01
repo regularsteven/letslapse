@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Project detail (interval) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, originalsSection, versionRow, managementCard) for an interval capture — kind == .photos and NOT isPhotoCapture. The card previews the shoot's FIRST SOURCE FRAME rendered through the project's preset + PhotoAdjustments (not its hero: once a stacked image version exists that version is the hero, and it is a finished render that already carries the grade that made it). An interval project's card carries TWO affordances, because it has both a sequence to watch and a frame to grade. The circular button in the middle is play: it opens FullscreenMediaSheet on `.intervalMotion`, which plays the shoot's own frames as motion at the frame rate of its newest rendered version (12 fps until one exists) — the preview that used to cost a full render to see (see player.portrait.svg). Bottom-left, over the image, an "Edit photo" pill opens App/PhotoViewerView.swift on that frame — presets, sliders, white balance — so an interval project still customises its grade there rather than in the card; see project-photo.viewer.portrait.svg. Beneath the preset strip, where the video variant shows a Source Clips card, an interval shoot shows the Originals card: a "Source photos" row carrying the batched Save all to Photos export (deliberately ungraded — it hands over the captured files byte for byte), and a "View all photos" row that presents CapturePhotoGrid over the individual frames, every tile rendered through the same grade. Save-all states replace the trailing control in place: Save all to Photos → spinner → "Saved" (checkmark, secondary) → "Retry" with the error as the row subtitle. The grade is baked into the timelapse the blend writes, frame by frame; the stills on disk are never rewritten.</desc>
+  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, originalsSection, versionRow, managementCard) for an interval capture — kind == .photos and NOT isPhotoCapture. The card previews the shoot's FIRST SOURCE FRAME rendered through the project's preset + PhotoAdjustments (not its hero: once a stacked image blended clip exists that clip is the hero, and it is a finished render that already carries the grade that made it). An interval project's card carries TWO affordances, because it has both a sequence to watch and a frame to grade. The circular button in the middle is play: it opens FullscreenMediaSheet on `.intervalMotion`, which plays the shoot's own frames as motion at the frame rate of its newest rendered blended clip (12 fps until one exists) — the preview that used to cost a full render to see (see player.portrait.svg). Bottom-left, over the image, an "Edit photo" pill opens App/PhotoViewerView.swift on that frame — presets, sliders, white balance — so an interval project still customises its grade there rather than in the card; see project-photo.viewer.portrait.svg. Beneath the preset strip, where the video variant shows a Source Clips card, an interval shoot shows the Originals card: a "Source photos" row carrying the batched Save all to Photos export (deliberately ungraded — it hands over the captured files byte for byte), and a "View all photos" row that presents CapturePhotoGrid over the individual frames, every tile rendered through the same grade. Save-all states replace the trailing control in place: Save all to Photos → spinner → "Saved" (checkmark, secondary) → "Retry" with the error as the row subtitle. The grade is baked into the timelapse the blend writes, frame by frame; the stills on disk are never rewritten.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -87,21 +87,21 @@
         </g>
       </g>
 
-      <!-- new version button -->
+      <!-- new blended clip button -->
       <g id="new-version">
         <rect x="16" y="515" width="361" height="50" rx="14" fill="#C36A00"/>
-        <path d="M158 540 v-14 M151 533 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
-        <text x="172" y="546" font-size="16" class="b" fill="#FFF">New version</text>
+        <path d="M128 540 v-14 M121 533 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
+        <text x="142" y="546" font-size="16" class="b" fill="#FFF">New blended clip</text>
       </g>
 
-      <!-- versions -->
-      <text x="20" y="594" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">VERSIONS · 1</text>
+      <!-- blended clips -->
+      <text x="20" y="594" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 1</text>
       <g id="versions-card">
         <rect x="16" y="603" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
         <rect x="30" y="613" width="58" height="42" rx="7" fill="#463522"/>
         <circle cx="59" cy="627" r="7" fill="#FFB340" opacity="0.8"/>
         <path d="M53 627 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
-        <text x="100" y="631" font-size="14.5" class="sb" fill="#000">v1 · 18 frames · 6.1 s</text>
+        <text x="100" y="631" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 18 frames · 6.1 s</text>
         <text x="100" y="648" font-size="11.5" fill="#6D6D72">24 fps · yesterday</text>
         <text x="363" y="638" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
       </g>
@@ -113,7 +113,7 @@
         <path d="M363 695 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
         <line x1="32" y1="723" x2="377" y2="723" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="748" font-size="16" fill="#000">Storage</text>
-        <text x="32" y="763" font-size="11.5" fill="#6D6D72">original + versions</text>
+        <text x="32" y="763" font-size="11.5" fill="#6D6D72">original + blended clips</text>
         <text x="361" y="752" font-size="14" fill="#6D6D72" text-anchor="end">3.1 GB</text>
         <line x1="32" y1="775" x2="377" y2="775" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="801" font-size="16" fill="#FF3B30">Delete project…</text>
@@ -138,10 +138,11 @@
           <path d="M191 781 h11 M193 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
           <text x="196.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
         </g>
-        <g id="tab-music" fill="none" stroke="#8E8E93">
-          <path d="M265 783 V769 c4.6 1.2 8 3 8 6.6" stroke-width="1.6" stroke-linecap="round" data-symbol="music.note"/>
-          <ellipse cx="261.5" cy="782.5" rx="4.6" ry="3.4" transform="rotate(-20 261.5 782.5)" fill="#8E8E93" stroke="none"/>
-          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Music</text>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <rect x="259.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="film.stack"/>
+          <path d="M262.5 769.5 v7 M270.5 769.5 v7" stroke-width="1" opacity="0.7"/>
+          <path d="M261 781 h11 M263 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
         </g>
         <g id="tab-settings" fill="none" stroke="#8E8E93">
           <path d="M328.5 771 h16 M328.5 776.5 h16 M328.5 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>

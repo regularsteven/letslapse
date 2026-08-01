@@ -32,7 +32,7 @@ struct ProcessingView: View {
                 }
                 .buttonStyle(LLSecondaryButtonStyle(tint: .red))
 
-                Text("Cancelling discards this version. Your original is safe.")
+                Text("Cancelling discards this blended clip. Your original is safe.")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
             }

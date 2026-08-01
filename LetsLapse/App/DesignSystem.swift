@@ -236,7 +236,7 @@ enum LLTab: String, CaseIterable, Identifiable {
     case create
     case gallery
     case projects
-    case music
+    case collections
     case settings
 
     var id: String { rawValue }
@@ -246,7 +246,7 @@ enum LLTab: String, CaseIterable, Identifiable {
         case .create: return "Create"
         case .gallery: return "Gallery"
         case .projects: return "Projects"
-        case .music: return "Music"
+        case .collections: return "Collections"
         case .settings: return "Settings"
         }
     }
@@ -256,7 +256,7 @@ enum LLTab: String, CaseIterable, Identifiable {
         case .create: return "record.circle"
         case .gallery: return "photo.on.rectangle.angled"
         case .projects: return "square.stack"
-        case .music: return "music.note"
+        case .collections: return "film.stack"
         case .settings: return "line.3.horizontal"
         }
     }

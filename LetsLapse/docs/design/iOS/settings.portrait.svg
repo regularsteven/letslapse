@@ -103,8 +103,8 @@
         </g>
         <g id="legend" font-size="11" fill="#6D6D72">
           <circle cx="36" cy="860" r="3.5" fill="#C36A00"/><text x="44" y="864">Originals 8.2 GB</text>
-          <circle cx="140" cy="860" r="3.5" fill="#FFB340"/><text x="148" y="864">Versions 3.9 GB</text>
-          <circle cx="240" cy="860" r="3.5" fill="#B9B9C0"/><text x="248" y="864">Cache 542 MB</text>
+          <circle cx="140" cy="860" r="3.5" fill="#FFB340"/><text x="148" y="864">Blended clips 3.9 GB</text>
+          <circle cx="266" cy="860" r="3.5" fill="#B9B9C0"/><text x="274" y="864">Cache 542 MB</text>
         </g>
         <line x1="32" y1="876" x2="377" y2="876" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="903" font-size="16" fill="#000">Review large originals</text>
@@ -133,10 +133,11 @@
           <path d="M191 781 h11 M193 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
           <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
         </g>
-        <g id="tab-music" fill="none" stroke="#8E8E93">
-          <path d="M265 783 V769 c4.6 1.2 8 3 8 6.6" stroke-width="1.6" stroke-linecap="round" data-symbol="music.note"/>
-          <ellipse cx="261.5" cy="782.5" rx="4.6" ry="3.4" transform="rotate(-20 261.5 782.5)" fill="#8E8E93" stroke="none"/>
-          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Music</text>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <rect x="259.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="film.stack"/>
+          <path d="M262.5 769.5 v7 M270.5 769.5 v7" stroke-width="1" opacity="0.7"/>
+          <path d="M261 781 h11 M263 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
         </g>
         <rect x="303.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
         <g id="tab-settings" fill="none" stroke="#C36A00">

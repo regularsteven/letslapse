@@ -3,7 +3,7 @@ import AVKit
 import LetsLapseKit
 
 /// The review screen. It answers "where did my file go" up front, and turns
-/// re-blending into a single "New version" row.
+/// re-blending into a single "New blended clip" row.
 struct ResultView: View {
     @EnvironmentObject var model: AppModel
     @State private var player: AVPlayer?
@@ -112,7 +112,7 @@ struct ResultView: View {
     }
 
     private var resultChip: String {
-        guard let blend = model.currentBlend else { return "New version" }
+        guard let blend = model.currentBlend else { return "New blended clip" }
         var parts = [blend.speedLabel]
         if let seconds = blend.outputSeconds {
             parts.append(SpeedMath.clipLengthCompact(seconds))
@@ -137,7 +137,7 @@ struct ResultView: View {
                     .foregroundStyle(.green)
                 Group {
                     Text("Saved as ")
-                        + Text("v\(model.versionNumber(for: blend))").bold()
+                        + Text("blended clip \(model.versionNumber(for: blend))").bold()
                         + Text(" in ")
                         + Text(capture.displayTitle).bold()
                 }
@@ -164,7 +164,7 @@ struct ResultView: View {
     // MARK: - Next steps
 
     /// A Photo-mode result is a single auto-blended shot with no Adjust step —
-    /// re-processing isn't a thing, so its "New version" row stays hidden.
+    /// re-processing isn't a thing, so its "New blended clip" row stays hidden.
     private var isPhotoResult: Bool {
         model.currentCapture?.isPhotoCapture == true
     }
@@ -176,7 +176,7 @@ struct ResultView: View {
                     model.stage = .configure
                 } label: {
                     HStack {
-                        Label("New version from original", systemImage: "arrow.counterclockwise")
+                        Label("New blended clip from original", systemImage: "arrow.counterclockwise")
                             .font(.system(size: 15.5, weight: .semibold))
                             .foregroundStyle(LL.accent)
                         Spacer()

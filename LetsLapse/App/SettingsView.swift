@@ -364,7 +364,7 @@ struct SettingsView: View {
                     StorageBar(storage: storage)
                     HStack(spacing: 14) {
                         legendDot(color: LL.accent, label: "Originals \(LLFormat.bytes(storage.originalsBytes))")
-                        legendDot(color: LL.amber, label: "Versions \(LLFormat.bytes(storage.versionsBytes))")
+                        legendDot(color: LL.amber, label: "Blended clips \(LLFormat.bytes(storage.versionsBytes))")
                         legendDot(color: Color.secondary.opacity(0.35), label: "Cache \(LLFormat.bytes(storage.cacheBytes))")
                     }
                 }
@@ -609,7 +609,7 @@ private struct LargeOriginalsView: View {
                                 // A photo capture is one asset — no version tally.
                                 Text(capture.isPhotoCapture
                                         ? capture.formatLine
-                                        : "\(capture.formatLine) · \(versionCount) version\(versionCount == 1 ? "" : "s")")
+                                        : "\(capture.formatLine) · \(versionCount) blended clip\(versionCount == 1 ? "" : "s")")
                                     .font(.caption)
                                     .foregroundStyle(.secondary)
                             }
@@ -634,9 +634,9 @@ private struct LargeOriginalsView: View {
                 }
             } footer: {
                 #if os(macOS)
-                Text("Click a project to open it. Deleting a project removes its original and every version.")
+                Text("Click a project to open it. Deleting a project removes its original and every blended clip.")
                 #else
-                Text("Tap a project to open it. Deleting a project removes its original and every version.")
+                Text("Tap a project to open it. Deleting a project removes its original and every blended clip.")
                 #endif
             }
         }
@@ -658,7 +658,7 @@ private struct LargeOriginalsView: View {
         .alert(item: $pendingDelete) { capture in
             Alert(
                 title: Text("Delete “\(capture.displayTitle)”?"),
-                message: Text("This permanently deletes the original and all its versions."),
+                message: Text("This permanently deletes the original and all its blended clips."),
                 primaryButton: .destructive(Text("Delete")) {
                     do {
                         try model.deleteCapture(capture)

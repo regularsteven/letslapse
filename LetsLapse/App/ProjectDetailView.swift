@@ -102,8 +102,8 @@ struct ProjectDetailView: View {
         }
         .alert(item: $versionPendingDelete) { blend in
             Alert(
-                title: Text("Delete v\(model.versionNumber(for: blend))?"),
-                message: Text("This permanently deletes the generated clip. The original stays in the project."),
+                title: Text("Delete blended clip \(model.versionNumber(for: blend))?"),
+                message: Text("This permanently deletes the blended clip. The original stays in the project."),
                 primaryButton: .destructive(Text("Delete")) { delete(blend) },
                 secondaryButton: .cancel()
             )
@@ -282,15 +282,15 @@ struct ProjectDetailView: View {
                     Button {
                         model.openCapture(capture)
                     } label: {
-                        Label("New version", systemImage: "plus")
+                        Label("New blended clip", systemImage: "plus")
                     }
                     .buttonStyle(LLPrimaryButtonStyle())
 
                     VStack(alignment: .leading, spacing: 8) {
-                        LLSectionHeader(versions.isEmpty ? "Versions" : "Versions · \(versions.count)")
+                        LLSectionHeader(versions.isEmpty ? "Blended clips" : "Blended clips · \(versions.count)")
 
                         if versions.isEmpty {
-                            Text("No versions yet — tap New version to make the first clip from this original.")
+                            Text("No blended clips yet — tap New blended clip to make the first one from this original.")
                                 .font(.system(size: 13))
                                 .foregroundStyle(.secondary)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -526,7 +526,7 @@ struct ProjectDetailView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Play v\(model.versionNumber(for: blend))")
+            .accessibilityLabel("Play blended clip \(model.versionNumber(for: blend))")
 
             Button("Open") {
                 model.openBlend(blend)
@@ -545,13 +545,13 @@ struct ProjectDetailView: View {
                 Label("Open", systemImage: "arrow.up.forward.app")
             }
             // Photo results are single stacked shots — no re-processing, so
-            // the settings-based "New version" path stays off for them.
+            // the settings-based "New blended clip" path stays off for them.
             if model.capture(for: blend)?.isPhotoCapture != true {
                 Button {
                     model.openBlend(blend)
                     model.stage = .configure
                 } label: {
-                    Label("New version from these settings", systemImage: "slider.horizontal.3")
+                    Label("New blended clip from these settings", systemImage: "slider.horizontal.3")
                 }
             }
             Button(role: .destructive) {
@@ -606,7 +606,7 @@ struct ProjectDetailView: View {
             // the storage line instead of surfacing them as media.
             return capture.sourceMediaCount > 1 ? "photo + burst frames" : "photo"
         }
-        return "original + versions"
+        return "original + blended clips"
     }
 
     private func originalBadge(for capture: AppModel.CaptureProject) -> String {
@@ -647,7 +647,7 @@ struct ProjectDetailView: View {
     }
 
     private func versionTitle(_ blend: AppModel.BlendProject) -> String {
-        var parts = ["v\(model.versionNumber(for: blend))", blend.speedLabel]
+        var parts = ["Blended clip \(model.versionNumber(for: blend))", blend.speedLabel]
         if let seconds = blend.outputSeconds {
             parts.append(SpeedMath.clipLength(seconds))
         }
@@ -675,7 +675,7 @@ struct ProjectDetailView: View {
             return "This permanently deletes the photo. There's no undo."
         }
         let count = model.blends(for: capture).count
-        let versionText = count == 1 ? "1 version" : "\(count) versions"
+        let versionText = count == 1 ? "1 blended clip" : "\(count) blended clips"
         return "This permanently deletes the original and \(versionText). There's no undo."
     }
 
@@ -1565,7 +1565,7 @@ private struct ManageClipSheet: View {
             }
             Button("Cancel", role: .cancel) { encodingPendingDelete = nil }
         } message: {
-            Text("ProRes is the highest-quality original and can't be re-created from a converted copy. Your H.264/HEVC versions stay.")
+            Text("ProRes is the highest-quality original and can't be re-created from a converted copy. Your H.264/HEVC copies stay.")
         }
         #if os(iOS)
         .presentationDetents([.medium, .large])

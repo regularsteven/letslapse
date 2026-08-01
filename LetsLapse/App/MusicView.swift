@@ -6,6 +6,10 @@ import os
 
 /// Music tab — experimental soundtrack that builds like a real track.
 ///
+/// PARKED (2026-08-01): the tab slot this lived in became Collections, so no
+/// tab routes here any more. The whole spike — this view and `MusicBedEngine`
+/// — deliberately stays compiling so the soundtrack work can resume later.
+///
 /// Layers accumulate across 7 arrangement stages. Two arpeggiators are the
 /// foundation: a chunky bass arp with per-step velocity + rests, and a lead arp
 /// that moves across the chosen mode's scale with gaps and melodic shape.
