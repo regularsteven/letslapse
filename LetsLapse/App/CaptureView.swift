@@ -79,9 +79,29 @@ struct CaptureView: View {
     /// the second stops it and stacks everything captured into one long
     /// exposure (or, with blend Off, keeps just the last frame).
     @State private var photoBulbMode = false
-    /// Live frame counter during a Photo-mode burst, shown as "5 / 10" over the
-    /// viewfinder. Reset at capture start, driven by `camera.photoCount`.
-    @State private var photoBurstProgress = 0
+    /// The burst pill's lifecycle. `.hidden` leaves the slot to the idle
+    /// dials; `.running` mounts the pill (Photo: on the first shot; Interval:
+    /// at run start); `.settling` plays the completion hold (900 ms) and fade
+    /// (400 ms) after the run stops, then returns to `.hidden`. One machine
+    /// serves every burst variant — the modes are exclusive, and
+    /// `burstPillMode` keeps a stale pill from surviving a mode switch.
+    private enum BurstPillPhase { case hidden, running, settling }
+    @State private var burstPillPhase: BurstPillPhase = .hidden
+    /// What the pill counts: Photo plain stills (`camera.photoCount`), Photo
+    /// DNG RAW frames gathered in the window (`liveBlendDiagnostics`), or
+    /// Interval outputs (`photoCount` / `liveBlendOutputCount`). Mirrored
+    /// into local state so a finished run's number freezes through settle.
+    @State private var burstPillCount = 0
+    /// The run's cap, frozen at mount (nil = open-ended, the zebra), so a
+    /// dial change mid-settle can't relabel a finished burst.
+    @State private var burstPillTotal: Int?
+    /// The mode that mounted the pill — its slot condition checks this, so
+    /// switching modes mid-settle never shows the other mode's pill.
+    @State private var burstPillMode: CaptureMode?
+    /// Drives the pill's 400 ms fade-out; the pill unmounts once it lands.
+    @State private var burstPillFadingOut = false
+    /// Strands in-flight hold/fade sleeps when a newer run claims the pill.
+    @State private var burstPillGeneration = 0
     /// A DNG Photo shot runs the live-blend RAW pipeline, which is open-ended;
     /// a capped shot arms this so the first finished output stops the run. Bulb
     /// leaves it false — the user's second tap stops it.
@@ -221,6 +241,9 @@ struct CaptureView: View {
             RecordingSettingsStore.save(captureMode: newMode)
             updateAspectPreview()
             syncAppleLog()
+            // A pill left by another mode (running or settling) doesn't
+            // follow the user across the switch.
+            if burstPillMode != nil, burstPillMode != newMode { dismissBurstPill() }
             guard RecordingSettingsStore.isEnabled else { return }
             if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
                 interval = seconds
@@ -261,19 +284,47 @@ struct CaptureView: View {
         }
         // A capped DNG Photo shot ends itself: once its single blended DNG is
         // out, stop the open-ended live-blend run. Bulb leaves the flag off.
+        // Interval blend runs count their outputs into the burst pill here.
         .onChange(of: camera.liveBlendOutputCount) { count in
+            if mode == .interval, burstPillPhase == .running, camera.isLiveBlendRunning {
+                burstPillCount = count
+            }
             guard mode == .photo, photoDNGAutoStop, count >= 1 else { return }
             photoDNGAutoStop = false
             camera.stopLiveBlend()
+        }
+        // A DNG Photo shot has no still-counter, but the blend pipeline
+        // publishes how many RAW frames the open window has gathered — that
+        // is the pill's per-frame truth for both the capped fill and Bulb's
+        // zebra. Single-window runs only, so the count never moves backwards.
+        .onChange(of: camera.liveBlendDiagnostics) { diagnostics in
+            guard mode == .photo, camera.isLiveBlendRunning,
+                  let frames = diagnostics?.currentWindowSelectedFrames, frames >= 1 else { return }
+            if burstPillPhase == .running {
+                burstPillCount = max(burstPillCount, frames)
+            } else {
+                mountBurstPill(taken: frames, total: photoBulbMode ? nil : photoBlendDepth)
+            }
         }
         // Tail-frame detection: tag each captured Interval frame with its
         // motion reading. Photo mode has its own steady gate and never needs a
         // tail log, so only plain-JPEG Interval sessions log here. (macOS is
         // inert — the monitor never moves, so the tail count stays 0.)
         .onChange(of: camera.photoCount) { count in
-            // Photo mode: mirror the burst count into the viewfinder overlay.
-            if mode == .photo {
-                photoBurstProgress = count
+            // Plain-still engine tallies. A Photo burst mounts the pill on
+            // its first shot (never at run start — a steady-gated burst can
+            // idle before frame one); an Interval run's pill is already
+            // mounted, so its ticks just feed it.
+            if camera.isIntervalRunning {
+                if mode == .photo, count >= 1 {
+                    if burstPillPhase == .running {
+                        burstPillCount = count
+                    } else {
+                        mountBurstPill(taken: count, total: photoBulbMode ? nil : photoBlendDepth)
+                    }
+                } else if mode == .interval, burstPillPhase == .running {
+                    burstPillCount = count
+                }
             }
             guard mode == .interval, count > 0 else { return }
             steadiness.logCapture(index: count - 1)
@@ -318,13 +369,25 @@ struct CaptureView: View {
         .onChange(of: camera.segmentCount) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isRampActive) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isRampHighRate) { _ in updateWatchRecordingState() }
-        .onChange(of: camera.isIntervalRunning) { _ in
+        .onChange(of: camera.isIntervalRunning) { running in
             updateIdleTimer()
             updateWatchRecordingState()
+            // Interval's pill lives for the whole run, so it mounts with the
+            // engine (count 0 draws the bare track); Photo waits for a shot.
+            if running {
+                if mode == .interval { mountBurstPill(taken: 0, total: nil) }
+            } else {
+                settleBurstPill()
+            }
         }
-        .onChange(of: camera.isLiveBlendRunning) { _ in
+        .onChange(of: camera.isLiveBlendRunning) { running in
             updateIdleTimer()
             updateWatchRecordingState()
+            if running {
+                if mode == .interval { mountBurstPill(taken: 0, total: nil) }
+            } else {
+                settleBurstPill()
+            }
         }
         .onChange(of: mode) { _ in
             updateWatchModeContext()
@@ -369,6 +432,9 @@ struct CaptureView: View {
         // anyway, so re-saving is a no-op there.
         RecordingSettingsStore.save(captureMode: mode)
         refreshRecentCapture()
+        #if DEBUG
+        applyBurstPreviewHook()
+        #endif
         #if os(iOS)
         // Geotagging: request permission if needed, start streaming fixes so a
         // location is ready to bake into stills, and arm the camera's tagger.
@@ -660,15 +726,22 @@ struct CaptureView: View {
                     speedChipsRow
                 }
             } else if mode == .photo {
-                if !isCapturing {
+                if burstPillPhase != .hidden && burstPillMode == .photo {
+                    burstStatusPill
+                } else if !isCapturing {
                     photoControlsRow
                 }
             } else {
                 intervalStatusRow
             }
 
-            if !isCapturing {
+            if !isCapturing || (burstPillPhase != .hidden && burstPillMode == .photo) {
                 modeRow
+                    // The design keeps the mode row on screen under a running
+                    // Photo burst, but inert — mid-run mode or lens switches
+                    // are the shutter's call, not a tap's. (Interval runs
+                    // keep hiding it, as before.)
+                    .disabled(isCapturing)
             }
 
             #if os(iOS)
@@ -734,7 +807,9 @@ struct CaptureView: View {
                         if mode == .video {
                             landscapeEstimateChips
                         } else if mode == .photo {
-                            if !isCapturing {
+                            if burstPillPhase != .hidden && burstPillMode == .photo {
+                                burstStatusPill
+                            } else if !isCapturing {
                                 photoControlsRow
                             }
                         } else {
@@ -853,23 +928,6 @@ struct CaptureView: View {
                 }
                 if mode == .photo && isWaitingForSteady {
                     SteadyGateOverlay(isStill: steadiness.isStill, magnitude: steadiness.magnitude)
-                }
-                if mode == .photo && camera.isIntervalRunning {
-                    // A capped Photo burst counts toward its depth ("5 / 10");
-                    // a Bulb run is open-ended, so it just tallies frames.
-                    Text(photoBulbMode ? "\(photoBurstProgress)" : "\(photoBurstProgress) / \(photoBlendDepth)")
-                        .font(.system(size: 28, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .shadow(radius: 4)
-                }
-                if mode == .photo && camera.isLiveBlendRunning {
-                    // DNG shots run the RAW pipeline, which reports no per-frame
-                    // tally — show the state instead (Bulb stays live until the
-                    // shutter is tapped again).
-                    Text(photoBulbMode ? "Capturing DNG…" : "Blending DNG…")
-                        .font(.system(size: 20, weight: .semibold, design: .rounded))
-                        .foregroundColor(.white)
-                        .shadow(radius: 4)
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -1158,9 +1216,16 @@ struct CaptureView: View {
         camera.isIntervalRunning || camera.isLiveBlendRunning
     }
 
+    /// The running row also covers the settle window after a stop, so the
+    /// burst pill can play its hold-and-fade before the pickers return (the
+    /// diagnostics readout guards on the engine itself and drops instantly).
+    private var showsIntervalRunningRow: Bool {
+        isIntervalCapturing || (burstPillPhase != .hidden && burstPillMode == .interval)
+    }
+
     @ViewBuilder
     private var intervalStatusRow: some View {
-        if isIntervalCapturing {
+        if showsIntervalRunningRow {
             VStack(spacing: 8) {
                 intervalRunningPills
                 blendDiagnosticsReadout
@@ -1177,7 +1242,7 @@ struct CaptureView: View {
     /// they get dark backdrops to stay legible.
     @ViewBuilder
     private var landscapeIntervalRow: some View {
-        if isIntervalCapturing {
+        if showsIntervalRunningRow {
             VStack(alignment: .leading, spacing: 6) {
                 intervalRunningPills
                 blendDiagnosticsReadout
@@ -1190,22 +1255,91 @@ struct CaptureView: View {
         }
     }
 
+    /// Interval's run counter is the burst pill's zebra — open-ended, so no
+    /// total; the count is outputs so far (stills or blends). The elapsed
+    /// pill keeps the run clock beside it; both fade together on settle.
     private var intervalRunningPills: some View {
         HStack(spacing: 12) {
-            if camera.isLiveBlendRunning {
-                CameraPill(
-                    text: "\(camera.liveBlendOutputCount) \(blendDepth.blends ? "blends" : "photos")",
-                    tint: LL.amber, bold: true, monospaced: true)
-            } else {
-                CameraPill(text: "\(camera.photoCount) photos", tint: LL.amber, bold: true, monospaced: true)
-            }
+            burstStatusPill
             CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
+                .opacity(burstPillFadingOut ? 0 : 1)
         }
     }
 
     private var elapsedIntervalText: String {
         DurationFormatter.recordingTime(from: now.timeIntervalSince(framingStartedAt))
     }
+
+    // MARK: - Burst pill
+
+    /// The burst pill in the interval-pills slot: 249 pt wide, its fade-out
+    /// driven by the settle phase.
+    private var burstStatusPill: some View {
+        BurstStatusIndicator(taken: burstPillCount, total: burstPillTotal)
+            .frame(width: 249)
+            .opacity(burstPillFadingOut ? 0 : 1)
+    }
+
+    /// A run claimed the pill: freeze its cap (nil = zebra), seed the count,
+    /// and cancel whatever settle a previous run left in flight.
+    private func mountBurstPill(taken: Int, total: Int?) {
+        burstPillGeneration += 1
+        burstPillCount = taken
+        burstPillTotal = total
+        burstPillMode = mode
+        burstPillFadingOut = false
+        burstPillPhase = .running
+    }
+
+    /// The run stopped — cap reached, Bulb's second tap, or Interval's stop.
+    /// Hold the pill at its final state for 900 ms, fade it over 400 ms, then
+    /// hand the slot back to the dials. No completion flourish, no lingering
+    /// chrome. A new run starting mid-settle bumps the generation, stranding
+    /// these sleeps.
+    private func settleBurstPill() {
+        guard burstPillPhase == .running else { return }
+        burstPillPhase = .settling
+        burstPillGeneration += 1
+        let generation = burstPillGeneration
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            guard generation == burstPillGeneration, burstPillPhase == .settling else { return }
+            withAnimation(BurstStatusIndicator.ease(0.4)) {
+                burstPillFadingOut = true
+            }
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard generation == burstPillGeneration, burstPillPhase == .settling else { return }
+            burstPillPhase = .hidden
+            burstPillFadingOut = false
+        }
+    }
+
+    /// Drop the pill immediately (mode switch, or a new run resetting the
+    /// slot before it mounts again).
+    private func dismissBurstPill() {
+        burstPillGeneration += 1
+        burstPillPhase = .hidden
+        burstPillMode = nil
+        burstPillFadingOut = false
+    }
+
+    #if DEBUG
+    /// `LL_BURST=7/10` (capped fill) or `LL_BURST=47` (zebra) freezes the
+    /// burst pill on screen for SVG-mirror screenshots — the simulator has
+    /// no camera, so a live run can't reach this state. Add `LL_BURST_MODE=
+    /// interval` to stage it in the Interval row instead of Photo's slot.
+    /// Pair with `LL_CAPTURE=1`.
+    private func applyBurstPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_BURST"] else { return }
+        let parts = raw.split(separator: "/", maxSplits: 1)
+        guard let taken = parts.first.flatMap({ Int($0) }), taken >= 0 else { return }
+        mode = ProcessInfo.processInfo.environment["LL_BURST_MODE"] == "interval" ? .interval : .photo
+        burstPillCount = taken
+        burstPillTotal = parts.count > 1 ? Int(parts[1]) : nil
+        burstPillMode = mode
+        burstPillPhase = .running
+    }
+    #endif
 
     /// The two interval dials — spacing and blend depth. One line where it
     /// fits (Mac, landscape phones/iPads); portrait iPhones fall back to two
@@ -1728,7 +1862,7 @@ struct CaptureView: View {
 
     private func startBulbCapture() {
         framingStartedAt = Date()
-        photoBurstProgress = 0
+        dismissBurstPill()  // re-appears on the first shot
         // DNG Bulb: one open-ended live-blend RAW window that stacks every
         // captured frame into a single blended DNG when the user stops. No
         // auto-stop — the second shutter tap closes it (see `shutterAction`).
@@ -1780,7 +1914,7 @@ struct CaptureView: View {
 
     private func startPhotoCapture() {
         framingStartedAt = Date()
-        photoBurstProgress = 0
+        dismissBurstPill()  // re-appears on the first shot
         // DNG: run the live-blend RAW pipeline for a single window — it blends
         // `photoBlendDepth` RAW frames into one DNG (or emits one untouched DNG
         // with blend Off, depth 1), exactly as Interval does. The first

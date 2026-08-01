@@ -35,13 +35,14 @@ Shared components: `CaptureFilterBar` (the All · Photos · Interval · Video se
 |---|---|---|---|
 | Photo · idle | [capture-photo.portrait.svg](capture-photo.portrait.svg) | `App/CaptureView.swift` (`portraitLayout`, `photoControlsRow`) | ✅ |
 | Interval · idle | [capture-interval.portrait.svg](capture-interval.portrait.svg) | `App/CaptureView.swift` (`intervalPickerRow`) | ✅ |
-| Interval · running | [capture-interval.running.portrait.svg](capture-interval.running.portrait.svg) | `App/CaptureView.swift` (`intervalRunningPills`, `blendDiagnosticsReadout`) | ✅ |
+| Interval · running | [capture-interval.running.portrait.svg](capture-interval.running.portrait.svg) | `App/CaptureView.swift` (`intervalRunningPills` — `BurstStatusIndicator` zebra + elapsed pill, `blendDiagnosticsReadout`); same row for JPEG and DNG runs | ✅ |
 | Video · idle | [capture-video.portrait.svg](capture-video.portrait.svg) | `App/CaptureView.swift` (`speedChipsRow`) | ✅ |
 | Video · recording | [capture-video.recording.portrait.svg](capture-video.recording.portrait.svg) | `App/CaptureView.swift` (`speedMarquee`, `segmentStrip`) | ✅ |
 | Interval · idle · landscape | [capture-interval.landscape.svg](capture-interval.landscape.svg) | `App/CaptureView.swift` (`landscapeLayout`, `landscapeExposureControl`) | ✅ |
 | Video · idle · landscape | [capture-video.landscape.svg](capture-video.landscape.svg) | `App/CaptureView.swift` (`landscapeLayout`, `landscapeEstimateChips`, `landscapeExposureControl`) | ✅ |
 | Exposure locked · brightness + focus sliders | [capture-exposure-locked.portrait.svg](capture-exposure-locked.portrait.svg) | `App/CaptureView.swift` (`exposurePanel`) — brightness is a ±3 EV offset centered on the locked exposure, not absolute ISO | ✅ |
-| Photo · burst counter / steady gate / DNG overlay | — | `App/CaptureView.swift` (`SteadyGateOverlay`, viewfinder overlays) | 🟡 |
+| Photo · burst running | [capture-photo.burst.portrait.svg](capture-photo.burst.portrait.svg) | `App/CaptureView.swift` (`burstStatusPill`) + `App/BurstStatusIndicator.swift` — drawn capped (7/10 fill); the Bulb twin is the same pill with a decay zebra + bare count, seeded via `LL_BURST`. Covers JPEG and DNG shots (DNG counts RAW frames in the window; the "Blending DNG…" text is gone) | ✅ |
+| Photo · steady gate | — | `App/CaptureView.swift` (`SteadyGateOverlay`) | 🟡 |
 | Photo · idle · landscape | — | same rails as interval landscape, BLEND-only corner overlay | 🟡 |
 | Camera-denied overlay | — | `App/CaptureView.swift` (`authorizationMessage`) | 🟡 |
 | Psycho blending notice (alert) | — | `App/CaptureView.swift` (`showPsychoNotice`) | 🟡 |

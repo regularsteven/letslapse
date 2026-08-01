@@ -41,7 +41,7 @@ Three standard answers:
 
 The app has DEBUG launch hooks so simulator screenshots of any screen can be taken without tap automation, for comparing against an SVG:
 
-`LL_TAB` (create|gallery|projects|settings) · `LL_OPEN=latest` · `LL_SEED=<path>` · `LL_DETAIL=latest` · `LL_PUSH=<SettingsDestination>` · `LL_CAPTURE=1` · `LL_SPEED=<n>` · `LL_AUTO=process` · `LL_VIEWER=1|expanded` (opens the grading viewer over `LL_DETAIL=latest` — photo capture or interval first frame — with the Customise panel shut or open) · `LL_CUSTOMISE=1` (drops a **video** project's Customise panel open inside its project-detail grading card)
+`LL_TAB` (create|gallery|projects|settings) · `LL_OPEN=latest` · `LL_SEED=<path>` · `LL_DETAIL=latest` · `LL_PUSH=<SettingsDestination>` · `LL_CAPTURE=1` · `LL_BURST=<taken>[/<total>]` (freezes the burst pill — capped fill with a total, zebra without; add `LL_BURST_MODE=interval` for the Interval row; pair with `LL_CAPTURE=1`) · `LL_SPEED=<n>` · `LL_AUTO=process` · `LL_VIEWER=1|expanded` (opens the grading viewer over `LL_DETAIL=latest` — photo capture or interval first frame — with the Customise panel shut or open) · `LL_CUSTOMISE=1` (drops a **video** project's Customise panel open inside its project-detail grading card)
 
 e.g. `SIMCTL_CHILD_LL_TAB=projects xcrun simctl launch --terminate-running-process <udid> com.regularsteven.letslapse`
 
