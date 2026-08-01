@@ -66,6 +66,7 @@ struct ContentView: View {
     @State private var selectedTab: LLTab = .create
     @State private var galleryPath: [UUID] = []
     @State private var projectsPath: [UUID] = []
+    @State private var collectionsPath: [UUID] = []
     @State private var settingsPath: [SettingsDestination] = []
     /// Owns the camera presentation so that selecting the Create tab can open
     /// the camera straight away, over the Create screen (the tab's home).
@@ -155,7 +156,7 @@ struct ContentView: View {
     private func openCameraOnLaunch() {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return }
         #endif
         guard selectedTab == .create else { return }
@@ -201,6 +202,18 @@ struct ContentView: View {
                 }
             }
         }
+        // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
+        // collections from existing video blends (no-op without any); detail
+        // additionally opens the first collection's timeline.
+        if let hook = environment["LL_COLLECTIONS"] {
+            selectedTab = .collections
+            if hook == "seed" || hook == "list" || hook == "detail" {
+                model.debugSeedCollections()
+            }
+            if hook == "detail", let first = model.collections.first {
+                collectionsPath = [first.id]
+            }
+        }
     }
     #endif
 
@@ -223,7 +236,7 @@ struct ContentView: View {
                 case .projects:
                     ProjectsView(path: $projectsPath)
                 case .collections:
-                    CollectionsView()
+                    CollectionsView(path: $collectionsPath)
                 case .settings:
                     NavigationStack(path: $settingsPath) {
                         SettingsView()
@@ -274,7 +287,7 @@ struct ContentView: View {
                 .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
                 .tag(LLTab.projects)
 
-            CollectionsView()
+            CollectionsView(path: $collectionsPath)
                 .hiddenSystemTabBar()
                 .tabItem { Label(LLTab.collections.title, systemImage: LLTab.collections.systemImage) }
                 .tag(LLTab.collections)
@@ -311,8 +324,7 @@ struct ContentView: View {
         case .projects:
             projectsPath = []
         case .collections:
-            // A single placeholder screen with no stack — nothing to pop.
-            break
+            collectionsPath = []
         case .settings:
             settingsPath = []
         }

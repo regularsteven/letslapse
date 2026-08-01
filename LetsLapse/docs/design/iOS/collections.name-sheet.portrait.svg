@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Collections · name sheet · portrait</title>
+  <desc>Mirrors App/CollectionsView.swift (CollectionNameSheet): naming at creation, presented as a 290pt-detent sheet with a drag indicator over the dimmed Collections tab. "New collection" 17 semibold centered; the text field (white, r12, 14pt padding) is focused and pre-filled with the suggested default "Collection 3" (Collection N = count+1), keyboard up; hint "You can rename it later from ⋯ on the collection." 11.5 secondary; Cancel (LLSecondaryButtonStyle, gray tint) and Create (LLPrimaryButtonStyle) side by side at 50pt. Create pushes the new collection's timeline builder. The system keyboard is indicated schematically.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- dimmed underlying tab -->
+      <g id="dimmed-tab" opacity="0.55">
+        <text x="20" y="99" font-size="34" class="b" fill="#000">Collections</text>
+        <circle cx="356" cy="88" r="17" fill="#C36A00" opacity="0.12"/>
+        <rect x="16" y="136" width="361" height="140" rx="18" fill="#FFF"/>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#000" opacity="0.18"/>
+
+      <!-- sheet (290pt detent) -->
+      <g id="name-sheet">
+        <rect x="0" y="200" width="393" height="652" rx="20" fill="#F2F2F7"/>
+        <rect x="178.5" y="208" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
+        <text x="196.5" y="248" font-size="17" class="sb" fill="#000" text-anchor="middle">New collection</text>
+
+        <rect x="16" y="266" width="361" height="49" rx="12" fill="#FFF" filter="url(#card)"/>
+        <text x="30" y="297" font-size="17" fill="#000">Collection 3</text>
+        <rect x="122" y="276" width="2" height="28" fill="#C36A00"/>
+
+        <text x="20" y="333" font-size="11.5" class="sec">You can rename it later from ⋯ on the collection.</text>
+
+        <g id="buttons">
+          <rect x="16" y="351" width="175.5" height="50" rx="14" fill="#FFF" filter="url(#card)"/>
+          <text x="103.75" y="382" font-size="15.5" class="sb" fill="#6D6D72" text-anchor="middle">Cancel</text>
+          <rect x="201.5" y="351" width="175.5" height="50" rx="14" fill="#C36A00"/>
+          <text x="289.25" y="382" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create</text>
+        </g>
+
+        <!-- system keyboard (schematic) -->
+        <g id="keyboard">
+          <rect x="0" y="437" width="393" height="415" fill="#D1D3D9"/>
+          <g fill="#FFF">
+            <rect x="6" y="460" width="33" height="42" rx="5"/><rect x="45" y="460" width="33" height="42" rx="5"/><rect x="84" y="460" width="33" height="42" rx="5"/><rect x="123" y="460" width="33" height="42" rx="5"/><rect x="162" y="460" width="33" height="42" rx="5"/><rect x="201" y="460" width="33" height="42" rx="5"/><rect x="240" y="460" width="33" height="42" rx="5"/><rect x="279" y="460" width="33" height="42" rx="5"/><rect x="318" y="460" width="33" height="42" rx="5"/><rect x="354" y="460" width="33" height="42" rx="5"/>
+            <rect x="25" y="512" width="33" height="42" rx="5"/><rect x="64" y="512" width="33" height="42" rx="5"/><rect x="103" y="512" width="33" height="42" rx="5"/><rect x="142" y="512" width="33" height="42" rx="5"/><rect x="181" y="512" width="33" height="42" rx="5"/><rect x="220" y="512" width="33" height="42" rx="5"/><rect x="259" y="512" width="33" height="42" rx="5"/><rect x="298" y="512" width="33" height="42" rx="5"/><rect x="337" y="512" width="33" height="42" rx="5"/>
+            <rect x="6" y="564" width="45" height="42" rx="5" opacity="0.7"/><rect x="64" y="564" width="33" height="42" rx="5"/><rect x="103" y="564" width="33" height="42" rx="5"/><rect x="142" y="564" width="33" height="42" rx="5"/><rect x="181" y="564" width="33" height="42" rx="5"/><rect x="220" y="564" width="33" height="42" rx="5"/><rect x="259" y="564" width="33" height="42" rx="5"/><rect x="298" y="564" width="33" height="42" rx="5"/><rect x="342" y="564" width="45" height="42" rx="5" opacity="0.7"/>
+            <rect x="6" y="616" width="90" height="42" rx="5" opacity="0.7"/><rect x="102" y="616" width="189" height="42" rx="5"/><rect x="297" y="616" width="90" height="42" rx="5" opacity="0.7"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collections · name sheet · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionsView.swift (CollectionNameSheet) — pre-filled "Collection N" · rename hint · Cancel/Create</text>
+</svg>

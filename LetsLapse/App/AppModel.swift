@@ -205,6 +205,11 @@ final class AppModel: ObservableObject {
         /// one explicitly (nil = automatic / best-available). Its `OutputCodec`
         /// raw value, e.g. "h264".
         var sourceCodec: String?
+        /// The clip's default crop per canvas ratio (raw value → pan offset
+        /// 0…1), used wherever a collection shows this clip on a mismatched
+        /// canvas and hasn't set its own crop. Absent until a crop is first
+        /// saved; absent ratios resolve to centred (0.5).
+        var defaultCrops: [String: Double]?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -263,6 +268,8 @@ final class AppModel: ObservableObject {
     private struct LibraryManifest: Codable {
         var captures: [CaptureProject] = []
         var blends: [BlendProject] = []
+        /// Optional so manifests written before Collections existed decode.
+        var collections: [LapseCollection]?
     }
 
     private struct ProcessingOutput {
@@ -387,6 +394,15 @@ final class AppModel: ObservableObject {
     @Published var errorMessage: String?
     @Published private(set) var captures: [CaptureProject] = []
     @Published private(set) var blends: [BlendProject] = []
+    @Published private(set) var collections: [LapseCollection] = []
+    /// Probed durations for blends whose manifests predate output stats,
+    /// keyed by blend id — filled lazily by `blendDuration(for:)` callers.
+    @Published private(set) var probedBlendDurations: [UUID: Double] = [:]
+    /// Probed display-oriented pixel sizes per blend. The manifest's stored
+    /// width/height are the encoded buffer's, which an imported clip's
+    /// rotation transform can flip — the collection preview and crop math
+    /// need the picture as displayed.
+    @Published private(set) var probedBlendSizes: [UUID: CGSize] = [:]
     @Published var currentCaptureID: UUID?
     @Published var resultBlendID: UUID?
 
@@ -676,8 +692,10 @@ final class AppModel: ObservableObject {
             try FileManager.default.removeItem(at: folder)
         }
 
+        let removedBlendIDs = Set(blends.filter { $0.captureID == capture.id }.map(\.id))
         captures.removeAll { $0.id == capture.id }
         blends.removeAll { $0.captureID == capture.id }
+        removeCollectionEntries(blendIDs: removedBlendIDs)
         try persistLibrary()
 
         if currentCaptureID == capture.id {
@@ -700,6 +718,7 @@ final class AppModel: ObservableObject {
         }
 
         blends.removeAll { $0.id == blend.id }
+        removeCollectionEntries(blendIDs: [blend.id])
         try persistLibrary()
 
         let blendsFolder = output.deletingLastPathComponent()
@@ -719,6 +738,312 @@ final class AppModel: ObservableObject {
             stage = source == nil ? .home : .configure
         }
     }
+
+    // MARK: - Collections
+
+    /// Dropping a blend (or its whole project) drops it from every collection
+    /// that used it. The remaining clips keep their order; a stale kept render
+    /// invalidates on its own because the collection's recipe changed.
+    private func removeCollectionEntries(blendIDs: Set<UUID>) {
+        guard !blendIDs.isEmpty else { return }
+        collections = collections.map { collection in
+            var collection = collection
+            collection.entries.removeAll { blendIDs.contains($0.blendID) }
+            return collection
+        }
+    }
+
+    func collection(withID id: UUID) -> LapseCollection? {
+        collections.first { $0.id == id }
+    }
+
+    /// The name sheet's pre-fill: "Collection N".
+    var suggestedCollectionName: String {
+        "Collection \(collections.count + 1)"
+    }
+
+    @discardableResult
+    func createCollection(named name: String) -> LapseCollection {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let collection = LapseCollection(name: trimmed.isEmpty ? suggestedCollectionName : trimmed)
+        collections.append(collection)
+        persistCollectionsQuietly()
+        return collection
+    }
+
+    func renameCollection(_ id: UUID, to name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        mutateCollection(id) { $0.name = trimmed }
+    }
+
+    func deleteCollection(_ id: UUID) {
+        guard collections.contains(where: { $0.id == id }) else { return }
+        collections.removeAll { $0.id == id }
+        try? FileManager.default.removeItem(at: collectionRenderFolderURL(for: id))
+        persistCollectionsQuietly()
+    }
+
+    /// Adds blends to a collection in order, skipping any already there —
+    /// one appearance per collection (callers pre-check when they want the
+    /// refusal toast). The first clip a collection ever receives sets its
+    /// canvas; the ratio it set is returned so the caller can say so.
+    @discardableResult
+    func addBlends(_ blendIDs: [UUID], to collectionID: UUID) -> CanvasRatio? {
+        guard let index = collections.firstIndex(where: { $0.id == collectionID }) else { return nil }
+        var collection = collections[index]
+        var setRatio: CanvasRatio?
+        for blendID in blendIDs {
+            guard let blend = blends.first(where: { $0.id == blendID }),
+                  blend.kind == .video,
+                  collection.entry(for: blendID) == nil else { continue }
+            if collection.ratio == nil {
+                let ratio = canvasRatio(for: blend)
+                collection.ratio = ratio
+                setRatio = ratio
+            }
+            collection.entries.append(LapseCollection.Entry(blendID: blendID))
+        }
+        collections[index] = collection
+        persistCollectionsQuietly()
+        return setRatio
+    }
+
+    func removeEntry(blendID: UUID, from collectionID: UUID) {
+        mutateCollection(collectionID) { collection in
+            collection.entries.removeAll { $0.blendID == blendID }
+        }
+    }
+
+    func moveEntry(in collectionID: UUID, from source: Int, to destination: Int) {
+        mutateCollection(collectionID) { collection in
+            guard collection.entries.indices.contains(source),
+                  collection.entries.indices.contains(destination) else { return }
+            let entry = collection.entries.remove(at: source)
+            collection.entries.insert(entry, at: destination)
+        }
+    }
+
+    func setCanvasRatio(_ ratio: CanvasRatio, for collectionID: UUID) {
+        mutateCollection(collectionID) { $0.ratio = ratio }
+    }
+
+    func updateTrim(blendID: UUID, in collectionID: UUID, inPoint: Double, outPoint: Double) {
+        mutateCollection(collectionID) { collection in
+            guard let idx = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
+            collection.entries[idx].inPoint = min(max(0, inPoint), 1)
+            collection.entries[idx].outPoint = min(max(0, outPoint), 1)
+        }
+    }
+
+    /// A crop saved "just for this collection".
+    func setLocalCrop(blendID: UUID, in collectionID: UUID, ratio: CanvasRatio, offset: Double) {
+        mutateCollection(collectionID) { collection in
+            guard let idx = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
+            collection.entries[idx].crops[ratio.rawValue] = min(max(0, offset), 1)
+        }
+    }
+
+    /// A crop saved as the clip's default for this ratio — every collection
+    /// without its own override follows it. Clearing the saving collection's
+    /// local override is deliberate: "replace the default" means this
+    /// collection now follows the default it just wrote.
+    func setDefaultCrop(blendID: UUID, ratio: CanvasRatio, offset: Double, clearLocalIn collectionID: UUID?) {
+        guard let blendIndex = blends.firstIndex(where: { $0.id == blendID }) else { return }
+        var crops = blends[blendIndex].defaultCrops ?? [:]
+        crops[ratio.rawValue] = min(max(0, offset), 1)
+        blends[blendIndex].defaultCrops = crops
+        if let collectionID,
+           let index = collections.firstIndex(where: { $0.id == collectionID }),
+           let entryIndex = collections[index].entries.firstIndex(where: { $0.blendID == blendID }) {
+            collections[index].entries[entryIndex].crops.removeValue(forKey: ratio.rawValue)
+        }
+        persistCollectionsQuietly()
+    }
+
+    /// Whether the entry's clip needs a crop on this collection's canvas, and
+    /// with which resolved pan offset: the collection's own override, else the
+    /// clip's default, else centred. nil when the clip matches the canvas.
+    func resolvedCropOffset(entry: LapseCollection.Entry, in collection: LapseCollection) -> Double? {
+        guard let ratio = collection.ratio,
+              let blend = blends.first(where: { $0.id == entry.blendID }),
+              blendNeedsCrop(blend, on: ratio) else { return nil }
+        return entry.crops[ratio.rawValue]
+            ?? blend.defaultCrops?[ratio.rawValue]
+            ?? 0.5
+    }
+
+    /// Whether an entry carries its own crop for the collection's canvas
+    /// (the "CROP 16:9 · CUSTOM" badge).
+    func entryHasLocalCrop(_ entry: LapseCollection.Entry, in collection: LapseCollection) -> Bool {
+        guard let ratio = collection.ratio else { return false }
+        return entry.crops[ratio.rawValue] != nil
+    }
+
+    func blendNeedsCrop(_ blend: BlendProject, on ratio: CanvasRatio) -> Bool {
+        abs(blendAspect(blend) - ratio.aspect) > 0.01
+    }
+
+    /// The clip's display-oriented pixel size: the probed value once a probe
+    /// has landed, else the recorded output stats.
+    func blendDisplaySize(for blend: BlendProject) -> CGSize? {
+        if let probed = probedBlendSizes[blend.id] { return probed }
+        guard let width = blend.width, let height = blend.height, width > 0, height > 0 else {
+            return nil
+        }
+        return CGSize(width: width, height: height)
+    }
+
+    /// The clip's picture aspect as displayed.
+    func blendAspect(_ blend: BlendProject) -> Double {
+        guard let size = blendDisplaySize(for: blend), size.height > 0 else { return 16.0 / 9.0 }
+        return size.width / size.height
+    }
+
+    /// The canvas the first clip sets: the ratio closest to the clip's own.
+    func canvasRatio(for blend: BlendProject) -> CanvasRatio {
+        let aspect = blendAspect(blend)
+        return CanvasRatio.allCases.min {
+            abs($0.aspect - aspect) < abs($1.aspect - aspect)
+        } ?? .wide
+    }
+
+    /// Collections that use this blend — the delete warning and the crop
+    /// prompt both hinge on it.
+    func collectionsUsing(blendID: UUID) -> [LapseCollection] {
+        collections.filter { $0.entry(for: blendID) != nil }
+    }
+
+    /// One clip's kept length on the timeline.
+    func entrySeconds(_ entry: LapseCollection.Entry) -> Double {
+        guard let blend = blends.first(where: { $0.id == entry.blendID }),
+              let duration = blendDuration(for: blend) else { return 0 }
+        return entry.keptFraction * duration
+    }
+
+    /// The whole timeline's length — trims retime the cut, clips butt together.
+    func collectionSeconds(_ collection: LapseCollection) -> Double {
+        collection.entries.reduce(0) { $0 + entrySeconds($1) }
+    }
+
+    /// A clip's full duration: recorded stats first, probed as a fallback for
+    /// manifests that predate output stats. nil until a probe lands.
+    func blendDuration(for blend: BlendProject) -> Double? {
+        blend.outputSeconds ?? probedBlendDurations[blend.id]
+    }
+
+    /// Fills the duration and oriented-size caches for a clip whose stats are
+    /// missing or possibly rotation-flipped. One asset load covers both.
+    func probeBlendMediaIfNeeded(_ blend: BlendProject) async {
+        guard blend.kind == .video else { return }
+        let needsDuration = blendDuration(for: blend) == nil
+        let needsSize = probedBlendSizes[blend.id] == nil
+        guard needsDuration || needsSize else { return }
+        let asset = AVURLAsset(url: blendOutputURL(for: blend))
+        if needsDuration,
+           let duration = try? await asset.load(.duration).seconds,
+           duration.isFinite, duration > 0 {
+            probedBlendDurations[blend.id] = duration
+        }
+        if needsSize,
+           let track = try? await asset.loadTracks(withMediaType: .video).first,
+           let natural = try? await track.load(.naturalSize),
+           let transform = try? await track.load(.preferredTransform) {
+            let oriented = CGRect(origin: .zero, size: natural).applying(transform)
+            let size = CGSize(width: abs(oriented.width), height: abs(oriented.height))
+            if size.width > 0, size.height > 0 {
+                probedBlendSizes[blend.id] = size
+            }
+        }
+    }
+
+    /// The collection export's frame rate: the fastest member clip's, so no
+    /// clip is thinned — clamped to the app's output range.
+    func collectionExportFPS(_ collection: LapseCollection) -> Int {
+        let best = collection.entries
+            .compactMap { entry in blends.first { $0.id == entry.blendID }?.outputFPS }
+            .max() ?? 30
+        return min(60, max(24, best))
+    }
+
+    /// Everything the render depends on, as one stable string. While the kept
+    /// render's recipe matches, exporting again is instant.
+    func collectionRecipe(_ collection: LapseCollection) -> String {
+        let head = "\(collection.ratioRaw ?? "—")@\(collectionExportFPS(collection))"
+        let parts = collection.entries.map { entry -> String in
+            let crop = resolvedCropOffset(entry: entry, in: collection)
+                .map { String(format: "%.4f", $0) } ?? "fit"
+            return "\(entry.blendID.uuidString):\(String(format: "%.4f", entry.inPoint))-\(String(format: "%.4f", entry.outPoint))@\(crop)"
+        }
+        return ([head] + parts).joined(separator: "|")
+    }
+
+    /// The kept render, when it still matches the collection's recipe and is
+    /// on disk. nil means the next export renders fresh.
+    func validCachedRender(for collection: LapseCollection) -> URL? {
+        guard !collection.entries.isEmpty,
+              let last = collection.lastExport,
+              last.recipe == collectionRecipe(collection) else { return nil }
+        let url = collectionRenderFolderURL(for: collection.id).appendingPathComponent(last.fileName)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    func recordCollectionExport(_ collectionID: UUID, fileName: String, recipe: String) {
+        mutateCollection(collectionID) { collection in
+            collection.lastExport = LapseCollection.ExportRecord(
+                fileName: fileName, exportedAt: Date(), recipe: recipe)
+        }
+    }
+
+    func collectionRenderFolderURL(for id: UUID) -> URL {
+        applicationSupportURL
+            .appendingPathComponent("Collections", isDirectory: true)
+            .appendingPathComponent(id.uuidString, isDirectory: true)
+    }
+
+    /// The blend's media file, for collection playback and export.
+    func blendMediaURL(for blendID: UUID) -> URL? {
+        blends.first { $0.id == blendID }.map(blendOutputURL(for:))
+    }
+
+    private func mutateCollection(_ id: UUID, _ mutate: (inout LapseCollection) -> Void) {
+        guard let index = collections.firstIndex(where: { $0.id == id }) else { return }
+        var collection = collections[index]
+        mutate(&collection)
+        collections[index] = collection
+        persistCollectionsQuietly()
+    }
+
+    /// Collection edits are frequent and small; a failed write surfaces like
+    /// every other library error rather than throwing out of a drag gesture.
+    private func persistCollectionsQuietly() {
+        do {
+            try persistLibrary()
+        } catch {
+            errorMessage = "Couldn't save the collection: \(error.localizedDescription)"
+        }
+    }
+
+    #if DEBUG
+    /// LL_COLLECTIONS screenshot hook: demo collections built from whatever
+    /// video blends the library already has. No-op once any collection exists
+    /// so repeated launches don't multiply.
+    func debugSeedCollections() {
+        guard collections.isEmpty else { return }
+        let videoBlends = blends.filter { $0.kind == .video }
+        guard !videoBlends.isEmpty else { return }
+        let first = createCollection(named: "Harbour reel")
+        addBlends(videoBlends.prefix(3).map(\.id), to: first.id)
+        if let entry = collection(withID: first.id)?.entries.first {
+            updateTrim(blendID: entry.blendID, in: first.id, inPoint: 0.125, outPoint: 0.833)
+        }
+        if videoBlends.count > 1 {
+            let second = createCollection(named: "City set")
+            addBlends(Array(videoBlends.suffix(2)).map(\.id), to: second.id)
+            setCanvasRatio(.tall, for: second.id)
+        }
+    }
+    #endif
 
     func setSource(_ source: Source, mode: String = "Import") {
         do {
@@ -2503,6 +2828,8 @@ final class AppModel: ObservableObject {
             let manifest = try JSONDecoder().decode(LibraryManifest.self, from: data)
             captures = manifest.captures.sorted { $0.createdAt > $1.createdAt }
             blends = manifest.blends.sorted { $0.createdAt > $1.createdAt }
+            // Oldest first — a collection list reads in creation order.
+            collections = (manifest.collections ?? []).sorted { $0.createdAt < $1.createdAt }
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil || capture.sourceWidth == nil) {
@@ -2520,7 +2847,7 @@ final class AppModel: ObservableObject {
         // ends here, so this is the one place that has to drop the size cache.
         projectStorageBytes.removeAll()
         try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
-        let manifest = LibraryManifest(captures: captures, blends: blends)
+        let manifest = LibraryManifest(captures: captures, blends: blends, collections: collections)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(manifest)

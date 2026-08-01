@@ -1,0 +1,99 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Collections · add clips picker · portrait</title>
+  <desc>Mirrors App/CollectionClipPicker.swift: the "Add clips" sheet (large detent, drag indicator) over the timeline builder. Header: Cancel (accent, left) · "Add clips" 17 semibold centered; native segmented control By project / All clips beneath. By project: one section per Interval/Video project with ≥1 blended clip — name 15 semibold + right meta ("Video · 5 blended clips" / "Interval · 1 clip + 1 still"), a horizontal reel of 96×54 r9 tiles with amber speed pills. Tile states: selectable; selected (2.5pt amber border + 18pt amber check circle, top-right); ADDED (green badge, 45% opacity — already in THIS collection, tap toasts "Already in City set — one appearance per collection"); STILL (dark badge, 45% opacity, tap toasts "Stills can't join a collection — v1 is video-only"). Sections containing stills add the footnote "Long-exposure stills can't join a collection — v1 is video-only." All clips: a 3-column grid of the same tiles with 10pt project-name captions. Footer CTA: "Add clips" disabled gray (#C8C8CD) at zero, "Add N clips" accent once selected — adding sets the canvas from the first clip when unset ("Canvas set to 16:9 — from your first clip"), else toasts "Added N clips". Selection order = timeline order.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+    <linearGradient id="clipA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+    <linearGradient id="clipB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A43"/><stop offset="1" stop-color="#232E1D"/></linearGradient>
+    <linearGradient id="clipC" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#463522"/><stop offset="1" stop-color="#241A10"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#8E8E93"/>
+    <g transform="translate(24,24)">
+
+      <!-- sheet -->
+      <rect x="0" y="40" width="393" height="812" rx="20" fill="#F2F2F7"/>
+      <rect x="178.5" y="48" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
+
+      <!-- header -->
+      <g id="header">
+        <text x="16" y="93" font-size="16" fill="#C36A00">Cancel</text>
+        <text x="196.5" y="93" font-size="17" class="sb" fill="#000" text-anchor="middle">Add clips</text>
+        <g id="segmented">
+          <rect x="16" y="112" width="361" height="32" rx="9" fill="#E3E3E8"/>
+          <rect x="18" y="114" width="178" height="28" rx="7" fill="#FFF" filter="url(#card)"/>
+          <text x="107" y="133" font-size="13" class="sb" fill="#000" text-anchor="middle">By project</text>
+          <text x="286" y="133" font-size="13" fill="#000" text-anchor="middle">All clips</text>
+        </g>
+      </g>
+
+      <!-- section: Tram Tester -->
+      <g id="section-1">
+        <text x="18" y="180" font-size="15" class="sb" fill="#000">Tram Tester</text>
+        <text x="377" y="180" font-size="11.5" class="sec" text-anchor="end">Video · 5 blended clips</text>
+        <!-- tile 1: selected -->
+        <g>
+          <rect x="16" y="192" width="96" height="54" rx="9" fill="url(#clipA)"/>
+          <rect x="16" y="192" width="96" height="54" rx="9" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+          <rect x="20" y="228" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="35" y="237" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+          <circle cx="99" cy="205" r="9" fill="#FFB340"/><path d="M95 205 l3 3 5 -6" stroke="#1C1C1E" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="checkmark"/>
+        </g>
+        <!-- tiles 2-3 -->
+        <g>
+          <rect x="120" y="192" width="96" height="54" rx="9" fill="url(#clipA)"/>
+          <rect x="124" y="228" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="139" y="237" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+          <rect x="224" y="192" width="96" height="54" rx="9" fill="url(#clipA)"/>
+          <rect x="228" y="228" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="243" y="237" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+          <rect x="328" y="192" width="96" height="54" rx="9" fill="url(#clipA)"/>
+          <rect x="332" y="228" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="347" y="237" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+        </g>
+      </g>
+
+      <!-- section: Interval — harbour dusk (with a locked still) -->
+      <g id="section-2">
+        <text x="18" y="284" font-size="15" class="sb" fill="#000">Interval — harbour dusk</text>
+        <text x="377" y="284" font-size="11.5" class="sec" text-anchor="end">Interval · 1 clip + 1 still</text>
+        <!-- video tile: ADDED (already in this collection) -->
+        <g opacity="0.45">
+          <rect x="16" y="296" width="96" height="54" rx="9" fill="url(#clipB)"/>
+          <rect x="20" y="332" width="46" height="12" rx="6" fill="#000" opacity="0.5"/><text x="43" y="341" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
+        </g>
+        <rect x="74" y="300" width="34" height="12" rx="6" fill="#34C759" opacity="0.9"/>
+        <text x="91" y="309" font-size="8.5" class="b" fill="#FFF" text-anchor="middle">ADDED</text>
+        <!-- still tile: locked -->
+        <g opacity="0.45">
+          <rect x="120" y="296" width="96" height="54" rx="9" fill="url(#clipC)"/>
+          <rect x="124" y="332" width="28" height="12" rx="6" fill="#000" opacity="0.5"/><text x="138" y="341" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">PNG</text>
+        </g>
+        <rect x="180" y="300" width="30" height="12" rx="6" fill="#000" opacity="0.55"/>
+        <text x="195" y="309" font-size="8.5" class="b" fill="#FFF" fill-opacity="0.8" text-anchor="middle">STILL</text>
+        <text x="18" y="368" font-size="11" class="sec">Long-exposure stills can’t join a collection — v1 is video-only.</text>
+      </g>
+
+      <!-- section: Ramp capture -->
+      <g id="section-3">
+        <text x="18" y="406" font-size="15" class="sb" fill="#000">Ramp capture</text>
+        <text x="377" y="406" font-size="11.5" class="sec" text-anchor="end">Video · 1 blended clip</text>
+        <rect x="16" y="418" width="96" height="54" rx="9" fill="url(#clipB)"/>
+        <rect x="20" y="454" width="30" height="12" rx="6" fill="#000" opacity="0.5"/><text x="35" y="463" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+      </g>
+
+      <!-- footer CTA -->
+      <g id="cta">
+        <rect x="16" y="740" width="361" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="771" font-size="16" class="b" fill="#FFF" text-anchor="middle">Add 1 clip</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collections · add clips picker · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionClipPicker.swift — By project / All clips · tile states: selected · ADDED · STILL · CTA counts selection</text>
+</svg>

@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Collection detail (timeline builder) · landscape</title>
+  <desc>Mirrors App/CollectionDetailView.swift (wideLayout): past 560pt of width the builder splits — preview left, controls right. The left column (min(46% of width, 420pt)) vertically centres the crop surface at up to (column−20)×(height−120) with the caption beneath; a tall canvas (9:16 · 3:4) gets the room it needs, which is the point of rotating. The right column stacks: ratio chips (h28 in landscape scale per design, drawn 33 as implemented), the compact meta line "0:59 · exports 2160×3840", the TIMELINE header, the scrollable rows card (same 66pt clipRow as portrait), and a bottom row of dashed "+ Add clips" + "Export collection" (44pt, side by side). Same layout serves iPad and macOS (the 760×680 default window is wide enough). Status text and nav are the system's; the floating tab bar continues to overlay (drawn omitted here for clarity of the split — geometry as portrait). Drawn with the 9:16 crop state selected. Note: drawn from the implemented geometry; headless simulators can't rotate, so this file awaits an on-device pass (status ⚠️ in INDEX).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
+    <clipPath id="preview"><rect x="140" y="94" width="142" height="253" rx="12"/></clipPath>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+    <linearGradient id="clipA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+    <linearGradient id="clipB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A43"/><stop offset="1" stop-color="#232E1D"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="852" height="393" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- inline nav -->
+      <g id="nav">
+        <circle cx="52" cy="36" r="15" fill="#FFF" filter="url(#card)"/>
+        <path d="M55 29 l-7 7 7 7" stroke="#1C1C1E" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
+        <text x="426" y="41" font-size="15" class="sb" fill="#000" text-anchor="middle">City set</text>
+        <circle cx="800" cy="36" r="15" fill="#FFF" filter="url(#card)"/>
+        <g stroke="#C36A00" fill="#C36A00" data-symbol="ellipsis.circle"><circle cx="800" cy="36" r="9" fill="none" stroke-width="1.6"/><circle cx="795.5" cy="36" r="1.3" stroke="none"/><circle cx="800" cy="36" r="1.3" stroke="none"/><circle cx="804.5" cy="36" r="1.3" stroke="none"/></g>
+      </g>
+
+      <!-- left column: crop surface (16:9 clip, 9:16 frame) vertically centred -->
+      <g id="left-preview">
+        <rect x="70" y="94" width="282" height="253" rx="12" fill="#000"/>
+        <g>
+          <rect x="70" y="94" width="282" height="159" rx="0" fill="url(#clipA)" transform="translate(0,47)"/>
+        </g>
+        <!-- clip drawn aspect-fit: 282×159 16:9 centred; crop frame 89×159 -->
+        <g id="crop">
+          <rect x="70" y="141" width="282" height="159" fill="url(#clipA)"/>
+          <rect x="70" y="141" width="97" height="159" fill="#000" opacity="0.6"/>
+          <rect x="256" y="141" width="96" height="159" fill="#000" opacity="0.6"/>
+          <rect x="167" y="141" width="89" height="159" fill="none" stroke="#FFF" stroke-width="2"/>
+          <path d="M196.7 141 v159 M226.3 141 v159 M167 194 h89 M167 247 h89" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <rect x="80" y="104" width="112" height="18" rx="9" fill="#000" opacity="0.5"/>
+        <text x="136" y="117" font-size="10" class="sb" fill="#FFF" text-anchor="middle">Tram Tester · 50×</text>
+        <text x="211" y="368" font-size="11" class="sec" text-anchor="middle">Drag the white frame — it keeps 608×1080 of 1920×1080 for the 9:16 export.</text>
+      </g>
+
+      <!-- right column -->
+      <g id="right-controls" transform="translate(392,0)">
+        <!-- ratio chips -->
+        <g id="chips">
+          <rect x="0" y="62" width="58" height="33" rx="16.5" fill="#FFF" filter="url(#card)"/>
+          <text x="29" y="83" font-size="13" class="sb" fill="#000" text-anchor="middle">16:9</text>
+          <rect x="66" y="62" width="58" height="33" rx="16.5" fill="#C36A00"/>
+          <text x="95" y="83" font-size="13" class="sb" fill="#FFF" text-anchor="middle">9:16</text>
+          <rect x="132" y="62" width="46" height="33" rx="16.5" fill="#FFF" filter="url(#card)"/>
+          <text x="155" y="83" font-size="13" class="sb" fill="#000" text-anchor="middle">1:1</text>
+          <rect x="186" y="62" width="50" height="33" rx="16.5" fill="#FFF" filter="url(#card)"/>
+          <text x="211" y="83" font-size="13" class="sb" fill="#000" text-anchor="middle">4:3</text>
+          <rect x="244" y="62" width="50" height="33" rx="16.5" fill="#FFF" filter="url(#card)"/>
+          <text x="269" y="83" font-size="13" class="sb" fill="#000" text-anchor="middle">3:4</text>
+        </g>
+        <text x="2" y="115" font-size="11.5" class="sec">0:59 · exports 2160×3840</text>
+
+        <text x="0" y="145" font-size="12" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 3 CLIPS</text>
+
+        <!-- rows card (scrollable) -->
+        <g id="rows">
+          <rect x="0" y="155" width="436" height="150" rx="14" fill="#FFF" filter="url(#card)"/>
+          <g id="row-1">
+            <rect x="0" y="155" width="436" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
+            <rect x="12" y="167" width="58" height="42" rx="7" fill="url(#clipB)"/>
+            <path d="M37 182 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
+            <text x="80" y="183" font-size="14.5" class="sb" fill="#000">Capture 27. 7. at 11:14</text>
+            <text x="80" y="202" font-size="11.5" class="sec">50× · 28s</text>
+            <rect x="144" y="191" width="66" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
+            <rect x="144" y="191" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+            <text x="177" y="201" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16</text>
+            <circle cx="384" cy="188" r="17" fill="#C36A00" opacity="0.1"/>
+            <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M378 181 h-2 v14 h2 M390 181 h2 v14 h-2"/><path d="M381 188 h6"/></g>
+            <path d="M412 182 h16 M412 188 h16 M412 194 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
+          </g>
+          <line x1="80" y1="221" x2="436" y2="221" stroke="#000" stroke-opacity="0.06"/>
+          <g id="row-2">
+            <rect x="12" y="233" width="58" height="42" rx="7" fill="url(#clipA)"/>
+            <path d="M37 248 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
+            <text x="80" y="249" font-size="14.5" class="sb" fill="#000">Tram Tester</text>
+            <text x="80" y="268" font-size="11.5" class="sec">50× · 1…</text>
+            <rect x="124" y="257" width="58" height="14" rx="7" fill="#FFB340" opacity="0.28"/>
+            <text x="153" y="267" font-size="9.5" class="b" fill="#8A4A00" text-anchor="middle">TRIMMED</text>
+            <rect x="188" y="257" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+            <text x="221" y="267" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16</text>
+            <circle cx="384" cy="254" r="17" fill="#C36A00" opacity="0.1"/>
+            <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M378 247 h-2 v14 h2 M390 247 h2 v14 h-2"/><path d="M381 254 h6"/></g>
+            <path d="M412 248 h16 M412 254 h16 M412 260 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
+          </g>
+          <!-- third row clipped by the scroll (indicated) -->
+          <line x1="80" y1="287" x2="436" y2="287" stroke="#000" stroke-opacity="0.06"/>
+          <rect x="12" y="293" width="58" height="12" rx="6" fill="url(#clipA)" opacity="0.5"/>
+        </g>
+
+        <!-- bottom buttons -->
+        <g id="bottom-buttons">
+          <rect x="0" y="325" width="214" height="44" rx="12" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <text x="107" y="352" font-size="14" class="sb" fill="#C36A00" text-anchor="middle">+ Add clips</text>
+          <rect x="222" y="325" width="214" height="44" rx="12" fill="#C36A00"/>
+          <text x="329" y="352" font-size="14" class="b" fill="#FFF" text-anchor="middle">Export collection</text>
+        </g>
+      </g>
+
+      <!-- hardware: island left in landscape -->
+      <rect x="11" y="134.5" width="36" height="124" rx="18" fill="#000"/>
+      <rect x="359" y="380" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="450" y="446" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collection detail (timeline builder) · landscape · 852×393 pt</text>
+  <text x="450" y="464" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift (wideLayout, &gt;560pt) — preview left · chips + rows + Add/Export right · also iPad/macOS</text>
+</svg>

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Collections · trim editor · portrait</title>
+  <desc>Mirrors App/CollectionTrimView.swift: the in/out editor, a fullscreen dark surface (cover on iOS, sheet on macOS). Top bar: Cancel (white 70%) · "Trim" 15 semibold with the clip label "Tram Tester · 50×" 11.5 white 45% beneath · Done (amber 16 bold). Clip preview (aspect-fit within 345×240, r12) with a static 52pt play circle, 24pt below the bar. Readouts: IN (10 bold white45 kerned + 14 semibold tabular value) left, kept range center (24 bold amber + "kept of 20s" 10.5 white45), OUT right. Filmstrip: 56pt bar inset 24, the clip's look sliced by 2pt dark separators every 44pt; dropped head/tail dimmed black 62%; kept range outlined amber 2.5 r8; 22×66 amber handles with ink chevrons overhang the bar and drag by absolute position (minimum gap 6% of the clip). Footnote: "Trimming retimes the whole collection — the clips after this one pull in. No gaps, ever."; "Reset trim" amber below. Done commits the entry's in/out and toasts "Collection retimed — now 0:44"; Cancel discards. Drawn at in=0, out≈0.78 (15s kept of 20s).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="strip"><rect x="48" y="546" width="345" height="56" rx="8"/></clipPath>
+    <linearGradient id="clipA" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar (light on dark) -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- top bar -->
+      <g id="top-bar">
+        <text x="20" y="90" font-size="16" fill="#FFF" opacity="0.7">Cancel</text>
+        <text x="196.5" y="84" font-size="15" class="sb" fill="#FFF" text-anchor="middle">Trim</text>
+        <text x="196.5" y="100" font-size="11.5" fill="#FFF" opacity="0.45" text-anchor="middle">Tram Tester · 50×</text>
+        <text x="373" y="90" font-size="16" class="b" fill="#FFB340" text-anchor="end">Done</text>
+      </g>
+
+      <!-- preview (16:9 fit in 345×240 → 345×194) -->
+      <g id="preview">
+        <rect x="24" y="128" width="345" height="194" rx="12" fill="url(#clipA)"/>
+        <circle cx="196.5" cy="225" r="26" fill="#000" opacity="0.45"/>
+        <path d="M190 215 l17 10 -17 10 z" fill="#FFF" data-symbol="play.fill"/>
+      </g>
+
+      <!-- readouts -->
+      <g id="readouts">
+        <text x="26" y="452" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="1">IN</text>
+        <text x="26" y="472" font-size="14" class="sb" fill="#FFF">0.0s</text>
+        <text x="196.5" y="466" font-size="24" class="b" fill="#FFB340" text-anchor="middle">15s</text>
+        <text x="196.5" y="483" font-size="10.5" fill="#FFF" opacity="0.45" text-anchor="middle">kept of 20s</text>
+        <text x="367" y="452" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="1" text-anchor="end">OUT</text>
+        <text x="367" y="472" font-size="14" class="sb" fill="#FFF" text-anchor="end">15.4s</text>
+      </g>
+
+      <!-- filmstrip: kept 0 → 0.78 of the 345pt bar -->
+      <g id="filmstrip">
+        <g clip-path="url(#strip)">
+          <rect x="48" y="546" width="345" height="56" fill="url(#clipA)"/>
+          <g fill="#000" opacity="0.35">
+            <rect x="90" y="546" width="2" height="56"/><rect x="134" y="546" width="2" height="56"/><rect x="178" y="546" width="2" height="56"/><rect x="222" y="546" width="2" height="56"/><rect x="266" y="546" width="2" height="56"/><rect x="310" y="546" width="2" height="56"/><rect x="354" y="546" width="2" height="56"/>
+          </g>
+          <!-- dropped tail dim (out = 0.78 → x 317) -->
+          <rect x="317" y="546" width="76" height="56" fill="#000" opacity="0.62"/>
+        </g>
+        <!-- kept range -->
+        <rect x="48" y="546" width="269" height="56" rx="8" fill="none" stroke="#FFB340" stroke-width="2.5"/>
+        <!-- handles (22×66, overhanging) -->
+        <g id="handle-in">
+          <rect x="37" y="541" width="22" height="66" rx="7" fill="#FFB340"/>
+          <path d="M51 567 l-5 7 5 7" stroke="#1C1C1E" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
+        </g>
+        <g id="handle-out">
+          <rect x="306" y="541" width="22" height="66" rx="7" fill="#FFB340"/>
+          <path d="M314 567 l5 7 -5 7" stroke="#1C1C1E" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        </g>
+      </g>
+
+      <!-- footnote + reset -->
+      <text x="196.5" y="648" font-size="11.5" fill="#FFF" opacity="0.45" text-anchor="middle">Trimming retimes the whole collection — the clips after</text>
+      <text x="196.5" y="665" font-size="11.5" fill="#FFF" opacity="0.45" text-anchor="middle">this one pull in. No gaps, ever.</text>
+      <text x="196.5" y="702" font-size="14" class="sb" fill="#FFB340" text-anchor="middle">Reset trim</text>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collections · trim editor · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionTrimView.swift — IN/kept/OUT readouts · dimmed filmstrip · amber handles (6% min gap) · Reset trim</text>
+</svg>

@@ -51,6 +51,8 @@ struct ProjectDetailView: View {
     }
     @State private var photoSaveState: AssetSaveState = .idle
     @State private var originalsSaveState: AssetSaveState = .idle
+    /// Collection confirmations ("Added to City set", refusals, creations).
+    @State private var collectionToast: String?
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
@@ -73,6 +75,7 @@ struct ProjectDetailView: View {
             }
         }
         .fullscreenMedia($fullscreenMedia, model: model)
+        .llToast($collectionToast)
         #if os(iOS)
         // macOS has no grading sheet: `previewGradedPhoto` opens the viewer in
         // its own resizable window instead (see the scene in `LetsLapseApp`).
@@ -103,7 +106,7 @@ struct ProjectDetailView: View {
         .alert(item: $versionPendingDelete) { blend in
             Alert(
                 title: Text("Delete blended clip \(model.versionNumber(for: blend))?"),
-                message: Text("This permanently deletes the blended clip. The original stays in the project."),
+                message: Text(deleteVersionMessage(blend)),
                 primaryButton: .destructive(Text("Delete")) { delete(blend) },
                 secondaryButton: .cancel()
             )
@@ -554,6 +557,27 @@ struct ProjectDetailView: View {
                     Label("New blended clip from these settings", systemImage: "slider.horizontal.3")
                 }
             }
+            // Collections are video-only in v1 — a long-exposure image
+            // has no place on a timeline, so no menu for it.
+            if blend.kind == .video {
+                Menu {
+                    ForEach(model.collections) { collection in
+                        Button("\(collection.name) · \(collection.clipCountLabel)") {
+                            addToCollection(blend, collection)
+                        }
+                    }
+                    if !model.collections.isEmpty {
+                        Divider()
+                    }
+                    Button {
+                        newCollectionWith(blend)
+                    } label: {
+                        Label("New collection…", systemImage: "plus")
+                    }
+                } label: {
+                    Label("Add to collection", systemImage: "film.stack")
+                }
+            }
             Button(role: .destructive) {
                 versionPendingDelete = blend
             } label: {
@@ -880,6 +904,38 @@ struct ProjectDetailView: View {
         } catch {
             deletionFailure = error.localizedDescription
         }
+    }
+
+    // MARK: - Collections
+
+    private func addToCollection(_ blend: AppModel.BlendProject, _ collection: LapseCollection) {
+        if collection.entry(for: blend.id) != nil {
+            collectionToast = "Already in \(collection.name) — one appearance per collection"
+            return
+        }
+        model.addBlends([blend.id], to: collection.id)
+        collectionToast = "Added to \(collection.name)"
+    }
+
+    private func newCollectionWith(_ blend: AppModel.BlendProject) {
+        let collection = model.createCollection(named: model.suggestedCollectionName)
+        model.addBlends([blend.id], to: collection.id)
+        collectionToast = "Created “\(collection.name)” with this clip"
+    }
+
+    /// The delete warning names the collections that use this clip — deleting
+    /// also removes it from them.
+    private func deleteVersionMessage(_ blend: AppModel.BlendProject) -> String {
+        let used = model.collectionsUsing(blendID: blend.id)
+        guard !used.isEmpty else {
+            return "This permanently deletes the blended clip. The original stays in the project."
+        }
+        let names = used.map { "“\($0.name)”" }
+        let list = names.count == 1
+            ? names[0]
+            : names.dropLast().joined(separator: ", ") + " and " + (names.last ?? "")
+        let pronoun = used.count == 1 ? "that collection" : "those collections"
+        return "It’s used in \(list). Deleting also removes it from \(pronoun). Your original is safe."
     }
 }
 

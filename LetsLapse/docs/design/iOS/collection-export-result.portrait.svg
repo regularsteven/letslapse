@@ -1,0 +1,73 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Collections · export result · portrait</title>
+  <desc>Mirrors App/CollectionExportView.swift (CollectionExportResultView): the finished export. A 300pt r20 dark player card (#0E1218) hosting an inline AVKit VideoPlayer of the render (a 9:16 export pillarboxes inside it), badged top-left with ratio · export resolution · the FILE's probed duration ("9:16 · 2160×3840 · 0:56" — the render, not the timeline estimate). Green success banner (green 12% fill, 35% border, r14, 46pt): check + "Exported — kept in City set" (name bold) + trailing "Open" (returns to the timeline). Buttons: Save to Photos (LLPrimaryButtonStyle; saving spinner → "Saved ✓"; iOS only) and Share (LLSecondaryButtonStyle, ShareLink). Info card: "The render stays with the collection — exporting again is instant until you change clips, trims, or crops." — backed by the recipe check in AppModel.validCachedRender: while the recipe matches and render.mp4 exists, Export collection jumps straight here. Done (gray secondary) at the bottom dismisses.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+    <linearGradient id="clipB" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5B6B52"/><stop offset="1" stop-color="#232E1D"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- player card -->
+      <g id="player-card">
+        <rect x="16" y="83" width="361" height="300" rx="20" fill="#0E1218"/>
+        <!-- pillarboxed 9:16 render -->
+        <rect x="112" y="83" width="169" height="300" fill="url(#clipB)"/>
+        <circle cx="196.5" cy="233" r="27" fill="#000" opacity="0.5"/>
+        <path d="M190 223 l17 10 -17 10 z" fill="#FFF" data-symbol="play.fill"/>
+        <rect x="26" y="95" width="164" height="21" rx="10.5" fill="#000" opacity="0.5"/>
+        <text x="108" y="109" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">9:16 · 2160×3840 · 0:56</text>
+      </g>
+
+      <!-- success banner -->
+      <g id="banner">
+        <rect x="16" y="399" width="361" height="46" rx="14" fill="#34C759" opacity="0.12"/>
+        <rect x="16" y="399" width="361" height="46" rx="14" fill="none" stroke="#34C759" stroke-opacity="0.35"/>
+        <path d="M32 422 l4 4 8 -9" stroke="#34C759" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+        <text x="54" y="427" font-size="13.5" fill="#000">Exported — kept in <tspan class="b">City set</tspan></text>
+        <text x="363" y="427" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+      </g>
+
+      <!-- actions -->
+      <g id="actions">
+        <rect x="16" y="459" width="175.5" height="50" rx="14" fill="#C36A00"/>
+        <text x="103.75" y="490" font-size="15" class="b" fill="#FFF" text-anchor="middle">Save to Photos</text>
+        <rect x="201.5" y="459" width="175.5" height="50" rx="14" fill="#FFF" filter="url(#card)"/>
+        <text x="289.25" y="490" font-size="15.5" class="b" fill="#C36A00" text-anchor="middle">Share</text>
+      </g>
+
+      <!-- info card -->
+      <g id="info">
+        <rect x="16" y="523" width="361" height="66" rx="16" fill="#FFF" filter="url(#card)"/>
+        <text x="32" y="551" font-size="12.5" class="sec">The render stays with the collection — exporting again is</text>
+        <text x="32" y="569" font-size="12.5" class="sec">instant until you change clips, trims, or crops.</text>
+      </g>
+
+      <!-- done -->
+      <g id="done">
+        <rect x="16" y="758" width="361" height="50" rx="14" fill="#FFF" filter="url(#card)"/>
+        <text x="196.5" y="789" font-size="15.5" class="sb" fill="#6D6D72" text-anchor="middle">Done</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collections · export result · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionExportView.swift — player card w/ honest badge · kept-in banner · Save to Photos / Share · instant re-export note</text>
+</svg>
