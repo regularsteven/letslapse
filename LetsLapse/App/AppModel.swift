@@ -1868,7 +1868,7 @@ final class AppModel: ObservableObject {
         let core = try BlendCore()
         let blender = VideoBlender(core: core)
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).mp4")
+            .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
         let options = VideoBlendOptions(
             ramp: ramp,
             outputFPS: fps,
@@ -1975,7 +1975,7 @@ final class AppModel: ObservableObject {
         processingETADate = nil
         statusMessage = "Stitching \(processedPieces.count) processed segments..."
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LetsLapse-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
+            .appendingPathComponent("LetsLapse-sequence-\(UUID().uuidString).mp4")
         let stitchBand = plan.stitchBand ?? min(progress, 0.98)...0.98
         let stitched = try await stitchVideos(
             processedPieces, to: output, burstRamp: burstRamp
@@ -1986,14 +1986,18 @@ final class AppModel: ObservableObject {
         }
         try Task.checkCancellation()
         reportTailProgress(band: stitchBand, fraction: 1)
+        if stitched.rampDropped {
+            saveConfirmation = "Clip created — slow-motion ramp couldn't be applied on this device"
+        }
 
+        let effectiveBurstRamp = stitched.rampDropped ? 0.0 : burstRamp
         let finalFrames = stitchedOutputFrames(
             blended: outputFrames, stitchedDuration: stitched.duration,
-            fps: fps, burstRamp: burstRamp, pieces: processedPieces)
+            fps: fps, burstRamp: effectiveBurstRamp, pieces: processedPieces)
         let summary = "\(inputFrames) frames in → \(finalFrames) frames out · "
             + "\(stitched.width)×\(stitched.height) · "
             + "\(source.sequence.rampIntervals.count) ramp intervals stitched"
-            + burstRampSummary(burstRamp, pieces: processedPieces)
+            + burstRampSummary(effectiveBurstRamp, pieces: processedPieces)
         return ProcessingOutput(
             kind: .video,
             url: output,
@@ -2125,7 +2129,7 @@ final class AppModel: ObservableObject {
         processingETADate = nil
         statusMessage = "Stitching \(processedPieces.count) processed marker intervals..."
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LetsLapse-marker-sequence-\(Int(Date().timeIntervalSince1970)).mp4")
+            .appendingPathComponent("LetsLapse-marker-sequence-\(UUID().uuidString).mp4")
         let stitchBand = plan.stitchBand ?? min(progress, 0.98)...0.98
         let stitched = try await stitchVideos(
             processedPieces, to: output, burstRamp: burstRamp
@@ -2136,14 +2140,18 @@ final class AppModel: ObservableObject {
         }
         try Task.checkCancellation()
         reportTailProgress(band: stitchBand, fraction: 1)
+        if stitched.rampDropped {
+            saveConfirmation = "Clip created — slow-motion ramp couldn't be applied on this device"
+        }
 
+        let effectiveBurstRamp = stitched.rampDropped ? 0.0 : burstRamp
         let finalFrames = stitchedOutputFrames(
             blended: outputFrames, stitchedDuration: stitched.duration,
-            fps: fps, burstRamp: burstRamp, pieces: processedPieces)
+            fps: fps, burstRamp: effectiveBurstRamp, pieces: processedPieces)
         let summary = "\(inputFrames) frames in → \(finalFrames) frames out · "
             + "\(stitched.width)×\(stitched.height) · "
             + "\(source.sequence.rampIntervals.count) marker ramp intervals stitched"
-            + burstRampSummary(burstRamp, pieces: processedPieces)
+            + burstRampSummary(effectiveBurstRamp, pieces: processedPieces)
         return ProcessingOutput(
             kind: .video,
             url: output,
@@ -2270,9 +2278,19 @@ final class AppModel: ObservableObject {
     /// own `localizedDescription` is almost always the useless "The operation
     /// could not be completed" — the code and the underlying error are what
     /// actually say which part of the composition it choked on.
-    private static func exportFailureDescription(_ error: Error?) -> String {
+    private static func exportFailureDescription(_ error: Error?, hadBurstRamp: Bool = false) -> String {
         guard let error else { return "sequence export failed" }
         let nsError = error as NSError
+        // kVTPropertyNotSupportedErr (-16364) wrapped in
+        // AVErrorOperationNotSupportedForAsset (-11800) is VideoToolbox
+        // rejecting scaleTimeRange on a codec it can't retime (typically HEVC).
+        // Give the user something they can act on instead of raw error codes.
+        if hadBurstRamp,
+           nsError.domain == AVFoundationErrorDomain, nsError.code == -11800 {
+            let description = "Slow-motion ramp failed — try reducing the ramp duration or turning it off"
+            LLog("stitch export failed: \(description) (AVFoundationErrorDomain -11800)")
+            return description
+        }
         var parts = [nsError.localizedDescription]
         if let reason = nsError.localizedFailureReason { parts.append(reason) }
         if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
@@ -2324,12 +2342,17 @@ final class AppModel: ObservableObject {
     /// burst clip in the timeline instead of cutting straight into slow motion.
     /// It is a pure retime of the composition — the ramp lives inside the burst
     /// clip's own footage and never reaches the clips either side of it.
+    // Thrown internally when the export fails with AVErrorOperationNotSupportedForAsset
+    // (-11800) while a burst ramp is active, so the caller can rebuild and retry
+    // without the ramp rather than surfacing a hard error.
+    private struct BurstRampExportFailure: Error {}
+
     private func stitchVideos(
         _ pieces: [StitchPiece],
         to outputURL: URL,
         burstRamp: Double = 0,
         progress: (@Sendable (Double) -> Void)? = nil
-    ) async throws -> (width: Int, height: Int, duration: Double) {
+    ) async throws -> (width: Int, height: Int, duration: Double, rampDropped: Bool) {
         guard !pieces.isEmpty else { throw LapseError.noInputFrames }
         try? FileManager.default.removeItem(at: outputURL)
 
@@ -2423,9 +2446,25 @@ final class AppModel: ObservableObject {
             }
         }
 
+        // AVAssetExportPresetHighestQuality attempts to preserve the source
+        // codec (HEVC on modern iPhones), but VideoToolbox's HEVC encoder does
+        // not support scaleTimeRange — it returns kVTPropertyNotSupportedErr
+        // (-16364) wrapped in AVErrorOperationNotSupportedForAsset (-11800).
+        // A resolution-locked preset forces an H.264 encode path that handles
+        // speed ramps without complaint. Only switch when ramp is actually on;
+        // HighestQuality is still used for ramp-free stitches.
+        let hasRamp = burstRamp > 0 && !burstPlacements.isEmpty
+        let stitchPreset: String
+        if hasRamp, let size = outputSize {
+            stitchPreset = max(size.width, size.height) > 1920
+                ? AVAssetExportPreset3840x2160
+                : AVAssetExportPreset1920x1080
+        } else {
+            stitchPreset = AVAssetExportPresetHighestQuality
+        }
         guard let export = AVAssetExportSession(
             asset: composition,
-            presetName: AVAssetExportPresetHighestQuality
+            presetName: stitchPreset
         ) else {
             throw LapseError.writerFailed("could not create export session")
         }
@@ -2448,24 +2487,45 @@ final class AppModel: ObservableObject {
         }
         defer { poller?.cancel() }
 
-        try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                exportBox.session.exportAsynchronously {
-                    switch exportBox.session.status {
-                    case .completed:
-                        continuation.resume()
-                    case .failed:
-                        continuation.resume(throwing: LapseError.writerFailed(
-                            Self.exportFailureDescription(exportBox.session.error)))
-                    case .cancelled:
-                        continuation.resume(throwing: LapseError.cancelled)
-                    default:
-                        continuation.resume(throwing: LapseError.writerFailed("sequence export did not complete"))
+        do {
+            try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                    exportBox.session.exportAsynchronously {
+                        switch exportBox.session.status {
+                        case .completed:
+                            continuation.resume()
+                        case .failed:
+                            let exportError = exportBox.session.error
+                            let nsErr = exportError as? NSError
+                            if hasRamp,
+                               nsErr?.domain == AVFoundationErrorDomain,
+                               nsErr?.code == -11800 {
+                                // VideoToolbox rejected scaleTimeRange (kVTPropertyNotSupportedErr).
+                                // Signal the outer catch to rebuild and retry without ramp.
+                                LLog("burst-ramp: export -11800 — will retry without ramp")
+                                continuation.resume(throwing: BurstRampExportFailure())
+                            } else {
+                                continuation.resume(throwing: LapseError.writerFailed(
+                                    Self.exportFailureDescription(exportError, hadBurstRamp: hasRamp)))
+                            }
+                        case .cancelled:
+                            continuation.resume(throwing: LapseError.cancelled)
+                        default:
+                            continuation.resume(throwing: LapseError.writerFailed("sequence export did not complete"))
+                        }
                     }
                 }
+            } onCancel: {
+                exportBox.session.cancelExport()
             }
-        } onCancel: {
-            exportBox.session.cancelExport()
+        } catch is BurstRampExportFailure {
+            // The ramp couldn't be encoded on this device. Rebuild without it so
+            // the clip still lands — the caller surfaces a non-fatal notice.
+            LLog("burst-ramp: rebuilding composition without ramp")
+            try? FileManager.default.removeItem(at: outputURL)
+            let fallback = try await stitchVideos(pieces, to: outputURL,
+                                                  burstRamp: 0, progress: progress)
+            return (fallback.width, fallback.height, fallback.duration, rampDropped: true)
         }
 
         let size = outputSize ?? .zero
@@ -2475,7 +2535,8 @@ final class AppModel: ObservableObject {
         return (
             Int(abs(size.width).rounded()),
             Int(abs(size.height).rounded()),
-            composition.duration.seconds
+            composition.duration.seconds,
+            rampDropped: false
         )
     }
 
@@ -2494,7 +2555,7 @@ final class AppModel: ObservableObject {
         grade: PhotoGrade = .identity
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).mp4")
+            .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
         let result = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> StackSequenceResult in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
