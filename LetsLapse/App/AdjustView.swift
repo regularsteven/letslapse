@@ -1,57 +1,63 @@
 import SwiftUI
 import LetsLapseKit
 
-/// "Adjust" — pick a speed, see the one number that matters (how long the
-/// clip will be), then create the version. Replaces the old Blend Options form.
+/// "Adjust" — the warp timeline (design 3a): scrub the source, drag to
+/// nominate a real-time moment, give every stretch its own speed, let the
+/// seams own the ramps — then create the clip. The edit is a time-warp, never
+/// a trim: every source frame lands in the finished clip.
 struct AdjustView: View {
     @EnvironmentObject var model: AppModel
     @State private var showAdvanced = false
     @State private var showCustomSpeed = false
-    /// This shoot's burst material and what the current ramp does to it. Read
-    /// off the sequence sidecar, so it is loaded in a task rather than
-    /// recomputed inside the body.
-    @State private var burstRamp: AppModel.BurstRampInfo?
+    /// The stretch the chips edit, as an index into the warp timeline.
+    @State private var selectedStretch = 0
+    @StateObject private var preview = WarpPreviewLoader()
+
+    /// The six canonical speeds. Free values come through the value sheet.
+    private static let speedChips: [(speed: Double, word: String)] = [
+        (0.25, "¼× slow"), (1, "real time"), (4, "gentle"),
+        (15, "subtle"), (60, "flowing"), (100, "streaks"),
+    ]
 
     var body: some View {
-        VStack(spacing: 0) {
-            FlowHeader(title: "New blended clip") {
-                model.reset()
-            }
+        GeometryReader { proxy in
+            let isWide = proxy.size.width > 560 && model.source?.isVideo == true
+            VStack(spacing: 0) {
+                FlowHeader(title: "New blended clip") {
+                    model.reset()
+                }
 
-            ScrollView {
-                VStack(spacing: 14) {
-                    sourceCard
-
-                    if model.source?.isVideo == true {
-                        blendFromSection
-                        speedSection
-                        estimateCard
-                        // Only for a shoot that actually recorded burst clips —
-                        // there is nothing to ease into otherwise.
-                        if let burstRamp {
-                            burstRampRow(info: burstRamp)
-                        }
-                        advancedRow
+                ScrollView {
+                    if isWide {
+                        wideLayout
+                            .padding(.horizontal, 16)
+                            .padding(.top, 8)
+                            .padding(.bottom, 16)
                     } else {
-                        tailFrameBanner
-                        stackCard
-                    }
+                        VStack(spacing: 14) {
+                            sourceCard
 
-                    if let error = model.errorMessage {
-                        Text(error)
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(14)
-                            .llCard()
+                            if model.source?.isVideo == true {
+                                warpCard(inlineThumbnail: true)
+                                chipsRow
+                                blendFromSection
+                                estimateCard
+                                advancedRow
+                            } else {
+                                tailFrameBanner
+                                stackCard
+                            }
+
+                            errorLine
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
                     }
                 }
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
-                .padding(.bottom, 16)
-            }
 
-            bottomBar
+                bottomBar
+            }
         }
         .background(LL.screenBackground.ignoresSafeArea())
         .sheet(isPresented: $showAdvanced) {
@@ -59,24 +65,67 @@ struct AdjustView: View {
                 .environmentObject(model)
         }
         .sheet(isPresented: $showCustomSpeed) {
-            CustomSpeedSheet()
+            CustomSpeedSheet(stretch: selectedStretch)
                 .environmentObject(model)
-        }
-        .task(id: burstRampToken) {
-            burstRamp = model.currentCapture.flatMap { model.burstRampInfo(for: $0) }
         }
     }
 
-    /// Re-read the burst material whenever anything that moves the cap moves:
-    /// the project's own ramp, the app default behind it, or the output rate
-    /// that decides how long a burst runs on screen.
-    private var burstRampToken: Int {
-        var hasher = Hasher()
-        hasher.combine(model.currentCaptureID)
-        hasher.combine(model.currentCapture?.burstRampDuration)
-        hasher.combine(model.burstRampDefault)
-        hasher.combine(model.outputFPS)
-        return hasher.finalize()
+    /// iPad / Mac / iPhone landscape: the timeline beside the preview, per the
+    /// design handoff — the playhead frame becomes a proper preview pane.
+    private var wideLayout: some View {
+        VStack(spacing: 14) {
+            sourceCard
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 14) {
+                    warpCard(inlineThumbnail: false)
+                    chipsRow
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(spacing: 14) {
+                    widePreviewPane
+                    estimateCard
+                }
+                .frame(width: 320)
+            }
+            blendFromSection
+            advancedRow
+            errorLine
+        }
+    }
+
+    private var widePreviewPane: some View {
+        RoundedRectangle(cornerRadius: 16, style: .continuous)
+            .fill(Color.black)
+            .overlay {
+                if let image = preview.image {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                Text("≈ keyframe preview")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 3)
+                    .background(.black.opacity(0.45), in: Capsule())
+                    .padding(8)
+            }
+            .frame(height: 180)
+    }
+
+    @ViewBuilder private var errorLine: some View {
+        if let error = model.errorMessage {
+            Text(error)
+                .font(.footnote)
+                .foregroundStyle(.red)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(14)
+                .llCard()
+        }
     }
 
     // MARK: - Source
@@ -93,9 +142,8 @@ struct AdjustView: View {
                 Text(model.currentCapture?.displayTitle ?? "Source")
                     .font(.system(size: 14.5, weight: .semibold))
                     .lineLimit(1)
-                Text(sourceDetailLine)
+                sourceSubtitle
                     .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
             }
@@ -111,12 +159,126 @@ struct AdjustView: View {
         .llCard()
     }
 
+    private var sourceDetailLine: String {
+        guard let capture = model.currentCapture else { return "—" }
+        var parts: [String] = []
+        if let duration = capture.sourceDurationSeconds {
+            parts.append(DurationFormatter.recordingTime(from: duration) + " min")
+        }
+        parts.append(capture.formatLine)
+        parts.append("shot \(capture.createdAt.formatted(.relative(presentation: .named)))")
+        return parts.joined(separator: " · ")
+    }
+
+    /// "08:16 · 1080p · 30 fps · 2 moments" for a shoot with recorded
+    /// structure, "20:00 · 4K · 120 fps · continuous" for one take — the
+    /// design's exact shapes; the accent chunk replaces the Video/shot-date
+    /// tokens so the line fits.
+    private var sourceSubtitle: some View {
+        guard model.source?.isVideo == true, let capture = model.currentCapture else {
+            return Text(sourceDetailLine).foregroundColor(.secondary)
+        }
+        let moments = model.blendStretches().momentCount
+        var parts: [String] = []
+        if let duration = capture.sourceDurationSeconds {
+            parts.append(DurationFormatter.recordingTime(from: duration))
+        }
+        if let width = capture.sourceWidth, let height = capture.sourceHeight {
+            parts.append(AppModel.CaptureProject.resolutionLabel(width: width, height: height))
+        }
+        if let fps = capture.sourceFPS {
+            parts.append("\(Int(fps.rounded())) fps")
+        }
+        let tail = moments > 0 ? " · \(moments) \(moments == 1 ? "moment" : "moments")" : " · continuous"
+        return Text(parts.joined(separator: " · ")).foregroundColor(.secondary)
+            + Text(tail)
+                .foregroundColor(LL.accentDeep)
+                .fontWeight(.semibold)
+    }
+
+    // MARK: - Warp timeline
+
+    private func warpCard(inlineThumbnail: Bool) -> some View {
+        WarpTimelineView(
+            selectedStretch: $selectedStretch,
+            preview: preview,
+            showsInlineThumbnail: inlineThumbnail
+        )
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+        .padding(.bottom, 10)
+        .llCard()
+    }
+
+    /// Speed chips always edit the selected stretch — there is no separate
+    /// "base" any more.
+    private var chipsRow: some View {
+        let timeline = model.activeWarp()
+        let index = min(selectedStretch, max(0, timeline.stretchCount - 1))
+        let current = timeline.speeds.indices.contains(index) ? timeline.speeds[index] : 1
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                ForEach(Self.speedChips, id: \.speed) { chip in
+                    let active = abs(current - chip.speed) < 0.001
+                    Button {
+                        model.updateWarp { $0.setSpeed(chip.speed, for: index) }
+                    } label: {
+                        VStack(spacing: 1) {
+                            Text(WarpTimeline.speedLabel(chip.speed))
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(active ? LL.amber : .primary)
+                            Text(chip.word)
+                                .font(.system(size: 9.5))
+                                .foregroundStyle(active ? Color.white.opacity(0.6) : Color.secondary)
+                        }
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 8)
+                        .background(
+                            active ? LL.ink : LL.cardBackground,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .shadow(color: .black.opacity(active ? 0 : 0.05), radius: 1.5, y: 1)
+                        .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Button {
+                    showCustomSpeed = true
+                } label: {
+                    VStack(spacing: 1) {
+                        Text("···")
+                            .font(.system(size: 14, weight: .bold))
+                            .foregroundStyle(.primary)
+                        Text("custom")
+                            .font(.system(size: 9.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .shadow(color: .black.opacity(0.05), radius: 1.5, y: 1)
+                    .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .buttonStyle(.plain)
+            }
+            Text("Every stretch is speedable — no separate \u{201C}base\u{201D}. Hold a stretch for Remove · Split · Reset.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+            if model.useRamp {
+                Text("Speed ramp \(model.rampStart)×→\(model.rampEnd)× is on — editing the timeline turns it off. Edit it in Advanced.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(LL.accent)
+                    .padding(.horizontal, 4)
+            }
+        }
+    }
+
     // MARK: - Blend from (source codec)
 
     /// Shown only when a clip has been converted, so there's a real choice of
     /// which encoding feeds the blend — the ProRes-vs-H.264 quality test.
     @ViewBuilder private var blendFromSection: some View {
-        if let capture = model.currentCapture {
+        if let capture = model.currentCapture, model.source?.isVideo == true {
             let codecs = model.availableBlendCodecs(for: capture)
             if !codecs.isEmpty {
                 VStack(alignment: .leading, spacing: 8) {
@@ -171,77 +333,6 @@ struct AdjustView: View {
         }
     }
 
-    private var sourceDetailLine: String {
-        guard let capture = model.currentCapture else { return "—" }
-        var parts: [String] = []
-        if let duration = capture.sourceDurationSeconds {
-            parts.append(DurationFormatter.recordingTime(from: duration) + " min")
-        }
-        parts.append(capture.formatLine)
-        parts.append("shot \(capture.createdAt.formatted(.relative(presentation: .named)))")
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: - Speed
-
-    private var speedSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LLSectionHeader("Speed")
-            HStack(spacing: 8) {
-                ForEach(SpeedMath.presets, id: \.self) { preset in
-                    speedChip(
-                        title: "\(preset)×",
-                        subtitle: SpeedMath.chipWord(for: preset),
-                        isSelected: !model.useRamp && model.constantWindow == preset
-                    ) {
-                        model.useRamp = false
-                        model.constantWindow = preset
-                    }
-                }
-                speedChip(
-                    title: "···",
-                    subtitle: "custom",
-                    isSelected: !model.useRamp && !SpeedMath.presets.contains(model.constantWindow)
-                ) {
-                    showCustomSpeed = true
-                }
-            }
-            if model.useRamp {
-                Text("Speed ramp \(model.rampStart)×→\(model.rampEnd)× is on — edit it in Advanced.")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(LL.accent)
-                    .padding(.horizontal, 4)
-            }
-        }
-    }
-
-    private func speedChip(
-        title: String,
-        subtitle: String,
-        isSelected: Bool,
-        action: @escaping () -> Void
-    ) -> some View {
-        Button(action: action) {
-            VStack(spacing: 1) {
-                Text(title)
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(isSelected ? LL.amber : .primary)
-                Text(subtitle)
-                    .font(.system(size: 10.5))
-                    .foregroundStyle(isSelected ? Color.white.opacity(0.6) : Color.secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .background(
-                isSelected ? LL.ink : LL.cardBackground,
-                in: RoundedRectangle(cornerRadius: 12, style: .continuous)
-            )
-            .shadow(color: .black.opacity(isSelected ? 0 : 0.05), radius: 1.5, y: 1)
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        }
-        .buttonStyle(.plain)
-    }
-
     // MARK: - Estimate
 
     private var estimateCard: some View {
@@ -280,7 +371,7 @@ struct AdjustView: View {
                 Text(estimateHeadline)
                     .font(.system(size: 28, weight: .bold))
                     .foregroundStyle(.white)
-                Text("· \(SpeedMath.cardPhrase(for: effectiveSpeed))")
+                Text(estimatePhrase)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(LL.amber)
             }
@@ -306,8 +397,16 @@ struct AdjustView: View {
         .background(LL.ink, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
-    private var effectiveSpeed: Int {
-        model.useRamp ? max(1, (model.rampStart + model.rampEnd) / 2) : model.constantWindow
+    private var estimatePhrase: String {
+        if model.useRamp {
+            return "· \(model.rampStart)×→\(model.rampEnd)× ramp"
+        }
+        let timeline = model.activeWarp()
+        if timeline.stretchCount > 1 {
+            return "· \(timeline.stretchCount) stretches"
+        }
+        let speed = timeline.speeds.first ?? Double(model.constantWindow)
+        return "· \(WarpTimeline.speedWord(speed))"
     }
 
     private var estimateHeadline: String {
@@ -323,7 +422,7 @@ struct AdjustView: View {
         if model.useRamp {
             return "The window ramps from \(model.rampStart) to \(model.rampEnd) frames per output frame across the clip."
         }
-        return "Each output frame averages \(model.constantWindow) real frames — that's where the blur comes from."
+        return "Time-warp, never a trim — every source frame lands in the clip; blur follows speed through each ease."
     }
 
     // MARK: - Tail-frame review
@@ -443,96 +542,6 @@ struct AdjustView: View {
         if singleImage { return "all \(photoCount) → one still" }
         if noBlend { return "no blend" }
         return "\(depth) photos → 1 frame"
-    }
-
-    // MARK: - Burst ramp
-
-    /// How long each burst clip eases into and out of slow motion, with a note
-    /// when the burst's own length — not the setting — is deciding it. Sits
-    /// directly above Advanced: it shapes this render, like speed does.
-    private func burstRampRow(info: AppModel.BurstRampInfo) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Slow-motion ramp")
-                        .font(.system(size: 15.5))
-                        .foregroundStyle(.primary)
-                    Text(info.clipCount == 1
-                         ? "Eases the burst in and out of slow motion."
-                         : "Eases all \(info.clipCount) bursts in and out of slow motion.")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer(minLength: 8)
-                Menu {
-                    if let capture = model.currentCapture {
-                        Button {
-                            model.setBurstRamp(nil, for: capture)
-                        } label: {
-                            burstRampOption(
-                                "Default (\(BurstRamp.label(model.burstRampDefault)))",
-                                isSelected: capture.burstRampDuration == nil)
-                        }
-                        Button {
-                            model.setBurstRamp(0, for: capture)
-                        } label: {
-                            burstRampOption("Off", isSelected: capture.burstRampDuration == 0)
-                        }
-                        ForEach(BurstRamp.choices, id: \.self) { seconds in
-                            Button {
-                                model.setBurstRamp(seconds, for: capture)
-                            } label: {
-                                burstRampOption(
-                                    BurstRamp.label(seconds),
-                                    isSelected: capture.burstRampDuration == seconds)
-                            }
-                        }
-                    }
-                } label: {
-                    HStack(spacing: 4) {
-                        Text(model.currentCapture?.burstRampDuration.map { BurstRamp.label($0) }
-                             ?? "Default (\(BurstRamp.label(model.burstRampDefault)))")
-                        Image(systemName: "chevron.up.chevron.down")
-                            .font(.system(size: 10, weight: .semibold))
-                    }
-                    .font(.system(size: 14))
-                    .foregroundStyle(.secondary)
-                }
-                .menuStyle(.borderlessButton)
-                .fixedSize()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-
-            if let note = burstRampNote(info) {
-                Text(note)
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 16)
-                    .padding(.bottom, 12)
-            }
-        }
-        .llCard()
-    }
-
-    @ViewBuilder private func burstRampOption(_ title: String, isSelected: Bool) -> some View {
-        if isSelected {
-            Label(title, systemImage: "checkmark")
-        } else {
-            Text(title)
-        }
-    }
-
-    /// Says so when the burst's own length is deciding the ramp — a 0.4s burst
-    /// can't carry a 1s ease at each end.
-    private func burstRampNote(_ info: AppModel.BurstRampInfo) -> String? {
-        guard info.requestedRamp > 0 else { return nil }
-        if info.appliedRamp <= 0 {
-            return "Shortest burst is only \(BurstRamp.preciseLabel(info.shortestOutputDuration)) — too short to ramp."
-        }
-        guard info.isCapped else { return nil }
-        return "Capped to \(BurstRamp.preciseLabel(info.appliedRamp)) — the shortest burst runs \(BurstRamp.preciseLabel(info.shortestOutputDuration))."
     }
 
     // MARK: - Advanced
@@ -712,7 +721,7 @@ struct AdvancedOptionsSheet: View {
                 } header: {
                     Text("Speed ramp")
                 } footer: {
-                    Text("The blend window moves between two speeds over the length of the clip.")
+                    Text("The blend window moves between two speeds over the length of the clip. The warp timeline takes over as soon as you edit it.")
                 }
 
                 Section {
@@ -762,25 +771,32 @@ struct AdvancedOptionsSheet: View {
 
 // MARK: - Custom speed sheet
 
+/// Free speed values for the selected stretch — anything the chips don't
+/// offer, 1×–240×. Slow motion below 1× stays on the ¼× chip.
 struct CustomSpeedSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
+    var stretch: Int = 0
 
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Stepper("Speed: \(model.constantWindow)×", value: customSpeed, in: SpeedMath.range)
+                    Stepper("Speed: \(customSpeed.wrappedValue)×", value: customSpeed, in: SpeedMath.range)
                     Slider(
                         value: Binding(
-                            get: { Double(model.constantWindow) },
+                            get: { Double(customSpeed.wrappedValue) },
                             set: { customSpeed.wrappedValue = Int($0.rounded()) }
                         ),
                         in: Double(SpeedMath.range.lowerBound)...Double(SpeedMath.range.upperBound),
                         step: 1
                     )
+                } header: {
+                    if model.activeWarp().stretchCount > 1 {
+                        Text("Stretch \(min(stretch, model.activeWarp().stretchCount - 1) + 1)")
+                    }
                 } footer: {
-                    Text("\(model.constantWindow) real frames become one output frame\(estimateSuffix).")
+                    Text("\(customSpeed.wrappedValue)× real time\(estimateSuffix).")
                 }
             }
             .navigationTitle("Custom speed")
@@ -800,15 +816,18 @@ struct CustomSpeedSheet: View {
 
     private var customSpeed: Binding<Int> {
         Binding {
-            model.constantWindow
+            let timeline = model.activeWarp()
+            let index = min(stretch, max(0, timeline.stretchCount - 1))
+            let speed = timeline.speeds.indices.contains(index) ? timeline.speeds[index] : 1
+            return max(1, Int(speed.rounded()))
         } set: { newValue in
-            model.useRamp = false
-            model.constantWindow = newValue
+            let index = min(stretch, max(0, model.activeWarp().stretchCount - 1))
+            model.updateWarp { $0.setSpeed(Double(newValue), for: index) }
         }
     }
 
     private var estimateSuffix: String {
-        guard let seconds = model.estimatedOutputSeconds(speed: model.constantWindow) else { return "" }
-        return " — about \(SpeedMath.clipLength(seconds))"
+        guard let seconds = model.estimatedOutputSeconds() else { return "" }
+        return " — the clip lands at about \(SpeedMath.clipLength(seconds))"
     }
 }

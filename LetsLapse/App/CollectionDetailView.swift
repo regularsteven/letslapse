@@ -677,6 +677,11 @@ struct CollectionDetailView: View {
         }
         .padding(.horizontal, 12)
         .frame(height: rowHeight)
+        // `claimsDrag: false` keeps the reorder handle's own drag winning on
+        // its patch; a leading swipe anywhere else reveals the remove action.
+        .swipeToDelete(claimsDrag: false) {
+            removeFromTimeline(entry)
+        }
         .background(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .fill(isDraggedRow ? LL.cardBackground : (selected ? LL.accent.opacity(0.07) : Color.clear))
@@ -720,6 +725,19 @@ struct CollectionDetailView: View {
                 }
                 reorder = nil
             }
+    }
+
+    /// Dropping a clip from the timeline is recipe-only — the blended clip
+    /// itself stays in its project, so no confirmation stands in the way.
+    private func removeFromTimeline(_ entry: LapseCollection.Entry) {
+        model.removeEntry(blendID: entry.blendID, from: collectionID)
+        if selectedBlendID == entry.blendID {
+            selectedBlendID = nil
+        }
+        if cropDrag?.blendID == entry.blendID {
+            cropDrag = nil
+        }
+        toast = "Removed from the timeline — the clip stays in its project"
     }
 
     private func displayedEntries(_ collection: LapseCollection) -> [LapseCollection.Entry] {

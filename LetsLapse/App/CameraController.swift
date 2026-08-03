@@ -256,6 +256,10 @@ final class CameraController: NSObject, ObservableObject {
     @Published var isAuthorized: Bool?
     @Published var isRecording = false
     @Published var recordingStartedAt: Date?
+    /// Start of the capture run in progress (video, interval, or Live Blend) —
+    /// the "Stop at" anchor: stop amounts measure the whole run from here.
+    /// Meaningful only while a run flag is true; the next start overwrites it.
+    private(set) var captureRunStartedAt: Date?
     @Published var isIntervalRunning = false
     @Published var photoCount = 0 {
         didSet { checkScheduledStopCount() }
@@ -1505,6 +1509,7 @@ final class CameraController: NSObject, ObservableObject {
             self.startNextSegment(frameRate: self.selectedFrameRate)
             DispatchQueue.main.async {
                 self.recordingStartedAt = startedAt
+                self.captureRunStartedAt = startedAt
                 self.isRecording = true
                 self.activeSequenceMode = mode
                 self.markerCount = 0
@@ -1847,6 +1852,7 @@ final class CameraController: NSObject, ObservableObject {
             self.intervalActive = true
             DispatchQueue.main.async {
                 self.photoCount = 0
+                self.captureRunStartedAt = Date()
                 self.isIntervalRunning = true
             }
             let period = frameCap != nil ? max(0.05, seconds) : max(0.5, seconds)
@@ -1922,9 +1928,13 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: - Scheduled stop (Watch "stop at…")
 
-    /// Schedules a stop of whatever capture is running: after `amount`
-    /// minutes, or after `amount` more frames (photos/blends in Interval;
-    /// fps-derived time in Video). Replaces any earlier schedule.
+    /// Schedules a stop of whatever capture is running, measured over the
+    /// whole run: at the `amount`-minute mark from the run's start, or at
+    /// `amount` total frames (photos/blends in Interval; fps-derived time in
+    /// Video) — "stop at 10 minutes" armed 8 minutes in stops 2 minutes
+    /// later. A mark the run has already passed stops immediately; the Watch
+    /// floors its dial, so only a race lands there. Replaces any earlier
+    /// schedule.
     func scheduleStop(unit: ScheduledStopUnit, amount: Double) {
         DispatchQueue.main.async {
             guard amount > 0 else { return }
@@ -1932,23 +1942,23 @@ final class CameraController: NSObject, ObservableObject {
             self.scheduledStopWorkItem?.cancel()
             self.scheduledStopWorkItem = nil
 
+            let runStart = self.captureRunStartedAt ?? Date()
             let stop: ScheduledStop
             switch unit {
             case .minutes:
                 stop = ScheduledStop(
                     unit: .minutes,
-                    deadline: Date().addingTimeInterval(amount * 60),
+                    deadline: runStart.addingTimeInterval(amount * 60),
                     targetCount: nil)
             case .frames:
                 if self.isRecording {
                     let fps = Double(max(1, self.selectedFrameRate))
                     stop = ScheduledStop(
                         unit: .frames,
-                        deadline: Date().addingTimeInterval(amount / fps),
+                        deadline: runStart.addingTimeInterval(amount / fps),
                         targetCount: nil)
                 } else {
-                    let current = self.isLiveBlendRunning ? self.liveBlendOutputCount : self.photoCount
-                    stop = ScheduledStop(unit: .frames, deadline: nil, targetCount: current + Int(amount))
+                    stop = ScheduledStop(unit: .frames, deadline: nil, targetCount: Int(amount))
                 }
             }
             self.scheduledStop = stop
@@ -1959,7 +1969,9 @@ final class CameraController: NSObject, ObservableObject {
                     deadline: .now() + max(0, deadline.timeIntervalSinceNow),
                     execute: workItem)
             }
-            LLog("scheduled stop: \(unit.rawValue) \(amount)")
+            // A count target the run has already met fires on the spot.
+            self.checkScheduledStopCount()
+            LLog("scheduled stop: \(unit.rawValue) \(amount) from run start")
         }
     }
 
@@ -2151,6 +2163,7 @@ final class CameraController: NSObject, ObservableObject {
             output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
             controller.start()
             DispatchQueue.main.async {
+                self.captureRunStartedAt = Date()
                 self.isLiveBlendRunning = true
                 self.liveBlendOutputCount = 0
                 self.liveBlendDiagnostics = LiveBlendDiagnosticsSnapshot(
@@ -2285,6 +2298,7 @@ final class CameraController: NSObject, ObservableObject {
         liveBlendRawController = controller
         controller.start()
         DispatchQueue.main.async {
+            self.captureRunStartedAt = Date()
             self.isLiveBlendRunning = true
             self.liveBlendOutputCount = 0
             var snapshot = LiveBlendDiagnosticsSnapshot(

@@ -14,6 +14,7 @@ struct CollectionsView: View {
 
     @State private var showNameSheet = false
     @State private var toast: String?
+    @State private var collectionPendingDelete: LapseCollection?
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -26,6 +27,9 @@ struct CollectionsView: View {
                     } else {
                         ForEach(model.collections) { collection in
                             collectionCard(collection)
+                                .swipeToDelete(cornerRadius: 18) {
+                                    collectionPendingDelete = collection
+                                }
                         }
                     }
 
@@ -49,6 +53,18 @@ struct CollectionsView: View {
                 let collection = model.createCollection(named: name)
                 path.append(collection.id)
             }
+        }
+        // The same warning the detail screen's ⋯ menu gives — a swipe reaches
+        // the identical delete, confirmation included.
+        .alert(item: $collectionPendingDelete) { collection in
+            Alert(
+                title: Text("Delete “\(collection.name)”?"),
+                message: Text("The clips themselves stay in their projects — only the collection and its kept export are deleted."),
+                primaryButton: .destructive(Text("Delete")) {
+                    model.deleteCollection(collection.id)
+                },
+                secondaryButton: .cancel()
+            )
         }
         .llToast($toast)
     }

@@ -42,19 +42,27 @@ public struct VideoBlendOptions: Sendable {
     public var linearLight: Bool
     /// Number of seconds to skip at both the head and tail of the source.
     public var trimHeadTailSeconds: Double
+    /// An explicit per-output-frame window schedule (consecutive input-frame
+    /// counts). When set it replaces the schedule derived from `ramp`, letting
+    /// a caller compile an arbitrary speed curve — piecewise stretches with
+    /// eased seams — into one blend pass. Input that outlives the schedule
+    /// keeps blending at the last window, exactly like the ramp path.
+    public var customWindows: [Int]?
 
     public init(
         ramp: BlendRamp,
         outputFPS: Double = 30,
         codec: OutputCodec = .h264,
         linearLight: Bool = true,
-        trimHeadTailSeconds: Double = 0
+        trimHeadTailSeconds: Double = 0,
+        customWindows: [Int]? = nil
     ) {
         self.ramp = ramp
         self.outputFPS = outputFPS
         self.codec = codec
         self.linearLight = linearLight
         self.trimHeadTailSeconds = trimHeadTailSeconds
+        self.customWindows = customWindows
     }
 }
 
@@ -245,7 +253,8 @@ public final class VideoBlender: @unchecked Sendable {
         }
 
         let accumulator = FrameAccumulator(core: core)
-        let schedule = WindowSchedule.make(totalInputFrames: estimatedFrames, ramp: options.ramp)
+        let schedule = options.customWindows.map { $0.map { max(1, $0) } }
+            ?? WindowSchedule.make(totalInputFrames: estimatedFrames, ramp: options.ramp)
         let srgb = options.linearLight
         // Bounds how many decoded frames wait on the GPU at once, which keeps
         // peak memory flat even with 50-frame windows on 4K input.

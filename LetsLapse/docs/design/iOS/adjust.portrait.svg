@@ -1,9 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Adjust — New blended clip (video source) · portrait</title>
-  <desc>Mirrors App/AdjustView.swift for a video source: FlowHeader, source card with Change, Blend-from codec chips (shown when converted encodings exist), Speed preset chips with character words, ink estimate card with BeforeAfterBar, the burst Slow-motion ramp row (only for a shoot that recorded burst clips — how long each burst eases into and out of slow motion, "Default (…)" until this project overrides the app setting, with a note when the burst is too short for the length asked for), Advanced row, bottom CTA. Flow screens overlay the tabs full-screen — no tab bar.</desc>
+  <desc>Mirrors App/AdjustView.swift + App/WarpTimelineView.swift for a video source — the 3a warp timeline from the signed-off "Blended Clip Timeline Concepts" design (turn 3): FlowHeader; source card whose subtitle surfaces "2 moments" (or "continuous") in accent-deep; the SOURCE warp card — floating keyframe thumbnail following a draggable playhead (clock pill, "≈ keyframe" badge), the source-proportional stretch bar (12pt tile floor; amber tiles when v &lt; 10; accent selection ring; speed pills hidden under 30pt; accent resize handles with white grips on the selected stretch's movable edges; drag on the bar nominates a 1× stretch with a dashed amber preview; pinch zooms to a 20s floor with a "Fit" chip and pan on the clock ruler), seam pills between stretches ("step" grey, "~1s ◀ / ▶ / ·?" ink+amber; tap opens the RAMP AT THIS SEAM popover: step · 0.5s · 1s · 2s and ◀ Before / After ▶ side chips with the borrow-hint copy), zoom clock ruler, and the selection line ("Stretch 2 of 5 · 3:39–3:40 · ¼× slow motion → 5.2s of the clip") with the ⋯ stretch-options button (Remove · Split here · Reset speed). Below: six speed chips (¼× · 1× · 4× · 15× · 60× · 100× + ··· custom) that always edit the selection — no separate "base" — then the ink estimate card ("· N stretches" phrase, time-warp explainer, BeforeAfterBar) and the bottom CTA. Advanced row (and Blend-from chips when converted encodings exist) sit below the fold. Above 560pt (iPad/Mac/iPhone landscape) the timeline sits beside a large keyframe preview pane with the estimate card. The edit is a monotonic time-warp, never a trim; speeds are ×-real-time; each seam's ease borrows source time from its chosen side. Sample data: the design brief's 8:16 capture, two 120fps moments, seeded 100× base / ¼× moments / ~1s seams borrowing from the base sides.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <linearGradient id="baseTile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+    <linearGradient id="momentTile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6B4A16"/><stop offset="1" stop-color="#3A2E14"/></linearGradient>
+    <linearGradient id="thumbImage" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A6E"/><stop offset="0.55" stop-color="#2E3B4C"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
@@ -34,86 +37,137 @@
         <circle cx="48" cy="141" r="7" fill="#FFB340" opacity="0.85"/>
         <polygon points="28,163 52,151 74,161 92,153 92,175 28,175" fill="#1E2632"/>
         <text x="104" y="147" font-size="14.5" class="sb" fill="#000">Sunset over harbour</text>
-        <text x="104" y="164" font-size="12" fill="#6D6D72">0:36 min · 1080p · 30 fps · shot 2 days ago</text>
+        <text x="104" y="164" font-size="12"><tspan fill="#6D6D72">08:16 · 4K · 30 fps</tspan><tspan fill="#8A4A00" class="sb"> · 2 moments</tspan></text>
         <text x="363" y="155" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Change</text>
       </g>
 
-      <!-- blend from -->
-      <text x="20" y="216" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLEND FROM</text>
-      <g id="blend-from-chips">
-        <rect x="16" y="226" width="62" height="33" rx="16.5" fill="#C36A00"/>
-        <text x="47" y="247" font-size="13" class="b" fill="#000" text-anchor="middle">Auto</text>
-        <rect x="86" y="226" width="74" height="33" rx="16.5" fill="#E4E4E9"/>
-        <text x="123" y="247" font-size="13" fill="#000" text-anchor="middle">ProRes</text>
-        <rect x="168" y="226" width="70" height="33" rx="16.5" fill="#E4E4E9"/>
-        <text x="203" y="247" font-size="13" fill="#000" text-anchor="middle">H.264</text>
-        <text x="16" y="281" font-size="12" fill="#6D6D72">Uses the best surviving copy of each clip.</text>
-      </g>
+      <!-- SOURCE warp card -->
+      <g id="warp-card">
+        <rect x="16" y="201" width="361" height="276" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="230" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE · 8:16</text>
+        <text x="361" y="229" font-size="8.5" fill="#8E8E93" text-anchor="end">pinch to zoom · drag to nominate · hold for options</text>
 
-      <!-- speed -->
-      <text x="20" y="316" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SPEED</text>
-      <g id="speed-chips">
-        <rect x="16" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="48.9" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">10×</text>
-        <text x="48.9" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">subtle</text>
-        <rect x="89.8" y="326" width="65.8" height="47" rx="12" fill="#1C1C1E"/>
-        <text x="122.7" y="347" font-size="15" class="b" fill="#FFB340" text-anchor="middle">25×</text>
-        <text x="122.7" y="362" font-size="10.5" fill="#FFF" opacity="0.6" text-anchor="middle">smooth</text>
-        <rect x="163.6" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="196.5" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">50×</text>
-        <text x="196.5" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">flowing</text>
-        <rect x="237.4" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="270.3" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">100×</text>
-        <text x="270.3" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">streaks</text>
-        <rect x="311.2" y="326" width="65.8" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="344.1" y="347" font-size="15" class="b" fill="#000" text-anchor="middle">···</text>
-        <text x="344.1" y="362" font-size="10.5" fill="#6D6D72" text-anchor="middle">custom</text>
-      </g>
-
-      <!-- estimate card (ink) -->
-      <g id="estimate-card">
-        <rect x="16" y="387" width="361" height="152" rx="16" fill="#1C1C1E"/>
-        <text x="32" y="411" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
-        <text x="345" y="411" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">30 fps ⌄</text>
-        <text x="32" y="443" font-size="28" class="b" fill="#FFF">1.4 seconds</text>
-        <text x="196" y="441" font-size="14" class="sb" fill="#FFB340">· smooth motion</text>
-        <g id="before-after-bar">
-          <rect x="32" y="466" width="180" height="8" rx="4" fill="#3D3D3F"/>
-          <text x="222" y="474" font-size="11" fill="#FFF" opacity="0.4">0:36</text>
-          <path d="M252 470 h10 m-4 -3.5 4 3.5 -4 3.5" stroke="#FFF" stroke-opacity="0.3" stroke-width="1.4" fill="none"/>
-          <rect x="272" y="466" width="10" height="8" rx="4" fill="#FFB340"/>
-          <text x="290" y="474" font-size="11" class="b" fill="#FFB340">1.4s</text>
+        <!-- floating keyframe thumbnail, following the playhead (clamped 17–83%) -->
+        <g id="playhead-thumbnail">
+          <rect x="140" y="241" width="120" height="72" rx="9" fill="url(#thumbImage)" filter="url(#soft)"/>
+          <rect x="146" y="292" width="38" height="16" rx="6" fill="#000" opacity="0.55"/>
+          <text x="165" y="303.5" font-size="10" class="b" fill="#FFF" text-anchor="middle">3:11</text>
+          <rect x="196" y="246" width="59" height="14" rx="6" fill="#000" opacity="0.4"/>
+          <text x="225.5" y="256" font-size="8.5" fill="#FFF" fill-opacity="0.8" text-anchor="middle">≈ keyframe</text>
         </g>
-        <text x="32" y="503" font-size="11" fill="#FFF" opacity="0.45">Each output frame averages 25 real frames — that's</text>
-        <text x="32" y="517" font-size="11" fill="#FFF" opacity="0.45">where the blur comes from.</text>
+
+        <!-- stretch bar: source-proportional, 12pt floor for the two moments -->
+        <g id="stretch-bar">
+          <rect x="32" y="327" width="115" height="50" rx="8" fill="url(#baseTile)"/>
+          <rect x="149" y="327" width="12" height="50" rx="6" fill="url(#momentTile)"/>
+          <rect x="149.75" y="327.75" width="10.5" height="48.5" rx="5.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="152" y="330" width="6.5" height="44" rx="3" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <rect x="163" y="327" width="128" height="50" rx="8" fill="url(#baseTile)"/>
+          <rect x="293" y="327" width="12" height="50" rx="6" fill="url(#momentTile)"/>
+          <rect x="293.75" y="327.75" width="10.5" height="48.5" rx="5.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="307" y="327" width="54" height="50" rx="8" fill="url(#baseTile)"/>
+          <!-- speed pills (hidden on the sub-30pt moment slivers) -->
+          <g font-size="10" font-weight="700">
+            <rect x="75.5" y="353" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
+            <text x="89.5" y="364.5" fill="#FFF" text-anchor="middle">100×</text>
+            <rect x="213" y="353" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
+            <text x="227" y="364.5" fill="#FFF" text-anchor="middle">100×</text>
+            <rect x="320" y="353" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
+            <text x="334" y="364.5" fill="#FFF" text-anchor="middle">100×</text>
+          </g>
+          <!-- resize handles on the selected moment's edges (accent, white grip) -->
+          <g id="resize-handles">
+            <rect x="143" y="324" width="12" height="56" rx="6" fill="#C36A00"/>
+            <rect x="147.5" y="340" width="3" height="24" rx="1.5" fill="#FFF"/>
+            <rect x="155" y="324" width="12" height="56" rx="6" fill="#C36A00"/>
+            <rect x="159.5" y="340" width="3" height="24" rx="1.5" fill="#FFF"/>
+          </g>
+          <!-- playhead line + knob at the selected moment -->
+          <rect x="154" y="319" width="2" height="60" fill="#C36A00"/>
+          <circle cx="155" cy="316" r="9" fill="#C36A00" filter="url(#soft)"/>
+        </g>
+
+        <!-- seam pills: ~1s eases borrowing from the base sides; stacked pairs
+             when two seams sit within 13% of the bar -->
+        <g id="seam-pills" font-size="9.5" font-weight="700">
+          <rect x="128" y="385" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
+          <text x="150" y="397" fill="#FFB340" text-anchor="middle">~1s ◀</text>
+          <rect x="132" y="405" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
+          <text x="154" y="417" fill="#FFB340" text-anchor="middle">~1s ▶</text>
+          <rect x="272" y="385" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
+          <text x="294" y="397" fill="#FFB340" text-anchor="middle">~1s ◀</text>
+          <rect x="276" y="405" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
+          <text x="298" y="417" fill="#FFB340" text-anchor="middle">~1s ▶</text>
+        </g>
+        <!-- an unsided ease reads "~1s ·?" ; a step seam is a grey pill "step" -->
+
+        <!-- zoom clock ruler (pan when zoomed; "Fit 8:16" chip appears zoomed) -->
+        <g font-size="10" fill="#8E8E93">
+          <text x="32" y="434">0:00</text>
+          <text x="196.5" y="434" text-anchor="middle">4:08</text>
+          <text x="361" y="434" text-anchor="end">8:16</text>
+        </g>
+
+        <!-- selection line + stretch options -->
+        <g id="selection-line">
+          <rect x="32" y="441" width="329" height="30" rx="10" fill="#F2F2F7"/>
+          <text x="42" y="460" font-size="11.5" fill="#1C1C1E">Stretch 2 of 5 · 3:09–3:33 · ¼× slow motion → 48s of clip</text>
+          <circle cx="347" cy="456" r="8" fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="ellipsis.circle"/>
+          <circle cx="343.5" cy="456" r="0.9" fill="#C36A00"/><circle cx="347" cy="456" r="0.9" fill="#C36A00"/><circle cx="350.5" cy="456" r="0.9" fill="#C36A00"/>
+        </g>
       </g>
 
-      <!-- burst ramp: only present when the shoot actually recorded burst clips -->
-      <g id="burst-ramp-row">
-        <rect x="16" y="553" width="361" height="74" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="580" font-size="15.5" fill="#000">Slow-motion ramp</text>
-        <text x="32" y="596" font-size="12" fill="#6D6D72">Eases all 2 bursts in and out of slow motion.</text>
-        <text x="352" y="588" font-size="14" fill="#6D6D72" text-anchor="end">Default (Off)</text>
-        <path d="M359 578 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
-        <text x="32" y="612" font-size="11.5" fill="#6D6D72">Capped to 0.55s — the shortest burst runs 2.4s.</text>
+      <!-- speed chips: always edit the selected stretch -->
+      <g id="speed-chips">
+        <rect x="16" y="491" width="46.4" height="47" rx="12" fill="#1C1C1E"/>
+        <text x="39.2" y="512" font-size="14" class="b" fill="#FFB340" text-anchor="middle">¼×</text>
+        <text x="39.2" y="526" font-size="9.5" fill="#FFF" opacity="0.6" text-anchor="middle">¼× slow</text>
+        <rect x="68.4" y="491" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="91.6" y="512" font-size="14" class="b" fill="#000" text-anchor="middle">1×</text>
+        <text x="91.6" y="526" font-size="9.5" fill="#6D6D72" text-anchor="middle">real time</text>
+        <rect x="120.8" y="491" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="144" y="512" font-size="14" class="b" fill="#000" text-anchor="middle">4×</text>
+        <text x="144" y="526" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
+        <rect x="173.2" y="491" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="196.4" y="512" font-size="14" class="b" fill="#000" text-anchor="middle">15×</text>
+        <text x="196.4" y="526" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
+        <rect x="225.6" y="491" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="248.8" y="512" font-size="14" class="b" fill="#000" text-anchor="middle">60×</text>
+        <text x="248.8" y="526" font-size="9.5" fill="#6D6D72" text-anchor="middle">flowing</text>
+        <rect x="278" y="491" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="301.2" y="512" font-size="14" class="b" fill="#000" text-anchor="middle">100×</text>
+        <text x="301.2" y="526" font-size="9.5" fill="#6D6D72" text-anchor="middle">streaks</text>
+        <rect x="330.4" y="491" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="353.6" y="512" font-size="14" class="b" fill="#000" text-anchor="middle">···</text>
+        <text x="353.6" y="526" font-size="9.5" fill="#6D6D72" text-anchor="middle">custom</text>
+        <text x="20" y="556" font-size="11" fill="#6D6D72">Every stretch is speedable — no separate “base”. Hold a stretch for</text>
+        <text x="20" y="570" font-size="11" fill="#6D6D72">Remove · Split · Reset.</text>
       </g>
-      <!-- The menu reads "Default (<app default>)" until the project picks its own,
-           then "Off" / "0.25s" … "2s". The note line appears only when the burst is
-           too short for the ramp asked for; without it the card is 56pt tall. -->
 
-      <!-- advanced row -->
-      <g id="advanced-row">
-        <rect x="16" y="641" width="361" height="49" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="671" font-size="15.5" fill="#000">Advanced</text>
-        <text x="340" y="670" font-size="12" fill="#6D6D72" text-anchor="end">Ramp · Trim · True-light</text>
-        <path d="M357 658 l6 7.5 -6 7.5" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+      <!-- estimate card (ink); scrolls under the CTA — Advanced row and the
+           Blend-from chips (converted clips only) are below the fold -->
+      <g id="estimate-card">
+        <rect x="16" y="584" width="361" height="152" rx="16" fill="#1C1C1E"/>
+        <text x="32" y="608" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
+        <text x="345" y="608" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">30 fps ⌄</text>
+        <text x="32" y="640" font-size="28" class="b" fill="#FFF">1:44 min</text>
+        <text x="152" y="638" font-size="14" class="sb" fill="#FFB340">· 5 stretches</text>
+        <g id="before-after-bar">
+          <rect x="32" y="663" width="170" height="8" rx="4" fill="#3D3D3F"/>
+          <text x="212" y="671" font-size="11" fill="#FFF" opacity="0.4">08:16</text>
+          <path d="M246 667 h10 m-4 -3.5 4 3.5 -4 3.5" stroke="#FFF" stroke-opacity="0.3" stroke-width="1.4" fill="none"/>
+          <rect x="266" y="663" width="34" height="8" rx="4" fill="#FFB340"/>
+          <text x="306" y="671" font-size="11" class="b" fill="#FFB340">1:44</text>
+        </g>
+        <text x="32" y="700" font-size="11" fill="#FFF" opacity="0.45">Time-warp, never a trim — every source frame lands in the clip;</text>
+        <text x="32" y="714" font-size="11" fill="#FFF" opacity="0.45">blur follows speed through each ease.</text>
       </g>
 
       <!-- bottom CTA -->
       <g id="bottom-bar">
         <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
         <rect x="16" y="738" width="361" height="50" rx="14" fill="#C36A00"/>
-        <text x="196.5" y="768" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 1.4 s clip</text>
+        <text x="196.5" y="768" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 1:44 min clip</text>
         <text x="196.5" y="806" font-size="11.5" fill="#6D6D72" text-anchor="middle">Your original is kept — you can always make another blended clip.</text>
       </g>
 
@@ -124,5 +178,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — New blended clip (video) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — sourceCard · blendFromSection · speedSection · estimateCard · burstRampRow · advancedRow</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift + App/WarpTimelineView.swift — sourceCard · warp timeline (thumbnail · bar · seams · selection) · chipsRow · estimateCard (advancedRow + blendFromSection below the fold)</text>
 </svg>

@@ -210,6 +210,14 @@ final class AppModel: ObservableObject {
         /// canvas and hasn't set its own crop. Absent until a crop is first
         /// saved; absent ratios resolve to centred (0.5).
         var defaultCrops: [String: Double]?
+        /// The effective window of each stretch, in render order, for clips
+        /// made with the short-lived per-stretch ruler. Kept for decode; new
+        /// clips record `warp` instead.
+        var stretchWindows: [Int]?
+        /// The warp timeline this clip was rendered from — stretches, speeds
+        /// in ×-real-time, and the seams' ramps. Absent for clips from before
+        /// the warp editor.
+        var warp: WarpTimeline?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -238,11 +246,21 @@ final class AppModel: ObservableObject {
             }
         }
 
-        /// "100×" / "1→30× ramp" / "Long exposure"
+        /// "100×" / "1→30× ramp" / "¼×–100× warp" / "Long exposure"
         var speedLabel: String {
             switch kind {
             case .video:
                 if useRamp { return "\(rampStart)→\(rampEnd)× ramp" }
+                if let warp,
+                   let slowest = warp.speeds.min(), let fastest = warp.speeds.max(),
+                   fastest - slowest > 0.001 {
+                    return "\(WarpTimeline.speedLabel(slowest))–\(WarpTimeline.speedLabel(fastest)) warp"
+                }
+                if let stretchWindows,
+                   let slowest = stretchWindows.min(), let fastest = stretchWindows.max(),
+                   slowest != fastest {
+                    return "\(slowest)×–\(fastest)× mix"
+                }
                 if let compressionRatio { return "\(compressionRatio)×" }
                 return "Video"
             case .image:
@@ -430,6 +448,13 @@ final class AppModel: ObservableObject {
     @Published var defaultSpeed = UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int ?? 100 {
         didSet { UserDefaults.standard.set(defaultSpeed, forKey: DefaultsKey.defaultSpeed) }
     }
+
+    /// The current capture's warp timeline — stretches in source time, each
+    /// with a speed in ×-real-time, seams owning the ramps between them. nil
+    /// until the Adjust screen seeds it (from recorded structure, or one
+    /// whole-clip stretch for a continuous capture). Capture-specific, so
+    /// opening another project clears it.
+    @Published var warp: WarpTimeline?
 
     /// Blend depth for interval-stills output, kept separate from the video
     /// `constantWindow` (whose default is a fast video speed). 1 = a crisp
@@ -1043,6 +1068,56 @@ final class AppModel: ObservableObject {
             setCanvasRatio(.tall, for: second.id)
         }
     }
+
+    /// LL_ADJUST=demo screenshot hook: the newest video capture opened on the
+    /// Adjust screen inside a fabricated two-moment sequence — the design's
+    /// 8:16 sample (178s + 24s@120 + 198s + 8s@120 + 88s) — so the output-time
+    /// ruler shows structure without a real burst shoot. Never persisted, and
+    /// Create would blend the same file per piece, so screenshots only.
+    func debugOpenAdjustDemo() {
+        guard let capture = captures.first(where: { $0.kind == .video }) else { return }
+        openCapture(capture)
+        guard let url = mediaURL(for: capture) else { return }
+        let name = url.lastPathComponent
+        let sequence = LiveCaptureSequence(
+            mode: .ramp,
+            createdAt: capture.createdAt,
+            lockedResolution: .init(width: 3840, height: 2160),
+            baseFrameRate: 30,
+            rampFrameRate: 120,
+            segments: [
+                .init(index: 0, fileName: name, frameRate: 30, relativeStart: 0, relativeEnd: 178),
+                .init(index: 1, fileName: name, frameRate: 120, relativeStart: 178, relativeEnd: 202),
+                .init(index: 2, fileName: name, frameRate: 30, relativeStart: 202, relativeEnd: 400),
+                .init(index: 3, fileName: name, frameRate: 120, relativeStart: 400, relativeEnd: 408),
+                .init(index: 4, fileName: name, frameRate: 30, relativeStart: 408, relativeEnd: 496),
+            ],
+            markers: [],
+            rampIntervals: [
+                .init(index: 0, relativeStart: 178, relativeEnd: 202),
+                .init(index: 1, relativeStart: 400, relativeEnd: 408),
+            ])
+        source = .liveSequence(LiveCaptureSource(
+            sequence: sequence,
+            segmentURLs: [url],
+            metadataURL: url,
+            resolvedByOriginalName: [name: url]))
+        stage = .configure
+    }
+
+    /// LL_STRETCH="1=0.25,3=15" — pin warp stretch speeds (×-real-time) by
+    /// stretch index for variant screenshots.
+    func debugApplyStretchOverrides(_ raw: String) {
+        for pair in raw.split(separator: ",") {
+            let parts = pair.split(separator: "=")
+            guard parts.count == 2,
+                  let index = Int(parts[0].trimmingCharacters(in: .whitespaces)),
+                  let speed = Double(parts[1].trimmingCharacters(in: .whitespaces)) else { continue }
+            updateWarp { timeline in
+                timeline.setSpeed(speed, for: index)
+            }
+        }
+    }
     #endif
 
     func setSource(_ source: Source, mode: String = "Import") {
@@ -1077,6 +1152,7 @@ final class AppModel: ObservableObject {
         source = nil
         currentCaptureID = nil
         photoBlendDepth = 1
+        warp = nil
         excludedFrameIndices = []
         tailFramesToExclude = 0
         totalIntervalFrames = 0
@@ -1110,6 +1186,7 @@ final class AppModel: ObservableObject {
             source = try source(for: capture)
             currentCaptureID = capture.id
             photoBlendDepth = 1
+            warp = nil
             excludedFrameIndices = []
             tailFramesToExclude = 0
             totalIntervalFrames = 0
@@ -1136,6 +1213,7 @@ final class AppModel: ObservableObject {
             blendSourceCodec = nil
             source = try source(for: capture)
             currentCaptureID = capture.id
+            warp = nil
             excludedFrameIndices = []
             tailFramesToExclude = 0
             totalIntervalFrames = 0
@@ -1165,6 +1243,22 @@ final class AppModel: ObservableObject {
             trimVideoEnds = (blend.trimHeadTailSeconds ?? 0) > 0
             if let trimHeadTailSeconds = blend.trimHeadTailSeconds {
                 self.trimHeadTailSeconds = max(0.1, trimHeadTailSeconds)
+            }
+            // Re-blending starts from exactly the timeline this clip was made
+            // with. Clips from the short-lived per-stretch ruler convert their
+            // windows into warp speeds (v = window · outFps ⁄ srcFps).
+            if let savedWarp = blend.warp {
+                warp = savedWarp
+            } else if let savedWindows = blend.stretchWindows, !savedWindows.isEmpty {
+                let stretches = blendStretches()
+                if stretches.count == savedWindows.count, stretches.count > 1 {
+                    var converted = seededLegacyWarpBase(stretches: stretches)
+                    for (index, window) in savedWindows.enumerated() {
+                        let sourceFPS = Double(max(1, stretches[index].fps))
+                        converted.speeds[index] = Double(window) * Double(outputFPS) / sourceFPS
+                    }
+                    warp = converted
+                }
             }
 
             let outputURL = blendOutputURL(for: blend)
@@ -1233,10 +1327,16 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The one number that matters: how long the clip will be. `speed` defaults
-    /// to the current setting; ramps are approximated by their average window.
+    /// The one number that matters: how long the clip will be. With the warp
+    /// timeline active this is exact — the compiled schedule's frame count —
+    /// including every seam's ease. `speed` gives the legacy whole-clip
+    /// hypothetical (the Result screen's "try N×" suggestion).
     func estimatedOutputSeconds(speed: Int? = nil) -> Double? {
-        guard source?.isVideo == true, let frames = estimatedInputFrames else { return nil }
+        guard source?.isVideo == true else { return nil }
+        if speed == nil, !useRamp, let compiled = compiledWarp(), compiled.outputFrames > 0 {
+            return compiled.outputSeconds
+        }
+        guard let frames = estimatedInputFrames else { return nil }
         let window: Int
         if let speed {
             window = speed
@@ -1246,6 +1346,183 @@ final class AppModel: ObservableObject {
             window = constantWindow
         }
         return SpeedMath.outputSeconds(inputFrames: frames, speed: window, outputFPS: outputFPS)
+    }
+
+    // MARK: - Warp timeline
+
+    /// The recorded shape of the capture, for seeding the warp — moments and
+    /// base runs in order. One whole-clip stretch for continuous footage.
+    func blendStretches() -> [BlendStretch] {
+        guard let capture = currentCapture else { return [] }
+        switch source {
+        case .liveSequence(let liveSource):
+            let stretches = StretchBuilder.stretches(for: liveSource.sequence)
+            return stretches.isEmpty
+                ? StretchBuilder.singleStretch(
+                    seconds: capture.sourceDurationSeconds, fps: capture.sourceFPS)
+                : stretches
+        case .video:
+            // The warp axis is the whole source; head/tail trim applies at
+            // compile time, not here.
+            return StretchBuilder.singleStretch(
+                seconds: capture.sourceDurationSeconds, fps: capture.sourceFPS)
+        default:
+            return []
+        }
+    }
+
+    /// The timeline the Adjust screen draws — the stored one, else a fresh
+    /// seed (not yet published; edits go through `updateWarp`).
+    func activeWarp() -> WarpTimeline {
+        warp ?? seededWarp()
+    }
+
+    /// Edit the timeline. Direct manipulation always means explicit stretch
+    /// speeds, so the Advanced ramp switches off — as touching a speed control
+    /// always has.
+    func updateWarp(_ transform: (inout WarpTimeline) -> Void) {
+        var timeline = warp ?? seededWarp()
+        transform(&timeline)
+        warp = timeline
+        useRamp = false
+    }
+
+    /// A capture's starting timeline: recorded moments become ¼× (the same
+    /// frame-for-frame slow motion they've always rendered as), base runs get
+    /// the project speed — now read as ×-real-time, the design's semantics —
+    /// and the seams inherit the project's slow-motion ramp, borrowing from the
+    /// moment's side exactly as the old stitch ramp lived inside the burst.
+    private func seededWarp() -> WarpTimeline {
+        let stretches = blendStretches()
+        let baseSpeed = Double(max(1, constantWindow))
+        guard stretches.count > 1 else {
+            let seconds = stretches.first?.seconds ?? currentCapture?.sourceDurationSeconds ?? 0
+            return WarpTimeline(sourceSeconds: seconds, speed: baseSpeed)
+        }
+        var bounds = [0.0]
+        var speeds: [Double] = []
+        for stretch in stretches {
+            bounds.append((bounds.last ?? 0) + stretch.seconds)
+            speeds.append(stretch.kind == .moment ? 0.25 : baseSpeed)
+        }
+        let rampSeconds = effectiveBurstRamp(for: currentCapture)
+        let ramp: WarpTimeline.Seam.Ramp =
+            rampSeconds <= 0 ? .step
+            : rampSeconds <= 0.5 ? .half
+            : rampSeconds <= 1 ? .one
+            : .two
+        var seams: [WarpTimeline.Seam] = []
+        for index in 0..<(stretches.count - 1) {
+            let intoMoment = stretches[index].kind == .base && stretches[index + 1].kind == .moment
+            let outOfMoment = stretches[index].kind == .moment && stretches[index + 1].kind == .base
+            // The base side spends the ease's time — decelerating from a fast
+            // stretch passes through fast speeds, which costs tens of source
+            // seconds only the base footage has. This is the prototype's own
+            // seed: ~1s ◀ into a moment, ~1s ▶ out of it.
+            if ramp != .step, intoMoment {
+                seams.append(WarpTimeline.Seam(ramp: ramp, side: .before))
+            } else if ramp != .step, outOfMoment {
+                seams.append(WarpTimeline.Seam(ramp: ramp, side: .after))
+            } else {
+                seams.append(.step)
+            }
+        }
+        return WarpTimeline(bounds: bounds, speeds: speeds, seams: seams)
+    }
+
+    /// Bounds and step seams for a stretch list — the scaffold a legacy
+    /// per-stretch recipe converts into when reopened.
+    private func seededLegacyWarpBase(stretches: [BlendStretch]) -> WarpTimeline {
+        var bounds = [0.0]
+        var speeds: [Double] = []
+        for stretch in stretches {
+            bounds.append((bounds.last ?? 0) + stretch.seconds)
+            speeds.append(1)
+        }
+        return WarpTimeline(
+            bounds: bounds, speeds: speeds,
+            seams: Array(repeating: .step, count: max(0, stretches.count - 1)))
+    }
+
+    /// The physically recorded regions of the warp's source axis, in order —
+    /// one per segment file for a ramp-mode shoot, one for everything else.
+    private func warpSourceRegions() -> [WarpCompiler.SourceRegion] {
+        switch source {
+        case .liveSequence(let live) where live.sequence.mode == .ramp && !live.sequence.segments.isEmpty:
+            return live.sequence.segments
+                .sorted { $0.index < $1.index }
+                .map {
+                    WarpCompiler.SourceRegion(
+                        span: max(0, $0.relativeEnd - $0.relativeStart),
+                        fps: Double($0.frameRate > 0 ? $0.frameRate : max(1, live.sequence.baseFrameRate)))
+                }
+                .filter { $0.span > 0 }
+        case .liveSequence(let live):
+            let whole = live.sequence.segments.first
+            let span = whole.map { max(0, $0.relativeEnd - $0.relativeStart) }
+                ?? currentCapture?.sourceDurationSeconds ?? 0
+            guard span > 0 else { return [] }
+            return [WarpCompiler.SourceRegion(span: span, fps: Double(max(1, live.sequence.baseFrameRate)))]
+        case .video:
+            guard let capture = currentCapture, let seconds = capture.sourceDurationSeconds,
+                  seconds > 0 else { return [] }
+            return [WarpCompiler.SourceRegion(span: seconds, fps: capture.sourceFPS ?? 30)]
+        default:
+            return []
+        }
+    }
+
+    /// The file and in-file time behind a point on the warp's source axis, for
+    /// the playhead's keyframe preview.
+    func warpFrameLocation(at time: Double) -> (url: URL, seconds: Double)? {
+        switch source {
+        case .liveSequence(let live) where live.sequence.mode == .ramp && !live.sequence.segments.isEmpty:
+            let ordered = live.sequence.segments.sorted { $0.index < $1.index }
+            var cursor = 0.0
+            for (position, segment) in ordered.enumerated() {
+                let span = max(0, segment.relativeEnd - segment.relativeStart)
+                if time <= cursor + span || position == ordered.count - 1 {
+                    guard let url = live.resolvedByOriginalName[segment.fileName]
+                        ?? live.segmentURLs.first else { return nil }
+                    return (url, min(max(0, time - cursor), max(0, span - 0.05)))
+                }
+                cursor += span
+            }
+            return nil
+        case .liveSequence(let live):
+            guard let url = live.primaryVideoURL else { return nil }
+            return (url, max(0, time))
+        case .video(let url):
+            return (url, max(0, time))
+        default:
+            return nil
+        }
+    }
+
+    /// Head/tail trim as a window on the warp axis — plain videos only, same
+    /// as the legacy render path.
+    private func warpActiveRange(total: Double) -> (start: Double, end: Double) {
+        if case .video = source, trimVideoEnds {
+            let trim = max(0, trimHeadTailSeconds)
+            if trim * 2 < total {
+                return (trim, total - trim)
+            }
+        }
+        return (0, total)
+    }
+
+    /// The current timeline compiled into per-file window schedules — what the
+    /// render will do and what the estimate reports. nil when the Advanced
+    /// ramp is on (it wins over the timeline) or the source has no known shape.
+    func compiledWarp() -> WarpCompiler.Compiled? {
+        guard source?.isVideo == true, !useRamp else { return nil }
+        let regions = warpSourceRegions()
+        guard !regions.isEmpty else { return nil }
+        let timeline = activeWarp()
+        let range = warpActiveRange(total: timeline.sourceSeconds)
+        return WarpCompiler.compile(
+            timeline, regions: regions, outputFPS: outputFPS,
+            activeStart: range.start, activeEnd: range.end)
     }
 
     /// A different speed worth trying next, for the Result screen's suggestion.
@@ -1321,33 +1598,33 @@ final class AppModel: ObservableObject {
     }
 
     func burstRampInfo(for capture: CaptureProject) -> BurstRampInfo? {
-        guard capture.kind == .video, let sequence = liveCaptureSequence(for: capture) else { return nil }
+        guard capture.kind == .video else { return nil }
+        // The current capture's sequence is already in memory — and it is the
+        // one the ruler and the estimate are working from, so the three can
+        // never disagree. The disk sidecar covers everything else.
+        let loaded: LiveCaptureSequence?
+        if capture.id == currentCaptureID, case .liveSequence(let live)? = source {
+            loaded = live.sequence
+        } else {
+            loaded = liveCaptureSequence(for: capture)
+        }
+        guard let sequence = loaded else { return nil }
         let fps = Double(outputFPS)
         guard fps > 0 else { return nil }
 
-        // How long each burst clip runs in the stitched timeline, and how far
-        // from real time it is there. The blend writes a burst's frames out
-        // one-for-one at the output rate, so a 2s burst shot at 120 fps lands
-        // as 2 × (120/25) seconds of footage playing 4.8× slow.
+        // How long each moment runs in the stitched timeline at its current
+        // ruler speed, and how far from real time it is there. At window w, a
+        // burst shot at `rate` fps lands rate/(w·fps) times slow — at the
+        // default w = 1, a 2s burst shot at 120 fps lands as 2 × (120/25)
+        // seconds of footage playing 4.8× slow.
+        let stretches = StretchBuilder.stretches(for: sequence)
         var clips: [(duration: Double, slowFactor: Double)] = []
-        switch sequence.mode {
-        case .ramp:
-            for segment in sequence.segments where segment.frameRate > sequence.baseFrameRate {
-                let real = max(0, segment.relativeEnd - segment.relativeStart)
-                let slowFactor = Double(segment.frameRate) / fps
-                clips.append((real * slowFactor, slowFactor))
-            }
-        case .marker:
-            let slowFactor = Double(sequence.baseFrameRate) / fps
-            let sequenceEnd = sequence.segments.first?.relativeEnd
-            for interval in sequence.rampIntervals {
-                guard let end = interval.relativeEnd ?? sequenceEnd else { continue }
-                let real = max(0, end - interval.relativeStart)
-                clips.append((real * slowFactor, slowFactor))
-            }
+        for stretch in stretches where stretch.kind == .moment {
+            let slowFactor = Double(stretch.fps) / fps
+            clips.append((stretch.seconds * slowFactor, slowFactor))
         }
-        // A burst that isn't actually slower than the output rate has nothing
-        // to ease into.
+        // A moment that isn't actually slower than the output rate — sped back
+        // up to real time on the ruler, say — has nothing to ease into.
         clips = clips.filter { $0.slowFactor > 1 && $0.duration > 0 }
         guard let shortest = clips.min(by: { $0.duration < $1.duration }) else { return nil }
 
@@ -1593,8 +1870,12 @@ final class AppModel: ObservableObject {
         // files are never touched.
         let grade = currentCapture.map { photoGrade(for: $0) } ?? .identity
         // Resolved once, here: the project's own ramp when it has one, else the
-        // app default, else none.
+        // app default, else none. Only the legacy (Advanced-ramp) path stitches
+        // with it — the warp's seams carry their own eases inside the schedules.
         let burstRamp = effectiveBurstRamp(for: currentCapture)
+        // The warp timeline compiled into per-file window schedules; nil =
+        // legacy path (Advanced ramp on, or a source with no known shape).
+        let warpCompiled = compiledWarp()
         // Whether the run ends with the grade-bake export below — the progress
         // plan reserves a band for it so the bar doesn't sit full while it runs.
         let willBakeGrade = source.isVideo && !grade.isIdentity
@@ -1608,11 +1889,14 @@ final class AppModel: ObservableObject {
                         clipFrames: [Int((self.estimatedInputFrames ?? 1).rounded())],
                         hasStitch: false, hasGrade: willBakeGrade))
                     self.processingPhase = .blending(clip: 1, of: 1)
-                    output = try await self.blendVideo(url: url, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: trim)
+                    output = try await self.blendVideo(
+                        url: url, ramp: ramp, fps: fps, linear: linear,
+                        trimHeadTailSeconds: trim,
+                        customWindows: warpCompiled?.schedules.first)
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(
                         liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                        willBakeGrade: willBakeGrade)
+                        willBakeGrade: willBakeGrade, warpSchedules: warpCompiled?.schedules)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
@@ -1816,10 +2100,13 @@ final class AppModel: ObservableObject {
         fps: Double,
         linear: Bool,
         trimHeadTailSeconds: Double,
-        clipIndex: Int = 0
+        clipIndex: Int = 0,
+        customWindows: [Int]? = nil
     ) async throws -> ProcessingOutput {
         #if os(macOS)
-        if ramp.startWindow == ramp.endWindow {
+        // The external runner only speaks constant windows; warped and ramped
+        // blends run in-process through VideoBlender, same as iOS.
+        if ramp.startWindow == ramp.endWindow, customWindows == nil {
             let result = try await MacVideoJobRunner.run(
                 inputURL: url,
                 options: MacVideoJobOptions(
@@ -1874,7 +2161,8 @@ final class AppModel: ObservableObject {
             outputFPS: fps,
             codec: .h264,
             linearLight: linear,
-            trimHeadTailSeconds: trimHeadTailSeconds
+            trimHeadTailSeconds: trimHeadTailSeconds,
+            customWindows: customWindows
         )
         let result = try await blender.blend(input: url, to: output, options: options) { fraction in
             Task { @MainActor [weak self] in
@@ -1904,14 +2192,15 @@ final class AppModel: ObservableObject {
         fps: Double,
         linear: Bool,
         burstRamp: Double,
-        willBakeGrade: Bool
+        willBakeGrade: Bool,
+        warpSchedules: [[Int]]? = nil
     ) async throws -> ProcessingOutput {
         guard !source.segmentURLs.isEmpty else { throw LapseError.noInputFrames }
 
         guard source.sequence.mode == .ramp else {
             return try await blendMarkerSequence(
                 source, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                willBakeGrade: willBakeGrade)
+                willBakeGrade: willBakeGrade, warpSchedules: warpSchedules)
         }
 
         let segmentURLByName = source.resolvedByOriginalName
@@ -1948,21 +2237,27 @@ final class AppModel: ObservableObject {
             statusMessage = isRampOn
                 ? "Blending ramp segment \(index + 1) / \(totalSegments) at playback speed..."
                 : "Blending base segment \(index + 1) / \(totalSegments)..."
+            // The warp's compiled schedule for this file when the timeline is
+            // driving; the legacy defaults otherwise — moments frame-for-frame,
+            // base at the project speed or Advanced ramp.
+            let warpWindows = warpSchedules.flatMap { index < $0.count ? $0[index] : nil }
             let segmentOutput = try await blendVideo(
                 url: segmentURL,
                 ramp: isRampOn ? .constant(1) : ramp,
                 fps: fps,
                 linear: linear,
                 trimHeadTailSeconds: 0,
-                clipIndex: index
+                clipIndex: index,
+                customWindows: (warpWindows?.isEmpty == false) ? warpWindows : nil
             )
-            // A burst segment's frames go out one-for-one at the output rate,
-            // so it lands in the timeline running frameRate/fps times slow —
-            // the gap the ramp eases across.
+            // Legacy path only: a burst segment's frames go out one-for-one at
+            // the output rate, landing frameRate/fps times slow — the gap the
+            // stitch ramp eases across. A warp render already carries its
+            // speeds and eases inside the schedules, so nothing is retimed.
             let slowFactor = Double(segment.frameRate) / fps
             processedPieces.append(StitchPiece(
                 url: segmentOutput.url,
-                slowFactor: isRampOn && slowFactor > 1 ? slowFactor : nil))
+                slowFactor: warpSchedules == nil && isRampOn && slowFactor > 1 ? slowFactor : nil))
             inputFrames += segmentOutput.inputFrames ?? 0
             outputFrames += segmentOutput.outputFrames ?? 0
             outputWidth = outputWidth ?? segmentOutput.width
@@ -2062,9 +2357,25 @@ final class AppModel: ObservableObject {
         fps: Double,
         linear: Bool,
         burstRamp: Double,
-        willBakeGrade: Bool
+        willBakeGrade: Bool,
+        warpSchedules: [[Int]]? = nil
     ) async throws -> ProcessingOutput {
         guard let sourceURL = source.primaryVideoURL else { throw LapseError.noInputFrames }
+
+        // A warp render needs no extraction and no stitch: marker mode is one
+        // file, and the compiled schedule carries every stretch, seam and ease
+        // through a single pass — blur follows the speed curve continuously.
+        if let schedule = warpSchedules?.first, !schedule.isEmpty {
+            beginProgressPlan(.make(
+                clipFrames: [max(1, schedule.reduce(0, +))],
+                hasStitch: false, hasGrade: willBakeGrade))
+            processingPhase = .blending(clip: 1, of: 1)
+            statusMessage = "Blending the warped timeline..."
+            return try await blendVideo(
+                url: sourceURL, ramp: ramp, fps: fps, linear: linear,
+                trimHeadTailSeconds: 0, customWindows: schedule)
+        }
+
         let pieces = try await markerSequencePieces(for: source, sourceURL: sourceURL)
         guard !pieces.isEmpty else {
             beginProgressPlan(.make(clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade))
@@ -2171,50 +2482,11 @@ final class AppModel: ObservableObject {
         let asset = AVURLAsset(url: sourceURL)
         let duration = try await asset.load(.duration).seconds
         guard duration.isFinite, duration > 0 else { return [] }
-
-        let sequenceStart = source.sequence.segments.first?.relativeStart ?? 0
-        let sequenceEnd = source.sequence.segments.first?.relativeEnd ?? (sequenceStart + duration)
-        let rampRanges = source.sequence.rampIntervals
-            .compactMap { interval -> ClosedRange<Double>? in
-                let intervalEnd = interval.relativeEnd ?? sequenceEnd
-                let start = max(0, interval.relativeStart - sequenceStart)
-                let end = min(duration, intervalEnd - sequenceStart)
-                guard end > start else { return nil }
-                return start...end
-            }
-            .sorted { $0.lowerBound < $1.lowerBound }
-
-        guard !rampRanges.isEmpty else { return [] }
-
-        var mergedRampRanges: [ClosedRange<Double>] = []
-        for range in rampRanges {
-            guard let last = mergedRampRanges.last else {
-                mergedRampRanges.append(range)
-                continue
-            }
-            if range.lowerBound <= last.upperBound {
-                mergedRampRanges[mergedRampRanges.count - 1] = last.lowerBound...max(last.upperBound, range.upperBound)
-            } else {
-                mergedRampRanges.append(range)
-            }
-        }
-
-        let minimumDuration = 0.05
-        var pieces: [MarkerSequencePiece] = []
-        var cursor = 0.0
-        for range in mergedRampRanges {
-            if range.lowerBound - cursor > minimumDuration {
-                pieces.append(MarkerSequencePiece(range: cursor...range.lowerBound, isRampOn: false))
-            }
-            if range.upperBound - range.lowerBound > minimumDuration {
-                pieces.append(MarkerSequencePiece(range: range.lowerBound...range.upperBound, isRampOn: true))
-            }
-            cursor = max(cursor, range.upperBound)
-        }
-        if duration - cursor > minimumDuration {
-            pieces.append(MarkerSequencePiece(range: cursor...duration, isRampOn: false))
-        }
-        return pieces
+        // Shared with the Adjust screen's ruler (which reads the duration off
+        // the sidecar instead of probing), so a per-stretch speed override
+        // lands on the same piece the ruler showed it on.
+        return StretchBuilder.markerPieces(sequence: source.sequence, duration: duration)
+            .map { MarkerSequencePiece(range: $0.range, isRampOn: $0.isMoment) }
     }
 
     private func extractVideoRange(
@@ -2691,7 +2963,8 @@ final class AppModel: ObservableObject {
             height: nil,
             inputFrames: nil,
             outputFrames: nil,
-            sourceCodec: source?.isVideo == true ? blendSourceCodec?.rawValue : nil
+            sourceCodec: source?.isVideo == true ? blendSourceCodec?.rawValue : nil,
+            warp: compiledWarp() != nil ? activeWarp() : nil
         )
     }
 

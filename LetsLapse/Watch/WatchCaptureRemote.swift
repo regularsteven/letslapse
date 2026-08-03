@@ -262,6 +262,12 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         guard !isDebugPreview else { return }
         if let rawState = payload[WatchMessageKey.recordingState] as? String,
            let state = WatchRecordingState(rawValue: rawState) {
+            if recordingState == .recording, state == .idle, stopAtUnit != nil {
+                // The capture ended while a scheduled stop was armed. The
+                // whole point of "stop at" is walking away, so land the news
+                // on the wrist instead of silently falling back to Ready.
+                playHaptic(.success)
+            }
             recordingState = state
         }
         applySequenceState(payload)
@@ -342,22 +348,28 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             playHaptic(.click)
         case "scheduleStop":
             // Mirror the phone's math immediately; its authoritative echo
-            // arrives a beat later.
+            // arrives a beat later. Amounts are totals for the whole run,
+            // anchored to its start — never "N more from now".
             if let raw = sent[WatchMessageKey.stopAtUnit] as? String,
                let unit = ScheduledStopUnit(rawValue: raw),
                let amount = sent[WatchMessageKey.value] as? Double {
                 stopAtUnit = unit
+                let runStart = recordingStartedAt ?? Date()
                 switch unit {
                 case .minutes:
-                    stopAtDeadline = Date().addingTimeInterval(amount * 60)
+                    stopAtDeadline = runStart.addingTimeInterval(amount * 60)
                     stopAtTargetCount = nil
                 case .frames:
                     if captureMode == .video {
-                        stopAtDeadline = Date().addingTimeInterval(amount / Double(max(1, captureFPS)))
+                        // Base rate, matching the phone's selectedFrameRate —
+                        // captureFPS reads the burst rate mid-burst and would
+                        // put this countdown out of step with the real one.
+                        let fps = Double(max(1, baseFPS > 0 ? baseFPS : captureFPS))
+                        stopAtDeadline = runStart.addingTimeInterval(amount / fps)
                         stopAtTargetCount = nil
                     } else {
                         stopAtDeadline = nil
-                        stopAtTargetCount = captureCount + Int(amount)
+                        stopAtTargetCount = Int(amount)
                     }
                 }
             }
@@ -399,6 +411,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         case .start: WKInterfaceDevice.current().play(.start)
         case .stop: WKInterfaceDevice.current().play(.stop)
         case .click: WKInterfaceDevice.current().play(.click)
+        case .success: WKInterfaceDevice.current().play(.success)
         }
         #endif
     }
@@ -407,6 +420,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         case start
         case stop
         case click
+        case success
     }
 
     func reconnect() {

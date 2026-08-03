@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>watchOS · Stop at… (sheet)</title>
-  <desc>Mirrors Watch/WatchControlView.swift StopAtSheet: Minutes/Frames unit chips, giant crown-or-swipe-dialled amount, Cancel/Set. Minutes schedules a deadline; Frames stops after N captured photos/blends (Interval) or fps-derived frames (Video).</desc>
+  <desc>Mirrors Watch/WatchControlView.swift StopAtSheet: Minutes/Frames unit chips, giant crown-or-swipe-dialled amount, live "stops in" countdown caption, Cancel/Set. Values are total-anchored to this run's START: Minutes stops when the run's elapsed time reaches the amount; Frames stops at N total captured photos/blends this run (Interval) — the Frames chip is hidden for Video runs. The dial floors at elapsed+1 minutes (or captured+1 frames) so an already-passed mark can't be dialled, and opens at max(default, floor). Caption ticks at 1 Hz. Mock numbers tie to recording-video.svg: elapsed 12:26, dial 16 → stops in 3m 34s.</desc>
   <defs>
     <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
   </defs>
@@ -23,9 +23,11 @@
         <text x="152.5" y="56" font-size="11" class="sb" fill="#FFF" text-anchor="middle">Frames</text>
       </g>
 
-      <!-- dialled amount (crown or vertical swipe) -->
-      <text x="104" y="140" font-size="42" class="b m" fill="#FFB340" text-anchor="middle">10</text>
+      <!-- dialled amount (crown or vertical swipe; floors at elapsed+1) -->
+      <text x="104" y="140" font-size="42" class="b m" fill="#FFB340" text-anchor="middle">16</text>
       <text x="104" y="162" font-size="11" fill="#98989E" text-anchor="middle">minutes</text>
+      <!-- live countdown caption (1 Hz; 16 min total − 12:26 elapsed) -->
+      <text x="104" y="180" font-size="11" fill="#98989E" text-anchor="middle">stops in 3m 34s</text>
 
       <!-- confirm row -->
       <g id="confirm-row">

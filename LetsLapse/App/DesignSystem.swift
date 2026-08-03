@@ -40,6 +40,23 @@ enum SpeedMath {
     static let presets = [10, 25, 50, 100]
     static let range = 1...240
 
+    /// The output-ruler stepper's detents. A custom value set through the
+    /// fine-grained sheet steps to its nearest neighbour from here.
+    static let stepDetents = [1, 2, 4, 8, 12, 16, 25, 50, 100, 150, 200]
+
+    /// The next detent from `current` in `direction` (+1 / −1). A value between
+    /// detents moves to the adjacent detent on that side, so 37× steps down to
+    /// 25× and up to 50×.
+    static func detent(from current: Int, direction: Int) -> Int {
+        if direction > 0 {
+            return stepDetents.first { $0 > current } ?? max(current, stepDetents.last ?? current)
+        }
+        if direction < 0 {
+            return stepDetents.last { $0 < current } ?? min(current, stepDetents.first ?? current)
+        }
+        return current
+    }
+
     /// Output clip length for a known number of source frames.
     static func outputSeconds(inputFrames: Double, speed: Int, outputFPS: Int) -> Double {
         guard inputFrames > 0, speed > 0, outputFPS > 0 else { return 0 }

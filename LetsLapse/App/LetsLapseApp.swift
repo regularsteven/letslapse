@@ -156,7 +156,7 @@ struct ContentView: View {
     private func openCameraOnLaunch() {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return }
         #endif
         guard selectedTab == .create else { return }
@@ -200,6 +200,22 @@ struct ContentView: View {
                 if model.stage == .configure {
                     model.startProcessing()
                 }
+            }
+        }
+        // LL_ADJUST=latest|demo — open the newest video capture on the Adjust
+        // screen; `demo` wraps it in a fabricated two-moment sequence (the
+        // design's 8:16 sample) so the warp timeline shows structure without
+        // needing a real burst shoot on the simulator. LL_STRETCH
+        // ("1=0.25,3=15") then pins warp stretch speeds (×-real-time) for
+        // variant screenshots.
+        if let hook = environment["LL_ADJUST"] {
+            if hook == "demo" {
+                model.debugOpenAdjustDemo()
+            } else if let capture = model.captures.first(where: { $0.kind == .video }) {
+                model.openCapture(capture)
+            }
+            if let overrides = environment["LL_STRETCH"] {
+                model.debugApplyStretchOverrides(overrides)
             }
         }
         // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo

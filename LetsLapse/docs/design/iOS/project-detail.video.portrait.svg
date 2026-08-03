@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Project detail (video) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, sourceClipsSection, versionRow, managementCard): inline nav with ⋯ menu, then the grading card — a preview frame pulled out of the movie with AVAssetImageGenerator and rendered through the project's preset + PhotoAdjustments, carrying the play button and the ORIGINAL/format badges — then the preset chip strip, a Customise row, the Source Clips card (Manage for ProRes/multi-encoding clips), New blended clip, Blended clips rows, management card. A video project has no fullscreen grading viewer, so Customise lives in the card: collapsed here (the chevron points right), it expands the same slider panel the viewer shows inline below the row, and once the card is 500pt wide or more it presents that panel as a sheet instead. Tapping a chip re-grades the preview and persists the choice; the grade is baked in only where a new file is written — the blended clip the blend produces, and a clip saved to Photos. Playback: the WHOLE of a source clip row and of a blended-clip row is the tap target (everything left of Save/Manage and of Open), and each thumbnail carries the play glyph to say so; all three routes — the card's play button, a clip row, a blended-clip row — open FullscreenMediaSheet (see player.portrait.svg). Source clips and the original play through the project's live grade; a blended clip plays ungraded, because the grade that made it is already in the file. Only Open still changes flow state. With two blended clips listed the management card sits below the fold, which is what the real (scrolling) screen shows. Floating tab bar stays over pushed screens.</desc>
+  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, versionRow, sourceClipsSection, managementCard): inline nav with ⋯ menu, then the grading card — a preview frame pulled out of the movie with AVAssetImageGenerator and rendered through the project's preset + PhotoAdjustments, carrying the play button and the ORIGINAL/format badges — then the preset chip strip, a Customise row, the Blended clips rows (results lead; the whole section hides while the project has none — the button below is the empty state), New blended clip, the Source Clips card (Manage for ProRes/multi-encoding clips), management card. A video project has no fullscreen grading viewer, so Customise lives in the card: collapsed here (the chevron points right), it expands the same slider panel the viewer shows inline below the row, and once the card is 500pt wide or more it presents that panel as a sheet instead. Tapping a chip re-grades the preview and persists the choice; the grade is baked in only where a new file is written — the blended clip the blend produces, and a clip saved to Photos. Playback: the WHOLE of a source clip row and of a blended-clip row is the tap target (everything left of Save/Manage and of Open), and each thumbnail carries the play glyph to say so; all three routes — the card's play button, a clip row, a blended-clip row — open FullscreenMediaSheet (see player.portrait.svg). Source clips and the original play through the project's live grade; a blended clip plays ungraded, because the grade that made it is already in the file. Only Open still changes flow state. A blended-clip row also swipes left to reveal a 72pt red trash action (SwipeToDelete.swift) that raises the same delete-confirm alert as its context menu. With two blended clips listed the management card sits below the fold, which is what the real (scrolling) screen shows; the scroll content ends with 96pt bottom clearance so Delete project comes to rest fully above the floating tab bar. Floating tab bar stays over pushed screens.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -68,46 +68,46 @@
               stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
       </g>
 
-      <!-- source clips -->
-      <text x="20" y="456" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE CLIP</text>
-      <g id="source-clips-card">
-        <rect x="16" y="465" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="475" width="58" height="42" rx="7" fill="#33415A"/>
-        <path d="M50 490 l12 7 -12 7 z" fill="#FFF" opacity="0.8"/>
-        <text x="100" y="493" font-size="14.5" class="sb" fill="#000">Clip 1</text>
-        <text x="100" y="510" font-size="11.5" fill="#6D6D72">ProRes · 2.9 GB</text>
-        <text x="363" y="500" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Manage</text>
+      <!-- blended clips (results lead; section hidden entirely while empty) -->
+      <text x="20" y="456" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 2</text>
+      <g id="versions-card">
+        <rect x="16" y="465" width="361" height="124" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="version-row-1">
+          <rect x="30" y="475" width="58" height="42" rx="7" fill="#31404E"/>
+          <path d="M53 489 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+          <text x="100" y="493" font-size="14.5" class="sb" fill="#000">Blended clip 2 · 100× · 1.2 s</text>
+          <text x="100" y="510" font-size="11.5" fill="#6D6D72">30 fps · from ProRes · yesterday</text>
+          <text x="363" y="500" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+        </g>
+        <line x1="100" y1="527" x2="377" y2="527" stroke="#000" stroke-opacity="0.08"/>
+        <g id="version-row-2">
+          <rect x="30" y="537" width="58" height="42" rx="7" fill="#3B4653"/>
+          <path d="M53 551 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+          <text x="100" y="555" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 50× · 2.4 s</text>
+          <text x="100" y="572" font-size="11.5" fill="#6D6D72">30 fps · true-light · 2 days ago</text>
+          <text x="363" y="562" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+        </g>
       </g>
 
       <!-- new blended clip button -->
       <g id="new-version">
-        <rect x="16" y="541" width="361" height="50" rx="14" fill="#C36A00"/>
-        <path d="M128 566 v-14 M121 559 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
-        <text x="142" y="572" font-size="16" class="b" fill="#FFF">New blended clip</text>
+        <rect x="16" y="603" width="361" height="50" rx="14" fill="#C36A00"/>
+        <path d="M128 628 v-14 M121 621 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
+        <text x="142" y="634" font-size="16" class="b" fill="#FFF">New blended clip</text>
       </g>
 
-      <!-- blended clips -->
-      <text x="20" y="620" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 2</text>
-      <g id="versions-card">
-        <rect x="16" y="629" width="361" height="124" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <g id="version-row-1">
-          <rect x="30" y="639" width="58" height="42" rx="7" fill="#31404E"/>
-          <path d="M53 653 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
-          <text x="100" y="657" font-size="14.5" class="sb" fill="#000">Blended clip 2 · 100× · 1.2 s</text>
-          <text x="100" y="674" font-size="11.5" fill="#6D6D72">30 fps · from ProRes · yesterday</text>
-          <text x="363" y="664" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
-        </g>
-        <line x1="100" y1="691" x2="377" y2="691" stroke="#000" stroke-opacity="0.08"/>
-        <g id="version-row-2">
-          <rect x="30" y="701" width="58" height="42" rx="7" fill="#3B4653"/>
-          <path d="M53 715 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
-          <text x="100" y="719" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 50× · 2.4 s</text>
-          <text x="100" y="736" font-size="11.5" fill="#6D6D72">30 fps · true-light · 2 days ago</text>
-          <text x="363" y="726" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
-        </g>
+      <!-- source clips -->
+      <text x="20" y="680" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE CLIP</text>
+      <g id="source-clips-card">
+        <rect x="16" y="689" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="699" width="58" height="42" rx="7" fill="#33415A"/>
+        <path d="M50 714 l12 7 -12 7 z" fill="#FFF" opacity="0.8"/>
+        <text x="100" y="717" font-size="14.5" class="sb" fill="#000">Clip 1</text>
+        <text x="100" y="734" font-size="11.5" fill="#6D6D72">ProRes · 2.9 GB</text>
+        <text x="363" y="724" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Manage</text>
       </g>
 
-      <!-- management card: pushed below the fold by the grading card, behind the tab bar -->
+      <!-- management card: below the fold at rest; the scroll ends with 96pt clearance so Delete project clears the tab bar -->
       <g id="management-card">
         <rect x="16" y="767" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
         <text x="32" y="795" font-size="16" fill="#000">Rename project</text>
@@ -156,5 +156,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail (video) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — GradingCard (graded frame · presetStrip · customiseControls) · sourceClipsSection · versionRow · managementCard</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — GradingCard (graded frame · presetStrip · customiseControls) · versionRow · sourceClipsSection · managementCard</text>
 </svg>

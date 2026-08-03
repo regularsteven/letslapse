@@ -272,34 +272,14 @@ struct ProjectDetailView: View {
                         originalsSection(for: capture)
                     }
                 } else {
-                    if capture.kind == .video, !clipNames.isEmpty {
-                        sourceClipsSection(for: capture, clipNames: clipNames)
-                    }
-                    // Interval frames are stacking material, not clips — one
-                    // compact row stands in for the whole set, with the export
-                    // path to Photos the originals never had.
-                    if capture.kind == .photos {
-                        originalsSection(for: capture)
-                    }
+                    // Results lead: the blended clips already made, then the
+                    // button that makes the next one, then the source material
+                    // they're made from. No clips yet hides the section — the
+                    // button right under the hero is the empty state.
+                    if !versions.isEmpty {
+                        VStack(alignment: .leading, spacing: 8) {
+                            LLSectionHeader("Blended clips · \(versions.count)")
 
-                    Button {
-                        model.openCapture(capture)
-                    } label: {
-                        Label("New blended clip", systemImage: "plus")
-                    }
-                    .buttonStyle(LLPrimaryButtonStyle())
-
-                    VStack(alignment: .leading, spacing: 8) {
-                        LLSectionHeader(versions.isEmpty ? "Blended clips" : "Blended clips · \(versions.count)")
-
-                        if versions.isEmpty {
-                            Text("No blended clips yet — tap New blended clip to make the first one from this original.")
-                                .font(.system(size: 13))
-                                .foregroundStyle(.secondary)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                                .padding(16)
-                                .llCard()
-                        } else {
                             VStack(spacing: 0) {
                                 ForEach(versions) { blend in
                                     versionRow(blend, in: capture)
@@ -311,13 +291,36 @@ struct ProjectDetailView: View {
                             .llCard()
                         }
                     }
+
+                    Button {
+                        model.openCapture(capture)
+                    } label: {
+                        Label("New blended clip", systemImage: "plus")
+                    }
+                    .buttonStyle(LLPrimaryButtonStyle())
+
+                    if capture.kind == .video, !clipNames.isEmpty {
+                        sourceClipsSection(for: capture, clipNames: clipNames)
+                    }
+                    // Interval frames are stacking material, not clips — one
+                    // compact row stands in for the whole set, with the export
+                    // path to Photos the originals never had.
+                    if capture.kind == .photos {
+                        originalsSection(for: capture)
+                    }
                 }
 
                 managementCard(for: capture)
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            #if os(iOS)
+            // Clearance for the floating tab bar, so Delete project stays
+            // visible and tappable at the end of the scroll.
+            .padding(.bottom, 96)
+            #else
             .padding(.bottom, 24)
+            #endif
         }
         .background(LL.screenBackground)
         .navigationTitle(capture.displayTitle)
@@ -1776,58 +1779,5 @@ private struct ManageClipSheet: View {
             isBusy = false
         }
         #endif
-    }
-}
-
-// MARK: - Swipe to delete (outside List)
-
-/// Reveals a delete action on leading drag, for rows living in custom cards.
-private struct SwipeToDeleteModifier: ViewModifier {
-    var onDelete: () -> Void
-    @State private var offset: CGFloat = 0
-    @GestureState private var isDragging = false
-
-    private let actionWidth: CGFloat = 72
-
-    func body(content: Content) -> some View {
-        content
-            .offset(x: offset)
-            .background(alignment: .trailing) {
-                if offset < 0 {
-                    Button(action: {
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                            offset = 0
-                        }
-                        onDelete()
-                    }) {
-                        Image(systemName: "trash.fill")
-                            .foregroundStyle(.white)
-                            .frame(width: actionWidth)
-                            .frame(maxHeight: .infinity)
-                            .background(Color.red)
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .clipped()
-            .highPriorityGesture(
-                DragGesture(minimumDistance: 24, coordinateSpace: .local)
-                    .updating($isDragging) { _, state, _ in state = true }
-                    .onChanged { value in
-                        guard abs(value.translation.width) > abs(value.translation.height) else { return }
-                        offset = min(0, max(-actionWidth, value.translation.width + (offset < -actionWidth / 2 ? -actionWidth : 0)))
-                    }
-                    .onEnded { value in
-                        withAnimation(.spring(response: 0.3, dampingFraction: 0.9)) {
-                            offset = value.translation.width < -actionWidth / 2 ? -actionWidth : 0
-                        }
-                    }
-            )
-    }
-}
-
-private extension View {
-    func swipeToDelete(onDelete: @escaping () -> Void) -> some View {
-        modifier(SwipeToDeleteModifier(onDelete: onDelete))
     }
 }

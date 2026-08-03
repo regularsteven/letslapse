@@ -2374,7 +2374,11 @@ struct CaptureView: View {
     private func updateWatchRecordingState() {
         watchRemote.setRecordingState(
             isCapturing ? .recording : .idle,
-            startedAt: camera.recordingStartedAt ?? (isCapturing ? framingStartedAt : nil),
+            // captureRunStartedAt is the "Stop at" anchor — publishing it
+            // keeps the watch's dial floor and countdown on the same clock
+            // as the phone's authoritative deadline.
+            startedAt: camera.captureRunStartedAt ?? camera.recordingStartedAt
+                ?? (isCapturing ? framingStartedAt : nil),
             sequenceMode: camera.activeSequenceMode ?? sequenceMode,
             markerCount: camera.markerCount,
             rampIntervalCount: camera.rampIntervalCount,

@@ -11,6 +11,9 @@ struct WatchControlView: View {
     @State private var showIntervalPicker = false
     @State private var showFramesPicker = false
     @State private var showStopAtSheet = false
+    /// Armed burst length in seconds; 0 = none, so ⚡ runs open-ended. The
+    /// last choice (including "none") is the default for every later run.
+    @AppStorage("letslapse.watch.burstDefaultSeconds") private var armedBurstSeconds = 1
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private let amber = Color(red: 1, green: 0.7, blue: 0.25)
@@ -434,32 +437,51 @@ struct WatchControlView: View {
         .disabled(remote.isSending || !remote.isReachable)
     }
 
-    /// The 24⇄240 toggle — one giant tap, mirrored by the button state.
+    /// One segmented control, two states — base rate ⇄ burst. Each side
+    /// *selects* its state (tapping the active side is a no-op): ⚡ starts a
+    /// burst — the armed length, or open-ended when none is armed — and the
+    /// fps side returns to base, which is also how a running burst is
+    /// cancelled early. Only ⚡ ever starts anything, so a fumbled tap on the
+    /// fps number can no longer fire a burst.
     private var burstToggle: some View {
-        HStack(spacing: 6) {
-            burstSegment(label: baseRateLabel, isActive: !remote.isRampHighRate)
-            burstSegment(label: "⚡ burst", isActive: remote.isRampHighRate)
+        HStack(spacing: 0) {
+            burstSegment(label: baseRateLabel, isActive: !remote.isRampHighRate) {
+                guard remote.isRampHighRate else { return }
+                remote.triggerMoment()
+            }
+            burstSegment(label: burstSegmentLabel, isActive: remote.isRampHighRate) {
+                guard !remote.isRampHighRate else { return }
+                if armedBurstSeconds > 0 {
+                    remote.triggerTimedBurst(seconds: armedBurstSeconds)
+                } else {
+                    remote.triggerMoment()
+                }
+            }
         }
+        .padding(2)
+        .background(Color.white.opacity(0.10), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
-    private func burstSegment(label: String, isActive: Bool) -> some View {
-        Button {
-            // Either side toggles: there are only two states.
-            remote.triggerMoment()
-        } label: {
+    private func burstSegment(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
             Text(label)
                 .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(isActive ? .black : .white)
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, minHeight: 34)
+                .frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.plain)
         .background(
-            isActive ? amber : Color.white.opacity(0.12),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+            isActive ? amber : .clear,
+            in: RoundedRectangle(cornerRadius: 8, style: .continuous)
         )
         .disabled(remote.isSending || !remote.isReachable)
+    }
+
+    /// ⚡ previews what pressing it will do: the armed length, or open-ended.
+    private var burstSegmentLabel: String {
+        armedBurstSeconds > 0 ? "⚡ \(armedBurstSeconds)s" : "⚡ burst"
     }
 
     /// Labels from the sequence's resting rate, never `captureFPS` — that one
@@ -471,10 +493,13 @@ struct WatchControlView: View {
         return remote.captureFPS > 0 ? "\(remote.captureFPS)" : "base"
     }
 
-    /// One press = burst at the ramp rate for that many seconds, then the
-    /// phone drops back to the base rate on its own — for moments too quick
-    /// to toggle twice by hand. The phone owns the timer, so the revert lands
-    /// even if the watch sleeps mid-burst.
+    /// The armed burst length — a setting, not a trigger. One chip may be
+    /// ticked (radio-with-off: tapping it again deselects); ⚡ fires whatever
+    /// is armed, and the phone still owns the revert timer so the drop back
+    /// to base lands even if the watch sleeps mid-burst. Chips are local and
+    /// safe to fumble, so they never disable. The tick matches the ready
+    /// screen's selected-option vocabulary; amber *fill* stays reserved for
+    /// the toggle's live segment.
     private var timedBurstRow: some View {
         HStack(spacing: 6) {
             timedBurstButton(seconds: 1)
@@ -484,24 +509,28 @@ struct WatchControlView: View {
     }
 
     private func timedBurstButton(seconds: Int) -> some View {
-        let isActive = remote.isRampHighRate && remote.timedBurstSeconds == seconds
+        let isArmed = armedBurstSeconds == seconds
         return Button {
-            remote.triggerTimedBurst(seconds: seconds)
+            armedBurstSeconds = isArmed ? 0 : seconds
         } label: {
-            Text("⚡\(seconds)s")
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(isActive ? .black : .white)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
-                .frame(maxWidth: .infinity, minHeight: 30)
+            HStack(spacing: 3) {
+                if isArmed {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(amber)
+                }
+                Text("\(seconds)s")
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(.white)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity, minHeight: 30)
         }
         .buttonStyle(.plain)
-        .background(
-            isActive ? amber : Color.white.opacity(0.12),
-            in: RoundedRectangle(cornerRadius: 10, style: .continuous)
-        )
-        .disabled(remote.isSending || !remote.isReachable)
-        .accessibilityLabel("Burst \(seconds) second\(seconds == 1 ? "" : "s")")
+        .background(Color.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .accessibilityLabel("\(seconds) second burst length")
+        .accessibilityAddTraits(isArmed ? [.isSelected] : [])
     }
 
     /// Interval's counterpart of the burst toggle's slot: how many outputs
@@ -676,26 +705,47 @@ struct WatchControlView: View {
                 StopAtSheet { unit, amount in
                     remote.scheduleStop(unit: unit, amount: amount)
                 }
+                .environmentObject(remote)
             }
         }
     }
 }
 
 /// Mini modal for "stop at…": pick minutes or frames, dial the number with a
-/// vertical swipe or the crown, confirm or cancel.
+/// vertical swipe or the crown, confirm or cancel. Amounts are totals for the
+/// whole run — "stop at" the 10-minute mark, not in 10 more minutes — so the
+/// dial floors just past what the run has already used (a passed mark can't
+/// be dialled) and a live caption shows when the stop would land. Frames is
+/// Interval-only: a video run's total frame count outgrows a wrist dial.
 private struct StopAtSheet: View {
     var onConfirm: (ScheduledStopUnit, Int) -> Void
+    @EnvironmentObject private var remote: WatchCaptureRemote
     @Environment(\.dismiss) private var dismiss
 
     @State private var unit: ScheduledStopUnit = .minutes
     @State private var amount = 10
     @State private var crownValue: Double = 10
     @State private var appliedDragSteps = 0
+    @State private var now = Date()
+    private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
     private let amber = Color(red: 1, green: 0.7, blue: 0.25)
 
     private var upperBound: Int { unit == .minutes ? 180 : 999 }
     private var defaultAmount: Int { unit == .minutes ? 10 : 50 }
+
+    private var elapsedSeconds: TimeInterval {
+        guard let startedAt = remote.recordingStartedAt else { return 0 }
+        return max(0, now.timeIntervalSince(startedAt))
+    }
+
+    /// The first amount still ahead of the run. Clamped into the dial range —
+    /// a run past the 180-minute cap pins the dial at 180, and confirming
+    /// that stops on the spot.
+    private var lowerBound: Int {
+        let floor = unit == .minutes ? Int(elapsedSeconds / 60) + 1 : remote.captureCount + 1
+        return min(max(1, floor), upperBound)
+    }
 
     var body: some View {
         VStack(spacing: 6) {
@@ -704,7 +754,9 @@ private struct StopAtSheet: View {
 
             HStack(spacing: 4) {
                 unitChip(.minutes, label: "Minutes")
-                unitChip(.frames, label: "Frames")
+                if remote.captureMode != .video {
+                    unitChip(.frames, label: "Frames")
+                }
             }
 
             Text("\(amount)")
@@ -729,7 +781,7 @@ private struct StopAtSheet: View {
                 .focusable(true)
                 .digitalCrownRotation(
                     $crownValue,
-                    from: 1,
+                    from: Double(lowerBound),
                     through: Double(upperBound),
                     by: 1,
                     sensitivity: .medium
@@ -742,6 +794,10 @@ private struct StopAtSheet: View {
                 }
 
             Text(unit == .minutes ? "minutes" : "frames")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+
+            Text(landingCaption)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
 
@@ -770,13 +826,42 @@ private struct StopAtSheet: View {
             }
         }
         .padding(.horizontal, 4)
+        .onAppear { setAmount(max(defaultAmount, lowerBound)) }
+        .onReceive(timer) { date in
+            now = date
+            // The run keeps moving while the dial is up; keep the floor
+            // ahead of it.
+            if amount < lowerBound { setAmount(lowerBound) }
+        }
+    }
+
+    /// Where the stop would land, live — makes total-vs-remaining unambiguous
+    /// while dialling.
+    private var landingCaption: String {
+        switch unit {
+        case .minutes:
+            let remaining = max(0, Double(amount) * 60 - elapsedSeconds)
+            return "stops in \(shortDuration(remaining))"
+        case .frames:
+            return "stops in \(max(0, amount - remote.captureCount)) frames"
+        }
+    }
+
+    private func shortDuration(_ seconds: TimeInterval) -> String {
+        let total = Int(seconds.rounded())
+        let hours = total / 3600
+        let minutes = (total % 3600) / 60
+        let secs = total % 60
+        if hours > 0 { return "\(hours)h \(minutes)m" }
+        if minutes > 0 { return "\(minutes)m \(secs)s" }
+        return "\(secs)s"
     }
 
     private func unitChip(_ chipUnit: ScheduledStopUnit, label: String) -> some View {
         Button {
             guard unit != chipUnit else { return }
             unit = chipUnit
-            setAmount(defaultAmount)
+            setAmount(max(defaultAmount, lowerBound))
         } label: {
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
@@ -792,7 +877,7 @@ private struct StopAtSheet: View {
     }
 
     private func setAmount(_ newValue: Int) {
-        let clamped = min(max(1, newValue), upperBound)
+        let clamped = min(max(lowerBound, newValue), upperBound)
         amount = clamped
         crownValue = Double(clamped)
     }
