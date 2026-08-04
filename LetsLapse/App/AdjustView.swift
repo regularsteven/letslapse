@@ -30,8 +30,10 @@ struct AdjustView: View {
         GeometryReader { proxy in
             let isWide = proxy.size.width > 560 && model.source?.isVideo == true
             VStack(spacing: 0) {
-                FlowHeader(title: "New blended clip") {
-                    model.reset()
+                FlowHeader(title: "New blended clip", onBack: { model.reset() }) {
+                    if model.source?.isVideo == true {
+                        canvasMenu
+                    }
                 }
 
                 ScrollView {
@@ -43,7 +45,6 @@ struct AdjustView: View {
                     } else {
                         VStack(spacing: 14) {
                             if model.source?.isVideo == true {
-                                canvasSection
                                 warpCard(inlineThumbnail: true)
                                 chipsRow
                                 blendFromSection
@@ -85,7 +86,6 @@ struct AdjustView: View {
     /// design handoff — the playhead frame becomes a proper preview pane.
     private var wideLayout: some View {
         VStack(spacing: 14) {
-            canvasSection
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 14) {
                     warpCard(inlineThumbnail: false)
@@ -106,7 +106,7 @@ struct AdjustView: View {
     }
 
     /// The preview pane at the chosen canvas — tall canvases pin to a fixed
-    /// height, top-leading, like the portrait layout's scrub preview.
+    /// height, centred, like the portrait layout's scrub preview.
     ///
     /// Hit-testing OFF for the same reason as the portrait pane: the
     /// aspect-fill image spills past the clipped box on the mismatched axis,
@@ -115,11 +115,9 @@ struct AdjustView: View {
         let aspect = model.effectiveBlendCanvas().aspect
         return Group {
             if aspect < 1 {
-                HStack(spacing: 0) {
-                    widePreviewBox(aspect: aspect)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: 340)
+                widePreviewBox(aspect: aspect)
+                    .frame(height: 340)
+                    .frame(maxWidth: .infinity)
             } else {
                 widePreviewBox(aspect: aspect)
                     .frame(maxWidth: .infinity)
@@ -164,35 +162,51 @@ struct AdjustView: View {
 
     // MARK: - Canvas
 
-    /// The clip's canvas — the same five ratio chips as a collection's CANVAS
-    /// row, replacing the old source-info card (the back chevron already
-    /// covers "Change"). Defaults to the shape the source was shot at,
-    /// rotation included; picking another centre-crops the preview and the
-    /// created clip.
-    private var canvasSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            LLSectionHeader("Canvas")
-            CanvasRatioChips(selected: model.effectiveBlendCanvas()) { ratio in
-                model.blendCanvasRatio = ratio
+    /// The clip's canvas, folded into the header as a compact select — the
+    /// collapsed control shows only the ratio; the menu carries the "as shot"
+    /// and crop consequences the old caption line spelled out. Defaults to
+    /// the shape the source was shot at, rotation included; picking another
+    /// centre-crops the preview and the created clip.
+    private var canvasMenu: some View {
+        Menu {
+            ForEach(CanvasRatio.allCases) { ratio in
+                Button {
+                    model.blendCanvasRatio = ratio
+                } label: {
+                    if ratio == model.effectiveBlendCanvas() {
+                        Label(canvasChoiceLabel(ratio), systemImage: "checkmark")
+                    } else {
+                        Text(canvasChoiceLabel(ratio))
+                    }
+                }
             }
-            Text(canvasCaption)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-                .padding(.horizontal, 4)
+        } label: {
+            HStack(spacing: 4) {
+                Text(model.effectiveBlendCanvas().rawValue)
+                    .font(.system(size: 13.5, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(LL.accent)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(LL.cardBackground, in: Capsule())
+            .shadow(color: .black.opacity(0.06), radius: 1.5, y: 1)
+            .contentShape(Capsule())
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("Canvas \(model.effectiveBlendCanvas().rawValue)")
     }
 
-    private var canvasCaption: String {
-        let canvas = model.effectiveBlendCanvas()
-        guard let size = model.sourceDisplaySize() else {
-            return "\(canvas.rawValue) — the clip's shape."
+    /// "9:16 — as shot" / "1:1 — crops to 608×608": the menu rows carry the
+    /// consequence so the collapsed chip can stay terse.
+    private func canvasChoiceLabel(_ ratio: CanvasRatio) -> String {
+        guard let size = model.sourceDisplaySize() else { return ratio.rawValue }
+        if let crop = VideoCanvasCropper.cropSize(displaySize: size, canvas: ratio) {
+            return "\(ratio.rawValue) — crops to \(Int(crop.width))×\(Int(crop.height))"
         }
-        let sourceLabel = AppModel.CaptureProject.resolutionLabel(
-            width: Int(size.width), height: Int(size.height))
-        if let crop = model.blendCanvasCropSize() {
-            return "\(canvas.rawValue) — crops the \(sourceLabel) source to \(Int(crop.width))×\(Int(crop.height))."
-        }
-        return "\(canvas.rawValue) — as shot · \(sourceLabel)."
+        return "\(ratio.rawValue) — as shot"
     }
 
     // MARK: - Source

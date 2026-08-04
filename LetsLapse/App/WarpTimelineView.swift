@@ -158,9 +158,21 @@ struct WarpTimelineView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            header
             if showsInlineThumbnail {
                 scrubPreview
+                    .overlay(alignment: .topLeading) {
+                        // Overlaid AFTER the pane's allowsHitTesting(false),
+                        // so the chips stay tappable over the dead pane.
+                        editChips
+                            .padding(6)
+                    }
+            } else if model.canUndoWarp || isZoomed {
+                // Wide layouts draw no inline preview — the chips get a slim
+                // row of their own that only exists while they do.
+                HStack {
+                    Spacer()
+                    editChips
+                }
             }
             GeometryReader { proxy in
                 barZone(width: max(1, proxy.size.width))
@@ -250,15 +262,13 @@ struct WarpTimelineView: View {
         }
     }
 
-    // MARK: - Header
+    // MARK: - Edit chips
 
-    private var header: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 8) {
-            Text("SOURCE · \(WarpTimeline.clock(total))")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .kerning(0.5)
-            Spacer()
+    /// Undo and un-zoom, floating over the preview (or in their own slim row
+    /// on wide layouts) now the SOURCE header row is gone — they must stay
+    /// reachable wherever the timeline can be edited.
+    private var editChips: some View {
+        HStack(spacing: 6) {
             if model.canUndoWarp {
                 Button {
                     withAnimation(.easeInOut(duration: 0.2)) {
@@ -299,15 +309,6 @@ struct WarpTimelineView: View {
                 }
                 .buttonStyle(.plain)
             }
-            // Once an edit exists the Undo chip needs the room — and the user
-            // has plainly found the gestures the hint teaches.
-            if !model.canUndoWarp {
-                Text("pinch to zoom · drag to nominate · hold for options")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
         }
     }
 
@@ -347,27 +348,25 @@ struct WarpTimelineView: View {
     /// the card's whole height with video.
     private static let tallPreviewHeight: CGFloat = 300
 
-    /// The playhead's frame at the chosen canvas — full width, pinned top-left
-    /// under the SOURCE header (it no longer chases the playhead). The frame
-    /// aspect-fills the canvas shape, so a mismatched canvas previews the
-    /// centred crop the created clip will keep. Scrubbing anywhere on the bar
-    /// just swaps the picture.
+    /// The playhead's frame at the chosen canvas — full width at the top of
+    /// the card, centred (it no longer chases the playhead; tall canvases cap
+    /// the height and centre the box). The frame aspect-fills the canvas
+    /// shape, so a mismatched canvas previews the centred crop the created
+    /// clip will keep. Scrubbing anywhere on the bar just swaps the picture.
     ///
     /// Hit-testing is OFF for the whole pane: the aspect-FILL image inside
     /// overflows the box on the mismatched axis, and `clipShape` clips
     /// drawing but not hit-testing — with a portrait source on a wide canvas
-    /// the invisible spill sat over the CANVAS chips (and the Undo chip) and
-    /// silently swallowed their taps. Nothing in the pane is interactive
+    /// the invisible spill sat over the canvas control (and the Undo chip)
+    /// and silently swallowed their taps. Nothing in the pane is interactive
     /// today; scope this tighter when pinch-to-position arrives.
     private var scrubPreview: some View {
         let aspect = model.effectiveBlendCanvas().aspect
         return Group {
             if aspect < 1 {
-                HStack(spacing: 0) {
-                    previewBox(aspect: aspect)
-                    Spacer(minLength: 0)
-                }
-                .frame(height: Self.tallPreviewHeight)
+                previewBox(aspect: aspect)
+                    .frame(height: Self.tallPreviewHeight)
+                    .frame(maxWidth: .infinity)
             } else {
                 previewBox(aspect: aspect)
                     .frame(maxWidth: .infinity)

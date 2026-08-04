@@ -409,9 +409,16 @@ struct FlowChromeButton: View {
 }
 
 /// Shared header for flow screens: back chevron + centered title.
-struct FlowHeader: View {
+struct FlowHeader<Trailing: View>: View {
     var title: String
     var onBack: (() -> Void)?
+    var trailing: Trailing
+
+    init(title: String, onBack: (() -> Void)? = nil, @ViewBuilder trailing: () -> Trailing) {
+        self.title = title
+        self.onBack = onBack
+        self.trailing = trailing()
+    }
 
     var body: some View {
         HStack(spacing: 8) {
@@ -424,9 +431,19 @@ struct FlowHeader: View {
             Text(title)
                 .font(.system(size: 16, weight: .semibold))
                 .frame(maxWidth: .infinity)
-            Color.clear.frame(width: 34, height: 34)
+            // The 34pt floor keeps the title optically centred when there is
+            // no trailing control; a wider control (the Adjust screen's
+            // canvas menu) nudges it like any nav bar would.
+            trailing
+                .frame(minWidth: 34, minHeight: 34, alignment: .trailing)
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
+    }
+}
+
+extension FlowHeader where Trailing == EmptyView {
+    init(title: String, onBack: (() -> Void)? = nil) {
+        self.init(title: title, onBack: onBack, trailing: { EmptyView() })
     }
 }
