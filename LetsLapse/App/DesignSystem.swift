@@ -333,6 +333,41 @@ struct FloatingTabBar: View {
 
 // MARK: - Small shared pieces
 
+/// The five canvas-ratio chips — one control for a collection's CANVAS row
+/// and the Adjust screen's clip canvas.
+struct CanvasRatioChips: View {
+    var selected: CanvasRatio?
+    var isEnabled = true
+    var onSelect: (CanvasRatio) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(CanvasRatio.allCases) { ratio in
+                let isSelected = selected == ratio
+                Button {
+                    guard isEnabled else { return }
+                    onSelect(ratio)
+                } label: {
+                    Text(ratio.rawValue)
+                        .font(.system(size: 13.5, weight: .semibold))
+                        .foregroundStyle(
+                            isSelected ? .white
+                                : (isEnabled ? Color.primary : Color.secondary.opacity(0.5)))
+                        .padding(.horizontal, 13)
+                        .frame(height: 33)
+                        .background(
+                            isSelected ? LL.accent : LL.cardBackground,
+                            in: Capsule())
+                        .shadow(color: .black.opacity(isSelected ? 0 : 0.06), radius: 1.5, y: 1)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Canvas \(ratio.rawValue)")
+                .accessibilityAddTraits(isSelected ? .isSelected : [])
+            }
+        }
+    }
+}
+
 /// Translucent dark chip used over camera/video imagery.
 struct MediaBadge: View {
     var text: String

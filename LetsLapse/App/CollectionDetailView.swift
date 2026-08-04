@@ -500,27 +500,11 @@ struct CollectionDetailView: View {
     // MARK: - Canvas chips
 
     private func ratioChips(_ collection: LapseCollection) -> some View {
-        HStack(spacing: 8) {
-            ForEach(CanvasRatio.allCases) { ratio in
-                let selected = collection.ratio == ratio
-                Button {
-                    guard !collection.entries.isEmpty else { return }
-                    model.setCanvasRatio(ratio, for: collectionID)
-                } label: {
-                    Text(ratio.rawValue)
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(
-                            selected ? .white
-                                : (collection.entries.isEmpty ? Color.secondary.opacity(0.5) : .primary))
-                        .padding(.horizontal, 13)
-                        .frame(height: 33)
-                        .background(
-                            selected ? LL.accent : LL.cardBackground,
-                            in: Capsule())
-                        .shadow(color: .black.opacity(selected ? 0 : 0.06), radius: 1.5, y: 1)
-                }
-                .buttonStyle(.plain)
-            }
+        CanvasRatioChips(
+            selected: collection.ratio,
+            isEnabled: !collection.entries.isEmpty
+        ) { ratio in
+            model.setCanvasRatio(ratio, for: collectionID)
         }
     }
 

@@ -14,6 +14,10 @@ struct AdjustView: View {
     @State private var showCustomSpeed = false
     /// The stretch the chips edit, as an index into the warp timeline.
     @State private var selectedStretch = 0
+    /// "Blend from" choices, probed once per capture. Deciding them stats
+    /// every encoding file on disk — too much to re-pay on every body
+    /// evaluation (every @Published change re-runs the body).
+    @State private var blendCodecs: [OutputCodec] = []
     @StateObject private var preview = WarpPreviewLoader()
 
     /// The six canonical speeds. Free values come through the value sheet.
@@ -38,15 +42,15 @@ struct AdjustView: View {
                             .padding(.bottom, 16)
                     } else {
                         VStack(spacing: 14) {
-                            sourceCard
-
                             if model.source?.isVideo == true {
+                                canvasSection
                                 warpCard(inlineThumbnail: true)
                                 chipsRow
                                 blendFromSection
                                 estimateCard
                                 advancedRow
                             } else {
+                                sourceCard
                                 tailFrameBanner
                                 stackCard
                             }
@@ -64,6 +68,9 @@ struct AdjustView: View {
         }
         .background(LL.screenBackground.ignoresSafeArea())
         .onAppear { model.warpUndoManager = undoManager }
+        .task(id: model.currentCaptureID) {
+            blendCodecs = model.currentCapture.map { model.availableBlendCodecs(for: $0) } ?? []
+        }
         .sheet(isPresented: $showAdvanced) {
             AdvancedOptionsSheet()
                 .environmentObject(model)
@@ -78,7 +85,7 @@ struct AdjustView: View {
     /// design handoff — the playhead frame becomes a proper preview pane.
     private var wideLayout: some View {
         VStack(spacing: 14) {
-            sourceCard
+            canvasSection
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 14) {
                     warpCard(inlineThumbnail: false)
@@ -98,9 +105,33 @@ struct AdjustView: View {
         }
     }
 
+    /// The preview pane at the chosen canvas — tall canvases pin to a fixed
+    /// height, top-leading, like the portrait layout's scrub preview.
+    ///
+    /// Hit-testing OFF for the same reason as the portrait pane: the
+    /// aspect-fill image spills past the clipped box on the mismatched axis,
+    /// and that invisible spill swallows taps from neighbouring controls.
     private var widePreviewPane: some View {
+        let aspect = model.effectiveBlendCanvas().aspect
+        return Group {
+            if aspect < 1 {
+                HStack(spacing: 0) {
+                    widePreviewBox(aspect: aspect)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: 340)
+            } else {
+                widePreviewBox(aspect: aspect)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    private func widePreviewBox(aspect: Double) -> some View {
         RoundedRectangle(cornerRadius: 16, style: .continuous)
             .fill(Color.black)
+            .aspectRatio(CGFloat(aspect), contentMode: .fit)
             .overlay {
                 if let image = preview.image {
                     Image(decorative: image, scale: 1)
@@ -118,7 +149,6 @@ struct AdjustView: View {
                     .background(.black.opacity(0.45), in: Capsule())
                     .padding(8)
             }
-            .frame(height: 180)
     }
 
     @ViewBuilder private var errorLine: some View {
@@ -130,6 +160,39 @@ struct AdjustView: View {
                 .padding(14)
                 .llCard()
         }
+    }
+
+    // MARK: - Canvas
+
+    /// The clip's canvas — the same five ratio chips as a collection's CANVAS
+    /// row, replacing the old source-info card (the back chevron already
+    /// covers "Change"). Defaults to the shape the source was shot at,
+    /// rotation included; picking another centre-crops the preview and the
+    /// created clip.
+    private var canvasSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            LLSectionHeader("Canvas")
+            CanvasRatioChips(selected: model.effectiveBlendCanvas()) { ratio in
+                model.blendCanvasRatio = ratio
+            }
+            Text(canvasCaption)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 4)
+        }
+    }
+
+    private var canvasCaption: String {
+        let canvas = model.effectiveBlendCanvas()
+        guard let size = model.sourceDisplaySize() else {
+            return "\(canvas.rawValue) — the clip's shape."
+        }
+        let sourceLabel = AppModel.CaptureProject.resolutionLabel(
+            width: Int(size.width), height: Int(size.height))
+        if let crop = model.blendCanvasCropSize() {
+            return "\(canvas.rawValue) — crops the \(sourceLabel) source to \(Int(crop.width))×\(Int(crop.height))."
+        }
+        return "\(canvas.rawValue) — as shot · \(sourceLabel)."
     }
 
     // MARK: - Source
@@ -282,23 +345,20 @@ struct AdjustView: View {
     /// Shown only when a clip has been converted, so there's a real choice of
     /// which encoding feeds the blend — the ProRes-vs-H.264 quality test.
     @ViewBuilder private var blendFromSection: some View {
-        if let capture = model.currentCapture, model.source?.isVideo == true {
-            let codecs = model.availableBlendCodecs(for: capture)
-            if !codecs.isEmpty {
-                VStack(alignment: .leading, spacing: 8) {
-                    LLSectionHeader("Blend from")
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 8) {
-                            codecChip(nil, "Auto")
-                            ForEach(codecs, id: \.self) { codec in
-                                codecChip(codec, codecLabel(codec))
-                            }
+        if model.source?.isVideo == true, !blendCodecs.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                LLSectionHeader("Blend from")
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        codecChip(nil, "Auto")
+                        ForEach(blendCodecs, id: \.self) { codec in
+                            codecChip(codec, codecLabel(codec))
                         }
                     }
-                    Text(blendFromHint)
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
                 }
+                Text(blendFromHint)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
             }
         }
     }

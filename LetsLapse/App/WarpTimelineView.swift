@@ -20,7 +20,9 @@ final class WarpPreviewLoader: ObservableObject {
             // it keeps scrubbing free.
             g.requestedTimeToleranceBefore = .positiveInfinity
             g.requestedTimeToleranceAfter = .positiveInfinity
-            g.maximumSize = CGSize(width: 480, height: 480)
+            // The preview is now a full-width pane, not a 120pt thumbnail —
+            // decode enough pixels for a 3× phone at card width.
+            g.maximumSize = CGSize(width: 1024, height: 1024)
             g.appliesPreferredTrackTransform = true
             generators[url] = g
             return g
@@ -108,9 +110,12 @@ struct WarpTimelineView: View {
     @State private var openSeam: Int?
     @State private var pinchBase: (start: Double, end: Double)?
     @State private var pinchAtLimit = false
-    /// Pan anchors: the value at first onChanged, so cumulative translations
+    /// Pan anchor: the value at first onChanged, so cumulative translations
     /// apply once instead of compounding.
     @State private var panBase: Double?
+    /// Knob/handle grab offsets in bar-space pixels (finger x − control x at
+    /// grab), so an off-centre grab tracks without snapping. nil = not
+    /// engaged; the healers clear them on gesture cancellation.
     @State private var playheadDragBase: Double?
     @State private var handleDragBase: Double?
     /// A pinch happened during the current touch sequence. The drag that
@@ -155,7 +160,7 @@ struct WarpTimelineView: View {
         VStack(alignment: .leading, spacing: 6) {
             header
             if showsInlineThumbnail {
-                thumbnailStrip
+                scrubPreview
             }
             GeometryReader { proxy in
                 barZone(width: max(1, proxy.size.width))
@@ -336,52 +341,76 @@ struct WarpTimelineView: View {
         .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
     }
 
-    // MARK: - Thumbnail strip
+    // MARK: - Scrub preview
 
-    private var thumbnailStrip: some View {
-        GeometryReader { proxy in
-            let fraction = (playhead - visibleStart) / visibleSpan
-            let clamped = min(max(fraction, 0.17), 0.83)
-            ZStack(alignment: .topLeading) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(Color.black)
-                    .overlay {
-                        if let image = preview.image {
-                            Image(decorative: image, scale: 1)
-                                .resizable()
-                                .aspectRatio(contentMode: .fill)
-                        } else {
-                            Self.baseGradient
-                        }
-                    }
-                    .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                    .overlay(alignment: .bottomLeading) {
-                        Text(thumbnailBadge)
-                            .font(.system(size: 10, weight: .bold))
-                            .foregroundStyle(.white)
-                            .padding(.horizontal, 6)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .padding(6)
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        Text("≈ keyframe")
-                            .font(.system(size: 8.5))
-                            .foregroundStyle(.white.opacity(0.8))
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-                            .padding(5)
-                    }
-                    .frame(width: 120, height: 72)
-                    // An off-window playhead dims its thumbnail — the frame is
-                    // real, but it isn't where you're looking.
-                    .opacity(playheadVisible ? 1 : 0.55)
-                    .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
-                    .offset(x: clamped * proxy.size.width - 60)
+    /// Tall canvases pin the picture to a fixed-height row instead of filling
+    /// the card's whole height with video.
+    private static let tallPreviewHeight: CGFloat = 300
+
+    /// The playhead's frame at the chosen canvas — full width, pinned top-left
+    /// under the SOURCE header (it no longer chases the playhead). The frame
+    /// aspect-fills the canvas shape, so a mismatched canvas previews the
+    /// centred crop the created clip will keep. Scrubbing anywhere on the bar
+    /// just swaps the picture.
+    ///
+    /// Hit-testing is OFF for the whole pane: the aspect-FILL image inside
+    /// overflows the box on the mismatched axis, and `clipShape` clips
+    /// drawing but not hit-testing — with a portrait source on a wide canvas
+    /// the invisible spill sat over the CANVAS chips (and the Undo chip) and
+    /// silently swallowed their taps. Nothing in the pane is interactive
+    /// today; scope this tighter when pinch-to-position arrives.
+    private var scrubPreview: some View {
+        let aspect = model.effectiveBlendCanvas().aspect
+        return Group {
+            if aspect < 1 {
+                HStack(spacing: 0) {
+                    previewBox(aspect: aspect)
+                    Spacer(minLength: 0)
+                }
+                .frame(height: Self.tallPreviewHeight)
+            } else {
+                previewBox(aspect: aspect)
+                    .frame(maxWidth: .infinity)
             }
         }
-        .frame(height: 76)
+        .allowsHitTesting(false)
+    }
+
+    private func previewBox(aspect: Double) -> some View {
+        RoundedRectangle(cornerRadius: 9, style: .continuous)
+            .fill(Color.black)
+            .aspectRatio(CGFloat(aspect), contentMode: .fit)
+            .overlay {
+                if let image = preview.image {
+                    Image(decorative: image, scale: 1)
+                        .resizable()
+                        .aspectRatio(contentMode: .fill)
+                } else {
+                    Self.baseGradient
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .overlay(alignment: .bottomLeading) {
+                Text(thumbnailBadge)
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(.black.opacity(0.55), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(6)
+            }
+            .overlay(alignment: .topTrailing) {
+                Text("≈ keyframe")
+                    .font(.system(size: 8.5))
+                    .foregroundStyle(.white.opacity(0.8))
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(.black.opacity(0.4), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+                    .padding(5)
+            }
+            // An off-window playhead dims its preview — the frame is real,
+            // but it isn't where you're looking.
+            .opacity(playheadVisible ? 1 : 0.55)
     }
 
     /// "2:41" while the playhead is visible; "◀ 2:41" / "2:41 ▶" when it sits
@@ -392,18 +421,60 @@ struct WarpTimelineView: View {
         return WarpTimeline.clock(playhead)
     }
 
+    // MARK: - Output-time mapping
+
+    /// Cumulative output (clip) seconds at each stretch bound — steady-speed
+    /// spans (length ÷ speed), the same approximation the selection line
+    /// reports. The bar draws in this domain, so a stretch's width is its
+    /// share of the finished clip, not of the source: a 50× stretch that eats
+    /// most of the source but lands as 1.9s of a 14s clip draws narrow, and
+    /// the slow moment that IS most of the clip draws wide.
+    private var outputBounds: [Double] {
+        var bounds = [0.0]
+        for index in 0..<timeline.stretchCount {
+            bounds.append(bounds[index] + timeline.length(of: index) / max(0.0001, timeline.speeds[index]))
+        }
+        return bounds
+    }
+
+    /// Source seconds → output seconds through the piecewise-linear warp.
+    private func outputTime(atSource time: Double) -> Double {
+        let clamped = min(max(0, time), total)
+        let index = timeline.stretchIndex(at: clamped)
+        return outputBounds[index]
+            + (clamped - timeline.bounds[index]) / max(0.0001, timeline.speeds[index])
+    }
+
+    /// Output seconds → source seconds — the inverse of `outputTime(atSource:)`.
+    private func sourceTime(atOutput output: Double) -> Double {
+        let outs = outputBounds
+        let clamped = min(max(0, output), outs.last ?? 0)
+        var index = 0
+        while index < outs.count - 2, clamped >= outs[index + 1] {
+            index += 1
+        }
+        let source = timeline.bounds[index]
+            + (clamped - outs[index]) * max(0.0001, timeline.speeds[index])
+        return min(max(0, source), total)
+    }
+
+    private var visibleOutputStart: Double { outputTime(atSource: visibleStart) }
+    private var visibleOutputEnd: Double { outputTime(atSource: visibleEnd) }
+    private var visibleOutputSpan: Double { max(0.0001, visibleOutputEnd - visibleOutputStart) }
+
     // MARK: - Bar
 
     private func position(_ time: Double, width: CGFloat) -> CGFloat {
-        CGFloat((time - visibleStart) / visibleSpan) * width
+        CGFloat((outputTime(atSource: time) - visibleOutputStart) / visibleOutputSpan) * width
     }
 
     private func time(at x: CGFloat, width: CGFloat) -> Double {
-        min(max(0, visibleStart + Double(x / width) * visibleSpan), total)
+        sourceTime(atOutput: visibleOutputStart + Double(x / width) * visibleOutputSpan)
     }
 
     /// Visible tiles with a 12pt floor, the clamped-up surplus taken from the
-    /// wider tiles so the row fills its line exactly.
+    /// wider tiles so the row fills its line exactly. Shares are output-time
+    /// shares — the tile row is the clip being made.
     private func tileLayout(width: CGFloat) -> [(index: Int, width: CGFloat)] {
         let bounds = timeline.bounds
         var visible: [(index: Int, share: Double)] = []
@@ -411,7 +482,8 @@ struct WarpTimelineView: View {
             let clippedStart = max(bounds[index], visibleStart)
             let clippedEnd = min(bounds[index + 1], visibleEnd)
             if clippedEnd > clippedStart {
-                visible.append((index, (clippedEnd - clippedStart) / visibleSpan))
+                let outputSpan = (clippedEnd - clippedStart) / max(0.0001, timeline.speeds[index])
+                visible.append((index, outputSpan / visibleOutputSpan))
             }
         }
         guard !visible.isEmpty else { return [] }
@@ -501,11 +573,18 @@ struct WarpTimelineView: View {
                 playheadChevron(width: width)
             }
         }
+        .coordinateSpace(name: Self.barSpace)
         .contentShape(Rectangle())
         .gesture(nominateGesture(width: width))
         .simultaneousGesture(pinchGesture(width: width))
         .simultaneousGesture(doubleTapZoom(width: width))
     }
+
+    /// The bar's named coordinate space. The knob and the resize handles move
+    /// with their own drags, so a drag measured in their local space loses
+    /// exactly the distance the view moved (halving the motion) — their
+    /// gestures read locations in this space instead.
+    private static let barSpace = "warpBar"
 
     private func playheadKnob(width: CGFloat) -> some View {
         // 18pt of accent inside a 44pt touch target.
@@ -518,14 +597,19 @@ struct WarpTimelineView: View {
         .frame(width: 44, height: 44)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.barSpace))
                 .updating($knobLive) { _, live, _ in live = true }
                 .onChanged { value in
                     guard pinchBase == nil else { return }
-                    let base = playheadDragBase ?? playhead
-                    playheadDragBase = base
-                    let shift = Double(value.translation.width / width) * visibleSpan
-                    playhead = min(max(visibleStart, base + shift), visibleEnd)
+                    // Absolute finger position in bar space keeps the knob
+                    // exactly under the finger on the output-proportional
+                    // axis; the remembered grab offset stops an off-centre
+                    // grab from snapping the playhead.
+                    let grab = playheadDragBase
+                        ?? Double(value.location.x - position(playhead, width: width))
+                    playheadDragBase = grab
+                    let target = time(at: value.location.x - CGFloat(grab), width: width)
+                    playhead = min(max(visibleStart, target), visibleEnd)
                 }
                 .onEnded { _ in playheadDragBase = nil }
         )
@@ -732,24 +816,49 @@ struct WarpTimelineView: View {
         .frame(width: 44, height: Self.barHeight + 12)
         .contentShape(Rectangle())
         .gesture(
-            DragGesture(minimumDistance: 0)
+            DragGesture(minimumDistance: 0, coordinateSpace: .named(Self.barSpace))
                 .updating($handleLive) { _, live, _ in live = true }
                 .onChanged { value in
                     guard pinchBase == nil else { return }
                     if handleDragBase == nil {
-                        handleDragBase = timeline.bounds[boundary]
+                        // A 3pt slop keeps a plain tap from becoming a
+                        // zero-length resize (which would light Undo through
+                        // mapping round-off) — and leaves it free to be the
+                        // tap-through below.
+                        guard abs(value.translation.width) > 3 else { return }
+                        handleDragBase = Double(
+                            value.location.x - position(timeline.bounds[boundary], width: width))
                         WarpHaptics.engage()
                     }
-                    guard let base = handleDragBase else { return }
-                    let shift = Double(value.translation.width / width) * visibleSpan
+                    guard let grab = handleDragBase else { return }
+                    // Absolute finger position in bar space (minus the grab
+                    // offset) keeps the handle under the finger even though
+                    // the bar's axis is output-proportional — source seconds
+                    // per pixel change from stretch to stretch, and the
+                    // handle itself moves as the timeline reflows.
+                    let target = time(at: value.location.x - CGFloat(grab), width: width)
+                    guard abs(target - timeline.bounds[boundary]) > 0.01 else { return }
                     model.updateWarp(coalescing: "resize-\(boundary)") {
-                        $0.resize(boundary: boundary, to: base + shift)
+                        $0.resize(boundary: boundary, to: target)
                     }
                 }
-                .onEnded { _ in
+                .onEnded { value in
+                    let dragged = handleDragBase != nil
                     handleDragBase = nil
                     model.endWarpCoalescing()
-                    WarpHaptics.engage()
+                    if dragged {
+                        WarpHaptics.engage()
+                        return
+                    }
+                    // Never crossed the slop: this was a tap. The handle's
+                    // enlarged hit area can blanket a minimum-width tile
+                    // completely, so pass the tap through — select (and
+                    // scrub to) whatever sits under the finger.
+                    let tapped = time(at: value.location.x, width: width)
+                    selectedStretch = timeline.stretchIndex(at: tapped)
+                    playhead = tapped
+                    openSeam = nil
+                    menuStretch = nil
                 }
         )
         .accessibilityLabel("Resize stretch boundary")
@@ -912,16 +1021,23 @@ struct WarpTimelineView: View {
 
     // MARK: - Ruler + minimap
 
-    /// The visible window's clock labels; dragging the row pans a zoomed
-    /// window 1:1.
+    /// "0s" — `clipLengthCompact` writes zero as "—", which a ruler edge
+    /// can't.
+    private func outputLabel(_ seconds: Double) -> String {
+        seconds <= 0.049 ? "0s" : SpeedMath.clipLengthCompact(seconds)
+    }
+
+    /// The visible window's labels in CLIP time — the axis the bar now draws
+    /// in; the badge on the preview keeps the source clock. Dragging the row
+    /// pans a zoomed window 1:1.
     private var ruler: some View {
         GeometryReader { proxy in
             HStack {
-                Text(WarpTimeline.clock(visibleStart))
+                Text(outputLabel(visibleOutputStart))
                 Spacer()
-                Text(WarpTimeline.clock((visibleStart + visibleEnd) / 2))
+                Text(outputLabel((visibleOutputStart + visibleOutputEnd) / 2))
                 Spacer()
-                Text(WarpTimeline.clock(visibleEnd))
+                Text(outputLabel(visibleOutputEnd))
             }
             .font(.system(size: 10))
             .foregroundStyle(.tertiary)
@@ -945,7 +1061,10 @@ struct WarpTimelineView: View {
                 let base = panBase ?? visibleStart
                 panBase = base
                 let span = visibleSpan
-                var start = base - Double(value.translation.width / width) * span
+                // Output-domain shift so the bar's content tracks the finger
+                // 1:1; the window keeps its source span (the zoom level).
+                let shift = Double(value.translation.width / width) * visibleOutputSpan
+                var start = sourceTime(atOutput: outputTime(atSource: base) - shift)
                 start = min(max(0, start), total - span)
                 zoomStart = start
                 zoomEnd = start + span
@@ -1100,16 +1219,20 @@ struct WarpTimelineView: View {
         let span = base.end - base.start
         let newSpan = min(max(span / max(0.01, scale), minimumSpan), total)
         // Anchor at the fingers when the gesture reports them; else keep the
-        // playhead planted if it's in view, else the window centre.
+        // playhead planted if it's in view, else the window centre. The bar
+        // is output-proportional, so a finger fraction converts to its source
+        // moment through the warp before the new window is placed around it.
+        let outStart = outputTime(atSource: base.start)
+        let outSpan = max(0.0001, outputTime(atSource: base.end) - outStart)
         let anchor: Double
         if let anchorX {
             anchor = min(max(0, anchorX), 1)
         } else if playhead >= base.start, playhead <= base.end, span > 0 {
-            anchor = (playhead - base.start) / span
+            anchor = (outputTime(atSource: playhead) - outStart) / outSpan
         } else {
             anchor = 0.5
         }
-        let anchorTime = base.start + anchor * span
+        let anchorTime = sourceTime(atOutput: outStart + anchor * outSpan)
         var start = anchorTime - anchor * newSpan
         start = min(max(0, start), total - newSpan)
         zoomStart = start
@@ -1143,7 +1266,9 @@ struct WarpTimelineView: View {
                         let fraction = min(max(0, Double(value.location.x / max(1, width))), 1)
                         let newSpan = max(minimumSpan, total / 4)
                         guard newSpan < total - 0.5 else { return }
-                        let anchorTime = fraction * total
+                        // The tapped pixel names a source moment through the
+                        // output-proportional bar, not a plain fraction of it.
+                        let anchorTime = time(at: value.location.x, width: width)
                         var start = anchorTime - fraction * newSpan
                         start = min(max(0, start), total - newSpan)
                         zoomStart = start

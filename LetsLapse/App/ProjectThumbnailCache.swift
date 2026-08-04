@@ -173,10 +173,18 @@ enum DiskThumbnailStore {
     /// Cache identity of a source file: its path plus modification date, so
     /// a rewritten file re-generates and a missing one is distinguishable
     /// from every real version of itself.
+    ///
+    /// The path part is sandbox-relative: an absolute path embeds the data
+    /// container's UUID, which iOS rotates on some reinstalls — that orphaned
+    /// every cached thumbnail at once and cost a full-library regeneration
+    /// storm on the next launch (a burst of "can't open …Thumbnails/….jpg"
+    /// in the log, and a device busy decoding for minutes).
     static func key(for url: URL) -> String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970
-        return "\(url.path)|\(modified.map { String($0) } ?? "missing")"
+        let home = NSHomeDirectory()
+        let path = url.path.hasPrefix(home) ? String(url.path.dropFirst(home.count)) : url.path
+        return "\(path)|\(modified.map { String($0) } ?? "missing")"
     }
 
     static func read(_ key: String) -> CGImage? {

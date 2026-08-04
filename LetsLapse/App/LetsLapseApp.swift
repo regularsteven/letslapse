@@ -217,6 +217,10 @@ struct ContentView: View {
             if let overrides = environment["LL_STRETCH"] {
                 model.debugApplyStretchOverrides(overrides)
             }
+            // LL_CANVAS=9:16 — pin the Adjust canvas for variant screenshots.
+            if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {
+                model.blendCanvasRatio = ratio
+            }
         }
         // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
         // collections from existing video blends (no-op without any); detail

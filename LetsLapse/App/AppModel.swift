@@ -439,6 +439,10 @@ final class AppModel: ObservableObject {
     /// (best surviving encoding per clip). Only meaningful once a clip has more
     /// than one encoding; drives the "Blend from" picker in Adjust.
     @Published var blendSourceCodec: OutputCodec?
+    /// The canvas the new blended clip renders to — the Adjust screen's ratio
+    /// chips. `nil` = as shot (no crop). A mismatched canvas centre-crops the
+    /// finished clip at source pixel scale on its way into the project.
+    @Published var blendCanvasRatio: CanvasRatio?
     @Published var useRamp = false
     @Published var constantWindow = UserDefaults.standard.object(forKey: DefaultsKey.constantWindow) as? Int
         ?? UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int
@@ -933,6 +937,47 @@ final class AppModel: ObservableObject {
         } ?? .wide
     }
 
+    // MARK: - Blend canvas (Adjust)
+
+    /// The current source's display-oriented pixel size. Rotation is already
+    /// baked in: a metadata-only Rotate 90° swaps the capture's stored
+    /// `sourceWidth`/`sourceHeight`, so these are the dimensions as displayed.
+    func sourceDisplaySize() -> CGSize? {
+        guard let capture = currentCapture,
+              let width = capture.sourceWidth, let height = capture.sourceHeight,
+              width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    /// The canvas the source was shot at: the ratio nearest its oriented
+    /// aspect — the Adjust picker's default.
+    func sourceCanvasRatio() -> CanvasRatio {
+        guard let size = sourceDisplaySize() else { return .wide }
+        let aspect = size.width / size.height
+        return CanvasRatio.allCases.min {
+            abs($0.aspect - aspect) < abs($1.aspect - aspect)
+        } ?? .wide
+    }
+
+    /// What the Adjust screen edits against: the chosen canvas, else as shot.
+    func effectiveBlendCanvas() -> CanvasRatio {
+        blendCanvasRatio ?? sourceCanvasRatio()
+    }
+
+    /// Whether creating the clip will crop — the chosen canvas disagrees with
+    /// the source's own shape beyond tolerance.
+    func blendCanvasNeedsCrop() -> Bool {
+        guard let size = sourceDisplaySize() else { return false }
+        return VideoCanvasCropper.cropSize(displaySize: size, canvas: effectiveBlendCanvas()) != nil
+    }
+
+    /// The pixels the chosen canvas keeps (centred, source scale) — the created
+    /// clip's dimensions, and the picker caption's number. nil when no crop.
+    func blendCanvasCropSize() -> CGSize? {
+        guard let size = sourceDisplaySize() else { return nil }
+        return VideoCanvasCropper.cropSize(displaySize: size, canvas: effectiveBlendCanvas())
+    }
+
     /// Collections that use this blend — the delete warning and the crop
     /// prompt both hinge on it.
     func collectionsUsing(blendID: UUID) -> [LapseCollection] {
@@ -1155,6 +1200,7 @@ final class AppModel: ObservableObject {
         source = nil
         currentCaptureID = nil
         photoBlendDepth = 1
+        blendCanvasRatio = nil
         warp = nil
         clearWarpHistory()
         excludedFrameIndices = []
@@ -1187,6 +1233,7 @@ final class AppModel: ObservableObject {
     func openCapture(_ capture: CaptureProject) {
         do {
             blendSourceCodec = nil
+            blendCanvasRatio = nil
             source = try source(for: capture)
             currentCaptureID = capture.id
             photoBlendDepth = 1
@@ -1216,6 +1263,7 @@ final class AppModel: ObservableObject {
 
         do {
             blendSourceCodec = nil
+            blendCanvasRatio = nil
             source = try source(for: capture)
             currentCaptureID = capture.id
             warp = nil
@@ -1616,18 +1664,50 @@ final class AppModel: ObservableObject {
         return (0, total)
     }
 
+    /// Everything a compiled warp depends on. The estimate card, its phrase
+    /// and the CTA all ask per body evaluation — and every @Published change
+    /// re-evaluates the body — so compiling a long clip's whole per-frame
+    /// schedule each time made canvas/chip taps visibly laggy on device.
+    private struct CompiledWarpMemo {
+        var timeline: WarpTimeline
+        var outputFPS: Int
+        var trim: Double
+        var captureID: UUID?
+        var codec: OutputCodec?
+        /// Region spans follow the async source probe, not just the capture.
+        var sourceSeconds: Double?
+        var value: WarpCompiler.Compiled?
+    }
+    private var compiledWarpMemo: CompiledWarpMemo?
+
     /// The current timeline compiled into per-file window schedules — what the
     /// render will do and what the estimate reports. nil when the Advanced
     /// ramp is on (it wins over the timeline) or the source has no known shape.
+    /// Memoized on its inputs; the memo self-invalidates by comparison.
     func compiledWarp() -> WarpCompiler.Compiled? {
         guard source?.isVideo == true, !useRamp else { return nil }
-        let regions = warpSourceRegions()
-        guard !regions.isEmpty else { return nil }
         let timeline = activeWarp()
+        let trim = trimVideoEnds ? max(0, trimHeadTailSeconds) : 0
+        if let memo = compiledWarpMemo,
+           memo.timeline == timeline,
+           memo.outputFPS == outputFPS,
+           memo.trim == trim,
+           memo.captureID == currentCaptureID,
+           memo.codec == blendSourceCodec,
+           memo.sourceSeconds == currentCapture?.sourceDurationSeconds {
+            return memo.value
+        }
+        let regions = warpSourceRegions()
         let range = warpActiveRange(total: timeline.sourceSeconds)
-        return WarpCompiler.compile(
+        let compiled: WarpCompiler.Compiled? = regions.isEmpty ? nil : WarpCompiler.compile(
             timeline, regions: regions, outputFPS: outputFPS,
             activeStart: range.start, activeEnd: range.end)
+        compiledWarpMemo = CompiledWarpMemo(
+            timeline: timeline, outputFPS: outputFPS, trim: trim,
+            captureID: currentCaptureID, codec: blendSourceCodec,
+            sourceSeconds: currentCapture?.sourceDurationSeconds,
+            value: compiled)
+        return compiled
     }
 
     /// A different speed worth trying next, for the Result screen's suggestion.
@@ -1984,6 +2064,12 @@ final class AppModel: ObservableObject {
         // Whether the run ends with the grade-bake export below — the progress
         // plan reserves a band for it so the bar doesn't sit full while it runs.
         let willBakeGrade = source.isVideo && !grade.isIdentity
+        // The Adjust canvas, resolved before the job starts so a selection
+        // change mid-render can't retarget it. nil = the clip keeps its shape.
+        let cropCanvas = source.isVideo && blendCanvasNeedsCrop() ? effectiveBlendCanvas() : nil
+        // The crop and the grade are both tail passes over the finished clip;
+        // the plan reserves its tail band when either will run.
+        let hasTailPass = willBakeGrade || cropCanvas != nil
         blendTask = Task { [weak self] in
             do {
                 guard let self else { return }
@@ -1992,7 +2078,7 @@ final class AppModel: ObservableObject {
                 case .video(let url):
                     self.beginProgressPlan(.make(
                         clipFrames: [Int((self.estimatedInputFrames ?? 1).rounded())],
-                        hasStitch: false, hasGrade: willBakeGrade))
+                        hasStitch: false, hasGrade: hasTailPass))
                     self.processingPhase = .blending(clip: 1, of: 1)
                     output = try await self.blendVideo(
                         url: url, ramp: ramp, fps: fps, linear: linear,
@@ -2001,7 +2087,7 @@ final class AppModel: ObservableObject {
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(
                         liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                        willBakeGrade: willBakeGrade, warpSchedules: warpCompiled?.schedules)
+                        willBakeGrade: hasTailPass, warpSchedules: warpCompiled?.schedules)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
@@ -2029,6 +2115,46 @@ final class AppModel: ObservableObject {
                             linear: linear, grade: grade)
                     }
                 }
+                // Tail passes share the plan's reserved band: the crop takes
+                // its head when both run, the grade the rest.
+                let tailBand = self.activeProgressPlan?.gradeBand
+                func slice(_ band: ClosedRange<Double>, _ from: Double, _ to: Double) -> ClosedRange<Double> {
+                    let span = band.upperBound - band.lowerBound
+                    return (band.lowerBound + from * span)...(band.lowerBound + to * span)
+                }
+                // The Adjust canvas crops the finished clip rather than the
+                // source — one short composition pass over a few seconds of
+                // output, whichever engine produced it, before the grade pass
+                // so the grade re-encodes only the kept pixels.
+                if let cropCanvas, output.kind == .video {
+                    self.statusMessage = "Cropping to \(cropCanvas.rawValue)..."
+                    self.processingPhase = .grading
+                    self.tailPhaseStartedAt = Date()
+                    self.processingETADate = nil
+                    let cropBand = tailBand.map { willBakeGrade ? slice($0, 0, 0.4) : $0 }
+                    let uncropped = output.url
+                    let cropped = try await VideoCanvasCropper.croppedCopy(
+                        of: uncropped, canvas: cropCanvas
+                    ) { fraction in
+                        Task { @MainActor [weak self] in
+                            guard let self, let cropBand else { return }
+                            self.reportTailProgress(band: cropBand, fraction: fraction)
+                        }
+                    }
+                    if let cropBand {
+                        self.reportTailProgress(band: cropBand, fraction: 1)
+                    }
+                    if let renderSize = cropped.renderSize {
+                        output.url = cropped.url
+                        output.width = Int(renderSize.width)
+                        output.height = Int(renderSize.height)
+                        output.summary += " · cropped to \(cropCanvas.rawValue)"
+                        if uncropped.deletingLastPathComponent().standardizedFileURL
+                            == FileManager.default.temporaryDirectory.standardizedFileURL {
+                            try? FileManager.default.removeItem(at: uncropped)
+                        }
+                    }
+                }
                 // A video blend grades the finished clip rather than the source:
                 // one short pass over a few seconds of output instead of a full
                 // re-encode of the original before it is even blended.
@@ -2037,7 +2163,7 @@ final class AppModel: ObservableObject {
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
-                    let gradeBand = self.activeProgressPlan?.gradeBand
+                    let gradeBand = tailBand.map { cropCanvas != nil ? slice($0, 0.4, 1) : $0 }
                     let ungraded = output.url
                     output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade) { fraction in
                         Task { @MainActor [weak self] in
@@ -2135,6 +2261,7 @@ final class AppModel: ObservableObject {
         }
 
         blendSourceCodec = nil
+        blendCanvasRatio = nil
         source = captureSource
         currentCaptureID = capture.id
         photoBlendDepth = max(1, blendDepth)
