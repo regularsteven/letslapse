@@ -1,0 +1,28 @@
+LetsLapse capture optics probe
+iPad15,5 · Version 26.5.2 (Build 23F84)
+build 0.1 (1)
+
+DEVICES
+back   WideAngleCamera  Back Camera
+front  WideAngleCamera  Front Camera
+front  UltraWideCamera  Front Ultra Wide Camera
+
+SELECTED  WideAngleCamera · Back Camera
+constituents (widest first): WideAngleCamera
+switchover factors (raw):
+  WideAngleCamera  fov 64.7°  maxPhoto 4224×3168
+secondaryNativeResolutionZoomFactors: none (no native sensor crop on this device)
+
+DERIVED CAPTURE OPTICS (the chips this device would get)
+     1x  raw 1     optical expect WideAngleCamera
+     2x  raw 2     digital-2x expect WideAngleCamera
+
+LIVE WALK (photo configuration)
+  stop   zoom→  backing camera        bayer RAW
+     1x  1      WideAngleCamera rgg4
+     2x  2      WideAngleCamera rgg4
+
+Reading the walk: 'backing camera' is activePrimaryConstituent — the
+physical lens actually in use at that stop. A non-empty RAW column on
+every optical stop means the DNG pipeline can run on this device via
+the virtual camera; 'none' anywhere keeps DNG on discrete devices.

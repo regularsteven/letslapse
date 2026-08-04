@@ -1,0 +1,45 @@
+LetsLapse capture optics probe
+iPhone17,1 · Version 26.5.2 (Build 23F84)
+build 0.1 (1)
+
+DEVICES
+back   TripleCamera  Back Triple Camera
+    constituents [UltraWideCamera, WideAngleCamera, TelephotoCamera]  switchover [2, 10]
+back   DualWideCamera  Back Dual Wide Camera
+    constituents [UltraWideCamera, WideAngleCamera]  switchover [2]
+back   DualCamera  Back Dual Camera
+    constituents [WideAngleCamera, TelephotoCamera]  switchover [5]
+back   WideAngleCamera  Back Camera
+front  WideAngleCamera  Front Camera
+back   UltraWideCamera  Back Ultra Wide Camera
+back   TelephotoCamera  Back Telephoto Camera
+front  TrueDepthCamera  Front TrueDepth Camera
+    constituents [WideAngleCamera]  switchover []
+
+SELECTED  TripleCamera · Back Triple Camera
+constituents (widest first): UltraWideCamera → WideAngleCamera → TelephotoCamera
+switchover factors (raw): 2, 10
+  UltraWideCamera  fov 106.2°  maxPhoto 8064×6048
+  WideAngleCamera  fov 74.6°  maxPhoto 8064×6048
+  TelephotoCamera  fov 17.2°  maxPhoto 4032×3024
+secondaryNativeResolutionZoomFactors [4] on 45 formats
+
+DERIVED CAPTURE OPTICS (the chips this device would get)
+   0.5x  raw 1     optical expect UltraWideCamera
+     1x  raw 2     optical expect WideAngleCamera
+     2x  raw 4     sensor-crop expect WideAngleCamera
+     5x  raw 10    optical expect TelephotoCamera
+    10x  raw 20    digital-2x expect TelephotoCamera
+
+LIVE WALK (photo configuration)
+  stop   zoom→  backing camera        bayer RAW
+   0.5x  1      UltraWideCamera none
+     1x  2      WideAngleCamera none
+     2x  4      WideAngleCamera none
+     5x  10     WideAngleCamera none
+    10x  20     WideAngleCamera none
+
+Reading the walk: 'backing camera' is activePrimaryConstituent — the
+physical lens actually in use at that stop. A non-empty RAW column on
+every optical stop means the DNG pipeline can run on this device via
+the virtual camera; 'none' anywhere keeps DNG on discrete devices.

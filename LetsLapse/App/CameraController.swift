@@ -23,6 +23,9 @@ let captureDiagEnabled = true
 /// interval photo capture for stacking.
 /// Session work runs on a dedicated queue; published state hops to main.
 final class CameraController: NSObject, ObservableObject {
+    /// Legacy lens vocabulary. No longer the chip model — stops are derived
+    /// from hardware at runtime (CaptureOptics.swift) — but kept for the
+    /// manage-resolutions probe and the remembered-lens migration.
     enum Lens: String, CaseIterable, Identifiable {
         #if os(iOS)
         case ultraWide
@@ -197,6 +200,29 @@ final class CameraController: NSObject, ObservableObject {
     private var videoInput: AVCaptureDeviceInput?
     private var audioInput: AVCaptureDeviceInput?
     private var videoDevice: AVCaptureDevice?
+    /// The device lens stops derive from and the standard world captures
+    /// through: the virtual multi-cam where the hardware has one, else the
+    /// plain wide/default device. Chosen once at configure. DNG work swaps
+    /// the session input to a physical constituent (Bayer RAW is a
+    /// physical-device capability — probe 2026-08-04), but stops keep
+    /// deriving from this device. sessionQueue-confined.
+    private var opticsDevice: AVCaptureDevice?
+    /// Every stop the hardware yields, unfiltered. sessionQueue-confined.
+    private var fullStops: [DerivedOpticsStop] = []
+    /// The stop currently applied — sessionQueue-confined mirror of
+    /// `selectedStop`. Format switches read it to re-assert zoom, because
+    /// setting `activeFormat` resets `videoZoomFactor` to 1.
+    private var currentStop: DerivedOpticsStop?
+    /// Bayer RAW capability of the physical wide camera, probed once at
+    /// configure before the optics input goes in. The virtual device always
+    /// reports none, so this cache is what the DNG gate reads while the
+    /// standard world is active. sessionQueue-confined.
+    private var wideRAWProbe: (supported: Bool, sensor: CaptureResolution?) = (false, nil)
+    /// Stop factor to restore once stops are derived (remembered settings).
+    private var preferredStopFactor: Double?
+    /// Last-applied "Enhanced lenses" setting, so reconcile re-derives when
+    /// Settings changed it while the capture screen was away.
+    private var lastEnhancedLensesEnabled = CaptureOpticsStore.enhancedLensesEnabled
     private var selectedPhotoDimensions: CMVideoDimensions?
     private var intervalTimer: DispatchSourceTimer?
     private var photoDirectory: URL?
@@ -265,8 +291,8 @@ final class CameraController: NSObject, ObservableObject {
         didSet { checkScheduledStopCount() }
     }
     @Published var activeFormatDescription = ""
-    @Published var availableLenses: [Lens] = []
-    @Published var selectedLens: Lens = .wide
+    @Published var availableStops: [DerivedOpticsStop] = []
+    @Published var selectedStop: DerivedOpticsStop?
     @Published var availableResolutions: [CaptureResolution] = []
     @Published var selectedResolution = CaptureResolution(width: 1920, height: 1080)
     @Published var availableFrameRates: [Int] = [30]
@@ -426,9 +452,7 @@ final class CameraController: NSObject, ObservableObject {
     /// `refreshCaptureOptions`.
     private func restoreRememberedSettings() {
         guard RecordingSettingsStore.isEnabled else { return }
-        if let lens = RecordingSettingsStore.lens {
-            selectedLens = lens
-        }
+        preferredStopFactor = RecordingSettingsStore.stopDisplayFactor
         if let resolution = RecordingSettingsStore.resolution {
             selectedResolution = resolution
         }
@@ -572,13 +596,52 @@ final class CameraController: NSObject, ObservableObject {
         guard !isConfigured else { return }
         LLog("configureIfNeeded: begin")
         isConfigured = true
+        let optics = Self.captureOpticsDevice()
+        opticsDevice = optics
+        #if os(iOS)
+        // Bayer RAW is a physical-device capability (the virtual camera
+        // reports none — probe 2026-08-04), and the list only populates in a
+        // photo configuration, so the DNG gate is probed on the physical
+        // wide before the optics input goes in. All pre-startRunning, so the
+        // extra configuration passes never show on screen.
+        let probeDevice = (optics?.isVirtualDevice == true)
+            ? optics.flatMap(Self.physicalWide(of:))
+            : optics
+        if let probeDevice, let probeInput = try? AVCaptureDeviceInput(device: probeDevice) {
+            session.beginConfiguration()
+            session.sessionPreset = .photo
+            if session.canAddInput(probeInput) { session.addInput(probeInput) }
+            if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
+            session.commitConfiguration()
+            let rawFormats = availableBayerRawFormats()
+            let dims = CMVideoFormatDescriptionGetDimensions(probeDevice.activeFormat.formatDescription)
+            wideRAWProbe = (
+                !rawFormats.isEmpty,
+                rawFormats.isEmpty ? nil : CaptureResolution(width: dims.width, height: dims.height))
+            bayerRAWProbeByDevice[probeDevice.uniqueID] = wideRAWProbe
+            LLog("liveblend-dng: configure probe \(probeDevice.localizedName) bayerRAW=\(wideRAWProbe.supported) sensor=\(dims.width)x\(dims.height)")
+            session.beginConfiguration()
+            session.removeInput(probeInput)
+            session.commitConfiguration()
+        }
+        #endif
         session.beginConfiguration()
         session.sessionPreset = .high
-        publishAvailableLenses()
-        configureLens(selectedLens)
+        if let optics, let input = try? AVCaptureDeviceInput(device: optics),
+           session.canAddInput(input) {
+            session.addInput(input)
+            videoInput = input
+            videoDevice = optics
+        }
         if session.canAddOutput(movieOutput) { session.addOutput(movieOutput) }
-        if session.canAddOutput(photoOutput) { session.addOutput(photoOutput) }
+        if !session.outputs.contains(photoOutput), session.canAddOutput(photoOutput) {
+            session.addOutput(photoOutput)
+        }
         session.commitConfiguration()
+        #if os(iOS)
+        if let optics { installConstituentLogging(on: optics) }
+        #endif
+        deriveStops()
         refreshCaptureOptions()
         applyVideoStabilization()
         publishFormat()
@@ -619,6 +682,10 @@ final class CameraController: NSObject, ObservableObject {
     private func probeBayerRAW() -> (supported: Bool, sensor: CaptureResolution?) {
         #if os(iOS)
         guard let device = videoDevice else { return (false, nil) }
+        // Virtual devices never offer Bayer RAW (probe 2026-08-04) — the
+        // standard world answers from the physical wide's configure-time
+        // probe instead of flipping presets to learn nothing.
+        if device.isVirtualDevice { return wideRAWProbe }
         if let cached = bayerRAWProbeByDevice[device.uniqueID] { return cached }
         let previousPreset = session.sessionPreset
         session.beginConfiguration()
@@ -686,20 +753,77 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             if active {
-                guard self.photoAspectPreviousPreset == nil,
-                      self.deviceSupportsBayerRAW() else { return }
-                self.photoAspectPreviousPreset = self.session.sessionPreset
-                self.applyPhotoAspectConfiguration()
+                self.armPhotoAspectPreview()
             } else {
-                guard let previous = self.photoAspectPreviousPreset else { return }
-                self.photoAspectPreviousPreset = nil
-                self.session.beginConfiguration()
-                self.session.sessionPreset = previous
-                self.session.commitConfiguration()
-                _ = self.applyCaptureFormat(resolution: self.selectedResolution, fps: self.selectedFrameRate)
-                self.publishFormat()
+                self.disarmPhotoAspectPreview()
             }
         }
+    }
+
+    /// sessionQueue-confined. DNG frames come from a physical camera (the
+    /// virtual device offers no Bayer RAW — probe 2026-08-04), so arming
+    /// swaps the session input to the nearest optical stop's constituent,
+    /// verifies RAW honestly on that device, and only then flips to the
+    /// photo configuration. Stops republish as optical-only.
+    private func armPhotoAspectPreview() {
+        guard photoAspectPreviousPreset == nil else { return }
+        let previousPreset = session.sessionPreset
+        guard let target = nearestOpticalStop(to: currentStop) else { return }
+        #if os(iOS)
+        if !physicalWorldActive, let optics = opticsDevice, optics.isVirtualDevice {
+            guard let device = physicalDevice(for: target),
+                  let input = try? AVCaptureDeviceInput(device: device) else { return }
+            session.beginConfiguration()
+            if let videoInput { session.removeInput(videoInput) }
+            if session.canAddInput(input) {
+                session.addInput(input)
+                videoInput = input
+                videoDevice = device
+            }
+            session.commitConfiguration()
+        }
+        #endif
+        guard deviceSupportsBayerRAW() else {
+            // Honest refusal: this camera cannot deliver DNG — undo the swap.
+            restoreOpticsInputIfNeeded()
+            _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            deriveStops()
+            publishFormat()
+            return
+        }
+        photoAspectPreviousPreset = previousPreset
+        currentStop = target
+        applyPhotoAspectConfiguration()
+        deriveStops()
+    }
+
+    /// sessionQueue-confined: restore the optics input and the pinned video
+    /// configuration, republishing the full stop set.
+    private func disarmPhotoAspectPreview() {
+        guard let previous = photoAspectPreviousPreset else { return }
+        photoAspectPreviousPreset = nil
+        session.beginConfiguration()
+        session.sessionPreset = previous
+        session.commitConfiguration()
+        restoreOpticsInputIfNeeded()
+        _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        deriveStops()
+        publishFormat()
+    }
+
+    /// sessionQueue-confined: put the optics device back as the session's
+    /// video input after DNG work ran on a physical constituent.
+    private func restoreOpticsInputIfNeeded() {
+        guard let optics = opticsDevice, videoDevice !== optics,
+              let input = try? AVCaptureDeviceInput(device: optics) else { return }
+        session.beginConfiguration()
+        if let videoInput { session.removeInput(videoInput) }
+        if session.canAddInput(input) {
+            session.addInput(input)
+            videoInput = input
+            videoDevice = optics
+        }
+        session.commitConfiguration()
     }
 
     /// sessionQueue-confined: flips the session to the photo configuration
@@ -716,15 +840,20 @@ final class CameraController: NSObject, ObservableObject {
         publishFormat()
     }
 
-    /// Lens (and resolution) changes re-pin the 16:9 video format as a side
-    /// effect; when the photo-aspect preview is armed it must win again
-    /// afterwards — or disarm honestly if the new device cannot do RAW.
+    /// Stop (and resolution) changes in the DNG world re-pin the 16:9 video
+    /// format as a side effect; when the photo-aspect preview is armed it
+    /// must win again afterwards — or disarm honestly if the new device
+    /// cannot do RAW.
     private func reassertPhotoAspectPreviewIfArmed() {
         guard photoAspectPreviousPreset != nil else { return }
         if deviceSupportsBayerRAW() {
             applyPhotoAspectConfiguration()
         } else {
             photoAspectPreviousPreset = nil
+            restoreOpticsInputIfNeeded()
+            _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            deriveStops()
+            publishFormat()
         }
     }
 
@@ -737,6 +866,11 @@ final class CameraController: NSObject, ObservableObject {
     /// is away. Runs on the sessionQueue.
     private func reconcileSettingsDrivenState() {
         reconcileAudioInput()
+        let enhanced = CaptureOpticsStore.enhancedLensesEnabled
+        if enhanced != lastEnhancedLensesEnabled {
+            lastEnhancedLensesEnabled = enhanced
+            deriveStops()
+        }
         let custom = RecordingSettingsStore.customFrameRate
         guard custom != lastAppliedCustomFrameRate else { return }
         lastAppliedCustomFrameRate = custom
@@ -770,51 +904,230 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    private func publishAvailableLenses() {
-        let lenses = Lens.allCases.filter { lens in
-            self.captureDevice(for: lens) != nil
+    // MARK: - Capture optics (derived lens stops)
+
+    /// The device lens stops derive from and the standard world captures
+    /// through: the virtual multi-cam when the hardware has one (system-
+    /// managed constituent switching, zoom-ramp lens changes, cross-lens
+    /// AE handoff), else the plain wide/default device.
+    private static func captureOpticsDevice() -> AVCaptureDevice? {
+        #if os(iOS)
+        let preference: [AVCaptureDevice.DeviceType] = [
+            .builtInTripleCamera, .builtInDualWideCamera, .builtInDualCamera, .builtInWideAngleCamera,
+        ]
+        return preference.lazy
+            .compactMap { AVCaptureDevice.default($0, for: .video, position: .back) }
+            .first
+        #else
+        return AVCaptureDevice.default(for: .video)
+        #endif
+    }
+
+    #if os(iOS)
+    /// Console-visible constituent handoffs (🎥LL): a finger-over-the-lens
+    /// test reads straight from the log. Also logs the switching-policy
+    /// defaults once — the prime suspect in the Photo-JPEG tele report
+    /// (2026-08-04): the wide was observed serving the 5×/10× stops.
+    private var constituentObservation: NSKeyValueObservation?
+
+    private func installConstituentLogging(on device: AVCaptureDevice) {
+        constituentObservation = nil
+        guard device.isVirtualDevice else { return }
+        LLog("optics: switching policy=\(device.primaryConstituentDeviceSwitchingBehavior.rawValue)"
+            + " active=\(device.activePrimaryConstituentDeviceSwitchingBehavior.rawValue)"
+            + " conditions=\(device.primaryConstituentDeviceRestrictedSwitchingBehaviorConditions.rawValue)")
+        constituentObservation = device.observe(
+            \.activePrimaryConstituent, options: [.initial, .new]
+        ) { device, _ in
+            let name = device.activePrimaryConstituent?.deviceType.rawValue
+                .replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") ?? "none"
+            LLog("optics: constituent → \(name) (zoom \(String(format: "%.2f", device.videoZoomFactor)))")
         }
+    }
+    #endif
+
+    /// The physical wide-angle constituent of a virtual device.
+    private static func physicalWide(of device: AVCaptureDevice) -> AVCaptureDevice? {
+        #if os(iOS)
+        return device.constituentDevices.first { $0.deviceType == .builtInWideAngleCamera }
+            ?? device.constituentDevices.first
+        #else
+        return device
+        #endif
+    }
+
+    /// True while the session runs on a physical constituent for DNG work
+    /// rather than the optics device. sessionQueue-confined.
+    private var physicalWorldActive: Bool {
+        guard let optics = opticsDevice else { return false }
+        return videoDevice !== optics
+    }
+
+    /// True while DNG work owns the session configuration (armed framing
+    /// preview or a running DNG blend) — the state that restricts stops to
+    /// optical. On single-camera hardware the input never swaps, so this is
+    /// deliberately preset-based, not input-based. sessionQueue-confined.
+    private var dngWorldActive: Bool {
+        #if os(iOS)
+        return photoAspectPreviousPreset != nil || dngRunPreviousPreset != nil
+        #else
+        return false
+        #endif
+    }
+
+    /// Derive the stop list from the optics device and publish the filtered
+    /// set: Settings can hide the enhanced (non-optical) stops, and DNG
+    /// work offers optical stops only — a zoom crop never applies to a
+    /// Bayer mosaic, so a computational chip would promise framing the file
+    /// won't have. sessionQueue-confined.
+    private func deriveStops() {
+        guard let optics = opticsDevice else {
+            fullStops = []
+            currentStop = nil
+            DispatchQueue.main.async {
+                self.availableStops = []
+                self.selectedStop = nil
+            }
+            return
+        }
+        #if os(iOS)
+        let constituents = optics.isVirtualDevice
+            ? optics.constituentDevices
+                .sorted { $0.activeFormat.videoFieldOfView > $1.activeFormat.videoFieldOfView }
+                .map { $0.deviceType.rawValue }
+            : [optics.deviceType.rawValue]
+        var cropFactors = Set<Double>()
+        for format in optics.formats {
+            format.secondaryNativeResolutionZoomFactors.forEach { cropFactors.insert(Double($0)) }
+        }
+        fullStops = CaptureOpticsDerivation.derive(.init(
+            constituents: constituents,
+            switchOverFactors: optics.virtualDeviceSwitchOverVideoZoomFactors.map(\.doubleValue),
+            sensorCropFactors: cropFactors.sorted(),
+            maxZoomFactor: Double(optics.activeFormat.videoMaxZoomFactor)))
+        #else
+        // The Mac's webcam is one lens; digital zoom support is spotty and
+        // the chips hide for a single stop anyway.
+        fullStops = [DerivedOpticsStop(
+            displayFactor: 1, rawFactor: 1, kind: .optical,
+            expectedBacking: optics.deviceType.rawValue)]
+        #endif
+
+        var stops = fullStops
+        if !CaptureOpticsStore.enhancedLensesEnabled || dngWorldActive {
+            stops = stops.filter { $0.kind == .optical }
+        }
+        let target = preferredStopFactor ?? currentStop?.displayFactor ?? 1.0
+        preferredStopFactor = nil
+        let selected = stops.min {
+            abs(log($0.displayFactor) - log(target)) < abs(log($1.displayFactor) - log(target))
+        }
+        currentStop = selected
         DispatchQueue.main.async {
-            self.availableLenses = lenses.isEmpty ? [.wide] : lenses
+            self.availableStops = stops
+            self.selectedStop = selected
+        }
+        if let selected, !physicalWorldActive {
+            applyZoom(selected, animated: false)
         }
     }
 
-    func selectLens(_ lens: Lens) {
+    /// The physical constituent backing a stop — the DNG world's discrete-
+    /// device sessions capture through this.
+    private func physicalDevice(for stop: DerivedOpticsStop) -> AVCaptureDevice? {
+        guard let optics = opticsDevice else { return nil }
+        #if os(iOS)
+        guard optics.isVirtualDevice else { return optics }
+        let sorted = optics.constituentDevices
+            .sorted { $0.activeFormat.videoFieldOfView > $1.activeFormat.videoFieldOfView }
+        var index = 0
+        for (i, factor) in optics.virtualDeviceSwitchOverVideoZoomFactors.enumerated()
+        where stop.rawFactor >= factor.doubleValue {
+            index = i + 1
+        }
+        return sorted[safe: index] ?? optics.constituentDevices.first
+        #else
+        return optics
+        #endif
+    }
+
+    /// The optical stop nearest (in log space) to `stop` — what a
+    /// computational selection collapses to when DNG work needs a physical
+    /// lens. sessionQueue-confined.
+    private func nearestOpticalStop(to stop: DerivedOpticsStop?) -> DerivedOpticsStop? {
+        let optical = fullStops.filter { $0.kind == .optical }
+        guard let stop else { return optical.first { $0.displayFactor == 1 } ?? optical.first }
+        return optical.min {
+            abs(log($0.displayFactor) - log(stop.displayFactor))
+                < abs(log($1.displayFactor) - log(stop.displayFactor))
+        }
+    }
+
+    /// Select a lens stop. Standard world: a zoom ramp on the one optics
+    /// input — no session transaction, continuous imagery, exposure carried
+    /// across the switchover by the system. DNG world: a discrete input swap
+    /// to the stop's physical camera (Bayer RAW requires it).
+    func selectStop(_ stop: DerivedOpticsStop) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
-            self.session.beginConfiguration()
-            self.configureLens(lens)
-            self.session.commitConfiguration()
-            self.refreshCaptureOptions()
-            self.applyVideoStabilization()
-            self.publishFormat()
-            self.reassertPhotoAspectPreviewIfArmed()
+            RecordingSettingsStore.save(stopFactor: stop.displayFactor)
+            if self.physicalWorldActive {
+                self.selectPhysicalStop(stop)
+            } else {
+                self.applyZoom(stop, animated: true)
+            }
         }
     }
 
-    private func configureLens(_ lens: Lens) {
-        let device = captureDevice(for: lens) ?? captureDevice(for: .wide)
-        guard let device, let input = try? AVCaptureDeviceInput(device: device) else { return }
-
-        if let videoInput {
-            session.removeInput(videoInput)
+    /// sessionQueue-confined. Rate 8 (powers of two per second) crosses the
+    /// 1×→5× jump in ~0.29 s — the native app's kind of snap.
+    private func applyZoom(_ stop: DerivedOpticsStop, animated: Bool) {
+        guard let device = videoDevice else { return }
+        #if os(iOS)
+        let raw = min(CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
+        do {
+            try device.lockForConfiguration()
+            if animated, session.isRunning {
+                device.ramp(toVideoZoomFactor: raw, withRate: 8)
+            } else {
+                device.videoZoomFactor = raw
+            }
+            device.unlockForConfiguration()
+        } catch {
+            LLog("optics: zoom to \(stop.chipLabel) failed: \(error.localizedDescription)")
+            return
         }
+        #endif
+        currentStop = stop
+        DispatchQueue.main.async {
+            if self.selectedStop != stop { self.selectedStop = stop }
+        }
+    }
+
+    /// sessionQueue-confined DNG-world stop change: swap the session input
+    /// to the stop's physical camera (the discrete path the whole app used
+    /// before Capture Optics), re-pin the format, and re-assert the armed
+    /// photo framing.
+    private func selectPhysicalStop(_ stop: DerivedOpticsStop) {
+        guard stop.kind == .optical,
+              let device = physicalDevice(for: stop),
+              let input = try? AVCaptureDeviceInput(device: device) else { return }
+        session.beginConfiguration()
+        if let videoInput { session.removeInput(videoInput) }
         if session.canAddInput(input) {
             session.addInput(input)
             videoInput = input
             videoDevice = device
-            let selected = Lens.allCases.first { $0.deviceType == device.deviceType } ?? .wide
-            RecordingSettingsStore.save(lens: selected)
-            DispatchQueue.main.async { self.selectedLens = selected }
         }
-    }
-
-    private func captureDevice(for lens: Lens) -> AVCaptureDevice? {
-        #if os(iOS)
-        return AVCaptureDevice.default(lens.deviceType, for: .video, position: .back)
-        #else
-        return AVCaptureDevice.default(for: .video)
-        #endif
+        session.commitConfiguration()
+        currentStop = stop
+        DispatchQueue.main.async {
+            if self.selectedStop != stop { self.selectedStop = stop }
+        }
+        refreshCaptureOptions()
+        applyVideoStabilization()
+        publishFormat()
+        reassertPhotoAspectPreviewIfArmed()
     }
 
     func selectResolution(_ resolution: CaptureResolution) {
@@ -996,6 +1309,13 @@ final class CameraController: NSObject, ObservableObject {
             }
             reassertExposureLock(on: device)
             #if os(iOS)
+            // Setting `activeFormat` also resets `videoZoomFactor` to 1 —
+            // re-assert the selected stop so a format change (resolution,
+            // fps, a ramp-burst segment) never silently jumps the framing.
+            if !physicalWorldActive, let stop = currentStop {
+                device.videoZoomFactor = min(
+                    CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
+            }
             // Setting `activeFormat` resets the device to its default colour
             // space, so re-assert Apple Log if Capture Flat is on and the new
             // format supports it (otherwise sRGB).
@@ -2184,6 +2504,24 @@ final class CameraController: NSObject, ObservableObject {
     /// finish), then RAW photo captures feed a linear-space average — one
     /// blended DNG per interval.
     private func startLiveBlendDNG(every interval: Double, depth: BlendDepth, options: LiveBlendCaptureOptions) {
+        // DNG frames come from a physical camera. The armed framing preview
+        // normally swapped the input already, but the arm is async — if the
+        // run starts from the standard world, move to the nearest optical
+        // stop's constituent now.
+        if let device = videoDevice, device.isVirtualDevice,
+           let target = nearestOpticalStop(to: currentStop),
+           let physical = physicalDevice(for: target),
+           let input = try? AVCaptureDeviceInput(device: physical) {
+            session.beginConfiguration()
+            if let videoInput { session.removeInput(videoInput) }
+            if session.canAddInput(input) {
+                session.addInput(input)
+                videoInput = input
+                videoDevice = physical
+            }
+            session.commitConfiguration()
+            currentStop = target
+        }
         let previousPreset = session.sessionPreset
         session.beginConfiguration()
         session.sessionPreset = .photo
@@ -2335,9 +2673,12 @@ final class CameraController: NSObject, ObservableObject {
         session.commitConfiguration()
         // While the photo-aspect preview is armed the run started from (and
         // returns to) the photo configuration — re-pinning the video format
-        // would snap the viewfinder back to 16:9 after every DNG shoot.
+        // (or restoring the optics input) would snap the viewfinder back to
+        // 16:9 after every DNG shoot.
         if photoAspectPreviousPreset == nil {
+            restoreOpticsInputIfNeeded()
             _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            deriveStops()
         }
         publishFormat()
     }
@@ -2579,6 +2920,7 @@ enum RecordingSettingsStore {
 
     private static let modeKey = "letslapse.capture.mode"
     private static let lensKey = "letslapse.capture.lens"
+    private static let stopFactorKey = "letslapse.capture.stopDisplayFactor"
     private static let resolutionWidthKey = "letslapse.capture.resolutionWidth"
     private static let resolutionHeightKey = "letslapse.capture.resolutionHeight"
     private static let frameRateKey = "letslapse.capture.frameRate"
@@ -2702,9 +3044,26 @@ enum RecordingSettingsStore {
         UserDefaults.standard.set(photoBulbMode, forKey: photoBulbModeKey)
     }
 
-    static var lens: CameraController.Lens? {
-        UserDefaults.standard.string(forKey: lensKey)
-            .flatMap(CameraController.Lens.init(rawValue:))
+    /// Remembered lens stop as its user-facing display factor. Falls back to
+    /// the retired Lens-enum key so an upgrade keeps the user's lens — the
+    /// old telephoto token maps to 4.0, which nearest-stop selection
+    /// resolves to the device's tele stop (5× on a 16 Pro, 3× on a 15 Pro).
+    static var stopDisplayFactor: Double? {
+        if let value = UserDefaults.standard.object(forKey: stopFactorKey) as? Double,
+           value > 0 {
+            return value
+        }
+        switch UserDefaults.standard.string(forKey: lensKey) {
+        case "ultraWide": return 0.5
+        case "wide": return 1.0
+        case "telephoto": return 4.0
+        default: return nil
+        }
+    }
+
+    static func save(stopFactor: Double) {
+        guard isEnabled else { return }
+        UserDefaults.standard.set(stopFactor, forKey: stopFactorKey)
     }
 
     static var resolution: CameraController.CaptureResolution? {
@@ -2728,7 +3087,6 @@ enum RecordingSettingsStore {
     }
 
     static func save(
-        lens: CameraController.Lens? = nil,
         resolution: CameraController.CaptureResolution? = nil,
         frameRate: Int? = nil,
         rampFrameRate: Int? = nil,
@@ -2736,7 +3094,6 @@ enum RecordingSettingsStore {
     ) {
         guard isEnabled else { return }
         let defaults = UserDefaults.standard
-        if let lens { defaults.set(lens.rawValue, forKey: lensKey) }
         if let resolution {
             defaults.set(Int(resolution.width), forKey: resolutionWidthKey)
             defaults.set(Int(resolution.height), forKey: resolutionHeightKey)
@@ -2751,7 +3108,7 @@ enum RecordingSettingsStore {
     static func clear() {
         let defaults = UserDefaults.standard
         for key in [
-            modeKey, lensKey, resolutionWidthKey, resolutionHeightKey,
+            modeKey, lensKey, stopFactorKey, resolutionWidthKey, resolutionHeightKey,
             frameRateKey, rampFrameRateKey, stabilizationKey,
             intervalSecondsKey, liveBlendIntervalSecondsKey, liveBlendFramesPerBlendKey,
             blendDepthKey, photoBlendDepthKey, photoBulbModeKey,

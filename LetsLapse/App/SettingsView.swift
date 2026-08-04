@@ -22,6 +22,8 @@ struct SettingsView: View {
     @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
     #if os(iOS)
     @State private var showCaptureBenchmark = false
+    @State private var showCaptureOpticsProbe = false
+    @AppStorage(CaptureOpticsStore.enhancedLensesKey) private var enhancedLenses = true
     #endif
     #if os(macOS)
     @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
@@ -83,6 +85,9 @@ struct SettingsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showCaptureBenchmark) {
             CaptureBenchmarkView()
+        }
+        .sheet(isPresented: $showCaptureOpticsProbe) {
+            CaptureOpticsProbeView()
         }
         #else
         .navigationTitle("Settings")
@@ -265,6 +270,26 @@ struct SettingsView: View {
                         .buttonStyle(.bordered)
                         .tint(.green)
                 }
+            }
+
+            LLRow(
+                title: "Enhanced lenses",
+                subtitle: "Adds the derived sensor-crop and 2× digital lens stops (dot-marked) beside the optical lenses. Optical stops always show."
+            ) {
+                Toggle("", isOn: $enhancedLenses)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+
+            // Capture Optics groundwork: lens-topology diagnostics, not
+            // gated on DNG — the lens model concerns every mode.
+            LLRow(
+                title: "Capture optics probe",
+                subtitle: "Dumps this device's lens topology — switchover factors, native sensor crops, RAW support per stop — and the lens chips it would derive. Results copy as text."
+            ) {
+                Button("Open") { showCaptureOpticsProbe = true }
+                    .buttonStyle(.bordered)
+                    .tint(.green)
             }
             #endif
 

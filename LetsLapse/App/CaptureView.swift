@@ -961,13 +961,13 @@ struct CaptureView: View {
         mode = Self.modeOrder[next]
     }
 
-    /// Pinch steps through the lenses one stop per threshold crossed:
-    /// pinch in walks .5× → 1× → 3×, pinch out walks back, stopping at
-    /// the tight and wide ends.
+    /// Pinch steps through the lens stops one per threshold crossed:
+    /// pinch in walks wide → tight, pinch out walks back, stopping at the
+    /// ends. Each step is a zoom ramp, so a fast pinch reads as continuous.
     private var lensPinchGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
-                guard !isCapturing, camera.availableLenses.count > 1 else { return }
+                guard !isCapturing, camera.availableStops.count > 1 else { return }
                 let threshold: CGFloat = 1.35
                 while value / pinchBaseline > threshold {
                     pinchBaseline *= threshold
@@ -984,12 +984,12 @@ struct CaptureView: View {
     }
 
     private func stepLens(tighter: Bool) {
-        let lenses = camera.availableLenses
-        guard let index = lenses.firstIndex(of: camera.selectedLens) else { return }
+        let stops = camera.availableStops
+        guard let selected = camera.selectedStop,
+              let index = stops.firstIndex(of: selected) else { return }
         let next = tighter ? index + 1 : index - 1
-        guard lenses.indices.contains(next) else { return }
-        camera.selectedLens = lenses[next]
-        camera.selectLens(lenses[next])
+        guard stops.indices.contains(next) else { return }
+        camera.selectStop(stops[next])
     }
 
     private var previewAspectRatio: CGFloat {
@@ -1569,7 +1569,7 @@ struct CaptureView: View {
             }
             .buttonStyle(.plain)
 
-            if camera.availableLenses.count > 1 {
+            if camera.availableStops.count > 1 {
                 zoomChips
             }
         }
@@ -1578,13 +1578,12 @@ struct CaptureView: View {
 
     private var zoomChips: some View {
         HStack(spacing: 8) {
-            ForEach(camera.availableLenses) { lens in
-                let isSelected = camera.selectedLens == lens
+            ForEach(camera.availableStops) { stop in
+                let isSelected = camera.selectedStop == stop
                 Button {
-                    camera.selectedLens = lens
-                    camera.selectLens(lens)
+                    camera.selectStop(stop)
                 } label: {
-                    Text(lens.zoomLabel)
+                    Text(stop.chipLabel)
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(isSelected ? LL.amber : .white.opacity(0.6))
                         .frame(minWidth: 30, minHeight: 30)
@@ -1594,8 +1593,18 @@ struct CaptureView: View {
                                 lineWidth: 1
                             )
                         )
+                        // Enhanced (non-optical) stops carry a dot until the
+                        // signed-off badge treatment lands with the SVGs.
+                        .overlay(alignment: .topTrailing) {
+                            if stop.kind != .optical {
+                                Circle()
+                                    .fill(LL.amber.opacity(isSelected ? 0.9 : 0.45))
+                                    .frame(width: 4, height: 4)
+                                    .offset(x: -1, y: 1)
+                            }
+                        }
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ZoomChipButtonStyle())
             }
         }
     }
@@ -2538,17 +2547,15 @@ private struct RuleOfThirdsGrid: View {
     }
 }
 
-private extension CameraController.Lens {
-    var zoomLabel: String {
-        switch self {
-        #if os(iOS)
-        case .ultraWide: return ".5×"
-        #endif
-        case .wide: return "1×"
-        #if os(iOS)
-        case .telephoto: return "3×"
-        #endif
-        }
+/// Chip presses repaint instantly: the default plain style's animated
+/// pressed fade left the amber selection under the measurement mask for
+/// ~150 ms on every lens change (capture investigation §3.4) — the strip
+/// must never read as "nothing selected".
+private struct ZoomChipButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .opacity(configuration.isPressed ? 0.7 : 1)
+            .animation(nil, value: configuration.isPressed)
     }
 }
 
