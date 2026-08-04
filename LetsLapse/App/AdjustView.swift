@@ -7,6 +7,9 @@ import LetsLapseKit
 /// a trim: every source frame lands in the finished clip.
 struct AdjustView: View {
     @EnvironmentObject var model: AppModel
+    /// The window's UndoManager, handed to the model so Cmd-Z, shake, and
+    /// three-finger-swipe drive the same timeline history as the Undo chip.
+    @Environment(\.undoManager) private var undoManager
     @State private var showAdvanced = false
     @State private var showCustomSpeed = false
     /// The stretch the chips edit, as an index into the warp timeline.
@@ -60,6 +63,7 @@ struct AdjustView: View {
             }
         }
         .background(LL.screenBackground.ignoresSafeArea())
+        .onAppear { model.warpUndoManager = undoManager }
         .sheet(isPresented: $showAdvanced) {
             AdvancedOptionsSheet()
                 .environmentObject(model)
@@ -800,6 +804,7 @@ struct CustomSpeedSheet: View {
                 }
             }
             .navigationTitle("Custom speed")
+            .onDisappear { model.endWarpCoalescing() }
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -822,7 +827,9 @@ struct CustomSpeedSheet: View {
             return max(1, Int(speed.rounded()))
         } set: { newValue in
             let index = min(stretch, max(0, model.activeWarp().stretchCount - 1))
-            model.updateWarp { $0.setSpeed(Double(newValue), for: index) }
+            // One undo step per visit to the sheet's slider/stepper, not one
+            // per tick.
+            model.updateWarp(coalescing: "speed-\(index)") { $0.setSpeed(Double(newValue), for: index) }
         }
     }
 

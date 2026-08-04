@@ -1117,6 +1117,9 @@ final class AppModel: ObservableObject {
                 timeline.setSpeed(speed, for: index)
             }
         }
+        // The seeded speeds are the screenshot's starting state, not edits —
+        // don't leave the Undo chip lit on a fresh variant run.
+        clearWarpHistory()
     }
     #endif
 
@@ -1153,6 +1156,7 @@ final class AppModel: ObservableObject {
         currentCaptureID = nil
         photoBlendDepth = 1
         warp = nil
+        clearWarpHistory()
         excludedFrameIndices = []
         tailFramesToExclude = 0
         totalIntervalFrames = 0
@@ -1187,6 +1191,7 @@ final class AppModel: ObservableObject {
             currentCaptureID = capture.id
             photoBlendDepth = 1
             warp = nil
+            clearWarpHistory()
             excludedFrameIndices = []
             tailFramesToExclude = 0
             totalIntervalFrames = 0
@@ -1214,6 +1219,7 @@ final class AppModel: ObservableObject {
             source = try source(for: capture)
             currentCaptureID = capture.id
             warp = nil
+            clearWarpHistory()
             excludedFrameIndices = []
             tailFramesToExclude = 0
             totalIntervalFrames = 0
@@ -1377,14 +1383,113 @@ final class AppModel: ObservableObject {
         warp ?? seededWarp()
     }
 
+    /// One undoable moment of the Adjust screen. `warp` stays Optional so undo
+    /// can restore the pristine not-yet-edited state (which re-seeds live);
+    /// `useRamp` rides along because `updateWarp` silently switches it off.
+    struct WarpEditSnapshot: Equatable {
+        var warp: WarpTimeline?
+        var useRamp: Bool
+    }
+
+    /// Uncapped on purpose: snapshots are three small arrays, and a cap would
+    /// desynchronize this stack from the window UndoManager's registrations.
+    @Published private(set) var warpUndoStack: [WarpEditSnapshot] = []
+    @Published private(set) var warpRedoStack: [WarpEditSnapshot] = []
+    /// While non-nil, edits carrying the same key fold into the snapshot the
+    /// first one pushed — a resize drag is one undo step, not sixty.
+    private var warpCoalescingKey: String?
+    /// The focused window's UndoManager, handed over by the Adjust screen so
+    /// Cmd-Z / shake / three-finger-swipe drive the same stack as the chip.
+    weak var warpUndoManager: UndoManager?
+    private static let warpUndoActionName = "Timeline Edit"
+
+    var canUndoWarp: Bool { !warpUndoStack.isEmpty }
+    var canRedoWarp: Bool { !warpRedoStack.isEmpty }
+
     /// Edit the timeline. Direct manipulation always means explicit stretch
     /// speeds, so the Advanced ramp switches off — as touching a speed control
-    /// always has.
-    func updateWarp(_ transform: (inout WarpTimeline) -> Void) {
-        var timeline = warp ?? seededWarp()
+    /// always has. Every distinct edit pushes an undo snapshot; pass a
+    /// `coalescing` key from continuous gestures and call
+    /// `endWarpCoalescing()` when the gesture lifts.
+    func updateWarp(coalescing key: String? = nil, _ transform: (inout WarpTimeline) -> Void) {
+        let before = WarpEditSnapshot(warp: warp, useRamp: useRamp)
+        let baseline = warp ?? seededWarp()
+        var timeline = baseline
         transform(&timeline)
+        // A no-op edit pushes nothing — including identity transforms on the
+        // pristine (still re-seeding) screen, so tapping the already-active
+        // chip never lights the Undo affordance. It also leaves the coalescing
+        // key alone, so a gesture's first REAL change still snapshots the true
+        // before-state.
+        let changed = timeline != baseline || useRamp
+        guard changed else { return }
+        if key == nil || key != warpCoalescingKey {
+            warpUndoStack.append(before)
+            warpRedoStack.removeAll()
+            registerSystemUndo()
+        }
+        warpCoalescingKey = key
         warp = timeline
         useRamp = false
+    }
+
+    /// A continuous gesture ended — the next edit starts a fresh undo step.
+    func endWarpCoalescing() {
+        warpCoalescingKey = nil
+    }
+
+    /// The UI's undo entry point. Routes through the window's UndoManager when
+    /// its top action is ours, so the undo/redo pairing stays truthful for
+    /// Cmd-Z, shake, and three-finger-swipe; falls back to the plain stack
+    /// when the manager is absent or its top action belongs to something else.
+    func requestWarpUndo() {
+        if let manager = warpUndoManager, manager.canUndo,
+           manager.undoActionName == Self.warpUndoActionName {
+            manager.undo()
+        } else {
+            undoWarp()
+        }
+    }
+
+    func undoWarp() {
+        // Registrations on the window manager outlive this screen (Processing,
+        // Result, other macOS tabs); a shake or Cmd-Z there must not silently
+        // rewrite the timeline the user just rendered from.
+        guard stage == .configure else { return }
+        guard let snapshot = warpUndoStack.popLast() else { return }
+        warpRedoStack.append(WarpEditSnapshot(warp: warp, useRamp: useRamp))
+        warpCoalescingKey = nil
+        warp = snapshot.warp
+        useRamp = snapshot.useRamp
+        // Inside UndoManager.undo() this lands on its redo stack. Outside one
+        // (the no-manager fallback) it would corrupt the undo stack — skip.
+        if let manager = warpUndoManager, manager.isUndoing {
+            manager.registerUndo(withTarget: self) { $0.redoWarp() }
+            manager.setActionName(Self.warpUndoActionName)
+        }
+    }
+
+    func redoWarp() {
+        guard stage == .configure else { return }
+        guard let snapshot = warpRedoStack.popLast() else { return }
+        warpUndoStack.append(WarpEditSnapshot(warp: warp, useRamp: useRamp))
+        warpCoalescingKey = nil
+        warp = snapshot.warp
+        useRamp = snapshot.useRamp
+        registerSystemUndo()
+    }
+
+    private func registerSystemUndo() {
+        warpUndoManager?.registerUndo(withTarget: self) { $0.undoWarp() }
+        warpUndoManager?.setActionName(Self.warpUndoActionName)
+    }
+
+    /// Leaving the Adjust flow — the timeline history dies with the timeline.
+    private func clearWarpHistory() {
+        warpUndoStack.removeAll()
+        warpRedoStack.removeAll()
+        warpCoalescingKey = nil
+        warpUndoManager?.removeAllActions(withTarget: self)
     }
 
     /// A capture's starting timeline: recorded moments become ¼× (the same

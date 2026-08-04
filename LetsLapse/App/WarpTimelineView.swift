@@ -1,5 +1,8 @@
 import SwiftUI
 import AVFoundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// Loads the playhead's frame — the nearest keyframe, decoded once per URL —
 /// for the warp timeline's floating thumbnail and the wide layout's preview.
@@ -33,9 +36,56 @@ final class WarpPreviewLoader: ObservableObject {
     }
 }
 
+/// Gesture confirmations for the timeline. UIKit generators because the
+/// deployment target predates `.sensoryFeedback`; silent no-ops on macOS,
+/// where the pointer is its own confirmation.
+enum WarpHaptics {
+    static func success() {
+        #if canImport(UIKit)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        #endif
+    }
+
+    static func warning() {
+        #if canImport(UIKit)
+        UINotificationFeedbackGenerator().notificationOccurred(.warning)
+        #endif
+    }
+
+    static func tick() {
+        #if canImport(UIKit)
+        UISelectionFeedbackGenerator().selectionChanged()
+        #endif
+    }
+
+    static func engage() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
+    }
+
+    static func limit() {
+        #if canImport(UIKit)
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        #endif
+    }
+}
+
+/// A transient confirmation over the timeline — "Added 1× stretch · Undo".
+private struct TimelineToast: Equatable {
+    let id = UUID()
+    var message: String
+    var showsUndo: Bool
+
+    static func == (lhs: TimelineToast, rhs: TimelineToast) -> Bool {
+        lhs.id == rhs.id
+    }
+}
+
 /// The 3a warp timeline: the source bar with per-stretch speeds, seam pills,
 /// a scrubbable playhead, drag-to-nominate, resize handles, zoom, and the
-/// long-press stretch menu. All edits go through `model.updateWarp`.
+/// hold (or macOS right-click) stretch menu. All edits go through
+/// `model.updateWarp`, which keeps the undo history.
 struct WarpTimelineView: View {
     @EnvironmentObject var model: AppModel
     @Binding var selectedStretch: Int
@@ -51,19 +101,46 @@ struct WarpTimelineView: View {
     @State private var playheadPlaced = false
     /// In-flight drag-to-nominate range, in source seconds.
     @State private var nominating: ClosedRange<Double>?
+    /// Whether the in-flight nomination has crossed the minimum span — drives
+    /// the overlay's dashed-vs-amber state and the crossing tick.
+    @State private var nominateWasValid = false
     /// Which seam's popover is open.
     @State private var openSeam: Int?
     @State private var pinchBase: (start: Double, end: Double)?
+    @State private var pinchAtLimit = false
+    /// Pan anchors: the value at first onChanged, so cumulative translations
+    /// apply once instead of compounding.
+    @State private var panBase: Double?
+    @State private var playheadDragBase: Double?
+    @State private var handleDragBase: Double?
+    /// A pinch happened during the current touch sequence. The drag that
+    /// survives a pinch must never carve — its coordinates were remapped
+    /// mid-gesture. Cleared once both the pinch and the drag are over.
+    @State private var dragSawPinch = false
+    /// Recognition liveness, tracked with @GestureState because SwiftUI resets
+    /// it even when a gesture is CANCELLED (scroll steal, interruption) — the
+    /// onChange healers below reset the plain-@State anchors that onEnded
+    /// would otherwise never clear.
+    @GestureState private var pinchLive = false
+    @GestureState private var nominateLive = false
+    @GestureState private var knobLive = false
+    @GestureState private var handleLive = false
+    @GestureState private var panLive = false
     /// The held stretch's menu (Remove · Split · Reset). A hold opens it; the
     /// release's tap is swallowed by the flag so it doesn't immediately close.
     @State private var menuStretch: Int?
     @State private var menuOpenedByHold = false
+    @State private var toast: TimelineToast?
 
     private var timeline: WarpTimeline { model.activeWarp() }
     private var total: Double { max(0.001, timeline.sourceSeconds) }
     private var visibleStart: Double { min(max(0, zoomStart ?? 0), total) }
     private var visibleEnd: Double { min(zoomEnd ?? total, total) }
-    private var visibleSpan: Double { max(WarpTimelineView.minimumZoomSpan / 4, visibleEnd - visibleStart) }
+    private var visibleSpan: Double { max(0.001, visibleEnd - visibleStart) }
+    private var isZoomed: Bool { zoomStart != nil || zoomEnd != nil }
+    private var playheadVisible: Bool { playhead >= visibleStart && playhead <= visibleEnd }
+    /// The zoom floor — clips shorter than 20s zoom no further than themselves.
+    private var minimumSpan: Double { min(WarpTimelineView.minimumZoomSpan, total) }
     private static let minimumZoomSpan = 20.0
     private static let barHeight: CGFloat = 50
 
@@ -85,17 +162,12 @@ struct WarpTimelineView: View {
             }
             .frame(height: 96)
 
-            HStack {
-                Text(WarpTimeline.clock(visibleStart))
-                Spacer()
-                Text(WarpTimeline.clock((visibleStart + visibleEnd) / 2))
-                Spacer()
-                Text(WarpTimeline.clock(visibleEnd))
+            ruler
+
+            if isZoomed {
+                minimap
+                    .transition(.opacity)
             }
-            .font(.system(size: 10))
-            .foregroundStyle(.tertiary)
-            .contentShape(Rectangle())
-            .gesture(panGesture)
 
             selectionLine
 
@@ -108,15 +180,69 @@ struct WarpTimelineView: View {
                     .transition(.opacity)
             }
         }
+        .overlay(alignment: .top) {
+            if let toast {
+                // Over the thumbnail strip in portrait; over the header row in
+                // wide layouts, where padding 28 would blanket the bar itself.
+                toastView(toast)
+                    .padding(.top, showsInlineThumbnail ? 28 : 0)
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                    .task(id: toast.id) {
+                        try? await Task.sleep(nanoseconds: 4_000_000_000)
+                        withAnimation(.easeInOut(duration: 0.2)) { self.toast = nil }
+                    }
+            }
+        }
         .onAppear(perform: placePlayheadIfNeeded)
         .onChange(of: model.currentCaptureID) { _ in
             playheadPlaced = false
             zoomStart = nil
             zoomEnd = nil
             openSeam = nil
+            menuStretch = nil
+            menuOpenedByHold = false
+            panBase = nil
+            pinchBase = nil
+            pinchAtLimit = false
+            playheadDragBase = nil
+            handleDragBase = nil
+            nominating = nil
+            nominateWasValid = false
+            dragSawPinch = false
+            toast = nil
             placePlayheadIfNeeded()
         }
         .onChange(of: playhead) { _ in loadPreview() }
+        // Undo can shrink the timeline under the selection — keep it legal.
+        .onChange(of: timeline.stretchCount) { count in
+            selectedStretch = min(selectedStretch, max(0, count - 1))
+        }
+        // Cancellation healers: @GestureState flips false on end AND cancel,
+        // so anchors can't stay stuck when a gesture dies without onEnded.
+        .onChange(of: pinchLive) { live in
+            guard !live else { return }
+            pinchBase = nil
+            pinchAtLimit = false
+            if !nominateLive { dragSawPinch = false }
+        }
+        .onChange(of: nominateLive) { live in
+            guard !live else { return }
+            nominating = nil
+            nominateWasValid = false
+            menuOpenedByHold = false
+            if !pinchLive { dragSawPinch = false }
+        }
+        .onChange(of: knobLive) { live in
+            if !live { playheadDragBase = nil }
+        }
+        .onChange(of: handleLive) { live in
+            guard !live else { return }
+            handleDragBase = nil
+            model.endWarpCoalescing()
+        }
+        .onChange(of: panLive) { live in
+            if !live { panBase = nil }
+        }
     }
 
     // MARK: - Header
@@ -128,7 +254,30 @@ struct WarpTimelineView: View {
                 .foregroundStyle(.secondary)
                 .kerning(0.5)
             Spacer()
-            if zoomStart != nil || zoomEnd != nil {
+            if model.canUndoWarp {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        model.requestWarpUndo()
+                        toast = nil
+                    }
+                    WarpHaptics.tick()
+                } label: {
+                    HStack(spacing: 3) {
+                        Image(systemName: "arrow.uturn.backward")
+                            .font(.system(size: 9, weight: .bold))
+                        Text("Undo")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .foregroundStyle(LL.amber)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 3)
+                    .background(LL.ink, in: Capsule())
+                    .contentShape(Rectangle().inset(by: -10))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Undo timeline edit")
+            }
+            if isZoomed {
                 Button {
                     withAnimation(.easeInOut(duration: 0.25)) {
                         zoomStart = nil
@@ -141,15 +290,50 @@ struct WarpTimelineView: View {
                         .padding(.horizontal, 8)
                         .padding(.vertical, 3)
                         .background(LL.ink, in: Capsule())
+                        .contentShape(Rectangle().inset(by: -10))
                 }
                 .buttonStyle(.plain)
             }
-            Text("pinch to zoom · drag to nominate · hold for options")
-                .font(.system(size: 10))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+            // Once an edit exists the Undo chip needs the room — and the user
+            // has plainly found the gestures the hint teaches.
+            if !model.canUndoWarp {
+                Text("pinch to zoom · drag to nominate · hold for options")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
+    }
+
+    // MARK: - Toast
+
+    private func toastView(_ toast: TimelineToast) -> some View {
+        HStack(spacing: 10) {
+            Text(toast.message)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+            if toast.showsUndo {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        model.requestWarpUndo()
+                        self.toast = nil
+                    }
+                    WarpHaptics.tick()
+                } label: {
+                    Text("Undo")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(LL.amber)
+                        .contentShape(Rectangle().inset(by: -10))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Undo timeline edit")
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 9)
+        .background(LL.ink, in: Capsule())
+        .shadow(color: .black.opacity(0.25), radius: 8, y: 3)
     }
 
     // MARK: - Thumbnail strip
@@ -172,7 +356,7 @@ struct WarpTimelineView: View {
                     }
                     .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
                     .overlay(alignment: .bottomLeading) {
-                        Text(WarpTimeline.clock(playhead))
+                        Text(thumbnailBadge)
                             .font(.system(size: 10, weight: .bold))
                             .foregroundStyle(.white)
                             .padding(.horizontal, 6)
@@ -190,11 +374,22 @@ struct WarpTimelineView: View {
                             .padding(5)
                     }
                     .frame(width: 120, height: 72)
+                    // An off-window playhead dims its thumbnail — the frame is
+                    // real, but it isn't where you're looking.
+                    .opacity(playheadVisible ? 1 : 0.55)
                     .shadow(color: .black.opacity(0.18), radius: 6, y: 2)
                     .offset(x: clamped * proxy.size.width - 60)
             }
         }
         .frame(height: 76)
+    }
+
+    /// "2:41" while the playhead is visible; "◀ 2:41" / "2:41 ▶" when it sits
+    /// beyond the zoomed window, pointing the way back.
+    private var thumbnailBadge: String {
+        if playhead < visibleStart { return "◀ \(WarpTimeline.clock(playhead))" }
+        if playhead > visibleEnd { return "\(WarpTimeline.clock(playhead)) ▶" }
+        return WarpTimeline.clock(playhead)
     }
 
     // MARK: - Bar
@@ -247,9 +442,8 @@ struct WarpTimelineView: View {
         let bounds = timeline.bounds
         return ZStack(alignment: .topLeading) {
             // Stretch tiles. The nominate drag and the select tap live on this
-            // row with priority over the tiles' own context-menu interaction;
-            // the knob, handles and seam pills are siblings with their own
-            // gestures, untouched by it.
+            // row; the knob, handles and seam pills are siblings with their own
+            // gestures, drawn later so their (enlarged) hit areas win overlaps.
             HStack(spacing: 2) {
                 ForEach(tileLayout(width: width), id: \.index) { tile in
                     stretchTile(tile.index, width: tile.width)
@@ -257,20 +451,28 @@ struct WarpTimelineView: View {
             }
             .padding(.top, 8)
 
-            // Nomination overlay.
+            // Nomination overlay: dashed and quiet until the drag spans the
+            // 2-second minimum, amber once it will really carve.
             if let nominating {
                 let x0 = max(0, position(nominating.lowerBound, width: width))
                 let x1 = min(width, position(nominating.upperBound, width: width))
+                let valid = nominating.upperBound - nominating.lowerBound >= WarpTimeline.minimumNomination
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(LL.amber.opacity(0.35))
+                    .fill(valid ? LL.amber.opacity(0.35) : Color.secondary.opacity(0.15))
                     .overlay(
                         RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .strokeBorder(LL.amber, style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
+                            .strokeBorder(
+                                valid ? LL.amber : Color.secondary.opacity(0.6),
+                                style: StrokeStyle(lineWidth: 1.5, dash: [4, 3]))
                     )
                     .frame(width: max(0, x1 - x0), height: Self.barHeight)
                     .offset(x: x0, y: 8)
                     .allowsHitTesting(false)
             }
+
+            // Seam pills — drawn BEFORE the handles so a handle's enlarged hit
+            // area wins where the two overlap at a selected boundary.
+            seamPills(width: width)
 
             // Resize handles for the selected stretch.
             if selectedStretch < timeline.stretchCount {
@@ -278,41 +480,81 @@ struct WarpTimelineView: View {
                 let right = bounds[selectedStretch + 1]
                 if selectedStretch > 0, left >= visibleStart, left <= visibleEnd {
                     resizeHandle(boundary: selectedStretch, width: width)
-                        .offset(x: position(left, width: width) - 6, y: 5)
+                        .offset(x: position(left, width: width) - 22, y: 2)
                 }
                 if selectedStretch < timeline.stretchCount - 1, right >= visibleStart, right <= visibleEnd {
                     resizeHandle(boundary: selectedStretch + 1, width: width)
-                        .offset(x: position(right, width: width) - 6, y: 5)
+                        .offset(x: position(right, width: width) - 22, y: 2)
                 }
             }
 
-            // Seam pills.
-            seamPills(width: width)
-
-            // Playhead.
-            if playhead >= visibleStart, playhead <= visibleEnd {
+            // Playhead — or, zoomed past it, a chevron that leads back.
+            if playheadVisible {
                 Rectangle()
                     .fill(LL.accent)
                     .frame(width: 2, height: 60)
                     .offset(x: position(playhead, width: width) - 1)
                     .allowsHitTesting(false)
-                Circle()
-                    .fill(LL.accent)
-                    .frame(width: 18, height: 18)
-                    .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
-                    .offset(x: position(playhead, width: width) - 9, y: -9)
-                    .gesture(
-                        DragGesture(minimumDistance: 0)
-                            .onChanged { value in
-                                playhead = time(at: value.location.x, width: width)
-                            }
-                    )
-                    .accessibilityLabel("Playhead, \(WarpTimeline.clock(playhead))")
+                playheadKnob(width: width)
+                    .offset(x: position(playhead, width: width) - 22, y: -22)
+            } else {
+                playheadChevron(width: width)
             }
         }
         .contentShape(Rectangle())
         .gesture(nominateGesture(width: width))
         .simultaneousGesture(pinchGesture(width: width))
+        .simultaneousGesture(doubleTapZoom(width: width))
+    }
+
+    private func playheadKnob(width: CGFloat) -> some View {
+        // 18pt of accent inside a 44pt touch target.
+        ZStack {
+            Circle()
+                .fill(LL.accent)
+                .frame(width: 18, height: 18)
+                .shadow(color: .black.opacity(0.3), radius: 2, y: 1)
+        }
+        .frame(width: 44, height: 44)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($knobLive) { _, live, _ in live = true }
+                .onChanged { value in
+                    guard pinchBase == nil else { return }
+                    let base = playheadDragBase ?? playhead
+                    playheadDragBase = base
+                    let shift = Double(value.translation.width / width) * visibleSpan
+                    playhead = min(max(visibleStart, base + shift), visibleEnd)
+                }
+                .onEnded { _ in playheadDragBase = nil }
+        )
+        .accessibilityLabel("Playhead, \(WarpTimeline.clock(playhead))")
+    }
+
+    /// The zoomed window has scrolled past the playhead — show where it went
+    /// and offer a non-destructive way back.
+    private func playheadChevron(width: CGFloat) -> some View {
+        let leading = playhead < visibleStart
+        return Button {
+            withAnimation(.easeInOut(duration: 0.25)) {
+                let span = visibleSpan
+                var start = playhead - span / 2
+                start = min(max(0, start), total - span)
+                zoomStart = start
+                zoomEnd = start + span
+            }
+        } label: {
+            Image(systemName: leading ? "chevron.left.circle.fill" : "chevron.right.circle.fill")
+                .font(.system(size: 20, weight: .semibold))
+                .foregroundStyle(LL.accent)
+                .background(Circle().fill(.white).padding(3))
+                .frame(width: 44, height: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .offset(x: leading ? -8 : width - 36, y: 11)
+        .accessibilityLabel("Playhead at \(WarpTimeline.clock(playhead)), tap to recenter")
     }
 
     private func stretchTile(_ index: Int, width: CGFloat) -> some View {
@@ -322,7 +564,7 @@ struct WarpTimelineView: View {
         let clippedStart = max(timeline.bounds[index], visibleStart)
         let clippedEnd = min(timeline.bounds[index + 1], visibleEnd)
         let shape = RoundedRectangle(cornerRadius: 8, style: .continuous)
-        return shape
+        let tile = shape
             .fill(slow ? Self.slowGradient : Self.baseGradient)
             .overlay {
                 if slow {
@@ -350,6 +592,13 @@ struct WarpTimelineView: View {
             .gesture(
                 SpatialTapGesture()
                     .onEnded { value in
+                        // The release after a hold is a tap too — swallow it so
+                        // it doesn't close the menu the hold just opened.
+                        if menuOpenedByHold, menuStretch == index {
+                            menuOpenedByHold = false
+                            return
+                        }
+                        menuOpenedByHold = false
                         let fraction = min(max(0, value.location.x / max(1, width)), 1)
                         playhead = clippedStart + Double(fraction) * (clippedEnd - clippedStart)
                         selectedStretch = index
@@ -359,14 +608,65 @@ struct WarpTimelineView: View {
             )
             .accessibilityLabel("Stretch \(index + 1), \(WarpTimeline.speedLabel(speed)) \(WarpTimeline.speedWord(speed))")
             .accessibilityAddTraits(selected ? .isSelected : [])
+        return platformStretchActions(tile, index: index)
     }
 
-    /// The held stretch's menu — the prototype's Remove · Split here · Reset,
-    /// as an inline card so one gesture owns the whole bar.
+    /// macOS right-click gets the native menu; iOS keeps the inline card via
+    /// the hold gesture. The hold is NOT attached on macOS — a slow precise
+    /// mouse press would trip it, and right-click already covers the intent.
+    @ViewBuilder
+    private func platformStretchActions(_ content: some View, index: Int) -> some View {
+        #if os(macOS)
+        content.contextMenu {
+            Button(role: .destructive) {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    model.updateWarp { selectedStretch = $0.remove(index) }
+                }
+            } label: {
+                Label("Remove stretch", systemImage: "trash")
+            }
+            .disabled(timeline.stretchCount <= 1)
+            Button {
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    model.updateWarp { $0.split(index, at: playhead) }
+                    selectedStretch = index
+                }
+            } label: {
+                Label("Split here", systemImage: "scissors")
+            }
+            Button {
+                model.updateWarp { $0.setSpeed(Double(max(1, model.constantWindow)), for: index) }
+            } label: {
+                Label("Reset speed", systemImage: "gauge")
+            }
+        }
+        #else
+        content.simultaneousGesture(
+            LongPressGesture(minimumDuration: 0.45)
+                .onEnded { _ in
+                    menuOpenedByHold = true
+                    selectedStretch = index
+                    openSeam = nil
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        menuStretch = index
+                    }
+                    WarpHaptics.engage()
+                }
+        )
+        #endif
+    }
+
+    /// The held stretch's menu — Remove · Split here · Reset, as an inline
+    /// card so one gesture owns the whole bar. Reached by holding a stretch,
+    /// the selection line's ellipsis, or right-click on macOS.
     private func stretchMenu(_ index: Int) -> some View {
-        VStack(spacing: 0) {
-            menuRow("Remove stretch", color: Color(red: 1, green: 0.23, blue: 0.19)) {
-                guard timeline.stretchCount > 1 else { return }
+        let removable = timeline.stretchCount > 1
+        return VStack(spacing: 0) {
+            menuRow(
+                "Remove stretch",
+                color: removable ? Color(red: 1, green: 0.23, blue: 0.19) : .secondary,
+                enabled: removable
+            ) {
                 withAnimation(.easeInOut(duration: 0.25)) {
                     model.updateWarp { selectedStretch = $0.remove(index) }
                 }
@@ -388,14 +688,26 @@ struct WarpTimelineView: View {
         .shadow(color: .black.opacity(0.25), radius: 12, y: 5)
     }
 
-    private func menuRow(_ title: String, color: Color, action: @escaping () -> Void) -> some View {
+    private func menuRow(
+        _ title: String,
+        color: Color,
+        enabled: Bool = true,
+        action: @escaping () -> Void
+    ) -> some View {
         Button {
+            guard enabled else {
+                menuOpenedByHold = false
+                WarpHaptics.warning()
+                return
+            }
+            menuOpenedByHold = false
             withAnimation(.easeInOut(duration: 0.15)) { menuStretch = nil }
             action()
         } label: {
             Text(title)
                 .font(.system(size: 13.5))
                 .foregroundStyle(color)
+                .opacity(enabled ? 1 : 0.6)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
@@ -405,22 +717,42 @@ struct WarpTimelineView: View {
     }
 
     private func resizeHandle(boundary: Int, width: CGFloat) -> some View {
-        RoundedRectangle(cornerRadius: 6, style: .continuous)
-            .fill(LL.accent)
-            .frame(width: 12, height: Self.barHeight + 6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 1.5)
-                    .fill(.white)
-                    .frame(width: 3, height: 24)
-            )
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { value in
-                        let target = time(at: value.location.x, width: width)
-                        model.updateWarp { $0.resize(boundary: boundary, to: target) }
+        // 12pt of accent inside a 44pt touch target, so near-boundary drags
+        // resize instead of falling through to the bar and carving.
+        ZStack {
+            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                .fill(LL.accent)
+                .frame(width: 12, height: Self.barHeight + 6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(.white)
+                        .frame(width: 3, height: 24)
+                )
+        }
+        .frame(width: 44, height: Self.barHeight + 12)
+        .contentShape(Rectangle())
+        .gesture(
+            DragGesture(minimumDistance: 0)
+                .updating($handleLive) { _, live, _ in live = true }
+                .onChanged { value in
+                    guard pinchBase == nil else { return }
+                    if handleDragBase == nil {
+                        handleDragBase = timeline.bounds[boundary]
+                        WarpHaptics.engage()
                     }
-            )
-            .accessibilityLabel("Resize stretch boundary")
+                    guard let base = handleDragBase else { return }
+                    let shift = Double(value.translation.width / width) * visibleSpan
+                    model.updateWarp(coalescing: "resize-\(boundary)") {
+                        $0.resize(boundary: boundary, to: base + shift)
+                    }
+                }
+                .onEnded { _ in
+                    handleDragBase = nil
+                    model.endWarpCoalescing()
+                    WarpHaptics.engage()
+                }
+        )
+        .accessibilityLabel("Resize stretch boundary")
     }
 
     private func seamPills(width: CGFloat) -> some View {
@@ -451,6 +783,8 @@ struct WarpTimelineView: View {
                     .background(
                         pill.seam.ramp == .step ? Color(red: 0.894, green: 0.894, blue: 0.914) : LL.ink,
                         in: Capsule())
+                    .frame(minWidth: 44, minHeight: 36)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .position(x: min(max(pill.x, 24), width - 24), y: pill.stacked ? 84 : 66)
@@ -558,6 +892,7 @@ struct WarpTimelineView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) {
+                    menuOpenedByHold = false
                     menuStretch = menuStretch == index ? nil : index
                     openSeam = nil
                 }
@@ -565,6 +900,7 @@ struct WarpTimelineView: View {
                 Image(systemName: "ellipsis.circle")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(LL.accent)
+                    .contentShape(Rectangle().inset(by: -14))
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Stretch options")
@@ -574,71 +910,246 @@ struct WarpTimelineView: View {
         .background(LL.screenBackground, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
     }
 
+    // MARK: - Ruler + minimap
+
+    /// The visible window's clock labels; dragging the row pans a zoomed
+    /// window 1:1.
+    private var ruler: some View {
+        GeometryReader { proxy in
+            HStack {
+                Text(WarpTimeline.clock(visibleStart))
+                Spacer()
+                Text(WarpTimeline.clock((visibleStart + visibleEnd) / 2))
+                Spacer()
+                Text(WarpTimeline.clock(visibleEnd))
+            }
+            .font(.system(size: 10))
+            .foregroundStyle(.tertiary)
+            .frame(maxHeight: .infinity)
+            // Intrinsic-height row (matches the drawn spec); the inset grows
+            // the pan strip's touch target without moving any pixels.
+            .contentShape(Rectangle().inset(by: -10))
+            .gesture(panGesture(width: max(1, proxy.size.width)))
+        }
+        .frame(height: 14)
+    }
+
+    /// Dragging the clock ruler pans a zoomed window — anchored at the drag's
+    /// start so cumulative translation applies once, and scaled to the
+    /// measured width so a finger-width of drag moves a finger-width of bar.
+    private func panGesture(width: CGFloat) -> some Gesture {
+        DragGesture()
+            .updating($panLive) { _, live, _ in live = true }
+            .onChanged { value in
+                guard isZoomed else { return }
+                let base = panBase ?? visibleStart
+                panBase = base
+                let span = visibleSpan
+                var start = base - Double(value.translation.width / width) * span
+                start = min(max(0, start), total - span)
+                zoomStart = start
+                zoomEnd = start + span
+            }
+            .onEnded { _ in panBase = nil }
+    }
+
+    /// The whole source in one strip while zoomed: stretch bounds as ticks,
+    /// the playhead in accent, and the amber lens marking — and moving — the
+    /// visible window. One glance answers "where am I?".
+    private var minimap: some View {
+        GeometryReader { proxy in
+            let width = max(1, proxy.size.width)
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.secondary.opacity(0.18))
+                    .frame(height: 6)
+                ForEach(1..<max(1, timeline.stretchCount), id: \.self) { index in
+                    Rectangle()
+                        .fill(Color.secondary.opacity(0.5))
+                        .frame(width: 1, height: 6)
+                        .offset(x: CGFloat(timeline.bounds[index] / total) * width)
+                }
+                Rectangle()
+                    .fill(LL.accent)
+                    .frame(width: 1.5, height: 12)
+                    .offset(x: CGFloat(playhead / total) * width - 0.75)
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(LL.amber.opacity(0.14))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4, style: .continuous)
+                            .strokeBorder(LL.amber, lineWidth: 1.5)
+                    )
+                    .frame(width: max(10, CGFloat(visibleSpan / total) * width), height: 14)
+                    .offset(x: CGFloat(visibleStart / total) * width)
+            }
+            .frame(maxHeight: .infinity)
+            .contentShape(Rectangle().inset(by: -10))
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        let fraction = min(max(0, Double(value.location.x / width)), 1)
+                        let span = visibleSpan
+                        var start = fraction * total - span / 2
+                        start = min(max(0, start), total - span)
+                        zoomStart = start
+                        zoomEnd = start + span
+                    }
+            )
+        }
+        .frame(height: 16)
+        .accessibilityLabel("Timeline overview, showing \(WarpTimeline.clock(visibleStart)) to \(WarpTimeline.clock(visibleEnd))")
+    }
+
     // MARK: - Gestures
 
     /// A horizontal drag across the bar carves a 1× stretch exactly where
-    /// drawn. The 24 pt activation distance plus high priority is the shape
-    /// that reliably beats the enclosing scroll view (see SwipeToDelete);
-    /// taps and holds don't reach it, so they stay with their own gestures.
+    /// drawn. Plain `.gesture` (not high-priority): the enclosing scroll view
+    /// may still claim clearly vertical drags, which is right for a carving
+    /// gesture — see SwipeToDelete for the non-destructive variant. The 24pt
+    /// activation distance keeps taps and holds with their own gestures, and
+    /// an active pinch or freshly held menu cancels nomination outright.
     private func nominateGesture(width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 24)
+            .updating($nominateLive) { _, live, _ in live = true }
             .onChanged { value in
+                // dragSawPinch latches for the whole touch sequence: after a
+                // pinch ends, the surviving finger's coordinates map through a
+                // rezoomed window — rebuilding the range here would carve a
+                // span the user never drew.
+                guard pinchBase == nil, !dragSawPinch, !menuOpenedByHold else {
+                    nominating = nil
+                    return
+                }
                 guard abs(value.translation.width) > abs(value.translation.height) || nominating != nil else { return }
                 let start = time(at: value.startLocation.x, width: width)
                 let current = time(at: value.location.x, width: width)
-                nominating = min(start, current)...max(start, current)
+                let range = min(start, current)...max(start, current)
+                let valid = range.upperBound - range.lowerBound >= WarpTimeline.minimumNomination
+                if valid, !nominateWasValid {
+                    WarpHaptics.tick()
+                }
+                nominateWasValid = valid
+                nominating = range
                 playhead = current
                 menuStretch = nil
                 openSeam = nil
             }
             .onEnded { _ in
-                defer { nominating = nil }
-                guard let range = nominating,
-                      range.upperBound - range.lowerBound >= WarpTimeline.minimumNomination else { return }
+                defer {
+                    nominating = nil
+                    nominateWasValid = false
+                    // A real drag means the release can never be the hold's
+                    // swallow-tap — don't leave the flag latched.
+                    menuOpenedByHold = false
+                }
+                guard pinchBase == nil, !dragSawPinch, let range = nominating else { return }
+                guard range.upperBound - range.lowerBound >= WarpTimeline.minimumNomination else {
+                    WarpHaptics.warning()
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        toast = TimelineToast(
+                            message: "Too short — drag past \(Int(WarpTimeline.minimumNomination))s, or zoom in",
+                            showsUndo: false)
+                    }
+                    return
+                }
                 withAnimation(.easeInOut(duration: 0.25)) {
                     model.updateWarp { timeline in
                         if let created = timeline.nominate(from: range.lowerBound, to: range.upperBound) {
                             selectedStretch = created
                         }
                     }
+                    toast = TimelineToast(message: "Added 1× stretch", showsUndo: true)
                 }
+                WarpHaptics.success()
             }
     }
 
-    /// Pinch zooms around the visible centre, floored at a 20-second window.
-    private func pinchGesture(width: CGFloat) -> some Gesture {
-        MagnificationGesture()
-            .onChanged { scale in
-                let base = pinchBase ?? (visibleStart, visibleEnd)
-                pinchBase = base
-                let span = base.end - base.start
-                let newSpan = min(max(span / Double(scale), Self.minimumZoomSpan), total)
-                let centre = (base.start + base.end) / 2
-                var start = centre - newSpan / 2
-                start = min(max(0, start), total - newSpan)
-                zoomStart = start
-                zoomEnd = start + newSpan
-            }
-            .onEnded { _ in
-                pinchBase = nil
-                if visibleEnd - visibleStart >= total - 0.5 {
-                    zoomStart = nil
-                    zoomEnd = nil
+    /// Pinch zooms anchored under the fingers (window centre before iOS 17 /
+    /// macOS 14), floored at a 20-second window — with a firm tick when the
+    /// zoom hits either end of its travel instead of silently eating input.
+    /// A pinch also cancels any in-flight nomination: zooming must never carve.
+    private func pinchGesture(width: CGFloat) -> AnyGesture<Void> {
+        if #available(iOS 17.0, macOS 14.0, *) {
+            return AnyGesture(
+                MagnifyGesture()
+                    .updating($pinchLive) { _, live, _ in live = true }
+                    .onChanged { value in
+                        applyPinch(scale: value.magnification, anchorX: Double(value.startAnchor.x))
+                    }
+                    .onEnded { _ in endPinch() }
+                    .map { _ in () }
+            )
+        }
+        return AnyGesture(
+            MagnificationGesture()
+                .updating($pinchLive) { _, live, _ in live = true }
+                .onChanged { scale in
+                    applyPinch(scale: Double(scale), anchorX: nil)
                 }
-            }
+                .onEnded { _ in endPinch() }
+                .map { _ in () }
+        )
     }
 
-    /// Dragging the clock ruler pans a zoomed window.
-    private var panGesture: some Gesture {
-        DragGesture()
-            .onChanged { value in
-                guard zoomStart != nil || zoomEnd != nil else { return }
-                let span = visibleSpan
-                let shift = -Double(value.translation.width / 320) * span * 0.1
-                var start = visibleStart + shift
-                start = min(max(0, start), total - span)
-                zoomStart = start
-                zoomEnd = start + span
+    private func applyPinch(scale: Double, anchorX: Double?) {
+        let base = pinchBase ?? (visibleStart, visibleEnd)
+        pinchBase = base
+        nominating = nil
+        nominateWasValid = false
+        dragSawPinch = true
+        let span = base.end - base.start
+        let newSpan = min(max(span / max(0.01, scale), minimumSpan), total)
+        // Anchor at the fingers when the gesture reports them; else keep the
+        // playhead planted if it's in view, else the window centre.
+        let anchor: Double
+        if let anchorX {
+            anchor = min(max(0, anchorX), 1)
+        } else if playhead >= base.start, playhead <= base.end, span > 0 {
+            anchor = (playhead - base.start) / span
+        } else {
+            anchor = 0.5
+        }
+        let anchorTime = base.start + anchor * span
+        var start = anchorTime - anchor * newSpan
+        start = min(max(0, start), total - newSpan)
+        zoomStart = start
+        zoomEnd = start + newSpan
+        let atLimit = newSpan <= minimumSpan + 0.0001 || newSpan >= total - 0.0001
+        if atLimit, !pinchAtLimit {
+            WarpHaptics.limit()
+        }
+        pinchAtLimit = atLimit
+    }
+
+    private func endPinch() {
+        pinchBase = nil
+        pinchAtLimit = false
+        if visibleEnd - visibleStart >= total - 0.5 {
+            zoomStart = nil
+            zoomEnd = nil
+        }
+    }
+
+    /// Double-tap (double-click on macOS — the only zoom a mouse has): zoom
+    /// in around the tapped time, or back out to the whole source.
+    private func doubleTapZoom(width: CGFloat) -> some Gesture {
+        SpatialTapGesture(count: 2)
+            .onEnded { value in
+                withAnimation(.easeInOut(duration: 0.25)) {
+                    if isZoomed {
+                        zoomStart = nil
+                        zoomEnd = nil
+                    } else {
+                        let fraction = min(max(0, Double(value.location.x / max(1, width))), 1)
+                        let newSpan = max(minimumSpan, total / 4)
+                        guard newSpan < total - 0.5 else { return }
+                        let anchorTime = fraction * total
+                        var start = anchorTime - fraction * newSpan
+                        start = min(max(0, start), total - newSpan)
+                        zoomStart = start
+                        zoomEnd = start + newSpan
+                    }
+                }
             }
     }
 
