@@ -6,12 +6,37 @@ struct LetsLapseApp: App {
     @Environment(\.scenePhase) private var scenePhase
 
     init() {
+        Self.quietenMetalShaderCompiler()
+
         #if os(iOS)
         // Activate in init, not view onAppear: when the Watch messages a
         // not-running phone app, iOS launches it in the background to deliver —
         // no UI is built there, so an onAppear-tied activation never runs and
         // the Watch's message dies with a timeout.
         WatchRemoteControlReceiver.shared.activate()
+        #endif
+    }
+
+    /// Silences the "Warning: Compilation succeeded with: …unused variable
+    /// 'MAX_REDUCE_SPECIALIZED_DIMS'…" block that MLX's first inference prints
+    /// once per JIT-compiled kernel, burying every real log line under it.
+    ///
+    /// The warnings are not MLX's to suppress and there is no Swift API for
+    /// them: `Device::build_library_` only prints when `newLibrary` returns
+    /// *nil*, so a library that compiles with warnings is reported by Metal's
+    /// own compiler service, not by mlx. (`MLX_METAL_DEBUG` looks like the
+    /// lever and isn't — it is an `#ifdef` in mlx's C++, a build-time flag on a
+    /// dependency this app consumes prebuilt, so setting it in the environment
+    /// does nothing.) `MTL_IGNORE_WARNINGS` is the Metal-side switch, read
+    /// lazily when a shader is first compiled — hence here, ahead of anything
+    /// that could touch the GPU, rather than in `SceneAnalyser`.
+    ///
+    /// Not overwritten if it is already set, so a scheme entry (or
+    /// `MTL_IGNORE_WARNINGS=0` when the warnings are the thing being debugged)
+    /// still wins.
+    private static func quietenMetalShaderCompiler() {
+        #if canImport(MLX)
+        setenv("MTL_IGNORE_WARNINGS", "1", 0)
         #endif
     }
 
@@ -115,6 +140,18 @@ struct ContentView: View {
             guard let requested else { return }
             model.requestedTab = nil
             selectedTab = requested
+        }
+        // A deep link into a specific Settings page, from a screen that can
+        // explain what is missing but not fix it (project detail's
+        // "Download a model in Settings" caption).
+        .onChange(of: model.requestedSettingsDestination) { requested in
+            guard let requested else { return }
+            model.requestedSettingsDestination = nil
+            selectedTab = .settings
+            // The Settings stack is only built once its tab is selected, and a path set in the
+            // same update lands before its `navigationDestination` is registered — so it is
+            // silently dropped. Push on the next turn, when the stack exists.
+            DispatchQueue.main.async { settingsPath = [requested] }
         }
         #if os(iOS)
         // Selecting the Create tab opens the camera straight away — the Create
@@ -232,6 +269,34 @@ struct ContentView: View {
             }
             if hook == "detail", let first = model.collections.first {
                 collectionsPath = [first.id]
+            }
+        }
+        // LL_TAGS=demo — stamp scene metadata across the library so the Projects
+        // search field and tag chips can be verified without a 3.3 GB model.
+        if environment["LL_TAGS"] == "demo" {
+            model.debugSeedSceneTags()
+        }
+        // LL_AI=<image path> — run SceneAnalyser on one frame and log the result
+        // (LL_AI_PLACE / LL_AI_LIGHT set the context). devicectl and simctl can't
+        // tap the Settings row, so this is the automation path for the on-device
+        // model, mirroring how the Phase 0 harness had to auto-run on launch.
+        if let path = environment["LL_AI"] {
+            let place = environment["LL_AI_PLACE"]
+            let light = environment["LL_AI_LIGHT"]
+            Task {
+                let start = Date()
+                do {
+                    // Through the service, not the actor, so the hook exercises the same path
+                    // the "Auto rename & tag" row does — including the installed-model lookup
+                    // and, with it, whichever engine the active model names.
+                    let result = try await SceneAnalyzerFactory.active().analyze(
+                        SceneAnalysisRequest(
+                            imageURLs: [URL(fileURLWithPath: path)], place: place, light: light),
+                        status: { LLog("[ai] \($0)") })
+                    LLog("[ai] title=\"\(result.title)\" tags=\(result.subjectTags) elements=\(result.elements) in \(String(format: "%.2f", Date().timeIntervalSince(start)))s")
+                } catch {
+                    LLog("[ai] FAILED: \(error)")
+                }
             }
         }
     }

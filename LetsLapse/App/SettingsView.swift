@@ -10,12 +10,14 @@ enum SettingsDestination: String, Hashable {
     case diagnostics
     case blendLearning
     case manageResolutions
+    case aiModels
 }
 
 /// Creative defaults and recording up top, storage in the middle, and the
 /// engine (performance, diagnostics) demoted to Advanced.
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
+    @ObservedObject private var models = ModelManager.shared
     @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
     @State private var storage: AppModel.LibraryStorage?
     @State private var isClearingCache = false
@@ -54,6 +56,10 @@ struct SettingsView: View {
                 locationCard
                     .padding(.bottom, 12)
 
+                LLSectionHeader("On-device AI")
+                aiCard
+                    .padding(.bottom, 12)
+
                 LLSectionHeader("Storage")
                 storageCard
                     .padding(.bottom, 12)
@@ -79,6 +85,7 @@ struct SettingsView: View {
             case .diagnostics: DiagnosticsView()
             case .blendLearning: BlendLearningView()
             case .manageResolutions: ManageResolutionsView()
+            case .aiModels: AIModelsView()
             }
         }
         #if os(iOS)
@@ -359,6 +366,37 @@ struct SettingsView: View {
             }
         }
         .llCard()
+    }
+
+    // MARK: - On-device AI
+
+    /// The only entry point to the model library. The subtitle carries the state so the feature's
+    /// readiness is legible without opening the screen — this is what the "Auto rename & tag"
+    /// action on a project depends on.
+    private var aiCard: some View {
+        VStack(spacing: 0) {
+            NavigationLink(value: SettingsDestination.aiModels) {
+                LLRow(
+                    title: "AI Models",
+                    subtitle: aiModelsSubtitle,
+                    showsDivider: false
+                ) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .llCard()
+    }
+
+    private var aiModelsSubtitle: String {
+        if let active = models.activeModel {
+            return "\(active.name) · automatic naming and tagging is on"
+        }
+        return "Download a model to name and tag captures on this device"
     }
 
     private func menuValueLabel(_ text: String) -> some View {

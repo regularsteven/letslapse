@@ -20,6 +20,9 @@ struct ProjectDetailView: View {
     /// the viewer is the grading *editor*, not playback.
     @State private var gradingPhoto: GradingPhoto?
     @State private var isRenaming = false
+    /// On-device naming: the run in flight and the proposal it produced.
+    @StateObject private var autoName = AutoNameController()
+    @ObservedObject private var models = ModelManager.shared
 
     private struct GradingPhoto: Identifiable {
         let url: URL
@@ -88,6 +91,24 @@ struct ProjectDetailView: View {
             .environmentObject(model)
         }
         #endif
+        .sheet(item: $autoName.proposal) { proposal in
+            AutoNameSheet(proposal: proposal) { metadata in
+                if let capture {
+                    model.applySceneMetadata(metadata, to: capture)
+                }
+            }
+        }
+        .alert(
+            "Couldn't analyse this project",
+            isPresented: Binding(
+                get: { autoName.failure != nil },
+                set: { if !$0 { autoName.failure = nil } }
+            )
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(autoName.failure ?? "")
+        }
         .alert("Rename project", isPresented: $isRenaming) {
             TextField("Project name", text: $renameText)
             Button("Save") {
@@ -335,6 +356,12 @@ struct ProjectDetailView: View {
                     } label: {
                         Label("Rename project", systemImage: "pencil")
                     }
+                    Button {
+                        startAutoName(capture)
+                    } label: {
+                        Label("Auto rename & tag", systemImage: "sparkles")
+                    }
+                    .disabled(!models.isReady || autoName.isRunning)
                     Button {
                         rotateProject()
                     } label: {
@@ -594,6 +621,8 @@ struct ProjectDetailView: View {
 
     private func managementCard(for capture: AppModel.CaptureProject) -> some View {
         VStack(spacing: 0) {
+            autoNameRow(for: capture)
+
             Button {
                 startRename(capture)
             } label: {
@@ -605,6 +634,29 @@ struct ProjectDetailView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            if let tags = capture.sceneTags, !tags.isEmpty {
+                LLRow(title: "Tags") {
+                    Text(tags.map { SceneMetadata.label(for: $0) }.joined(separator: ", "))
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
+
+            // The analysis's own wording for what was in frame. Kept because it is what
+            // Projects search matches on most specifically — "waterfall" finds this project
+            // when no tag in the closed taxonomy would have.
+            if let elements = capture.sceneElements, !elements.isEmpty {
+                LLRow(title: "In frame") {
+                    Text(elements.joined(separator: ", "))
+                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                }
+            }
 
             LLRow(title: "Storage", subtitle: storageSubtitle(for: capture)) {
                 Text(storageBytes.map { LLFormat.bytes($0) } ?? "—")
@@ -623,6 +675,84 @@ struct ProjectDetailView: View {
             .buttonStyle(.plain)
         }
         .llCard()
+    }
+
+    // MARK: - Auto rename & tag
+
+    /// Names and tags the project from the frames themselves.
+    ///
+    /// With no model installed the row stays visible but inert, and its caption is the fix: it
+    /// deep-links to Settings › AI Models rather than describing where to go. A feature that can't
+    /// run is more useful as a signpost than as a hidden row.
+    @ViewBuilder
+    private func autoNameRow(for capture: AppModel.CaptureProject) -> some View {
+        let isReady = models.isReady
+
+        Button {
+            startAutoName(capture)
+        } label: {
+            LLRow(
+                title: "Auto rename & tag",
+                subtitle: autoNameSubtitle(isReady: isReady),
+                titleColor: isReady ? .primary : .secondary
+            ) {
+                if autoName.isRunning {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if isReady {
+                    Image(systemName: "sparkles")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(LL.accent)
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(!isReady || autoName.isRunning)
+
+        // Disabled buttons swallow taps, so the "go and fix it" affordance is its own control
+        // under the row rather than the row's own caption.
+        if !isReady {
+            Button {
+                model.requestedSettingsDestination = .aiModels
+            } label: {
+                LLRow(title: "Open AI Models in Settings", titleColor: LL.accent) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    private func autoNameSubtitle(isReady: Bool) -> String {
+        if let status = autoName.status { return status }
+        if !isReady { return "Choose a model in Settings to enable" }
+        // Vision tags but cannot name, and the row is called "Auto rename & tag" — say which half
+        // is actually on offer rather than promising a name that arrives unchanged.
+        if models.activeModel?.isBuiltIn == true {
+            return "Tags this project from its own frames · Apple Vision doesn't suggest names"
+        }
+        return "Names and tags this project from its own frames, on this device"
+    }
+
+    private func startAutoName(_ capture: AppModel.CaptureProject) {
+        guard let source = model.sceneSource(for: capture) else {
+            autoName.failure = "This project has no frames to analyse."
+            return
+        }
+        let locationFile = model.sourceClipURLs(for: capture).first
+            ?? model.sourceFrameURLs(for: capture).first
+        Task {
+            await autoName.run(
+                source: source,
+                capturedAt: capture.createdAt,
+                duration: capture.sourceDurationSeconds ?? 0,
+                locationFile: locationFile,
+                fallbackTitle: capture.displayTitle)
+        }
     }
 
     // MARK: - Labels

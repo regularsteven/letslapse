@@ -1,0 +1,168 @@
+diff --git a/IntegrationTesting/IntegrationTestingTests/Gemma4EseriesLoadIntegrationTests.swift b/IntegrationTesting/IntegrationTestingTests/Gemma4EseriesLoadIntegrationTests.swift
+new file mode 100644
+index 000000000..8658c2ed0
+--- /dev/null
++++ b/IntegrationTesting/IntegrationTestingTests/Gemma4EseriesLoadIntegrationTests.swift
+@@ -0,0 +1,64 @@
++// Copyright © 2026 Apple Inc.
++
++import Foundation
++import HuggingFace
++import IntegrationTestHelpers
++import MLXHuggingFace
++import MLXLMCommon
++import MLXVLM
++import Testing
++import Tokenizers
++
++// MARK: - E-series (KV-sharing) target load regression
++//
++// The Gemma 4 "effective" targets (E2B/E4B) use num_kv_shared_layers > 0: the
++// last N decoder layers reuse an earlier layer's K/V and ship no k_proj/v_proj.
++// They carry vision_config so they load through VLMModelFactory. Before the
++// loader fix, the VLM Gemma4 backbone declared k_proj on the shared tail and
++// loadWeights failed `keyNotFound layers.{15,24}.self_attn.k_proj.weight`
++// (independent of MTP — plain load). This exercises the real cached checkpoint
++// end to end: load + a short greedy generate (which also drives the runtime
++// shared-KV forward on those layers).
++//
++// Cache-gated: each test enables only when its checkpoint is already in the HF
++// cache, so it runs locally where the weights exist and disables (does not fail)
++// in CI without them — no env var, no multi-GB auto-download.
++
++private let e4bTarget = "mlx-community/gemma-4-e4b-it-4bit"
++private let e2bTarget = "mlx-community/gemma-4-e2b-it-4bit"
++
++@Suite(.serialized)
++struct Gemma4EseriesLoadIntegrationTests {
++
++    @Test(.enabled(if: hfSnapshotDir(modelId: e4bTarget) != nil))
++    func testE4BTargetLoadsAndGenerates() async throws {
++        try await loadAndGenerate(modelId: e4bTarget)
++    }
++
++    @Test(.enabled(if: hfSnapshotDir(modelId: e2bTarget) != nil))
++    func testE2BTargetLoadsAndGenerates() async throws {
++        try await loadAndGenerate(modelId: e2bTarget)
++    }
++
++    private func loadAndGenerate(modelId: String) async throws {
++        let dir = try #require(hfSnapshotDir(modelId: modelId))
++
++        // The load itself is the regression surface — pre-fix this threw
++        // keyNotFound on the KV-shared tail layers.
++        let context = try await VLMModelFactory.shared.load(
++            from: dir, using: #huggingFaceTokenizerLoader())
++
++        let input = try await context.processor.prepare(
++            input: UserInput(chat: [.user("Why is the sky blue? One sentence.")]))
++        let stream = try generate(
++            input: input,
++            parameters: GenerateParameters(maxTokens: 16, temperature: 0),
++            context: context)
++
++        var text = ""
++        for await event in stream {
++            if case .chunk(let c) = event { text += c }
++        }
++        #expect(!text.isEmpty, "\(modelId) loaded but produced no output")
++    }
++}
+diff --git a/Libraries/MLXVLM/Models/Gemma4.swift b/Libraries/MLXVLM/Models/Gemma4.swift
+index 10c41cb56..7662d91ce 100644
+--- a/Libraries/MLXVLM/Models/Gemma4.swift
++++ b/Libraries/MLXVLM/Models/Gemma4.swift
+@@ -824,7 +824,13 @@ final class Gemma4TextAttention: Module {
+         self.isKVSharedLayer = layerIdx >= firstKVSharedLayer && firstKVSharedLayer > 0
+ 
+         self._qProj.wrappedValue = Linear(config.hiddenSize, numHeads * headDim, bias: false)
+-        if !kvSharedOnly {
++        // KV-shared layers (the last `num_kv_shared_layers`) reuse an earlier layer's
++        // K/V and own no k_proj/v_proj/k_norm/v_norm — the checkpoint ships none, so the
++        // module tree must not declare them (else loadWeights fails keyNotFound on the
++        // shared layers, e.g. E2B layer 15 / E4B layer 24). `kvSharedOnly` is the drafter's
++        // always-shared variant; `isKVSharedLayer` covers the target's own shared tail.
++        // Mirrors the text backbone (MLXLLM/Models/Gemma4Text.swift).
++        if !kvSharedOnly && !isKVSharedLayer {
+             self._kProj.wrappedValue = Linear(
+                 config.hiddenSize, numKVHeads * headDim, bias: false)
+             if !useKEqV {
+@@ -871,12 +877,13 @@ final class Gemma4TextAttention: Module {
+             currentOffset = offset ?? 0
+             kvState = sharedKV
+         } else {
+-            // Non-`kvSharedOnly` path: K/V projections must be present. If they
+-            // are nil here the layer was built with `kvSharedOnly: true` and the
+-            // caller forgot to pass `sharedKV` — a configuration bug.
++            // KV-owning path: K/V projections must be present. If they are nil
++            // here the layer is KV-shared (drafter `kvSharedOnly`, or the target's
++            // shared tail `isKVSharedLayer`) and the caller forgot to pass
++            // `sharedKV` — a configuration bug.
+             guard let kProj, let kNorm, let vNorm else {
+                 fatalError(
+-                    "Gemma4 attention called without sharedKV on a kvSharedOnly layer")
++                    "Gemma4 attention called without sharedKV on a KV-shared layer")
+             }
+             currentOffset = cache?.offset ?? 0
+             var keys = kProj(x).reshaped(batch, length, numKVHeads, headDim)
+diff --git a/Tests/MLXLMTests/Gemma4EmitDrafterStateTests.swift b/Tests/MLXLMTests/Gemma4EmitDrafterStateTests.swift
+index 0edee2061..b0e6e5fce 100644
+--- a/Tests/MLXLMTests/Gemma4EmitDrafterStateTests.swift
++++ b/Tests/MLXLMTests/Gemma4EmitDrafterStateTests.swift
+@@ -98,13 +98,43 @@ func testGemma4TextEmitDisabledIsBitIdenticalRegressionBySynthetic() {
+     )
+ }
+ 
++// MARK: - KV-shared layer module-tree shape (E-series load regression)
++
++/// The last `num_kv_shared_layers` decoder layers reuse an earlier layer's K/V
++/// and own no `k_proj`/`v_proj`/`k_norm`/`v_norm`; the published checkpoints ship
++/// none. The module tree must therefore declare none on those layers, else
++/// `loadWeights` fails `keyNotFound self_attn.k_proj.weight` on the shared tail —
++/// the bug that blocked loading the E-series targets (E2B layer 15, E4B layer 24)
++/// through `VLMModelFactory`. Pins the module-tree shape with no checkpoint.
++@Test
++func testGemma4TextSharedLayersDeclareNoKProj() {
++    // 4 layers, last 2 KV-shared ⇒ layers 0,1 own k_proj; layers 2,3 must not.
++    let model = makeSyntheticGemma4TextLanguageModel(
++        layerTypes: Array(repeating: "full_attention", count: 4),
++        numKvSharedLayers: 2)
++
++    let kProjLayers = Set(
++        model.parameters().flattened().compactMap { key, _ -> Int? in
++            guard key.contains("self_attn.k_proj"),
++                let r = key.range(of: "layers.")
++            else { return nil }
++            let digits = key[r.upperBound...].prefix { $0.isNumber }
++            return Int(digits)
++        })
++
++    #expect(
++        kProjLayers == [0, 1],
++        "only KV-owning layers may declare k_proj; got \(kProjLayers.sorted())")
++}
++
+ // MARK: - Helpers
+ 
+-/// Build a small 2-layer Gemma4TextLanguageModel with random-initialized
+-/// weights. Sufficient for emit-hook plumbing tests; not a correctness
+-/// reference for the model itself.
++/// Build a small Gemma4TextLanguageModel with random-initialized weights.
++/// Sufficient for emit-hook plumbing and module-tree shape tests; not a
++/// correctness reference for the model itself.
+ private func makeSyntheticGemma4TextLanguageModel(
+-    layerTypes: [String]
++    layerTypes: [String],
++    numKvSharedLayers: Int = 0
+ ) -> Gemma4TextLanguageModel {
+     let layersJSON = layerTypes.map { "\"\($0)\"" }.joined(separator: ", ")
+     let textJSON =
+@@ -118,7 +148,7 @@ private func makeSyntheticGemma4TextLanguageModel(
+           "head_dim": 2,
+           "global_head_dim": 2,
+           "vocab_size": 10,
+-          "num_kv_shared_layers": 0,
++          "num_kv_shared_layers": \(numKvSharedLayers),
+           "hidden_size_per_layer_input": 0,
+           "sliding_window": 4,
+           "sliding_window_pattern": 1,

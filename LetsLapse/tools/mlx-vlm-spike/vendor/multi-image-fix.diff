@@ -1,0 +1,26 @@
+--- a/Libraries/MLXVLM/Models/Gemma4.swift
++++ b/Libraries/MLXVLM/Models/Gemma4.swift
+@@ -2046,13 +2046,21 @@
+         var imageFeatures = visionTower(pixelValues)
+         imageFeatures = embedVision(imageFeatures)
+         imageFeatures = imageFeatures.asType(inputsEmbeds.dtype)
++
++        // The processor stacks every image on the batch axis, so vision features arrive as
++        // (imageCount, softTokensPerImage, hiddenSize). The prompt carries
++        // `imageCount × softTokensPerImage` image placeholders, so flatten the batch away
++        // before counting — comparing against `dim(1)` alone only ever sees one image's worth
++        // of tokens and rejects every multi-image prompt. Matches the unified model's
++        // `scatterFeatures`, which reshapes to (-1, hiddenSize) for the same reason.
++        imageFeatures = imageFeatures.reshaped(-1, imageFeatures.dim(-1))
+ 
+         let imageMask = inputIds .== config.imageTokenId
+         let expectedImageTokens = imageMask.asType(.int32).sum().item(Int.self)
+ 
+-        if expectedImageTokens != imageFeatures.dim(1) {
++        if expectedImageTokens != imageFeatures.dim(0) {
+             throw Gemma4Error.imageTokenCountMismatch(
+-                expectedVisionTokens: imageFeatures.dim(1), actualPromptTokens: expectedImageTokens)
++                expectedVisionTokens: imageFeatures.dim(0), actualPromptTokens: expectedImageTokens)
+         }
+ 
+         var imageMaskExpanded = expandedDimensions(imageMask, axis: -1)

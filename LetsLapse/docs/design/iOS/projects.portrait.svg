@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Projects · portrait</title>
-  <desc>Mirrors App/ProjectsView.swift (header, ProjectCard) + App/CaptureFilterBar.swift (CaptureFilterBar): manual large title and the shared segmented capture filter (All · Photos · Interval · Video) share one list row, so the spacing rhythm is identical to the Gallery tab — 15pt above the title, 8pt above and below the filter bar, first card flush at 160. One card per original with an always-visible blended-clip thumbnail strip and a dashed "+" new-blended-clip tile; photo captures are one asset, so no strip. Swipe-to-delete on cards; context menu for preview/new blended clip/details/delete. Card rows hang their 14pt rhythm below them (listRowInsets top 0 / bottom 14).</desc>
+  <desc>Mirrors App/ProjectsView.swift (header, ProjectCard) + App/CaptureFilterBar.swift (CaptureFilterBar) + App/SceneSearch.swift (SceneSearchField, SceneTagChips, SceneTagLine): manual large title, scene search field, the shared segmented capture filter (All · Photos · Interval · Video) and the subject-tag chip row share one list row — 15pt above the title, 10pt above the 34pt search capsule, 8pt above and below the filter bar, chips flush after it with 8pt below, first card at 238. Search matches a project's name, its subject tags (raw and labelled) and the free-form elements the on-device analysis named; chips narrow to projects carrying EVERY selected tag. Both are hidden while the library is empty, and the chip row is drawn only from tags that actually exist in the library. One card per original with an always-visible blended-clip thumbnail strip and a dashed "+" new-blended-clip tile; photo captures are one asset, so no strip. An analysed project carries a tag line under its size line (up to 3 chips, then "+N") — without it the chips would filter by something invisible; an unanalysed project's card keeps its original height. A project tagged by the silent Apple Vision pass at capture time ends that same tag line with a 10pt sparkles glyph (accent at 70%, 6pt gap) — it marks "the app guessed this" rather than "you agreed to this", and disappears once an Auto rename &amp; tag proposal is applied; being inside the tag line, it adds no height. Swipe-to-delete on cards; context menu for preview/new blended clip/details/delete. Card rows hang their 14pt rhythm below them (listRowInsets top 0 / bottom 14).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -20,74 +20,132 @@
         <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
       </g>
 
-      <!-- header row: title + shared filter bar in ONE list row, so no row
-           inset can open a gap between them (matches gallery.portrait.svg) -->
+      <!-- header row: title + search + shared filter bar + tag chips in ONE
+           list row, so no row inset can open a gap between them (the title and
+           filter rhythm still matches gallery.portrait.svg) -->
       <text x="20" y="106" font-size="34" class="b" fill="#000">Projects</text>
+
+      <!-- scene search — SceneSearchField. Hand-built rather than .searchable:
+           Projects hides its navigation bar on iOS, the only place the system
+           field can live. Clears with a trailing xmark.circle.fill once typed. -->
+      <g id="search">
+        <rect x="16" y="122" width="361" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+        <g transform="translate(29,132)" stroke="#8A8A90" stroke-width="1.6" fill="none" data-symbol="magnifyingglass">
+          <circle cx="6" cy="6" r="5"/><path d="M9.8 9.8 L14 14" stroke-linecap="round"/>
+        </g>
+        <text x="54" y="145" font-size="15" fill="#8A8A90">Search projects</text>
+      </g>
 
       <!-- segmented filter — shared CaptureFilterBar, same geometry as Gallery -->
       <g id="filter">
-        <rect x="16" y="120" width="361" height="32" rx="9" fill="#E3E3E8"/>
-        <rect x="18" y="122" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
-        <text x="61" y="140" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
-        <text x="151" y="140" font-size="13" fill="#000" text-anchor="middle">Photos</text>
-        <text x="241" y="140" font-size="13" fill="#000" text-anchor="middle">Interval</text>
-        <text x="331" y="140" font-size="13" fill="#000" text-anchor="middle">Video</text>
+        <rect x="16" y="164" width="361" height="32" rx="9" fill="#E3E3E8"/>
+        <rect x="18" y="166" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
+        <text x="61" y="184" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
+        <text x="151" y="184" font-size="13" fill="#000" text-anchor="middle">Photos</text>
+        <text x="241" y="184" font-size="13" fill="#000" text-anchor="middle">Interval</text>
+        <text x="331" y="184" font-size="13" fill="#000" text-anchor="middle">Video</text>
       </g>
 
-      <!-- card 1: video project with 2 blended clips — first card flush at 160,
-           8pt below the filter bar, exactly where the Gallery grid starts -->
+      <!-- subject-tag chips — SceneTagChips. Drawn only from tags present in
+           the library, in taxonomy order so the row never reshuffles as
+           projects are analysed; scrolls horizontally and bleeds past the
+           trailing inset. Selected chip is filled accent, white semibold.
+           Multiple selections AND together (each tap narrows). -->
+      <g id="tag-chips">
+        <rect x="16" y="204" width="66" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="49" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Water</text>
+        <rect x="89" y="204" width="110" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="144" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Sky &amp; weather</text>
+        <rect x="206" y="204" width="62" height="26" rx="13" fill="#C36A00"/>
+        <text x="237" y="221" font-size="13" class="sb" fill="#FFF" text-anchor="middle">Urban</text>
+        <rect x="275" y="204" width="68" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="309" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Nature</text>
+        <rect x="350" y="204" width="68" height="26" rx="13" fill="#000" fill-opacity="0.07"/>
+        <text x="384" y="221" font-size="13" fill="#000" fill-opacity="0.75" text-anchor="middle">Landmark</text>
+      </g>
+
+      <!-- card 1: video project with 2 blended clips — first card at 238, 8pt
+           below the chip row. An analysed project: the tag line under the size
+           line adds 14pt to the card (the text column now outgrows the 64pt
+           thumbnail), which is why every card here stands 14pt taller than the
+           unanalysed geometry the Gallery-matched rhythm was drawn against. -->
       <g id="card-video-project">
-        <rect x="16" y="160" width="361" height="164" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="172" width="86" height="64" rx="8" fill="#3D4A5C"/>
-        <circle cx="56" cy="192" r="9" fill="#FFB340" opacity="0.85"/>
-        <polygon points="30,220 60,204 92,218 116,208 116,236 30,236" fill="#232B36"/>
-        <rect x="62" y="218" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="87" y="229" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
-        <text x="128" y="189" font-size="16" class="b" fill="#000">Sunset over harbour</text>
-        <text x="128" y="206" font-size="12" fill="#6D6D72">1080p · 30 fps · 2 days ago</text>
-        <text x="128" y="224" font-size="12" class="sb" fill="#C36A00">2 blended clips · 1.4 GB</text>
+        <rect x="16" y="238" width="361" height="178" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="250" width="86" height="64" rx="8" fill="#3D4A5C"/>
+        <circle cx="56" cy="270" r="9" fill="#FFB340" opacity="0.85"/>
+        <polygon points="30,298 60,282 92,296 116,286 116,314 30,314" fill="#232B36"/>
+        <rect x="62" y="296" width="50" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="87" y="307" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">0:36</text>
+        <text x="128" y="267" font-size="16" class="b" fill="#000">Sunset over harbour</text>
+        <text x="128" y="284" font-size="12" fill="#6D6D72">1080p · 30 fps · 2 days ago</text>
+        <text x="128" y="302" font-size="12" class="sb" fill="#C36A00">2 blended clips · 1.4 GB</text>
+        <g id="tag-line-1" data-component="SceneTagLine">
+          <rect x="128" y="308" width="44" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="150" y="320" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Water</text>
+          <rect x="177" y="308" width="87" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="220" y="320" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Sky &amp; weather</text>
+          <rect x="269" y="308" width="60" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="299" y="320" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Landmark</text>
+          <text x="336" y="320" font-size="10.5" class="sb" fill="#8A8A90">+1</text>
+        </g>
         <g id="version-strip">
-          <rect x="30" y="248" width="96" height="54" rx="9" fill="#31404E"/>
-          <rect x="34" y="284" width="34" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="51" y="294" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
-          <rect x="134" y="248" width="96" height="54" rx="9" fill="#3B4653"/>
-          <rect x="138" y="284" width="40" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="158" y="294" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">100×</text>
-          <rect x="238" y="248" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <path d="M265 267 v16 M257 275 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+          <rect x="30" y="340" width="96" height="54" rx="9" fill="#31404E"/>
+          <rect x="34" y="376" width="34" height="14" rx="7" fill="#000" opacity="0.5"/>
+          <text x="51" y="386" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
+          <rect x="134" y="340" width="96" height="54" rx="9" fill="#3B4653"/>
+          <rect x="138" y="376" width="40" height="14" rx="7" fill="#000" opacity="0.5"/>
+          <text x="158" y="386" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">100×</text>
+          <rect x="238" y="340" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M265 359 v16 M257 367 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
         </g>
       </g>
 
       <!-- card 2: interval project with 1 blended clip — 14pt below card 1 -->
       <g id="card-interval-project">
-        <rect x="16" y="338" width="361" height="164" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="350" width="86" height="64" rx="8" fill="#4A3B2E"/>
-        <circle cx="60" cy="372" r="8" fill="#FFD9A0" opacity="0.8"/>
-        <polygon points="30,398 62,382 94,396 116,388 116,414 30,414" fill="#2E2419"/>
-        <rect x="48" y="396" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="80" y="407" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
-        <text x="128" y="367" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
-        <text x="128" y="384" font-size="12" fill="#6D6D72">Interval · DNG · 10-frame blend · yesterday</text>
-        <text x="128" y="402" font-size="12" class="sb" fill="#C36A00">1 blended clip · 3.1 GB</text>
+        <rect x="16" y="430" width="361" height="178" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="442" width="86" height="64" rx="8" fill="#4A3B2E"/>
+        <circle cx="60" cy="464" r="8" fill="#FFD9A0" opacity="0.8"/>
+        <polygon points="30,490 62,474 94,488 116,480 116,506 30,506" fill="#2E2419"/>
+        <rect x="48" y="488" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="80" y="499" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
+        <text x="128" y="459" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
+        <text x="128" y="476" font-size="12" fill="#6D6D72">Interval · DNG · 10-frame blend · yesterday</text>
+        <text x="128" y="494" font-size="12" class="sb" fill="#C36A00">1 blended clip · 3.1 GB</text>
+        <g id="tag-line-2" data-component="SceneTagLine">
+          <rect x="128" y="500" width="44" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="150" y="512" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Water</text>
+          <rect x="177" y="500" width="42" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
+          <text x="198" y="512" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Urban</text>
+          <!-- tagged automatically: this project's tags came from the silent Apple
+               Vision pass at capture time, not from a run the user confirmed.
+               10pt sparkles, accent at 70%, 6pt after the last chip, inside the
+               tag line — so it costs the card no height. Comes off the moment an
+               Auto rename & tag proposal is applied. -->
+          <g data-symbol="sparkles" opacity="0.7" fill="#C36A00">
+            <path d="M229 502 l1.6 3.6 3.6 1.6 -3.6 1.6 -1.6 3.6 -1.6 -3.6 -3.6 -1.6 3.6 -1.6 z"/>
+            <path d="M236 508.5 l0.9 2 2 0.9 -2 0.9 -0.9 2 -0.9 -2 -2 -0.9 2 -0.9 z"/>
+          </g>
+        </g>
         <g id="version-strip-2">
-          <rect x="30" y="426" width="96" height="54" rx="9" fill="#463522"/>
-          <rect x="34" y="462" width="52" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="60" y="472" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
-          <rect x="134" y="426" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <path d="M161 445 v16 M153 453 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+          <rect x="30" y="532" width="96" height="54" rx="9" fill="#463522"/>
+          <rect x="34" y="568" width="52" height="14" rx="7" fill="#000" opacity="0.5"/>
+          <text x="60" y="578" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
+          <rect x="134" y="532" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M161 551 v16 M153 559 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
         </g>
       </g>
 
-      <!-- card 3: photo project (single asset — no strip) — 14pt below card 2 -->
+      <!-- card 3: photo project (single asset — no strip), never analysed, so
+           no tag line and the original 88pt height — 14pt below card 2 -->
       <g id="card-photo-project">
-        <rect x="16" y="516" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="528" width="86" height="64" rx="8" fill="#26303C"/>
-        <ellipse cx="73" cy="554" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
-        <rect x="60" y="574" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="86" y="585" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
-        <text x="128" y="545" font-size="16" class="b" fill="#000">Long exposure — falls</text>
-        <text x="128" y="562" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
-        <text x="128" y="580" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
+        <rect x="16" y="622" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="634" width="86" height="64" rx="8" fill="#26303C"/>
+        <ellipse cx="73" cy="660" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
+        <rect x="60" y="680" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="86" y="691" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <text x="128" y="651" font-size="16" class="b" fill="#000">Long exposure — falls</text>
+        <text x="128" y="668" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
+        <text x="128" y="686" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
       </g>
 
       <!-- floating tab bar (Projects selected) -->
@@ -128,5 +186,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + CaptureFilterBar) · ProjectCard · blended-clip strip · dashed new-blended-clip tile</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + SceneSearchField + CaptureFilterBar + SceneTagChips) · ProjectCard incl. SceneTagLine · blended-clip strip · dashed new-blended-clip tile</text>
 </svg>

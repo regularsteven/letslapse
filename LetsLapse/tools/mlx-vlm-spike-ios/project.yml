@@ -1,0 +1,52 @@
+# xcodegen spec for the Phase 0 on-device harness (throwaway; NOT part of the app target).
+# Generate with: xcodegen generate  (run in this directory)
+name: VLMSpikeiOS
+options:
+  bundleIdPrefix: com.regularsteven.letslapse
+packages:
+  mlx-swift:
+    url: https://github.com/ml-explore/mlx-swift
+    exactVersion: 0.31.4
+  mlx-swift-lm:
+    path: ../mlx-vlm-spike/vendor/mlx-swift-lm  # vendored 3.31.4 + PR #384 fix; see that dir's README.md
+  swift-huggingface:
+    url: https://github.com/huggingface/swift-huggingface
+    from: 0.9.0
+  swift-transformers:
+    url: https://github.com/huggingface/swift-transformers
+    from: 1.3.0
+targets:
+  VLMSpikeiOS:
+    type: application
+    platform: iOS
+    deploymentTarget: "17.0"
+    sources:
+      - path: Sources
+      - path: ../mlx-vlm-spike/Sources/vlm-spike/SpikeCore.swift
+      - path: ../mlx-vlm-spike/TestImages
+        type: folder
+      - path: ../mlx-vlm-spike/Prompts/scene-prompt.txt
+    settings:
+      base:
+        DEVELOPMENT_TEAM: S546K64836
+        PRODUCT_BUNDLE_IDENTIFIER: com.regularsteven.letslapse.vlmspike
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        # Increased Memory Limit entitlement intentionally NOT set: the Xcode-managed wildcard
+        # team profile on this Mac lacks the capability and minting a new profile needs an
+        # interactive Apple ID session. Whether the 4-bit model fits the default per-app memory
+        # ceiling is itself a Phase 0 question; re-add VLMSpikeiOS.entitlements once a profile
+        # with the capability exists (open the project in Xcode once, signed in).
+    dependencies:
+      - package: mlx-swift
+        product: MLX
+      - package: mlx-swift-lm
+        product: MLXVLM
+      - package: mlx-swift-lm
+        product: MLXLMCommon
+      - package: swift-huggingface
+        product: HuggingFace
+      - package: swift-transformers
+        product: Tokenizers

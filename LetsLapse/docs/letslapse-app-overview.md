@@ -238,7 +238,7 @@ Not currently covered at unit level: HEVC/ProRes/JPEG output paths, `stackSequen
 
 - **Create** — the camera. On iOS/iPadOS, selecting the Create tab (and launching the app, since Create is the launch tab) presents the capture screen immediately; the effect-first Create home lives *behind* it and is revealed when the camera closes. `openCameraForCreateTab()` only fires when `stage == .home`, so a running or parked flow keeps the screen it's on, and the DEBUG preview hooks (§9) suppress the auto-open so a screenshot run lands where it was told to.
 - **Gallery** — every capture in the library as one filterable square grid (§4.7).
-- **Projects** — originals grouped with their blended clips.
+- **Projects** — originals grouped with their blended clips, searchable by what is in them. The header carries a search capsule and a row of subject-tag chips (`App/SceneSearch.swift` — `SceneQuery` does the matching, `SceneSearchField` / `SceneTagChips` / `SceneTagLine` draw it) above the shared capture-kind filter. A typed word matches the project's name, its subject tags — raw *and* labelled, so "sky & weather" finds `skyWeather` — and the free-form elements the on-device analysis named for the frame; every word must land somewhere, so each word narrows. Chips AND together and are drawn only from tags actually present in the library. Both come from **Auto rename & tag** (`App/AI/`, §AI below): `CaptureProject.sceneTags` and `.sceneElements`, written in one go by `applySceneMetadata(_:to:)` when the user accepts a proposal. Analysed cards carry their tags as a small line so the chips filter by something visible; unanalysed cards are untouched.
 - **Collections** — ordered sets of blended clips gathered from across projects onto one timeline, exported as a single video (shipped 2026-08-01 from the signed-off "Collections Flow" design; brief at the repo-root `docs/letslapse-collections-ux-brief.md`). A collection has a canvas ratio (16:9 · 9:16 · 1:1 · 4:3 · 3:4; the first clip added sets it, chips override) exporting at that ratio's maximum resolution; per-clip in/out trims retime the cut with no gaps; a mismatched clip is cropped by a single-axis pan offset chosen by dragging a white frame on the detail preview itself (collection-local override → the clip's default crop on `BlendProject.defaultCrops` → centred; the replace-default-or-just-here prompt appears only when another collection shares the clip). One appearance per clip per collection; long-exposure stills are visible but locked (v1 is video-only); deleting a blend or project drops it from every collection, and the delete alert names them. Exports run through `CollectionExporter` (one `AVMutableComposition` + per-segment crop/scale transforms, H.264, honest ring + four-phase checklist reusing the Processing pattern); the render is kept with the collection (`Application Support/LetsLapse/Collections/<id>/render.mp4`) and re-export is instant until the recipe — clips, trims, crops, ratio, fps — changes. Model: `LapseCollection` (`App/CollectionsModel.swift`) persisted in `library.json`. Screens: `CollectionsView` (list/empty/name sheet), `CollectionDetailView` (timeline builder; splits preview-left/controls-right past 560pt), `CollectionClipPicker`, `CollectionTrimView`, `CollectionExportView`. The tab took the slot of the parked **Music** spike — `App/MusicView.swift` and its `MusicBedEngine` stay in the codebase and compiling, but no tab routes to them.
 - **Settings** — creative defaults, video, recording, location, storage, advanced/diagnostics.
 
@@ -694,6 +694,47 @@ Feedback is haptic-first (`.start` / `.stop` / `.click` on accepted commands) wi
 
 ---
 
+## 7a. On-device scene understanding
+
+Everything lives in `App/AI/` and every MLX-facing line sits behind `#if canImport(MLX)`, so a
+checkout without the package — or a platform below the engine's iOS 17 / macOS 14 floor — still
+builds and simply reports the feature unavailable. Nothing leaves the device and there is no
+network call at inference time; the only network work is the one-off model download.
+
+The layering, outermost first:
+
+- **`AIModelsView`** (Settings → AI models) — the catalog. One row per model with its size, a
+  download with progress, and honest per-row blockers: a device that cannot hold the weights says
+  so *before* the download rather than after, and a model that fails to load is marked incompatible
+  on its own row instead of staying "installed and healthy". `ModelManager` owns install state and
+  the per-model cache directory; `DeviceCapability` owns the memory arithmetic.
+- **`SceneAnalysisService`** (`MLXSceneAnalyzer`, `SceneFrameSampler`, `SceneContext`) — the
+  product-facing call: one request per capture, one result. The sampler turns a capture into the
+  handful of frames worth looking at (1 for a photo, 3 for an interval shoot, 5 spread across a
+  recording), each re-encoded as a ≤1024 px JPEG — the size the vision tower resizes to anyway, and
+  the only affordable way to feed it a DNG, since this app's own DNGs embed no preview. `SceneContext`
+  supplies the place and light words from the capture's *own* GPS fix and clock rather than asking
+  the model to guess them. Multi-frame requests run one frame at a time and merge, because an extra
+  frame costs roughly half a gigabyte an 8 GB phone does not have.
+- **`SceneAnalyser`** — the actor that speaks MLX: model load, prompt, generation, JSON parsing.
+- **`AutoNameSheet`** — "Auto rename & tag" on a project's management card. Nothing is written
+  until Apply; the title is editable and tags can be dropped, while the place and light chips are
+  shown but not editable (they are the capture's facts, handed *to* the model).
+
+What gets stored, and why it matters downstream: `CaptureProject.sceneTags` (the closed taxonomy in
+`SceneMetadata`) and `.sceneElements` (the model's own nouns for what is in frame). Both feed
+Projects search (§4) — the elements especially, since "waterfall" is findable when no taxonomy tag
+would have been.
+
+**Memory is the constraint, not speed.** On an 8 GB iPhone the 4-bit Gemma 4 E2B weights load in
+~2 s and sit at 2.8 GB, and iOS kills the app the moment inference begins unless
+`com.apple.developer.kernel.increased-memory-limit` is present — measured twice, and unfixable by
+lowering resolution. The entitlement ships in `App/LetsLapse-iOS.entitlements` and needs an explicit
+App ID (a wildcard profile cannot carry it). The measurements, the vendored engine patches and the
+catalog's engine-version policy are in `docs/ai/phase0-findings.md`.
+
+---
+
 ## 8. Design language
 
 Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, shared components):
@@ -727,6 +768,8 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 | `LL_CAPTURE` = `1` | auto-open the capture screen |
 | `LL_VIEWER` = `1` \| `expanded` | open the newest photo/interval project's grading viewer on its hero frame |
 | `LL_CUSTOMISE` = `1` | expand the Customise grading panel on a video project's detail card |
+| `LL_AI` = *image path* | run one scene-analysis pass on that frame and log the result (`LL_AI_PLACE` / `LL_AI_LIGHT` set the context) — needs an installed model, so device/Mac only |
+| `LL_TAGS` = `demo` | stamp plausible scene tags and elements across the library, so Projects search and its tag chips have something to act on without a 3.3 GB model |
 
 **Where to start reading, by task:**
 

@@ -169,7 +169,12 @@ struct CaptureView: View {
         }
     }
 
-    var body: some View {
+    // `body` is assembled from four pieces rather than one chain. At the iOS 17 floor every
+    // `.onChange(of:)` gains a second (two-parameter) overload, and ~45 of them in a single
+    // expression blows the type-checker's budget. Order is unchanged; the split is purely so
+    // each piece is solved on its own.
+
+    private var stage: some View {
         GeometryReader { geometry in
             ZStack {
                 // One persistent preview, filling the whole area. It lives
@@ -202,6 +207,11 @@ struct CaptureView: View {
         #if os(iOS)
         .statusBarHidden()
         #endif
+    }
+
+    /// Sheets, lifecycle and the clock.
+    private var chrome: some View {
+        stage
         .sheet(isPresented: $showFormatSheet) {
             FormatSheet(
                 camera: camera,
@@ -233,6 +243,11 @@ struct CaptureView: View {
                 shutterAction()
             }
         }
+    }
+
+    /// Everything that persists or re-validates the capture setup as it changes.
+    private var settingsObservers: some View {
+        chrome
         // Persist the capture setup as it changes, from any entry path
         // (on-screen pickers, Watch commands). On a mode switch, swap in
         // that mode's remembered spacing, or adopt the carried-over one
@@ -334,6 +349,11 @@ struct CaptureView: View {
         } message: {
             Text("Psycho captures as many frames as your device can manage each interval, ignoring thermal limits, for maximum motion blur. Your device may get warm during long sessions. This mode also teaches the app where your device throttles, which powers Safe mode.")
         }
+    }
+
+    /// Orientation and the Watch-link mirrors — iOS only, bar the one shared recording hook.
+    var body: some View {
+        settingsObservers
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             // Refresh the orientation the grid overlay sizes against, and nudge
@@ -929,7 +949,15 @@ struct CaptureView: View {
                 if mode == .photo && isWaitingForSteady {
                     SteadyGateOverlay(isStill: steadiness.isStill, magnitude: steadiness.magnitude)
                 }
+                // A DNG lens change reconnects the physical camera — the one
+                // transition the zoom ramp can't cover. Dip instead of
+                // showing the old lens's live feed and a hard cut.
+                if camera.isSwitchingLens {
+                    Color.black.opacity(0.85)
+                        .allowsHitTesting(false)
+                }
             }
+            .animation(.easeInOut(duration: 0.16), value: camera.isSwitchingLens)
             .frame(width: geometry.size.width, height: geometry.size.height)
         }
         .contentShape(Rectangle())

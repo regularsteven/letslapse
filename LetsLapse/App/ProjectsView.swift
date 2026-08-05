@@ -11,6 +11,9 @@ struct ProjectsView: View {
     @State private var previewItem: MediaPreviewItem?
     @State private var deleteFailure: String?
     @State private var filter: CaptureFilter = .all
+    /// Typed words and tag chips, together — the two narrow the same list and share one
+    /// empty state, so they are one value rather than two pieces of view state.
+    @State private var query = SceneQuery.empty
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -24,7 +27,7 @@ struct ProjectsView: View {
                     .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 0, trailing: 16))
 
                 Group {
-                    let visible = model.captures.filtered(by: filter)
+                    let visible = model.captures.filtered(by: filter).matching(query)
                     if model.captures.isEmpty {
                         emptyState
                     } else if visible.isEmpty {
@@ -90,8 +93,13 @@ struct ProjectsView: View {
 
     /// The Gallery's `VStack(spacing: 0)` header, reproduced as a single list
     /// row: 34pt title 15pt from the top (7 row inset + 8 here), 20pt in from
-    /// the leading edge (16 row inset + 4 here), then the filter bar, whose own
-    /// 8pt vertical padding is the only spacing above and below it.
+    /// the leading edge (16 row inset + 4 here), then the search field, the
+    /// filter bar — whose own 8pt vertical padding is the only spacing above
+    /// and below it — and, when the library has any, the tag chips.
+    ///
+    /// Projects carries search and Gallery does not: search matches a project's
+    /// name and what the on-device analysis found in it, and the Gallery shows
+    /// assets rather than projects.
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("Projects")
@@ -108,7 +116,18 @@ struct ProjectsView: View {
                 // the empty-state card doesn't butt against the title.
                 Color.clear.frame(height: 8)
             } else {
+                SceneSearchField(text: $query.text)
+                    .padding(.top, 10)
+
                 CaptureFilterBar(selection: $filter)
+
+                let tags = model.captures.presentSceneTags
+                if !tags.isEmpty {
+                    // Bleeds past the row's trailing inset so a long chip row
+                    // scrolls out to the screen edge rather than stopping short.
+                    SceneTagChips(tags: tags, selection: $query.tags)
+                        .padding(.bottom, 8)
+                }
             }
         }
     }
@@ -130,23 +149,54 @@ struct ProjectsView: View {
         .llCard(cornerRadius: 18)
     }
 
-    /// The library has projects, just none of this kind — say so rather than
-    /// repeating the "record something" pitch.
+    /// The library has projects, just none that survived what is switched on —
+    /// say so rather than repeating the "record something" pitch. A search that
+    /// found nothing says what was searched for, because "No videos" would be a
+    /// lie when the kind filter is on All and it was the typed word that missed.
     private var filteredEmptyState: some View {
         VStack(spacing: 8) {
-            Image(systemName: "line.3.horizontal.decrease.circle")
+            Image(systemName: query.isActive
+                ? "magnifyingglass"
+                : "line.3.horizontal.decrease.circle")
                 .font(.largeTitle)
                 .foregroundStyle(.secondary)
-            Text(filter.emptyMessage)
+            Text(query.isActive ? "No matching projects" : filter.emptyMessage)
                 .font(.headline)
-            Button("Show all") { filter = .all }
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(LL.accent)
-                .buttonStyle(.plain)
+            if query.isActive {
+                Text(noMatchDetail)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            Button(query.isActive ? "Clear filters" : "Show all") {
+                query = .empty
+                filter = .all
+            }
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(LL.accent)
+            .buttonStyle(.plain)
         }
         .frame(maxWidth: .infinity, minHeight: 200)
         .padding(20)
         .llCard(cornerRadius: 18)
+    }
+
+    /// Names what is actually narrowing the list, so "clear filters" is an
+    /// informed tap rather than a guess.
+    private var noMatchDetail: String {
+        var parts: [String] = []
+        let typed = query.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !typed.isEmpty { parts.append("“\(typed)”") }
+        if !query.tags.isEmpty {
+            let names = SceneMetadata.orderedTaxonomy
+                .filter(query.tags.contains)
+                .map(SceneMetadata.label(for:))
+            parts.append(names.joined(separator: " + "))
+        }
+        let subject = parts.joined(separator: " and ")
+        return filter == .all
+            ? "Nothing in your library matches \(subject)."
+            : "Nothing under \(filter.rawValue) matches \(subject)."
     }
 
     private func preview(_ capture: AppModel.CaptureProject) {
@@ -236,6 +286,25 @@ private struct ProjectCard: View {
                                 versions.isEmpty || capture.isPhotoCapture
                                     ? Color.secondary : LL.accent)
                             .padding(.top, 2)
+
+                        // Only on analysed projects, so an untagged library's
+                        // cards keep exactly the height they always had.
+                        if let tags = capture.sceneTags, !tags.isEmpty {
+                            HStack(spacing: 6) {
+                                SceneTagLine(tags: tags)
+                                // Tagged by the app on its own, not from a run
+                                // the user confirmed — worth marking, quietly.
+                                // It sits inside the existing tag row, so it
+                                // costs the card no height at all.
+                                if capture.sceneTaggedAutomatically == true {
+                                    Image(systemName: "sparkles")
+                                        .font(.system(size: 10, weight: .semibold))
+                                        .foregroundStyle(LL.accent.opacity(0.7))
+                                        .accessibilityLabel("Tagged automatically")
+                                }
+                            }
+                            .padding(.top, 4)
+                        }
                     }
                     Spacer(minLength: 0)
                 }

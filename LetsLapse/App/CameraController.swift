@@ -293,6 +293,12 @@ final class CameraController: NSObject, ObservableObject {
     @Published var activeFormatDescription = ""
     @Published var availableStops: [DerivedOpticsStop] = []
     @Published var selectedStop: DerivedOpticsStop?
+    /// True while a DNG-world lens change (or arm/disarm) reconnects the
+    /// physical camera — the one transition a zoom ramp cannot cover, since
+    /// Bayer RAW only exists on direct physical-device connections. The
+    /// capture screen dips the viewfinder while this is set, so the user
+    /// never sees the old lens's live feed followed by a hard cut.
+    @Published var isSwitchingLens = false
     @Published var availableResolutions: [CaptureResolution] = []
     @Published var selectedResolution = CaptureResolution(width: 1920, height: 1080)
     @Published var availableFrameRates: [Int] = [30]
@@ -769,10 +775,14 @@ final class CameraController: NSObject, ObservableObject {
         guard photoAspectPreviousPreset == nil else { return }
         let previousPreset = session.sessionPreset
         guard let target = nearestOpticalStop(to: currentStop) else { return }
+        beginLensCover()
         #if os(iOS)
         if !physicalWorldActive, let optics = opticsDevice, optics.isVirtualDevice {
             guard let device = physicalDevice(for: target),
-                  let input = try? AVCaptureDeviceInput(device: device) else { return }
+                  let input = try? AVCaptureDeviceInput(device: device) else {
+                endLensCoverAfterSettle(0)
+                return
+            }
             session.beginConfiguration()
             if let videoInput { session.removeInput(videoInput) }
             if session.canAddInput(input) {
@@ -789,18 +799,21 @@ final class CameraController: NSObject, ObservableObject {
             _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
             deriveStops()
             publishFormat()
+            endLensCoverAfterSettle()
             return
         }
         photoAspectPreviousPreset = previousPreset
         currentStop = target
         applyPhotoAspectConfiguration()
         deriveStops()
+        endLensCoverAfterSettle()
     }
 
     /// sessionQueue-confined: restore the optics input and the pinned video
     /// configuration, republishing the full stop set.
     private func disarmPhotoAspectPreview() {
         guard let previous = photoAspectPreviousPreset else { return }
+        beginLensCover()
         photoAspectPreviousPreset = nil
         session.beginConfiguration()
         session.sessionPreset = previous
@@ -809,6 +822,7 @@ final class CameraController: NSObject, ObservableObject {
         _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
         deriveStops()
         publishFormat()
+        endLensCoverAfterSettle()
     }
 
     /// sessionQueue-confined: put the optics device back as the session's
@@ -1104,14 +1118,49 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// sessionQueue-confined DNG-world stop change: swap the session input
-    /// to the stop's physical camera (the discrete path the whole app used
-    /// before Capture Optics), re-pin the format, and re-assert the armed
-    /// photo framing.
+    // MARK: - DNG-world lens transitions
+
+    /// Cover token: every covered transition bumps the generation so an
+    /// overlapping switch keeps the dip up until the last one settles.
+    /// sessionQueue-confined.
+    private var lensCoverGeneration = 0
+
+    private func beginLensCover() {
+        lensCoverGeneration += 1
+        DispatchQueue.main.async {
+            if !self.isSwitchingLens { self.isSwitchingLens = true }
+        }
+    }
+
+    /// Drop the cover once the new device has had a beat to deliver and
+    /// meter — the dip hides the reconnection AND the first dark frames of
+    /// the fresh AE.
+    private func endLensCoverAfterSettle(_ delay: TimeInterval = 0.35) {
+        let generation = lensCoverGeneration
+        sessionQueue.asyncAfter(deadline: .now() + delay) {
+            guard generation == self.lensCoverGeneration else { return }
+            DispatchQueue.main.async { self.isSwitchingLens = false }
+        }
+    }
+
+    /// sessionQueue-confined DNG-world stop change: ONE session transaction
+    /// swapping the input to the stop's physical camera, under the dip. In
+    /// the armed world the session already runs (and stays in) the photo
+    /// configuration — no video-format pin, no preset flip; the old
+    /// three-transaction sequence was the "horrible" DNG switch.
     private func selectPhysicalStop(_ stop: DerivedOpticsStop) {
         guard stop.kind == .optical,
-              let device = physicalDevice(for: stop),
-              let input = try? AVCaptureDeviceInput(device: device) else { return }
+              let device = physicalDevice(for: stop) else { return }
+        guard device !== videoDevice else {
+            // Already on this camera — just confirm the selection.
+            currentStop = stop
+            DispatchQueue.main.async {
+                if self.selectedStop != stop { self.selectedStop = stop }
+            }
+            return
+        }
+        guard let input = try? AVCaptureDeviceInput(device: device) else { return }
+        beginLensCover()
         session.beginConfiguration()
         if let videoInput { session.removeInput(videoInput) }
         if session.canAddInput(input) {
@@ -1124,10 +1173,32 @@ final class CameraController: NSObject, ObservableObject {
         DispatchQueue.main.async {
             if self.selectedStop != stop { self.selectedStop = stop }
         }
-        refreshCaptureOptions()
-        applyVideoStabilization()
-        publishFormat()
-        reassertPhotoAspectPreviewIfArmed()
+        if photoAspectPreviousPreset != nil {
+            // Armed world: verify RAW on the new constituent (cached after
+            // the first visit), re-assert any exposure lock, republish. A
+            // constituent that can't deliver DNG disarms honestly.
+            if deviceSupportsBayerRAW() {
+                if (try? device.lockForConfiguration()) != nil {
+                    reassertExposureLock(on: device)
+                    device.unlockForConfiguration()
+                }
+                publishLiveBlendDNGSupport()
+                publishFormat()
+            } else {
+                photoAspectPreviousPreset = nil
+                restoreOpticsInputIfNeeded()
+                _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+                deriveStops()
+                publishFormat()
+            }
+        } else {
+            // DNG run without armed framing (edge): the old full path.
+            refreshCaptureOptions()
+            applyVideoStabilization()
+            publishFormat()
+            reassertPhotoAspectPreviewIfArmed()
+        }
+        endLensCoverAfterSettle()
     }
 
     func selectResolution(_ resolution: CaptureResolution) {

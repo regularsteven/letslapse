@@ -9,6 +9,11 @@
 /* Begin PBXBuildFile section */
 		AA0000000000000000000022 /* LetsLapseKit in Frameworks */ = {isa = PBXBuildFile; productRef = AA0000000000000000000021 /* LetsLapseKit */; };
 		AA0000000000000000000032 /* LetsLapse Watch App.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = AA0000000000000000000031 /* LetsLapse Watch App.app */; platformFilters = (ios, iphonesimulator, ); settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		AA00000000000000000000B1 /* MLX in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000A1 /* MLX */; };
+		AA00000000000000000000B2 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000A2 /* MLXVLM */; };
+		AA00000000000000000000B3 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000A3 /* MLXLMCommon */; };
+		AA00000000000000000000B4 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000A4 /* HuggingFace */; };
+		AA00000000000000000000B5 /* Tokenizers in Frameworks */ = {isa = PBXBuildFile; productRef = AA00000000000000000000A5 /* Tokenizers */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -69,6 +74,11 @@
 			path = Shared;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000070 /* Resources */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Resources;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -77,6 +87,11 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA0000000000000000000022 /* LetsLapseKit in Frameworks */,
+				AA00000000000000000000B1 /* MLX in Frameworks */,
+				AA00000000000000000000B2 /* MLXVLM in Frameworks */,
+				AA00000000000000000000B3 /* MLXLMCommon in Frameworks */,
+				AA00000000000000000000B4 /* HuggingFace in Frameworks */,
+				AA00000000000000000000B5 /* Tokenizers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -96,6 +111,7 @@
 				AA0000000000000000000007 /* App */,
 				AA0000000000000000000030 /* Watch */,
 				AA0000000000000000000060 /* Shared */,
+				AA0000000000000000000070 /* Resources */,
 				AA0000000000000000000006 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -129,10 +145,16 @@
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000007 /* App */,
 				AA0000000000000000000060 /* Shared */,
+				AA0000000000000000000070 /* Resources */,
 			);
 			name = LetsLapse;
 			packageProductDependencies = (
 				AA0000000000000000000021 /* LetsLapseKit */,
+				AA00000000000000000000A1 /* MLX */,
+				AA00000000000000000000A2 /* MLXVLM */,
+				AA00000000000000000000A3 /* MLXLMCommon */,
+				AA00000000000000000000A4 /* HuggingFace */,
+				AA00000000000000000000A5 /* Tokenizers */,
 			);
 			productName = LetsLapse;
 			productReference = AA0000000000000000000008 /* LetsLapse.app */;
@@ -190,6 +212,10 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AA0000000000000000000020 /* XCLocalSwiftPackageReference "Kit" */,
+				AA00000000000000000000C0 /* XCLocalSwiftPackageReference "tools/mlx-vlm-spike/vendor/mlx-swift-lm" */,
+				AA00000000000000000000C1 /* XCRemoteSwiftPackageReference "mlx-swift" */,
+				AA00000000000000000000C2 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
+				AA00000000000000000000C3 /* XCRemoteSwiftPackageReference "swift-transformers" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AA0000000000000000000006 /* Products */;
@@ -366,6 +392,7 @@
 				ALLOW_TARGET_PLATFORM_SPECIALIZATION = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "App/LetsLapse-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = App/LetsLapse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -383,7 +410,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -392,7 +419,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.regularsteven.letslapse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -411,6 +438,7 @@
 				ALLOW_TARGET_PLATFORM_SPECIALIZATION = YES;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				"CODE_SIGN_ENTITLEMENTS[sdk=iphoneos*]" = "App/LetsLapse-iOS.entitlements";
 				"CODE_SIGN_ENTITLEMENTS[sdk=macosx*]" = App/LetsLapse.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -428,7 +456,7 @@
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
-				IPHONEOS_DEPLOYMENT_TARGET = 16.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -437,7 +465,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.regularsteven.letslapse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -555,12 +583,66 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = Kit;
 		};
+		AA00000000000000000000C0 /* XCLocalSwiftPackageReference "tools/mlx-vlm-spike/vendor/mlx-swift-lm" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "tools/mlx-vlm-spike/vendor/mlx-swift-lm";
+		};
 /* End XCLocalSwiftPackageReference section */
+
+/* Begin XCRemoteSwiftPackageReference section */
+		AA00000000000000000000C1 /* XCRemoteSwiftPackageReference "mlx-swift" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/ml-explore/mlx-swift";
+			requirement = {
+				kind = exactVersion;
+				version = 0.31.4;
+			};
+		};
+		AA00000000000000000000C2 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 0.9.0;
+			};
+		};
+		AA00000000000000000000C3 /* XCRemoteSwiftPackageReference "swift-transformers" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-transformers";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.3.0;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
 		AA0000000000000000000021 /* LetsLapseKit */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = LetsLapseKit;
+		};
+		AA00000000000000000000A1 /* MLX */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000C1 /* XCRemoteSwiftPackageReference "mlx-swift" */;
+			productName = MLX;
+		};
+		AA00000000000000000000A2 /* MLXVLM */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXVLM;
+		};
+		AA00000000000000000000A3 /* MLXLMCommon */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXLMCommon;
+		};
+		AA00000000000000000000A4 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000C2 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
+		};
+		AA00000000000000000000A5 /* Tokenizers */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AA00000000000000000000C3 /* XCRemoteSwiftPackageReference "swift-transformers" */;
+			productName = Tokenizers;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

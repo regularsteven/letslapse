@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "engine": {
+    "package": "ml-explore/mlx-swift-lm",
+    "revision": "18edd228",
+    "notes": "Vendored copy under tools/mlx-vlm-spike/vendor/mlx-swift-lm, carrying vendor/pr384.diff (Gemma 4 E-series shared-KV loading) and vendor/multi-image-fix.diff. A model entry is only valid against this engine revision — a Hub re-conversion can break an older engine, so revisions are pinned on both sides. See docs/ai/phase0-findings.md. Entries whose own `engine` is not `mlx` don't run on it at all and ignore this block.",
+    "notesOnBuiltIns": "A built-in entry (engine other than \"mlx\") has no repo, no revision and no download: it is a system framework the app can call today. It still carries an id and a name because it is chosen the same way an installed model is."
+  },
+  "models": [
+    {
+      "id": "apple-vision",
+      "engine": "vision-framework",
+      "name": "Apple Vision",
+      "quantization": "Built-in",
+      "availability": "builtIn",
+      "approxDownloadBytes": 0,
+      "minUnifiedMemoryGB": 0,
+      "approxPeakMemoryBytes": 0,
+      "maxImagesPerPrompt": 1,
+      "summary": "Apple's built-in scene and object classifier. Instant, and nothing to download. It tags a capture but doesn't write a name — keep a language model for titles.",
+      "warning": null
+    },
+    {
+      "id": "gemma-4-e2b-it-4bit",
+      "engine": "mlx",
+      "repoID": "mlx-community/gemma-4-e2b-it-4bit",
+      "revision": "238767527555cb75a05732a84dff5d6ba0dd6809",
+      "name": "Gemma 4 E2B",
+      "quantization": "4-bit",
+      "availability": "recommended",
+      "approxDownloadBytes": 3583082661,
+      "minUnifiedMemoryGB": 6.5,
+      "approxPeakMemoryBytes": 4509715660,
+      "maxImagesPerPrompt": 1,
+      "matching": [
+        "*.safetensors",
+        "*.safetensors.index.json",
+        "*.json",
+        "*.jinja",
+        "*.model",
+        "*.txt"
+      ],
+      "summary": "Google's small multimodal model. Names and tags a capture in about a second once loaded.",
+      "warning": null
+    }
+  ]
+}

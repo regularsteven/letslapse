@@ -114,6 +114,19 @@ final class AppModel: ObservableObject {
         /// decode as nil and behave exactly as they always did.
         /// Read it through `AppModel.effectiveBurstRamp(for:)`.
         var burstRampDuration: Double?
+        /// Subject tags the user accepted from an on-device scene analysis. Optional so projects
+        /// saved before the feature existed still decode; nil and empty mean the same thing.
+        var sceneTags: [String]?
+        /// The free-form nouns the same analysis named for what is actually in frame
+        /// ("waterfall", "mossy rocks"). Not shown as chips — they are the model's own wording
+        /// rather than a closed list — but they are the most specific thing search can match, so
+        /// they are kept alongside the tags rather than thrown away with the proposal sheet.
+        var sceneElements: [String]?
+        /// True when these tags came from the silent Vision pass at capture time rather than from
+        /// a run the user asked for and confirmed. It is the difference between "the app guessed
+        /// this" and "you agreed to this", and it is the only reason the card shows a marker at
+        /// all. Cleared the moment a proposal is applied.
+        var sceneTaggedAutomatically: Bool?
 
         var summary: String {
             switch kind {
@@ -606,6 +619,10 @@ final class AppModel: ObservableObject {
     /// clears it. Screens presented over the tabs (the camera is a full-screen
     /// cover) must dismiss themselves as well; this only moves the selection.
     @Published var requestedTab: LLTab?
+
+    /// Set by screens that want Settings opened on a specific page — the project detail's
+    /// "Download a model in Settings" caption. ContentView consumes and clears it.
+    @Published var requestedSettingsDestination: SettingsDestination?
 
     private var blendTask: Task<Void, Never>?
 
@@ -1112,6 +1129,29 @@ final class AppModel: ObservableObject {
             addBlends(Array(videoBlends.suffix(2)).map(\.id), to: second.id)
             setCanvasRatio(.tall, for: second.id)
         }
+    }
+
+    /// LL_TAGS=demo screenshot hook: stamps plausible scene metadata across the library so the
+    /// Projects search field, its tag chips and the card tag lines have something to act on.
+    /// Running the real analyser on a simulator is not an option — MLX needs a GPU the simulator
+    /// does not have — and on a device it would mean a 3.3 GB download per verification pass.
+    ///
+    /// Deliberately writes through the same persistence as a real Apply, so a seeded library
+    /// exercises the decode path too.
+    func debugSeedSceneTags() {
+        let samples: [(tags: [String], elements: [String])] = [
+            (["water", "nature"], ["waterfall", "mossy rocks"]),
+            (["urban", "lightTrails"], ["traffic", "tower block"]),
+            (["skyWeather", "nature"], ["storm clouds", "ridgeline"]),
+            (["people", "event"], ["market stalls", "crowd"]),
+            (["water", "skyWeather", "landmark"], ["harbour", "suspension bridge"]),
+        ]
+        for (index, capture) in captures.enumerated() where capture.sceneTags == nil {
+            let sample = samples[index % samples.count]
+            captures[index].sceneTags = sample.tags
+            captures[index].sceneElements = sample.elements
+        }
+        try? persistLibrary()
     }
 
     /// LL_ADJUST=demo screenshot hook: the newest video capture opened on the
@@ -1733,6 +1773,87 @@ final class AppModel: ObservableObject {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         captures[index].name = trimmed.isEmpty ? nil : trimmed
         try? persistLibrary()
+    }
+
+    /// Applies what the user accepted from an on-device scene analysis. One write, because a
+    /// rename and a tag change arriving separately would leave the manifest briefly disagreeing
+    /// with the sheet the user just confirmed.
+    func applySceneMetadata(_ metadata: SceneMetadata, to capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        let trimmed = metadata.title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty {
+            captures[index].name = trimmed
+        }
+        captures[index].sceneTags = metadata.tags.isEmpty ? nil : metadata.tags
+        captures[index].sceneElements = metadata.elements.isEmpty ? nil : metadata.elements
+        // Confirmed by a person now, whatever put them there first — so the "tagged automatically"
+        // marker comes off the card.
+        captures[index].sceneTaggedAutomatically = nil
+        try? persistLibrary()
+    }
+
+    // MARK: - Automatic tagging
+
+    /// Tags a freshly created project in the background, when the active model is one that costs
+    /// nothing to run.
+    ///
+    /// Only ever the built-in classifier. A VLM is seconds of compute and a couple of gigabytes of
+    /// resident weights per capture — firing that unasked, on the device the user is still shooting
+    /// with, is not a background nicety. So the MLX path stays where it was: a row the user taps.
+    ///
+    /// Silent by design and forgiving by design: no sheet, no toast, and any failure is dropped.
+    /// A project with no tags is the state it was already in.
+    func autoTagIfEnabled(_ capture: CaptureProject) {
+        guard ModelManager.shared.activeModel?.isBuiltIn == true else { return }
+        guard let source = sceneSource(for: capture) else { return }
+
+        Task { [weak self] in
+            guard let sample = try? await SceneFrameSampler.sample(source) else { return }
+            defer { SceneFrameSampler.cleanUp(sample) }
+            // One frame, not the sampler's usual three or five: this runs unasked while a capture
+            // has just finished writing, and the marginal tag from frames two and three is not
+            // worth the contention.
+            guard let frame = sample.frameURLs.first else { return }
+
+            let light = SceneContext.light(
+                from: capture.createdAt, duration: capture.sourceDurationSeconds ?? 0)
+            guard let result = try? await VisionSceneAnalyzer.shared.analyze(
+                SceneAnalysisRequest(imageURLs: [frame], place: nil, light: light))
+            else { return }
+
+            await self?.applyAutomaticTags(result, to: capture.id)
+        }
+    }
+
+    /// Writes what the background pass found — tags only, and only onto a project nobody has
+    /// tagged in the meantime.
+    private func applyAutomaticTags(_ result: SceneAnalysisResult, to captureID: UUID) {
+        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        // A run the user started while this was in flight has the better answer; don't overwrite it.
+        guard captures[index].sceneTags == nil else { return }
+        guard !result.subjectTags.isEmpty || !result.elements.isEmpty else { return }
+
+        captures[index].sceneTags = result.subjectTags.isEmpty ? nil : result.subjectTags
+        captures[index].sceneElements = result.elements.isEmpty ? nil : result.elements
+        // The name is untouched on purpose — Vision writes none, and a project silently renaming
+        // itself after a shoot would be alarming even if it could.
+        captures[index].sceneTaggedAutomatically = true
+        try? persistLibrary()
+    }
+
+    /// Which frames stand for a capture, by mode: a Photo project *is* one asset, an interval shoot
+    /// is summarised from its own stills, and a recording is sampled from the movie.
+    func sceneSource(for capture: CaptureProject) -> SceneFrameSampler.Source? {
+        if capture.isPhotoCapture {
+            guard let url = heroImageURL(for: capture) else { return nil }
+            return .photo(url)
+        }
+        if capture.kind == .photos {
+            let frames = sourceFrameURLs(for: capture)
+            return frames.isEmpty ? nil : .stills(frames)
+        }
+        guard let url = mediaURL(for: capture) else { return nil }
+        return .video(url)
     }
 
     // MARK: - Burst ramps
@@ -3299,6 +3420,7 @@ final class AppModel: ObservableObject {
                 await self?.refreshVideoMetadata(for: capture.id)
             }
         }
+        autoTagIfEnabled(capture)
         return capture
     }
 
@@ -3336,6 +3458,7 @@ final class AppModel: ObservableObject {
         Task { [weak self] in
             await self?.refreshVideoMetadata(for: capture.id)
         }
+        autoTagIfEnabled(capture)
         return capture
     }
 
