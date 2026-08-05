@@ -256,6 +256,7 @@ private struct ProjectCard: View {
     var onDelete: () -> Void
 
     @State private var projectBytes: Int64?
+    @State private var burstSummary: AppModel.BurstClipSummary?
 
     var body: some View {
         let versions = model.blends(for: capture)
@@ -280,6 +281,15 @@ private struct ProjectCard: View {
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
+                        // The shoot's make-up, video only: an interval card
+                        // already counts its photos in the format line, and a
+                        // photo capture reads as one asset — no counts at all.
+                        if capture.kind == .video {
+                            Text(sourceLine)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                        }
                         Text(versionsLine(count: versions.count))
                             .font(.system(size: 12, weight: .semibold))
                             .foregroundStyle(
@@ -389,12 +399,29 @@ private struct ProjectCard: View {
                 projectBytes = bytes
             }
         }
+        .task(id: capture.id) {
+            guard capture.kind == .video else { return }
+            // nil is a cancelled read — keep the line's current tail.
+            if let summary = await model.burstClipSummary(for: capture) {
+                burstSummary = summary
+            }
+        }
     }
 
     /// A photo project's tile is the photo itself; everything else shows its
     /// source media.
     private var thumbnailURL: URL? {
         capture.isPhotoCapture ? model.heroImageURL(for: capture) : model.mediaURL(for: capture)
+    }
+
+    /// "4 source clips · 2 bursts at 120 fps": the clip count is knowable
+    /// synchronously, the burst tail joins once the sequence sidecar has been
+    /// read — and only when the shoot actually recorded bursts.
+    private var sourceLine: String {
+        let clips = capture.sourceMediaCount
+        let base = clips == 1 ? "1 source clip" : "\(clips) source clips"
+        guard let bursts = burstSummary?.label else { return base }
+        return "\(base) · \(bursts)"
     }
 
     private var durationBadge: String {

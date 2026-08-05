@@ -1959,6 +1959,57 @@ final class AppModel: ObservableObject {
         return try? decoder.decode(LiveCaptureSequence.self, from: data)
     }
 
+    /// The burst make-up of a video shoot, for its Projects card: how many
+    /// segments were recorded above the base rate, and at what rate(s). A
+    /// zero count is a real answer — an import, a burstless shoot, or a
+    /// marker-mode capture (one file at the base rate; its marked intervals
+    /// are intent, not burst clips).
+    struct BurstClipSummary: Equatable {
+        var count: Int
+        var minFPS: Int
+        var maxFPS: Int
+
+        /// "2 bursts at 120 fps" / "1 burst at 120–240 fps"; nil at zero so
+        /// the card's source line can end cleanly at its clip count.
+        var label: String? {
+            guard count > 0 else { return nil }
+            let rate = minFPS == maxFPS ? "\(maxFPS) fps" : "\(minFPS)–\(maxFPS) fps"
+            return count == 1 ? "1 burst at \(rate)" : "\(count) bursts at \(rate)"
+        }
+    }
+
+    /// Summaries already read this session, keyed by capture. A sequence
+    /// sidecar is written once at capture end and never edited afterwards, so
+    /// entries can live as long as the app runs — including the "no sidecar"
+    /// zero, which is what stops scrolling from re-probing every import.
+    private var burstSummaryCache: [UUID: BurstClipSummary] = [:]
+
+    /// The Projects card's burst read — the sidecar decode runs off the main
+    /// actor like every other per-card disk walk. Returns nil only when the
+    /// read was cancelled (the row scrolled away); callers must keep whatever
+    /// they were showing rather than reading nil as "no bursts".
+    func burstClipSummary(for capture: CaptureProject) async -> BurstClipSummary? {
+        guard capture.kind == .video else { return BurstClipSummary(count: 0, minFPS: 0, maxFPS: 0) }
+        if let known = burstSummaryCache[capture.id] { return known }
+        let metadataURL = captureFolderURL(for: capture.id)
+            .appendingPathComponent("source/sequence.json")
+        let summary = await MediaWorkQueue.shared.run { () -> BurstClipSummary in
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            guard let data = try? Data(contentsOf: metadataURL),
+                  let sequence = try? decoder.decode(LiveCaptureSequence.self, from: data) else {
+                return BurstClipSummary(count: 0, minFPS: 0, maxFPS: 0)
+            }
+            let rates = sequence.segments
+                .filter { $0.frameRate > sequence.baseFrameRate }
+                .map(\.frameRate)
+            return BurstClipSummary(count: rates.count, minFPS: rates.min() ?? 0, maxFPS: rates.max() ?? 0)
+        }
+        guard let summary else { return nil }
+        burstSummaryCache[capture.id] = summary
+        return summary
+    }
+
     // MARK: - Storage
 
     struct LibraryStorage: Equatable {
