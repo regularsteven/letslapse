@@ -231,6 +231,9 @@ final class AppModel: ObservableObject {
         /// in ×-real-time, and the seams' ramps. Absent for clips from before
         /// the warp editor.
         var warp: WarpTimeline?
+        /// The punch-in reframe track this clip was rendered with — spatial
+        /// keys only; speed stays in `warp`. Absent for clips without one.
+        var reframe: ReframeTrack?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -472,6 +475,15 @@ final class AppModel: ObservableObject {
     /// whole-clip stretch for a continuous capture). Capture-specific, so
     /// opening another project clears it.
     @Published var warp: WarpTimeline?
+
+    /// The capture's punch-in reframe track — spatial keys beside the warp,
+    /// never seeded: nil or empty means the full frame. Capture-specific, so
+    /// opening another project clears it.
+    @Published var reframe: ReframeTrack?
+
+    /// The Punch-in reframe button opens the same Adjust flow with the
+    /// reframe lane already expanded; the plain button leaves it collapsed.
+    @Published var reframeLaneFocused = false
 
     /// Blend depth for interval-stills output, kept separate from the video
     /// `constantWindow` (whose default is a fast video speed). 1 = a crisp
@@ -1242,6 +1254,8 @@ final class AppModel: ObservableObject {
         photoBlendDepth = 1
         blendCanvasRatio = nil
         warp = nil
+        reframe = nil
+        reframeLaneFocused = false
         clearWarpHistory()
         excludedFrameIndices = []
         tailFramesToExclude = 0
@@ -1278,6 +1292,8 @@ final class AppModel: ObservableObject {
             currentCaptureID = capture.id
             photoBlendDepth = 1
             warp = nil
+            reframe = nil
+            reframeLaneFocused = false
             clearWarpHistory()
             excludedFrameIndices = []
             tailFramesToExclude = 0
@@ -1307,6 +1323,8 @@ final class AppModel: ObservableObject {
             source = try source(for: capture)
             currentCaptureID = capture.id
             warp = nil
+            reframe = nil
+            reframeLaneFocused = false
             clearWarpHistory()
             excludedFrameIndices = []
             tailFramesToExclude = 0
@@ -1341,6 +1359,7 @@ final class AppModel: ObservableObject {
             // Re-blending starts from exactly the timeline this clip was made
             // with. Clips from the short-lived per-stretch ruler convert their
             // windows into warp speeds (v = window · outFps ⁄ srcFps).
+            reframe = blend.reframe
             if let savedWarp = blend.warp {
                 warp = savedWarp
             } else if let savedWindows = blend.stretchWindows, !savedWindows.isEmpty {
@@ -1474,9 +1493,12 @@ final class AppModel: ObservableObject {
     /// One undoable moment of the Adjust screen. `warp` stays Optional so undo
     /// can restore the pristine not-yet-edited state (which re-seeds live);
     /// `useRamp` rides along because `updateWarp` silently switches it off.
+    /// `reframe` rides the same stack so a session interleaving speed and
+    /// punch edits unwinds in the order it was made.
     struct WarpEditSnapshot: Equatable {
         var warp: WarpTimeline?
         var useRamp: Bool
+        var reframe: ReframeTrack?
     }
 
     /// Uncapped on purpose: snapshots are three small arrays, and a cap would
@@ -1500,7 +1522,7 @@ final class AppModel: ObservableObject {
     /// `coalescing` key from continuous gestures and call
     /// `endWarpCoalescing()` when the gesture lifts.
     func updateWarp(coalescing key: String? = nil, _ transform: (inout WarpTimeline) -> Void) {
-        let before = WarpEditSnapshot(warp: warp, useRamp: useRamp)
+        let before = WarpEditSnapshot(warp: warp, useRamp: useRamp, reframe: reframe)
         let baseline = warp ?? seededWarp()
         var timeline = baseline
         transform(&timeline)
@@ -1519,6 +1541,40 @@ final class AppModel: ObservableObject {
         warpCoalescingKey = key
         warp = timeline
         useRamp = false
+    }
+
+    /// The reframe lane the Adjust screen draws — the stored track, else
+    /// empty. Never seeded: no keys means the full frame.
+    func activeReframe() -> ReframeTrack {
+        reframe ?? ReframeTrack()
+    }
+
+    /// Edit the reframe track. Same contract as `updateWarp` — every distinct
+    /// edit is one undo step on the SAME stack, so speed and punch edits
+    /// unwind in the order they were made; pass a `coalescing` key from
+    /// continuous gestures and call `endWarpCoalescing()` when the gesture
+    /// lifts. Unlike a warp edit, a punch edit says nothing about speed, so
+    /// the Advanced ramp stays as it is.
+    func updateReframe(coalescing key: String? = nil, _ transform: (inout ReframeTrack) -> Void) {
+        let before = WarpEditSnapshot(warp: warp, useRamp: useRamp, reframe: reframe)
+        let baseline = reframe ?? ReframeTrack()
+        var track = baseline
+        transform(&track)
+        // The reframe renders through the compiled timeline, so touching it
+        // switches the Advanced ramp off — the same rule as every other
+        // timeline edit.
+        let changed = track != baseline || (useRamp && !track.isEmpty)
+        guard changed else { return }
+        if key == nil || key != warpCoalescingKey {
+            warpUndoStack.append(before)
+            warpRedoStack.removeAll()
+            registerSystemUndo()
+        }
+        warpCoalescingKey = key
+        reframe = track.isEmpty ? nil : track
+        if !track.isEmpty {
+            useRamp = false
+        }
     }
 
     /// A continuous gesture ended — the next edit starts a fresh undo step.
@@ -1545,10 +1601,11 @@ final class AppModel: ObservableObject {
         // rewrite the timeline the user just rendered from.
         guard stage == .configure else { return }
         guard let snapshot = warpUndoStack.popLast() else { return }
-        warpRedoStack.append(WarpEditSnapshot(warp: warp, useRamp: useRamp))
+        warpRedoStack.append(WarpEditSnapshot(warp: warp, useRamp: useRamp, reframe: reframe))
         warpCoalescingKey = nil
         warp = snapshot.warp
         useRamp = snapshot.useRamp
+        reframe = snapshot.reframe
         // Inside UndoManager.undo() this lands on its redo stack. Outside one
         // (the no-manager fallback) it would corrupt the undo stack — skip.
         if let manager = warpUndoManager, manager.isUndoing {
@@ -1560,10 +1617,11 @@ final class AppModel: ObservableObject {
     func redoWarp() {
         guard stage == .configure else { return }
         guard let snapshot = warpRedoStack.popLast() else { return }
-        warpUndoStack.append(WarpEditSnapshot(warp: warp, useRamp: useRamp))
+        warpUndoStack.append(WarpEditSnapshot(warp: warp, useRamp: useRamp, reframe: reframe))
         warpCoalescingKey = nil
         warp = snapshot.warp
         useRamp = snapshot.useRamp
+        reframe = snapshot.reframe
         registerSystemUndo()
     }
 
@@ -2239,9 +2297,22 @@ final class AppModel: ObservableObject {
         // The Adjust canvas, resolved before the job starts so a selection
         // change mid-render can't retarget it. nil = the clip keeps its shape.
         let cropCanvas = source.isVideo && blendCanvasNeedsCrop() ? effectiveBlendCanvas() : nil
-        // The crop and the grade are both tail passes over the finished clip;
-        // the plan reserves its tail band when either will run.
-        let hasTailPass = willBakeGrade || cropCanvas != nil
+        // The punch-in reframe, resolved the same way. It needs the compiled
+        // warp's frame map, so the legacy (Advanced-ramp) path renders without
+        // it. When it runs it subsumes the canvas crop — its render size IS
+        // the canvas shape.
+        let reframeTrack: ReframeTrack? = {
+            guard source.isVideo, let track = reframe, !track.isEmpty,
+                  warpCompiled != nil else { return nil }
+            return track
+        }()
+        let reframeAspect = effectiveBlendCanvas().aspect
+        let reframeSourceSize = sourceDisplaySize()
+        let reframeWarp = activeWarp()
+        let reframeFrameTimes = warpCompiled?.frameSourceTimes.flatMap { $0 } ?? []
+        // The reframe, the crop and the grade are all tail passes over the
+        // finished clip; the plan reserves its tail band when any will run.
+        let hasTailPass = willBakeGrade || cropCanvas != nil || reframeTrack != nil
         blendTask = Task { [weak self] in
             do {
                 guard let self else { return }
@@ -2294,11 +2365,50 @@ final class AppModel: ObservableObject {
                     let span = band.upperBound - band.lowerBound
                     return (band.lowerBound + from * span)...(band.lowerBound + to * span)
                 }
+                // The punch-in reframe bakes the animated crop into the
+                // finished clip — per-frame, at the source moments the
+                // compiled schedule says each output frame shows. It renders
+                // at the canvas shape, so the static canvas crop below is
+                // skipped when this runs.
+                if let reframeTrack, output.kind == .video,
+                   let reframeSourceSize, !reframeFrameTimes.isEmpty {
+                    self.statusMessage = "Baking the punch-in reframe..."
+                    self.processingPhase = .grading
+                    self.tailPhaseStartedAt = Date()
+                    self.processingETADate = nil
+                    let reframeBand = tailBand.map { willBakeGrade ? slice($0, 0, 0.4) : $0 }
+                    let unreframed = output.url
+                    let reframed = try await ReframeVideoCropper.croppedCopy(
+                        of: unreframed,
+                        track: reframeTrack,
+                        aspect: reframeAspect,
+                        sourceSize: reframeSourceSize,
+                        warp: reframeWarp,
+                        frameSourceTimes: reframeFrameTimes,
+                        outputFPS: self.outputFPS
+                    ) { fraction in
+                        Task { @MainActor [weak self] in
+                            guard let self, let reframeBand else { return }
+                            self.reportTailProgress(band: reframeBand, fraction: fraction)
+                        }
+                    }
+                    if let reframeBand {
+                        self.reportTailProgress(band: reframeBand, fraction: 1)
+                    }
+                    output.url = reframed.url
+                    output.width = Int(reframed.renderSize.width)
+                    output.height = Int(reframed.renderSize.height)
+                    output.summary += " · punch-in reframe"
+                    if unreframed.deletingLastPathComponent().standardizedFileURL
+                        == FileManager.default.temporaryDirectory.standardizedFileURL {
+                        try? FileManager.default.removeItem(at: unreframed)
+                    }
+                }
                 // The Adjust canvas crops the finished clip rather than the
                 // source — one short composition pass over a few seconds of
                 // output, whichever engine produced it, before the grade pass
                 // so the grade re-encodes only the kept pixels.
-                if let cropCanvas, output.kind == .video {
+                if let cropCanvas, output.kind == .video, reframeTrack == nil {
                     self.statusMessage = "Cropping to \(cropCanvas.rawValue)..."
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
@@ -2335,7 +2445,9 @@ final class AppModel: ObservableObject {
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
-                    let gradeBand = tailBand.map { cropCanvas != nil ? slice($0, 0.4, 1) : $0 }
+                    let gradeBand = tailBand.map {
+                        cropCanvas != nil || reframeTrack != nil ? slice($0, 0.4, 1) : $0
+                    }
                     let ungraded = output.url
                     output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade) { fraction in
                         Task { @MainActor [weak self] in
@@ -3368,7 +3480,8 @@ final class AppModel: ObservableObject {
             inputFrames: nil,
             outputFrames: nil,
             sourceCodec: source?.isVideo == true ? blendSourceCodec?.rawValue : nil,
-            warp: compiledWarp() != nil ? activeWarp() : nil
+            warp: compiledWarp() != nil ? activeWarp() : nil,
+            reframe: source?.isVideo == true ? reframe : nil
         )
     }
 

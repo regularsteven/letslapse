@@ -193,6 +193,41 @@ struct WarpTimeline: Codable, Equatable {
         seams[index] = seam
     }
 
+    // MARK: - Output-time mapping
+
+    /// Cumulative output (clip) seconds at each stretch bound — steady-speed
+    /// spans (length ÷ speed), the same approximation the timeline bar draws
+    /// in. Seam eases shift this by fractions of a second; the compiled
+    /// schedule is the exact answer where exactness matters (the render).
+    var outputBounds: [Double] {
+        var bounds = [0.0]
+        for index in 0..<stretchCount {
+            bounds.append(bounds[index] + length(of: index) / Swift.max(0.0001, speeds[index]))
+        }
+        return bounds
+    }
+
+    /// Source seconds → output seconds through the piecewise-linear warp.
+    func outputTime(atSource time: Double) -> Double {
+        let clamped = Swift.min(Swift.max(0, time), sourceSeconds)
+        let index = stretchIndex(at: clamped)
+        return outputBounds[index]
+            + (clamped - bounds[index]) / Swift.max(0.0001, speeds[index])
+    }
+
+    /// Output seconds → source seconds — the inverse of `outputTime(atSource:)`.
+    func sourceTime(atOutput output: Double) -> Double {
+        let outs = outputBounds
+        let clamped = Swift.min(Swift.max(0, output), outs.last ?? 0)
+        var index = 0
+        while index < outs.count - 2, clamped >= outs[index + 1] {
+            index += 1
+        }
+        let source = bounds[index]
+            + (clamped - outs[index]) * Swift.max(0.0001, speeds[index])
+        return Swift.min(Swift.max(0, source), sourceSeconds)
+    }
+
     // MARK: - Display
 
     /// "¼×" / "½×" / "1×" / "0.8×" / "15×"
@@ -239,6 +274,10 @@ enum WarpCompiler {
     struct Compiled {
         /// Per-region window schedules, aligned with the input regions.
         var schedules: [[Int]]
+        /// Per-region, per-output-frame source times (mid-window, on the
+        /// global concatenated source axis) — the exact output-frame →
+        /// source-moment map the reframe crop is evaluated against.
+        var frameSourceTimes: [[Double]]
         /// Exact output length of the warp: total output frames / outFps.
         var outputSeconds: Double
         var outputFrames: Int { schedules.reduce(0) { $0 + $1.count } }
@@ -353,7 +392,10 @@ enum WarpCompiler {
         let pieces = pieces(for: warp)
         let limit = min(activeEnd ?? warp.sourceSeconds, warp.sourceSeconds)
         guard !pieces.isEmpty, !regions.isEmpty, limit > activeStart else {
-            return Compiled(schedules: regions.map { _ in [] }, outputSeconds: 0)
+            return Compiled(
+                schedules: regions.map { _ in [] },
+                frameSourceTimes: regions.map { _ in [] },
+                outputSeconds: 0)
         }
 
         func speed(at time: Double, pointer: inout Int) -> Double {
@@ -364,24 +406,31 @@ enum WarpCompiler {
         }
 
         var schedules: [[Int]] = []
+        var frameTimes: [[Double]] = []
         var regionStart = 0.0
         var pointer = 0
         for region in regions {
             let fps = max(1, region.fps)
             let regionEnd = regionStart + region.span
             var windows: [Int] = []
+            var times: [Double] = []
             var cursor = max(regionStart, activeStart)
             let end = min(regionEnd, limit)
             while cursor < end - 0.0005 {
                 let v = max(speed(at: cursor, pointer: &pointer), outFps / fps)
                 let window = max(1, Int((v * fps / outFps).rounded()))
                 windows.append(window)
+                times.append(cursor + Double(window) / fps / 2)
                 cursor += Double(window) / fps
             }
             schedules.append(windows)
+            frameTimes.append(times)
             regionStart = regionEnd
         }
         let frames = schedules.reduce(0) { $0 + $1.count }
-        return Compiled(schedules: schedules, outputSeconds: Double(frames) / outFps)
+        return Compiled(
+            schedules: schedules,
+            frameSourceTimes: frameTimes,
+            outputSeconds: Double(frames) / outFps)
     }
 }

@@ -95,11 +95,17 @@ struct WarpTimelineView: View {
     /// Wide layouts draw the preview beside the timeline instead of the
     /// floating thumbnail above it.
     var showsInlineThumbnail = true
+    /// The reframe lane rides under the bar when open; the inline preview
+    /// then becomes the interactive punch canvas. The playhead is shared with
+    /// the Adjust screen so both draw the same moment.
+    var showsReframeLane = false
+    @Binding var playhead: Double
+    @Binding var selectedReframeKey: Int?
+    @Binding var reframeDraft: ReframeDraft?
 
     /// Visible source window (zoom); nil = the whole source.
     @State private var zoomStart: Double?
     @State private var zoomEnd: Double?
-    @State private var playhead: Double = 0
     @State private var playheadPlaced = false
     /// In-flight drag-to-nominate range, in source seconds.
     @State private var nominating: ClosedRange<Double>?
@@ -159,13 +165,26 @@ struct WarpTimelineView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             if showsInlineThumbnail {
-                scrubPreview
-                    .overlay(alignment: .topLeading) {
-                        // Overlaid AFTER the pane's allowsHitTesting(false),
-                        // so the chips stay tappable over the dead pane.
-                        editChips
-                            .padding(6)
+                Group {
+                    if showsReframeLane {
+                        // The interactive punch canvas — same slot, same
+                        // playhead frame, gestures on. The chips overlay
+                        // AFTER it, so they win the taps they always won.
+                        ReframeCanvasView(
+                            preview: preview,
+                            playhead: $playhead,
+                            selectedKey: $selectedReframeKey,
+                            draft: $reframeDraft)
+                    } else {
+                        scrubPreview
                     }
+                }
+                .overlay(alignment: .topLeading) {
+                    // Overlaid AFTER the pane's allowsHitTesting(false),
+                    // so the chips stay tappable over the dead pane.
+                    editChips
+                        .padding(6)
+                }
             } else if model.canUndoWarp || isZoomed {
                 // Wide layouts draw no inline preview — the chips get a slim
                 // row of their own that only exists while they do.
@@ -178,6 +197,17 @@ struct WarpTimelineView: View {
                 barZone(width: max(1, proxy.size.width))
             }
             .frame(height: 96)
+
+            if showsReframeLane {
+                ReframeLaneView(
+                    selectedKey: $selectedReframeKey,
+                    playhead: $playhead,
+                    position: { time, width in self.position(time, width: width) },
+                    timeAt: { x, width in self.time(at: x, width: width) },
+                    visibleStart: visibleStart,
+                    visibleEnd: visibleEnd)
+                    .transition(.opacity)
+            }
 
             ruler
 

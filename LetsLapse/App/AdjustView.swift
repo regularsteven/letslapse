@@ -19,6 +19,13 @@ struct AdjustView: View {
     /// evaluation (every @Published change re-runs the body).
     @State private var blendCodecs: [OutputCodec] = []
     @StateObject private var preview = WarpPreviewLoader()
+    /// The playhead in source seconds — owned here so the timeline, the
+    /// reframe lane and the punch canvas all draw the same moment.
+    @State private var playhead: Double = 0
+    /// The reframe lane's visibility, selection and uncommitted framing.
+    @State private var reframeLaneOpen = false
+    @State private var selectedReframeKey: Int?
+    @State private var reframeDraft: ReframeDraft?
 
     /// The six canonical speeds. Free values come through the value sheet.
     private static let speedChips: [(speed: Double, word: String)] = [
@@ -47,6 +54,7 @@ struct AdjustView: View {
                             if model.source?.isVideo == true {
                                 warpCard(inlineThumbnail: true)
                                 chipsRow
+                                reframeToggleRow
                                 blendFromSection
                                 estimateCard
                                 advancedRow
@@ -68,7 +76,17 @@ struct AdjustView: View {
             }
         }
         .background(LL.screenBackground.ignoresSafeArea())
-        .onAppear { model.warpUndoManager = undoManager }
+        .onAppear {
+            model.warpUndoManager = undoManager
+            // The Punch-in reframe button lands here with the lane open; so
+            // does re-editing a clip that has a track.
+            if model.reframeLaneFocused || !(model.reframe?.isEmpty ?? true) {
+                reframeLaneOpen = true
+            }
+        }
+        // Scrubbing away from an uncommitted framing drops it — the draft
+        // belongs to the moment it was shaped at.
+        .onChange(of: playhead) { _ in reframeDraft = nil }
         .task(id: model.currentCaptureID) {
             blendCodecs = model.currentCapture.map { model.availableBlendCodecs(for: $0) } ?? []
         }
@@ -90,11 +108,21 @@ struct AdjustView: View {
                 VStack(spacing: 14) {
                     warpCard(inlineThumbnail: false)
                     chipsRow
+                    reframeToggleRow
                 }
                 .frame(maxWidth: .infinity)
 
                 VStack(spacing: 14) {
-                    widePreviewPane
+                    if reframeLaneOpen {
+                        ReframeCanvasView(
+                            preview: preview,
+                            playhead: $playhead,
+                            selectedKey: $selectedReframeKey,
+                            draft: $reframeDraft,
+                            tallHeight: 340)
+                    } else {
+                        widePreviewPane
+                    }
                     estimateCard
                 }
                 .frame(width: 320)
@@ -283,12 +311,50 @@ struct AdjustView: View {
         WarpTimelineView(
             selectedStretch: $selectedStretch,
             preview: preview,
-            showsInlineThumbnail: inlineThumbnail
+            showsInlineThumbnail: inlineThumbnail,
+            showsReframeLane: reframeLaneOpen,
+            playhead: $playhead,
+            selectedReframeKey: $selectedReframeKey,
+            reframeDraft: $reframeDraft
         )
         .padding(.horizontal, 16)
         .padding(.top, 12)
         .padding(.bottom, 10)
         .llCard()
+    }
+
+    /// The lane's disclosure — the second entry point's landing spot, and the
+    /// only switch. Closing it hides the lane; the track itself stays.
+    private var reframeToggleRow: some View {
+        let track = model.activeReframe()
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) { reframeLaneOpen.toggle() }
+        } label: {
+            HStack {
+                Image(systemName: "viewfinder")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                Text("Punch-in reframe")
+                    .font(.system(size: 15.5))
+                    .foregroundStyle(.primary)
+                Spacer()
+                Text(track.isEmpty
+                    ? "Off"
+                    : "\(track.keys.count) \(track.keys.count == 1 ? "key" : "keys")")
+                    .font(.system(size: 12))
+                    .foregroundStyle(track.isEmpty ? .secondary : LL.accentDeep)
+                Image(systemName: reframeLaneOpen ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .llCard()
+        .accessibilityLabel(
+            "Punch-in reframe, \(reframeLaneOpen ? "expanded" : "collapsed")")
     }
 
     /// Speed chips always edit the selected stretch — there is no separate

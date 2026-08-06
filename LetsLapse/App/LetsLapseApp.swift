@@ -97,10 +97,6 @@ struct ContentView: View {
     /// the camera straight away, over the Create screen (the tab's home).
     @State private var showCamera = false
     @State private var cameraIntent = CaptureIntent()
-    /// The Punch-In Reframe editor, laid over whatever tab is showing. Opened
-    /// from a project's "Punch-in reframe" button — and, in DEBUG, by
-    /// `LL_REFRAME`.
-    @State private var reframeSource: ReframeSourceRequest?
     #if os(macOS)
     @State private var lastStage: AppModel.Stage = .home
     #endif
@@ -175,7 +171,6 @@ struct ContentView: View {
             lastStage = newStage
         }
         #endif
-        .reframeEditor(item: $reframeSource)
         .tint(LL.accent)
         #if DEBUG
         .onAppear(perform: applyUIPreviewHooks)
@@ -264,28 +259,40 @@ struct ContentView: View {
                 model.blendCanvasRatio = ratio
             }
         }
-        // LL_REFRAME=latest — open the newest video capture in the Punch-In
-        // Reframe editor, over whichever tab is showing. The editor is
-        // otherwise reached from a project's "Punch-in reframe" button, which
-        // simctl can't tap. LL_REFRAME_RATIO=9:16 pins the output shape for
-        // variant screenshots.
+        // LL_REFRAME=latest — open the newest video capture in the blended-
+        // clip flow with the reframe lane expanded, exactly what the
+        // project's "Punch-in reframe" button (which simctl can't tap) does.
+        // LL_REFRAME_RATIO=9:16 pins the canvas for variant screenshots.
         if environment["LL_REFRAME"] == "latest",
-           let capture = model.captures.first(where: { $0.kind == .video }),
-           let url = model.mediaURL(for: capture) {
-            let size: CGSize
-            if let width = capture.sourceWidth, let height = capture.sourceHeight,
-               width > 0, height > 0 {
-                size = CGSize(width: width, height: height)
-            } else {
-                size = CGSize(width: 3840, height: 2160)
+           let capture = model.captures.first(where: { $0.kind == .video }) {
+            model.openCapture(capture)
+            model.reframeLaneFocused = true
+            if let ratio = environment["LL_REFRAME_RATIO"].flatMap(CanvasRatio.init(rawValue:)) {
+                model.blendCanvasRatio = ratio
             }
-            reframeSource = ReframeSourceRequest(
-                url: url,
-                title: capture.displayTitle,
-                size: size,
-                duration: capture.sourceDurationSeconds ?? 0,
-                fps: capture.sourceFPS,
-                ratio: environment["LL_REFRAME_RATIO"].flatMap(ReframeRatio.init(rawValue:)))
+            // LL_REFRAME_SEED=1 — plant a demo punch move. Screenshots and
+            // render checks need keys to show; the product itself never
+            // auto-adds any.
+            if environment["LL_REFRAME_SEED"] == "1",
+               let size = model.sourceDisplaySize(),
+               let duration = capture.sourceDurationSeconds, duration > 1 {
+                let cx = Double(size.width) / 2
+                let cy = Double(size.height) / 2
+                model.updateReframe {
+                    $0.addKey(t: duration * 0.2, z: 1, cx: cx, cy: cy)
+                    $0.addKey(t: duration * 0.45, z: 2.4, cx: cx * 1.3, cy: cy * 0.9)
+                    $0.addKey(t: duration * 0.7, z: 1, cx: cx, cy: cy)
+                    if $0.moves.count == 2 {
+                        $0.setMove(.init(span: .one, curve: .ease), at: 0)
+                        $0.setMove(.init(span: .two, curve: .ease), at: 1)
+                    }
+                }
+            }
+            // LL_REFRAME_RENDER=1 — go straight to Create, for checking the
+            // baked clip without a tappable UI.
+            if environment["LL_REFRAME_RENDER"] == "1" {
+                model.startProcessing()
+            }
         }
         // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
         // collections from existing video blends (no-op without any); detail
