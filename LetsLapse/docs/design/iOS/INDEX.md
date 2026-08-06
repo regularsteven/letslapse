@@ -106,6 +106,9 @@ DEBUG hook: `LL_COLLECTIONS=seed|list|detail` — seeds two demo collections fro
 | Adjust (video) · nominating (drag overlay) | — | `App/WarpTimelineView.swift` (overlay grey-dashed under the 2s minimum, amber past it, selection tick on crossing; under-2s release → warning haptic + "Too short" toast) | 🟡 |
 | Adjust (video) · with Blend-from chips | — | `App/AdjustView.swift` (`blendFromSection` below the estimate, for a clip with converted encodings) | 🟡 |
 | Adjust (video) · Advanced ramp on | — | `App/AdjustView.swift` (timeline shows ramp state; editing it turns the ramp off — note under the chips) | 🟡 |
+| Punch-in reframe (video) | — | `App/Reframe/PunchInReframeView.swift` (`clipCard`, `warpCard`, `speedChipsRow`, `blendCard`, `summaryCard`) + `App/Reframe/ReframePlayerView.swift` (`.framed` — crop fills the box, minimap once punched in) + `App/Reframe/WarpBarView.swift` (warp bar + diamond lane) — the keyframe-driven warp: speed, crop and blend ramp together on one cubic ease between `PunchKeyframe`s. Title is "New blended clip"; ratio picker in the header. Built from a design handoff, never drawn as an SVG | 🟡 |
+| Punch-in reframe · expanded (place the crop) | — | `App/Reframe/PunchInReframeView.swift` (`expandedReframe`) + `ReframePlayerView` `.placement` — full-screen `#0B0C0E`, whole source with the excluded area dimmed, amber crop box + thirds, dark diamond scrubber | 🟡 |
+| Punch-in reframe · wide (landscape/iPad/Mac) | — | `App/Reframe/PunchInReframeView.swift` (`wideLayout`, >640pt regular / >740pt compact: warp card beside chips + blend + summary) — verified on the iPad Pro 11" sim | 🟡 |
 | Adjust (photos source) | [adjust.photos.portrait.svg](adjust.photos.portrait.svg) | `App/AdjustView.swift` (`stackCard`, `TailFrameBanner`) | ✅ |
 | Processing | [processing.portrait.svg](processing.portrait.svg) | `App/ProcessingView.swift` | ✅ |
 | Result | [result.portrait.svg](result.portrait.svg) | `App/ResultView.swift` | ✅ |

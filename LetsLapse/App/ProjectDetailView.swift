@@ -46,6 +46,8 @@ struct ProjectDetailView: View {
     @State private var isRotating = false
     @State private var rotateFailure: String?
     @State private var isBrowsingOriginals = false
+    /// The clip opened in the Punch-In Reframe editor (video captures only).
+    @State private var reframeSource: ReframeSourceRequest?
 
     /// Save-to-Photos progress, tracked separately for the photo asset and
     /// the originals row so one export doesn't repaint the other.
@@ -59,6 +61,16 @@ struct ProjectDetailView: View {
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
+    }
+
+    /// The stored display size, or a 4K stand-in until the editor loads the
+    /// real one off the asset.
+    private func reframeSourceSize(for capture: AppModel.CaptureProject) -> CGSize {
+        guard let width = capture.sourceWidth, let height = capture.sourceHeight,
+              width > 0, height > 0 else {
+            return CGSize(width: 3840, height: 2160)
+        }
+        return CGSize(width: width, height: height)
     }
 
     var body: some View {
@@ -211,6 +223,7 @@ struct ProjectDetailView: View {
                 #endif
             }
         }
+        .reframeEditor(item: $reframeSource)
         .task(id: storageToken) {
             guard let capture else { return }
             if let bytes = await model.storageBytes(for: capture) {
@@ -319,6 +332,24 @@ struct ProjectDetailView: View {
                         Label("New blended clip", systemImage: "plus")
                     }
                     .buttonStyle(LLPrimaryButtonStyle())
+
+                    // The other way to make a clip from the same source: a
+                    // punch-in move instead of one speed across the whole
+                    // thing. Video only — a photo stack has no frame to crop
+                    // into over time.
+                    if capture.kind == .video, let url = model.mediaURL(for: capture) {
+                        Button {
+                            reframeSource = ReframeSourceRequest(
+                                url: url,
+                                title: capture.displayTitle,
+                                size: reframeSourceSize(for: capture),
+                                duration: capture.sourceDurationSeconds ?? 0,
+                                fps: capture.sourceFPS)
+                        } label: {
+                            Label("Punch-in reframe", systemImage: "viewfinder")
+                        }
+                        .buttonStyle(LLSecondaryButtonStyle())
+                    }
 
                     if capture.kind == .video, !clipNames.isEmpty {
                         sourceClipsSection(for: capture, clipNames: clipNames)

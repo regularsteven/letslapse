@@ -97,6 +97,10 @@ struct ContentView: View {
     /// the camera straight away, over the Create screen (the tab's home).
     @State private var showCamera = false
     @State private var cameraIntent = CaptureIntent()
+    /// The Punch-In Reframe editor, laid over whatever tab is showing. Opened
+    /// from a project's "Punch-in reframe" button — and, in DEBUG, by
+    /// `LL_REFRAME`.
+    @State private var reframeSource: ReframeSourceRequest?
     #if os(macOS)
     @State private var lastStage: AppModel.Stage = .home
     #endif
@@ -171,6 +175,7 @@ struct ContentView: View {
             lastStage = newStage
         }
         #endif
+        .reframeEditor(item: $reframeSource)
         .tint(LL.accent)
         #if DEBUG
         .onAppear(perform: applyUIPreviewHooks)
@@ -193,7 +198,7 @@ struct ContentView: View {
     private func openCameraOnLaunch() {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return }
         #endif
         guard selectedTab == .create else { return }
@@ -258,6 +263,29 @@ struct ContentView: View {
             if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {
                 model.blendCanvasRatio = ratio
             }
+        }
+        // LL_REFRAME=latest — open the newest video capture in the Punch-In
+        // Reframe editor, over whichever tab is showing. The editor is
+        // otherwise reached from a project's "Punch-in reframe" button, which
+        // simctl can't tap. LL_REFRAME_RATIO=9:16 pins the output shape for
+        // variant screenshots.
+        if environment["LL_REFRAME"] == "latest",
+           let capture = model.captures.first(where: { $0.kind == .video }),
+           let url = model.mediaURL(for: capture) {
+            let size: CGSize
+            if let width = capture.sourceWidth, let height = capture.sourceHeight,
+               width > 0, height > 0 {
+                size = CGSize(width: width, height: height)
+            } else {
+                size = CGSize(width: 3840, height: 2160)
+            }
+            reframeSource = ReframeSourceRequest(
+                url: url,
+                title: capture.displayTitle,
+                size: size,
+                duration: capture.sourceDurationSeconds ?? 0,
+                fps: capture.sourceFPS,
+                ratio: environment["LL_REFRAME_RATIO"].flatMap(ReframeRatio.init(rawValue:)))
         }
         // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
         // collections from existing video blends (no-op without any); detail

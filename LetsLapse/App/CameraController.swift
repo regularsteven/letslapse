@@ -218,6 +218,14 @@ final class CameraController: NSObject, ObservableObject {
     /// reports none, so this cache is what the DNG gate reads while the
     /// standard world is active. sessionQueue-confined.
     private var wideRAWProbe: (supported: Bool, sensor: CaptureResolution?) = (false, nil)
+    /// True while the session runs on the physical wide because the optics
+    /// device cannot shoot the requested rate — AVFoundation publishes the
+    /// fastest formats (4K 120) only on the physical constituents, never on a
+    /// virtual multi-cam device. Distinct from the DNG swap that shares the
+    /// same mechanism: this flag is what says the physical input is *ours* to
+    /// give back, so the two worlds never restore each other's input.
+    /// sessionQueue-confined.
+    private var usingPhysicalForHighFPS = false
     /// Stop factor to restore once stops are derived (remembered settings).
     private var preferredStopFactor: Double?
     /// Last-applied "Enhanced lenses" setting, so reconcile re-derives when
@@ -795,8 +803,7 @@ final class CameraController: NSObject, ObservableObject {
         #endif
         guard deviceSupportsBayerRAW() else {
             // Honest refusal: this camera cannot deliver DNG — undo the swap.
-            restoreOpticsInputIfNeeded()
-            _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            restoreStandardCaptureFormat()
             deriveStops()
             publishFormat()
             endLensCoverAfterSettle()
@@ -818,8 +825,7 @@ final class CameraController: NSObject, ObservableObject {
         session.beginConfiguration()
         session.sessionPreset = previous
         session.commitConfiguration()
-        restoreOpticsInputIfNeeded()
-        _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        restoreStandardCaptureFormat()
         deriveStops()
         publishFormat()
         endLensCoverAfterSettle()
@@ -828,16 +834,32 @@ final class CameraController: NSObject, ObservableObject {
     /// sessionQueue-confined: put the optics device back as the session's
     /// video input after DNG work ran on a physical constituent.
     private func restoreOpticsInputIfNeeded() {
-        guard let optics = opticsDevice, videoDevice !== optics,
-              let input = try? AVCaptureDeviceInput(device: optics) else { return }
+        guard let optics = opticsDevice else { return }
+        guard videoDevice !== optics else {
+            usingPhysicalForHighFPS = false
+            return
+        }
+        guard let input = try? AVCaptureDeviceInput(device: optics) else { return }
         session.beginConfiguration()
         if let videoInput { session.removeInput(videoInput) }
         if session.canAddInput(input) {
             session.addInput(input)
             videoInput = input
             videoDevice = optics
+            // Whatever the physical input was for, it is gone now.
+            usingPhysicalForHighFPS = false
         }
         session.commitConfiguration()
+    }
+
+    /// sessionQueue-confined: leave the DNG world — optics input back, then
+    /// the pinned video format re-asserted on whichever device can shoot it
+    /// (adding an input re-applies the session preset, so the pin never
+    /// survives a swap on its own).
+    private func restoreStandardCaptureFormat() {
+        restoreOpticsInputIfNeeded()
+        prepareInputForFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
     }
 
     /// sessionQueue-confined: flips the session to the photo configuration
@@ -864,8 +886,7 @@ final class CameraController: NSObject, ObservableObject {
             applyPhotoAspectConfiguration()
         } else {
             photoAspectPreviousPreset = nil
-            restoreOpticsInputIfNeeded()
-            _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            restoreStandardCaptureFormat()
             deriveStops()
             publishFormat()
         }
@@ -1085,11 +1106,47 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             RecordingSettingsStore.save(stopFactor: stop.displayFactor)
-            if self.physicalWorldActive {
+            if self.usingPhysicalForHighFPS {
+                // The physical camera is standing in for a rate the optics
+                // device can't shoot, not serving DNG: a constituent swap
+                // would lose that rate, so the stop is honoured as a crop of
+                // the wide. (During a burst this never runs — recording
+                // gates the whole method.)
+                self.applyPhysicalWideZoom(stop)
+            } else if self.physicalWorldActive {
                 self.selectPhysicalStop(stop)
             } else {
                 self.applyZoom(stop, animated: true)
             }
+        }
+    }
+
+    #if os(iOS)
+    /// The zoom factor that reproduces `stop`'s framing on the physical wide.
+    /// Stops below 1× belong to a different camera entirely, so they clamp to
+    /// the wide's own framing — the one thing the stand-in cannot deliver.
+    private func wideZoomFactor(for stop: DerivedOpticsStop, on device: AVCaptureDevice) -> CGFloat {
+        min(max(CGFloat(stop.displayFactor), 1), device.activeFormat.videoMaxZoomFactor)
+    }
+    #endif
+
+    /// sessionQueue-confined: honour a stop while the physical wide stands in
+    /// for a physical-only frame rate — a crop of the wide, not a lens change.
+    private func applyPhysicalWideZoom(_ stop: DerivedOpticsStop) {
+        #if os(iOS)
+        guard let device = videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            device.videoZoomFactor = wideZoomFactor(for: stop, on: device)
+            device.unlockForConfiguration()
+        } catch {
+            LLog("optics: high-fps zoom to \(stop.chipLabel) failed: \(error.localizedDescription)")
+            return
+        }
+        #endif
+        currentStop = stop
+        DispatchQueue.main.async {
+            if self.selectedStop != stop { self.selectedStop = stop }
         }
     }
 
@@ -1186,8 +1243,7 @@ final class CameraController: NSObject, ObservableObject {
                 publishFormat()
             } else {
                 photoAspectPreviousPreset = nil
-                restoreOpticsInputIfNeeded()
-                _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+                restoreStandardCaptureFormat()
                 deriveStops()
                 publishFormat()
             }
@@ -1237,7 +1293,12 @@ final class CameraController: NSObject, ObservableObject {
         preferredFrameRate: Int? = nil
     ) {
         guard let device = videoDevice else { return }
-        let supportedRates = supportedFrameRatesByResolution(for: device)
+        // While the physical wide stands in for a physical-only rate, the
+        // menus must still describe the optics device (whose scan already
+        // unions the wide's formats) — reading the stand-in would narrow them
+        // to its own list mid-session.
+        let listDevice = usingPhysicalForHighFPS ? (opticsDevice ?? device) : device
+        let supportedRates = supportedFrameRatesByResolution(for: listDevice)
         guard !supportedRates.isEmpty else {
             DispatchQueue.main.async {
                 self.availableResolutions = []
@@ -1265,6 +1326,7 @@ final class CameraController: NSObject, ObservableObject {
             ? selectedRampFrameRate
             : nearestRampFrameRate(from: frameRate, in: frameRates)
 
+        prepareInputForFormat(resolution: resolution, fps: frameRate)
         _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
         RecordingSettingsStore.save(
             resolution: resolution,
@@ -1289,6 +1351,33 @@ final class CameraController: NSObject, ObservableObject {
            !candidateFrameRates.contains(custom) {
             candidateFrameRates.append(custom)
         }
+        accumulateFrameRates(from: device, candidates: candidateFrameRates, into: &supportedRates)
+        #if os(iOS)
+        // The fastest formats (4K 120) exist only on the physical
+        // constituents — AVFoundation never publishes them on a virtual
+        // multi-cam device, so scanning the optics device alone tops 4K out
+        // at 60 (the regression 7c70e88 introduced when recording moved to
+        // the triple camera for continuous zoom). The rates are real
+        // hardware capabilities, so they belong in the menus; capture swaps
+        // the session to the physical wide for as long as one is pinned
+        // (`prepareInputForFormat`).
+        if device.isVirtualDevice, let wide = Self.physicalWide(of: device), wide !== device {
+            accumulateFrameRates(from: wide, candidates: candidateFrameRates, into: &supportedRates)
+        }
+        #endif
+        return supportedRates
+    }
+
+    /// Folds one device's formats into the resolution → frame-rate map.
+    /// Keying by pixel dimensions (and the ProRes flag, which a physical
+    /// camera only sets when it has ProRes formats of its own) is what unions
+    /// a constituent's rates into the virtual device's buckets rather than
+    /// spawning duplicate rows in the picker.
+    private func accumulateFrameRates(
+        from device: AVCaptureDevice,
+        candidates candidateFrameRates: [Int],
+        into supportedRates: inout [CaptureResolution: Set<Int>]
+    ) {
         for format in device.formats {
             #if os(iOS)
             guard !videoStabilizationRequested || stabilizationMode(for: format) != nil else {
@@ -1307,7 +1396,6 @@ final class CameraController: NSObject, ObservableObject {
             guard !rates.isEmpty else { continue }
             supportedRates[resolution, default: []].formUnion(rates)
         }
-        return supportedRates
     }
 
     private static func supportedFrameRates(
@@ -1360,6 +1448,58 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// sessionQueue-confined. Puts the session on a device that can actually
+    /// shoot `resolution` at `fps`: the optics device whenever it can — it is
+    /// the only one with continuous zoom across the lenses — otherwise the
+    /// physical wide, whose formats the pickers already advertise. The input
+    /// swap mirrors the DNG path exactly; `usingPhysicalForHighFPS` marks it
+    /// as ours so the two never restore each other's input.
+    ///
+    /// No-op unless the requested combination genuinely needs the physical
+    /// camera, so the standard world keeps the virtual device (and its
+    /// cross-lens zoom) for every rate the hardware publishes on it.
+    private func prepareInputForFormat(resolution: CaptureResolution, fps: Int) {
+        #if os(iOS)
+        // DNG owns the input while it is armed or running, and no swap is
+        // ever safe mid-take.
+        guard !dngWorldActive, !isLiveBlendActive, !movieOutput.isRecording,
+              let optics = opticsDevice else { return }
+        if captureFormatMatch(for: optics, resolution: resolution, fps: fps) != nil {
+            restoreOpticsAfterHighFPS(resolution: resolution, fps: fps)
+            return
+        }
+        guard optics.isVirtualDevice,
+              !physicalWorldActive || usingPhysicalForHighFPS,
+              let wide = Self.physicalWide(of: optics), wide !== optics,
+              videoDevice !== wide,
+              captureFormatMatch(for: wide, resolution: resolution, fps: fps) != nil,
+              let input = try? AVCaptureDeviceInput(device: wide)
+        else { return }
+        session.beginConfiguration()
+        if let videoInput { session.removeInput(videoInput) }
+        if session.canAddInput(input) {
+            session.addInput(input)
+            videoInput = input
+            videoDevice = wide
+            usingPhysicalForHighFPS = true
+        }
+        session.commitConfiguration()
+        LLog("optics: \(resolution.label)@\(fps) is physical-only — session on \(wide.localizedName)")
+        #else
+        _ = (resolution, fps)
+        #endif
+    }
+
+    /// sessionQueue-confined: hand the optics device back once a
+    /// physical-only rate is no longer pinned, and re-assert the format on it
+    /// (adding an input re-applies the session preset, so the pin has to be
+    /// made again — the DNG restore does the same).
+    private func restoreOpticsAfterHighFPS(resolution: CaptureResolution, fps: Int) {
+        guard usingPhysicalForHighFPS else { return }
+        restoreOpticsInputIfNeeded()
+        _ = applyCaptureFormat(resolution: resolution, fps: fps)
+    }
+
     @discardableResult
     private func applyCaptureFormat(resolution: CaptureResolution, fps: Int) -> Bool {
         guard let device = videoDevice,
@@ -1386,6 +1526,12 @@ final class CameraController: NSObject, ObservableObject {
             if !physicalWorldActive, let stop = currentStop {
                 device.videoZoomFactor = min(
                     CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
+            } else if usingPhysicalForHighFPS, let stop = currentStop {
+                // Standing in on the physical wide: the user-facing factor IS
+                // the zoom factor there (the wide's native framing is 1×), so
+                // the selected stop survives the swap as a crop of the wide
+                // rather than snapping the framing back to 1×.
+                device.videoZoomFactor = wideZoomFactor(for: stop, on: device)
             }
             // Setting `activeFormat` resets the device to its default colour
             // space, so re-assert Apple Log if Capture Flat is on and the new
@@ -2090,6 +2236,11 @@ final class CameraController: NSObject, ObservableObject {
 
     private func startNextSegment(frameRate: Int) {
         guard let directory = activeSequenceDirectory else { return }
+        // A burst rate the virtual device doesn't publish (4K 120) records
+        // through the physical wide for the length of the burst; the base
+        // rate that follows hands the optics device straight back. Both run
+        // between segments, where the movie output is idle.
+        prepareInputForFormat(resolution: selectedResolution, fps: frameRate)
         _ = applyCaptureFormat(resolution: selectedResolution, fps: frameRate)
         #if os(iOS)
         // A new segment reuses the movie output connection; re-assert the
@@ -2186,6 +2337,12 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     private func resetLiveCaptureState() {
+        // A run that ended mid-burst (stopped there, or discarded) leaves the
+        // session on the physical wide — hand the optics device back before
+        // the resting format is re-pinned.
+        restoreOpticsAfterHighFPS(
+            resolution: selectedResolution,
+            fps: activeSequence?.baseFrameRate ?? selectedFrameRate)
         restoreBaseFrameRateIfNeeded()
         timedBurstGeneration += 1
         activeSequence = nil
@@ -2747,8 +2904,7 @@ final class CameraController: NSObject, ObservableObject {
         // (or restoring the optics input) would snap the viewfinder back to
         // 16:9 after every DNG shoot.
         if photoAspectPreviousPreset == nil {
-            restoreOpticsInputIfNeeded()
-            _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            restoreStandardCaptureFormat()
             deriveStops()
         }
         publishFormat()
