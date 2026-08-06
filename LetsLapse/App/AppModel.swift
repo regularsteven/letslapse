@@ -234,6 +234,10 @@ final class AppModel: ObservableObject {
         /// The punch-in reframe track this clip was rendered with — spatial
         /// keys only; speed stays in `warp`. Absent for clips without one.
         var reframe: ReframeTrack?
+        /// The canvas ratio (raw value) the render actually used. The reframe
+        /// keys' geometry only means anything against this shape, so re-editing
+        /// restores it; absent for clips from before it was recorded.
+        var canvasRatio: String?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -1358,8 +1362,11 @@ final class AppModel: ObservableObject {
             }
             // Re-blending starts from exactly the timeline this clip was made
             // with. Clips from the short-lived per-stretch ruler convert their
-            // windows into warp speeds (v = window · outFps ⁄ srcFps).
+            // windows into warp speeds (v = window · outFps ⁄ srcFps). The
+            // reframe's geometry only means anything on the canvas it was
+            // authored against, so that comes back with it.
             reframe = blend.reframe
+            blendCanvasRatio = blend.canvasRatio.flatMap(CanvasRatio.init(rawValue:))
             if let savedWarp = blend.warp {
                 warp = savedWarp
             } else if let savedWindows = blend.stretchWindows, !savedWindows.isEmpty {
@@ -2308,8 +2315,10 @@ final class AppModel: ObservableObject {
         }()
         let reframeAspect = effectiveBlendCanvas().aspect
         let reframeSourceSize = sourceDisplaySize()
-        let reframeWarp = activeWarp()
         let reframeFrameTimes = warpCompiled?.frameSourceTimes.flatMap { $0 } ?? []
+        // Resolved with the other job inputs — the pass must use the fps the
+        // schedules were compiled at, not whatever the user opens mid-render.
+        let reframeOutputFPS = outputFPS
         // The reframe, the crop and the grade are all tail passes over the
         // finished clip; the plan reserves its tail band when any will run.
         let hasTailPass = willBakeGrade || cropCanvas != nil || reframeTrack != nil
@@ -2383,9 +2392,8 @@ final class AppModel: ObservableObject {
                         track: reframeTrack,
                         aspect: reframeAspect,
                         sourceSize: reframeSourceSize,
-                        warp: reframeWarp,
                         frameSourceTimes: reframeFrameTimes,
-                        outputFPS: self.outputFPS
+                        outputFPS: reframeOutputFPS
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let reframeBand else { return }
@@ -2394,6 +2402,13 @@ final class AppModel: ObservableObject {
                     }
                     if let reframeBand {
                         self.reportTailProgress(band: reframeBand, fraction: 1)
+                    }
+                    // The summary already carries the intermediate's
+                    // resolution — keep it truthful about the kept pixels.
+                    if let oldWidth = output.width, let oldHeight = output.height {
+                        output.summary = output.summary.replacingOccurrences(
+                            of: "\(oldWidth)×\(oldHeight)",
+                            with: "\(Int(reframed.renderSize.width))×\(Int(reframed.renderSize.height))")
                     }
                     output.url = reframed.url
                     output.width = Int(reframed.renderSize.width)
@@ -3481,7 +3496,10 @@ final class AppModel: ObservableObject {
             outputFrames: nil,
             sourceCodec: source?.isVideo == true ? blendSourceCodec?.rawValue : nil,
             warp: compiledWarp() != nil ? activeWarp() : nil,
-            reframe: source?.isVideo == true ? reframe : nil
+            // Gated like `warp`: the reframe only renders through the compiled
+            // path, so a ramp render must not record a punch it never baked.
+            reframe: compiledWarp() != nil ? reframe : nil,
+            canvasRatio: source?.isVideo == true ? effectiveBlendCanvas().rawValue : nil
         )
     }
 

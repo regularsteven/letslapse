@@ -18,6 +18,10 @@ struct ReframeLaneView: View {
     @State private var openMove: Int?
     /// Key-drag grab offset in bar pixels; nil = not engaged (tap-through).
     @State private var keyDragBase: Double?
+    /// Recognition liveness — @GestureState resets on CANCEL as well as end
+    /// (scroll steal, the diamond scrolling out of a zoomed window), so the
+    /// healer below can clear an anchor onEnded would never see.
+    @GestureState private var keyLive = false
 
     private var track: ReframeTrack { model.activeReframe() }
     private static let laneHeight: CGFloat = 30
@@ -35,6 +39,11 @@ struct ReframeLaneView: View {
             }
 
             keyLine
+        }
+        .onChange(of: keyLive) { live in
+            guard !live else { return }
+            keyDragBase = nil
+            model.endWarpCoalescing()
         }
     }
 
@@ -110,6 +119,7 @@ struct ReframeLaneView: View {
     /// coalesced undo step.
     private func keyGesture(index: Int, width: CGFloat) -> some Gesture {
         DragGesture(minimumDistance: 0, coordinateSpace: .named("reframeLane"))
+            .updating($keyLive) { _, live, _ in live = true }
             .onChanged { value in
                 if keyDragBase == nil {
                     guard abs(value.translation.width) > 3 else { return }

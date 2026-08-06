@@ -108,9 +108,9 @@ struct ReframeTrack: Codable, Equatable {
         return index
     }
 
-    /// Remove the key at `index`, merging its two moves into one (the
-    /// earlier gap's settings survive, like a removed stretch keeping its
-    /// neighbour's speed).
+    /// Remove the key at `index`, merging its two gaps into one. The LATER
+    /// gap's move survives — arrive-anchored, a move belongs to the key it
+    /// arrives at, and the merged gap still arrives at that key.
     mutating func removeKey(at index: Int) {
         guard keys.indices.contains(index) else { return }
         keys.remove(at: index)

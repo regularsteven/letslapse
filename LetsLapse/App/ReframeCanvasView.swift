@@ -29,8 +29,24 @@ struct ReframeCanvasView: View {
     /// scrub preview.
     var tallHeight: CGFloat = 300
 
-    @State private var dragBase: (cx: Double, cy: Double)?
+    /// Which thing this touch edits — latched at the first change, so an
+    /// external draft-clear (a scrub) can never re-route a live gesture onto
+    /// whatever key happens to sit under the playhead afterwards.
+    private enum GestureTarget: Equatable {
+        case draft
+        case key(Int)
+    }
+    @State private var gestureTarget: GestureTarget?
+    /// The last event's cumulative translation — drags apply incremental
+    /// deltas at the CURRENT scale, so a simultaneous pinch changing the zoom
+    /// mid-drag can't retroactively rescale distance already panned.
+    @State private var lastDragTranslation: CGSize?
     @State private var pinchBase: Double?
+    /// Recognition liveness — @GestureState resets on CANCEL as well as end
+    /// (the enclosing ScrollView stealing a touch), so the healers below can
+    /// clear anchors that onEnded would never see.
+    @GestureState private var dragLive = false
+    @GestureState private var pinchLive = false
 
     private var track: ReframeTrack { model.activeReframe() }
     private var aspect: Double { model.effectiveBlendCanvas().aspect }
@@ -41,10 +57,15 @@ struct ReframeCanvasView: View {
         track.keys.firstIndex { abs($0.t - playhead) < ReframeTrack.minimumKeySpacing }
     }
 
-    /// The framing on screen: the draft while one is alive, else the key
-    /// under the playhead, else the interpolated move.
+    /// The framing on screen: the draft while one is alive, else the parked
+    /// key's own stored values (never the interpolation — a touch must start
+    /// from what the key actually holds), else the interpolated move.
     private var displayed: (z: Double, cx: Double, cy: Double) {
         if let draft { return (draft.z, draft.cx, draft.cy) }
+        if let index = onKeyIndex, track.keys.indices.contains(index) {
+            let key = track.keys[index]
+            return (key.z, key.cx, key.cy)
+        }
         guard let size = model.sourceDisplaySize() else { return (1, 0, 0) }
         guard !track.isEmpty else {
             return (1, Double(size.width) / 2, Double(size.height) / 2)
@@ -71,14 +92,32 @@ struct ReframeCanvasView: View {
                     .frame(maxWidth: .infinity)
             }
         }
+        // Cancellation healers: each clears only its own anchor, and the
+        // touch is over only once neither gesture is live.
+        .onChange(of: dragLive) { live in
+            guard !live else { return }
+            lastDragTranslation = nil
+            if !pinchLive { endTouch() }
+        }
+        .onChange(of: pinchLive) { live in
+            guard !live else { return }
+            pinchBase = nil
+            if !dragLive { endTouch() }
+        }
     }
 
     private var canvasBox: some View {
         GeometryReader { proxy in
             let box = proxy.size
             ZStack(alignment: .topLeading) {
+                // The picture rides an OVERLAY so its oversized frame never
+                // participates in layout: as a ZStack child it would inflate
+                // the stack to the image's size and the outer fixed frame
+                // would then CENTER the oversized stack — silently shifting
+                // the drawn region by (image − box)/2 and breaking the
+                // crop-to-picture registration the moment the punch grows.
                 Color.black
-                picture(in: box)
+                    .overlay(alignment: .topLeading) { picture(in: box) }
                 frameEdge(in: box)
             }
             .frame(width: box.width, height: box.height)
@@ -103,10 +142,15 @@ struct ReframeCanvasView: View {
         if let image = preview.image, let source = model.sourceDisplaySize(),
            source.width > 0, cropRect.width > 0 {
             let scale = box.width / cropRect.width
+            // Hit-testing OFF: the frame spills far past the clipped box on
+            // the mismatched axis, and clipShape clips drawing, not touches —
+            // the spill would swallow taps over neighbouring controls.
+            // Gestures live on the ZStack's contentShape, which is the box.
             Image(decorative: image, scale: 1)
                 .resizable()
                 .frame(width: source.width * scale, height: source.height * scale)
                 .offset(x: -cropRect.minX * scale, y: -cropRect.minY * scale)
+                .allowsHitTesting(false)
         }
     }
 
@@ -226,75 +270,100 @@ struct ReframeCanvasView: View {
     // MARK: - Gestures
 
     /// Drag pans the picture under the frame (the crop goes the other way).
-    /// On a key it edits the key; between keys it shapes the draft.
+    /// On a key it edits the key; between keys it shapes the draft. Deltas
+    /// are incremental — each applies at the scale in effect when it
+    /// happened, so a simultaneous pinch can't retroactively rescale the pan.
     private func dragGesture(box: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+        DragGesture(minimumDistance: 6)
+            .updating($dragLive) { _, live, _ in live = true }
             .onChanged { value in
                 guard let source = model.sourceDisplaySize(), cropRect.width > 0 else { return }
-                let start = beginGestureIfNeeded()
-                let base = dragBase ?? (start.cx, start.cy)
-                dragBase = base
+                // Two fingers down means the pinch owns the framing — the
+                // drag keeps tracking translation (so it resumes without a
+                // jump if the pinch lifts first) but must not pan.
+                guard pinchBase == nil else {
+                    lastDragTranslation = value.translation
+                    return
+                }
+                latchTargetIfNeeded()
+                let previous = lastDragTranslation ?? .zero
+                let delta = CGSize(
+                    width: value.translation.width - previous.width,
+                    height: value.translation.height - previous.height)
+                lastDragTranslation = value.translation
+                let current = displayed
                 let scale = Double(cropRect.width / box.width)
                 let centre = ReframeMath.clampCenter(
-                    z: start.z,
-                    cx: base.cx - Double(value.translation.width) * scale,
-                    cy: base.cy - Double(value.translation.height) * scale,
+                    z: current.z,
+                    cx: current.cx - Double(delta.width) * scale,
+                    cy: current.cy - Double(delta.height) * scale,
                     aspect: aspect,
                     sourceSize: source)
-                apply(z: start.z, cx: centre.cx, cy: centre.cy)
+                apply(z: current.z, cx: centre.cx, cy: centre.cy)
             }
-            .onEnded { _ in endGesture() }
     }
 
     /// Pinch sets the punch for the framing under the playhead.
     private var pinchGesture: some Gesture {
         MagnifyGesture()
+            .updating($pinchLive) { _, live, _ in live = true }
             .onChanged { value in
                 guard let source = model.sourceDisplaySize(),
                       value.magnification.isFinite, value.magnification > 0 else { return }
-                let start = beginGestureIfNeeded()
-                let base = pinchBase ?? start.z
+                latchTargetIfNeeded()
+                let current = displayed
+                let base = pinchBase ?? current.z
                 pinchBase = base
                 let zoom = min(
                     max(base * Double(value.magnification), ReframeTrack.minZoom),
                     ReframeTrack.maxZoom)
                 let centre = ReframeMath.clampCenter(
-                    z: zoom, cx: start.cx, cy: start.cy, aspect: aspect, sourceSize: source)
+                    z: zoom, cx: current.cx, cy: current.cy, aspect: aspect, sourceSize: source)
                 apply(z: zoom, cx: centre.cx, cy: centre.cy)
             }
-            .onEnded { _ in endGesture() }
     }
 
-    /// The framing this touch starts from. Between keys, the first change
-    /// seeds the draft from the interpolated frame so the picture never jumps
-    /// at the moment you touch it — but nothing is committed.
-    private func beginGestureIfNeeded() -> (z: Double, cx: Double, cy: Double) {
-        if draft == nil, onKeyIndex == nil {
-            let frame = displayed
-            draft = ReframeDraft(z: frame.z, cx: frame.cx, cy: frame.cy)
-            return frame
-        }
-        return displayed
-    }
-
-    /// Route a live gesture's framing to whichever thing owns it.
-    private func apply(z: Double, cx: Double, cy: Double) {
-        if draft != nil {
-            draft = ReframeDraft(z: z, cx: cx, cy: cy)
-        } else if let index = onKeyIndex {
+    /// Latch what this touch edits, once, at its first change. Between keys
+    /// the first change seeds the draft from the framing on screen, so the
+    /// picture never jumps at the moment you touch it — but nothing commits.
+    private func latchTargetIfNeeded() {
+        guard gestureTarget == nil else { return }
+        if let index = onKeyIndex {
+            gestureTarget = .key(index)
             selectedKey = index
+        } else {
+            if draft == nil {
+                let frame = displayed
+                draft = ReframeDraft(z: frame.z, cx: frame.cx, cy: frame.cy)
+            }
+            gestureTarget = .draft
+        }
+    }
+
+    /// Route a live gesture's framing to the latched target — never to
+    /// whatever happens to sit under the playhead now.
+    private func apply(z: Double, cx: Double, cy: Double) {
+        switch gestureTarget {
+        case .draft:
+            // An externally cancelled draft (a scrub) kills the rest of the
+            // touch rather than resurrecting itself.
+            guard draft != nil else { return }
+            draft = ReframeDraft(z: z, cx: cx, cy: cy)
+        case .key(let index):
             model.updateReframe(coalescing: "reframe-canvas-\(index)") {
                 guard $0.keys.indices.contains(index) else { return }
                 $0.keys[index].z = z
                 $0.keys[index].cx = cx
                 $0.keys[index].cy = cy
             }
+        case nil:
+            break
         }
     }
 
-    private func endGesture() {
-        dragBase = nil
-        pinchBase = nil
+    /// The whole touch is over — both gestures dead.
+    private func endTouch() {
+        gestureTarget = nil
         model.endWarpCoalescing()
     }
 }

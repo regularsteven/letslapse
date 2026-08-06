@@ -30,17 +30,40 @@ enum ReframeVideoCropper {
 
     /// One crop rect per output frame, in display-oriented pixels of
     /// `sourceSize` — the space the keys were authored in.
+    ///
+    /// Move spans are measured on the COMPILED clock, not the timeline's
+    /// steady-speed approximation: output frame `i` plays at `i ÷ outFps`, so
+    /// inverting `frameSourceTimes` (monotone) gives the exact source→clip
+    /// map, seam eases and the frame-for-frame slow-motion floor included. A
+    /// "~1s" move pill means one real second of the finished clip.
     static func rects(
         track: ReframeTrack,
         aspect: Double,
         sourceSize: CGSize,
-        warp: WarpTimeline,
-        frameSourceTimes: [Double]
+        frameSourceTimes: [Double],
+        outputFPS: Int
     ) -> [CGRect] {
-        frameSourceTimes.map { time in
+        let outFps = Double(max(1, outputFPS))
+        let times = frameSourceTimes
+        let outputTime: (Double) -> Double = { s in
+            guard let first = times.first, let last = times.last, times.count > 1 else { return 0 }
+            if s <= first { return 0 }
+            if s >= last { return Double(times.count - 1) / outFps }
+            var lo = 0
+            var hi = times.count - 1
+            while lo < hi {
+                let mid = (lo + hi) / 2
+                if times[mid] >= s { hi = mid } else { lo = mid + 1 }
+            }
+            let t0 = times[lo - 1]
+            let t1 = times[lo]
+            let fraction = t1 > t0 ? (s - t0) / (t1 - t0) : 0
+            return (Double(lo - 1) + fraction) / outFps
+        }
+        return times.map { time in
             track.crop(
                 atSource: time, aspect: aspect, sourceSize: sourceSize,
-                outputTime: warp.outputTime(atSource:))
+                outputTime: outputTime)
         }
     }
 
@@ -55,7 +78,6 @@ enum ReframeVideoCropper {
         track: ReframeTrack,
         aspect: Double,
         sourceSize: CGSize,
-        warp: WarpTimeline,
         frameSourceTimes: [Double],
         outputFPS: Int,
         progress: (@Sendable (Double) -> Void)? = nil
@@ -87,7 +109,7 @@ enum ReframeVideoCropper {
 
         let frameRects = rects(
             track: track, aspect: aspect, sourceSize: sourceSize,
-            warp: warp, frameSourceTimes: frameSourceTimes
+            frameSourceTimes: frameSourceTimes, outputFPS: outputFPS
         ).map { $0.applying(CGAffineTransform(scaleX: scale, y: scale)) }
 
         let outFps = Double(max(1, outputFPS))

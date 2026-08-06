@@ -100,13 +100,16 @@ struct WarpTimelineView: View {
     /// the Adjust screen so both draw the same moment.
     var showsReframeLane = false
     @Binding var playhead: Double
+    /// Owned by the Adjust screen with the playhead itself — a layout flip
+    /// (wide ↔ narrow) rebuilds this view, and a rebuilt view must not
+    /// re-place a playhead the user already owns.
+    @Binding var playheadPlaced: Bool
     @Binding var selectedReframeKey: Int?
     @Binding var reframeDraft: ReframeDraft?
 
     /// Visible source window (zoom); nil = the whole source.
     @State private var zoomStart: Double?
     @State private var zoomEnd: Double?
-    @State private var playheadPlaced = false
     /// In-flight drag-to-nominate range, in source seconds.
     @State private var nominating: ClosedRange<Double>?
     /// Whether the in-flight nomination has crossed the minimum span — drives

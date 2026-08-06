@@ -20,8 +20,12 @@ struct AdjustView: View {
     @State private var blendCodecs: [OutputCodec] = []
     @StateObject private var preview = WarpPreviewLoader()
     /// The playhead in source seconds — owned here so the timeline, the
-    /// reframe lane and the punch canvas all draw the same moment.
+    /// reframe lane and the punch canvas all draw the same moment. The
+    /// placed flag lives here too: the wide/narrow layouts host structurally
+    /// different WarpTimelineViews, and a rotation must not re-place the
+    /// playhead (which would also drop an uncommitted draft).
     @State private var playhead: Double = 0
+    @State private var playheadPlaced = false
     /// The reframe lane's visibility, selection and uncommitted framing.
     @State private var reframeLaneOpen = false
     @State private var selectedReframeKey: Int?
@@ -314,6 +318,7 @@ struct AdjustView: View {
             showsInlineThumbnail: inlineThumbnail,
             showsReframeLane: reframeLaneOpen,
             playhead: $playhead,
+            playheadPlaced: $playheadPlaced,
             selectedReframeKey: $selectedReframeKey,
             reframeDraft: $reframeDraft
         )
@@ -412,7 +417,10 @@ struct AdjustView: View {
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
             if model.useRamp {
-                Text("Speed ramp \(model.rampStart)×→\(model.rampEnd)× is on — editing the timeline turns it off. Edit it in Advanced.")
+                Text("Speed ramp \(model.rampStart)×→\(model.rampEnd)× is on — editing the timeline turns it off. Edit it in Advanced."
+                    + (model.reframe?.isEmpty == false
+                        ? " The punch-in reframe won't render while the ramp is on."
+                        : ""))
                     .font(.system(size: 11.5))
                     .foregroundStyle(LL.accent)
                     .padding(.horizontal, 4)
