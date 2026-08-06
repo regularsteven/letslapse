@@ -46,6 +46,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		AA0000000000000000000062 /* Exceptions for "App" folder in "LetsLapse" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AA0000000000000000000010 /* LetsLapse */;
+		};
 		AA0000000000000000000061 /* Exceptions for "Watch" folder in "LetsLapse Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -58,6 +65,9 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AA0000000000000000000007 /* App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				AA0000000000000000000062 /* Exceptions for "App" folder in "LetsLapse" target */,
+			);
 			path = App;
 			sourceTree = "<group>";
 		};
@@ -400,6 +410,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
@@ -407,7 +418,6 @@
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -446,6 +456,7 @@
 				ENABLE_HARDENED_RUNTIME = YES;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
@@ -453,7 +464,6 @@
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;

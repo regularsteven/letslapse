@@ -53,24 +53,12 @@ struct ProcessingView: View {
             .frame(height: 260)
             .frame(maxWidth: .infinity)
             .blur(radius: 2.5)
-            .overlay(Color.black.opacity(0.45))
+            // A touch darker than the rest of the app's scrims: the mark's
+            // silver pipe has to hold against a bright frame behind it.
+            .overlay(Color.black.opacity(0.55))
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-            ZStack {
-                Circle()
-                    .stroke(.white.opacity(0.2), lineWidth: 8)
-                Circle()
-                    .trim(from: 0, to: max(0.003, model.progress))
-                    .stroke(LL.amber, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.3), value: model.progress)
-                Text("\(Int((model.progress * 100).rounded()))%")
-                    .font(.system(size: 17, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 92, height: 92)
-            .padding(8)
-            .background(.black.opacity(0.35), in: Circle())
+            LLRigProgress(progress: model.progress)
         }
     }
 

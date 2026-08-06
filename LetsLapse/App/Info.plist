@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The launch screen has to be a real colour, not the system default:
+	     an empty UILaunchScreen paints systemBackground, i.e. WHITE in light
+	     mode, and on a first install that canvas is held for seconds while
+	     dyld loads MLX. That white flash is the thing LaunchAnimationView
+	     exists to replace, so the static screen has to already be the field
+	     colour the animation starts on.
+
+	     This cannot be expressed as an INFOPLIST_KEY_* build setting —
+	     Xcode's plist generator honours UILaunchScreen_Generation but not the
+	     nested UIColorName, and silently emits an empty dict. So the target
+	     carries a partial Info.plist and lets the generated keys merge in,
+	     the same arrangement the Watch target uses for WKBackgroundModes. -->
+	<key>UILaunchScreen</key>
+	<dict>
+		<key>UIColorName</key>
+		<string>LaunchBackground</string>
+	</dict>
+</dict>
+</plist>

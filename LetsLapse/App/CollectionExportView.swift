@@ -108,24 +108,10 @@ private struct CollectionExportProgressView: View {
                 .frame(height: 260)
                 .frame(maxWidth: .infinity)
                 .blur(radius: 2.5)
-                .overlay(Color.black.opacity(0.45))
+                .overlay(Color.black.opacity(0.55))
                 .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-            ZStack {
-                Circle()
-                    .stroke(.white.opacity(0.2), lineWidth: 8)
-                Circle()
-                    .trim(from: 0, to: max(0.003, controller.progress))
-                    .stroke(LL.amber, style: StrokeStyle(lineWidth: 8, lineCap: .round))
-                    .rotationEffect(.degrees(-90))
-                    .animation(.linear(duration: 0.3), value: controller.progress)
-                Text("\(Int((controller.progress * 100).rounded()))%")
-                    .font(.system(size: 17, weight: .bold).monospacedDigit())
-                    .foregroundStyle(.white)
-            }
-            .frame(width: 92, height: 92)
-            .padding(8)
-            .background(.black.opacity(0.35), in: Circle())
+            LLRigProgress(progress: controller.progress)
         }
     }
 

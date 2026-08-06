@@ -97,6 +97,9 @@ struct ContentView: View {
     /// the camera straight away, over the Create screen (the tab's home).
     @State private var showCamera = false
     @State private var cameraIntent = CaptureIntent()
+    /// Cold-launch only, for free: `ContentView` is not rebuilt when the app
+    /// returns from the background, so a warm resume never re-arms the splash.
+    @State private var showLaunch = LaunchAnimationView.shouldPlayOnLaunch
     #if os(macOS)
     @State private var lastStage: AppModel.Stage = .home
     #endif
@@ -127,6 +130,16 @@ struct ContentView: View {
                     .zIndex(1)
             }
             #endif
+
+            // Over everything, including the flow. The camera is deliberately
+            // *not* opened underneath it: a `fullScreenCover` presents above the
+            // root hosting controller, so nothing in this hierarchy could draw
+            // over it. It opens when the splash finishes instead.
+            if showLaunch {
+                LaunchAnimationView(onFinish: finishLaunch)
+                    .transition(.opacity)
+                    .zIndex(100)
+            }
         }
         .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.stage)
         .onChange(of: model.requestedProjectDetailID) { requested in
@@ -159,7 +172,11 @@ struct ContentView: View {
         .onChange(of: selectedTab) { tab in
             if tab == .create { openCameraForCreateTab() }
         }
-        .onAppear(perform: openCameraOnLaunch)
+        // When the splash is showing it owns the hand-off; without it (a
+        // screenshot run, or a build where it is suppressed) this is the path.
+        .onAppear {
+            if !showLaunch { openCameraOnLaunch() }
+        }
         #endif
         #if os(macOS)
         .onChange(of: model.stage) { newStage in
@@ -174,6 +191,15 @@ struct ContentView: View {
         .tint(LL.accent)
         #if DEBUG
         .onAppear(perform: applyUIPreviewHooks)
+        #endif
+    }
+
+    /// The mark has settled — cross-fade it away and let the app take over.
+    private func finishLaunch() {
+        guard showLaunch else { return }
+        withAnimation(.easeOut(duration: 0.3)) { showLaunch = false }
+        #if os(iOS)
+        openCameraOnLaunch()
         #endif
     }
 
