@@ -1,0 +1,125 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Adjust — Punch-in reframe, wide layout · landscape</title>
+  <desc>Mirrors App/AdjustView.swift (`wideLayout`, &gt;560pt) with the reframe lane open — the same layout iPad and Mac get, drawn 2026-08-10 from the iPhone 16 simulator rotated to landscape (LL_REFRAME=latest LL_REFRAME_SEED=1). The screen splits into two columns: LEFT, the warp card (timeline, reframe lane, key line, ruler, selection line) followed by the speed chips and the Punch-in reframe row, which sit below the fold at this height; RIGHT, a fixed 320pt column carrying the interactive punch canvas — ReframeCanvasView replaces the plain preview pane whenever the lane is open — with the estimate card beneath it, clipped here by the fixed bottom bar. With the lane CLOSED the right column shows the read-only preview pane instead, badged "≈ keyframe preview" and hit-testing off. The warp card draws no inline preview in this layout, so the Undo (and Fit) chips get their own slim right-aligned row above the bar rather than floating over a picture — the one structural difference from portrait besides the split itself. The playhead, its "placed" flag and the uncommitted draft are owned by AdjustView rather than by WarpTimelineView, precisely so a rotation between these two layouts — which rebuilds a structurally different timeline view — cannot re-place the playhead or silently drop a draft. Canvas geometry: a tall canvas ratio pins the punch canvas to a 340pt row; 16:9 (drawn) fills the column's width. Sample data: a 1:00 source as one 100× stretch with three seeded keys and ~1s / ~2s arriving eases, the same fixture as adjust.reframe.portrait.svg — note again that the pills name viewer-seconds the 0.6s clip cannot pay (docs/overview-audit-2026-08-10.md, Part C).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
+    <clipPath id="canvasBoxL"><rect x="457" y="55" width="320" height="180" rx="9"/></clipPath>
+    <filter id="softL" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <linearGradient id="baseTileL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+    <linearGradient id="punchedL" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3B5170"/><stop offset="0.55" stop-color="#28405C"/><stop offset="1" stop-color="#1D3048"/></linearGradient>
+    <mask id="minimapHoleL"><rect x="693" y="184" width="76" height="43" fill="#FFF"/><rect x="719" y="194" width="33" height="19" fill="#000"/></mask>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="852" height="393" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- flow header: back · title · canvas menu, inside the landscape safe area -->
+      <g id="flow-header">
+        <circle cx="92" cy="29" r="17" fill="#FFF" filter="url(#softL)"/>
+        <path d="M96 21 l-8 8 8 8" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
+        <text x="409" y="35" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
+        <g id="canvas-menu">
+          <rect x="710" y="12" width="67" height="34" rx="17" fill="#FFF" filter="url(#softL)"/>
+          <text x="736" y="34" font-size="13.5" class="sb" fill="#C36A00" text-anchor="middle">16:9</text>
+          <path d="M755 30 l4 4.5 4 -4.5" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
+      </g>
+
+      <!-- LEFT COLUMN — the warp card, no inline preview -->
+      <g id="warp-card">
+        <rect x="76" y="55" width="365" height="222" rx="16" fill="#FFF" filter="url(#softL)"/>
+
+        <!-- edit chips get their own slim row when there is no preview to float over -->
+        <g id="edit-chips">
+          <rect x="368" y="63" width="57" height="17" rx="8.5" fill="#1C1C1E"/>
+          <path d="M380 69 l-3 2.5 3 2.5 M377 71.5 h6 a3.5 3.5 0 0 1 0 5" stroke="#FFB340" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.uturn.backward"/>
+          <text x="406" y="75.5" font-size="10" class="b" fill="#FFB340" text-anchor="middle">Undo</text>
+        </g>
+
+        <!-- stretch bar -->
+        <g id="stretch-bar">
+          <rect x="92" y="96" width="333" height="46" rx="8" fill="url(#baseTileL)"/>
+          <rect x="93.25" y="97.25" width="330.5" height="43.5" rx="6.75" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <rect x="243" y="118" width="30" height="16" rx="8" fill="#000" opacity="0.55"/>
+          <text x="258" y="129.5" font-size="10" class="b" fill="#FFF" text-anchor="middle">100×</text>
+          <rect x="257" y="90" width="2" height="56" fill="#C36A00"/>
+          <circle cx="258" cy="87" r="9" fill="#C36A00" filter="url(#softL)"/>
+        </g>
+
+        <!-- reframe lane -->
+        <g id="reframe-lane">
+          <rect x="92" y="186" width="333" height="1" fill="#8E8E93" opacity="0.28"/>
+          <g transform="translate(158,186) rotate(45)"><rect x="-4.5" y="-4.5" width="9" height="9" rx="2" fill="#FFF" stroke="#000" stroke-opacity="0.3" stroke-width="0.75"/></g>
+          <g transform="translate(242,186) rotate(45)"><rect x="-5.5" y="-5.5" width="11" height="11" rx="2" fill="#FFB340" stroke="#000" stroke-opacity="0.3" stroke-width="0.75"/></g>
+          <g transform="translate(326,186) rotate(45)"><rect x="-4.5" y="-4.5" width="9" height="9" rx="2" fill="#FFF" stroke="#000" stroke-opacity="0.3" stroke-width="0.75"/></g>
+          <g font-size="9.5" font-weight="700">
+            <rect x="174" y="177" width="52" height="18" rx="9" fill="#1C1C1E"/>
+            <text x="200" y="189.5" fill="#FFB340" text-anchor="middle">~1s ease</text>
+            <rect x="258" y="177" width="52" height="18" rx="9" fill="#1C1C1E"/>
+            <text x="284" y="189.5" fill="#FFB340" text-anchor="middle">~2s ease</text>
+          </g>
+          <rect x="257" y="171" width="2" height="30" fill="#C36A00"/>
+        </g>
+
+        <!-- key line -->
+        <g id="key-line">
+          <rect x="92" y="208" width="333" height="32" rx="10" fill="#F2F2F7"/>
+          <text x="102" y="228" font-size="12" fill="#6D6D72">3 keys — tap one to edit</text>
+          <rect x="289" y="214" width="126" height="20" rx="10" fill="#FFF"/>
+          <path d="M300 224 h7 M303.5 220.5 v7" stroke="#C36A00" stroke-width="1.8" stroke-linecap="round"/>
+          <text x="312" y="228" font-size="11" class="b" fill="#C36A00">Keyframe at 0:30</text>
+        </g>
+        <!-- the clip ruler and the selection line follow, clipped by the card's
+             own bottom at this height; the chips row and the Punch-in reframe
+             row scroll below them -->
+        <g font-size="10" fill="#8E8E93" opacity="0.5">
+          <text x="92" y="258">0s</text>
+          <text x="258" y="258" text-anchor="middle">0.3s</text>
+          <text x="425" y="258" text-anchor="end">0.6s</text>
+        </g>
+      </g>
+
+      <!-- RIGHT COLUMN — 320pt: punch canvas, then the estimate card -->
+      <g id="punch-canvas">
+        <g clip-path="url(#canvasBoxL)">
+          <rect x="457" y="55" width="320" height="180" fill="url(#punchedL)"/>
+          <circle cx="650" cy="130" r="32" fill="#FFB340" opacity="0.9"/>
+          <rect x="457" y="200" width="320" height="35" fill="#141C26"/>
+        </g>
+        <rect x="458" y="56" width="318" height="178" rx="8" fill="none" stroke="#FFB340" stroke-opacity="0.4" stroke-width="1.5"/>
+        <rect x="465" y="208" width="180" height="19" rx="9.5" fill="#000" opacity="0.55"/>
+        <text x="474" y="221" font-size="10" class="b" fill="#FFB340">≈ between keys · 2.3×<tspan fill="#FFF" fill-opacity="0.7"> · 822px</tspan></text>
+        <g id="minimap">
+          <rect x="693" y="184" width="76" height="43" rx="4" fill="#000" opacity="0.55"/>
+          <rect x="693" y="184" width="76" height="43" fill="#000" opacity="0.45" mask="url(#minimapHoleL)"/>
+          <rect x="719" y="194" width="33" height="19" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="693" y="184" width="76" height="43" rx="4" fill="none" stroke="#FFF" stroke-opacity="0.25" stroke-width="0.5"/>
+        </g>
+      </g>
+
+      <g id="estimate-card">
+        <rect x="457" y="250" width="320" height="120" rx="16" fill="#1C1C1E"/>
+        <text x="473" y="274" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
+        <text x="761" y="274" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">25 fps ⌄</text>
+      </g>
+
+      <!-- bottom bar spans both columns -->
+      <g id="bottom-bar">
+        <rect x="0" y="282" width="852" height="111" fill="#F2F2F7"/>
+        <rect x="76" y="288" width="701" height="50" rx="14" fill="#C36A00"/>
+        <text x="426.5" y="319" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 0.6 s clip</text>
+        <text x="426.5" y="353" font-size="11.5" fill="#6D6D72" text-anchor="middle">Your original is kept — you can always make another blended clip.</text>
+      </g>
+
+      <!-- hardware: Dynamic Island on the leading edge, home indicator bottom -->
+      <rect x="11" y="134.5" width="36" height="124" rx="18" fill="#000"/>
+      <rect x="359" y="381" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="450" y="450" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — Punch-in reframe, wide layout · landscape · 852×393 pt</text>
+  <text x="450" y="468" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift (wideLayout &gt;560pt) — timeline + lane left, ReframeCanvasView in the 320pt right column, estimate below; same layout on iPad and Mac</text>
+</svg>

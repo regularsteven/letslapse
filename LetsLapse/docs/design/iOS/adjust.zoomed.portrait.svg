@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Adjust — warp timeline zoomed, just after a nominate · portrait</title>
-  <desc>Mirrors App/WarpTimelineView.swift in the zoomed, just-edited state (2026-08-03 trust-and-navigation pass) — the moment after a drag carved a 1× stretch inside a pinch-zoomed window. Sample: the 8:16 capture zoomed to 3:21–4:53 (92s window; pinch is anchored under the fingers, floored at min(20s, source) with a rigid tick at either travel end), a fresh 1× stretch nominated 4:07–4:42. Header: "SOURCE · 8:16", then the "Undo" chip (ink capsule, amber arrow.uturn.backward + label — present whenever timeline history exists; each edit is one snapshot on a 30-deep stack, continuous gestures coalesce, Cmd-Z / shake / three-finger-swipe drive the same stack) and the "Fit 8:16" chip (zoomed only; tap returns to the whole source). The 10pt gesture-hint line is gone — it yields once the Undo chip exists. The transient toast capsule "Added 1× stretch · Undo" (ink, white text, amber Undo, 4s, success haptic) floats top-center over the thumbnail area after every nominate commit; an under-2s release instead warns "Too short — drag past 2s, or zoom in". Bar: the ¼× moment's 12pt amber sliver clipped at the window's left edge, 100× tile, the new 1× stretch (slow gradient, amber stroke + accent selection ring, both 44pt-target resize handles, relative drag), trailing 100× sliver; smart seams "~1s ·?" flank the carve (side unpicked), the surviving "~1s ▶" sits clamped at the left edge. Playhead knob (18pt visual in a 44pt target) at 4:42 with its floating keyframe thumbnail; when a zoomed window scrolls PAST the playhead the knob is replaced by an accent chevron pinned at the near bar edge (tap recenters, non-destructive) and the thumbnail dims to 55% with a directional badge ("◀ 3:10"). Clock ruler 3:21 · 4:07 · 4:53 — dragging it pans 1:1, anchored at the drag start. Below it the MINIMAP (zoomed only): full-source track with 1pt stretch-bound ticks, an accent playhead tick, and the amber lens marking the visible window — drag the strip to move the window (lens centers on the finger). Selection line "Stretch 4 of 7 · 4:07–4:42 · 1× real time → 35s of the clip" + ⋯. Chips highlight 1×; estimate updates to 2:19 min · 7 stretches. Nominating overlay (not drawn here): grey-dashed below the 2s minimum, amber above it, selection tick on crossing. A pinch always cancels an in-flight nomination — zooming can never carve.</desc>
+  <desc>Mirrors App/WarpTimelineView.swift in the zoomed + just-carved state, redrawn 2026-08-10 from the iPhone 16 simulator: LL_ADJUST=demo with a driven two-finger spread on the bar, then a drag across it to nominate. What this variant specifies over adjust.portrait.svg: (1) EDIT CHIPS — "Undo" (ink capsule, amber, arrow.uturn.backward) whenever timeline history exists, beside "Fit 8:16" whenever the window is zoomed, both overlaying the preview's top-leading corner and each with a 44pt-ish hit area; every edit is one snapshot on the undo stack, continuous gestures coalesce to one step, and Cmd-Z / shake / three-finger-swipe drive the same stack. (2) The NOMINATE result — a 1× stretch carved exactly where the drag was drawn, taking the selection and a "step" seam on each side (a fresh boundary only gets an ease when the speed jump is more than 4×; below that it is an instant step). The carve's overlay is grey-dashed until the drag passes the 2s minimum then amber, with a selection tick on crossing, a success haptic on commit, and a warning haptic + "Too short — drag past 2s, or zoom in" toast on a short release. (3) The TOAST — "Added 1× stretch · Undo", an ink capsule centred over the card with 28pt of top padding, auto-dismissing after 4s. It is drawn here from the code contract rather than from the capture: at four seconds it outlives neither a `simctl` screenshot round-trip nor a driven-gesture pause, so it was the one element of this screen that could not be photographed. (4) The MINIMAP lens strip, which appears between the ruler and the selection line while zoomed — the whole source as one 6pt track with stretch-boundary ticks, an accent playhead tick, and a draggable amber lens marking the visible window; it grows the card by 22pt. (5) The RULER, which stays in CLIP time and now reads the zoomed window (1.0s · 34s · 1:07), and pans 1:1 when dragged. Also specified: pinch zooms anchored under the fingers to a min(20s, source) floor with a rigid tick at either travel end, a pinch always cancels an in-flight nomination (zooming can never carve), double-tap zooms in around the tap or back out to Fit, and an off-window playhead is replaced by an accent chevron at the bar's edge that recenters non-destructively while its preview dims and gains a directional "◀ 2:41" badge. The header canvas menu, the preview pane, the Punch-in reframe row and the clipped estimate card are as adjust.portrait.svg.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
     <linearGradient id="baseTile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33415A"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
     <linearGradient id="momentTile" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#6B4A16"/><stop offset="1" stop-color="#3A2E14"/></linearGradient>
-    <linearGradient id="thumbImage" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A6E"/><stop offset="0.55" stop-color="#2E3B4C"/><stop offset="1" stop-color="#1B2330"/></linearGradient>
+    <linearGradient id="frameImage" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#33475E"/><stop offset="0.6" stop-color="#243850"/><stop offset="1" stop-color="#1B2A3C"/></linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
@@ -28,182 +28,169 @@
         <circle cx="33" cy="88" r="17" fill="#FFF" filter="url(#soft)"/>
         <path d="M37 80 l-8 8 8 8" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
         <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
+        <g id="canvas-menu">
+          <rect x="310" y="71" width="67" height="34" rx="17" fill="#FFF" filter="url(#soft)"/>
+          <text x="336" y="93" font-size="13.5" class="sb" fill="#C36A00" text-anchor="middle">16:9</text>
+          <path d="M355 89 l4 4.5 4 -4.5" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
       </g>
 
-      <!-- source card -->
-      <g id="source-card">
-        <rect x="16" y="115" width="361" height="72" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <rect x="28" y="127" width="64" height="48" rx="7" fill="#33415A"/>
-        <circle cx="48" cy="141" r="7" fill="#FFB340" opacity="0.85"/>
-        <polygon points="28,163 52,151 74,161 92,153 92,175 28,175" fill="#1E2632"/>
-        <text x="104" y="147" font-size="14.5" class="sb" fill="#000">Sunset over harbour</text>
-        <text x="104" y="164" font-size="12"><tspan fill="#6D6D72">08:16 · 4K · 30 fps</tspan><tspan fill="#8A4A00" class="sb"> · 2 moments</tspan></text>
-        <text x="363" y="155" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Change</text>
-      </g>
-
-      <!-- SOURCE warp card — zoomed to 3:21–4:53, one nominate just committed -->
+      <!-- warp card: 22pt taller than unzoomed, for the minimap strip -->
       <g id="warp-card">
-        <rect x="16" y="201" width="361" height="298" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="230" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE · 8:16</text>
-        <!-- header chips: Undo (history exists) + Fit (zoomed); the hint line has yielded -->
-        <g id="undo-chip">
-          <rect x="233" y="215" width="60" height="20" rx="10" fill="#1C1C1E"/>
-          <path d="M243 225 a4.5 4.5 0 1 1 2 3.6 M243 225 l-1.5 -3 M243 225 l3 -1" stroke="#FFB340" stroke-width="1.5" fill="none" stroke-linecap="round" data-symbol="arrow.uturn.backward"/>
-          <text x="272" y="228.5" font-size="10" class="b" fill="#FFB340" text-anchor="middle">Undo</text>
-        </g>
-        <g id="fit-chip">
-          <rect x="299" y="215" width="62" height="20" rx="10" fill="#1C1C1E"/>
-          <text x="330" y="228.5" font-size="10" class="b" fill="#FFB340" text-anchor="middle">Fit 8:16</text>
+        <rect x="16" y="112" width="361" height="401" rx="16" fill="#FFF" filter="url(#soft)"/>
+
+        <g id="preview-pane">
+          <rect x="32" y="127" width="329" height="185" rx="9" fill="url(#frameImage)"/>
+          <rect x="299" y="132" width="57" height="15" rx="6" fill="#000" opacity="0.4"/>
+          <text x="327.5" y="142.5" font-size="8.5" fill="#FFF" fill-opacity="0.8" text-anchor="middle">≈ keyframe</text>
+          <rect x="38" y="289" width="44" height="17" rx="6" fill="#000" opacity="0.55"/>
+          <text x="60" y="301" font-size="10" class="b" fill="#FFF" text-anchor="middle">3:14</text>
+
+          <!-- edit chips: Undo (history exists) + Fit (zoomed) -->
+          <g id="edit-chips">
+            <rect x="38" y="131" width="57" height="17" rx="8.5" fill="#1C1C1E"/>
+            <path d="M50 137 l-3 2.5 3 2.5 M47 139.5 h6 a3.5 3.5 0 0 1 0 5" stroke="#FFB340" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.uturn.backward"/>
+            <text x="76" y="143.5" font-size="10" class="b" fill="#FFB340" text-anchor="middle">Undo</text>
+            <rect x="101" y="131" width="55" height="17" rx="8.5" fill="#1C1C1E"/>
+            <text x="128.5" y="143.5" font-size="10" class="b" fill="#FFB340" text-anchor="middle">Fit 8:16</text>
+          </g>
         </g>
 
-        <!-- floating keyframe thumbnail at the playhead (4:42, fraction clamped 0.83) -->
-        <g id="playhead-thumbnail">
-          <rect x="241" y="248" width="120" height="72" rx="9" fill="url(#thumbImage)" filter="url(#soft)"/>
-          <rect x="247" y="299" width="38" height="16" rx="6" fill="#000" opacity="0.55"/>
-          <text x="266" y="310.5" font-size="10" class="b" fill="#FFF" text-anchor="middle">4:42</text>
-          <rect x="297" y="253" width="59" height="14" rx="6" fill="#000" opacity="0.4"/>
-          <text x="326.5" y="263" font-size="8.5" fill="#FFF" fill-opacity="0.8" text-anchor="middle">≈ keyframe</text>
+        <!-- toast, 28pt below the card top, 4s auto-dismiss -->
+        <g id="toast">
+          <rect x="118" y="140" width="157" height="30" rx="15" fill="#1C1C1E" filter="url(#soft)"/>
+          <text x="132" y="159" font-size="12" class="sb" fill="#FFF">Added 1× stretch</text>
+          <text x="262" y="159" font-size="12" class="b" fill="#FFB340" text-anchor="end">Undo</text>
         </g>
 
-        <!-- stretch bar, window 3:21–4:53: moment sliver · 100× · NEW 1× (selected) · 100× -->
+        <!-- zoomed bar: the carved 1× stretch is the selection -->
         <g id="stretch-bar">
-          <rect x="32" y="334" width="12" height="50" rx="6" fill="url(#momentTile)"/>
-          <rect x="32.75" y="334.75" width="10.5" height="48.5" rx="5.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
-          <rect x="46" y="334" width="148" height="50" rx="8" fill="url(#baseTile)"/>
-          <rect x="196" y="334" width="123" height="50" rx="8" fill="url(#momentTile)"/>
-          <rect x="196.75" y="334.75" width="121.5" height="48.5" rx="7.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
-          <rect x="197.25" y="335.25" width="120.5" height="47.5" rx="7" fill="none" stroke="#C36A00" stroke-width="2.5"/>
-          <rect x="321" y="334" width="40" height="50" rx="8" fill="url(#baseTile)"/>
-          <!-- speed pills -->
+          <rect x="32" y="327" width="12" height="50" rx="6" fill="url(#baseTile)"/>
+          <rect x="46" y="327" width="101" height="50" rx="8" fill="url(#momentTile)"/>
+          <rect x="46.75" y="327.75" width="99.5" height="48.5" rx="7.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="149" y="327" width="49" height="50" rx="8" fill="url(#momentTile)"/>
+          <rect x="149.75" y="327.75" width="47.5" height="48.5" rx="7.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="152" y="330" width="43" height="44" rx="6" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+          <rect x="200" y="327" width="145" height="50" rx="8" fill="url(#momentTile)"/>
+          <rect x="200.75" y="327.75" width="143.5" height="48.5" rx="7.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="347" y="327" width="14" height="50" rx="6" fill="url(#baseTile)"/>
           <g font-size="10" font-weight="700">
-            <rect x="106" y="360" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
-            <text x="120" y="371.5" fill="#FFF" text-anchor="middle">100×</text>
-            <rect x="245.5" y="360" width="24" height="16" rx="8" fill="#000" opacity="0.55"/>
-            <text x="257.5" y="371.5" fill="#FFB340" text-anchor="middle">1×</text>
-            <rect x="327" y="360" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
-            <text x="341" y="371.5" fill="#FFF" text-anchor="middle">100×</text>
+            <rect x="82" y="353" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
+            <text x="96" y="364.5" fill="#FFB340" text-anchor="middle">¼×</text>
+            <rect x="159" y="353" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
+            <text x="173" y="364.5" fill="#FFB340" text-anchor="middle">1×</text>
+            <rect x="258" y="353" width="28" height="16" rx="8" fill="#000" opacity="0.55"/>
+            <text x="272" y="364.5" fill="#FFB340" text-anchor="middle">¼×</text>
           </g>
-          <!-- resize handles (12pt visual inside 44pt targets) on the new stretch's edges -->
+          <!-- handles on the new stretch's two boundaries -->
           <g id="resize-handles">
-            <rect x="190" y="331" width="12" height="56" rx="6" fill="#C36A00"/>
-            <rect x="194.5" y="347" width="3" height="24" rx="1.5" fill="#FFF"/>
-            <rect x="315" y="331" width="12" height="56" rx="6" fill="#C36A00"/>
-            <rect x="319.5" y="347" width="3" height="24" rx="1.5" fill="#FFF"/>
+            <rect x="143" y="324" width="12" height="56" rx="6" fill="#C36A00"/>
+            <rect x="147.5" y="340" width="3" height="24" rx="1.5" fill="#FFF"/>
+            <rect x="194" y="324" width="12" height="56" rx="6" fill="#C36A00"/>
+            <rect x="198.5" y="340" width="3" height="24" rx="1.5" fill="#FFF"/>
           </g>
-          <!-- playhead at the carve's end (4:42) -->
-          <rect x="320" y="326" width="2" height="60" fill="#C36A00"/>
-          <circle cx="321" cy="323" r="9" fill="#C36A00" filter="url(#soft)"/>
+          <rect x="199" y="319" width="2" height="60" fill="#C36A00"/>
+          <circle cx="200" cy="316" r="9" fill="#C36A00" filter="url(#soft)"/>
         </g>
 
-        <!-- seam pills: survivor "~1s ▶" clamped at the window edge; the carve's
-             smart seams "~1s ·?" until a side is picked -->
+        <!-- seams: the carve's two neighbours are steps -->
         <g id="seam-pills" font-size="9.5" font-weight="700">
-          <rect x="34" y="392" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
-          <text x="56" y="404" fill="#FFB340" text-anchor="middle">~1s ▶</text>
-          <rect x="174" y="392" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
-          <text x="196" y="404" fill="#FFB340" text-anchor="middle">~1s ·?</text>
-          <rect x="299" y="392" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
-          <text x="321" y="404" fill="#FFB340" text-anchor="middle">~1s ·?</text>
+          <rect x="33" y="382" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
+          <text x="55" y="394" fill="#FFB340" text-anchor="middle">~1s ◀</text>
+          <rect x="126" y="382" width="42" height="17" rx="8.5" fill="#E4E4E9"/>
+          <text x="147" y="394" fill="#3A3A3F" text-anchor="middle">step</text>
+          <rect x="178" y="382" width="42" height="17" rx="8.5" fill="#E4E4E9"/>
+          <text x="199" y="394" fill="#3A3A3F" text-anchor="middle">step</text>
+          <rect x="315" y="382" width="44" height="17" rx="8.5" fill="#1C1C1E"/>
+          <text x="337" y="394" fill="#FFB340" text-anchor="middle">~1s ▶</text>
         </g>
 
-        <!-- zoom clock ruler — drag pans the window 1:1 -->
+        <!-- ruler: the zoomed window, still in clip time -->
         <g font-size="10" fill="#8E8E93">
-          <text x="32" y="428">3:21</text>
-          <text x="196.5" y="428" text-anchor="middle">4:07</text>
-          <text x="361" y="428" text-anchor="end">4:53</text>
+          <text x="32" y="433">1.0s</text>
+          <text x="196.5" y="433" text-anchor="middle">34s</text>
+          <text x="361" y="433" text-anchor="end">1:07</text>
         </g>
 
-        <!-- minimap (zoomed only): whole source, bound ticks, playhead tick, amber lens -->
+        <!-- minimap: the whole source, the lens is the visible window -->
         <g id="minimap">
-          <rect x="32" y="442" width="329" height="6" rx="3" fill="#8E8E93" opacity="0.28"/>
-          <g fill="#8E8E93" opacity="0.6">
-            <rect x="150" y="442" width="1" height="6"/>
-            <rect x="166" y="442" width="1" height="6"/>
-            <rect x="196" y="442" width="1" height="6"/>
-            <rect x="219" y="442" width="1" height="6"/>
-            <rect x="297" y="442" width="1" height="6"/>
-            <rect x="303" y="442" width="1" height="6"/>
+          <rect x="32" y="442" width="329" height="6" rx="3" fill="#8E8E93" opacity="0.18"/>
+          <g fill="#8E8E93" opacity="0.5">
+            <rect x="120" y="442" width="1" height="6"/><rect x="128" y="442" width="1" height="6"/>
+            <rect x="141" y="442" width="1" height="6"/><rect x="276" y="442" width="1" height="6"/>
+            <rect x="283" y="442" width="1" height="6"/>
           </g>
-          <rect x="219" y="438" width="1.5" height="12" fill="#C36A00"/>
-          <rect x="165" y="438" width="61" height="14" rx="4" fill="#FFB340" opacity="0.14"/>
-          <rect x="165.75" y="438.75" width="59.5" height="12.5" rx="3.5" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="132" y="439" width="1.5" height="12" fill="#C36A00"/>
+          <rect x="99" y="438" width="123" height="14" rx="4" fill="#FFB340" fill-opacity="0.14" stroke="#FFB340" stroke-width="1.5"/>
         </g>
 
-        <!-- selection line + stretch options -->
+        <!-- selection line -->
         <g id="selection-line">
-          <rect x="32" y="463" width="329" height="30" rx="10" fill="#F2F2F7"/>
-          <text x="42" y="482" font-size="11.5" fill="#1C1C1E">Stretch 4 of 7 · 4:07–4:42 · 1× real time → 35s of clip</text>
-          <circle cx="347" cy="478" r="8" fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="ellipsis.circle"/>
-          <circle cx="343.5" cy="478" r="0.9" fill="#C36A00"/><circle cx="347" cy="478" r="0.9" fill="#C36A00"/><circle cx="350.5" cy="478" r="0.9" fill="#C36A00"/>
-        </g>
-
-        <!-- transient toast (4s): success haptic + one-tap undo of the carve -->
-        <g id="toast" filter="url(#soft)">
-          <rect x="105" y="241" width="183" height="30" rx="15" fill="#1C1C1E"/>
-          <text x="118" y="260" font-size="12" class="sb" fill="#FFF">Added 1× stretch</text>
-          <text x="243" y="260" font-size="12" class="b" fill="#FFB340">Undo</text>
+          <rect x="32" y="464" width="329" height="45" rx="10" fill="#F2F2F7"/>
+          <text x="42" y="483" font-size="11.5" fill="#1C1C1E">Stretch 3 of 7 · 3:04–3:14 · 1× real time → 11s of</text>
+          <text x="42" y="498" font-size="11.5" fill="#1C1C1E">the clip</text>
+          <circle cx="347" cy="486" r="8" fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="ellipsis.circle"/>
+          <circle cx="343.5" cy="486" r="0.9" fill="#C36A00"/><circle cx="347" cy="486" r="0.9" fill="#C36A00"/><circle cx="350.5" cy="486" r="0.9" fill="#C36A00"/>
         </g>
       </g>
 
-      <!-- speed chips: the new 1× stretch is selected -->
-      <g id="speed-chips">
-        <rect x="16" y="513" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="39.2" y="534" font-size="14" class="b" fill="#000" text-anchor="middle">¼×</text>
-        <text x="39.2" y="548" font-size="9.5" fill="#6D6D72" text-anchor="middle">¼× slow</text>
-        <rect x="68.4" y="513" width="46.4" height="47" rx="12" fill="#1C1C1E"/>
-        <text x="91.6" y="534" font-size="14" class="b" fill="#FFB340" text-anchor="middle">1×</text>
-        <text x="91.6" y="548" font-size="9.5" fill="#FFF" opacity="0.6" text-anchor="middle">real time</text>
-        <rect x="120.8" y="513" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="144" y="534" font-size="14" class="b" fill="#000" text-anchor="middle">4×</text>
-        <text x="144" y="548" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
-        <rect x="173.2" y="513" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="196.4" y="534" font-size="14" class="b" fill="#000" text-anchor="middle">15×</text>
-        <text x="196.4" y="548" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
-        <rect x="225.6" y="513" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="248.8" y="534" font-size="14" class="b" fill="#000" text-anchor="middle">60×</text>
-        <text x="248.8" y="548" font-size="9.5" fill="#6D6D72" text-anchor="middle">flowing</text>
-        <rect x="278" y="513" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="301.2" y="534" font-size="14" class="b" fill="#000" text-anchor="middle">100×</text>
-        <text x="301.2" y="548" font-size="9.5" fill="#6D6D72" text-anchor="middle">streaks</text>
-        <rect x="330.4" y="513" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="353.6" y="534" font-size="14" class="b" fill="#000" text-anchor="middle">···</text>
-        <text x="353.6" y="548" font-size="9.5" fill="#6D6D72" text-anchor="middle">custom</text>
-        <text x="20" y="578" font-size="11" fill="#6D6D72">Every stretch is speedable — no separate “base”. Hold a stretch for</text>
-        <text x="20" y="592" font-size="11" fill="#6D6D72">Remove · Split · Reset.</text>
+      <!-- speed chips: 1× is now the selection's speed -->
+      <g id="speed-chips" font-size="14">
+        <rect x="16" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="39.2" y="545" class="b" fill="#000" text-anchor="middle">¼×</text>
+        <text x="39.2" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">¼× slow</text>
+        <rect x="68.4" y="524" width="46.4" height="47" rx="12" fill="#1C1C1E"/>
+        <text x="91.6" y="545" class="b" fill="#FFB340" text-anchor="middle">1×</text>
+        <text x="91.6" y="559" font-size="9.5" fill="#FFF" opacity="0.6" text-anchor="middle">real time</text>
+        <rect x="120.8" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="144" y="545" class="b" fill="#000" text-anchor="middle">4×</text>
+        <text x="144" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
+        <rect x="173.2" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="196.4" y="545" class="b" fill="#000" text-anchor="middle">15×</text>
+        <text x="196.4" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
+        <rect x="225.6" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="248.8" y="545" class="b" fill="#000" text-anchor="middle">60×</text>
+        <text x="248.8" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">flowing</text>
+        <rect x="278" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="301.2" y="545" class="b" fill="#000" text-anchor="middle">100×</text>
+        <text x="301.2" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">streaks</text>
+        <rect x="330.4" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="353.6" y="545" class="b" fill="#000" text-anchor="middle">···</text>
+        <text x="353.6" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">custom</text>
+        <text x="20" y="583" font-size="11" fill="#6D6D72">Every stretch is speedable — no separate “base”. Hold a stretch for</text>
+        <text x="20" y="597" font-size="11" fill="#6D6D72">Remove · Split · Reset.</text>
       </g>
 
-      <!-- estimate card: the carve added ~35s of real time -->
+      <g id="reframe-row">
+        <rect x="16" y="618" width="361" height="50" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="viewfinder">
+          <path d="M33 648 v-4 a3 3 0 0 1 3 -3 h4"/><path d="M46 641 h4 a3 3 0 0 1 3 3 v4"/>
+          <path d="M53 654 v4 a3 3 0 0 1 -3 3 h-4"/><path d="M40 661 h-4 a3 3 0 0 1 -3 -3 v-4"/>
+        </g>
+        <text x="65" y="648" font-size="15.5" fill="#000">Punch-in reframe</text>
+        <text x="336" y="648" font-size="12" fill="#6D6D72" text-anchor="end">Off</text>
+        <path d="M348 640 l5 5 5 -5" stroke="#B8B8BD" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+      </g>
+
       <g id="estimate-card">
-        <rect x="16" y="606" width="361" height="152" rx="16" fill="#1C1C1E"/>
-        <text x="32" y="630" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
-        <text x="345" y="630" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">30 fps ⌄</text>
-        <text x="32" y="662" font-size="28" class="b" fill="#FFF">2:19 min</text>
-        <text x="152" y="660" font-size="14" class="sb" fill="#FFB340">· 7 stretches</text>
-        <g id="before-after-bar">
-          <rect x="32" y="685" width="170" height="8" rx="4" fill="#3D3D3F"/>
-          <text x="212" y="693" font-size="11" fill="#FFF" opacity="0.4">08:16</text>
-          <path d="M246 689 h10 m-4 -3.5 4 3.5 -4 3.5" stroke="#FFF" stroke-opacity="0.3" stroke-width="1.4" fill="none"/>
-          <rect x="266" y="685" width="42" height="8" rx="4" fill="#FFB340"/>
-          <text x="314" y="693" font-size="11" class="b" fill="#FFB340">2:19</text>
-        </g>
-        <text x="32" y="722" font-size="11" fill="#FFF" opacity="0.45">Time-warp, never a trim — every source frame lands in the clip;</text>
-        <text x="32" y="736" font-size="11" fill="#FFF" opacity="0.45">blur follows speed through each ease.</text>
+        <rect x="16" y="677" width="361" height="152" rx="16" fill="#1C1C1E"/>
+        <text x="32" y="701" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
+        <text x="345" y="701" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">25 fps ⌄</text>
+        <text x="32" y="733" font-size="28" class="b" fill="#FFF">2:00 min</text>
       </g>
 
-      <!-- bottom CTA -->
       <g id="bottom-bar">
-        <rect x="0" y="748" width="393" height="104" fill="#F2F2F7"/>
-        <rect x="16" y="760" width="361" height="50" rx="14" fill="#C36A00"/>
-        <text x="196.5" y="790" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 2:19 min clip</text>
-        <text x="196.5" y="828" font-size="11.5" fill="#6D6D72" text-anchor="middle">Your original is kept — you can always make another blended clip.</text>
+        <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
+        <rect x="16" y="735" width="361" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="766" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 2:00 min clip</text>
+        <text x="196.5" y="806" font-size="11.5" fill="#6D6D72" text-anchor="middle">Your original is kept — you can always make another blended clip.</text>
       </g>
 
-      <!-- hardware -->
       <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
       <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — zoomed 3:21–4:53, just after a nominate · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/WarpTimelineView.swift — Undo + Fit chips (hint yielded) · toast · anchored pinch · minimap lens · 1:1 ruler pan · off-window playhead ⇒ edge chevron + dimmed directional thumbnail</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — zoomed, just after a nominate · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/WarpTimelineView.swift — Undo + Fit chips · “Added 1× stretch · Undo” toast · carved 1× stretch with step seams · minimap lens · zoomed clip ruler</text>
 </svg>

@@ -4,7 +4,9 @@ A handover document for developers, designers, and agents. It explains what Lets
 
 File references are relative to the `LetsLapse/` directory of the repository (e.g. `App/AppModel.swift`) unless noted. The Swift app lives on the `ios-app` branch; the repository's `main` branch holds the original Raspberry Pi LetsLapse project (Python capture/blend scripts and a web UI), which is preserved untouched. The Swift app is a fresh native implementation of the same blending idea with the CPU pipeline replaced by a Metal compute kernel.
 
-Every screen in the app is mirrored by an SVG design spec under `docs/design/<platform>/`. Those specs are the contract for UI work — see `docs/design/README.md` and the per-platform `INDEX.md` before changing layout, copy, colours or controls.
+Every screen in the app is mirrored by an SVG design spec under `docs/design/<platform>/`. Those specs are the contract for UI work — see `docs/design/README.md` and the per-platform `INDEX.md` before changing layout, copy, colours or controls. Where this document and an `INDEX.md` row disagree, the `INDEX.md` is the more current of the two.
+
+`docs/overview-audit-2026-08-10.md` is the standing audit of this document against the code: what it covers, what it doesn't, and — in Part C — the known UX problems of Punch-in reframe (§4.4a) with a triage table and the use-cases the feature is meant to serve. Read it alongside §4.4 before touching the Adjust screen.
 
 ---
 
@@ -73,7 +75,7 @@ At matched frame rates, speed N× is exactly N× compression. Blur strength and 
 
 A ramp from 1 → 40 starts as an unblended (potentially slow-motion, if from high-fps source) sequence and accelerates into a heavily motion-blurred hyperlapse — blur growing exactly as speed does, because they are the same number.
 
-This is the *blend* ramp, and it is a separate mechanism from the **burst slow-motion ramp** (§4.4), which retimes an already-slow-motion burst clip inside the stitch rather than changing how many frames get averaged.
+This is the *blend* ramp, and it is a separate mechanism from the **burst slow-motion ramp** (§4.4b), which retimes an already-slow-motion burst clip inside the stitch rather than changing how many frames get averaged.
 
 ### 2.4 Linear-light averaging
 
@@ -97,7 +99,7 @@ Both shapes accept an injected `loadFrame` closure, which is how the colour grad
 - **Blur and speed cannot disagree.** Because window size *is* the speed, users can't produce the jittery skipped-frame look; the tool's "wrong settings" still look intentional.
 - **Streaming with flat memory.** Each output frame depends only on its own window, so the pipeline streams decode → accumulate → divide → encode with a small in-flight cap. Arbitrarily long clips process in constant memory; a float32 accumulator avoids 8-bit rounding drift across large windows.
 - **Deterministic and testable.** The schedule is a pure function; tests assert exact pixel values through the GPU (e.g. (40+200)/2 = 120 ± 1) and that schedules always partition the input.
-- **No editing timeline required.** The ramp is a simple parametric function (start, end, curve) rather than a keyframe UI — by design. It keeps the product approachable while covering the useful creative space.
+- **The timeline is the vocabulary, not a keyframe editor bolted on.** The original design deliberately had no timeline at all — one parametric ramp (start, end, curve). That held until shoots with recorded structure arrived, and since 2026-08 video editing goes through the **warp timeline** (§4.4): stretches with speeds in ×-real-time, seams that own the ramps, and an optional spatial **reframe** track beside them. Both compile down to the same window schedule, so the engine gained nothing to maintain, and the parametric ramp survives as the legacy path. Every stretch is still one number, and the invariant — a monotonic warp, never a trim — is what keeps it approachable.
 - **Re-blendability.** Because originals are preserved and parameters are recorded per blended clip, every result is reproducible and every project invites iteration.
 
 ---
@@ -123,10 +125,13 @@ flowchart TB
         LOC["Location<br/>LocationService · MovieLocation<br/>CLLocation+EXIF · GPXWriter/Reader"]
         MWQ["MediaWorkQueue<br/>bounded, cancellable browsing I/O"]
         TC["ProjectThumbnailCache<br/>memory + disk JPEG tier"]
+        WRP["Adjust editor<br/>WarpTimeline + WarpCompiler (time)<br/>ReframeTrack + ReframeMath (space)<br/>VideoCanvasCropper · ReframeVideoCropper"]
         UI --> AM
         UI --> CC
         UI --> GRD
         UI --> TC
+        UI --> WRP
+        WRP -->|"window schedules · frame map"| AM
         CC -->|finished media| AM
         CC -->|sample buffers / RAW| LBC
         CC --> LOC
@@ -156,7 +161,7 @@ flowchart TB
 
     CLI["lapse CLI (macOS)"] --> VB
     CLI --> IS
-    AM --> VB
+    AM -->|"customWindows"| VB
     AM --> IS
     AM --> MR
     MJR --> IS
@@ -174,11 +179,11 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 
 | Situation | Path | Character |
 |---|---|---|
-| iOS/iPadOS, any blend; macOS with a **ramp** | `VideoBlender` (Kit) | In-memory streaming GPU pipeline; flat memory; cancellable; output forced to H.264/.mp4 in the app |
-| macOS with a **constant** window | `MacVideoJobRunner` (App) | Disk-backed, resumable job with a visible job folder, manifest, and logs (see §5.2) |
+| iOS/iPadOS, any blend; macOS with a **ramp or a warp timeline** | `VideoBlender` (Kit) | In-memory streaming GPU pipeline; flat memory; cancellable; output forced to H.264/.mp4 in the app |
+| macOS with a **constant** window and no warp | `MacVideoJobRunner` (App) | Disk-backed, resumable job with a visible job folder, manifest, and logs (see §5.2). The runner only speaks constant windows, so a warped blend bypasses it |
 | Interval/imported photos, depth ≥ count | `ImageStacker.stack` | One long-exposure image (PNG) |
 | Interval/imported photos, depth < count | `ImageStacker.stackSequence` | Blended timelapse video (H.264/.mp4) |
-| Live capture sequence (ramp/marker "moments") | `blendLiveSequence` / `blendMarkerSequence` in AppModel | Per-segment/per-slice blends stitched with `AVMutableComposition`, then burst-ramped (see §4.3, §4.4) |
+| Live capture sequence (ramp/marker "moments") | `blendLiveSequence` / `blendMarkerSequence` in AppModel | Per-segment/per-slice blends stitched with `AVMutableComposition`, then burst-ramped or warped (see §4.3, §4.4) |
 
 `OutputCodec` (`Kit/Sources/LetsLapseKit/VideoBlender.swift`) supports `h264`, `hevc`, `prores` (ProRes 422), `jpeg` — `.mp4` for the first two, `.mov` for the rest. The CLI exposes all four for blends; the app currently pins blend output to H.264 and uses HEVC/ProRes in the *source conversion* feature (§4.10) instead.
 
@@ -187,7 +192,7 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 1. **Reader** — `AVAssetReader` decodes the source track to `32BGRA`, Metal-compatible, zero-copy (`alwaysCopiesSampleData = false`). Optional head/tail trim becomes a reader `timeRange`. Estimated frame count = duration × nominal fps (fallback 30).
 2. **First-frame peek** — a one-slot lookahead reads true buffer dimensions before configuring the writer, so odd sources can't mismatch.
 3. **Writer** — `AVAssetWriter` with the codec's settings and the source's `preferredTransform` (orientation survives blending). Output timestamps use timescale 60000.
-4. **Accumulate loop** — for each window in the `WindowSchedule`: wrap each decoded `CVPixelBuffer` as a Metal texture via `CVMetalTextureCache` (zero-copy), `reset → accumulate×N → finalize` on the `FrameAccumulator`, then append the averaged frame from a pixel-buffer pool. An in-flight semaphore (3) caps buffers queued on the GPU; completed-handlers retain buffers until the GPU has read them; the texture cache is flushed per output frame. Memory stays flat regardless of clip length.
+4. **Accumulate loop** — for each window in the schedule (the `WindowSchedule` derived from the `BlendRamp`, or `VideoBlendOptions.customWindows` verbatim when the caller supplies one — which is what the warp timeline's compiler hands over, §4.4): wrap each decoded `CVPixelBuffer` as a Metal texture via `CVMetalTextureCache` (zero-copy), `reset → accumulate×N → finalize` on the `FrameAccumulator`, then append the averaged frame from a pixel-buffer pool. An in-flight semaphore (3) caps buffers queued on the GPU; completed-handlers retain buffers until the GPU has read them; the texture cache is flushed per output frame. Memory stays flat regardless of clip length.
 5. **VFR resilience** — if the source outlives the frame-count estimate (variable frame rate), the blender keeps consuming at the final window size; a partial last window still finalizes.
 6. **Progress & cancellation** — progress fires every 10 input frames (monotonic, capped at 0.99 until the writer finishes); `cancel()` sets a lock-guarded flag checked each window and throws `LapseError.cancelled`.
 
@@ -195,7 +200,7 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 
 ### 3.4 Verification
 
-`Kit/Tests/LetsLapseKitTests/` (run with `swift test` inside `Kit/`) holds **18 test files** plus a `TestHelpers` / `VideoSynthesizer` support pair. Grouped by what they defend:
+`Kit/Tests/LetsLapseKitTests/` (run with `swift test` inside `Kit/`) holds **19 test files** plus a `TestHelpers` / `VideoSynthesizer` support pair. Grouped by what they defend:
 
 **Blend engine**
 
@@ -205,6 +210,7 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 - `VideoBlenderTests` — frame counts for constant and ramped blends against the schedule; linear-light output values (±0.06 tolerance for H.264/BT.709-vs-sRGB); trim; monotonic progress ending at 1.0.
 - `WindowScheduleTests` — schedules always sum exactly to input frames; monotonic ramp growth; clamping; curve shapes.
 - `BlendLearningTests` — the adaptive-depth learner (§5.5): sample decay, percentile safe counts, best/worst bounds, the 3-run gate.
+- `BlendProgressPlanTests` — the truthful-global-progress plan (§4.9): band layout, monotonic mapping.
 
 **DNG / RAW pipeline** (§6)
 
@@ -226,7 +232,7 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 
 `VideoSynthesizer` provides deterministic inputs: a `ramp` pattern (gray level 0.1→0.9 across the clip, for numeric checks) and a `box` pattern (white box sweeping over gray, for eyeballing motion blur). GPU tests skip gracefully on machines without Metal; the DNG real-file tests skip cleanly when the local reference captures aren't present (§6.6).
 
-Not currently covered at unit level: HEVC/ProRes/JPEG output paths, `stackSequence`, the CLI, `MacVideoJobRunner`, `LiveBlendController`/`LiveBlendRawController` (their Kit pieces are tested; the frame-selection/watchdog/logging layers are not), and the grading and thumbnail layers.
+Not currently covered at unit level: HEVC/ProRes/JPEG output paths, `stackSequence`, `VideoBlender.customWindows` (the warp timeline's own route into the engine), the CLI, `MacVideoJobRunner`, `LiveBlendController`/`LiveBlendRawController` (their Kit pieces are tested; the frame-selection/watchdog/logging layers are not), and the grading and thumbnail layers. There is **no app-layer test target at all**, so `WarpCompiler`, `ReframeTrack`/`ReframeMath`, `ReframeVideoCropper` and `VideoCanvasCropper` — all on the critical render path — are untested. `WarpCompiler` and `ReframeMath` are pure functions with no dependencies and would be the cheapest high-value tests available; `WindowScheduleTests` is the template.
 
 ---
 
@@ -275,7 +281,7 @@ Below the cards: **Record now**, **Import a video**, **Import photos to stack** 
 
 ### 4.3 Capture
 
-`App/CameraController.swift` (~2,748 lines) owns a single `AVCaptureSession` driven on a serial queue; `App/CaptureView.swift` (~2,933 lines) is the full-screen dark UI. Highlights:
+`App/CameraController.swift` (~3,500 lines) owns a single `AVCaptureSession` driven on a serial queue; `App/CaptureView.swift` (~3,100 lines) is the full-screen dark UI. Highlights:
 
 - **Formats.** Available resolutions (4K/1080p/720p…) and frame rates are discovered from the device's real formats, filtered to preferred rates `[24, 25, 30, 50, 60, 100, 120, 240]` plus each range's maximum — genuine high-frame-rate capture up to 240 fps where hardware allows. Stabilization filters the format list when enabled. The list is further filtered by the user's own **Manage resolutions** allowlist (§4.12).
 - **ProRes awareness.** ProRes-capable formats (detected by FourCC: `apcn/apch/apcs/apco/ap4h/ap4x`) appear as separate entries marked `*` with the footer "* ProRes — very large files", so users understand the trade before shooting. Recording itself uses `AVCaptureMovieFileOutput` with system codec defaults; ProRes arises when the active format is a ProRes format.
@@ -289,7 +295,7 @@ Below the cards: **Record now**, **Import a video**, **Import photos to stack** 
 - **Interval** — stills on a timer (0.5 s–10 s presets, floor 0.5 s) with two dials — **EVERY** (spacing) and **BLEND** (frames per output image: fixed counts with "Off" = 1, plus the adaptive **Psycho**/**Safe** depths, §5.5) — and an output format (JPEG or DNG) chosen in the format sheet. The four combinations route to different engines behind one shutter (`startIntervalCapture()`): plain JPEG shoots use the photo-output dispatch timer (`frame-%05d.jpg`, Apple's full processed-still pipeline); JPEG blends run the video-tap Live Blend engine (§5.4); DNG shoots — blended or untouched — run the Bayer RAW pipeline (`frame-%05d.dng`, §6, iOS/iPadOS only; unsupported sources degrade per dial). All variants feed the same photo-stacking paths. (Live Blend was a mode of its own until July 2026; it merged into Interval as the BLEND dial — `CaptureMode(token:)` maps the retired wire/persistence value onto Interval.)
 - **Video** — records *live capture sequences* with two "moments" behaviors (`LiveCaptureSequence.Mode`):
   - **Marker mode** — one continuous recording; tapping the moment button (phone or watch) marks intervals. At blend time the marked slices are extracted and kept at real speed (window 1) while everything else gets the user's speed; the pieces are stitched with `AVMutableComposition`.
-  - **Ramp mode** — the moment button toggles a hardware **frame-rate burst** (base rate → e.g. 120/240 fps), recording separate segments per rate (`segment-%03d.mov` + a `sequence.json` sidecar describing segments, markers, and ramp intervals). At blend time, high-rate segments play every frame — a 240 fps burst rendered at 25 fps is ~9.6× slow motion — while base-rate segments get the timelapse blend, then all are stitched and the burst clips are eased in and out (§4.4). One recording session yields a hyperlapse that dives into slow motion on demand.
+  - **Ramp mode** — the moment button toggles a hardware **frame-rate burst** (base rate → e.g. 120/240 fps), recording separate segments per rate (`segment-%03d.mov` + a `sequence.json` sidecar describing segments, markers, and ramp intervals). At blend time, high-rate segments play every frame — a 240 fps burst rendered at 25 fps is ~9.6× slow motion — while base-rate segments get the timelapse blend, then all are stitched and the burst clips are eased in and out (§4.4b) — or, on the warp path, the eases live in the timeline’s seams (§4.4). One recording session yields a hyperlapse that dives into slow motion on demand.
 
 **Capture UI.** Persistent aspect-fit preview; speed chips with live output-length estimates per speed; a segment strip visualizing burst spans during recording; a target sheet (auto-stop with countdown ring); zoom as discrete lens chips (.5×/1×/3× where hardware exists — the only lens picker; the format sheet has none); grid overlay; format pill (locked while capturing — video reads "2160p · 30 · Stab", interval reads resolution plus a JPEG/DNG token, DNG in amber); idle timer disabled during capture.
 
@@ -303,25 +309,77 @@ Last-used capture setup persists via `RecordingSettingsStore` (opt-out in Settin
 
 Finished media hands off to `AppModel.setSource(...)` / `setSequenceSource(...)`, which registers a project on disk and enters the flow at `configure`.
 
-### 4.4 Adjust ("New blended clip")
+### 4.4 Adjust ("New blended clip") — the warp timeline
 
-`App/AdjustView.swift` is where the human vocabulary meets engine parameters:
+`App/AdjustView.swift` (~988 lines) + `App/WarpTimelineView.swift` (~1,334) are where the human vocabulary meets engine parameters. For a **video** source this screen is a **time-warp editor** (design "3a", shipped 2026-08-03); for a **photos** source it is still the one-slider stack card described at the end of this section.
+
+**The premise.** The source is partitioned into consecutive **stretches**, each carrying its own speed in **×-real-time**, with a **seam** between every neighbouring pair describing how the speed change happens. The invariant, stated in `WarpTimeline.swift` itself: *this is a monotonic, continuous time-warp — never a trim.* Every source frame lands in exactly one output moment, and the blur window follows the instantaneous speed through every ease. A "slow" stretch is 1× or ¼×, never a cut. There is no separate "base" speed and no moment/base split — a continuous one-take import is simply a timeline with one stretch.
+
+**The bar is drawn in output time, not source time.** A stretch's width is its share of the *finished clip*: a 4-minute base run at 60× that lands as 4 s of a 14 s clip draws narrow, and the 3-second moment that becomes most of the clip draws wide (`WarpTimelineView.outputBounds` / `position(_:width:)`). Every gesture therefore maps pixels → clip seconds → source seconds through the warp. Understand this before reading the view.
+
+**The controls, in the order a user meets them:**
+
+- **Canvas menu** (header) — the clip's output shape: 16:9 · 9:16 · 1:1 · 4:3 · 3:4, defaulting to the shape as shot (rotation included). Each menu row carries its consequence — "1:1 — crops to 1080×1080" / "9:16 — as shot". A non-matching canvas centre-crops the *finished clip* in one short composition pass (`App/VideoCanvasCropper.swift`), not the source.
+- **The warp card** — the playhead's frame on top (a **keyframe-tolerant** still, badged "≈ keyframe"; dimmed with a directional badge when the playhead sits outside a zoomed window), then the bar: stretch tiles labelled with their speeds, seam pills between them, the playhead knob, resize handles on the selected stretch's boundaries, a **clip-time** ruler that pans when zoomed, a minimap lens strip while zoomed, and a selection line — "Stretch 2 of 3 · 1:30–1:46 · ¼× slow motion → 4.2s of the clip" — with a ⋯ menu.
+- **Gestures.** Tap a tile to select and scrub there. **Drag across the bar to nominate** a real-time stretch exactly where drawn (minimum 2 s of source; the overlay is grey-dashed until it will really carve, then amber, with a tick on crossing and a "Too short" toast on a short release). Pinch to zoom (floor `min(20 s, source)`, anchored under the fingers on iOS 17 / macOS 14+, firm tick at either end of travel) — a pinch cancels and gates nomination, so zooming can never carve. Double-tap zooms in/out (the mouse path). Hold a tile 0.45 s — or right-click on macOS — for **Remove stretch · Split here · Reset speed**. Drag the ruler to pan a zoomed window 1:1.
+- **Speed chips** — **¼× · 1× · 4× · 15× · 60× · 100× · ···custom** (1–240× free values in a sheet), with character words *¼× slow → streaks*. They always edit **the selected stretch**.
+- **Punch-in reframe** row — the disclosure for the spatial lane (§4.4a).
+- **Blend from** codec chips (Auto/ProRes/HEVC/H.264) — which stored source encoding feeds the blend (§4.10); shown only when a clip really has a choice.
+- **Estimate card** — "Your clip will be **12 seconds** · 3 stretches", the before/after bar, and the output frame-rate menu (24/25/30/50/60). With the timeline active the number is **exact**: the compiled schedule's frame count ÷ output fps, seam eases included.
+- **Advanced** sheet — the legacy parametric **speed ramp** (start ×, end ×, `BlendCurve`), **trim video ends** (0.1–30 s from both ends, a reader `timeRange`), and **true-light blending**.
+- **Undo** is a first-class chip floating over the preview, backed by `AppModel.warpUndoStack` (uncapped; continuous gestures coalesce to one step) and bridged to the window's `UndoManager`, so Cmd-Z, shake and three-finger-swipe drive the same history. Each carve also raises an "Added 1× stretch · Undo" toast. The history dies with the flow (`clearWarpHistory`).
 
 | UI concept | Engine parameter |
 |---|---|
-| **Speed** chips 10×/25×/50×/100× (+ custom 1–240×), with character words *gentle → trails* | `BlendRamp.constant(window)` — the window size |
-| **Speed ramp** (Advanced): start ×, end ×, curve | `BlendRamp(startWindow:endWindow:curve:)` |
-| **Your clip will be** estimate card + before/after bar | `SpeedMath.outputSeconds` (single source of truth for length math) |
-| Output frame rate menu (24/25/30/50/60) | `outputFPS` |
-| **True-light blending** toggle | `linearLight` |
-| **Trim video ends** (0.1–30 s from both ends) | reader `timeRange` trim (removes grab-and-stop shake) |
+| **Stretch** speeds in ×-real-time (chips or custom sheet) | `WarpTimeline.speeds[i]` → `WarpCompiler` → `VideoBlendOptions.customWindows` |
+| **Seam** ramp (step · 0.5s · 1s · 2s) + which side spends the time | `WarpTimeline.Seam`; compiled into 16 sampled constant-speed runs that borrow source time from the chosen side |
+| **Canvas** ratio | `AppModel.blendCanvasRatio` → `VideoCanvasCropper` (or subsumed by the reframe pass, §4.4a) |
+| **Speed ramp** (Advanced) — the legacy whole-clip path | `BlendRamp(startWindow:endWindow:curve:)`; **wins over the timeline** when on |
+| **Your clip will be** estimate + before/after bar | compiled frame count ÷ fps, else `SpeedMath.outputSeconds` |
+| **Trim video ends** | compile-time `activeStart`/`activeEnd`, and the reader `timeRange` |
 | **Blend depth** slider for photos (Crisp ↔ Long exposure) | window over stills; depth ≥ count → single image |
-| **Blend from** codec chips (Auto/ProRes/HEVC/H.264) | which stored source encoding feeds the blend (§4.10) |
-| **Slow-motion ramp** menu (Default / Off / 0.25 s → 2.0 s) | `CaptureProject.burstRampDuration` → `BurstRamp.plan(...)` |
+| **Blend from** codec chips | which stored source encoding feeds the blend (§4.10) |
 
-The estimate card explains the technique in one sentence ("Each output frame averages N real frames — that's where the blur comes from") and the CTA is outcome-named: "Create 12s clip" / "Create long exposure". Advanced options live behind a sheet so the default path stays simple — the design principle is *outcome first, mechanics on request*.
+**How it reaches the engine.** `WarpCompiler.compile` (in `App/WarpTimeline.swift`) walks the stretches, replaces each eased seam with `easeSteps = 16` sampled constant-speed runs — the ease *borrows* source time from its chosen side, clamped to 90% of the borrowing stretch and dropped entirely below ~0.05 s rather than emitting sub-frame runs — and emits two things: one **window schedule per source region** (a plain video is one region; a ramp-mode shoot is one per segment file) and the **mid-window source time of every output frame**. The schedules become `VideoBlendOptions.customWindows`; the frame times are what the reframe crop is evaluated against (§4.4a). Windows are floored so slow motion never asks for less than one source frame per output frame — frame-for-frame is the slowest a blend can play. The result is memoised on its inputs (`AppModel.compiledWarp()`).
 
-#### Burst slow-motion ramps
+**Two paths, mutually exclusive.** Turning the Advanced ramp on makes `compiledWarp()` return nil and the whole timeline (and the reframe track) is ignored in favour of `BlendRamp`; any direct timeline edit turns the ramp back off. A caption under the speed chips says so while the ramp is on. Legacy blends made with the short-lived per-stretch ruler decode through `BlendProject.stretchWindows` and convert to warp speeds on re-edit.
+
+**Seeding.** A capture with recorded structure seeds a timeline rather than a blank one: recorded moments become ¼× stretches, base runs take the project speed, and the seams inherit the project's slow-motion ramp borrowing from the moment's side — exactly where the old stitch ramp lived inside the burst (§4.4b). The playhead lands on the first slow stretch, else the middle of the clip.
+
+**Layout.** Past 560 pt (iPad, Mac, iPhone landscape) the screen splits: timeline and chips on the left, the playhead frame as a proper 320 pt preview pane — or the interactive reframe canvas when the lane is open — plus the estimate card on the right. The playhead and its "placed" flag are owned by `AdjustView`, not the timeline view, because a rotation rebuilds a structurally different `WarpTimelineView` and must not re-place the playhead or drop an uncommitted framing.
+
+**Photos sources** keep the simpler screen: source card, the tail-frame banner (a quiet offer to drop the shaky frames that ended an interval shoot), and the stack card — one **Blend depth** slider from "Crisp" to "Long exposure", the true-light toggle, and a live "184 photos → 37 frames · 1.2s at 30 fps" line. The CTA stays outcome-named throughout: "Create 12s clip" / "Create long exposure" / "Create 37-frame timelapse". Advanced lives behind a sheet so the default path stays simple — the principle is still *outcome first, mechanics on request*; the timeline is simply now the primary control for video, not a hidden one.
+
+### 4.4a Punch-in reframe
+
+A **spatial keyframe track** riding alongside the warp timeline: where the crop sits over time, so a clip can punch into its subject, hold, and pull back out. Video only — a photo stack has no frame to crop into over time.
+
+**The model** (`App/ReframeTrack.swift`). `keys: [{t, z, cx, cy}]` — source time; punch factor `z` (1 = the whole frame at the canvas ratio, max 6); crop centre in **display-oriented source pixels**, the same space as `AppModel.sourceDisplaySize()`, so a metadata Rotate 90° needs no fixups. Plus one `Move {span, curve}` per gap. Empty track = the full frame at the chosen canvas. One key = one constant crop, the way one stretch is one constant speed. Speed lives only in the warp and framing only here — *"the two tracks are related by adjacency on the same bar, never by data."*
+
+**Moves are arrive-anchored and measured in output (clip) seconds.** The crop *holds* the earlier key's framing, then eases into the later key over the last `span` of the gap: "be locked on by here; take this long to get there." `span` is `gap` / 0.5s / 1s / 2s; `curve` is `ease` (cubic in-out — a planned move that settles) or `thru` (linear, so the interior keys of a tracking chain don't pulse to a stop at every key). Zoom interpolates log-linearly, centre linearly.
+
+**Authoring** (`App/ReframeCanvasView.swift`, `App/ReframeLaneView.swift`). With the lane open, the preview becomes an interactive canvas — **pinch to punch, drag to position**, with a minimap in the corner once the crop is smaller than the frame. On a keyframe, gestures edit that key directly (one coalesced undo step per touch). Between keyframes they shape a **draft** — dashed amber edge, "≈ new framing" badge, explicit "Set keyframe at 1:30" / ✕ chips — because a keyframe is only ever made on purpose; scrubbing away drops the draft. The lane under the bar draws one diamond per key on the same output-proportional axis (drag to slide a key in time, clamped at its neighbours), a move pill per gap, and a key line carrying the selected key's facts, a delete button, and the explicit "+ Keyframe at m:ss".
+
+**Two entry points, one flow.** The "Punch-in reframe" button on a video project's detail page opens the New blended clip screen with the lane already expanded (`AppModel.reframeLaneFocused`); the row inside Adjust toggles it. Re-opening a clip that has a track lands with the lane open too.
+
+**Render** (`App/ReframeVideoCropper.swift`). After the blend, one `AVAssetExportSession` pass over the finished clip applies a **per-output-frame crop**, Lanczos-scaled (the punch is a magnification; bilinear stair-steps exactly where the move should be silkiest) to one constant render size — the canvas-shaped base crop at source pixel scale, so the wide stretches keep every pixel and only the punch magnifies. When it runs it **subsumes** the static canvas crop: its render size *is* the canvas shape.
+
+**How it composes with time blending — the part to get right:**
+
+- **The crop is welded to scene time, not clip time.** Each output frame's crop is evaluated at that frame's *mid-window source moment*, taken from the compiled schedule's frame map. However the speed curve stretches the clock, the punch stays on the thing it was aimed at.
+- **But the move's duration is on the viewer's clock**, and the two axes are related by a wildly non-uniform warp. In a 100× stretch at 30 fps one output frame consumes ~3.3 s of source, so two keys 2 s of source apart are less than one output frame apart and the "move" renders as a hard cut. Inside a ¼× moment the relationship inverts. `minimumKeySpacing` is 0.05 *source* seconds — sane in a slow stretch, 1/60th of an output frame at 100×.
+- **Blur is computed before the crop, so the punch magnifies it** — and equally magnifies handheld drift and inter-window jitter, with no stabilisation anywhere in the path. A punch usually wants a slower stretch under it; the two lanes are deliberately unlinked and offer no guidance.
+- **Preview maths ≠ render maths.** The canvas and lane evaluate moves through `WarpTimeline.outputTime`, the steady-speed piecewise approximation the bar draws in; the render inverts the exact compiled frame map, seam eases included. The difference is fractions of a second.
+- **It is a second full export.** Blend → H.264 intermediate → crop + Lanczos → re-encode → optionally a third encode for the grade bake.
+- **It needs the compiled warp.** With the Advanced ramp on there is no frame map, so the reframe is dropped from the render (see §10).
+
+**Persistence.** `BlendProject.reframe` and `.canvasRatio` — the keys' geometry only means anything against the canvas they were authored on, so re-editing a clip restores both.
+
+The reframe replaced a standalone editor (`App/Reframe/`, deleted 2026-08-06); speed now lives only in the warp timeline. Its screens are tracked in `docs/design/iOS/INDEX.md` as 🟡 **awaiting sign-off** — the SVG mirrors are not drawn yet, and the known UX problems are catalogued in `docs/overview-audit-2026-08-10.md` (Part C) with a triage table. Read that before changing this feature.
+
+#### 4.4b Burst slow-motion ramps (the legacy stitch path)
+
+Since the warp timeline landed, a warped render carries its eases **inside the compiled window schedules** — the seams own them — and the composition retime below is skipped. It still runs for the legacy path (Advanced ramp on), and its value still seeds a fresh timeline's seams, so the behaviour is worth knowing.
 
 A ramp-mode shoot's burst segments are already slow motion by the time they reach the stitch — the blend writes their frames out one-for-one while their neighbours are heavily time-compressed — so the joins read as two hard cuts. `App/BurstRamp.swift` eases them instead, and it does so as a **pure retime of the composition**: no pixels are rewritten and nothing is re-encoded beyond the stitch export that was already happening.
 
@@ -329,7 +387,7 @@ A ramp-mode shoot's burst segments are already slow motion by the time they reac
 - **Order matters, and it runs backwards.** `scaleTimeRange` rewrites the track's timeline from the scaled range onward, so `BurstRamp.apply` walks the steps last-to-first: every range it is about to touch is still exactly where `insertTimeRange` put it. The same reasoning applies across clips — a composition with several bursts has its plans applied back to front too.
 - **Two clamps.** The obvious one: two ramps can't each be longer than half the clip. The one that isn't obvious: a ramp plays *faster* than the clip it rides on, so a second of ramp spends `costFactor` seconds of footage. The applied length is therefore `min(requested, burstOutputDuration / 2, burstOutputDuration / (2 × costFactor))`, re-taken against the sampling density actually used. Below `minimumDuration` (0.1 s) the clip gets no ramp at all rather than a token one. Adjust reports the capped figure ("capped to 0.62s") so the number on screen is the number that will render.
 - **Audio follows the picture** only when it can: the ramp is applied to every composition track the burst clip spans, and an audio track that is short of the stitch is skipped with a log line rather than dragging the picture out of sync.
-- **Where the value lives.** `CaptureProject.burstRampDuration: Double?` — nil means "follow the app default" (resolved at render time), 0 means "this project explicitly wants hard cuts". App defaults are `letslapse.burstRampDefault: Double?` and `letslapse.burstRampRememberLast: Bool` (a project's ramp becomes the next default), surfaced in Settings → Video. The Adjust row sits above Advanced and steps in 0.25 s increments to 2.0 s.
+- **Where the value lives.** `CaptureProject.burstRampDuration: Double?` — nil means "follow the app default" (resolved at render time), 0 means "this project explicitly wants hard cuts". App defaults are `letslapse.burstRampDefault: Double?` and `letslapse.burstRampRememberLast: Bool` (a project's ramp becomes the next default), surfaced in Settings → Video. The Adjust screen no longer carries a slow-motion-ramp row of its own: the resolved value is seeded into the warp's seams (`.step` / 0.5s / 1s / 2s, borrowing from the moment's side) where it is then editable per seam.
 
 ### 4.5 Colour grading
 
@@ -432,18 +490,19 @@ This replaced the old `ProjectMediaPreviewSheet` in `ProjectDetailView`; the old
 
 ### 4.9 Processing and Result
 
+- **Branded holding states.** The two screens that used to read as unfinished now carry the LetsLapse mark. A cold launch is no longer a bare white canvas: the app target ships a partial `App/Info.plist` naming a `LaunchBackground` colour (an `INFOPLIST_KEY_*` build setting cannot express the nested `UILaunchScreen` key — Xcode silently drops it), then `App/LaunchAnimationView.swift` assembles the rig over ~2.05 s and the camera slides up over a still-opaque field. Dark in **both** appearances, by decision. Processing's plain ring became `App/LLRigProgress.swift` — the mark at 120 pt with the percentage inside its lens and a sweeping head arc, drawn in one `Canvas` from a clock and frozen by Reduce Motion; `App/LLRigMark.swift` is the shared mark. It keeps the **app icon's** amber `#F0A32C`, deliberately not an `LL` token.
 - `App/ProcessingView.swift` — circular progress ring over a blurred source thumbnail, a four-stage checklist (Preparing / Blending — with a live *processed/total* frame counter — / Encoding / Saving), an ETA, and Cancel ("Cancelling discards this blended clip. Your original is safe."). Blend work runs in a single cancellable `Task`; Kit progress callbacks hop to the main actor.
 - **Truthful global progress.** A run's bar is ONE monotonic 0→100%, laid out up front by `Kit/.../BlendProgressPlan.swift` (unit-tested pure math): one band per source clip sized by its estimated input frames (a multi-clip ramp shoot weights a 4-minute base segment ~50% of the bar and a 1.3 s 120 fps burst ~1%; estimates come from the `sequence.json` sidecar, with an asset-duration probe and mean-weight fallback), then bands for the stitch export, the grade-bake export, and the save. Every engine keeps reporting its local per-clip 0→1; `AppModel.reportClipProgress(_:fraction:)` maps it into the clip's band with a monotonic clamp — the ring can never reset or run backwards, no matter how many clips a run has. `stitchVideos` and `VideoGrader.bakedCopy` take optional progress closures backed by 0.25 s `AVAssetExportSession.progress` pollers, so the once-invisible export tail now fills its band.
-- **Explicit phases, honest ETA.** The checklist follows `AppModel.processingPhase` (`preparing / blending(clip:of:) / combining(clips:) / grading / saving`), set by the pipeline — never derived from progress thresholds — so each stage ticks exactly once. The ETA is computed in `AppModel` on *both* platforms: frames-based while blending (run pace × frames remaining, padded ~2 s per pending tail stage so "Almost done" can't fire early), stage-local extrapolation inside stitch/grade bands, published as an absolute `processingETADate` the view counts down against. While blending a multi-clip project the ETA line reads "About 40 seconds left · Clip 2 of 5"; a phase with no honest countdown yet shows its label instead ("Combining 5 clips...", "Applying the colour grade...", "Almost done" while saving) — never blank, never a raw log line. The Mac runner's per-clip `etaSeconds`/frame counts no longer touch the UI (they remain in the Diagnostics job log); the frame counter is whole-run on every platform.
+- **Explicit phases, honest ETA.** The checklist follows `AppModel.processingPhase` (`preparing / blending(clip:of:) / combining(clips:) / grading / saving`), set by the pipeline — never derived from progress thresholds — so each stage ticks exactly once. (One gap: the canvas-crop and punch-in-reframe tail passes borrow the `grading` phase, so the checklist reads "Applying the colour grade…" while they run. `statusMessage` names them correctly; the checklist has no case for them — see §10.) The ETA is computed in `AppModel` on *both* platforms: frames-based while blending (run pace × frames remaining, padded ~2 s per pending tail stage so "Almost done" can't fire early), stage-local extrapolation inside stitch/grade bands, published as an absolute `processingETADate` the view counts down against. While blending a multi-clip project the ETA line reads "About 40 seconds left · Clip 2 of 5"; a phase with no honest countdown yet shows its label instead ("Combining 5 clips...", "Applying the colour grade...", "Almost done" while saving) — never blank, never a raw log line. The Mac runner's per-clip `etaSeconds`/frame counts no longer touch the UI (they remain in the Diagnostics job log); the frame counter is whole-run on every platform.
 - **Cancel is honest end-to-end.** The stitch export runs under `withTaskCancellationHandler` with `cancelExport()` plus a post-await cancellation check, so Cancel during the final combine actually discards the blended clip instead of letting it finish and save behind the sheet (the grade bake already behaved this way).
 - `App/ResultView.swift` — inline `AVPlayer` (or still image), a green "Saved as **blended clip N** in *project*" banner with "View project", Save to Photos, `ShareLink`, and next steps: "New blended clip from original" (with a suggested alternate speed) and "Compare with original". Results are written to temp, then copied into the project's `blends/` folder and recorded in the manifest before the user ever sees them.
 
 ### 4.10 Projects, blended clips, and per-clip encodings
 
-`App/ProjectsView.swift` lists one card per original — thumbnail, format line, a horizontal strip of blended-clip thumbnails (tap to open, "+" for a new blended clip), swipe-to-delete — filtered by the same `CaptureFilterBar` the Gallery uses. `App/ProjectDetailView.swift` (~1,777 lines) is the management layer:
+`App/ProjectsView.swift` lists one card per original — thumbnail, format line, a horizontal strip of blended-clip thumbnails (tap to open, "+" for a new blended clip), swipe-to-delete — filtered by the same `CaptureFilterBar` the Gallery uses. A video card carries a second line stating its make-up ("4 source clips · 2 bursts at 120 fps", from a cached `sequence.json` read). `App/ProjectDetailView.swift` (~1,927 lines) is the management layer:
 
 - The `GradingCard` hero (§4.5), then a **Source Clips** section for video projects (each clip playable and saveable — single-clip projects included, so every original has a Save to Photos path).
-- **Blended clips** list — "Blended clip 3 · 100× · 8s", open, delete, and **"New blended clip from these settings"** (rehydrates that clip's parameters into Adjust).
+- **Blended clips** list — "Blended clip 3 · 100× · 8s", open, delete, and **"New blended clip from these settings"** (rehydrates that clip's parameters into Adjust — warp timeline, reframe track and canvas included). Below the primary **New blended clip** button, video projects get a second door into the same flow: **Punch-in reframe**, which opens Adjust with the reframe lane already expanded (§4.4a).
 - **Photo captures read as ONE asset.** A Photo-mode shot never shows frame counts, blended-clip tallies, or New-blended-clip affordances anywhere (card, detail, gallery, storage list). With Blend Off the captured JPEG *is* the photo — registered as-is, no blended clip created, camera EXIF/GPS untouched; with blend on, the burst auto-stacks into a single image that carries the first frame's EXIF/GPS. The detail screen shows the photo with **Save to Photos** / **Share**; burst frames stay on disk as stacking material, owned by the storage line ("photo + burst frames").
 - **Originals export.** Interval projects get an **Originals** row that saves every source frame to Photos in one batched `PHPhotoLibrary` change (`saveOriginalsToPhotos`), deliberately ungraded — it hands over the originals, not a look.
 - **Rotate 90°** — a metadata-only transform via `Kit/.../MediaRotator.swift`; no re-encode, and the thumbnail cache is invalidated by generation counter so a same-URL content change still re-decodes.
@@ -517,7 +576,12 @@ Key model types (all `Codable`, in `App/AppModel.swift` unless noted):
   - `adjustments: PhotoAdjustments?` — the manual grade; nil resolves to `.neutral`. Read through `AppModel.photoAdjustments(for:)`.
   - `burstRampDuration: Double?` — nil follows the app default, 0 means "hard cuts". Read through `AppModel.effectiveBurstRamp(for:)`.
   - `isPhotoCapture` is the derived flag that makes a Photo-mode shot read as ONE asset everywhere.
-- `BlendProject` — id, `captureID` (the link back to its original), kind, output file name, and the **full recipe**: speed/ramp/curve, output fps, linear light, trim, source codec, plus result stats (frames in/out, dimensions). This is what makes every blended clip reproducible and re-editable.
+- `BlendProject` — id, `captureID` (the link back to its original), kind, output file name, and the **full recipe**: speed/ramp/curve, output fps, linear light, trim, source codec, plus result stats (frames in/out, dimensions). This is what makes every blended clip reproducible and re-editable. Five fields carry the Adjust editor and Collections, all Optional so older manifests decode:
+  - `warp: WarpTimeline?` — the stretches, ×-real-time speeds and seam ramps this clip was rendered from (§4.4). Absent for clips from before the warp editor.
+  - `stretchWindows: [Int]?` — the same thing for clips made with the short-lived per-stretch ruler; kept for decode only, converted to warp speeds on re-edit (`v = window · outFps ⁄ srcFps`).
+  - `reframe: ReframeTrack?` — the punch-in reframe's spatial keys (§4.4a).
+  - `canvasRatio: String?` — the canvas the render actually used. The reframe keys' geometry only means anything against this shape, so re-editing restores it.
+  - `defaultCrops: [String: Double]?` — the clip's default pan offset per canvas ratio, used wherever a collection shows it on a mismatched canvas and hasn't set its own (§4.1).
 - `LapseCollection` (`App/CollectionsModel.swift`) — id, name, canvas ratio raw value (nil until the first clip sets it), ordered `Entry` list (blend id + in/out trim fractions + per-ratio collection-local crop offsets), and the kept export record (file name, date, recipe string). Clip-default crops live on `BlendProject.defaultCrops` (ratio raw → pan offset 0…1), so every collection without its own override follows the clip.
 - `LiveCaptureSequence` (`App/LiveCaptureSequence.swift`) — mode (ramp/marker), locked resolution, base and burst frame rates, segments with per-segment frame rate and time range, markers, ramp intervals.
 - `CustomPreset` (`App/CustomPreset.swift`) — id, name, base preset, adjustments; stored app-wide, not per project.
@@ -707,7 +771,16 @@ The layering, outermost first:
   download with progress, and honest per-row blockers: a device that cannot hold the weights says
   so *before* the download rather than after, and a model that fails to load is marked incompatible
   on its own row instead of staying "installed and healthy". `ModelManager` owns install state and
-  the per-model cache directory; `DeviceCapability` owns the memory arithmetic.
+  the per-model cache directory; `DeviceCapability` owns the memory arithmetic. The first section is
+  **"On this device"**, not "Downloaded", because the catalog carries a **built-in** entry:
+  **Apple Vision** (`engine: "vision-framework"`, `App/AI/VisionSceneAnalyzer.swift`) — zero
+  download, no size, no delete, ready at launch, and adopted automatically by a fresh install; an
+  installed VLM still wins where there is one. `ModelCatalogEntry.isBuiltIn` bypasses the whole
+  download/disk/memory state machine. Vision tags but cannot *name*, so the Auto rename & tag row
+  says so while it is active and opens on the project's current name. When Vision is the active
+  model, new projects are tagged **silently at capture time** (one frame, no sheet, failures
+  dropped, never overwriting an existing analysis), and a card whose tags came from that pass ends
+  its tag line with a small sparkles glyph.
 - **`SceneAnalysisService`** (`MLXSceneAnalyzer`, `SceneFrameSampler`, `SceneContext`) — the
   product-facing call: one request per capture, one result. The sampler turns a capture into the
   handful of frames worth looking at (1 for a photo, 3 for an interval shoot, 5 spread across a
@@ -742,7 +815,7 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 - **Palette.** Accent burnt orange `rgb(195, 106, 0)` (primary actions, tint), deep accent `rgb(138, 74, 0)`, **amber** `rgb(255, 179, 64)` for highlights — selected values, progress, blended-clip badges, and everything "moment"-related on both phone and watch. `ink` `rgb(28, 28, 30)` for dark stat cards. Surfaces track system grouped-background colors so light/dark both work; hairlines are `primary @ 8%`.
 - **Typography.** System font only. 34 pt bold screen titles; ~16 pt rows and buttons; 13 pt semibold uppercase section headers (kerned 0.5); ~12 pt secondary captions; monospaced digits for counts, times, and sizes.
 - **Components.** `LLPrimaryButtonStyle` (accent fill, 50 pt min height, radius 14), `LLSecondaryButtonStyle` (card fill, tinted label), `.llCard()` (radius 16–18, soft shadow), `LLRow` (settings-style rows), `LLSectionHeader`, `MediaBadge` (translucent capsule over imagery), `FloatingTabBar` (material pill; re-tap pops to root), `FlowHeader`/`FlowChromeButton` for the overlay flow, `CaptureFilterBar` and `CaptureAssetGrid` for the browsing surfaces, `PhotoAdjustmentsPanel` for grading, and shared async thumbnails.
-- **Vocabulary system.** The app never says "blend window" in the primary path. **Speed** (N×) with character words (*gentle, subtle, smooth, flowing, streaks, trails*), **True-light blending** (linear light), **Blend depth** (photo window), **Moments** (markers/bursts), **Slow-motion ramp** (burst retime), **blended clips** (outputs — renamed from "versions" in 2026-08; internal symbols like `BlendProject`/`versionNumber` keep their names), **projects** (originals + blended clips), **collections** (upcoming: ordered sets of blended clips with in/out points, exported as one video — a placeholder tab today). All length math and speed language route through `SpeedMath` so every screen agrees. Technical detail is progressively disclosed: Advanced sheet → Settings → Diagnostics.
+- **Vocabulary system.** The app never says "blend window" in the primary path. **Speed** (N× real time) with character words (*slow motion, real time, gentle, subtle, smooth, flowing, streaks*), **stretch** (a run of the source at one speed) and **seam** (how two stretches meet) on the warp timeline, **moment** (a nominated real-time stretch, and the markers/bursts that seed one), **punch-in reframe** with **keys** and **moves** for the spatial track, **canvas** (the clip's output shape), **True-light blending** (linear light), **Blend depth** (photo window), **Slow-motion ramp** (burst retime), **blended clips** (outputs — renamed from "versions" in 2026-08; internal symbols like `BlendProject`/`versionNumber` keep their names), **projects** (originals + blended clips), **collections** (ordered sets of blended clips with in/out points, exported as one video — shipped 2026-08-01, §4.1). All length math and speed language route through `SpeedMath` so every screen agrees. Technical detail is progressively disclosed: Advanced sheet → Settings → Diagnostics.
 - **Capture & watch are dark-first**, chrome kept away from the image; the watch uses red/green/amber state colors and oversized controls for no-look use.
 - **Design specs are part of the contract.** Every screen has an SVG mirror in `docs/design/<platform>/`, tracked per screen in that folder's `INDEX.md`. A commit touching SwiftUI layout, copy, colours or controls updates the matching SVG(s) — or states why none applies. If `DesignSystem.swift` changes, the SVGs are stale by definition. The design history behind the current effect-first shape is in the repo-root `docs/letslapse-ios-ux-brief.md`.
 
@@ -754,7 +827,7 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 
 **Engine:** `cd LetsLapse/Kit && swift build -c release` for the CLI, `swift test` for the suite (GPU tests skip without Metal). No external dependencies anywhere.
 
-**Screenshot / demo hooks** (DEBUG builds read environment variables, handy for simulators and UI review). Note that setting any of `LL_TAB`, `LL_OPEN`, `LL_SEED`, `LL_DETAIL`, `LL_PUSH`, `LL_CAPTURE` or `LL_AUTO` suppresses the Create tab's auto-open camera, so a hook lands on the screen it names:
+**Screenshot / demo hooks** (DEBUG builds read environment variables, handy for simulators and UI review). Any hook in the `hookKeys` list (`LetsLapseApp.swift` — `LL_TAB`, `LL_OPEN`, `LL_SEED`, `LL_DETAIL`, `LL_PUSH`, `LL_CAPTURE`, `LL_AUTO`, `LL_COLLECTIONS`, `LL_ADJUST`, `LL_REFRAME`) suppresses the Create tab's auto-open camera **and** the launch animation, so a hook lands on the screen it names without waiting out the ~2.05 s assembly:
 
 | Variable | Effect |
 |---|---|
@@ -766,6 +839,14 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 | `LL_SPEED` = *N* | force constant speed N× |
 | `LL_AUTO` = `process` | auto-start processing 1.5 s after configure |
 | `LL_CAPTURE` = `1` | auto-open the capture screen |
+| `LL_LAUNCH` = `1` | force the cold-launch animation back on (to capture the launch screen itself) |
+| `LL_ADJUST` = `latest` \| `demo` | open the newest video capture on the warp timeline; `demo` wraps it in a fabricated two-moment 8:16 sequence so the timeline shows structure without a real burst shoot (screenshots only — don't Create from it) |
+| `LL_STRETCH` = `"1=0.25,3=15"` | with `LL_ADJUST`: pin warp stretch speeds (×-real-time) by stretch index |
+| `LL_CANVAS` = `9:16` | pin the Adjust canvas for variant screenshots |
+| `LL_REFRAME` = `latest` | open the newest video capture in Adjust with the reframe lane expanded; `LL_REFRAME_SEED=1` plants a demo punch move, `LL_REFRAME_RATIO=9:16` pins the canvas, `LL_REFRAME_RENDER=1` goes straight to Create |
+| `LL_COLLECTIONS` = `seed` \| `list` \| `detail` | bring the Collections tab front; `seed` makes two demo collections from existing video blends; `detail` opens the first collection's builder |
+| `LL_BURST` = *taken*[/*total*] | freeze the burst pill (capped fill with a total, zebra without); `LL_BURST_MODE=interval` for the Interval row; pair with `LL_CAPTURE=1` |
+| `LL_RESET_CAPS` = `1` | drop the cached device capability matrix at launch |
 | `LL_VIEWER` = `1` \| `expanded` | open the newest photo/interval project's grading viewer on its hero frame |
 | `LL_CUSTOMISE` = `1` | expand the Customise grading panel on a video project's detail card |
 | `LL_AI` = *image path* | run one scene-analysis pass on that frame and log the result (`LL_AI_PLACE` / `LL_AI_LIGHT` set the context) — needs an installed model, so device/Mac only |
@@ -776,8 +857,10 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 | Task | Files |
 |---|---|
 | Blend math / engine | `Kit/Sources/LetsLapseKit/BlendRamp.swift`, `FrameAccumulator.swift`, `VideoBlender.swift`, `Metal/BlendKernels.metal` |
-| App state, persistence, jobs | `App/AppModel.swift` (single ~3,261-line source of truth) |
-| Camera behavior | `App/CameraController.swift` (~2,748), `App/CaptureView.swift` (~2,933), `App/LiveCaptureSequence.swift` |
+| App state, persistence, jobs | `App/AppModel.swift` (single ~4,700-line source of truth) |
+| The Adjust editor — time | `App/WarpTimeline.swift` (model + `WarpCompiler`), `App/WarpTimelineView.swift`, then `AppModel.updateWarp` / `compiledWarp()` |
+| The Adjust editor — space | `App/ReframeTrack.swift` (model + `ReframeMath`), `ReframeCanvasView.swift`, `ReframeLaneView.swift`, `ReframeVideoCropper.swift`, `VideoCanvasCropper.swift` |
+| Camera behavior | `App/CameraController.swift` (~3,500), `App/CaptureView.swift` (~3,100), `App/LiveCaptureSequence.swift` |
 | Colour grading | `App/PhotoPreset.swift`, `App/PhotoAdjustments.swift`, `App/VideoGrader.swift`, `App/CustomPreset.swift`, `App/PhotoViewerView.swift` |
 | Geotagging | `App/LocationService.swift`, `App/MovieLocation.swift`, `App/CLLocation+EXIF.swift`, `App/GPXWriter.swift` |
 | Burst slow-motion ramps | `App/BurstRamp.swift`, then `stitchVideos` in `App/AppModel.swift` |
@@ -806,12 +889,19 @@ Honest notes for whoever picks this up:
 - **ProRes format matching**: the format matcher filters on dimensions/fps/stabilization but does not re-check the ProRes flag, so selecting a ProRes entry can, in principle, land on a same-dimension non-ProRes format if one also matches.
 - **`WatchRecordingState` is defined twice** (once per side of the WatchConnectivity bridge, since only the key names are shared) — the two enums must be kept in sync manually.
 - **No thermal/battery throttling** anywhere; the only performance knobs are the macOS job runner's worker/batch budgets and `MediaWorkQueue`'s width. (Live Blend *reports* thermal state and learns from it (§5.5) but doesn't throttle mid-window; the capture benchmark is the only place that waits for cooling.)
-- **Processing checklist stages are cosmetic** — derived from progress thresholds, not real pipeline phases.
+- **Two tail passes borrow the `grading` phase.** The canvas crop and the punch-in reframe both set `processingPhase = .grading`, so the checklist reads "Applying the colour grade…" while they run (`statusMessage` is correct). The checklist needs its own case — the phases themselves are real, contrary to what this list used to say.
+- **The Advanced ramp silently voids the warp timeline and the reframe track.** With the ramp on, `compiledWarp()` returns nil and both are dropped from the render. Authoring either turns the ramp off, so the collision only arises if the ramp is switched on afterwards — at which point the reframe row still reads "3 keys", the canvas still previews the punch, and the only warning is a caption under the speed chips.
+- **Changing the canvas silently re-frames every reframe key.** Keys store centre + zoom against a canvas aspect; crops are re-derived and re-clamped at evaluation, so a punch composed flush to a subject at 16:9 drifts when switched to 9:16. `ReframeTrack.clamp(aspect:sourceSize:)` exists for exactly this and is **never called** — wire it up or state the consequence in the UI.
+- **The reframe canvas frames an approximate frame.** `WarpPreviewLoader` requests stills with infinite time tolerance (the nearest keyframe), which is right for a scrub thumbnail and wrong under a WYSIWYG crop box — you can compose a punch on a frame seconds away from the one that renders. Ask for exact frames while the lane is open.
+- **There is no motion preview of a reframe move**, so the only way to see one is to render the clip; and a reframe is a *second* full export of that clip (a third, with a grade). At `maxZoom = 6` on a 1080p source the kept region is 320 px wide, upscaled back — the badge shows the number, nothing warns.
+- **Move spans clamp silently.** A "~1s" move inside a fast stretch can render in a fraction of a frame and the pill still reads "~1s"; `BurstRamp` reports its identical clamp honestly ("capped to 0.62s") and the reframe should too. The full catalogue of reframe UX problems, with a triage table and the use-cases the feature should serve, is in `docs/overview-audit-2026-08-10.md` (Part C).
+- **Mouse-only Macs cannot punch in** — the reframe canvas offers pinch and drag only (trackpad pinch works; there is no slider, scroll-wheel or keyboard path).
 - **Interval capture silently discards** sessions with fewer than 2 photos.
 - **Interval DNG is iOS/iPadOS-only by SDK decree** (§6.1) — the Bayer RAW capture API is unavailable on macOS, so Macs always run the JPEG paths.
 - **The responsive-capture toggle can wedge the photo output** — reproducibly, after ~15 rapid RAW captures on iPhone 16 Pro (three benchmark runs). It ships off; if a user enables it and windows start failing, the run's three-consecutive-failure auto-stop is the backstop. The wedge clears on session reconfiguration.
 - **The benchmark's pipeline stage is a mirror, not the production function** — `CaptureBenchmark.runPipelineBody` replicates `LiveBlendRawController.processWindow` with finer clocks; a change to one must be made in both or the benchmark silently measures a stale pipeline.
 - **Debug builds inflate the DNG pipeline enormously** (mosaic ~150×, lossless-JPEG write ~30×; Swift bounds-checking in per-pixel loops). Device-representative numbers require a Release build — the shared scheme's Run action is currently set to Release for exactly this reason; flip it back to Debug when you need the debugger.
 - **Two preview sheets still coexist.** `FullscreenMediaSheet` (§4.8) is the intended one and owns project detail; the older `ProjectMediaPreviewSheet` survives in `ProjectsView` and `ResultView`. They should converge.
-- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, the CLI, `MacVideoJobRunner`, `LiveBlendController`, `LiveBlendRawController`, and the whole grading/thumbnail layer are untested at unit level — though the DNG pipeline's math and the GPS carriers are covered (§3.4, §6.6), the DNG real-file tests skipping without the local reference files.
-- The whole app is a strong proof-of-concept moving toward production: no onboarding, no iCloud/sync, no keyframe editing (deliberate), and store-readiness items (privacy strings, App Store assets) are not addressed in this document.
+- **Test gaps**: HEVC/ProRes/JPEG output paths, `ImageStacker.stackSequence`, `VideoBlender.customWindows`, the CLI, `MacVideoJobRunner`, `LiveBlendController`, `LiveBlendRawController`, and the whole grading/thumbnail layer are untested at unit level — though the DNG pipeline's math and the GPS carriers are covered (§3.4, §6.6), the DNG real-file tests skipping without the local reference files. There is no app-layer test target, so the Adjust editor's maths (`WarpCompiler`, `ReframeMath`) has no tests at all despite being pure functions.
+- **The Adjust card's design mirrors were rebuilt on 2026-08-10** — all five are now current and measured off the iPhone 16 simulator: `adjust.portrait.svg` and `adjust.zoomed.portrait.svg` redrawn (canvas menu, reframe row, removed source card, output-proportional bar, clip-time ruler), plus three new files for the punch-in reframe — `adjust.reframe.portrait.svg`, `adjust.reframe-draft.portrait.svg` and `adjust.reframe.landscape.svg` (the wide layout, standing for iPhone landscape, iPad and Mac). Two things were deliberately *not* tidied in the drawings because they are code fixes, not drawing errors: the draft chips colliding with the canvas badge and the minimap, and the move pills naming viewer-seconds a short clip cannot pay. Both are logged in the audit. **Every one of these five goes stale the moment the Part C fixes land**, so redraw after the UX settles, not before.
+- The whole app is a strong proof-of-concept moving toward production: no onboarding, no iCloud/sync, no stabilisation or subject tracking behind the reframe (every key is hand-placed), and store-readiness items (privacy strings, App Store assets) are not addressed in this document.
