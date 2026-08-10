@@ -218,14 +218,18 @@ final class CameraController: NSObject, ObservableObject {
     /// reports none, so this cache is what the DNG gate reads while the
     /// standard world is active. sessionQueue-confined.
     private var wideRAWProbe: (supported: Bool, sensor: CaptureResolution?) = (false, nil)
-    /// True while the session runs on the physical wide because the optics
-    /// device cannot shoot the requested rate — AVFoundation publishes the
-    /// fastest formats (4K 120) only on the physical constituents, never on a
-    /// virtual multi-cam device. Distinct from the DNG swap that shares the
-    /// same mechanism: this flag is what says the physical input is *ours* to
-    /// give back, so the two worlds never restore each other's input.
-    /// sessionQueue-confined.
-    private var usingPhysicalForHighFPS = false
+    /// Which burst rates each recording configuration can reach without the
+    /// framing changing, probed once at configure from format metadata and
+    /// cached across launches. Optional so a launch that somehow skipped the
+    /// probe falls back to the live format scan rather than showing no rates
+    /// at all. sessionQueue-confined.
+    private var capabilityMatrix: DeviceCapabilityMatrix?
+    /// The one lens a movie run records on, and the zoom factor that
+    /// reproduces the selected stop on it. Taken at `startRecording`, held
+    /// until `resetLiveCaptureState`. While it holds, nothing may swap the
+    /// session input or re-derive zoom in virtual-device factor space — a
+    /// shoot ends on the lens it started on. sessionQueue-confined.
+    private var sequenceLensPin: (device: AVCaptureDevice, zoomFactor: CGFloat)?
     /// Stop factor to restore once stops are derived (remembered settings).
     private var preferredStopFactor: Double?
     /// Last-applied "Enhanced lenses" setting, so reconcile re-derives when
@@ -252,11 +256,13 @@ final class CameraController: NSObject, ObservableObject {
     // 10/12/15 are acquisition rates for the blend pipeline: sparse temporal
     // sampling with up to a full-interval shutter, meant to be conformed or
     // blended rather than played as-is.
-    private static let preferredFrameRates = [10, 12, 15, 24, 25, 30, 50, 60, 100, 120, 240]
+    // Not private: `DeviceCapabilityMatrix.probe` reads formats with exactly
+    // these criteria, so the matrix and the live scan can never disagree.
+    static let preferredFrameRates = [10, 12, 15, 24, 25, 30, 50, 60, 100, 120, 240]
     private static let frameRateTolerance = 0.2
     /// ProRes codec subtypes (FourCC): 'apcn' 422, 'apch' 422 HQ,
     /// 'apcs' 422 LT, 'apco' 422 Proxy, 'ap4h' 4444, 'ap4x' 4444 XQ.
-    private static let proResFourCCs: Set<FourCharCode> = [
+    static let proResFourCCs: Set<FourCharCode> = [
         0x6170636e, 0x61706368, 0x61706373, 0x6170636f, 0x61703468, 0x61703478,
     ]
     private var activeSequence: LiveCaptureSequence?
@@ -311,6 +317,12 @@ final class CameraController: NSObject, ObservableObject {
     @Published var selectedResolution = CaptureResolution(width: 1920, height: 1080)
     @Published var availableFrameRates: [Int] = [30]
     @Published var selectedFrameRate = 30
+    /// Burst rates reachable from `selectedFrameRate` at `selectedResolution`
+    /// that keep the framing and the colour identical — a strict subset of
+    /// `availableFrameRates` above the base rate, narrowed by the capability
+    /// matrix. Not every faster format on the sensor qualifies: a different
+    /// field of view or codec would reframe the clip halfway through.
+    @Published var availableBurstFrameRates: [Int] = []
     @Published var selectedRampFrameRate = 120
     @Published var isVideoStabilizationEnabled = true
     @Published var videoStabilizationStatus = "Stabilization Auto"
@@ -652,6 +664,12 @@ final class CameraController: NSObject, ObservableObject {
             session.addOutput(photoOutput)
         }
         session.commitConfiguration()
+        // Format introspection only — no session work, no sensor swap — so it
+        // is safe here on the session queue before the session starts running.
+        // Everything downstream (`refreshCaptureOptions`) reads its answers.
+        capabilityMatrix = DeviceCapabilityMatrix.loadOrProbe(devices: allCaptureDevices())
+        LLog("capability matrix: \(capabilityMatrix?.validBurstRates.count ?? 0) configurations"
+             + " from \(allCaptureDevices().count) devices")
         #if os(iOS)
         if let optics { installConstituentLogging(on: optics) }
         #endif
@@ -661,6 +679,24 @@ final class CameraController: NSObject, ObservableObject {
         publishFormat()
         publishLiveBlendDNGSupport()
         LLog("configureIfNeeded: done, inputs=\(session.inputs.count) outputs=\(session.outputs.count)")
+    }
+
+    /// Every camera the app can record through: the optics device, plus its
+    /// physical constituents when it is a virtual multi-cam. The matrix needs
+    /// all of them because a run can be pinned to a constituent, and the
+    /// pickers must then describe that constituent's own formats.
+    private func allCaptureDevices() -> [AVCaptureDevice] {
+        guard let optics = opticsDevice else { return [] }
+        var devices = [optics]
+        #if os(iOS)
+        func append(_ device: AVCaptureDevice) {
+            guard !devices.contains(where: { $0.uniqueID == device.uniqueID }) else { return }
+            devices.append(device)
+        }
+        if optics.isVirtualDevice { optics.constituentDevices.forEach(append) }
+        if let wide = Self.physicalWide(of: optics) { append(wide) }
+        #endif
+        return devices
     }
 
     /// Bayer RAW formats offered by the photo output *in its current
@@ -834,31 +870,23 @@ final class CameraController: NSObject, ObservableObject {
     /// sessionQueue-confined: put the optics device back as the session's
     /// video input after DNG work ran on a physical constituent.
     private func restoreOpticsInputIfNeeded() {
-        guard let optics = opticsDevice else { return }
-        guard videoDevice !== optics else {
-            usingPhysicalForHighFPS = false
-            return
-        }
-        guard let input = try? AVCaptureDeviceInput(device: optics) else { return }
+        guard let optics = opticsDevice, videoDevice !== optics,
+              let input = try? AVCaptureDeviceInput(device: optics) else { return }
         session.beginConfiguration()
         if let videoInput { session.removeInput(videoInput) }
         if session.canAddInput(input) {
             session.addInput(input)
             videoInput = input
             videoDevice = optics
-            // Whatever the physical input was for, it is gone now.
-            usingPhysicalForHighFPS = false
         }
         session.commitConfiguration()
     }
 
     /// sessionQueue-confined: leave the DNG world — optics input back, then
-    /// the pinned video format re-asserted on whichever device can shoot it
-    /// (adding an input re-applies the session preset, so the pin never
-    /// survives a swap on its own).
+    /// the pinned video format re-asserted on it (adding an input re-applies
+    /// the session preset, so the pin never survives a swap on its own).
     private func restoreStandardCaptureFormat() {
         restoreOpticsInputIfNeeded()
-        prepareInputForFormat(resolution: selectedResolution, fps: selectedFrameRate)
         _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
     }
 
@@ -1106,49 +1134,151 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             RecordingSettingsStore.save(stopFactor: stop.displayFactor)
-            if self.usingPhysicalForHighFPS {
-                // The physical camera is standing in for a rate the optics
-                // device can't shoot, not serving DNG: a constituent swap
-                // would lose that rate, so the stop is honoured as a crop of
-                // the wide. (During a burst this never runs — recording
-                // gates the whole method.)
-                self.applyPhysicalWideZoom(stop)
-            } else if self.physicalWorldActive {
+            if self.physicalWorldActive {
                 self.selectPhysicalStop(stop)
             } else {
                 self.applyZoom(stop, animated: true)
+                // The burst menu is read from the lens this stop would pin to,
+                // so changing stops can change the answer (4K120 exists on the
+                // wide and not on the tele). Deferred past the ramp:
+                // `refreshCaptureOptions` re-applies `activeFormat`, which
+                // resets the zoom factor and would snap the animation.
+                self.sessionQueue.asyncAfter(deadline: .now() + 0.35) {
+                    guard !self.movieOutput.isRecording, self.intervalTimer == nil,
+                          !self.isLiveBlendActive else { return }
+                    self.refreshCaptureOptions()
+                }
             }
         }
     }
 
     #if os(iOS)
-    /// The zoom factor that reproduces `stop`'s framing on the physical wide.
-    /// Stops below 1× belong to a different camera entirely, so they clamp to
-    /// the wide's own framing — the one thing the stand-in cannot deliver.
-    private func wideZoomFactor(for stop: DerivedOpticsStop, on device: AVCaptureDevice) -> CGFloat {
-        min(max(CGFloat(stop.displayFactor), 1), device.activeFormat.videoMaxZoomFactor)
+    /// The physical constituent `stop` natively sits on, paired with the zoom
+    /// factor that reproduces the stop's framing there.
+    ///
+    /// Every stop is a crop of some optical stop: 5× is the tele at 1.0, the
+    /// 2× sensor crop is the wide at 2.0 (which is where the quad-Bayer
+    /// readout lives on the wide too), a digital 10× is the tele at 2.0. So
+    /// the answer is the nearest optical stop at or below this one, and the
+    /// ratio between them.
+    private func physicalLens(
+        for stop: DerivedOpticsStop
+    ) -> (device: AVCaptureDevice, zoomFactor: CGFloat)? {
+        guard let optics = opticsDevice, optics.isVirtualDevice else { return nil }
+        let optical = fullStops
+            .filter { $0.kind == .optical }
+            .sorted { $0.displayFactor < $1.displayFactor }
+        // 5% of slack, matching the derivation's own duplicate tolerance, so a
+        // stop that IS an optical stop can't fall to the one below it.
+        guard let native = optical.last(where: { $0.displayFactor <= stop.displayFactor * 1.05 })
+                ?? optical.first,
+              native.displayFactor > 0,
+              let device = optics.constituentDevices
+                .first(where: { $0.deviceType.rawValue == native.expectedBacking })
+        else { return nil }
+        return (device, CGFloat(max(stop.displayFactor / native.displayFactor, 1)))
     }
-    #endif
 
-    /// sessionQueue-confined: honour a stop while the physical wide stands in
-    /// for a physical-only frame rate — a crop of the wide, not a lens change.
-    private func applyPhysicalWideZoom(_ stop: DerivedOpticsStop) {
-        #if os(iOS)
-        guard let device = videoDevice else { return }
-        do {
-            try device.lockForConfiguration()
-            device.videoZoomFactor = wideZoomFactor(for: stop, on: device)
-            device.unlockForConfiguration()
-        } catch {
-            LLog("optics: high-fps zoom to \(stop.chipLabel) failed: \(error.localizedDescription)")
+    /// sessionQueue-confined. Decides the run's lens once, before the first
+    /// segment, and puts the session on it for the whole shoot.
+    ///
+    /// Segments re-set `activeFormat` between them, and on a virtual device
+    /// that resets `videoZoomFactor` to 1 — the widest constituent. Getting
+    /// back to the stop is a constituent hand-off, and `startNextSegment`
+    /// starts the movie output straight into it. When the hand-off loses that
+    /// race the whole segment records as a digital crop of the wrong lens:
+    /// the 2026-08-06 report is one 5× take that shot segment 000 on the
+    /// tele, 001 as a 5× crop of the wide (the physical-only burst rate), and
+    /// 002 as a ~9× crop of the ultra-wide for its full 39 s — three lenses,
+    /// two visible reframes, and a collapse in detail.
+    ///
+    /// Pinning the stop's own physical constituent removes the race and the
+    /// stand-in swap together: no segment boundary can change the optical
+    /// axis, because there is only ever one lens in the session. The stop is
+    /// served as a crop of that lens, which is what it already was.
+    ///
+    /// Declines — loudly — when the lens can't shoot every rate the run needs
+    /// at the locked resolution. A run that would have to drop the burst rate
+    /// or the resolution is worse than one that keeps the old behaviour.
+    private func pinLensForSequence(rates: [Int]) {
+        // DNG owns the input while it is armed or running; the pin never
+        // takes it from another world.
+        guard sequenceLensPin == nil,
+              !dngWorldActive,
+              !physicalWorldActive,
+              let stop = currentStop,
+              let lens = physicalLens(for: stop)
+        else { return }
+        guard lens.device !== videoDevice else {
+            sequenceLensPin = lens
+            LLog("optics: run already on \(lens.device.localizedName) — pinned there")
             return
         }
-        #endif
-        currentStop = stop
-        DispatchQueue.main.async {
-            if self.selectedStop != stop { self.selectedStop = stop }
+
+        let name = lens.device.localizedName
+        for fps in Set(rates)
+        where captureFormatMatch(for: lens.device, resolution: selectedResolution, fps: fps) == nil {
+            LLog("optics: \(name) cannot shoot \(selectedResolution.label)@\(fps)"
+                 + " — run stays on the optics device, lens may change mid-shoot")
+            return
+        }
+        guard let input = try? AVCaptureDeviceInput(device: lens.device) else { return }
+
+        session.beginConfiguration()
+        let previousInput = videoInput
+        if let previousInput { session.removeInput(previousInput) }
+        if session.canAddInput(input) {
+            session.addInput(input)
+            videoInput = input
+            videoDevice = lens.device
+            sequenceLensPin = lens
+        } else if let previousInput {
+            session.addInput(previousInput)
+        }
+        session.commitConfiguration()
+
+        guard sequenceLensPin != nil else { return }
+        LLog("optics: run pinned to \(name) at zoom "
+             + "\(String(format: "%.2f", lens.zoomFactor)) for \(Set(rates).sorted())")
+    }
+
+    /// sessionQueue-confined. Hands the optics device back once the run that
+    /// pinned a lens is over, and re-pins the resting format on it.
+    private func releaseSequenceLensPin() {
+        guard sequenceLensPin != nil else { return }
+        sequenceLensPin = nil
+        restoreOpticsInputIfNeeded()
+        _ = applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+        LLog("optics: run lens pin released")
+    }
+
+    /// sessionQueue-confined. Bounded wait for a virtual device to finish
+    /// handing the framing to the constituent the stop belongs on.
+    ///
+    /// Only reachable when a run declined to pin a lens (single-camera
+    /// hardware, or a lens that can't shoot the run's rates). There the
+    /// hand-off race is still live, so a segment waits for it rather than
+    /// recording minutes of upscaled ultra-wide. Half a second is longer than
+    /// any hand-off observed and short against a segment; past it the segment
+    /// starts anyway and says what it started on.
+    private func awaitConstituentSettle() {
+        guard sequenceLensPin == nil,
+              let device = videoDevice, device.isVirtualDevice,
+              let stop = currentStop,
+              let expected = physicalDevice(for: stop),
+              device.activePrimaryConstituent !== expected
+        else { return }
+        let deadline = Date().addingTimeInterval(0.5)
+        while device.activePrimaryConstituent !== expected, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        let landed = device.activePrimaryConstituent
+        if landed !== expected {
+            LLog("optics: segment starts on \(landed?.deviceType.rawValue ?? "none"),"
+                 + " not \(expected.deviceType.rawValue) — hand-off did not settle")
         }
     }
+    #endif
 
     /// sessionQueue-confined. Rate 8 (powers of two per second) crosses the
     /// 1×→5× jump in ~0.29 s — the native app's kind of snap.
@@ -1288,21 +1418,47 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// The device a run started right now would actually shoot on — which is
+    /// what the burst menu has to describe.
+    ///
+    /// `pinLensForSequence` puts every standard-world run on the stop's own
+    /// physical constituent, so the rates that matter are that lens's, not the
+    /// virtual device's. Apple publishes no 4K120 format on
+    /// `builtInTripleCamera` at all, so reading the burst list off the optics
+    /// device hid the wide's 4K120 from the picker on every iPhone that has it.
+    /// The DNG and physical worlds own the input themselves (and the pin
+    /// declines there), so they keep reading whatever is genuinely in the
+    /// session.
+    private func effectiveRecordingDevice(for stop: DerivedOpticsStop?) -> AVCaptureDevice? {
+        #if os(iOS)
+        if let optics = opticsDevice, optics.isVirtualDevice,
+           !dngWorldActive, !physicalWorldActive,
+           let stop, let lens = physicalLens(for: stop) {
+            return lens.device
+        }
+        #endif
+        return videoDevice
+    }
+
     private func refreshCaptureOptions(
         preferredResolution: CaptureResolution? = nil,
         preferredFrameRate: Int? = nil
     ) {
         guard let device = videoDevice else { return }
-        // While the physical wide stands in for a physical-only rate, the
-        // menus must still describe the optics device (whose scan already
-        // unions the wide's formats) — reading the stand-in would narrow them
-        // to its own list mid-session.
-        let listDevice = usingPhysicalForHighFPS ? (opticsDevice ?? device) : device
+        // While a run is pinned to one physical lens the menus must still
+        // describe the optics device — reading the pinned constituent would
+        // narrow them to its own list mid-session.
+        #if os(iOS)
+        let listDevice = sequenceLensPin != nil ? (opticsDevice ?? device) : device
+        #else
+        let listDevice = device
+        #endif
         let supportedRates = supportedFrameRatesByResolution(for: listDevice)
         guard !supportedRates.isEmpty else {
             DispatchQueue.main.async {
                 self.availableResolutions = []
                 self.availableFrameRates = []
+                self.availableBurstFrameRates = []
             }
             return
         }
@@ -1317,16 +1473,27 @@ final class CameraController: NSObject, ObservableObject {
         let resolution = resolutions.first { $0 == desiredResolution }
             ?? resolutions.first { $0.width == 1920 && $0.height == 1080 }
             ?? resolutions[0]
-        let frameRates = Array(supportedRates[resolution] ?? [30]).sorted()
+        let rateSet = supportedRates[resolution] ?? [30]
+        let frameRates = Array(rateSet).sorted()
         let desiredFrameRate = preferredFrameRate ?? selectedFrameRate
         let frameRate = frameRates.contains(desiredFrameRate)
             ? desiredFrameRate
             : nearestFrameRate(to: desiredFrameRate, in: frameRates)
-        let rampFrameRate = frameRates.contains(selectedRampFrameRate)
+        // The burst menu is the matrix's answer, not "everything faster":
+        // a faster format on a different optic (or codec) would reframe the
+        // clip at the segment boundary. Unlike the base-rate menu it is asked
+        // of the lens the run would pin to, not the optics device — see
+        // `effectiveRecordingDevice`.
+        let burstDevice = effectiveRecordingDevice(for: currentStop) ?? listDevice
+        let burstRates = burstFrameRates(
+            for: burstDevice,
+            resolution: resolution,
+            baseFrameRate: frameRate,
+            allRates: rateSet)
+        let rampFrameRate = burstRates.contains(selectedRampFrameRate)
             ? selectedRampFrameRate
-            : nearestRampFrameRate(from: frameRate, in: frameRates)
+            : (burstRates.first ?? selectedRampFrameRate)
 
-        prepareInputForFormat(resolution: resolution, fps: frameRate)
         _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
         RecordingSettingsStore.save(
             resolution: resolution,
@@ -1338,13 +1505,31 @@ final class CameraController: NSObject, ObservableObject {
             self.selectedResolution = resolution
             self.availableFrameRates = frameRates
             self.selectedFrameRate = frameRate
+            self.availableBurstFrameRates = burstRates
             self.selectedRampFrameRate = rampFrameRate
         }
     }
 
+    /// The resolution → base-frame-rate map the pickers list, from the
+    /// capability matrix when it has been probed (the stabilization filter
+    /// this used to apply per format is one of the matrix's key fields now).
+    /// The live format scan stays as the fallback for a controller whose
+    /// `configure()` hasn't run.
     private func supportedFrameRatesByResolution(
         for device: AVCaptureDevice
     ) -> [CaptureResolution: Set<Int>] {
+        if let matrix = capabilityMatrix {
+            let rates = matrix.supportedFrameRatesByResolution(
+                forDeviceType: device.deviceType.rawValue,
+                stabilizationEnabled: videoStabilizationRequested,
+                // The base-rate menu has never been filtered by Capture Flat:
+                // `applyCaptureFormat` falls back to sRGB on a format without
+                // Apple Log rather than refusing it. Only the burst lookup
+                // demands Apple Log, where losing it mid-clip would be a
+                // colour shift partway through one finished clip.
+                appleLogEnabled: false)
+            if !rates.isEmpty { return rates }
+        }
         var supportedRates: [CaptureResolution: Set<Int>] = [:]
         var candidateFrameRates = Self.preferredFrameRates
         if let custom = RecordingSettingsStore.customFrameRate,
@@ -1352,20 +1537,34 @@ final class CameraController: NSObject, ObservableObject {
             candidateFrameRates.append(custom)
         }
         accumulateFrameRates(from: device, candidates: candidateFrameRates, into: &supportedRates)
-        #if os(iOS)
-        // The fastest formats (4K 120) exist only on the physical
-        // constituents — AVFoundation never publishes them on a virtual
-        // multi-cam device, so scanning the optics device alone tops 4K out
-        // at 60 (the regression 7c70e88 introduced when recording moved to
-        // the triple camera for continuous zoom). The rates are real
-        // hardware capabilities, so they belong in the menus; capture swaps
-        // the session to the physical wide for as long as one is pinned
-        // (`prepareInputForFormat`).
-        if device.isVirtualDevice, let wide = Self.physicalWide(of: device), wide !== device {
-            accumulateFrameRates(from: wide, candidates: candidateFrameRates, into: &supportedRates)
-        }
-        #endif
         return supportedRates
+    }
+
+    /// Burst rates reachable from `baseFrameRate` at `resolution` without the
+    /// framing or the colour changing — the matrix's whole reason to exist.
+    /// Falls back to "everything faster at this resolution" (the pre-matrix
+    /// behaviour) when the probe hasn't run.
+    private func burstFrameRates(
+        for device: AVCaptureDevice,
+        resolution: CaptureResolution,
+        baseFrameRate: Int,
+        allRates: Set<Int>
+    ) -> [Int] {
+        #if os(iOS)
+        let logRequested = appleLogEnabled
+        #else
+        let logRequested = false
+        #endif
+        if let matrix = capabilityMatrix,
+           let rates = matrix.validBurstRates(
+                for: device,
+                resolution: resolution,
+                stabilizationEnabled: videoStabilizationRequested,
+                appleLogEnabled: logRequested,
+                baseFPS: baseFrameRate) {
+            return rates
+        }
+        return allRates.filter { $0 > baseFrameRate }.sorted()
     }
 
     /// Folds one device's formats into the resolution → frame-rate map.
@@ -1398,7 +1597,7 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    private static func supportedFrameRates(
+    static func supportedFrameRates(
         for format: AVCaptureDevice.Format,
         candidates: [Int]
     ) -> Set<Int> {
@@ -1428,76 +1627,20 @@ final class CameraController: NSObject, ObservableObject {
         } ?? frameRates[0]
     }
 
-    private func nearestRampFrameRate(from baseFrameRate: Int, in frameRates: [Int]) -> Int {
-        frameRates
-            .filter { $0 > baseFrameRate }
-            .sorted()
-            .first ?? frameRates.last ?? baseFrameRate
-    }
-
     func selectRampFrameRate(_ fps: Int) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
-            let frameRate = self.availableFrameRates.contains(fps)
+            // Only a composition-safe rate can be selected: anything else
+            // would swap the optic (or the codec) mid-clip.
+            let safeRates = self.availableBurstFrameRates
+            let frameRate = safeRates.contains(fps)
                 ? fps
-                : self.nearestRampFrameRate(from: self.selectedFrameRate, in: self.availableFrameRates)
+                : (safeRates.first ?? self.selectedFrameRate)
             RecordingSettingsStore.save(rampFrameRate: frameRate)
             DispatchQueue.main.async {
                 self.selectedRampFrameRate = frameRate
             }
         }
-    }
-
-    /// sessionQueue-confined. Puts the session on a device that can actually
-    /// shoot `resolution` at `fps`: the optics device whenever it can — it is
-    /// the only one with continuous zoom across the lenses — otherwise the
-    /// physical wide, whose formats the pickers already advertise. The input
-    /// swap mirrors the DNG path exactly; `usingPhysicalForHighFPS` marks it
-    /// as ours so the two never restore each other's input.
-    ///
-    /// No-op unless the requested combination genuinely needs the physical
-    /// camera, so the standard world keeps the virtual device (and its
-    /// cross-lens zoom) for every rate the hardware publishes on it.
-    private func prepareInputForFormat(resolution: CaptureResolution, fps: Int) {
-        #if os(iOS)
-        // DNG owns the input while it is armed or running, and no swap is
-        // ever safe mid-take.
-        guard !dngWorldActive, !isLiveBlendActive, !movieOutput.isRecording,
-              let optics = opticsDevice else { return }
-        if captureFormatMatch(for: optics, resolution: resolution, fps: fps) != nil {
-            restoreOpticsAfterHighFPS(resolution: resolution, fps: fps)
-            return
-        }
-        guard optics.isVirtualDevice,
-              !physicalWorldActive || usingPhysicalForHighFPS,
-              let wide = Self.physicalWide(of: optics), wide !== optics,
-              videoDevice !== wide,
-              captureFormatMatch(for: wide, resolution: resolution, fps: fps) != nil,
-              let input = try? AVCaptureDeviceInput(device: wide)
-        else { return }
-        session.beginConfiguration()
-        if let videoInput { session.removeInput(videoInput) }
-        if session.canAddInput(input) {
-            session.addInput(input)
-            videoInput = input
-            videoDevice = wide
-            usingPhysicalForHighFPS = true
-        }
-        session.commitConfiguration()
-        LLog("optics: \(resolution.label)@\(fps) is physical-only — session on \(wide.localizedName)")
-        #else
-        _ = (resolution, fps)
-        #endif
-    }
-
-    /// sessionQueue-confined: hand the optics device back once a
-    /// physical-only rate is no longer pinned, and re-assert the format on it
-    /// (adding an input re-applies the session preset, so the pin has to be
-    /// made again — the DNG restore does the same).
-    private func restoreOpticsAfterHighFPS(resolution: CaptureResolution, fps: Int) {
-        guard usingPhysicalForHighFPS else { return }
-        restoreOpticsInputIfNeeded()
-        _ = applyCaptureFormat(resolution: resolution, fps: fps)
     }
 
     @discardableResult
@@ -1523,15 +1666,14 @@ final class CameraController: NSObject, ObservableObject {
             // Setting `activeFormat` also resets `videoZoomFactor` to 1 —
             // re-assert the selected stop so a format change (resolution,
             // fps, a ramp-burst segment) never silently jumps the framing.
-            if !physicalWorldActive, let stop = currentStop {
+            if let pin = sequenceLensPin, device === pin.device {
+                // Pinned run: the stop is a crop of this one lens, and the
+                // factor was worked out in that lens's own space at pin time.
+                device.videoZoomFactor = min(
+                    pin.zoomFactor, device.activeFormat.videoMaxZoomFactor)
+            } else if !physicalWorldActive, let stop = currentStop {
                 device.videoZoomFactor = min(
                     CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
-            } else if usingPhysicalForHighFPS, let stop = currentStop {
-                // Standing in on the physical wide: the user-facing factor IS
-                // the zoom factor there (the wide's native framing is 1×), so
-                // the selected stop survives the swap as a crop of the wide
-                // rather than snapping the framing back to 1×.
-                device.videoZoomFactor = wideZoomFactor(for: stop, on: device)
             }
             // Setting `activeFormat` resets the device to its default colour
             // space, so re-assert Apple Log if Capture Flat is on and the new
@@ -2042,6 +2184,12 @@ final class CameraController: NSObject, ObservableObject {
             // One orientation per sequence: every segment records with the
             // pose the run started in (see activeSequenceOrientation).
             self.activeSequenceOrientation = self.captureOrientation()
+            // One lens per sequence, alongside one orientation per sequence:
+            // decided here from every rate the run can reach, held to the last
+            // segment (see pinLensForSequence).
+            var runRates = [baseFrameRate]
+            if mode == .ramp { runRates.append(self.selectedRampFrameRate) }
+            self.pinLensForSequence(rates: runRates)
             #endif
             self.startNextSegment(frameRate: self.selectedFrameRate)
             DispatchQueue.main.async {
@@ -2236,11 +2384,10 @@ final class CameraController: NSObject, ObservableObject {
 
     private func startNextSegment(frameRate: Int) {
         guard let directory = activeSequenceDirectory else { return }
-        // A burst rate the virtual device doesn't publish (4K 120) records
-        // through the physical wide for the length of the burst; the base
-        // rate that follows hands the optics device straight back. Both run
-        // between segments, where the movie output is idle.
-        prepareInputForFormat(resolution: selectedResolution, fps: frameRate)
+        // Every segment records on the device the run started on: the burst
+        // rate is a format change, never an input change. The rates the picker
+        // offers are exactly the ones this device can shoot without one (see
+        // DeviceCapabilityMatrix).
         _ = applyCaptureFormat(resolution: selectedResolution, fps: frameRate)
         #if os(iOS)
         // A new segment reuses the movie output connection; re-assert the
@@ -2253,6 +2400,12 @@ final class CameraController: NSObject, ObservableObject {
         #endif
         applyVideoStabilization()
         publishFormat()
+
+        #if os(iOS)
+        // Unpinned runs only: don't start recording into a constituent
+        // hand-off that hasn't landed yet.
+        awaitConstituentSettle()
+        #endif
 
         let index = segmentURLs.count
         let url = directory.appendingPathComponent(String(format: "segment-%03d.mov", index))
@@ -2337,12 +2490,11 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     private func resetLiveCaptureState() {
-        // A run that ended mid-burst (stopped there, or discarded) leaves the
-        // session on the physical wide — hand the optics device back before
-        // the resting format is re-pinned.
-        restoreOpticsAfterHighFPS(
-            resolution: selectedResolution,
-            fps: activeSequence?.baseFrameRate ?? selectedFrameRate)
+        // A run that pinned a lens leaves the session on that constituent —
+        // hand the optics device back before the resting format is re-pinned.
+        #if os(iOS)
+        releaseSequenceLensPin()
+        #endif
         restoreBaseFrameRateIfNeeded()
         timedBurstGeneration += 1
         activeSequence = nil

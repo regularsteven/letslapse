@@ -8,6 +8,17 @@ struct LetsLapseApp: App {
     init() {
         Self.quietenMetalShaderCompiler()
 
+        #if DEBUG
+        // LL_RESET_CAPS=1 — drop the cached device capability matrix before
+        // anything can read it, so a tester can force a fresh format probe
+        // without reinstalling the app. Here rather than in
+        // `applyUIPreviewHooks` because `CameraController.configure()` loads
+        // the cache as soon as the camera appears.
+        if let reset = ProcessInfo.processInfo.environment["LL_RESET_CAPS"], reset != "0" {
+            DeviceCapabilityMatrix.invalidateCache()
+        }
+        #endif
+
         #if os(iOS)
         // Activate in init, not view onAppear: when the Watch messages a
         // not-running phone app, iOS launches it in the background to deliver —
@@ -194,13 +205,23 @@ struct ContentView: View {
         #endif
     }
 
-    /// The mark has settled — cross-fade it away and let the app take over.
+    /// The mark has settled — hand over to the app.
     private func finishLaunch() {
         guard showLaunch else { return }
-        withAnimation(.easeOut(duration: 0.3)) { showLaunch = false }
         #if os(iOS)
-        openCameraOnLaunch()
+        // Let the camera slide up *over* a still-opaque field, then drop the
+        // field once it is hidden behind the cover. Cross-fading the field out
+        // instead exposes the light Create screen underneath for a few frames —
+        // the very white flash this screen exists to remove — and racing the
+        // presentation with `disablesAnimations` does not win reliably, because
+        // the cover is a UIKit presentation and takes its own frames to land.
+        // Holding past the animation is the version with no race in it.
+        if openCameraOnLaunch() {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { showLaunch = false }
+            return
+        }
         #endif
+        withAnimation(.easeOut(duration: 0.3)) { showLaunch = false }
     }
 
     #if os(iOS)
@@ -215,15 +236,18 @@ struct ContentView: View {
 
     /// Create is the launch tab and its purpose is the camera, so present it on
     /// first appear too — but never when a DEBUG preview hook is steering the
-    /// app to a specific screen for screenshots.
-    private func openCameraOnLaunch() {
+    /// app to a specific screen for screenshots. Reports whether it opened, so
+    /// the launch screen knows whether it has something to hand off to.
+    @discardableResult
+    private func openCameraOnLaunch() -> Bool {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
         let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME"]
-        if hookKeys.contains(where: { environment[$0] != nil }) { return }
+        if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
-        guard selectedTab == .create else { return }
+        guard selectedTab == .create, model.stage == .home else { return false }
         openCameraForCreateTab()
+        return true
     }
     #endif
 

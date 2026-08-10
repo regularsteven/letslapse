@@ -1,11 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Collections · export progress · portrait</title>
-  <desc>Mirrors App/CollectionExportView.swift (CollectionExportProgressView) + App/CollectionExporter.swift: the app's Processing pattern reused for a collection export — a fullscreen cover with the first clip's thumbnail blurred and dimmed under a 92pt amber progress ring (white 20% track, monospaced % label, black 35% backing circle), then the four-phase checklist card: Preparing clips ✓ · Cropping &amp; scaling (active amber dot, monospaced "1 / 3" detail = which clip the export session's head is inside) · Combining 3 clips ○ · Saving to collection ○. Status line beneath ("About 55 seconds left · Clip 1 of 3" — honest ETA from session progress; "Getting started…" before it stabilises, "Combining 3 clips…" while the writer finalises, "Almost done" while saving). Cancel (LLSecondaryButtonStyle, red) with "Cancelling keeps your collection — nothing is lost." — cancel really cancels (session.cancelExport, scratch deleted, collection untouched). The render runs at the canvas ratio's export resolution; a valid kept render (recipe unchanged, file on disk) skips this screen entirely and lands on the result.</desc>
+  <desc>Mirrors App/CollectionExportView.swift (CollectionExportProgressView) + App/CollectionExporter.swift: the app's Processing pattern reused for a collection export — a fullscreen cover with the first clip's thumbnail blurred and dimmed (55%) under the shared 120pt rig gauge — `LLRigProgress`, the same component Processing uses, with the percentage reading out inside the mark's lens over a soft radial vignette. The two screens carried byte-identical copies of the old 92pt amber ring; extracting the gauge removed the duplication. See processing.portrait.svg for the notes on why the arc is an indeterminate sweep and why 120pt is the floor. Then the four-phase checklist card: Preparing clips ✓ · Cropping &amp; scaling (active amber dot, monospaced "1 / 3" detail = which clip the export session's head is inside) · Combining 3 clips ○ · Saving to collection ○. Status line beneath ("About 55 seconds left · Clip 1 of 3" — honest ETA from session progress; "Getting started…" before it stabilises, "Combining 3 clips…" while the writer finalises, "Almost done" while saving). Cancel (LLSecondaryButtonStyle, red) with "Cancelling keeps your collection — nothing is lost." — cancel really cancels (session.cancelExport, scratch deleted, collection untouched). The render runs at the canvas ratio's export resolution; a valid kept render (recipe unchanged, file on disk) skips this screen entirely and lands on the result.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
     <filter id="blur"><feGaussianBlur stdDeviation="6"/></filter>
     <linearGradient id="clipB" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#4A5A43"/><stop offset="1" stop-color="#232E1D"/></linearGradient>
+    <radialGradient id="vignette" cx="196.5" cy="229" r="93.6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#000" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="markGlow" cx="512" cy="486" r="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F0A32C" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0A32C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="markPipe" x1="190.4" y1="84" x2="833.6" y2="888" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E9EEF6"/>
+      <stop offset="0.45" stop-color="#BAC6D8"/>
+      <stop offset="1" stop-color="#7C8CA5"/>
+    </linearGradient>
+    <linearGradient id="markBoard" x1="242" y1="234" x2="458" y2="690" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E2E4E"/>
+      <stop offset="1" stop-color="#04101F"/>
+    </linearGradient>
+    <linearGradient id="markLens" x1="478" y1="279" x2="478" y2="625" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E1C48"/>
+      <stop offset="0.26" stop-color="#4A4A93"/>
+      <stop offset="0.42" stop-color="#150332"/>
+      <stop offset="0.72" stop-color="#0C0322"/>
+      <stop offset="1" stop-color="#001C4C"/>
+    </linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
 
@@ -27,13 +52,42 @@
         <clipPath id="hero-clip"><rect x="16" y="99" width="361" height="260" rx="20"/></clipPath>
         <g clip-path="url(#hero-clip)">
           <rect x="16" y="99" width="361" height="260" fill="url(#clipB)" filter="url(#blur)"/>
-          <rect x="16" y="99" width="361" height="260" fill="#000" opacity="0.45"/>
+          <rect x="16" y="99" width="361" height="260" fill="#000" opacity="0.55"/>
         </g>
-        <circle cx="196.5" cy="229" r="54" fill="#000" opacity="0.35"/>
-        <circle cx="196.5" cy="229" r="46" fill="none" stroke="#FFF" stroke-opacity="0.2" stroke-width="8"/>
-        <!-- 17% arc -->
-        <path d="M196.5 183 a46 46 0 0 1 40.6 22.5" fill="none" stroke="#FFB340" stroke-width="8" stroke-linecap="round"/>
-        <text x="196.5" y="235" font-size="17" class="b" fill="#FFF" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Menlo, monospace">17%</text>
+        <!-- Same 120pt rig gauge as Processing — one LLRigProgress, two screens.
+             See processing.portrait.svg for the full notes on it. -->
+        <g id="progress-mark">
+          <circle cx="196.5" cy="229" r="93.6" fill="url(#vignette)"/>
+          <g transform="translate(136.5,169) scale(0.1171875)">
+            <circle cx="512" cy="486" r="440" fill="url(#markGlow)"/>
+            <g transform="rotate(-5 512 486)">
+              <rect x="281" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+              <rect x="269" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+              <rect x="709" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+              <rect x="697" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+            </g>
+            <circle cx="512" cy="486" r="402" fill="url(#markPipe)"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#6E7F99" stroke-width="9"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="24 76" opacity="0.28" transform="rotate(-95 512 486)"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="18 82" transform="rotate(-95 512 486)"/>
+            <g transform="rotate(-5 512 486)">
+              <rect x="340" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+              <rect x="325" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+              <rect x="636" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+              <rect x="621" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+              <rect x="242" y="234" width="540" height="456" rx="18" fill="url(#markBoard)"/>
+              <rect x="242" y="234" width="540" height="456" rx="18" fill="none" stroke="#245A85" stroke-width="7"/>
+              <rect x="274" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="718" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="718" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="274" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+            </g>
+            <circle cx="478" cy="452" r="196" fill="none" stroke="#F0A32C" stroke-width="14"/>
+            <circle cx="478" cy="452" r="173" fill="#02040C"/>
+            <circle cx="478" cy="452" r="173" fill="url(#markLens)" opacity="0.55"/>
+          </g>
+          <text x="192.5" y="227.4" font-size="15.6" font-weight="600" fill="#F0A32C" text-anchor="middle">17<tspan font-size="8.4" fill="#8A9AB5"> %</tspan></text>
+        </g>
       </g>
 
       <!-- phase checklist -->

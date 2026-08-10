@@ -2765,7 +2765,7 @@ private struct FormatSheet: View {
                 if mode == .video {
                     Section {
                         Picker("Speed bursts", selection: $sequenceMode) {
-                            Text("Switch sensor rate").tag(LiveCaptureSequence.Mode.ramp)
+                            Text("Switch frame rate").tag(LiveCaptureSequence.Mode.ramp)
                             Text("Mark intervals only").tag(LiveCaptureSequence.Mode.marker)
                         }
 
@@ -2783,8 +2783,8 @@ private struct FormatSheet: View {
                         Text("Speed bursts")
                     } footer: {
                         Text(sequenceMode == .ramp
-                             ? "While recording, the burst button (and Apple Watch) switches the sensor to the burst rate — those moments stay slow and sharp in the final clip."
-                             : "Marked intervals keep their real speed in the final clip; the sensor rate never changes.")
+                             ? "While recording, the burst button (and Apple Watch) switches to the burst frame rate — those moments stay slow and sharp in the final clip. The lens never changes."
+                             : "Marked intervals keep their real speed in the final clip; the frame rate never changes.")
                     }
                 }
             }
@@ -2804,7 +2804,10 @@ private struct FormatSheet: View {
     }
 
     private var rampRates: [Int] {
-        let higher = camera.availableFrameRates.filter { $0 > camera.selectedFrameRate }
+        // Not every rate above the base is offerable: the capability matrix
+        // has already dropped the ones that would change optic or codec
+        // between segments (see CameraController.availableBurstFrameRates).
+        let higher = camera.availableBurstFrameRates
         return higher.isEmpty ? [camera.selectedRampFrameRate] : higher
     }
 }

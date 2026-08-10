@@ -1,11 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Processing · portrait</title>
-  <desc>Mirrors App/ProcessingView.swift: blurred source preview with amber progress ring, four-stage checklist (Preparing footage ✓ · Blending frames ● with live counts · Encoding video ○ · Saving to project ○), ETA line, red-tinted Cancel with reassurance caption. Flow screen — no tab bar. The ring is ONE monotonic global bar for the whole run: a multi-clip project's bar is partitioned by each clip's frame count (BlendProgressPlan bands), then stitch/grade-bake export bands, then save to 100% — it never resets per clip. The checklist follows AppModel.processingPhase (explicit pipeline state), not progress thresholds, so each stage ticks exactly once. Blending counts are whole-run frames done/total on both platforms. ETA line states: while blending a multi-clip project it suffixes the clip position ("About 4 minutes left · Clip 2 of 5"); when a phase has no honest countdown yet it shows the phase label instead — "Blending clip 2 of 5...", "Combining 5 clips..." (stitch export), "Applying the colour grade..." (grade-bake export), "Almost done" (saving). Never blank, never a raw engine log line.</desc>
+  <desc>Mirrors App/ProcessingView.swift + App/LLRigProgress.swift: blurred source preview under the 120pt rig gauge (App/LLRigMark.swift, style .gauge, sweep on) — the LetsLapse mark with the percentage reading out INSIDE its lens, replacing the old 92pt Circle().trim ring. Shared with Collections export (collection-export.portrait.svg); the two screens used to carry byte-identical copies of the ring. Three things to know about it: the arc around the pipe is an indeterminate SWEEP on a 1.70s cycle, not a determinate fill — the design deliberately moves the resolution into the number and lets the sweep keep the motion honest between progress updates, with the checklist, frame counts and ETA below carrying the rest of the state; the size floor is 120pt, because the lens is only 34% of the mark's width and the digits stop being legible below it; and the mark keeps its OWN palette (amber #F0A32C is the app icon's, not LL.amber #FFB340) while every other element on this screen stays on LL tokens. The old hard black-35% backing disc is gone in favour of a soft radial vignette — a cut edge around a mark that has its own silver body read as a sticker over footage — and the preview scrim went 45% → 55% so the silver pipe holds against a bright frame. Four-stage checklist (Preparing footage ✓ · Blending frames ● with live counts · Encoding video ○ · Saving to project ○), ETA line, red-tinted Cancel with reassurance caption. Flow screen — no tab bar. The ring is ONE monotonic global bar for the whole run: a multi-clip project's bar is partitioned by each clip's frame count (BlendProgressPlan bands), then stitch/grade-bake export bands, then save to 100% — it never resets per clip. The checklist follows AppModel.processingPhase (explicit pipeline state), not progress thresholds, so each stage ticks exactly once. Blending counts are whole-run frames done/total on both platforms. ETA line states: while blending a multi-clip project it suffixes the clip position ("About 4 minutes left · Clip 2 of 5"); when a phase has no honest countdown yet it shows the phase label instead — "Blending clip 2 of 5...", "Combining 5 clips..." (stitch export), "Applying the colour grade..." (grade-bake export), "Almost done" (saving). Never blank, never a raw engine log line.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="prev"><rect x="16" y="107" width="361" height="260" rx="20"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
     <filter id="blur2"><feGaussianBlur stdDeviation="2.5"/></filter>
+    <radialGradient id="vignette" cx="196.5" cy="237" r="93.6" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#000" stop-opacity="0.55"/>
+      <stop offset="0.55" stop-color="#000" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#000" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="markGlow" cx="512" cy="486" r="440" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#F0A32C" stop-opacity="0.20"/>
+      <stop offset="1" stop-color="#F0A32C" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="markPipe" x1="190.4" y1="84" x2="833.6" y2="888" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#E9EEF6"/>
+      <stop offset="0.45" stop-color="#BAC6D8"/>
+      <stop offset="1" stop-color="#7C8CA5"/>
+    </linearGradient>
+    <linearGradient id="markBoard" x1="242" y1="234" x2="458" y2="690" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#0E2E4E"/>
+      <stop offset="1" stop-color="#04101F"/>
+    </linearGradient>
+    <linearGradient id="markLens" x1="478" y1="279" x2="478" y2="625" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1E1C48"/>
+      <stop offset="0.26" stop-color="#4A4A93"/>
+      <stop offset="0.42" stop-color="#150332"/>
+      <stop offset="0.72" stop-color="#0C0322"/>
+      <stop offset="1" stop-color="#001C4C"/>
+    </linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
 
@@ -30,13 +55,46 @@
             <circle cx="120" cy="180" r="24" fill="#FFB340" opacity="0.8"/>
             <polygon points="16,300 100,252 190,294 280,250 377,286 377,367 16,367" fill="#1A222E"/>
           </g>
-          <rect x="16" y="107" width="361" height="260" fill="#000" opacity="0.45"/>
+          <rect x="16" y="107" width="361" height="260" fill="#000" opacity="0.55"/>
         </g>
-        <g id="progress-ring">
-          <circle cx="196.5" cy="237" r="54" fill="#000" opacity="0.35"/>
-          <circle cx="196.5" cy="237" r="46" fill="none" stroke="#FFF" stroke-opacity="0.2" stroke-width="8"/>
-          <path d="M196.5 191 a46 46 0 0 1 44.9 56.1" stroke="#FFB340" stroke-width="8" fill="none" stroke-linecap="round"/>
-          <text x="196.5" y="243" font-size="17" class="b m" fill="#FFF" text-anchor="middle">34%</text>
+        <!-- The gauge: the rig at 120pt with the lens as the readout. The arc
+             around the pipe is an indeterminate SWEEP, not a fill — the design
+             moves the resolution into the number and lets the sweep keep the
+             motion honest between progress updates. -->
+        <g id="progress-mark">
+          <circle cx="196.5" cy="237" r="93.6" fill="url(#vignette)"/>
+          <g transform="translate(136.5,177) scale(0.1171875)">
+            <circle cx="512" cy="486" r="440" fill="url(#markGlow)"/>
+            <g transform="rotate(-5 512 486)">
+              <rect x="281" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+              <rect x="269" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+              <rect x="709" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+              <rect x="697" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+            </g>
+            <circle cx="512" cy="486" r="402" fill="url(#markPipe)"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#6E7F99" stroke-width="9"/>
+            <!-- sweeping head + trail, 9-27% of the circumference, 1.70s cycle -->
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="24 76" opacity="0.28" transform="rotate(-145 512 486)"/>
+            <circle cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="18 82" transform="rotate(-145 512 486)"/>
+            <g transform="rotate(-5 512 486)">
+              <rect x="340" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+              <rect x="325" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+              <rect x="636" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+              <rect x="621" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+              <rect x="242" y="234" width="540" height="456" rx="18" fill="url(#markBoard)"/>
+              <rect x="242" y="234" width="540" height="456" rx="18" fill="none" stroke="#245A85" stroke-width="7"/>
+              <rect x="274" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="718" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="718" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+              <rect x="274" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+            </g>
+            <circle cx="478" cy="452" r="196" fill="none" stroke="#F0A32C" stroke-width="14"/>
+            <circle cx="478" cy="452" r="173" fill="#02040C"/>
+            <!-- lens dimmed to 55% (vs 85% on launch) so the digits own the aperture -->
+            <circle cx="478" cy="452" r="173" fill="url(#markLens)" opacity="0.55"/>
+          </g>
+          <!-- readout centred on the LENS (478,452 in mark space), not the view -->
+          <text x="192.5" y="235.4" font-size="15.6" class="sb" fill="#F0A32C" text-anchor="middle">34<tspan font-size="8.4" fill="#8A9AB5"> %</tspan></text>
         </g>
       </g>
 
@@ -79,5 +137,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Processing · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProcessingView.swift — previewCard ring · stageChecklist · ETA</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProcessingView.swift — previewCard rig gauge · stageChecklist · ETA</text>
 </svg>
