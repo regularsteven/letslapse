@@ -2704,6 +2704,14 @@ final class CameraController: NSObject, ObservableObject {
         // leftover from the previous segment must never masquerade as it.
         activeSegmentRecordedStartAt = nil
         activeRecordingFrameRate = frameRate
+        #if os(iOS)
+        LLog("segment \(String(format: "%03d", index)) start: running=\(session.isRunning)"
+            + " interrupted=\(session.isInterrupted) inputs=\(session.inputs.count)"
+            + " fps=\(frameRate)")
+        #else
+        LLog("segment \(String(format: "%03d", index)) start: running=\(session.isRunning)"
+            + " inputs=\(session.inputs.count) fps=\(frameRate)")
+        #endif
         movieOutput.startRecording(to: url, recordingDelegate: self)
 
         DispatchQueue.main.async {
@@ -3527,6 +3535,14 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         from connections: [AVCaptureConnection],
         error: Error?
     ) {
+        // A recording that dies uninvited surfaces ONLY here — without this
+        // line the failure is silent (the 2026-08-11 instant-death hunt had
+        // to be diagnosed from file sizes). Note: a successful stop also
+        // passes an error on some paths (e.g. "recording stopped" markers),
+        // so log, don't react.
+        if let error {
+            LLog("didFinishRecording \(outputFileURL.lastPathComponent) error: \(error)")
+        }
         sessionQueue.async {
             let fileExists = FileManager.default.fileExists(atPath: outputFileURL.path)
             if fileExists {
