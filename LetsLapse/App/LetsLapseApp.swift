@@ -192,8 +192,12 @@ struct ContentView: View {
         #if os(macOS)
         .onChange(of: model.stage) { newStage in
             // A flow can start from any tab (e.g. "New blended clip" in Projects);
-            // bring the Create tab front so the flow is on screen.
-            if newStage != .home, lastStage == .home {
+            // bring the Create tab front so the flow is on screen. Entering
+            // `.configure` always fronts it — even over a parked flow, that
+            // transition means a fresh editing surface was just requested
+            // ("from these settings" on the result screen, a Guided clip
+            // opened while another flow sat parked).
+            if newStage == .configure || (newStage != .home && lastStage == .home) {
                 selectedTab = .create
             }
             lastStage = newStage
@@ -242,7 +246,7 @@ struct ContentView: View {
     private func openCameraOnLaunch() -> Bool {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -343,6 +347,14 @@ struct ContentView: View {
             if environment["LL_REFRAME_RENDER"] == "1" {
                 model.startProcessing()
             }
+        }
+        // LL_GUIDED=latest — open the newest video capture in the guided
+        // builder, exactly what the project's "Guided clip" button (which
+        // simctl can't tap) does.
+        if environment["LL_GUIDED"] == "latest",
+           let capture = model.captures.first(where: { $0.kind == .video }) {
+            model.openCapture(capture)
+            model.guidedBuilderFocused = true
         }
         // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
         // collections from existing video blends (no-op without any); detail
@@ -525,8 +537,13 @@ struct FlowView: View {
             case .home:
                 EmptyView()
             case .configure:
-                AdjustView()
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                if model.guidedBuilderFocused {
+                    GuidedBuilderView()
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                } else {
+                    AdjustView()
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                }
             case .processing:
                 ProcessingView()
                     .transition(.move(edge: .trailing).combined(with: .opacity))

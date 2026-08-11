@@ -496,6 +496,20 @@ final class AppModel: ObservableObject {
     /// reframe lane already expanded; the plain button leaves it collapsed.
     @Published var reframeLaneFocused = false
 
+    /// The experimental guided builder replaces the Adjust screen for this
+    /// pass through `.configure`: same stage, same underlying warp + reframe
+    /// data, a survey-style authoring surface. Capture-specific, so opening
+    /// another project clears it.
+    @Published var guidedBuilderFocused = false
+
+    /// Export resolution as a longest-edge cap (1080, 720); nil = full source
+    /// scale. The tail passes scale ONCE, directly to this size — a punched
+    /// crop Lanczos-resamples from its kept pixels straight to the target, so
+    /// a 2× punch on a 4K source is pixel-sharp at 1080. Guided-builder
+    /// surface only for now; capture-specific, so opening another project
+    /// clears it.
+    @Published var exportShortEdge: Int?
+
     /// Blend depth for interval-stills output, kept separate from the video
     /// `constantWindow` (whose default is a fast video speed). 1 = a crisp
     /// timelapse, one frame per photo; higher values blend more stills into
@@ -1267,6 +1281,8 @@ final class AppModel: ObservableObject {
         warp = nil
         reframe = nil
         reframeLaneFocused = false
+        guidedBuilderFocused = false
+        exportShortEdge = nil
         clearWarpHistory()
         excludedFrameIndices = []
         tailFramesToExclude = 0
@@ -1305,6 +1321,8 @@ final class AppModel: ObservableObject {
             warp = nil
             reframe = nil
             reframeLaneFocused = false
+            guidedBuilderFocused = false
+            exportShortEdge = nil
             clearWarpHistory()
             excludedFrameIndices = []
             tailFramesToExclude = 0
@@ -1336,6 +1354,8 @@ final class AppModel: ObservableObject {
             warp = nil
             reframe = nil
             reframeLaneFocused = false
+            guidedBuilderFocused = false
+            exportShortEdge = nil
             clearWarpHistory()
             excludedFrameIndices = []
             tailFramesToExclude = 0
@@ -2405,9 +2425,16 @@ final class AppModel: ObservableObject {
         // Whether the run ends with the grade-bake export below — the progress
         // plan reserves a band for it so the bar doesn't sit full while it runs.
         let willBakeGrade = source.isVideo && !grade.isIdentity
+        // The export resolution cap, resolved with the other job inputs. The
+        // reframe pass scales to it directly; without a reframe the canvas
+        // pass carries it — which is why the canvas pass also runs for a
+        // matching canvas when a cap is set (scale-only).
+        let exportEdge = source.isVideo ? exportShortEdge : nil
         // The Adjust canvas, resolved before the job starts so a selection
         // change mid-render can't retarget it. nil = the clip keeps its shape.
-        let cropCanvas = source.isVideo && blendCanvasNeedsCrop() ? effectiveBlendCanvas() : nil
+        let cropIsReal = blendCanvasNeedsCrop()
+        let cropCanvas = source.isVideo && (cropIsReal || exportEdge != nil)
+            ? effectiveBlendCanvas() : nil
         // The punch-in reframe, resolved the same way. It needs the compiled
         // warp's frame map, so the legacy (Advanced-ramp) path renders without
         // it. When it runs it subsumes the canvas crop — its render size IS
@@ -2497,7 +2524,8 @@ final class AppModel: ObservableObject {
                         aspect: reframeAspect,
                         sourceSize: reframeSourceSize,
                         frameSourceTimes: reframeFrameTimes,
-                        outputFPS: reframeOutputFPS
+                        outputFPS: reframeOutputFPS,
+                        exportShortEdge: exportEdge
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let reframeBand else { return }
@@ -2535,7 +2563,7 @@ final class AppModel: ObservableObject {
                     let cropBand = tailBand.map { willBakeGrade ? slice($0, 0, 0.4) : $0 }
                     let uncropped = output.url
                     let cropped = try await VideoCanvasCropper.croppedCopy(
-                        of: uncropped, canvas: cropCanvas
+                        of: uncropped, canvas: cropCanvas, shortEdge: exportEdge
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let cropBand else { return }
@@ -2546,10 +2574,17 @@ final class AppModel: ObservableObject {
                         self.reportTailProgress(band: cropBand, fraction: 1)
                     }
                     if let renderSize = cropped.renderSize {
+                        if let oldWidth = output.width, let oldHeight = output.height {
+                            output.summary = output.summary.replacingOccurrences(
+                                of: "\(oldWidth)×\(oldHeight)",
+                                with: "\(Int(renderSize.width))×\(Int(renderSize.height))")
+                        }
                         output.url = cropped.url
                         output.width = Int(renderSize.width)
                         output.height = Int(renderSize.height)
-                        output.summary += " · cropped to \(cropCanvas.rawValue)"
+                        if cropIsReal {
+                            output.summary += " · cropped to \(cropCanvas.rawValue)"
+                        }
                         if uncropped.deletingLastPathComponent().standardizedFileURL
                             == FileManager.default.temporaryDirectory.standardizedFileURL {
                             try? FileManager.default.removeItem(at: uncropped)

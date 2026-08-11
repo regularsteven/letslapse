@@ -280,6 +280,13 @@ enum WarpCompiler {
     struct SeamEase: Equatable {
         var requested: Double
         var applied: Double
+        /// Source seconds the compiled ease consumes on each side of the
+        /// boundary — where the ramp really begins and ends on the source
+        /// axis. Anything that wants to sit exactly at the ramp's edge (the
+        /// guided builder's arrival keys) reads these rather than guessing
+        /// from the steady-speed map.
+        var sourceBefore: Double = 0
+        var sourceAfter: Double = 0
         var isClamped: Bool { applied < requested - 0.01 }
     }
 
@@ -470,7 +477,9 @@ enum WarpCompiler {
                 seamEases[index] = SeamEase(requested: duration, applied: 0)
                 continue
             }
-            seamEases[index] = SeamEase(requested: duration, applied: dur)
+            seamEases[index] = SeamEase(
+                requested: duration, applied: dur,
+                sourceBefore: costBefore, sourceAfter: costAfter)
 
             var beforeRuns: [Piece] = []
             var afterRuns: [Piece] = []

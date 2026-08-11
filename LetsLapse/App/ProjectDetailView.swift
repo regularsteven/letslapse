@@ -319,6 +319,20 @@ struct ProjectDetailView: View {
                     }
                     .buttonStyle(LLPrimaryButtonStyle())
 
+                    // An experimental side-step into the SAME flow: a survey
+                    // that authors the warp + reframe as states and
+                    // transitions instead of a timeline. It must never
+                    // displace the primary button above.
+                    if capture.kind == .video {
+                        Button {
+                            model.openCapture(capture)
+                            model.guidedBuilderFocused = true
+                        } label: {
+                            Label("Guided clip (experimental)", systemImage: "wand.and.stars")
+                        }
+                        .buttonStyle(LLSecondaryButtonStyle())
+                    }
+
                     // The other door into the SAME flow: a punch-in move on
                     // top of the speed warp. It opens the blended-clip editor
                     // with the reframe lane already expanded — one process,

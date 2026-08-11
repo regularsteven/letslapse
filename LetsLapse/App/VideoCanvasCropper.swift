@@ -23,14 +23,17 @@ enum VideoCanvasCropper {
             height: CGFloat(max(2, Int(box.rect.height.rounded()) & ~1)))
     }
 
-    /// Writes a copy of `sourceURL` cropped to `canvas` and returns the new
-    /// file's URL and pixel size — in the temporary directory, under a
-    /// `LetsLapse-` name, the caller owns it. A clip that already matches the
-    /// canvas returns `sourceURL` with a nil size, so callers can invoke this
+    /// Writes a copy of `sourceURL` cropped to `canvas` — and, when
+    /// `shortEdge` is set, scaled down to that resolution class (1080 →
+    /// 1920×1080 / 1080×1920) — returning the new file's URL and pixel size:
+    /// in the temporary directory, under a `LetsLapse-` name, the caller
+    /// owns it. A clip that already matches the canvas at an acceptable size
+    /// returns `sourceURL` with a nil size, so callers can invoke this
     /// unconditionally and tell the two apart.
     static func croppedCopy(
         of sourceURL: URL,
         canvas: CanvasRatio,
+        shortEdge: Int? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize?) {
         let asset = AVURLAsset(url: sourceURL)
@@ -41,17 +44,29 @@ enum VideoCanvasCropper {
         let natural = try await assetTrack.load(.naturalSize)
         let orientedRect = CGRect(origin: .zero, size: natural).applying(preferred)
         let orientedSize = CGSize(width: abs(orientedRect.width), height: abs(orientedRect.height))
-        guard let renderSize = cropSize(displaySize: orientedSize, canvas: canvas),
-              let box = CollectionMath.cropBox(clipSize: orientedSize, canvas: canvas, offset: 0.5)
-        else { return (sourceURL, nil) }
+        // The kept pixels: the centred canvas crop, or the whole frame when
+        // the clip already matches — the pass still runs then if a size cap
+        // asks for a downscale.
+        let cropped = cropSize(displaySize: orientedSize, canvas: canvas)
+        let keptSize = cropped ?? CGSize(
+            width: CGFloat(max(2, Int(orientedSize.width.rounded()) & ~1)),
+            height: CGFloat(max(2, Int(orientedSize.height.rounded()) & ~1)))
+        let target = shortEdge.flatMap { ReframeVideoCropper.scaledDown(keptSize, shortEdge: $0) }
+        guard cropped != nil || target != nil else { return (sourceURL, nil) }
+        let renderSize = target ?? keptSize
+        let boxRect = CollectionMath.cropBox(
+            clipSize: orientedSize, canvas: canvas, offset: 0.5)?.rect
+            ?? CGRect(origin: .zero, size: orientedSize)
 
-        // Land the oriented picture at the origin, then slide the kept rect to
-        // the render origin — same transform chain as the collection export,
-        // minus its scale-to-canvas step.
+        // Land the oriented picture at the origin, slide the kept rect to the
+        // render origin — same transform chain as the collection export —
+        // then scale once to the export size.
         let oriented = preferred.concatenating(
             CGAffineTransform(translationX: -orientedRect.minX, y: -orientedRect.minY))
-        let transform = oriented.concatenating(
-            CGAffineTransform(translationX: -box.rect.minX, y: -box.rect.minY))
+        let exportScale = renderSize.width / max(1, keptSize.width)
+        let transform = oriented
+            .concatenating(CGAffineTransform(translationX: -boxRect.minX, y: -boxRect.minY))
+            .concatenating(CGAffineTransform(scaleX: exportScale, y: exportScale))
 
         let instruction = AVMutableVideoCompositionInstruction()
         instruction.timeRange = CMTimeRange(start: .zero, duration: try await asset.load(.duration))

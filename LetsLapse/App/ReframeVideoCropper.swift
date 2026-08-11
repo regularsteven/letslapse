@@ -28,6 +28,19 @@ enum ReframeVideoCropper {
             height: CGFloat(max(2, Int(base.height.rounded()) & ~1)))
     }
 
+    /// `size` scaled down to the `shortEdge` class — 1080 means 1920×1080 /
+    /// 1080×1920 for 16:9 material, 1080×1080 for square: the SHORTER
+    /// dimension lands on the class number, whatever the orientation.
+    /// Even-rounded for the encoder; nil when the size already fits.
+    static func scaledDown(_ size: CGSize, shortEdge: Int) -> CGSize? {
+        let short = min(size.width, size.height)
+        guard short > CGFloat(shortEdge) + 1 else { return nil }
+        let factor = CGFloat(shortEdge) / short
+        return CGSize(
+            width: CGFloat(max(2, Int((size.width * factor).rounded()) & ~1)),
+            height: CGFloat(max(2, Int((size.height * factor).rounded()) & ~1)))
+    }
+
     /// One crop rect per output frame, in display-oriented pixels of
     /// `sourceSize` — the space the keys were authored in.
     ///
@@ -80,6 +93,7 @@ enum ReframeVideoCropper {
         sourceSize: CGSize,
         frameSourceTimes: [Double],
         outputFPS: Int,
+        exportShortEdge: Int? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize) {
         guard !track.isEmpty, !frameSourceTimes.isEmpty else {
@@ -103,9 +117,12 @@ enum ReframeVideoCropper {
         let scale = Double(clipSize.width) / Double(sourceSize.width)
         let scaledSource = CGSize(
             width: sourceSize.width * CGFloat(scale), height: sourceSize.height * CGFloat(scale))
-        guard let renderSize = renderSize(displaySize: scaledSource, aspect: aspect) else {
+        guard let fullSize = renderSize(displaySize: scaledSource, aspect: aspect) else {
             throw ReframeCropError.exportFailed("the render size collapsed")
         }
+        // An export cap resamples ONCE, straight from the kept pixels to the
+        // target — a 2× punch on a 4K source lands pixel-sharp at 1080.
+        let renderSize = exportShortEdge.flatMap { scaledDown(fullSize, shortEdge: $0) } ?? fullSize
 
         let frameRects = rects(
             track: track, aspect: aspect, sourceSize: sourceSize,

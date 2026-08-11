@@ -39,15 +39,7 @@ struct AdjustView: View {
     /// end just devours it. 1×/4×/15× are always offered; free values come
     /// through the value sheet.
     private func speedChips(forStretchFPS fps: Double) -> [(speed: Double, word: String)] {
-        let out = Double(max(1, model.outputFPS))
-        var chips: [(speed: Double, word: String)] = []
-        if fps >= 4 * out { chips.append((0.25, "¼× slow")) }
-        if fps >= 2 * out { chips.append((0.5, "½× slow")) }
-        chips += [(1, "real time"), (4, "gentle"), (15, "subtle")]
-        if fps < 4 * out {
-            chips += [(50, "smooth"), (60, "flowing"), (100, "streaks")]
-        }
-        return chips
+        GuidedPlanner.gatedSpeedChips(forStretchFPS: fps, outputFPS: model.outputFPS)
     }
 
     var body: some View {
