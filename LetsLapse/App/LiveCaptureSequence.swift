@@ -26,6 +26,16 @@ struct LiveCaptureSequence: Codable, Equatable {
         var frameRate: Int
         var relativeStart: TimeInterval
         var relativeEnd: TimeInterval
+        /// When the file's first frame actually landed, on the run's clock —
+        /// stamped from the writer's did-start callback, where `relativeStart`
+        /// is stamped before the writer has spun up (~0.27s early). nil in
+        /// sidecars written before honest stamps existed.
+        var recordedStart: TimeInterval? = nil
+        /// The finished file's own media length, probed at capture time. With
+        /// `recordedStart` it places the segment's real frames exactly, so an
+        /// inter-file gap is measured rather than bracketed by wall-clock
+        /// stamps that err in opposite directions.
+        var recordedDuration: TimeInterval? = nil
     }
 
     struct Marker: Codable, Equatable {

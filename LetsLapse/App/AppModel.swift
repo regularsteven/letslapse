@@ -1749,22 +1749,38 @@ final class AppModel: ObservableObject {
             let ordered = live.sequence.segments.sorted { $0.index < $1.index }
             var regions: [WarpCompiler.SourceRegion] = []
             for (position, segment) in ordered.enumerated() {
-                let span = max(0, probed?[segment.fileName] ?? (segment.relativeEnd - segment.relativeStart))
+                let span = max(0, probed?[segment.fileName]
+                    ?? segment.recordedDuration
+                    ?? (segment.relativeEnd - segment.relativeStart))
                 // Real time the camera lost switching formats before this
-                // segment. The sidecar's start/end stamps bracket the truth
-                // from opposite directions (writer start-up latency vs
-                // stopwatch overshoot) — pixel-measured gaps on a real shoot
-                // (~0.6s at both boundaries) sit near their midpoint. Bias
-                // positive: overestimating reads as one slightly-calmer
-                // frame, underestimating as a visible jump.
+                // segment.
                 var gap = 0.0
                 if position > 0 {
                     let prev = ordered[position - 1]
-                    let prevSpan = probed?[prev.fileName] ?? max(0, prev.relativeEnd - prev.relativeStart)
-                    let startBased = segment.relativeStart - prev.relativeStart - prevSpan
-                    let endBased = segment.relativeStart - prev.relativeEnd
-                    let midpoint = (max(0, startBased) + max(0, endBased)) / 2
-                    gap = midpoint > 0.05 ? min(2.0, midpoint + 0.25) : 0
+                    let prevSpan = probed?[prev.fileName]
+                        ?? prev.recordedDuration
+                        ?? max(0, prev.relativeEnd - prev.relativeStart)
+                    if let start = segment.recordedStart, let prevStart = prev.recordedStart {
+                        // Honest sidecars: both boundaries carry the writer's
+                        // actual first-frame stamps and the files' own probed
+                        // lengths close the intervals — the gap is measured,
+                        // not estimated, so no bias term. The clamp only
+                        // guards against clock weirdness.
+                        let measured = start - prevStart - (prev.recordedDuration ?? prevSpan)
+                        gap = measured > 0.02 ? min(2.0, measured) : 0
+                    } else {
+                        // Pre-honest sidecars: the start/end stamps bracket
+                        // the truth from opposite directions (writer start-up
+                        // latency vs stopwatch overshoot) — pixel-measured
+                        // gaps on a real shoot (~0.6s at both boundaries) sit
+                        // near their midpoint. Bias positive: overestimating
+                        // reads as one slightly-calmer frame, underestimating
+                        // as a visible jump.
+                        let startBased = segment.relativeStart - prev.relativeStart - prevSpan
+                        let endBased = segment.relativeStart - prev.relativeEnd
+                        let midpoint = (max(0, startBased) + max(0, endBased)) / 2
+                        gap = midpoint > 0.05 ? min(2.0, midpoint + 0.25) : 0
+                    }
                 }
                 regions.append(WarpCompiler.SourceRegion(
                     span: span,
@@ -1776,7 +1792,9 @@ final class AppModel: ObservableObject {
             let whole = live.sequence.segments.first
             var span: Double = currentCapture?.sourceDurationSeconds ?? 0
             if let whole {
-                span = probed?[whole.fileName] ?? max(0, whole.relativeEnd - whole.relativeStart)
+                span = probed?[whole.fileName]
+                    ?? whole.recordedDuration
+                    ?? max(0, whole.relativeEnd - whole.relativeStart)
             }
             guard span > 0 else { return [] }
             return [WarpCompiler.SourceRegion(span: span, fps: Double(max(1, live.sequence.baseFrameRate)))]

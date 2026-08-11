@@ -269,10 +269,36 @@ final class CameraController: NSObject, ObservableObject {
     private var activeSequenceDirectory: URL?
     private var activeSequenceStartedAt: Date?
     private var activeSegmentStartedAt: Date?
+    /// When the segment's writer reported its first frame — the honest start
+    /// stamp for the sidecar, where `activeSegmentStartedAt` is taken before
+    /// `startRecording` and runs early by the writer's spin-up time.
+    private var activeSegmentRecordedStartAt: Date?
     private var activeRecordingFrameRate: Int?
     private var activeSegmentURL: URL?
     private var segmentURLs: [URL] = []
     private var pendingRampFrameRate: Int?
+    /// Both rates a running ramp sequence needs, empty outside one. While
+    /// non-empty, `captureFormatMatch` prefers a format that carries every
+    /// rate here, so the segment switch is a frame-duration change on one
+    /// format instead of an `activeFormat` swap — no pipeline teardown, no
+    /// auto-exposure reset, and a much smaller real-time hole at the cut.
+    private var sequenceSharedRampRates: [Int] = []
+    #if os(iOS)
+    /// The AE/AWB values the sensor was using when a ramp segment switch
+    /// began. Re-applied numerically after the reconfiguration so the next
+    /// file starts photometrically identical instead of re-metered — the
+    /// source-inherited one-frame luma blink at every cut. Confined to
+    /// sessionQueue; nil when no switch hold is active.
+    private struct SwitchExposureHold {
+        var exposureDuration: CMTime
+        var iso: Float
+        var whiteBalanceGains: AVCaptureDevice.WhiteBalanceGains
+    }
+    private var switchExposureHold: SwitchExposureHold?
+    #else
+    /// macOS has no numeric exposure API — the hold is plain `.locked` modes.
+    private var switchExposureHoldActive = false
+    #endif
     /// Cancellation token for Watch-timed bursts: every manual toggle, new
     /// timed press, or sequence teardown bumps it, orphaning any auto-revert
     /// still scheduled. Confined to `sessionQueue`.
@@ -1652,7 +1678,14 @@ final class CameraController: NSObject, ObservableObject {
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            device.activeFormat = match.format
+            // A rate change that lands on the format already active (a ramp
+            // segment switch under `sequenceSharedRampRates`) is a frame-
+            // duration change only: re-assigning `activeFormat` would tear
+            // the pipeline down and reset AE/zoom/colour space for nothing.
+            let formatChanged = device.activeFormat != match.format
+            if formatChanged {
+                device.activeFormat = match.format
+            }
             let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
@@ -1661,32 +1694,48 @@ final class CameraController: NSObject, ObservableObject {
                !sameDimensions(photoOutput.maxPhotoDimensions, photoDimensions) {
                 photoOutput.maxPhotoDimensions = photoDimensions
             }
+            // Both re-asserts run even on the fast path: a new frame interval
+            // can force a shorter shutter than the held/locked one, and both
+            // helpers clamp against it.
             reassertExposureLock(on: device)
             #if os(iOS)
-            // Setting `activeFormat` also resets `videoZoomFactor` to 1 —
-            // re-assert the selected stop so a format change (resolution,
-            // fps, a ramp-burst segment) never silently jumps the framing.
-            if let pin = sequenceLensPin, device === pin.device {
-                // Pinned run: the stop is a crop of this one lens, and the
-                // factor was worked out in that lens's own space at pin time.
-                device.videoZoomFactor = min(
-                    pin.zoomFactor, device.activeFormat.videoMaxZoomFactor)
-            } else if !physicalWorldActive, let stop = currentStop {
-                device.videoZoomFactor = min(
-                    CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
+            if let hold = switchExposureHold, !exposureLocked {
+                applySwitchExposureHold(hold, on: device)
             }
-            // Setting `activeFormat` resets the device to its default colour
-            // space, so re-assert Apple Log if Capture Flat is on and the new
-            // format supports it (otherwise sRGB).
-            if #available(iOS 17.2, *) {
-                let target: AVCaptureColorSpace =
-                    (appleLogEnabled && match.format.supportedColorSpaces.contains(.appleLog))
-                    ? .appleLog : .sRGB
-                if device.activeColorSpace != target {
-                    device.activeColorSpace = target
+            if formatChanged {
+                // Setting `activeFormat` also resets `videoZoomFactor` to 1 —
+                // re-assert the selected stop so a format change (resolution,
+                // fps, a ramp-burst segment) never silently jumps the framing.
+                if let pin = sequenceLensPin, device === pin.device {
+                    // Pinned run: the stop is a crop of this one lens, and the
+                    // factor was worked out in that lens's own space at pin time.
+                    device.videoZoomFactor = min(
+                        pin.zoomFactor, device.activeFormat.videoMaxZoomFactor)
+                } else if !physicalWorldActive, let stop = currentStop {
+                    device.videoZoomFactor = min(
+                        CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
+                }
+                // Setting `activeFormat` resets the device to its default colour
+                // space, so re-assert Apple Log if Capture Flat is on and the new
+                // format supports it (otherwise sRGB).
+                if #available(iOS 17.2, *) {
+                    let target: AVCaptureColorSpace =
+                        (appleLogEnabled && match.format.supportedColorSpaces.contains(.appleLog))
+                        ? .appleLog : .sRGB
+                    if device.activeColorSpace != target {
+                        device.activeColorSpace = target
+                    }
                 }
             }
+            #else
+            if switchExposureHoldActive, !exposureLocked {
+                if device.isExposureModeSupported(.locked) { device.exposureMode = .locked }
+                if device.isWhiteBalanceModeSupported(.locked) { device.whiteBalanceMode = .locked }
+            }
             #endif
+            if !sequenceSharedRampRates.isEmpty {
+                LLog("applyCaptureFormat fps=\(fps) \(formatChanged ? "format switch" : "duration-only (shared format)")")
+            }
             publishLiveBlendDNGSupport()
             return true
         } catch {
@@ -1735,6 +1784,160 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    // MARK: - Segment-switch exposure hold
+
+    /// Freeze AE/AWB at their current values before a ramp segment switch
+    /// tears the pipeline down. The values are what the loop is outputting
+    /// right now, so nothing visible changes — but the next file can start
+    /// on them instead of re-metering, which is where the one-frame luma
+    /// step at every cut came from. No-op under the user's manual lock
+    /// (`reassertExposureLock` already carries that across formats).
+    ///
+    /// `completion` fires on the sessionQueue once the custom exposure has
+    /// actually LATCHED (or after a timeout) — the auto→custom transition
+    /// takes the ISP a few frames, and stopping the old segment before it
+    /// lands puts those frames at the head of the next file instead (a
+    /// 2-hot-2-low ~4-frame flicker, measured on the 2026-08-11 iPhone
+    /// shoot). Callers gate the switch's `stopRecording` on it; the latch
+    /// frames then stay in the old segment's tail, at values identical to
+    /// what AE was already outputting.
+    private func beginSwitchExposureHold(completion: @escaping () -> Void) {
+        guard !exposureLocked, let device = videoDevice else { completion(); return }
+        #if os(iOS)
+        guard switchExposureHold == nil else { completion(); return }
+        let hold = SwitchExposureHold(
+            exposureDuration: device.exposureDuration,
+            iso: device.iso,
+            whiteBalanceGains: device.deviceWhiteBalanceGains
+        )
+        switchExposureHold = hold
+        // Once, whichever comes first: the device's latch callback or the
+        // fallback (a device that never calls back must not wedge the
+        // switch). Mutation confined to sessionQueue.
+        var completed = false
+        let finish = {
+            guard !completed else { return }
+            completed = true
+            completion()
+        }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            applySwitchExposureHold(hold, on: device) { [weak self] in
+                guard let self else { return }
+                self.sessionQueue.async(execute: finish)
+            }
+        } catch {}
+        sessionQueue.asyncAfter(deadline: .now() + 0.6, execute: finish)
+        LLog(String(format: "switch exposure hold: 1/%.0fs ISO %.0f",
+                    1 / max(hold.exposureDuration.seconds, 0.0001), hold.iso))
+        #else
+        defer { completion() }
+        guard !switchExposureHoldActive else { return }
+        switchExposureHoldActive = true
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isExposureModeSupported(.locked) { device.exposureMode = .locked }
+            if device.isWhiteBalanceModeSupported(.locked) { device.whiteBalanceMode = .locked }
+        } catch {}
+        LLog("switch exposure hold (locked modes)")
+        #endif
+    }
+
+    #if os(iOS)
+    /// Re-assert the held values on the (possibly new) format. Runs inside
+    /// the caller's `lockForConfiguration`. A burst rate's frame interval can
+    /// force a shorter shutter than the held one — trade the lost light back
+    /// in ISO so the two files still match in luma, not just in mode.
+    /// `latched` (arbitrary queue) reports when the exposure has taken
+    /// effect; it may never fire if custom exposure is unsupported.
+    private func applySwitchExposureHold(
+        _ hold: SwitchExposureHold,
+        on device: AVCaptureDevice,
+        latched: (() -> Void)? = nil
+    ) {
+        let format = device.activeFormat
+        var seconds = hold.exposureDuration.seconds
+        var iso = hold.iso
+        var ceiling = format.maxExposureDuration.seconds
+        let frameDuration = device.activeVideoMaxFrameDuration
+        if frameDuration.isValid, frameDuration.seconds > 0 {
+            ceiling = min(ceiling, frameDuration.seconds)
+        }
+        if seconds > ceiling, ceiling > 0 {
+            iso *= Float(seconds / ceiling)
+            seconds = ceiling
+        }
+        seconds = max(seconds, format.minExposureDuration.seconds)
+        iso = min(max(iso, format.minISO), format.maxISO)
+        if device.isExposureModeSupported(.custom) {
+            device.setExposureModeCustom(
+                duration: CMTimeMakeWithSeconds(seconds, preferredTimescale: 1_000_000),
+                iso: iso,
+                completionHandler: latched.map { callback in { _ in callback() } }
+            )
+        }
+        if device.isWhiteBalanceModeSupported(.locked) {
+            var gains = hold.whiteBalanceGains
+            let maxGain = device.maxWhiteBalanceGain
+            gains.redGain = min(max(gains.redGain, 1), maxGain)
+            gains.greenGain = min(max(gains.greenGain, 1), maxGain)
+            gains.blueGain = min(max(gains.blueGain, 1), maxGain)
+            device.setWhiteBalanceModeLocked(with: gains, completionHandler: nil)
+        }
+    }
+    #endif
+
+    /// Let AE/AWB go again once it can't read as a step at a cut. Called a
+    /// beat into a base-rate segment (burst segments stay held whole — both
+    /// of their cuts must match, and they're short); the loop resumes from
+    /// the held values, so any adaptation is ordinary in-scene drift.
+    private func endSwitchExposureHold() {
+        #if os(iOS)
+        guard switchExposureHold != nil else { return }
+        switchExposureHold = nil
+        #else
+        guard switchExposureHoldActive else { return }
+        switchExposureHoldActive = false
+        #endif
+        guard !exposureLocked, let device = videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+        } catch {}
+        LLog("switch exposure hold released")
+    }
+
+    /// The release path from a segment's first written frame: base-rate
+    /// segments release after a settling beat, anything else keeps holding.
+    /// Guarded against the segment having already switched again — the next
+    /// first-frame callback reschedules.
+    private func scheduleSwitchExposureHoldRelease() {
+        #if os(iOS)
+        guard switchExposureHold != nil else { return }
+        #else
+        guard switchExposureHoldActive else { return }
+        #endif
+        guard let sequence = activeSequence,
+              activeRecordingFrameRate == sequence.baseFrameRate else { return }
+        let url = activeSegmentURL
+        sessionQueue.asyncAfter(deadline: .now() + 1.0) {
+            // A switch requested inside the settling beat still needs the
+            // hold — keep it; the switch's own first frame reschedules.
+            guard self.activeSegmentURL == url,
+                  self.movieOutput.isRecording,
+                  self.pendingRampFrameRate == nil else { return }
+            self.endSwitchExposureHold()
+        }
+    }
+
     private func captureFormatMatch(
         for device: AVCaptureDevice,
         resolution: CaptureResolution,
@@ -1760,6 +1963,21 @@ final class CameraController: NSObject, ObservableObject {
                 (format: format, photoDimensions: bestPhotoDimensions(for: format, preferred: resolution))
             }
             .sorted { first, second in
+                // Ramp runs first prefer a format that carries BOTH of the
+                // run's rates: base and burst queries then resolve to the
+                // same format, the segment switch collapses to a frame-
+                // duration change, and every segment shares one
+                // stabilization mode and one pipeline. Ranked above the
+                // stabilization score — one consistent format beats a
+                // fancier mode on only some segments. Outside a ramp run
+                // the list is empty and this key is inert.
+                if !sequenceSharedRampRates.isEmpty {
+                    let firstShared = formatSupportsRates(first.format, sequenceSharedRampRates)
+                    let secondShared = formatSupportsRates(second.format, sequenceSharedRampRates)
+                    if firstShared != secondShared {
+                        return firstShared
+                    }
+                }
                 #if os(iOS)
                 let firstStabilization = stabilizationSortScore(for: first.format)
                 let secondStabilization = stabilizationSortScore(for: second.format)
@@ -1772,6 +1990,14 @@ final class CameraController: NSObject, ObservableObject {
                 return firstPixels > secondPixels
             }
             .first
+    }
+
+    private func formatSupportsRates(_ format: AVCaptureDevice.Format, _ rates: [Int]) -> Bool {
+        rates.allSatisfy { fps in
+            format.videoSupportedFrameRateRanges.contains { range in
+                Self.supportsFrameRate(Double(fps), in: range)
+            }
+        }
     }
 
     private func bestPhotoDimensions(
@@ -2191,6 +2417,14 @@ final class CameraController: NSObject, ObservableObject {
             if mode == .ramp { runRates.append(self.selectedRampFrameRate) }
             self.pinLensForSequence(rates: runRates)
             #endif
+            // One format per sequence when the sensor offers it, alongside
+            // one lens and one orientation: with both rates on a single
+            // format, every segment switch is a frame-duration change (see
+            // sequenceSharedRampRates). Set before the first segment so the
+            // run opens on the shared format rather than switching onto it.
+            self.sequenceSharedRampRates =
+                mode == .ramp && baseFrameRate != self.selectedRampFrameRate
+                ? [baseFrameRate, self.selectedRampFrameRate] : []
             self.startNextSegment(frameRate: self.selectedFrameRate)
             DispatchQueue.main.async {
                 self.recordingStartedAt = startedAt
@@ -2326,8 +2560,15 @@ final class CameraController: NSObject, ObservableObject {
             } else {
                 closeOpenRampInterval(at: Date())
             }
+            // Freeze AE/AWB at today's values before the pipeline goes down,
+            // so the next file opens on them instead of re-metering. The stop
+            // waits for the exposure latch: pendingRampFrameRate is set FIRST
+            // so re-entry (this method's top guard) and the timed-burst wait
+            // loops already see the switch as in flight during the wait.
             pendingRampFrameRate = targetFrameRate
-            movieOutput.stopRecording()
+            beginSwitchExposureHold { [weak self] in
+                self?.movieOutput.stopRecording()
+            }
         }
     }
 
@@ -2411,6 +2652,9 @@ final class CameraController: NSObject, ObservableObject {
         let url = directory.appendingPathComponent(String(format: "segment-%03d.mov", index))
         activeSegmentURL = url
         activeSegmentStartedAt = Date()
+        // The honest stamp arrives from the writer's did-start callback; a
+        // leftover from the previous segment must never masquerade as it.
+        activeSegmentRecordedStartAt = nil
         activeRecordingFrameRate = frameRate
         movieOutput.startRecording(to: url, recordingDelegate: self)
 
@@ -2435,19 +2679,50 @@ final class CameraController: NSObject, ObservableObject {
         let index = sequence.segments.count
         let relativeStart = segmentStartedAt.timeIntervalSince(startedAt)
         let relativeEnd = max(relativeStart, Date().timeIntervalSince(startedAt))
+        // Honest stamps: where the file's frames actually sit on the run's
+        // clock. The wall-clock bracket above stays for the UI strip and old
+        // renderers; the warp compiler prefers these to measure the real
+        // inter-file hole instead of estimating it.
+        let recordedStart = activeSegmentRecordedStartAt?.timeIntervalSince(startedAt)
+        let recordedDuration = Self.probeMovieDurationSeconds(outputFileURL)
         let segment = LiveCaptureSequence.Segment(
             index: index,
             fileName: outputFileURL.lastPathComponent,
             frameRate: frameRate,
             relativeStart: relativeStart,
-            relativeEnd: relativeEnd
+            relativeEnd: relativeEnd,
+            recordedStart: recordedStart,
+            recordedDuration: recordedDuration
         )
+        if let recordedStart, let recordedDuration {
+            LLog(String(
+                format: "segment %03d honest: %.3f +%.3fs (bracket %.3f–%.3f)",
+                index, recordedStart, recordedDuration, relativeStart, relativeEnd))
+        }
         sequence.segments.append(segment)
         activeSequence = sequence
         segmentURLs.append(outputFileURL)
         activeSegmentStartedAt = nil
+        activeSegmentRecordedStartAt = nil
         activeSegmentURL = nil
         activeRecordingFrameRate = nil
+    }
+
+    /// Media duration of a finished segment file — the QuickTime header's own
+    /// answer, read synchronously (milliseconds against the finalize that just
+    /// completed on this queue). nil when the file can't say.
+    private static func probeMovieDurationSeconds(_ url: URL) -> Double? {
+        final class Box: @unchecked Sendable { var seconds: Double? }
+        let box = Box()
+        let semaphore = DispatchSemaphore(value: 0)
+        Task.detached {
+            defer { semaphore.signal() }
+            guard let duration = try? await AVURLAsset(url: url).load(.duration) else { return }
+            let seconds = duration.seconds
+            if seconds.isFinite, seconds > 0 { box.seconds = seconds }
+        }
+        semaphore.wait()
+        return box.seconds
     }
 
     private func completeLiveCapture() {
@@ -2495,7 +2770,13 @@ final class CameraController: NSObject, ObservableObject {
         #if os(iOS)
         releaseSequenceLensPin()
         #endif
+        // Cleared before the resting format is re-applied, so the resting
+        // pick returns to the normal preference instead of the run's shared
+        // format; then let AE/AWB go if a hold is still standing (a run can
+        // end mid-burst).
+        sequenceSharedRampRates = []
         restoreBaseFrameRateIfNeeded()
+        endSwitchExposureHold()
         timedBurstGeneration += 1
         activeSequence = nil
         activeSequenceDirectory = nil
@@ -2504,6 +2785,7 @@ final class CameraController: NSObject, ObservableObject {
         activeSequenceOrientation = nil
         #endif
         activeSegmentStartedAt = nil
+        activeSegmentRecordedStartAt = nil
         activeRecordingFrameRate = nil
         activeSegmentURL = nil
         segmentURLs = []
@@ -3168,6 +3450,29 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         UserDefaults.standard.bool(forKey: FlatCapture.storageKey) && !supportsAppleLog
     }
 
+    /// The writer's first frame just landed — the honest start of this file,
+    /// where `startNextSegment`'s wall stamp runs ~0.27s early (writer
+    /// spin-up). Stamped before the queue hop; the callback is the event.
+    func fileOutput(
+        _ output: AVCaptureFileOutput,
+        didStartRecordingTo fileURL: URL,
+        from connections: [AVCaptureConnection]
+    ) {
+        let stampedAt = Date()
+        sessionQueue.async {
+            guard fileURL == self.activeSegmentURL else { return }
+            self.activeSegmentRecordedStartAt = stampedAt
+            if let startedAt = self.activeSegmentStartedAt {
+                LLog(String(
+                    format: "segment writer rolling %.3fs after startRecording",
+                    stampedAt.timeIntervalSince(startedAt)))
+            }
+            // The new segment is demonstrably delivering frames — the switch
+            // hold has done its job once this segment is a base-rate one.
+            self.scheduleSwitchExposureHoldRelease()
+        }
+    }
+
     func fileOutput(
         _ output: AVCaptureFileOutput,
         didFinishRecordingTo outputFileURL: URL,
@@ -3203,14 +3508,18 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
                 return
             }
 
-            if let nextFrameRate = self.pendingRampFrameRate {
-                self.pendingRampFrameRate = nil
-                self.startNextSegment(frameRate: nextFrameRate)
+            // The user's Stop wins over a switch still in flight: with both
+            // flags set, honouring pendingRampFrameRate first would spawn a
+            // segment nobody can stop. (Reachable when Stop lands inside the
+            // toggle→finalize window; the exposure-latch wait widens it.)
+            if self.isFinishingSequence {
+                self.completeLiveCapture()
                 return
             }
 
-            if self.isFinishingSequence {
-                self.completeLiveCapture()
+            if let nextFrameRate = self.pendingRampFrameRate {
+                self.pendingRampFrameRate = nil
+                self.startNextSegment(frameRate: nextFrameRate)
                 return
             }
 
