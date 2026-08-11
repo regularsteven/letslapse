@@ -46,19 +46,19 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
-		AA0000000000000000000062 /* Exceptions for "App" folder in "LetsLapse" target */ = {
-			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
-			membershipExceptions = (
-				Info.plist,
-			);
-			target = AA0000000000000000000010 /* LetsLapse */;
-		};
 		AA0000000000000000000061 /* Exceptions for "Watch" folder in "LetsLapse Watch App" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Info.plist,
 			);
 			target = AA0000000000000000000034 /* LetsLapse Watch App */;
+		};
+		AA0000000000000000000062 /* Exceptions for "App" folder in "LetsLapse" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = AA0000000000000000000010 /* LetsLapse */;
 		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 

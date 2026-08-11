@@ -479,6 +479,10 @@ final class CameraController: NSObject, ObservableObject {
     // sessionQueue-confined; the output is added lazily on the first Live
     // Blend run and stays attached (delegate cleared between runs).
     private var liveBlendOutput: AVCaptureVideoDataOutput?
+    // sessionQueue-confined; the test-card rig's sparse preview tap. Unlike
+    // the Live Blend output this one is REMOVED from the session when the rig
+    // stops watching, so recordings never carry an extra output.
+    private var testCardOutput: AVCaptureVideoDataOutput?
     private var liveBlendController: LiveBlendController?
     #if os(iOS)
     private var liveBlendRawController: LiveBlendRawController?
@@ -2537,6 +2541,50 @@ final class CameraController: NSObject, ObservableObject {
         }
         if attempt > 0 { LLog("timedBurst revert ran after \(attempt) deferrals") }
         performLiveMomentToggle()
+    }
+
+    // MARK: - Test-card rig tap
+
+    /// Attach the rig's sparse preview tap (see TestCardRig.swift). Safe to
+    /// call repeatedly; the output is created once and re-added as needed.
+    func startTestCardTap(_ tap: TestCardFrameTap) {
+        sessionQueue.async {
+            let output: AVCaptureVideoDataOutput
+            if let existing = self.testCardOutput {
+                output = existing
+            } else {
+                output = AVCaptureVideoDataOutput()
+                output.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                ]
+                output.alwaysDiscardsLateVideoFrames = true
+                self.testCardOutput = output
+            }
+            if !self.session.outputs.contains(output) {
+                self.session.beginConfiguration()
+                if self.session.canAddOutput(output) {
+                    self.session.addOutput(output)
+                } else {
+                    LLog("testcard: session refused the preview tap")
+                }
+                self.session.commitConfiguration()
+            }
+            output.setSampleBufferDelegate(tap, queue: tap.queue)
+        }
+    }
+
+    /// Detach the rig's tap entirely so a recording (test run or manual)
+    /// starts with the session exactly as it would be without the rig.
+    func stopTestCardTap() {
+        sessionQueue.async {
+            guard let output = self.testCardOutput else { return }
+            output.setSampleBufferDelegate(nil, queue: nil)
+            if self.session.outputs.contains(output) {
+                self.session.beginConfiguration()
+                self.session.removeOutput(output)
+                self.session.commitConfiguration()
+            }
+        }
     }
 
     private func performLiveMomentToggle() {

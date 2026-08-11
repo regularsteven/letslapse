@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LetsLapse Test Card v1</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html, body { margin: 0; padding: 0; background: #000; height: 100%; overflow: hidden; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { display: block; }
+</style>
+</head>
+<body>
+<canvas id="card"></canvas>
+<script>
+'use strict';
+/*
+ * LetsLapse Test Card v1
+ * ----------------------
+ * A machine-readable timing ground truth for on-device capture testing.
+ * Point a tripod-mounted iPhone at this page on a 60 Hz monitor and every
+ * captured frame carries its own display-side timestamp.
+ *
+ * All geometry lives in a fixed 1000x1600 logical coordinate space, scaled
+ * to fit the viewport. tools/testcard_report.py mirrors the LAYOUT constants
+ * below — KEEP THEM IN SYNC.
+ *
+ * Channels (see README.md for the full spec):
+ *   - Session QR  "LLTC1;<script>"        static; declares the rig + capture script
+ *   - Time QR     "LLT;<ms 8 digits>"     updates every 500 ms; coarse absolute time
+ *   - Gray strip  16-bit Gray-coded 60 Hz tick counter; blur-tolerant fine time
+ *   - Sweep dial  1 rev/sec analog hand; sub-tick draw-time refinement
+ *   - AE patches  6 gray steps + R/G/B; exposure-hold measurement
+ *   - Ball        constant-velocity triangle wave, 4 s period; visible motion
+ *
+ * URL params:
+ *   ?script=i25x100,b100x5,i25x100   capture script encoded into the session QR
+ *   ?t=12345                          freeze the card at elapsed ms (for testing)
+ * Click anywhere to toggle fullscreen.
+ */
+
+// ---------------------------------------------------------------------------
+// LAYOUT — mirrored in testcard_report.py. Logical units on a 1000x1600 card.
+// ---------------------------------------------------------------------------
+const LAYOUT = {
+  W: 1000, H: 1600,
+  // QR symbol rects (module area only, quiet zone is the white panel around it)
+  sessionQR: { x: 80,  y: 240, size: 300 },
+  timeQR:    { x: 620, y: 240, size: 300 },
+  // Gray-code strip: 18 blocks = [black ref, white ref, bit15 .. bit0]
+  strip: { x0: 104, y: 630, blockW: 44, blockH: 60, blocks: 18 },
+  // Sweep dial: 1 rotation per second, 0 ms at 12 o'clock, clockwise
+  dial: { cx: 270, cy: 940, faceR: 200, handR: 175, handW: 12 },
+  // AE patches: 6 gray levels then R, G, B
+  patches: { x0: 104, y: 1170, w: 88, h: 100,
+             grays: [0, 51, 102, 153, 204, 255] },
+  // Constant-velocity ball, triangle wave
+  ball: { xMin: 150, xMax: 850, yc: 1360, r: 36, period: 4000 },
+};
+
+// ---------------------------------------------------------------------------
+// QR encoder — byte mode, EC level M, versions 1-6, best-of-8 mask selection.
+// Self-contained so the card works offline from a single file.
+// ---------------------------------------------------------------------------
+const QR = (() => {
+  // GF(256), polynomial 0x11D
+  const EXP = new Uint8Array(512), LOG = new Uint8Array(256);
+  (() => {
+    let x = 1;
+    for (let i = 0; i < 255; i++) { EXP[i] = x; LOG[x] = i; x <<= 1; if (x & 0x100) x ^= 0x11D; }
+    for (let i = 255; i < 512; i++) EXP[i] = EXP[i - 255];
+  })();
+  const gmul = (a, b) => (a === 0 || b === 0) ? 0 : EXP[LOG[a] + LOG[b]];
+
+  function genPoly(nsym) {
+    let gen = [1];
+    for (let i = 0; i < nsym; i++) {
+      const g2 = new Array(gen.length + 1).fill(0);
+      for (let j = 0; j < gen.length; j++) {
+        g2[j] ^= gen[j];
+        g2[j + 1] ^= gmul(gen[j], EXP[i]);
+      }
+      gen = g2;
+    }
+    return gen;
+  }
+
+  function rsEC(data, nsym) {
+    const gen = genPoly(nsym);
+    const res = data.concat(new Array(nsym).fill(0));
+    for (let i = 0; i < data.length; i++) {
+      const coef = res[i];
+      if (coef !== 0) {
+        for (let j = 1; j < gen.length; j++) res[i + j] ^= gmul(gen[j], coef);
+      }
+    }
+    return res.slice(data.length);
+  }
+
+  // Level M block structure, versions 1-6 (uniform blocks throughout)
+  const VER = {
+    1: { data: 16,  blocks: [1, 16, 10] },
+    2: { data: 28,  blocks: [1, 28, 16] },
+    3: { data: 44,  blocks: [1, 44, 26] },
+    4: { data: 64,  blocks: [2, 32, 18] },
+    5: { data: 86,  blocks: [2, 43, 24] },
+    6: { data: 108, blocks: [4, 27, 16] },
+  };
+  const ALIGN = { 1: [], 2: [6, 18], 3: [6, 22], 4: [6, 26], 5: [6, 30], 6: [6, 34] };
+
+  function bch15(data) {
+    const G = 0b10100110111;
+    const digits = x => { let n = 0; while (x) { n++; x >>= 1; } return n; };
+    let d = data << 10;
+    while (digits(d) - digits(G) >= 0) d ^= G << (digits(d) - digits(G));
+    return ((data << 10) | d) ^ 0b101010000010010;
+  }
+
+  function maskFn(p, i, j) {
+    switch (p) {
+      case 0: return (i + j) % 2 === 0;
+      case 1: return i % 2 === 0;
+      case 2: return j % 3 === 0;
+      case 3: return (i + j) % 3 === 0;
+      case 4: return (Math.floor(i / 2) + Math.floor(j / 3)) % 2 === 0;
+      case 5: return (i * j) % 2 + (i * j) % 3 === 0;
+      case 6: return ((i * j) % 2 + (i * j) % 3) % 2 === 0;
+      case 7: return ((i * j) % 3 + (i + j) % 2) % 2 === 0;
+    }
+  }
+
+  function formatInfo(M, n, bits) {
+    for (let i = 0; i < 15; i++) {
+      const mod = bits === null ? false : ((bits >> i) & 1) === 1;
+      let r, c;
+      if (i < 6) { r = i; c = 8; }
+      else if (i < 8) { r = i + 1; c = 8; }
+      else { r = n - 15 + i; c = 8; }
+      M[r][c] = mod;
+      if (i < 8) { r = 8; c = n - 1 - i; }
+      else if (i < 9) { r = 8; c = 7; }
+      else { r = 8; c = 15 - i - 1; }
+      M[r][c] = mod;
+    }
+  }
+
+  function buildMatrix(ver, n, seq, maskP) {
+    const M = Array.from({ length: n }, () => Array(n).fill(null));
+    const finder = (r0, c0) => {
+      for (let r = -1; r <= 7; r++) for (let c = -1; c <= 7; c++) {
+        const rr = r0 + r, cc = c0 + c;
+        if (rr < 0 || rr >= n || cc < 0 || cc >= n) continue;
+        M[rr][cc] = (r >= 0 && r <= 6 && (c === 0 || c === 6)) ||
+                    (c >= 0 && c <= 6 && (r === 0 || r === 6)) ||
+                    (r >= 2 && r <= 4 && c >= 2 && c <= 4);
+      }
+    };
+    finder(0, 0); finder(0, n - 7); finder(n - 7, 0);
+    for (let i = 8; i < n - 8; i++) {
+      if (M[i][6] === null) M[i][6] = i % 2 === 0;
+      if (M[6][i] === null) M[6][i] = i % 2 === 0;
+    }
+    for (const r of ALIGN[ver]) for (const c of ALIGN[ver]) {
+      if (M[r][c] !== null) continue;
+      for (let dr = -2; dr <= 2; dr++) for (let dc = -2; dc <= 2; dc++) {
+        M[r + dr][c + dc] = Math.max(Math.abs(dr), Math.abs(dc)) !== 1;
+      }
+    }
+    M[n - 8][8] = true;
+    formatInfo(M, n, null);   // reserve
+    let inc = -1, row = n - 1, bitIdx = 7, byteIdx = 0;
+    for (let col = n - 1; col > 0; col -= 2) {
+      if (col === 6) col--;
+      for (;;) {
+        for (let c = 0; c < 2; c++) {
+          const cc = col - c;
+          if (M[row][cc] === null) {
+            let dark = false;
+            if (byteIdx < seq.length) dark = ((seq[byteIdx] >> bitIdx) & 1) === 1;
+            if (maskFn(maskP, row, cc)) dark = !dark;
+            M[row][cc] = dark;
+            if (--bitIdx < 0) { byteIdx++; bitIdx = 7; }
+          }
+        }
+        row += inc;
+        if (row < 0 || row >= n) { row -= inc; inc = -inc; break; }
+      }
+    }
+    formatInfo(M, n, bch15(maskP));   // EC level M code is 0, so data = mask
+    return M;
+  }
+
+  function penalty(M, n) {
+    let pen = 0;
+    // Rule 1: runs >= 5
+    for (let axis = 0; axis < 2; axis++) {
+      for (let i = 0; i < n; i++) {
+        let run = 1;
+        for (let j = 1; j < n; j++) {
+          const a = axis ? M[j][i] : M[i][j];
+          const b = axis ? M[j - 1][i] : M[i][j - 1];
+          if (a === b) { run++; }
+          else { if (run >= 5) pen += 3 + run - 5; run = 1; }
+        }
+        if (run >= 5) pen += 3 + run - 5;
+      }
+    }
+    // Rule 2: 2x2 blocks
+    for (let r = 0; r < n - 1; r++) for (let c = 0; c < n - 1; c++) {
+      const v = M[r][c];
+      if (M[r][c + 1] === v && M[r + 1][c] === v && M[r + 1][c + 1] === v) pen += 3;
+    }
+    // Rule 3: finder-like 1011101 with 4 light on a side
+    const P1 = '10111010000', P2 = '00001011101';
+    for (let axis = 0; axis < 2; axis++) {
+      for (let i = 0; i < n; i++) {
+        let s = '';
+        for (let j = 0; j < n; j++) s += (axis ? M[j][i] : M[i][j]) ? '1' : '0';
+        for (let k = s.indexOf(P1); k !== -1; k = s.indexOf(P1, k + 1)) pen += 40;
+        for (let k = s.indexOf(P2); k !== -1; k = s.indexOf(P2, k + 1)) pen += 40;
+      }
+    }
+    // Rule 4: dark balance
+    let dark = 0;
+    for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (M[r][c]) dark++;
+    pen += 10 * Math.floor(Math.abs(dark * 100 / (n * n) - 50) / 5);
+    return pen;
+  }
+
+  function encode(text, forceMask) {
+    const bytes = Array.from(new TextEncoder().encode(text));
+    let ver = null;
+    for (let v = 1; v <= 6; v++) if (bytes.length <= VER[v].data - 2) { ver = v; break; }
+    if (ver === null) throw new Error('QR payload too long (' + bytes.length + ' bytes, max 106)');
+    const info = VER[ver], n = 17 + 4 * ver;
+    const bits = [];
+    const push = (val, len) => { for (let i = len - 1; i >= 0; i--) bits.push((val >> i) & 1); };
+    push(4, 4);                       // byte mode
+    push(bytes.length, 8);            // count (8 bits for versions 1-9)
+    for (const b of bytes) push(b, 8);
+    push(0, Math.min(4, info.data * 8 - bits.length));   // terminator
+    while (bits.length % 8) bits.push(0);
+    const cw = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      let b = 0;
+      for (let j = 0; j < 8; j++) b = (b << 1) | bits[i + j];
+      cw.push(b);
+    }
+    const pads = [0xEC, 0x11];
+    for (let i = 0; cw.length < info.data; i ^= 1) cw.push(pads[i]);
+    const [nb, dpb, epb] = info.blocks;
+    const blocks = [], ecs = [];
+    for (let b = 0; b < nb; b++) {
+      const d = cw.slice(b * dpb, (b + 1) * dpb);
+      blocks.push(d);
+      ecs.push(rsEC(d, epb));
+    }
+    const seq = [];
+    for (let i = 0; i < dpb; i++) for (let b = 0; b < nb; b++) seq.push(blocks[b][i]);
+    for (let i = 0; i < epb; i++) for (let b = 0; b < nb; b++) seq.push(ecs[b][i]);
+    if (forceMask != null) return buildMatrix(ver, n, seq, forceMask);
+    let best = null, bestPen = Infinity;
+    for (let mp = 0; mp < 8; mp++) {
+      const M = buildMatrix(ver, n, seq, mp);
+      const p = penalty(M, n);
+      if (p < bestPen) { bestPen = p; best = M; }
+    }
+    return best;
+  }
+
+  return { encode };
+})();
+
+// ---------------------------------------------------------------------------
+// Card rendering
+// ---------------------------------------------------------------------------
+const params = new URLSearchParams(location.search);
+const scriptStr = (params.get('script') || 'i25x100,b100x5,i25x100').replace(/\s+/g, '');
+const freezeMs = params.has('t') ? Math.max(0, parseInt(params.get('t'), 10) || 0) : null;
+
+const canvas = document.getElementById('card');
+const ctx = canvas.getContext('2d');
+let viewScale = 1;
+
+function fit() {
+  const dpr = window.devicePixelRatio || 1;
+  const s = Math.min(window.innerWidth / LAYOUT.W, window.innerHeight / LAYOUT.H);
+  canvas.style.width = (LAYOUT.W * s) + 'px';
+  canvas.style.height = (LAYOUT.H * s) + 'px';
+  canvas.width = Math.round(LAYOUT.W * s * dpr);
+  canvas.height = Math.round(LAYOUT.H * s * dpr);
+  viewScale = s * dpr;
+}
+window.addEventListener('resize', () => { fit(); if (freezeMs !== null) draw(freezeMs); });
+fit();
+
+// Session QR is static; time QR is regenerated on each 500 ms boundary.
+let sessionMatrix = null, qrError = null;
+try {
+  sessionMatrix = QR.encode('LLTC1;' + scriptStr);
+} catch (e) {
+  qrError = e.message;
+}
+let timeMatrix = null, timeQRIndex = -1;
+
+function timeQRFor(ms) {
+  const idx = Math.floor(ms / 500);
+  if (idx !== timeQRIndex) {
+    timeQRIndex = idx;
+    timeMatrix = QR.encode('LLT;' + String(idx * 500).padStart(8, '0'));
+  }
+  return timeMatrix;
+}
+
+function drawQRMatrix(M, x, y, size) {
+  const n = M.length, m = size / n;
+  ctx.fillStyle = '#000';
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) {
+    if (M[r][c]) ctx.fillRect(x + c * m, y + r * m, m + 0.4, m + 0.4);
+  }
+}
+
+function panel(x, y, w, h) {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x, y, w, h);
+}
+
+function drawBrackets() {
+  const inset = 20, arm = 90, t = 14;
+  ctx.fillStyle = '#000';
+  const corner = (x, y, dx, dy) => {
+    ctx.fillRect(x, y, dx * arm, dy * t);
+    ctx.fillRect(x, y, dx * t, dy * arm);
+  };
+  // fillRect handles negative sizes poorly across engines; normalize by hand
+  const rect = (x, y, w, h) => ctx.fillRect(Math.min(x, x + w), Math.min(y, y + h), Math.abs(w), Math.abs(h));
+  ctx.fillStyle = '#000';
+  rect(inset, inset, arm, t);                       rect(inset, inset, t, arm);
+  rect(LAYOUT.W - inset, inset, -arm, t);           rect(LAYOUT.W - inset, inset, -t, arm);
+  rect(inset, LAYOUT.H - inset, arm, -t);           rect(inset, LAYOUT.H - inset, t, -arm);
+  rect(LAYOUT.W - inset, LAYOUT.H - inset, -arm, -t); rect(LAYOUT.W - inset, LAYOUT.H - inset, -t, -arm);
+}
+
+function draw(ms) {
+  ctx.setTransform(viewScale, 0, 0, viewScale, 0, 0);
+  // neutral background for AE
+  ctx.fillStyle = '#7f7f7f';
+  ctx.fillRect(0, 0, LAYOUT.W, LAYOUT.H);
+  drawBrackets();
+
+  // header
+  ctx.fillStyle = '#111';
+  ctx.textAlign = 'center';
+  ctx.font = 'bold 44px "SF Mono", Menlo, monospace';
+  ctx.fillText('LETSLAPSE TEST CARD v1', LAYOUT.W / 2, 92);
+  ctx.font = '28px "SF Mono", Menlo, monospace';
+  ctx.fillText(scriptStr, LAYOUT.W / 2, 140);
+
+  // QR panels (white area doubles as quiet zone)
+  panel(20, 180, 420, 420);
+  panel(550, 180, 440, 420);
+  ctx.fillStyle = '#111';
+  ctx.font = '24px "SF Mono", Menlo, monospace';
+  ctx.fillText('SESSION', 230, 222);
+  ctx.fillText('TIME', 770, 222);
+  if (sessionMatrix) drawQRMatrix(sessionMatrix, LAYOUT.sessionQR.x, LAYOUT.sessionQR.y, LAYOUT.sessionQR.size);
+  else {
+    ctx.fillStyle = '#a00';
+    ctx.fillText('SCRIPT TOO LONG', 230, 400);
+  }
+  drawQRMatrix(timeQRFor(ms), LAYOUT.timeQR.x, LAYOUT.timeQR.y, LAYOUT.timeQR.size);
+
+  // Gray-code strip: 60 Hz tick counter
+  const tick = Math.floor(ms * 60 / 1000) & 0xFFFF;
+  const gray = tick ^ (tick >>> 1);
+  const st = LAYOUT.strip;
+  panel(90, st.y - 10, 820, st.blockH + 20);
+  for (let i = 0; i < st.blocks; i++) {
+    let dark;
+    if (i === 0) dark = true;         // black reference
+    else if (i === 1) dark = false;   // white reference
+    else dark = ((gray >> (15 - (i - 2))) & 1) === 1;
+    if (dark) {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(st.x0 + i * st.blockW, st.y, st.blockW, st.blockH);
+    }
+  }
+
+  // sweep dial: 1 rev/sec, 0 at 12 o'clock, clockwise
+  const d = LAYOUT.dial;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.arc(d.cx, d.cy, d.faceR, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.arc(d.cx, d.cy, d.faceR - 2, 0, Math.PI * 2); ctx.stroke();
+  for (let k = 0; k < 10; k++) {
+    const a = (Math.PI * 2 * k) / 10 - Math.PI / 2;
+    ctx.lineWidth = k === 0 ? 9 : 5;
+    ctx.beginPath();
+    ctx.moveTo(d.cx + Math.cos(a) * 180, d.cy + Math.sin(a) * 180);
+    ctx.lineTo(d.cx + Math.cos(a) * 196, d.cy + Math.sin(a) * 196);
+    ctx.stroke();
+  }
+  const frac = (ms % 1000) / 1000;
+  const ha = Math.PI * 2 * frac - Math.PI / 2;
+  ctx.lineWidth = d.handW; ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(d.cx, d.cy);
+  ctx.lineTo(d.cx + Math.cos(ha) * d.handR, d.cy + Math.sin(ha) * d.handR);
+  ctx.stroke();
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(d.cx, d.cy, 12, 0, Math.PI * 2); ctx.fill();
+
+  // digits
+  panel(500, 830, 460, 220);
+  ctx.fillStyle = '#000';
+  ctx.font = 'bold 96px "SF Mono", Menlo, monospace';
+  const ss = String(Math.floor(ms / 1000) % 60).padStart(2, '0');
+  const mmm = String(Math.floor(ms % 1000)).padStart(3, '0');
+  ctx.fillText(ss + '.' + mmm, 730, 950);
+  ctx.font = '30px "SF Mono", Menlo, monospace';
+  ctx.fillText('t=' + (ms / 1000).toFixed(3) + 's  tick=' + tick, 730, 1010);
+
+  // AE patches
+  const p = LAYOUT.patches;
+  panel(90, p.y - 10, 820, p.h + 20);
+  const colors = p.grays.map(g => `rgb(${g},${g},${g})`).concat(['rgb(255,0,0)', 'rgb(0,255,0)', 'rgb(0,0,255)']);
+  for (let i = 0; i < colors.length; i++) {
+    ctx.fillStyle = colors[i];
+    ctx.fillRect(p.x0 + i * p.w, p.y, p.w, p.h);
+  }
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+  for (let i = 0; i <= colors.length; i++) {
+    ctx.beginPath();
+    ctx.moveTo(p.x0 + i * p.w, p.y);
+    ctx.lineTo(p.x0 + i * p.w, p.y + p.h);
+    ctx.stroke();
+  }
+
+  // constant-velocity ball
+  const b = LAYOUT.ball;
+  panel(90, 1310, 820, 100);
+  const phase = (ms % b.period) / b.period;
+  const tri = phase < 0.5 ? phase * 2 : 2 - phase * 2;
+  const bx = b.xMin + tri * (b.xMax - b.xMin);
+  ctx.fillStyle = '#000';
+  ctx.beginPath(); ctx.arc(bx, b.yc, b.r, 0, Math.PI * 2); ctx.fill();
+
+  // footer
+  ctx.fillStyle = '#111';
+  ctx.font = '24px "SF Mono", Menlo, monospace';
+  ctx.fillText('?script=…&t=…   click for fullscreen', LAYOUT.W / 2, 1476);
+}
+
+document.addEventListener('click', () => {
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => {});
+});
+
+if (freezeMs !== null) {
+  draw(freezeMs);
+} else {
+  let t0 = null;
+  const loop = ts => {
+    if (t0 === null) t0 = ts;
+    draw(ts - t0);
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>

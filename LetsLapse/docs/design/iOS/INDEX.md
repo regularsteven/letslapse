@@ -70,6 +70,7 @@ DEBUG hook: `LL_COLLECTIONS=seed|list|detail` — seeds two demo collections fro
 | Interval · idle | [capture-interval.portrait.svg](capture-interval.portrait.svg) | `App/CaptureView.swift` (`intervalPickerRow`) | ✅ |
 | Interval · running | [capture-interval.running.portrait.svg](capture-interval.running.portrait.svg) | `App/CaptureView.swift` (`intervalRunningPills` — `BurstStatusIndicator` zebra + elapsed pill, `blendDiagnosticsReadout`); same row for JPEG and DNG runs | ✅ |
 | Video · idle | [capture-video.portrait.svg](capture-video.portrait.svg) | `App/CaptureView.swift` (`speedChipsRow`) | ✅ |
+| Video · idle · test-card chip | described in [capture-video.portrait.svg](capture-video.portrait.svg) desc | `App/CaptureView.swift` (`testCardChip`) + `App/TestCardRig.swift` — countdown/running/finished capsule above the speed row when the monitor test card (`LetsLapse/tools/testcard/`) is sighted; `LL_TESTRIG=chip` freezes it | 🟡 |
 | Video · recording | [capture-video.recording.portrait.svg](capture-video.recording.portrait.svg) | `App/CaptureView.swift` (`speedMarquee`, `segmentStrip`) | ✅ |
 | Interval · idle · landscape | [capture-interval.landscape.svg](capture-interval.landscape.svg) | `App/CaptureView.swift` (`landscapeLayout`, `landscapeExposureControl`) | ✅ |
 | Video · idle · landscape | [capture-video.landscape.svg](capture-video.landscape.svg) | `App/CaptureView.swift` (`landscapeLayout`, `landscapeEstimateChips`, `landscapeExposureControl`) | ✅ |

@@ -26,6 +26,9 @@ struct CaptureView: View {
     /// Device-motion primitive for Photo mode's capture-when-steady gate (and
     /// the live "waiting for steady" indicator).
     @StateObject private var steadiness = SteadinessMonitor()
+    /// Monitor test-rig watcher/executor (see TestCardRig.swift): watches the
+    /// idle Video preview for the test card, then runs its script hands-free.
+    @StateObject private var testRig = TestCardRigController()
 
     @State private var mode: CaptureMode
     @State private var sequenceMode: LiveCaptureSequence.Mode
@@ -259,6 +262,7 @@ struct CaptureView: View {
             // A pill left by another mode (running or settling) doesn't
             // follow the user across the switch.
             if burstPillMode != nil, burstPillMode != newMode { dismissBurstPill() }
+            updateTestCardWatch()
             guard RecordingSettingsStore.isEnabled else { return }
             if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
                 interval = seconds
@@ -378,7 +382,9 @@ struct CaptureView: View {
             }
             updateWatchRecordingState()
             updateIdleTimer()
+            updateTestCardWatch()
         }
+        .onChange(of: testRig.phase) { _ in updateTestCardWatch() }
         .onChange(of: camera.recordingStartedAt) { _ in
             now = Date()
             updateWatchRecordingState()
@@ -452,6 +458,11 @@ struct CaptureView: View {
         // anyway, so re-saving is a no-op there.
         RecordingSettingsStore.save(captureMode: mode)
         refreshRecentCapture()
+        testRig.camera = camera
+        if ProcessInfo.processInfo.environment["LL_TESTRIG"] == "chip" {
+            testRig.seedDemoChip()
+        }
+        updateTestCardWatch()
         #if DEBUG
         applyBurstPreviewHook()
         #endif
@@ -641,10 +652,23 @@ struct CaptureView: View {
         camera.setPhotoAspectPreview(wantsPhotoAspectPreview)
     }
 
+    /// The rig only gets preview frames while there is nothing else going on:
+    /// Video mode, idle, and the rig itself still hunting. Everything else —
+    /// any capture, other modes, an armed or running rig — detaches the tap so
+    /// recordings never carry the extra output.
+    private func updateTestCardWatch() {
+        if mode == .video && !isCapturing && testRig.wantsFrames {
+            camera.startTestCardTap(testRig.tap)
+        } else {
+            camera.stopTestCardTap()
+        }
+    }
+
     private func cleanUpOnDisappear() {
         // Idempotent — the finish handlers already stop it, but a mid-session
         // close (or a Photo-mode exit) shouldn't leave motion updates running.
         steadiness.stop()
+        camera.stopTestCardTap()
         #if os(iOS)
         LocationService.shared.stopUpdates()
         watchRemote.setCommandHandler(nil)
@@ -737,6 +761,9 @@ struct CaptureView: View {
 
     private var portraitControls: some View {
         VStack(spacing: 13) {
+            if testRig.phase != .idle {
+                testCardChip
+            }
             if mode == .video {
                 if camera.isRecording {
                     speedMarquee
@@ -1111,6 +1138,46 @@ struct CaptureView: View {
             return sensorSummaryLabel(sensor)
         }
         return camera.selectedResolution.stillLabel
+    }
+
+    // MARK: - Test-card rig chip
+
+    /// The rig's whole UI: countdown (tap cancels), live run (tap stops and
+    /// keeps the partial take), then the result line. Styled after the
+    /// Target… pill so it reads as part of the letterbox controls.
+    private var testCardChip: some View {
+        Button { testRig.cancel() } label: {
+            TimelineView(.periodic(from: .now, by: 0.5)) { timeline in
+                HStack(spacing: 6) {
+                    Circle().fill(LL.amber).frame(width: 7, height: 7)
+                    Text(testCardChipText(at: timeline.date))
+                        .font(.system(size: 12.5, weight: .medium).monospacedDigit())
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func testCardChipText(at date: Date) -> String {
+        switch testRig.phase {
+        case .idle:
+            return ""
+        case .countdown(let script, let endsAt):
+            // .distantFuture is the LL_TESTRIG=chip screenshot freeze.
+            let remaining = endsAt == .distantFuture
+                ? 3 : max(0, Int(endsAt.timeIntervalSince(date).rounded(.up)))
+            return "Test card \(script.raw) — starts in \(remaining)s · tap to cancel"
+        case .running(let script, let startedAt):
+            let remaining = max(0, Int(script.totalSeconds - date.timeIntervalSince(startedAt)))
+            return "Test run \(script.raw) — \(remaining)s left · tap to stop"
+        case .finished(let message):
+            return message
+        }
     }
 
     // MARK: - Speed chips (idle)

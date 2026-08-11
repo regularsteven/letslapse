@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Video (idle) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (portraitLayout, portraitTopBar, speedChipsRow, modeRow, shutter row). Video mode, not recording. speedChipsRow is the Target… button alone — the fixed speed presets were removed. 16:9 preview nearly fills the safe area (y 89–788); chrome sits over it. Status bar hidden on capture screens; safe-area top 59, bottom 34.</desc>
+  <desc>Mirrors App/CaptureView.swift (portraitLayout, portraitTopBar, speedChipsRow, modeRow, shutter row). Video mode, not recording. speedChipsRow is the Target… button alone — the fixed speed presets were removed. 16:9 preview nearly fills the safe area (y 89–788); chrome sits over it. Status bar hidden on capture screens; safe-area top 59, bottom 34. Conditional state not drawn here: the test-card rig chip (testCardChip) — when the idle Video preview sights the monitor test card (tools/testcard/), a Target…-styled capsule appears ABOVE this speed row in the controls VStack (same #2B2B2E 0.9 capsule, 12.5pt white text, 7pt amber dot leading): "Test card i25x100,b100x5,i25x100 — starts in 3s · tap to cancel", then a running/finished line. Reproduce with LL_TESTRIG=chip.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
