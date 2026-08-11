@@ -2379,6 +2379,11 @@ final class CameraController: NSObject, ObservableObject {
     func startRecording(mode: LiveCaptureSequence.Mode) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording else { return }
+            // The rig's preview tap must be gone BEFORE the writer starts —
+            // synchronously, on this queue. The view's own detach arrives a
+            // beat later and would reconfigure the session under the
+            // recording (see detachTestCardTapNow).
+            self.detachTestCardTapNow()
             let startedAt = Date()
             // Geotagging: open this take's fix tracking now, so the location
             // baked into every segment is where the recording started — the fix
@@ -2547,8 +2552,18 @@ final class CameraController: NSObject, ObservableObject {
 
     /// Attach the rig's sparse preview tap (see TestCardRig.swift). Safe to
     /// call repeatedly; the output is created once and re-added as needed.
+    /// Refused outright while any capture is in flight: the view's
+    /// idle-detection is main-thread state that can lag the session queue,
+    /// and adding an output reconfigures the session under a live movie
+    /// writer — which kills it (see detachTestCardTapNow).
     func startTestCardTap(_ tap: TestCardFrameTap) {
         sessionQueue.async {
+            guard !self.movieOutput.isRecording,
+                  self.activeSequence == nil,
+                  !self.intervalActive else {
+                LLog("testcard: tap refused — capture in flight")
+                return
+            }
             let output: AVCaptureVideoDataOutput
             if let existing = self.testCardOutput {
                 output = existing
@@ -2577,13 +2592,25 @@ final class CameraController: NSObject, ObservableObject {
     /// starts with the session exactly as it would be without the rig.
     func stopTestCardTap() {
         sessionQueue.async {
-            guard let output = self.testCardOutput else { return }
-            output.setSampleBufferDelegate(nil, queue: nil)
-            if self.session.outputs.contains(output) {
-                self.session.beginConfiguration()
-                self.session.removeOutput(output)
-                self.session.commitConfiguration()
-            }
+            self.detachTestCardTapNow()
+        }
+    }
+
+    /// sessionQueue-confined, synchronous detach. Capture starts call this
+    /// INLINE before touching the movie output: the view-driven
+    /// `stopTestCardTap` rides a main-thread `.onChange` and lands on this
+    /// queue AFTER `startRecording` — a session reconfiguration under a
+    /// starting writer, which dies with -11805 "Cannot Record" or -11818
+    /// "Recording Stopped" on its first frame (2026-08-11: every recording
+    /// in Video mode was a one-frame dud while the rig's tap was attached).
+    private func detachTestCardTapNow() {
+        guard let output = testCardOutput else { return }
+        output.setSampleBufferDelegate(nil, queue: nil)
+        if session.outputs.contains(output) {
+            session.beginConfiguration()
+            session.removeOutput(output)
+            session.commitConfiguration()
+            LLog("testcard: tap detached")
         }
     }
 
@@ -2883,6 +2910,9 @@ final class CameraController: NSObject, ObservableObject {
     func startInterval(every seconds: Double, frameCap: Int? = nil) {
         sessionQueue.async {
             guard self.intervalTimer == nil else { return }
+            // Same ordering rule as startRecording: the rig's tap detaches
+            // inline before any capture work.
+            self.detachTestCardTapNow()
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("interval-\(Int(Date().timeIntervalSince1970))")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
