@@ -455,16 +455,33 @@ struct WarpTimelineView: View {
 
     // MARK: - Output-time mapping
 
-    /// Cumulative output (clip) seconds at each stretch bound — steady-speed
-    /// spans (length ÷ speed), the same approximation the selection line
-    /// reports. The bar draws in this domain, so a stretch's width is its
-    /// share of the finished clip, not of the source: a 50× stretch that eats
-    /// most of the source but lands as 1.9s of a 14s clip draws narrow, and
-    /// the slow moment that IS most of the clip draws wide.
+    /// Per-stretch speeds that reproduce the compiled schedule's real output
+    /// shares — `length ÷ compiled seconds`, eases and quantization included —
+    /// so the bar, the caption and the estimate card all tell one story. The
+    /// nominal speeds when no schedule exists (Advanced ramp, unprobed
+    /// source).
+    private var effectiveSpeeds: [Double] {
+        let speeds = timeline.speeds
+        guard let compiled = model.compiledWarp(),
+              compiled.stretchFrames.count == speeds.count else { return speeds }
+        let outFps = Double(max(1, model.outputFPS))
+        return speeds.indices.map { index in
+            let frames = compiled.stretchFrames[index]
+            guard frames > 0 else { return speeds[index] }
+            return timeline.length(of: index) / (Double(frames) / outFps)
+        }
+    }
+
+    /// Cumulative output (clip) seconds at each stretch bound. The bar draws
+    /// in this domain, so a stretch's width is its share of the finished
+    /// clip, not of the source: a 50× stretch that eats most of the source
+    /// but lands as 1.9s of a 14s clip draws narrow, and the slow moment
+    /// that IS most of the clip draws wide.
     private var outputBounds: [Double] {
+        let speeds = effectiveSpeeds
         var bounds = [0.0]
         for index in 0..<timeline.stretchCount {
-            bounds.append(bounds[index] + timeline.length(of: index) / max(0.0001, timeline.speeds[index]))
+            bounds.append(bounds[index] + timeline.length(of: index) / max(0.0001, speeds[index]))
         }
         return bounds
     }
@@ -474,7 +491,7 @@ struct WarpTimelineView: View {
         let clamped = min(max(0, time), total)
         let index = timeline.stretchIndex(at: clamped)
         return outputBounds[index]
-            + (clamped - timeline.bounds[index]) / max(0.0001, timeline.speeds[index])
+            + (clamped - timeline.bounds[index]) / max(0.0001, effectiveSpeeds[index])
     }
 
     /// Output seconds → source seconds — the inverse of `outputTime(atSource:)`.
@@ -486,7 +503,7 @@ struct WarpTimelineView: View {
             index += 1
         }
         let source = timeline.bounds[index]
-            + (clamped - outs[index]) * max(0.0001, timeline.speeds[index])
+            + (clamped - outs[index]) * max(0.0001, effectiveSpeeds[index])
         return min(max(0, source), total)
     }
 
@@ -509,12 +526,13 @@ struct WarpTimelineView: View {
     /// shares — the tile row is the clip being made.
     private func tileLayout(width: CGFloat) -> [(index: Int, width: CGFloat)] {
         let bounds = timeline.bounds
+        let speeds = effectiveSpeeds
         var visible: [(index: Int, share: Double)] = []
         for index in 0..<timeline.stretchCount {
             let clippedStart = max(bounds[index], visibleStart)
             let clippedEnd = min(bounds[index + 1], visibleEnd)
             if clippedEnd > clippedStart {
-                let outputSpan = (clippedEnd - clippedStart) / max(0.0001, timeline.speeds[index])
+                let outputSpan = (clippedEnd - clippedStart) / max(0.0001, speeds[index])
                 visible.append((index, outputSpan / visibleOutputSpan))
             }
         }
@@ -896,6 +914,13 @@ struct WarpTimelineView: View {
         .accessibilityLabel("Resize stretch boundary")
     }
 
+    /// The compiled outcome of one seam's ease — nil while no schedule exists
+    /// or the seam never asked for an ease.
+    private func seamEase(_ index: Int) -> WarpCompiler.SeamEase? {
+        guard let eases = model.compiledWarp()?.seamEases, index < eases.count else { return nil }
+        return eases[index]
+    }
+
     private func seamPills(width: CGFloat) -> some View {
         let bounds = timeline.bounds
         var previousX: CGFloat = -100
@@ -911,32 +936,51 @@ struct WarpTimelineView: View {
             pills.append((index, x, stacked, timeline.seams[index]))
         }
         return ForEach(pills, id: \.index) { pill in
+            let ease = seamEase(pill.index)
+            let clamped = ease?.isClamped == true
             Button {
                 withAnimation(.easeInOut(duration: 0.15)) {
                     openSeam = openSeam == pill.index ? nil : pill.index
                 }
             } label: {
-                Text(seamLabel(pill.seam))
+                Text(seamLabel(pill.seam, ease: ease))
                     .font(.system(size: 9.5, weight: .bold))
-                    .foregroundStyle(pill.seam.ramp == .step ? Color(red: 0.227, green: 0.227, blue: 0.247) : LL.amber)
+                    .foregroundStyle(
+                        clamped ? LL.ink
+                        : pill.seam.ramp == .step ? Color(red: 0.227, green: 0.227, blue: 0.247)
+                        : LL.amber)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 3)
                     .background(
-                        pill.seam.ramp == .step ? Color(red: 0.894, green: 0.894, blue: 0.914) : LL.ink,
+                        clamped ? LL.amber
+                        : pill.seam.ramp == .step ? Color(red: 0.894, green: 0.894, blue: 0.914)
+                        : LL.ink,
                         in: Capsule())
                     .frame(minWidth: 44, minHeight: 36)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .position(x: min(max(pill.x, 24), width - 24), y: pill.stacked ? 84 : 66)
-            .accessibilityLabel("Seam ramp \(seamLabel(pill.seam))")
+            .accessibilityLabel(
+                clamped
+                ? "Seam ramp \(seamLabel(pill.seam, ease: ease)) — doesn't fit"
+                : "Seam ramp \(seamLabel(pill.seam, ease: ease))")
         }
     }
 
-    private func seamLabel(_ seam: WarpTimeline.Seam) -> String {
+    /// "~0.2s" — an ease's real compiled length, for the clamped pill.
+    private func easeSecondsLabel(_ seconds: Double) -> String {
+        seconds < 0.05 ? "~0s" : String(format: "~%.1fs", seconds)
+    }
+
+    private func seamLabel(_ seam: WarpTimeline.Seam, ease: WarpCompiler.SeamEase?) -> String {
         guard seam.ramp != .step else { return "step" }
-        let side = seam.side == .before ? " ◀" : seam.side == .after ? " ▶" : " ·?"
-        return "~\(seam.ramp.label)\(side)"
+        // A clamped ease shows what it really compiles to — the chip the user
+        // picked lives in the popover.
+        if let ease, ease.isClamped {
+            return easeSecondsLabel(ease.applied)
+        }
+        return "~\(seam.ramp.label)"
     }
 
     // MARK: - Seam popover
@@ -953,10 +997,7 @@ struct WarpTimelineView: View {
                     let active = seam.ramp == ramp
                     Button {
                         model.updateWarp {
-                            var updated = $0.seams[index]
-                            updated.ramp = ramp
-                            if ramp == .step { updated.side = nil }
-                            $0.setSeam(updated, at: index)
+                            $0.setSeam(WarpTimeline.Seam(ramp: ramp), at: index)
                         }
                     } label: {
                         Text(ramp.label)
@@ -969,9 +1010,10 @@ struct WarpTimelineView: View {
                     .buttonStyle(.plain)
                 }
             }
-            HStack(spacing: 6) {
-                sideChip(index, seam: seam, side: .before, label: "◀ Before seam")
-                sideChip(index, seam: seam, side: .after, label: "After seam ▶")
+            if let ease = seamEase(index), ease.isClamped {
+                Text(seamClampNote(seam: seam, ease: ease))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(LL.accent)
             }
             Text(seamHint(seam))
                 .font(.system(size: 10))
@@ -982,37 +1024,19 @@ struct WarpTimelineView: View {
         .shadow(color: .black.opacity(0.18), radius: 10, y: 4)
     }
 
-    private func sideChip(_ index: Int, seam: WarpTimeline.Seam, side: WarpTimeline.Seam.Side, label: String) -> some View {
-        let active = seam.side == side
-        return Button {
-            guard seam.ramp != .step else { return }
-            model.updateWarp {
-                var updated = $0.seams[index]
-                updated.side = side
-                $0.setSeam(updated, at: index)
-            }
-        } label: {
-            Text(label)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(active ? LL.amber : .primary)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
-                .background(active ? LL.ink : LL.screenBackground, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
-        }
-        .buttonStyle(.plain)
-        .opacity(seam.ramp == .step ? 0.35 : 1)
+    /// Why the pill shows less than the chip asked for: easing through fast
+    /// speeds costs `duration × mean eased speed` footage seconds, and the
+    /// stretches beside this seam are shorter than that bill.
+    private func seamClampNote(seam: WarpTimeline.Seam, ease: WarpCompiler.SeamEase) -> String {
+        ease.applied < 0.05
+            ? "No room for the ~\(seam.ramp.label) ease — it plays as a step. The stretches beside this seam are too short."
+            : "Only \(easeSecondsLabel(ease.applied)) of the ~\(seam.ramp.label) ease fits — the stretches beside this seam are too short for more."
     }
 
     private func seamHint(_ seam: WarpTimeline.Seam) -> String {
-        if seam.ramp == .step {
-            return "Instant speed step — no frames lost; blur snaps with speed."
-        }
-        guard let side = seam.side else {
-            return "Pick which side spends the time — the ease must borrow from one stretch."
-        }
-        return side == .before
-            ? "Ease completes before the seam — borrows time from the earlier stretch."
-            : "Ease starts at the seam — borrows time from the later stretch."
+        seam.ramp == .step
+            ? "Instant speed step — no frames lost; blur snaps with speed."
+            : "The ease rides across the seam — fast footage brakes into the cut, the denser footage carries the slow tail."
     }
 
     // MARK: - Selection line
@@ -1021,7 +1045,10 @@ struct WarpTimelineView: View {
         let index = min(selectedStretch, max(0, timeline.stretchCount - 1))
         let speed = timeline.speeds[index]
         let range = timeline.range(of: index)
-        let output = timeline.length(of: index) / max(0.0001, speed)
+        // Effective speed, so this number is the stretch's real share of the
+        // compiled clip — eases included — and the captions sum to the
+        // estimate card's total.
+        let output = timeline.length(of: index) / max(0.0001, effectiveSpeeds[index])
         return HStack(spacing: 8) {
             Text(
                 "Stretch \(index + 1) of \(timeline.stretchCount) · "

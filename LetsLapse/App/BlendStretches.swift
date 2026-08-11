@@ -96,7 +96,14 @@ enum StretchBuilder {
     }
 
     /// The stretches of a recorded live sequence, in render order.
-    static func stretches(for sequence: LiveCaptureSequence) -> [BlendStretch] {
+    /// `segmentSeconds` (probed file durations, keyed by segment file name)
+    /// wins over the sidecar's wall-clock spans when present — the stopwatch
+    /// runs a fraction of a second past what the camera actually wrote, and
+    /// spans built on those phantom frames starve the render at end-of-file.
+    static func stretches(
+        for sequence: LiveCaptureSequence,
+        segmentSeconds: [String: Double]? = nil
+    ) -> [BlendStretch] {
         switch sequence.mode {
         case .ramp:
             return sequence.segments
@@ -107,12 +114,14 @@ enum StretchBuilder {
                         index: position,
                         kind: segment.frameRate > sequence.baseFrameRate ? .moment : .base,
                         fps: segment.frameRate > 0 ? segment.frameRate : max(1, sequence.baseFrameRate),
-                        seconds: max(0, segment.relativeEnd - segment.relativeStart)
+                        seconds: max(0, segmentSeconds?[segment.fileName]
+                            ?? (segment.relativeEnd - segment.relativeStart))
                     )
                 }
         case .marker:
             guard let whole = sequence.segments.first else { return [] }
-            let duration = max(0, whole.relativeEnd - whole.relativeStart)
+            let duration = max(0, segmentSeconds?[whole.fileName]
+                ?? (whole.relativeEnd - whole.relativeStart))
             let pieces = markerPieces(sequence: sequence, duration: duration)
             guard !pieces.isEmpty else {
                 return singleStretch(seconds: duration, fps: Double(sequence.baseFrameRate))

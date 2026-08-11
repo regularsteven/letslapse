@@ -127,6 +127,13 @@ final class AppModel: ObservableObject {
         /// this" and "you agreed to this", and it is the only reason the card shows a marker at
         /// all. Cleared the moment a proposal is applied.
         var sceneTaggedAutomatically: Bool?
+        /// Probed asset duration per segment file (keyed by the clip's original
+        /// relative-name last component). The sidecar's wall-clock spans run
+        /// ~0.2–0.6s past what the camera actually wrote, and a warp schedule
+        /// built on those phantom frames starves at end-of-file — always at the
+        /// slowest tail of a seam ease. This map is the truth the warp axis is
+        /// built on; nil (pre-probe) falls back to the sidecar spans.
+        var sourceSegmentSeconds: [String: Double]?
 
         var summary: String {
             switch kind {
@@ -1476,7 +1483,9 @@ final class AppModel: ObservableObject {
         guard let capture = currentCapture else { return [] }
         switch source {
         case .liveSequence(let liveSource):
-            let stretches = StretchBuilder.stretches(for: liveSource.sequence)
+            let stretches = StretchBuilder.stretches(
+                for: liveSource.sequence,
+                segmentSeconds: capture.sourceSegmentSeconds)
             return stretches.isEmpty
                 ? StretchBuilder.singleStretch(
                     seconds: capture.sourceDurationSeconds, fps: capture.sourceFPS)
@@ -1491,10 +1500,47 @@ final class AppModel: ObservableObject {
         }
     }
 
-    /// The timeline the Adjust screen draws — the stored one, else a fresh
-    /// seed (not yet published; edits go through `updateWarp`).
+    /// The timeline the Adjust screen draws — the stored one (rebased onto
+    /// the current axis if it predates the file probe), else a fresh seed
+    /// (not yet published; edits go through `updateWarp`).
     func activeWarp() -> WarpTimeline {
-        warp ?? seededWarp()
+        warp.map(healWarpAxis) ?? seededWarp()
+    }
+
+    /// A stored timeline may have been authored before the axis was probed —
+    /// its bounds ride the sidecar's wall-clock spans, which overshoot the
+    /// files by a fraction of a second per segment. Rebase it segment-by-
+    /// segment onto the probed axis so every seam stays glued to its file
+    /// boundary. Idempotent: once totals agree the timeline passes through
+    /// untouched.
+    private func healWarpAxis(_ timeline: WarpTimeline) -> WarpTimeline {
+        guard case .liveSequence(let live) = source, live.sequence.mode == .ramp,
+              let probed = currentCapture?.sourceSegmentSeconds, !probed.isEmpty,
+              timeline.sourceSeconds > 0.01 else { return timeline }
+        let ordered = live.sequence.segments.sorted { $0.index < $1.index }
+        let oldSpans = ordered.map { max(0, $0.relativeEnd - $0.relativeStart) }
+        let newSpans = ordered.map { probed[$0.fileName] ?? max(0, $0.relativeEnd - $0.relativeStart) }
+        let oldTotal = oldSpans.reduce(0, +)
+        let newTotal = newSpans.reduce(0, +)
+        guard abs(timeline.sourceSeconds - newTotal) > 0.02 else { return timeline }
+        var healed = timeline
+        guard abs(timeline.sourceSeconds - oldTotal) < 0.02 else {
+            // Authored on an axis we can't reconstruct — a uniform rescale
+            // still lands the endpoints where the files really end.
+            let scale = newTotal / timeline.sourceSeconds
+            healed.bounds = timeline.bounds.map { $0 * scale }
+            return healed
+        }
+        var oldCum = [0.0], newCum = [0.0]
+        for span in oldSpans { oldCum.append((oldCum.last ?? 0) + span) }
+        for span in newSpans { newCum.append((newCum.last ?? 0) + span) }
+        healed.bounds = timeline.bounds.map { bound in
+            var k = 0
+            while k < oldSpans.count - 1, bound > oldCum[k + 1] + 0.0001 { k += 1 }
+            let offset = oldSpans[k] > 0 ? (bound - oldCum[k]) / oldSpans[k] : 0
+            return newCum[k] + offset * newSpans[k]
+        }
+        return healed
     }
 
     /// One undoable moment of the Adjust screen. `warp` stays Optional so undo
@@ -1530,7 +1576,7 @@ final class AppModel: ObservableObject {
     /// `endWarpCoalescing()` when the gesture lifts.
     func updateWarp(coalescing key: String? = nil, _ transform: (inout WarpTimeline) -> Void) {
         let before = WarpEditSnapshot(warp: warp, useRamp: useRamp, reframe: reframe)
-        let baseline = warp ?? seededWarp()
+        let baseline = activeWarp()
         var timeline = baseline
         transform(&timeline)
         // A no-op edit pushes nothing — including identity transforms on the
@@ -1671,19 +1717,11 @@ final class AppModel: ObservableObject {
             : .two
         var seams: [WarpTimeline.Seam] = []
         for index in 0..<(stretches.count - 1) {
-            let intoMoment = stretches[index].kind == .base && stretches[index + 1].kind == .moment
-            let outOfMoment = stretches[index].kind == .moment && stretches[index + 1].kind == .base
-            // The base side spends the ease's time — decelerating from a fast
-            // stretch passes through fast speeds, which costs tens of source
-            // seconds only the base footage has. This is the prototype's own
-            // seed: ~1s ◀ into a moment, ~1s ▶ out of it.
-            if ramp != .step, intoMoment {
-                seams.append(WarpTimeline.Seam(ramp: ramp, side: .before))
-            } else if ramp != .step, outOfMoment {
-                seams.append(WarpTimeline.Seam(ramp: ramp, side: .after))
-            } else {
-                seams.append(.step)
-            }
+            let momentEdge = stretches[index].kind != stretches[index + 1].kind
+            // Eases straddle their seams — the compiler splits the sweep at
+            // the renderable floor, so the base footage brakes into the cut
+            // and the burst's denser frames carry the slow tail.
+            seams.append(ramp != .step && momentEdge ? WarpTimeline.Seam(ramp: ramp) : .step)
         }
         return WarpTimeline(bounds: bounds, speeds: speeds, seams: seams)
     }
@@ -1705,20 +1743,41 @@ final class AppModel: ObservableObject {
     /// The physically recorded regions of the warp's source axis, in order —
     /// one per segment file for a ramp-mode shoot, one for everything else.
     private func warpSourceRegions() -> [WarpCompiler.SourceRegion] {
+        let probed = currentCapture?.sourceSegmentSeconds
         switch source {
         case .liveSequence(let live) where live.sequence.mode == .ramp && !live.sequence.segments.isEmpty:
-            return live.sequence.segments
-                .sorted { $0.index < $1.index }
-                .map {
-                    WarpCompiler.SourceRegion(
-                        span: max(0, $0.relativeEnd - $0.relativeStart),
-                        fps: Double($0.frameRate > 0 ? $0.frameRate : max(1, live.sequence.baseFrameRate)))
+            let ordered = live.sequence.segments.sorted { $0.index < $1.index }
+            var regions: [WarpCompiler.SourceRegion] = []
+            for (position, segment) in ordered.enumerated() {
+                let span = max(0, probed?[segment.fileName] ?? (segment.relativeEnd - segment.relativeStart))
+                // Real time the camera lost switching formats before this
+                // segment. The sidecar's start/end stamps bracket the truth
+                // from opposite directions (writer start-up latency vs
+                // stopwatch overshoot) — pixel-measured gaps on a real shoot
+                // (~0.6s at both boundaries) sit near their midpoint. Bias
+                // positive: overestimating reads as one slightly-calmer
+                // frame, underestimating as a visible jump.
+                var gap = 0.0
+                if position > 0 {
+                    let prev = ordered[position - 1]
+                    let prevSpan = probed?[prev.fileName] ?? max(0, prev.relativeEnd - prev.relativeStart)
+                    let startBased = segment.relativeStart - prev.relativeStart - prevSpan
+                    let endBased = segment.relativeStart - prev.relativeEnd
+                    let midpoint = (max(0, startBased) + max(0, endBased)) / 2
+                    gap = midpoint > 0.05 ? min(2.0, midpoint + 0.25) : 0
                 }
-                .filter { $0.span > 0 }
+                regions.append(WarpCompiler.SourceRegion(
+                    span: span,
+                    fps: Double(segment.frameRate > 0 ? segment.frameRate : max(1, live.sequence.baseFrameRate)),
+                    leadingGap: gap))
+            }
+            return regions.filter { $0.span > 0 }
         case .liveSequence(let live):
             let whole = live.sequence.segments.first
-            let span = whole.map { max(0, $0.relativeEnd - $0.relativeStart) }
-                ?? currentCapture?.sourceDurationSeconds ?? 0
+            var span: Double = currentCapture?.sourceDurationSeconds ?? 0
+            if let whole {
+                span = probed?[whole.fileName] ?? max(0, whole.relativeEnd - whole.relativeStart)
+            }
             guard span > 0 else { return [] }
             return [WarpCompiler.SourceRegion(span: span, fps: Double(max(1, live.sequence.baseFrameRate)))]
         case .video:
@@ -1736,9 +1795,10 @@ final class AppModel: ObservableObject {
         switch source {
         case .liveSequence(let live) where live.sequence.mode == .ramp && !live.sequence.segments.isEmpty:
             let ordered = live.sequence.segments.sorted { $0.index < $1.index }
+            let probed = currentCapture?.sourceSegmentSeconds
             var cursor = 0.0
             for (position, segment) in ordered.enumerated() {
-                let span = max(0, segment.relativeEnd - segment.relativeStart)
+                let span = max(0, probed?[segment.fileName] ?? (segment.relativeEnd - segment.relativeStart))
                 if time <= cursor + span || position == ordered.count - 1 {
                     guard let url = live.resolvedByOriginalName[segment.fileName]
                         ?? live.segmentURLs.first else { return nil }
@@ -1781,6 +1841,7 @@ final class AppModel: ObservableObject {
         var codec: OutputCodec?
         /// Region spans follow the async source probe, not just the capture.
         var sourceSeconds: Double?
+        var segmentSeconds: [String: Double]?
         var value: WarpCompiler.Compiled?
     }
     private var compiledWarpMemo: CompiledWarpMemo?
@@ -1799,7 +1860,8 @@ final class AppModel: ObservableObject {
            memo.trim == trim,
            memo.captureID == currentCaptureID,
            memo.codec == blendSourceCodec,
-           memo.sourceSeconds == currentCapture?.sourceDurationSeconds {
+           memo.sourceSeconds == currentCapture?.sourceDurationSeconds,
+           memo.segmentSeconds == currentCapture?.sourceSegmentSeconds {
             return memo.value
         }
         let regions = warpSourceRegions()
@@ -1811,6 +1873,7 @@ final class AppModel: ObservableObject {
             timeline: timeline, outputFPS: outputFPS, trim: trim,
             captureID: currentCaptureID, codec: blendSourceCodec,
             sourceSeconds: currentCapture?.sourceDurationSeconds,
+            segmentSeconds: currentCapture?.sourceSegmentSeconds,
             value: compiled)
         return compiled
     }
@@ -3703,7 +3766,8 @@ final class AppModel: ObservableObject {
             collections = (manifest.collections ?? []).sorted { $0.createdAt < $1.createdAt }
             for capture in captures
             where capture.kind == .video
-                && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil || capture.sourceWidth == nil) {
+                && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
+                    || capture.sourceWidth == nil || capture.sourceSegmentSeconds == nil) {
                 Task { [weak self] in
                     await self?.refreshVideoMetadata(for: capture.id)
                 }
@@ -3800,6 +3864,7 @@ final class AppModel: ObservableObject {
         }
 
         var totalDuration: Double = 0
+        var segmentSeconds: [String: Double] = [:]
         var fps: Double?
         var width: Int?
         var height: Int?
@@ -3808,6 +3873,7 @@ final class AppModel: ObservableObject {
             let asset = AVURLAsset(url: url)
             if let duration = try? await asset.load(.duration).seconds, duration.isFinite {
                 totalDuration += duration
+                segmentSeconds[url.lastPathComponent] = duration
             }
             guard fps == nil || width == nil,
                   let track = try? await asset.loadTracks(withMediaType: .video).first else { continue }
@@ -3828,6 +3894,7 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
         if let fps { captures[index].sourceFPS = fps }
         if totalDuration > 0 { captures[index].sourceDurationSeconds = totalDuration }
+        if !segmentSeconds.isEmpty { captures[index].sourceSegmentSeconds = segmentSeconds }
         if let width, let height {
             captures[index].sourceWidth = width
             captures[index].sourceHeight = height

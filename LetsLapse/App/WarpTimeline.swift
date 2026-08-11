@@ -30,17 +30,13 @@ struct WarpTimeline: Codable, Equatable {
             var label: String { rawValue }
         }
 
-        enum Side: String, Codable {
-            case before
-            case after
-        }
-
+        /// An ease always straddles its seam: the compiler splits the sweep
+        /// at the fast side's renderable floor, so each side plays exactly
+        /// the speeds its footage can. (Timelines saved before 2026-08-11
+        /// carried a `side` choice; decoding ignores it.)
         var ramp: Ramp
-        /// Which stretch spends the time. Required whenever `ramp != .step`;
-        /// nil renders as a step and the UI shows "·?" until the user picks.
-        var side: Side?
 
-        static let step = Seam(ramp: .step, side: nil)
+        static let step = Seam(ramp: .step)
     }
 
     /// Stretch boundaries in source seconds — always sorted, first 0, last the
@@ -95,10 +91,10 @@ struct WarpTimeline: Codable, Equatable {
     // MARK: - Edits (the prototype's algorithms, verbatim in spirit)
 
     /// The seam a fresh boundary gets: an ease when the speed jump is big
-    /// enough to read as one, an instant step otherwise. Side is never assumed.
+    /// enough to read as one, an instant step otherwise.
     static func smartSeam(_ v1: Double, _ v2: Double) -> Seam {
         let hi = Swift.max(v1, v2), lo = Swift.max(0.0001, Swift.min(v1, v2))
-        return hi / lo > 4 ? Seam(ramp: .one, side: nil) : .step
+        return hi / lo > 4 ? Seam(ramp: .one) : .step
     }
 
     /// Carve [a, b] into a real-time (1×) stretch exactly where drawn. Swallows
@@ -265,10 +261,24 @@ struct WarpTimeline: Codable, Equatable {
 enum WarpCompiler {
     /// One physically recorded region of the source axis: `span` real seconds
     /// at `fps`. A plain video is one region; a ramp-mode shoot is one per
-    /// segment file, concatenated (inter-file gaps dropped).
+    /// segment file, concatenated. `leadingGap` is the real time the camera
+    /// LOST before this region's first frame (format switches drop ~0.6s) —
+    /// no footage exists for it, but the world moved through it, and an ease
+    /// crossing the boundary must account for that displacement or the cut
+    /// reads as a dropped-frames glitch.
     struct SourceRegion {
         var span: Double
         var fps: Double
+        var leadingGap: Double = 0
+    }
+
+    /// What actually happened to one seam's requested ease: the output
+    /// seconds asked for versus what the borrowing stretch could afford —
+    /// `applied` is 0 when the ease was dropped and the seam plays as a step.
+    struct SeamEase: Equatable {
+        var requested: Double
+        var applied: Double
+        var isClamped: Bool { applied < requested - 0.01 }
     }
 
     struct Compiled {
@@ -280,82 +290,197 @@ enum WarpCompiler {
         var frameSourceTimes: [[Double]]
         /// Exact output length of the warp: total output frames / outFps.
         var outputSeconds: Double
+        /// Output frames landing in each stretch (mid-window source time
+        /// bucketed against the warp bounds) — the real per-stretch shares of
+        /// the clip, eases and quantization included.
+        var stretchFrames: [Int]
+        /// Aligned with the warp's seams; nil for seams that never asked for
+        /// an ease (step, no side picked, equal speeds).
+        var seamEases: [SeamEase?]
         var outputFrames: Int { schedules.reduce(0) { $0 + $1.count } }
     }
 
-    /// A run of source time at one sampled speed.
-    private struct Piece {
+    /// A run of source time at one sampled speed. Internal (not private) so
+    /// the standalone verification harness can dump the compiled curve.
+    struct Piece {
         var start: Double
         var end: Double
         var speed: Double
     }
 
-    static let easeSteps = 16
+    /// Constant-speed runs per ease. 32 keeps the speed step between
+    /// neighbouring runs under ~35% for a 50×↔¼× sweep — the ease's slow tail
+    /// crosses the cut on sharp footage, where a coarser staircase would show.
+    static let easeSteps = 32
 
     private static func smoothstep(_ t: Double) -> Double {
         let x = min(max(t, 0), 1)
         return x * x * (3 - 2 * x)
     }
 
+    /// Ease interpolation in log-speed: perceived speed is multiplicative, so
+    /// a 50×→¼× warp should spend equal ease time per halving. A linear blend
+    /// crams the whole felt slowdown into the ease's last instants.
+    static func easedSpeed(from vA: Double, to vB: Double, at t: Double) -> Double {
+        let a = max(0.0001, vA)
+        return a * pow(max(0.0001, vB) / a, smoothstep(t))
+    }
+
     /// The piecewise speed curve in the source domain: stretches minus the
-    /// spans their eased seams borrow, plus the sampled ease runs. A seam with
-    /// no side picked renders as a step, exactly as the UI warns.
-    private static func pieces(for warp: WarpTimeline) -> [Piece] {
+    /// spans their eased seams borrow, plus the sampled ease runs. Every ease
+    /// STRADDLES its seam, split at the fast side's renderable floor: the part
+    /// of the sweep that side's footage can play (down to 1× for base-rate
+    /// footage) lands exactly at the boundary, and the sub-floor tail plays
+    /// from the slow side's denser footage — the only footage that can. At the
+    /// cut both sides render the same real-time cadence, so the speed curve is
+    /// continuous on screen by construction. The second value reports what
+    /// each requested ease shrank to.
+    static func pieces(
+        for warp: WarpTimeline,
+        regions: [SourceRegion],
+        outFps: Double
+    ) -> (pieces: [Piece], seamEases: [SeamEase?]) {
         let bounds = warp.bounds
         let speeds = warp.speeds
-        guard speeds.count > 0, bounds.count == speeds.count + 1 else { return [] }
+        var seamEases = [SeamEase?](repeating: nil, count: warp.seams.count)
+        guard speeds.count > 0, bounds.count == speeds.count + 1 else { return ([], seamEases) }
+
+        func regionFps(at time: Double) -> Double {
+            var cursor = 0.0
+            for region in regions {
+                cursor += region.span
+                if time < cursor - 0.0005 { return max(1, region.fps) }
+            }
+            return max(1, regions.last?.fps ?? outFps)
+        }
+
+        // An output frame must consume at least one source frame, so footage
+        // recorded at `fps` cannot play below outFps/fps.
+        func floorSpeed(at time: Double) -> Double {
+            outFps / regionFps(at: time)
+        }
+
+        // Real time the camera lost at this boundary (format switch), when
+        // the boundary sits on a region edge. The world moved through it, so
+        // an ease crossing here owes that displacement.
+        func gapAt(boundary: Double) -> Double {
+            var cursor = 0.0
+            for region in regions {
+                if abs(boundary - cursor) < 0.02 { return max(0, region.leadingGap) }
+                cursor += region.span
+            }
+            return 0
+        }
 
         // How much of each stretch the eases at its two ends consume.
         var headCost = [Double](repeating: 0, count: speeds.count)
         var tailCost = [Double](repeating: 0, count: speeds.count)
-        struct EaseRun { var seamIndex: Int; var side: WarpTimeline.Seam.Side; var runs: [Piece] }
+        struct EaseRun { var seamIndex: Int; var beforeRuns: [Piece]; var afterRuns: [Piece] }
         var eases: [EaseRun] = []
 
         for (index, seam) in warp.seams.enumerated() {
             let duration = seam.ramp.seconds
-            guard duration > 0, let side = seam.side else { continue }
+            guard duration > 0 else { continue }
             let boundary = bounds[index + 1]
             let vA = speeds[index], vB = speeds[index + 1]
             guard abs(vA - vB) > 0.0001 else { continue }
-            let borrowing = side == .before ? index : index + 1
-            // Room in the borrowing stretch, leaving space for its other ease
-            // and a sliver of steady speed.
-            let stretchSpan = bounds[borrowing + 1] - bounds[borrowing]
-            let alreadyBorrowed = headCost[borrowing] + tailCost[borrowing]
-            let available = max(0, (stretchSpan - alreadyBorrowed) * 0.9)
-            guard available > 0.01 else { continue }
 
-            func sourceCost(_ dur: Double) -> Double {
-                (0..<easeSteps).reduce(0.0) { sum, step in
-                    let t = (Double(step) + 0.5) / Double(easeSteps)
-                    return sum + (vA + (vB - vA) * smoothstep(t)) * (dur / Double(easeSteps))
-                }
+            let decel = vA > vB
+            let fastFloor = decel
+                ? floorSpeed(at: boundary - 0.001)
+                : floorSpeed(at: boundary + 0.001)
+            // A recording gap at the boundary forces the sweep to cross while
+            // per-frame displacement still exceeds the hole: half the hole
+            // rides on each boundary frame, so the crossing speed must cover
+            // its half plus real footage, with margin for the gap estimate.
+            let gap = gapAt(boundary: boundary)
+            let gapSplit = gap > 0 ? (gap / 2) * outFps * 1.3 + 1.0 : 0
+            let split = min(max(max(fastFloor, gapSplit), min(vA, vB)), max(vA, vB))
+
+            // 32 constant-speed runs sweeping vA→vB; the prefix on vA's side
+            // of the split plays before the boundary, the rest after. At a
+            // gapped boundary the two runs touching the cut are replaced by
+            // EXACT one-output-frame runs: each keeps the sweep's crossing
+            // displacement (half the hole plus real footage) but consumes
+            // only the footage part — the hole does the rest of the travel.
+            let sweepSpeeds = (0..<easeSteps).map { step -> Double in
+                let t = (Double(step) + 0.5) / Double(easeSteps)
+                return easedSpeed(from: vA, to: vB, at: t)
             }
+            let beforeCount = sweepSpeeds.prefix { decel ? $0 >= split : $0 <= split }.count
+            struct EaseSample { var speed: Double; var width: Double }
+            func runs(_ dur: Double) -> [EaseSample] {
+                var samples = sweepSpeeds.map {
+                    EaseSample(speed: $0, width: $0 * dur / Double(easeSteps))
+                }
+                if gap > 0 {
+                    let crossDisplacement = split / outFps
+                    if beforeCount > 0 {
+                        let fpsA = regionFps(at: boundary - 0.001)
+                        let frames = max(1, ((crossDisplacement - gap / 2) * fpsA).rounded())
+                        samples[beforeCount - 1] =
+                            EaseSample(speed: frames * outFps / fpsA, width: frames / fpsA)
+                    }
+                    if beforeCount < easeSteps {
+                        let fpsB = regionFps(at: boundary + 0.001)
+                        let frames = max(1, ((crossDisplacement - gap / 2) * fpsB).rounded())
+                        samples[beforeCount] =
+                            EaseSample(speed: frames * outFps / fpsB, width: frames / fpsB)
+                    }
+                }
+                return samples
+            }
+            func costs(_ dur: Double) -> (before: Double, after: Double) {
+                let widths = runs(dur).map(\.width)
+                return (
+                    widths.prefix(beforeCount).reduce(0, +),
+                    widths.dropFirst(beforeCount).reduce(0, +))
+            }
+
+            // Each side pays only for the part of the sweep it hosts, out of
+            // what its stretch still has (90%, leaving a sliver of steady
+            // speed; a stretch eased at BOTH ends offers each seam half, so
+            // the first seam compiled can't starve the second). The requested
+            // duration shrinks to the tighter budget.
+            func allowance(_ stretch: Int) -> Double {
+                let span = bounds[stretch + 1] - bounds[stretch]
+                let leftEased = stretch > 0 && warp.seams[stretch - 1].ramp != .step
+                let rightEased = stretch < warp.seams.count && warp.seams[stretch].ramp != .step
+                // Both ends eased: each seam owns half the budget, and the
+                // other seam's borrowings live in its own half.
+                if leftEased && rightEased { return span * 0.45 }
+                return span * 0.9 - headCost[stretch] - tailCost[stretch]
+            }
+            let availBefore = max(0, allowance(index))
+            let availAfter = max(0, allowance(index + 1))
             var dur = duration
-            var cost = sourceCost(dur)
-            if cost > available {
-                dur = duration * available / cost
-                cost = sourceCost(dur)
+            var (costBefore, costAfter) = costs(dur)
+            var scale = 1.0
+            if costBefore > availBefore, costBefore > 0 { scale = min(scale, availBefore / costBefore) }
+            if costAfter > availAfter, costAfter > 0 { scale = min(scale, availAfter / costAfter) }
+            if scale < 1 {
+                dur = duration * scale
+                (costBefore, costAfter) = costs(dur)
             }
             // An ease squeezed below a few output frames reads as a step —
             // skip it rather than emit sub-frame runs.
-            guard dur > 0.05 else { continue }
+            guard dur > 0.05 else {
+                seamEases[index] = SeamEase(requested: duration, applied: 0)
+                continue
+            }
+            seamEases[index] = SeamEase(requested: duration, applied: dur)
 
-            var runs: [Piece] = []
-            var cursor = side == .before ? boundary - cost : boundary
-            for step in 0..<easeSteps {
-                let t = (Double(step) + 0.5) / Double(easeSteps)
-                let v = vA + (vB - vA) * smoothstep(t)
-                let width = v * (dur / Double(easeSteps))
-                runs.append(Piece(start: cursor, end: cursor + width, speed: v))
-                cursor += width
+            var beforeRuns: [Piece] = []
+            var afterRuns: [Piece] = []
+            var cursor = boundary - costBefore
+            for (step, sample) in runs(dur).enumerated() {
+                let run = Piece(start: cursor, end: cursor + sample.width, speed: sample.speed)
+                if step < beforeCount { beforeRuns.append(run) } else { afterRuns.append(run) }
+                cursor += sample.width
             }
-            if side == .before {
-                tailCost[index] += cost
-            } else {
-                headCost[index + 1] += cost
-            }
-            eases.append(EaseRun(seamIndex: index, side: side, runs: runs))
+            tailCost[index] += costBefore
+            headCost[index + 1] += costAfter
+            eases.append(EaseRun(seamIndex: index, beforeRuns: beforeRuns, afterRuns: afterRuns))
         }
 
         // Assemble: each stretch's steady middle, with ease runs replacing the
@@ -364,17 +489,17 @@ enum WarpCompiler {
         for stretch in 0..<speeds.count {
             let start = bounds[stretch] + headCost[stretch]
             let end = bounds[stretch + 1] - tailCost[stretch]
-            for ease in eases where ease.side == .after && ease.seamIndex + 1 == stretch {
-                result.append(contentsOf: ease.runs)
+            for ease in eases where ease.seamIndex + 1 == stretch {
+                result.append(contentsOf: ease.afterRuns)
             }
             if end > start {
                 result.append(Piece(start: start, end: end, speed: speeds[stretch]))
             }
-            for ease in eases where ease.side == .before && ease.seamIndex == stretch {
-                result.append(contentsOf: ease.runs)
+            for ease in eases where ease.seamIndex == stretch {
+                result.append(contentsOf: ease.beforeRuns)
             }
         }
-        return result.sorted { $0.start < $1.start }
+        return (result.sorted { $0.start < $1.start }, seamEases)
     }
 
     /// Compile the warp over `regions`, optionally restricted to the source
@@ -389,24 +514,20 @@ enum WarpCompiler {
         activeEnd: Double? = nil
     ) -> Compiled {
         let outFps = Double(max(1, outputFPS))
-        let pieces = pieces(for: warp)
+        let (pieces, seamEases) = pieces(for: warp, regions: regions, outFps: outFps)
         let limit = min(activeEnd ?? warp.sourceSeconds, warp.sourceSeconds)
         guard !pieces.isEmpty, !regions.isEmpty, limit > activeStart else {
             return Compiled(
                 schedules: regions.map { _ in [] },
                 frameSourceTimes: regions.map { _ in [] },
-                outputSeconds: 0)
-        }
-
-        func speed(at time: Double, pointer: inout Int) -> Double {
-            while pointer < pieces.count - 1, time >= pieces[pointer].end {
-                pointer += 1
-            }
-            return pieces[pointer].speed
+                outputSeconds: 0,
+                stretchFrames: [Int](repeating: 0, count: warp.stretchCount),
+                seamEases: seamEases)
         }
 
         var schedules: [[Int]] = []
         var frameTimes: [[Double]] = []
+        var stretchFrames = [Int](repeating: 0, count: warp.stretchCount)
         var regionStart = 0.0
         var pointer = 0
         for region in regions {
@@ -416,12 +537,72 @@ enum WarpCompiler {
             var times: [Double] = []
             var cursor = max(regionStart, activeStart)
             let end = min(regionEnd, limit)
+            // Fractional source frames owed between output frames — keeps
+            // Σ windows equal to the source frames actually walked.
+            var frameCarry = 0.0
+            // A region start rewinds the pointer: pieces can straddle a file
+            // boundary, and the runs that begin exactly at it must not be
+            // skipped by the previous region's walk.
+            while pointer > 0, pieces[pointer].start > cursor + 0.0001 { pointer -= 1 }
+            // Output-time integration: each output frame consumes exactly
+            // 1/outFps of OUTPUT time through the piece curve — short ease
+            // runs merge into one window, long steady pieces split into many
+            // — so per-frame displacement follows the planned sweep exactly,
+            // with no per-piece rounding artifacts beside a seam.
+            // Output time from `from` to the region end, capped — cheap peek
+            // to decide whether the leftover is a runt worth absorbing.
+            func remainingOutput(from: Double, pointer p: Int, cap: Double) -> Double {
+                var total = 0.0
+                var position = from
+                var q = p
+                while position < end - 0.0005, total < cap {
+                    while q < pieces.count - 1, position >= pieces[q].end - 0.0005 { q += 1 }
+                    let pieceEnd = q == pieces.count - 1 ? end : min(pieces[q].end, end)
+                    guard pieceEnd > position + 1e-9 else { break }
+                    let v = max(pieces[q].speed, outFps / fps)
+                    total += (pieceEnd - position) / v
+                    position = pieceEnd
+                }
+                return total
+            }
             while cursor < end - 0.0005 {
-                let v = max(speed(at: cursor, pointer: &pointer), outFps / fps)
-                let window = max(1, Int((v * fps / outFps).rounded()))
+                let frameStart = cursor
+                var budget = 1.0 / outFps
+                // A region must end on a whole output frame — a leftover
+                // shorter than half a frame would render as a runt with a
+                // fraction of the local displacement, a visible stutter right
+                // at the file cut. Absorb it into this frame instead.
+                if remainingOutput(from: cursor, pointer: pointer, cap: 1.6 / outFps) < 1.5 / outFps {
+                    budget = 1.6 / outFps
+                }
+                while budget > 1e-9, cursor < end - 0.0005 {
+                    while pointer < pieces.count - 1, cursor >= pieces[pointer].end - 0.0005 {
+                        pointer += 1
+                    }
+                    let piece = pieces[pointer]
+                    // The last piece owns everything to the region end —
+                    // matching the old behaviour for footage past the
+                    // timeline's bounds.
+                    let pieceEnd = pointer == pieces.count - 1 ? end : min(piece.end, end)
+                    guard pieceEnd > cursor + 1e-9 else { break }
+                    let v = max(piece.speed, outFps / fps)
+                    let take = min(budget, (pieceEnd - cursor) / v)
+                    cursor += take * v
+                    budget -= take
+                }
+                let sourceThisFrame = cursor - frameStart
+                guard sourceThisFrame > 0 else { break }
+                let exact = sourceThisFrame * fps + frameCarry
+                var window = Int(exact.rounded())
+                frameCarry = exact - Double(window)
+                if window < 1 {
+                    window = 1
+                    frameCarry -= 1
+                }
                 windows.append(window)
-                times.append(cursor + Double(window) / fps / 2)
-                cursor += Double(window) / fps
+                let mid = frameStart + sourceThisFrame / 2
+                times.append(mid)
+                stretchFrames[warp.stretchIndex(at: mid)] += 1
             }
             schedules.append(windows)
             frameTimes.append(times)
@@ -431,6 +612,8 @@ enum WarpCompiler {
         return Compiled(
             schedules: schedules,
             frameSourceTimes: frameTimes,
-            outputSeconds: Double(frames) / outFps)
+            outputSeconds: Double(frames) / outFps,
+            stretchFrames: stretchFrames,
+            seamEases: seamEases)
     }
 }
