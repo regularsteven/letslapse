@@ -71,10 +71,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     override init() {
         super.init()
         #if os(watchOS)
-        // Shoots are hands-off by design: stretch the frontmost grace period
-        // (2 → 8 minutes) so a wrist-down doesn't immediately cost the
-        // connection. The extended runtime session below covers the rest.
-        WKExtension.shared().isFrontmostTimeoutExtended = true
+        // Shoots are hands-off by design; the extended runtime session
+        // (syncKeepAwake) is what carries the app through wrist-down.
+        // `isFrontmostTimeoutExtended` used to stretch the frontmost grace
+        // period too, but it's been a no-op since watchOS 7.
         #if DEBUG
         applyDebugPreviewStateIfRequested()
         #endif
@@ -456,8 +456,16 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     }
 
     private func startExtendedSessionIfNeeded() {
-        if let extendedSession,
-           extendedSession.state == .running || extendedSession.state == .scheduled {
+        // `.notStarted` counts as alive: `start()` is asynchronous, and the
+        // state pushes that arrive while it settles must not replace the
+        // session object — dropping the reference deallocs a starting/running
+        // WKExtendedRuntimeSession mid-session ("WKExtendedRuntimeObject was
+        // dealloced while running", 2026-08-11 watch log), and the shoot ends
+        // up with no keep-awake at all. Only a session the system has
+        // invalidated is dead enough to replace; the delegate below clears
+        // the handle when that happens, so a refused start self-heals on the
+        // next sync.
+        if let extendedSession, extendedSession.state != .invalid {
             return
         }
         let session = WKExtendedRuntimeSession()

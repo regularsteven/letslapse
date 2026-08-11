@@ -55,8 +55,14 @@ final class SteadinessMonitor: ObservableObject {
         magnitudeHistory = []
         manager.deviceMotionUpdateInterval = updateInterval
         manager.startDeviceMotionUpdates(to: .main) { [weak self] motion, _ in
+            // Delivered on the main queue (guaranteed by `to: .main`), but the
+            // handler type is not actor-annotated — assert the isolation so
+            // the @MainActor call is statically sound without a per-sample
+            // Task at 50 Hz.
             guard let self, let motion else { return }
-            self.ingest(motion)
+            MainActor.assumeIsolated {
+                self.ingest(motion)
+            }
         }
         #endif
     }
@@ -88,7 +94,13 @@ final class SteadinessMonitor: ObservableObject {
             gateThreshold = t
             steadyCheckContinuation = continuation
             steadyCheckTimer = Timer.scheduledTimer(withTimeInterval: timeout, repeats: false) { [weak self] _ in
-                self?.resolveSteadyGate(false)
+                // Scheduled from this @MainActor method, so it fires on the
+                // main run loop — assert the isolation, same as the motion
+                // handler above.
+                guard let self else { return }
+                MainActor.assumeIsolated {
+                    self.resolveSteadyGate(false)
+                }
             }
         }
         #else
