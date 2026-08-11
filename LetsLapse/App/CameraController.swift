@@ -2771,7 +2771,10 @@ final class CameraController: NSObject, ObservableObject {
         final class Box: @unchecked Sendable { var seconds: Double? }
         let box = Box()
         let semaphore = DispatchSemaphore(value: 0)
-        Task.detached {
+        // userInitiated: the session queue blocks on this — a default-priority
+        // task under it trips the Thread Performance Checker's inversion
+        // warning (seen 2026-08-11).
+        Task.detached(priority: .userInitiated) {
             defer { semaphore.signal() }
             guard let duration = try? await AVURLAsset(url: url).load(.duration) else { return }
             let seconds = duration.seconds
