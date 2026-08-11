@@ -1807,6 +1807,29 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// The densest playback the footage under a stretch can honour: the
+    /// MINIMUM fps across the source regions its span crosses — a stretch
+    /// straddling a seam can only slow as far as its thinnest footage. Drives
+    /// the Adjust chips' fps gating; falls back to the output rate (which
+    /// gates like base footage) when no regions resolve.
+    func warpStretchFPS(_ index: Int) -> Double {
+        let warp = activeWarp()
+        guard index >= 0, warp.bounds.indices.contains(index + 1) else {
+            return Double(max(1, outputFPS))
+        }
+        let start = warp.bounds[index]
+        let end = warp.bounds[index + 1]
+        var cursor = 0.0
+        var minFPS: Double?
+        for region in warpSourceRegions() {
+            let regionStart = cursor
+            cursor += region.span
+            guard cursor > start + 0.0005, regionStart < end - 0.0005 else { continue }
+            minFPS = min(minFPS ?? region.fps, region.fps)
+        }
+        return minFPS ?? Double(max(1, outputFPS))
+    }
+
     /// The file and in-file time behind a point on the warp's source axis, for
     /// the playhead's keyframe preview.
     func warpFrameLocation(at time: Double) -> (url: URL, seconds: Double)? {

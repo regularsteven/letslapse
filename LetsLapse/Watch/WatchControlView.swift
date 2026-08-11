@@ -501,10 +501,14 @@ struct WatchControlView: View {
     /// screen's selected-option vocabulary; amber *fill* stays reserved for
     /// the toggle's live segment.
     private var timedBurstRow: some View {
+        // 1/4/8, not 1/2/4 (2026-08-11 ramp review): seam eases are funded by
+        // burst footage, and under ~4 s at 100 fps a ramped seam eats the
+        // whole burst bridging its own cuts. 1 s stays as the "just a beat"
+        // accent; 2 s promised more than post could keep.
         HStack(spacing: 6) {
             timedBurstButton(seconds: 1)
-            timedBurstButton(seconds: 2)
             timedBurstButton(seconds: 4)
+            timedBurstButton(seconds: 8)
         }
     }
 

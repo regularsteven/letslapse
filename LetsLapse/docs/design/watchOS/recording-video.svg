@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>watchOS · Recording (Video, ramp)</title>
-  <desc>Mirrors Watch/WatchControlView.swift recordingScreen for Video in ramp mode: REC + elapsed, live estimate line, exposure-lock button + segmented base/burst toggle, armed-duration chips, slide-to-stop, Stop at…, interval dots + sequence caption. Burst is arm-then-fire: the 1s/2s/4s chips arm a default burst length (radio-with-off, persisted across runs; amber tick = armed — this file shows 1s) and never fire anything themselves. The toggle's sides select states: tapping ⚡ starts a burst (armed length via timedBurst, open-ended if no chip is armed — see recording-video.freeform.svg), tapping the fps side returns to base and early-cancels a running burst; tapping the already-active side is a no-op. Amber fill marks the live segment only and swaps to the ⚡ side while bursting; the phone owns the revert timer. Crown adjusts ISO while exposure is locked.</desc>
+  <desc>Mirrors Watch/WatchControlView.swift recordingScreen for Video in ramp mode: REC + elapsed, live estimate line, exposure-lock button + segmented base/burst toggle, armed-duration chips, slide-to-stop, Stop at…, interval dots + sequence caption. Burst is arm-then-fire: the 1s/4s/8s chips arm a default burst length (1/4/8 per the 2026-08-11 ramp review — under ~4s at 100fps a ramped seam eats the whole burst bridging its own cuts; 1s stays as the just-a-beat accent) (radio-with-off, persisted across runs; amber tick = armed — this file shows 1s) and never fire anything themselves. The toggle's sides select states: tapping ⚡ starts a burst (armed length via timedBurst, open-ended if no chip is armed — see recording-video.freeform.svg), tapping the fps side returns to base and early-cancels a running burst; tapping the already-active side is a no-op. Amber fill marks the live segment only and swaps to the ⚡ side while bursting; the phone owns the revert timer. Crown adjusts ISO while exposure is locked.</desc>
   <defs>
     <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
   </defs>
@@ -42,9 +42,9 @@
         <path d="M27 114.5 l3.5 3.5 6 -7" stroke="#FFB340" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
         <text x="40.5" y="120" font-size="13" class="b" fill="#FFF">1s</text>
         <rect x="76" y="100" width="58" height="30" rx="10" fill="#FFF" opacity="0.12"/>
-        <text x="105" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">2s</text>
+        <text x="105" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">4s</text>
         <rect x="140" y="100" width="58" height="30" rx="10" fill="#FFF" opacity="0.12"/>
-        <text x="169" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">4s</text>
+        <text x="169" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">8s</text>
       </g>
 
       <!-- slide to stop -->

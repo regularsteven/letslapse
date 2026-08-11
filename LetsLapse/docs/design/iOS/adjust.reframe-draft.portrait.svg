@@ -128,17 +128,17 @@
       <!-- chips, hint, reframe row and bottom bar as adjust.reframe.portrait.svg -->
       <g id="speed-chips" font-size="14">
         <rect x="16" y="585" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="39.2" y="606" class="b" fill="#000" text-anchor="middle">¼×</text>
-        <text x="39.2" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">¼× slow</text>
+        <text x="39.2" y="606" class="b" fill="#000" text-anchor="middle">1×</text>
+        <text x="39.2" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">real time</text>
         <rect x="68.4" y="585" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="91.6" y="606" class="b" fill="#000" text-anchor="middle">1×</text>
-        <text x="91.6" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">real time</text>
+        <text x="91.6" y="606" class="b" fill="#000" text-anchor="middle">4×</text>
+        <text x="91.6" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
         <rect x="120.8" y="585" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="144" y="606" class="b" fill="#000" text-anchor="middle">4×</text>
-        <text x="144" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
+        <text x="144" y="606" class="b" fill="#000" text-anchor="middle">15×</text>
+        <text x="144" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
         <rect x="173.2" y="585" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="196.4" y="606" class="b" fill="#000" text-anchor="middle">15×</text>
-        <text x="196.4" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
+        <text x="196.4" y="606" class="b" fill="#000" text-anchor="middle">50×</text>
+        <text x="196.4" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">smooth</text>
         <rect x="225.6" y="585" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
         <text x="248.8" y="606" class="b" fill="#000" text-anchor="middle">60×</text>
         <text x="248.8" y="620" font-size="9.5" fill="#6D6D72" text-anchor="middle">flowing</text>

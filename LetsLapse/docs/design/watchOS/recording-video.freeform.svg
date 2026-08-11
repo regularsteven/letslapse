@@ -41,9 +41,9 @@
         <rect x="12" y="100" width="58" height="30" rx="10" fill="#FFF" opacity="0.12"/>
         <text x="41" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">1s</text>
         <rect x="76" y="100" width="58" height="30" rx="10" fill="#FFF" opacity="0.12"/>
-        <text x="105" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">2s</text>
+        <text x="105" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">4s</text>
         <rect x="140" y="100" width="58" height="30" rx="10" fill="#FFF" opacity="0.12"/>
-        <text x="169" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">4s</text>
+        <text x="169" y="120" font-size="13" class="b" fill="#FFF" text-anchor="middle">8s</text>
       </g>
 
       <!-- slide to stop -->

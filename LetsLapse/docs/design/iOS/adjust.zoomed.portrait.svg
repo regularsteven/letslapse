@@ -135,19 +135,21 @@
       </g>
 
       <!-- speed chips: 1× is now the selection's speed -->
+      <!-- speed chips, fps-gated (2026-08-11): this 1×-selected stretch is
+           base footage, so the racing 50×/60×/100× show and ¼×/½× hide. -->
       <g id="speed-chips" font-size="14">
-        <rect x="16" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="39.2" y="545" class="b" fill="#000" text-anchor="middle">¼×</text>
-        <text x="39.2" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">¼× slow</text>
-        <rect x="68.4" y="524" width="46.4" height="47" rx="12" fill="#1C1C1E"/>
-        <text x="91.6" y="545" class="b" fill="#FFB340" text-anchor="middle">1×</text>
-        <text x="91.6" y="559" font-size="9.5" fill="#FFF" opacity="0.6" text-anchor="middle">real time</text>
+        <rect x="16" y="524" width="46.4" height="47" rx="12" fill="#1C1C1E"/>
+        <text x="39.2" y="545" class="b" fill="#FFB340" text-anchor="middle">1×</text>
+        <text x="39.2" y="559" font-size="9.5" fill="#FFF" opacity="0.6" text-anchor="middle">real time</text>
+        <rect x="68.4" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
+        <text x="91.6" y="545" class="b" fill="#000" text-anchor="middle">4×</text>
+        <text x="91.6" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
         <rect x="120.8" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="144" y="545" class="b" fill="#000" text-anchor="middle">4×</text>
-        <text x="144" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">gentle</text>
+        <text x="144.0" y="545" class="b" fill="#000" text-anchor="middle">15×</text>
+        <text x="144.0" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
         <rect x="173.2" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
-        <text x="196.4" y="545" class="b" fill="#000" text-anchor="middle">15×</text>
-        <text x="196.4" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">subtle</text>
+        <text x="196.4" y="545" class="b" fill="#000" text-anchor="middle">50×</text>
+        <text x="196.4" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">smooth</text>
         <rect x="225.6" y="524" width="46.4" height="47" rx="12" fill="#FFF" filter="url(#soft)"/>
         <text x="248.8" y="545" class="b" fill="#000" text-anchor="middle">60×</text>
         <text x="248.8" y="559" font-size="9.5" fill="#6D6D72" text-anchor="middle">flowing</text>

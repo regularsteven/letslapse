@@ -31,11 +31,24 @@ struct AdjustView: View {
     @State private var selectedReframeKey: Int?
     @State private var reframeDraft: ReframeDraft?
 
-    /// The six canonical speeds. Free values come through the value sheet.
-    private static let speedChips: [(speed: Double, word: String)] = [
-        (0.25, "¼× slow"), (1, "real time"), (4, "gentle"),
-        (15, "subtle"), (60, "flowing"), (100, "streaks"),
-    ]
+    /// The canonical speeds, gated by what the selected stretch's footage can
+    /// honour (2026-08-11 ramp review): the slow-motion chips need dense
+    /// frames — ¼× wants footage at 4× the output rate, ½× at 2× (at 25 fps
+    /// output: ≥100 and ≥50 fps) — and the racing chips are for base footage
+    /// only: a burst exists to be slowed, and at slow-motion density the fast
+    /// end just devours it. 1×/4×/15× are always offered; free values come
+    /// through the value sheet.
+    private func speedChips(forStretchFPS fps: Double) -> [(speed: Double, word: String)] {
+        let out = Double(max(1, model.outputFPS))
+        var chips: [(speed: Double, word: String)] = []
+        if fps >= 4 * out { chips.append((0.25, "¼× slow")) }
+        if fps >= 2 * out { chips.append((0.5, "½× slow")) }
+        chips += [(1, "real time"), (4, "gentle"), (15, "subtle")]
+        if fps < 4 * out {
+            chips += [(50, "smooth"), (60, "flowing"), (100, "streaks")]
+        }
+        return chips
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -368,9 +381,10 @@ struct AdjustView: View {
         let timeline = model.activeWarp()
         let index = min(selectedStretch, max(0, timeline.stretchCount - 1))
         let current = timeline.speeds.indices.contains(index) ? timeline.speeds[index] : 1
+        let chips = speedChips(forStretchFPS: model.warpStretchFPS(index))
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
-                ForEach(Self.speedChips, id: \.speed) { chip in
+                ForEach(chips, id: \.speed) { chip in
                     let active = abs(current - chip.speed) < 0.001
                     Button {
                         model.updateWarp { $0.setSpeed(chip.speed, for: index) }

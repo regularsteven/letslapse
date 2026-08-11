@@ -240,7 +240,9 @@ struct WarpTimeline: Codable, Equatable {
         if abs(v - 1) < 0.001 { return "real time" }
         if v < 10 { return "gentle" }
         if v < 25 { return "subtle" }
-        if v < 50 { return "smooth" }
+        // 50 caps the smooth band: the 50× chip says "smooth", and captions
+        // must agree with the chip that set them (60× owns "flowing").
+        if v <= 50 { return "smooth" }
         if v < 100 { return "flowing" }
         return "streaks"
     }
