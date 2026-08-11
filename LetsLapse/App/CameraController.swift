@@ -1706,29 +1706,31 @@ final class CameraController: NSObject, ObservableObject {
             if let hold = switchExposureHold, !exposureLocked {
                 applySwitchExposureHold(hold, on: device)
             }
-            if formatChanged {
-                // Setting `activeFormat` also resets `videoZoomFactor` to 1 —
-                // re-assert the selected stop so a format change (resolution,
-                // fps, a ramp-burst segment) never silently jumps the framing.
-                if let pin = sequenceLensPin, device === pin.device {
-                    // Pinned run: the stop is a crop of this one lens, and the
-                    // factor was worked out in that lens's own space at pin time.
-                    device.videoZoomFactor = min(
-                        pin.zoomFactor, device.activeFormat.videoMaxZoomFactor)
-                } else if !physicalWorldActive, let stop = currentStop {
-                    device.videoZoomFactor = min(
-                        CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
-                }
-                // Setting `activeFormat` resets the device to its default colour
-                // space, so re-assert Apple Log if Capture Flat is on and the new
-                // format supports it (otherwise sRGB).
-                if #available(iOS 17.2, *) {
-                    let target: AVCaptureColorSpace =
-                        (appleLogEnabled && match.format.supportedColorSpaces.contains(.appleLog))
-                        ? .appleLog : .sRGB
-                    if device.activeColorSpace != target {
-                        device.activeColorSpace = target
-                    }
+            // Setting `activeFormat` resets `videoZoomFactor` to 1 — and so
+            // does re-adding a device input (the pin release swaps the
+            // virtual camera back in at 1.0 = ultra-wide framing). Re-assert
+            // the selected stop UNCONDITIONALLY: on the fast path the write
+            // is a no-op, and gating it on `formatChanged` shipped a
+            // viewfinder that came back from every ramp run at 0.5×
+            // (2026-08-11). Only the `activeFormat` skip is the fast path.
+            if let pin = sequenceLensPin, device === pin.device {
+                // Pinned run: the stop is a crop of this one lens, and the
+                // factor was worked out in that lens's own space at pin time.
+                device.videoZoomFactor = min(
+                    pin.zoomFactor, device.activeFormat.videoMaxZoomFactor)
+            } else if !physicalWorldActive, let stop = currentStop {
+                device.videoZoomFactor = min(
+                    CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
+            }
+            // Same rule for the colour space (self-guarded by the `!=`):
+            // re-assert Apple Log if Capture Flat is on and the format
+            // supports it (otherwise sRGB).
+            if #available(iOS 17.2, *) {
+                let target: AVCaptureColorSpace =
+                    (appleLogEnabled && match.format.supportedColorSpaces.contains(.appleLog))
+                    ? .appleLog : .sRGB
+                if device.activeColorSpace != target {
+                    device.activeColorSpace = target
                 }
             }
             #else
@@ -2851,16 +2853,19 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     private func resetLiveCaptureState() {
+        // Cleared FIRST: both the pin release and the base-rate restore
+        // re-apply a resting format, and each should pick with the normal
+        // preference, not the run's shared-rates one (the 2026-08-11 stop
+        // log showed the release picking "(shared format)" and the restore
+        // re-picking right after).
+        sequenceSharedRampRates = []
         // A run that pinned a lens leaves the session on that constituent —
-        // hand the optics device back before the resting format is re-pinned.
+        // hand the optics device back before the resting format is re-pinned;
+        // then let AE/AWB go if a hold is still standing (a run can end
+        // mid-burst).
         #if os(iOS)
         releaseSequenceLensPin()
         #endif
-        // Cleared before the resting format is re-applied, so the resting
-        // pick returns to the normal preference instead of the run's shared
-        // format; then let AE/AWB go if a hold is still standing (a run can
-        // end mid-burst).
-        sequenceSharedRampRates = []
         restoreBaseFrameRateIfNeeded()
         endSwitchExposureHold()
         timedBurstGeneration += 1
