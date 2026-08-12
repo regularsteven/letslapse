@@ -3,6 +3,22 @@ import AVKit
 import ImageIO
 import SwiftUI
 
+/// `_AVKit_SwiftUI` — the framework behind SwiftUI's `VideoPlayer` — only
+/// WEAK-links AVKit and expects the app to carry the real dependency. With
+/// the Xcode 26.1 SDK, `import AVKit` plus `VideoPlayer`/`AVPlayer` usage
+/// autolinks just that overlay and AVFoundation: no LC_LOAD_DYLIB for AVKit
+/// itself, so `AVPlayerView` never loads and the FIRST player on screen
+/// aborts inside the Swift runtime ("failed to demangle superclass of
+/// VideoPlayerView from mangled name 'So12AVPlayerViewC'" — the 2026-08-12
+/// mac crash; the iOS binary had the identical hole). Referencing a real
+/// AVKit class forces the linker to record the framework. Verify with
+/// `otool -L <dylib> | grep AVKit.framework` after any link-setting change.
+#if os(macOS)
+private let avKitLinkAnchor: AnyClass = AVPlayerView.self
+#else
+private let avKitLinkAnchor: AnyClass = AVPlayerViewController.self
+#endif
+
 struct MediaPreviewItem: Identifiable, Hashable {
     var title: String
     var subtitle: String?
