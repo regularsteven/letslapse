@@ -14,7 +14,16 @@ enum LL {
         #if os(iOS)
         Color(uiColor: .systemGroupedBackground)
         #else
-        Color(nsColor: .underPageBackgroundColor)
+        // Light mode matches the iOS grouped background the design tokens
+        // name (#F2F2F7) — the old `underPageBackgroundColor` is a dark
+        // canvas grey meant for behind-the-page voids, and every accent on
+        // it read as orange-on-grey (2026-08-12 mac UI review). Dark mode
+        // keeps the system colour, where the two agree.
+        Color(nsColor: NSColor(name: nil) { appearance in
+            appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
+                ? .underPageBackgroundColor
+                : NSColor(red: 242 / 255, green: 242 / 255, blue: 247 / 255, alpha: 1)
+        })
         #endif
     }
 
@@ -285,6 +294,10 @@ enum LLTab: String, CaseIterable, Identifiable {
 struct FloatingTabBar: View {
     @Binding var selection: LLTab
     var onReselect: (LLTab) -> Void = { _ in }
+    /// When a flow screen fronts the selected tab (the guided builder inside
+    /// Create on macOS), highlighting that tab claims the user is on its home
+    /// — a lie. The bar stays clickable; only the highlight steps aside.
+    var showsSelection = true
 
     /// Derived from the tab count rather than fixed: five tabs at the original
     /// 92pt would make a 488pt pill, wider than a 393pt iPhone. 66pt keeps the
@@ -296,7 +309,7 @@ struct FloatingTabBar: View {
     var body: some View {
         HStack(spacing: 4) {
             ForEach(LLTab.allCases) { tab in
-                let isSelected = tab == selection
+                let isSelected = tab == selection && showsSelection
                 Button {
                     if isSelected {
                         onReselect(tab)

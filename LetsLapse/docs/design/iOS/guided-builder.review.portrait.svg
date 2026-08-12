@@ -1,6 +1,6 @@
 <svg viewBox="0 0 441 940" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Guided clip (experimental) · review step · portrait</title>
-  <desc>Mirrors App/GuidedBuilderView.swift (reviewStep: state list card, estimateLine with the resolution + fps menus, exportNote, "Open in the full editor", Create CTA). Question "Ready to create". The STATE LIST card: one row per stretch — kind glyph (bolt.fill amber for a recorded moment, arrow.right secondary for a base run), 14.5pt semibold "Stretch 1 · 50× smooth" (speed shown is the one that RENDERS — floored at one source frame per output frame if the fps menu raised the floor after the chips were answered), 11.5pt secondary framing summary ("Wide — full frame" / "Punched 2.0×" / "Pan 2.6× → 2.0× (thru)"), and the honest per-stretch share "~4.3s" from the compiled stretchFrames. Between rows: arrow.down transition connectors — "1s ease", "step", and the clamped-ease honesty variants "1s ease — plays as ~0.4s" / "— plays as a step" straight from SeamEase.applied. The ESTIMATE CARD (LL.ink): "Your clip will be", then TWO menus in the header — the EXPORT RESOLUTION picker (collapsed label = the oriented dimensions of the current choice, e.g. "1080×1920"; menu rows "Full — 2160×3840 · 1080 — 1080×1920 · 720 — 720×1280" with a checkmark; the class number is the SHORT edge, so wide material reads 1920×1080/1280×720; only choices genuinely smaller than the source are offered; writes AppModel.exportShortEdge, applied as ONE Lanczos resample in the reframe pass, or a scale in the canvas pass when no punch exists) and the fps menu (24/25/30/50/60 → AppModel.outputFPS); the 28pt bold EXACT length "19 s · 3 stretches" (compiledWarp().outputSeconds — no ≈, the Advanced ramp is forced off on builder entry); and, when a cap is chosen, the export note: "Your 2.0× punch keeps ~1080 px — pixel-sharp at 1080×1920." (kept pixels = base crop ÷ deepest punch, compared on the same axis; reads "— upscaled to …" when the punch keeps fewer than the target, and "Scaled once at export to …" with no punch). Below the card: the quiet accent "Open in the full editor" link (materialises, clears guidedBuilderFocused — the same warp + reframe open in AdjustView with the lane expanded) and the primary "Create 19 s clip" CTA over the reassurance line. Captured from the iPhone 17 Pro sim, mapped onto the 393×852 canvas.</desc>
+  <desc>Mirrors App/GuidedBuilderView.swift (reviewStep: state list card, estimateLine with the resolution + fps menus, exportNote, "Open in the full editor", Create CTA). Step 4 of 4 since Canvas and Opening merged (2026-08-12 UX sign-off); the labelled progress line ("Step 4 of 4 · Review") sits under the dots, the title is absolutely centred (FlowHeader centersTitle), and on wide surfaces the rail carries this step's answer as its own subtitle ("19 s · 3 stretches"). Question "Ready to create". The STATE LIST card: one row per stretch — kind glyph (bolt.fill amber for a recorded moment, arrow.right secondary for a base run), 14.5pt semibold "Stretch 1 · 50× smooth" (speed shown is the one that RENDERS — floored at one source frame per output frame if the fps menu raised the floor after the chips were answered), 11.5pt secondary framing summary ("Wide — full frame", or "Wide — the 1:1 crop" when the chosen canvas really crops / "Punched 2.0×" / "Pan 2.6× → 2.0× (thru)"), and the honest per-stretch share "~4.3s" from the compiled stretchFrames. Between rows: arrow.down transition connectors — "1s ease", "step", and the clamped-ease honesty variants "1s ease — plays as ~0.4s" / "— plays as a step" straight from SeamEase.applied. The ESTIMATE CARD (LL.ink): "Your clip will be", then TWO menus in the header — the EXPORT RESOLUTION picker (collapsed label = the oriented dimensions of the current choice, e.g. "1080×1920"; menu rows "Full — 2160×3840 · 1080 — 1080×1920 · 720 — 720×1280" with a checkmark; the class number is the SHORT edge, so wide material reads 1920×1080/1280×720; only choices genuinely smaller than the source are offered; writes AppModel.exportShortEdge, applied as ONE Lanczos resample in the reframe pass, or a scale in the canvas pass when no punch exists) and the fps menu (24/25/30/50/60 → AppModel.outputFPS); the 28pt bold EXACT length "19 s · 3 stretches" (compiledWarp().outputSeconds — no ≈, the Advanced ramp is forced off on builder entry); and, when a cap is chosen, the export note: "Your 2.0× punch keeps ~1080 px — pixel-sharp at 1080×1920." (kept pixels = base crop ÷ deepest punch, compared on the same axis; reads "— upscaled to …" when the punch keeps fewer than the target, and "Scaled once at export to …" with no punch). Below the card: the quiet accent "Open in the full editor" link (materialises, clears guidedBuilderFocused — the same warp + reframe open in AdjustView with the lane expanded) and the primary "Create 19 s clip" CTA over the reassurance line. Captured from the iPhone 17 Pro sim, mapped onto the 393×852 canvas.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
@@ -28,13 +28,16 @@
         <rect x="303" y="66" width="74" height="20" rx="10" fill="#C36A00" fill-opacity="0.12"/>
         <text x="340" y="80" font-size="9" class="b" text-anchor="middle" fill="#C36A00" letter-spacing="0.5">EXPERIMENTAL</text>
       </g>
+      <!-- step dots: 4 steps, Review current -->
       <g id="step-dots">
-        <rect x="162" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
-        <rect x="174" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
-        <rect x="186" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
-        <rect x="198" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
-        <rect x="210" y="103" width="18" height="5" rx="2.5" fill="#C36A00"/>
+        <rect x="169" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
+        <rect x="181" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
+        <rect x="193" y="103" width="7" height="5" rx="2.5" fill="#C36A00"/>
+        <rect x="205" y="103" width="18" height="5" rx="2.5" fill="#C36A00"/>
       </g>
+      <text id="progress-label" x="196" y="126" font-size="11" class="sb" text-anchor="middle" fill="#6D6D72">Step 4 of 4 · Review</text>
+      <!-- content sits 20pt lower than before the labelled progress line landed -->
+      <g id="step-content" transform="translate(0,20)">
       <text id="question" x="16" y="147" font-size="22" class="b" fill="#000">Ready to create</text>
       <!-- state list -->
       <g id="state-list">
@@ -83,6 +86,7 @@
         <text x="32" y="462" font-size="11" fill="#FFFFFF" fill-opacity="0.45">Your 2.0× punch keeps ~1080 px — pixel-sharp at 1080×1920.</text>
       </g>
       <text id="open-full-editor" x="18" y="502" font-size="13" class="sb" fill="#C36A00">Open in the full editor</text>
+      </g>
       <g id="create-button">
         <rect x="16" y="748" width="361" height="50" rx="14" fill="#C36A00"/>
         <text x="196" y="779" font-size="16" class="b" text-anchor="middle" fill="#FFFFFF">Create 19 s clip</text>

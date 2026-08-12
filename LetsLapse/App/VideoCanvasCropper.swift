@@ -2,16 +2,20 @@ import AVFoundation
 import CoreGraphics
 
 /// Crops a finished blend to the canvas chosen on the Adjust screen — the same
-/// centred `CollectionMath.cropBox` the preview draws, applied as one
-/// composition pass over the (short) output clip, the way the grade bake works.
+/// `CollectionMath.cropBox` the preview draws, applied as one composition pass
+/// over the (short) output clip, the way the grade bake works. The box slides
+/// along the source's free axis by `offset` (0…1, 0.5 = centred) — the guided
+/// builder's frame pane drags it; every other caller keeps it centred.
 ///
 /// The render stays at source pixel scale: a 1080p 16:9 blend cropped to 9:16
 /// lands at 608×1080, never upscaled to a nominal export size. Rotation is
 /// inherent — the crop works on the clip's display-oriented picture via its
 /// `preferredTransform`, so a metadata-rotated capture crops the way it looks.
 enum VideoCanvasCropper {
-    /// The kept pixels for `displaySize` on `canvas` (centred), even-rounded
-    /// for the encoder. nil when the clip already matches the canvas.
+    /// The kept pixels for `displaySize` on `canvas`, even-rounded for the
+    /// encoder. Size is offset-independent — only where the box sits moves —
+    /// so this stays the one truth for every "crops to 2160×1214" label.
+    /// nil when the clip already matches the canvas.
     static func cropSize(displaySize: CGSize, canvas: CanvasRatio) -> CGSize? {
         guard displaySize.width > 0, displaySize.height > 0 else { return nil }
         guard abs(displaySize.width / displaySize.height - canvas.aspect) > 0.01 else { return nil }
@@ -33,6 +37,7 @@ enum VideoCanvasCropper {
     static func croppedCopy(
         of sourceURL: URL,
         canvas: CanvasRatio,
+        offset: Double = 0.5,
         shortEdge: Int? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize?) {
@@ -55,7 +60,7 @@ enum VideoCanvasCropper {
         guard cropped != nil || target != nil else { return (sourceURL, nil) }
         let renderSize = target ?? keptSize
         let boxRect = CollectionMath.cropBox(
-            clipSize: orientedSize, canvas: canvas, offset: 0.5)?.rect
+            clipSize: orientedSize, canvas: canvas, offset: offset)?.rect
             ?? CGRect(origin: .zero, size: orientedSize)
 
         // Land the oriented picture at the origin, slide the kept rect to the

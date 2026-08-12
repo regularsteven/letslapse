@@ -217,6 +217,17 @@ struct AdjustView: View {
                     }
                 }
             }
+            // A crop the guided builder repositioned round-trips into this
+            // editor; without a way to see it, a moved crop would be invisible
+            // state that only the render reveals. Hidden once a reframe track
+            // exists: the offset is baked into the track's wide keys and the
+            // canvas pass doesn't run under a reframe, so the reset would be
+            // a render no-op pretending otherwise.
+            if abs(model.blendCanvasOffset - 0.5) > 0.005,
+               model.reframe?.isEmpty ?? true {
+                Divider()
+                Button("Recentre crop") { model.blendCanvasOffset = 0.5 }
+            }
         } label: {
             HStack(spacing: 4) {
                 Text(model.effectiveBlendCanvas().rawValue)

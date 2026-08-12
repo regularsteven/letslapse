@@ -73,10 +73,14 @@ struct GuidedFramingBox: View {
     /// base crop at source scale). Past a 2× upscale the punch renders soft,
     /// and the box says so rather than letting the render surprise.
     var deliveryWidth: Double?
+    /// How tall the surface stands when the source is taller than it is wide.
+    /// The phone column has one screen to spend; a desktop stage has room for
+    /// a surface you can actually compose on.
+    var tallHeight: CGFloat = 320
 
     @StateObject private var loader = ExactFrameLoader()
 
-    private enum DragMode: Equatable {
+    enum DragMode: Equatable {
         case move
         case resize(Handle, original: CGRect)
     }
@@ -93,7 +97,7 @@ struct GuidedFramingBox: View {
     @State private var scrollState = ScrollHoverState()
     #endif
 
-    private enum Handle: CaseIterable {
+    enum Handle: CaseIterable {
         case topLeft, top, topRight, right, bottomRight, bottom, bottomLeft, left
 
         /// Position on the box in unit coordinates.
@@ -135,7 +139,7 @@ struct GuidedFramingBox: View {
         return Group {
             if sourceSize.height > sourceSize.width {
                 surface
-                    .frame(height: 320)
+                    .frame(height: tallHeight)
                     .frame(maxWidth: .infinity)
             } else {
                 surface
@@ -199,6 +203,7 @@ struct GuidedFramingBox: View {
             .gesture(dragGesture(box: box).simultaneously(with: pinchGesture))
             .overlay(alignment: .bottomLeading) { badge }
             .overlay(alignment: .top) { softnessWarning }
+            .pointerFeedback(box: box, viewCrop: viewCrop, classify: classify)
         }
         .aspectRatio(max(0.1, sourceSize.width / max(1, sourceSize.height)), contentMode: .fit)
     }
@@ -330,7 +335,7 @@ struct GuidedFramingBox: View {
             }
     }
 
-    private func classify(start: CGPoint, viewCrop: CGRect) -> DragMode {
+    func classify(start: CGPoint, viewCrop: CGRect) -> DragMode {
         // The grab ring shrinks with the box so a deep punch keeps a movable
         // interior — at full size 26pt, never more than a quarter of the box.
         let grab = min(26, max(10, min(viewCrop.width, viewCrop.height) / 4))
@@ -413,5 +418,40 @@ struct GuidedFramingBox: View {
         let centre = ReframeMath.clampCenter(
             z: z, cx: framing.cx, cy: framing.cy, aspect: aspect, sourceSize: sourceSize)
         framing = GuidedFraming(z: z, cx: centre.cx, cy: centre.cy)
+    }
+}
+
+private extension View {
+    /// What the pointer says the box will do: the same classification the drag
+    /// makes at its first event, so the cursor can never promise a resize the
+    /// drag then reads as a move. Corners take the crosshair — AppKit has no
+    /// public diagonal resize cursor.
+    @ViewBuilder
+    func pointerFeedback(
+        box: CGSize,
+        viewCrop: CGRect,
+        classify: @escaping (CGPoint, CGRect) -> GuidedFramingBox.DragMode
+    ) -> some View {
+        #if os(macOS)
+        onContinuousHover(coordinateSpace: .local) { phase in
+            switch phase {
+            case .active(let location):
+                switch classify(location, viewCrop) {
+                case .move:
+                    NSCursor.openHand.set()
+                case .resize(let handle, _):
+                    switch handle {
+                    case .top, .bottom: NSCursor.resizeUpDown.set()
+                    case .left, .right: NSCursor.resizeLeftRight.set()
+                    default: NSCursor.crosshair.set()
+                    }
+                }
+            case .ended:
+                NSCursor.arrow.set()
+            }
+        }
+        #else
+        self
+        #endif
     }
 }

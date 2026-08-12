@@ -1,0 +1,184 @@
+<svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Guided clip (experimental) · canvas &amp; opening step, wide output · 1000×700</title>
+  <desc>Mirrors App/GuidedBuilderView.swift (railLayout + canvasStep wideOutput branch + flowStrip) and App/GuidedCanvasFrame.swift — the same merged first step as guided-builder.canvas.svg with 16:9 picked from the shape menu, post the 2026-08-12 mac UI rework. RATIO CLASS DRIVES THE LAYOUT while the opening's framing stays Wide: a wide output is a shallow band, so the frame moves into a well across the top (wellHeight = min(440, max(300, stageHeight − 60)) — 310pt at this 700-tall window, growing with the window) and the controls spread into the freed width below; the moment the opening is PUNCHED this branch flips to the same two-column answers-plus-stage layout every other state uses, so there are never two pictures on screen pretending to be a before-and-after. The menu label and the badge both read "2160×1214" — VideoCanvasCropper.cropSize is the one truth and it even-rounds for the encoder. A cropping shape leaves a free axis, so this state is DRAGGABLE: dragging inside the frame slides the crop along the source (the picture follows the pointer) into AppModel.blendCanvasOffset — persisted on the blend, honoured by VideoCanvasCropper's composition pass and by the guided wide framing's centre, so it round-trips into the full editor either way; the caption inside the well says so. The SOURCE STRIP beside the frame is the whole 2160×3840 source with the kept band in LL.amber. Scroll wheel is NOT bound here — it stays the framing tool's punch zoom; the canvas frame is drag-pan only and shows an open-hand pointer. Chips follow the app idiom (selected white-on-accent, unselected white card); at this window height the FRAMING section scrolls just under the fold — the OVERVIEW STRIP and Back/Next stay pinned below the scroll. The strip: output-proportional blocks (white cards for base runs, LL.ink + amber for the moment), "cut"/ease connectors from the compiled seams, current stretch outlined in accent, exact total trailing. The OUTPUT RATE menu (same-day follow-up) sits above OPENING and pushes the FRAMING section further under the fold at this height; Back on step one returns to the project detail; the floating pill overlays the bottom centre with no tab highlighted during the flow (desc-only). Verified 2026-08-12 on the iPad Pro 13-inch sim (LL_GUIDED=latest LL_CANVAS=16:9, crop dragged by injected touch path) and the Mac.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <clipPath id="scrollarea"><rect x="272" y="61" width="748" height="557"/></clipPath>
+    <clipPath id="frame"><rect x="416" y="171" width="480" height="270" rx="8"/></clipPath>
+    <clipPath id="strip"><rect x="912" y="272" width="38" height="68" rx="4"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FB6DA"/><stop offset="1" stop-color="#CBD8E2"/>
+    </linearGradient>
+    <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.10"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="1000" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="1020" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="520" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">LetsLapse</text>
+    </g>
+    <!-- steps rail — the canvas answer written back the moment a shape is picked -->
+    <g id="rail">
+      <rect x="20" y="60" width="252" height="660" fill="#FFFFFF" fill-opacity="0.68"/>
+      <line x1="272" y1="60" x2="272" y2="720" stroke="#000" stroke-opacity="0.07"/>
+      <text x="42" y="97" font-size="15" class="b" fill="#000">Guided clip</text>
+      <rect x="180" y="83" width="74" height="19" rx="9.5" fill="#C36A00" fill-opacity="0.12"/>
+      <text x="217" y="96" font-size="8.5" class="b" text-anchor="middle" fill="#C36A00" letter-spacing="0.5">EXPERIMENTAL</text>
+      <g id="rail-step-1">
+        <rect x="34" y="115" width="224" height="46" rx="10" fill="#C36A00" fill-opacity="0.10"/>
+        <circle cx="55" cy="138" r="10" fill="none" stroke="#C36A00" stroke-width="2"/>
+        <text x="55" y="142" font-size="11" class="b" text-anchor="middle" fill="#C36A00">1</text>
+        <text x="76" y="135" font-size="13" class="b" fill="#000">Canvas &amp; opening</text>
+        <text x="76" y="151" font-size="11" fill="#C36A00">16:9 · 50 fps · 100× streaks</text>
+      </g>
+      <g id="rail-step-2">
+        <circle cx="55" cy="188" r="10" fill="#8E8E93" fill-opacity="0.18"/>
+        <text x="55" y="192" font-size="11" class="b" text-anchor="middle" fill="#6D6D72">2</text>
+        <text x="76" y="185" font-size="13" class="sb" fill="#6D6D72">Moment 1</text>
+        <text x="76" y="201" font-size="11" fill="#6D6D72">½× slow motion</text>
+      </g>
+      <g id="rail-step-3">
+        <circle cx="55" cy="238" r="10" fill="#8E8E93" fill-opacity="0.18"/>
+        <text x="55" y="242" font-size="11" class="b" text-anchor="middle" fill="#6D6D72">3</text>
+        <text x="76" y="235" font-size="13" class="sb" fill="#6D6D72">Ending</text>
+        <text x="76" y="251" font-size="11" fill="#6D6D72">Ends like it starts</text>
+      </g>
+      <g id="rail-step-4">
+        <circle cx="55" cy="288" r="10" fill="#8E8E93" fill-opacity="0.18"/>
+        <text x="55" y="292" font-size="11" class="b" text-anchor="middle" fill="#6D6D72">4</text>
+        <text x="76" y="285" font-size="13" class="sb" fill="#6D6D72">Review</text>
+        <text x="76" y="301" font-size="11" fill="#6D6D72">21 s · 3 stretches</text>
+      </g>
+      <text x="42" y="694" font-size="12.5" class="sb" fill="#C36A00">Open in the full editor</text>
+    </g>
+    <!-- scrolling content: question, frame well, controls (FRAMING scrolls under the fold) -->
+    <g id="content" clip-path="url(#scrollarea)">
+      <text x="302" y="104" font-size="22" class="b" fill="#000">What shape should the clip be?</text>
+      <g id="shape-menu">
+        <!-- macOS borderless menu: accent label, no chip (iOS draws the chip) -->
+        <path d="M772 98 l4 -4 4 4 M772 104 l4 4 4 -4" stroke="#C36A00" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+        <text x="786" y="106" font-size="13" class="sb" fill="#C36A00">16:9 — crops to 2160×1214</text>
+        <path d="M978 100 l4 4 4 -4" stroke="#C36A00" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+      </g>
+      <text x="306" y="136" font-size="11.5" fill="#6D6D72">The shape sits above everything it changes — every framing below is composed against it.</text>
+      <!-- frame well: the output band + the source strip, drag caption inside -->
+      <g id="frame-well">
+        <rect x="302" y="151" width="688" height="310" rx="12" fill="#1C1C1E" fill-opacity="0.04"/>
+        <g clip-path="url(#frame)">
+          <rect x="416" y="171" width="480" height="270" fill="#000"/>
+          <rect x="416" y="171" width="480" height="100" fill="url(#sky)"/>
+          <g fill="#FFFFFF" fill-opacity="0.65"><ellipse cx="500" cy="214" rx="48" ry="14"/><ellipse cx="650" cy="198" rx="60" ry="18"/><ellipse cx="800" cy="224" rx="40" ry="12"/></g>
+          <rect x="416" y="256" width="480" height="20" fill="#8A7864"/>
+          <rect x="566" y="224" width="20" height="46" rx="1.5" fill="#B04A38"/>
+          <rect x="571" y="216" width="9" height="9" fill="#B04A38"/>
+          <path d="M598 270 a19 19 0 0 1 38 0 Z M640 270 a19 19 0 0 1 38 0 Z" fill="#9BA6B2"/>
+          <rect x="446" y="278" width="62" height="10" rx="3" fill="#4A7AB0"/>
+          <rect x="710" y="280" width="34" height="9" rx="3" fill="#4A7AB0"/>
+          <rect x="416" y="288" width="480" height="153" fill="#9A8C79"/>
+          <g stroke="#6E6357" stroke-width="1.8" opacity="0.85">
+            <path d="M430 441 L566 292"/><path d="M492 441 L594 292"/><path d="M562 441 L628 292"/><path d="M650 441 L656 292"/><path d="M740 441 L686 292"/><path d="M816 441 L714 292"/><path d="M880 441 L742 292"/>
+          </g>
+        </g>
+        <rect x="416" y="171" width="480" height="270" rx="8" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="424" y="409" width="182" height="24" rx="12" fill="#000" fill-opacity="0.55"/>
+        <text x="434" y="425" font-size="10" class="b" fill="#FFFFFF">Frame 1 — exact · 2160×1214</text>
+        <!-- source strip: the whole source, kept band in amber -->
+        <g id="source-strip">
+          <g clip-path="url(#strip)">
+            <rect x="912" y="272" width="38" height="68" fill="#9A8C79"/>
+            <rect x="912" y="272" width="38" height="26" fill="url(#sky)" fill-opacity="0.55"/>
+            <rect x="912" y="296" width="38" height="5" fill="#8A7864" fill-opacity="0.55"/>
+          </g>
+          <rect x="912" y="283" width="38" height="46" fill="#FFB340" fill-opacity="0.15"/>
+          <rect x="912" y="283" width="38" height="46" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="912" y="272" width="38" height="68" rx="4" fill="none" stroke="#000" stroke-opacity="0.15"/>
+        </g>
+        <text x="646" y="452" font-size="11" text-anchor="middle" fill="#6D6D72">Drag the frame to reposition the crop — the strip keeps the rest of the shot in view.</text>
+      </g>
+      <!-- controls spread below in the freed width -->
+      <g id="output-rate">
+        <text x="306" y="491" font-size="13" class="sb" fill="#6D6D72" letter-spacing="1">OUTPUT RATE</text>
+        <path d="M310 506 l3.5 -3.5 3.5 3.5 M310 512 l3.5 3.5 3.5 -3.5" stroke="#C36A00" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+        <text x="322" y="513" font-size="13" class="sb" fill="#C36A00">50 fps</text>
+        <path d="M366 507 l3.5 3.5 3.5 -3.5" stroke="#C36A00" stroke-width="1.5" fill="none" stroke-linecap="round"/>
+        <text x="384" y="506" font-size="11" fill="#6D6D72">Every duration below counts in seconds at this rate — and it</text>
+        <text x="384" y="519" font-size="11" fill="#6D6D72">sets how deep slow motion can go.</text>
+      </g>
+      <g id="opening-controls" transform="translate(0,55)">
+        <text x="306" y="491" font-size="13" class="sb" fill="#6D6D72" letter-spacing="1">OPENING</text>
+        <g id="opening-chips">
+          <rect x="302" y="501" width="46" height="41" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="325" y="520" font-size="14" class="b" text-anchor="middle" fill="#000">1×</text>
+          <text x="325" y="532" font-size="9" text-anchor="middle" fill="#6D6D72">real time</text>
+          <rect x="354" y="501" width="46" height="41" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="377" y="520" font-size="14" class="b" text-anchor="middle" fill="#000">4×</text>
+          <text x="377" y="532" font-size="9" text-anchor="middle" fill="#6D6D72">gentle</text>
+          <rect x="406" y="501" width="46" height="41" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="429" y="520" font-size="14" class="b" text-anchor="middle" fill="#000">15×</text>
+          <text x="429" y="532" font-size="9" text-anchor="middle" fill="#6D6D72">subtle</text>
+          <rect x="458" y="501" width="46" height="41" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="481" y="520" font-size="14" class="b" text-anchor="middle" fill="#000">50×</text>
+          <text x="481" y="532" font-size="9" text-anchor="middle" fill="#6D6D72">smooth</text>
+          <rect x="510" y="501" width="46" height="41" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="533" y="520" font-size="14" class="b" text-anchor="middle" fill="#000">60×</text>
+          <text x="533" y="532" font-size="9" text-anchor="middle" fill="#6D6D72">flowing</text>
+          <rect x="562" y="501" width="50" height="41" rx="12" fill="#1C1C1E"/>
+          <text x="587" y="520" font-size="14" class="b" text-anchor="middle" fill="#FFB340">100×</text>
+          <text x="587" y="532" font-size="9" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.6">streaks</text>
+          <rect x="618" y="501" width="46" height="41" rx="12" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="641" y="520" font-size="14" class="b" text-anchor="middle" fill="#000">···</text>
+          <text x="641" y="532" font-size="9" text-anchor="middle" fill="#6D6D72">custom</text>
+        </g>
+        <text x="306" y="560" font-size="11.5" fill="#6D6D72">Stretch 1 becomes ~2.3s of the clip.</text>
+        <text x="306" y="588" font-size="13" class="sb" fill="#6D6D72" letter-spacing="1">FRAMING</text>
+        <!-- scrolls under the fold at this window height -->
+        <rect x="302" y="598" width="66" height="33" rx="16.5" fill="#C36A00"/>
+        <text x="335" y="619" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Wide</text>
+        <rect x="376" y="598" width="86" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
+        <text x="419" y="619" font-size="13" class="sb" text-anchor="middle" fill="#000">Punch in</text>
+        <rect x="470" y="598" width="110" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
+        <text x="525" y="619" font-size="13" class="sb" text-anchor="middle" fill="#000">Punch + pan</text>
+      </g>
+    </g>
+    <!-- overview strip -->
+    <g id="flow-strip">
+      <line x1="272" y1="618" x2="1020" y2="618" stroke="#000" stroke-opacity="0.07"/>
+      <rect x="272" y="619" width="748" height="101" fill="#F2F2F7"/>
+      <g id="strip-seg-1">
+        <rect x="302" y="630" width="86" height="40" rx="9" fill="#FFFFFF" filter="url(#soft)"/>
+        <rect x="302" y="630" width="86" height="40" rx="9" fill="none" stroke="#C36A00" stroke-width="2"/>
+        <text x="345" y="647" font-size="12" class="b" text-anchor="middle" fill="#000">100×</text>
+        <text x="345" y="661" font-size="9" text-anchor="middle" fill="#6D6D72">Stretch 1</text>
+      </g>
+      <text x="410" y="654" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">cut</text>
+      <g id="strip-seg-2">
+        <rect x="432" y="630" width="330" height="40" rx="9" fill="#1C1C1E"/>
+        <text x="590" y="647" font-size="12" class="b" text-anchor="middle" fill="#FFB340">½×</text>
+        <text x="590" y="661" font-size="9" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.6">Moment 1</text>
+      </g>
+      <text x="784" y="654" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">cut</text>
+      <g id="strip-seg-3">
+        <rect x="806" y="630" width="88" height="40" rx="9" fill="#FFFFFF" filter="url(#soft)"/>
+        <text x="850" y="647" font-size="12" class="b" text-anchor="middle" fill="#000">100×</text>
+        <text x="850" y="661" font-size="9" text-anchor="middle" fill="#6D6D72">Stretch 2</text>
+      </g>
+      <text x="990" y="649" font-size="14" class="b" text-anchor="end" fill="#000">21 s</text>
+      <text x="990" y="662" font-size="9" text-anchor="end" fill="#6D6D72">3 stretches</text>
+    </g>
+    <g id="bottom-bar">
+      <rect x="838" y="682" width="72" height="30" rx="8" fill="#FFFFFF"/>
+      <rect x="838" y="682" width="72" height="30" rx="8" fill="none" stroke="#000" stroke-opacity="0.12"/>
+      <text x="874" y="702" font-size="13" text-anchor="middle" fill="#000">Back</text>
+      <rect x="918" y="682" width="72" height="30" rx="8" fill="#C36A00"/>
+      <text x="954" y="702" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Next</text>
+    </g>
+  </g>
+  <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="520" y="752" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Guided clip (experimental) · canvas &amp; opening step, wide output · 1000×700 pt window</text>
+  <text x="520" y="772" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (canvasStep wideOutput branch · flowStrip) + App/GuidedCanvasFrame.swift — frame well with drag + source strip; a punch flips to the two-column stage</text>
+</svg>

@@ -10,9 +10,27 @@ struct GuidedFraming: Equatable {
     var cx: Double
     var cy: Double
 
-    /// The default state: the full frame at the canvas — needs no authoring.
-    static func wide(sourceSize: CGSize) -> GuidedFraming {
-        GuidedFraming(z: 1, cx: Double(sourceSize.width) / 2, cy: Double(sourceSize.height) / 2)
+    /// The default state: the full canvas-shaped frame — needs no authoring.
+    /// `canvasOffset` slides it along the source's free axis (0…1, 0.5 =
+    /// centred), so a repositioned canvas crop and a wide framing describe the
+    /// same rectangle: at z = 1 the crop window IS the canvas box, and its
+    /// centre is the only place the offset can live in a `ReframeTrack`.
+    static func wide(sourceSize: CGSize, aspect: Double, canvasOffset: Double = 0.5) -> GuidedFraming {
+        let base = ReframeMath.baseCrop(aspect: aspect, sourceSize: sourceSize)
+        let width = Double(sourceSize.width), height = Double(sourceSize.height)
+        guard base.width > 0, base.height > 0 else {
+            return GuidedFraming(z: 1, cx: width / 2, cy: height / 2)
+        }
+        let free = min(1, max(0, canvasOffset))
+        let slackX = width - Double(base.width), slackY = height - Double(base.height)
+        // One free axis at most: whichever the canvas leaves slack on.
+        let cx = slackX > slackY
+            ? free * slackX + Double(base.width) / 2
+            : width / 2
+        let cy = slackX > slackY
+            ? height / 2
+            : free * slackY + Double(base.height) / 2
+        return GuidedFraming(z: 1, cx: cx, cy: cy)
     }
 }
 
@@ -61,11 +79,18 @@ enum GuidedPlanner {
     /// disagree about what a stretch's footage can honour.
     static func gatedSpeedChips(forStretchFPS fps: Double, outputFPS: Int) -> [(speed: Double, word: String)] {
         let out = Double(max(1, outputFPS))
+        // Probed nominal rates land a hair under their class — a "100 fps"
+        // burst reports ~99.6 — and the compiler floors at one source frame
+        // per output frame anyway, so a 2% shortfall renders identically.
+        // Without the tolerance the exact gate dropped ¼× from the very
+        // burst it exists for AND leaked the racing chips back in (both
+        // sides of the classification flipped on the same rounding hair).
+        let densityFloor = 0.98
         var chips: [(speed: Double, word: String)] = []
-        if fps >= 4 * out { chips.append((0.25, "¼× slow")) }
-        if fps >= 2 * out { chips.append((0.5, "½× slow")) }
+        if fps >= 4 * out * densityFloor { chips.append((0.25, "¼× slow")) }
+        if fps >= 2 * out * densityFloor { chips.append((0.5, "½× slow")) }
         chips += [(1, "real time"), (4, "gentle"), (15, "subtle")]
-        if fps < 4 * out {
+        if fps < 4 * out * densityFloor {
             chips += [(50, "smooth"), (60, "flowing"), (100, "streaks")]
         }
         return chips
@@ -114,7 +139,8 @@ enum GuidedPlanner {
         warp: WarpTimeline,
         seamEase: (Int) -> WarpCompiler.SeamEase?,
         aspect: Double,
-        sourceSize: CGSize
+        sourceSize: CGSize,
+        canvasOffset: Double = 0.5
     ) -> ReframeTrack {
         var track = ReframeTrack()
         guard punches.count == warp.stretchCount,
@@ -123,7 +149,8 @@ enum GuidedPlanner {
         else { return track }
 
         let spacing = ReframeTrack.minimumKeySpacing
-        let wide = GuidedFraming.wide(sourceSize: sourceSize)
+        let wide = GuidedFraming.wide(
+            sourceSize: sourceSize, aspect: aspect, canvasOffset: canvasOffset)
         /// The framing the clip is holding as the walk reaches each seam.
         var current = wide
 

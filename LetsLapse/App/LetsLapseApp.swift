@@ -350,11 +350,17 @@ struct ContentView: View {
         }
         // LL_GUIDED=latest — open the newest video capture in the guided
         // builder, exactly what the project's "Guided clip" button (which
-        // simctl can't tap) does.
+        // simctl can't tap) does. LL_CANVAS=16:9 pins the clip's shape (and
+        // with it the merged step's tall/wide layout); LL_STEP=<n> lands on a
+        // later step, both for variant screenshots — GuidedBuilderView reads
+        // LL_STEP itself, since the step index is its own state.
         if environment["LL_GUIDED"] == "latest",
            let capture = model.captures.first(where: { $0.kind == .video }) {
             model.openCapture(capture)
             model.guidedBuilderFocused = true
+            if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {
+                model.blendCanvasRatio = ratio
+            }
         }
         // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
         // collections from existing video blends (no-op without any); detail
@@ -431,7 +437,16 @@ struct ContentView: View {
                 Color.clear.frame(height: 58)
             }
 
-            FloatingTabBar(selection: $selectedTab, onReselect: handleReselect)
+            FloatingTabBar(
+                selection: $selectedTab,
+                onReselect: handleReselect,
+                // While the guided flow fronts the Create tab, no tab is
+                // "where you are" — highlighting Create would claim its home
+                // screen is showing. Parking the flow on another tab brings
+                // the highlight back, because then it tells the truth again.
+                showsSelection: !(selectedTab == .create
+                    && model.stage != .home
+                    && model.guidedBuilderFocused))
                 .padding(.bottom, 12)
         }
     }
@@ -579,11 +594,22 @@ struct FlowChromeButton: View {
 struct FlowHeader<Trailing: View>: View {
     var title: String
     var onBack: (() -> Void)?
+    /// Pins the title to the bar's true centre instead of the space left over
+    /// between the controls. For screens whose trailing control is a label
+    /// rather than a control the title should make room for — the guided
+    /// builder's EXPERIMENTAL capsule, which was shunting the title left.
+    var centersTitle = false
     var trailing: Trailing
 
-    init(title: String, onBack: (() -> Void)? = nil, @ViewBuilder trailing: () -> Trailing) {
+    init(
+        title: String,
+        onBack: (() -> Void)? = nil,
+        centersTitle: Bool = false,
+        @ViewBuilder trailing: () -> Trailing
+    ) {
         self.title = title
         self.onBack = onBack
+        self.centersTitle = centersTitle
         self.trailing = trailing()
     }
 
@@ -595,14 +621,25 @@ struct FlowHeader<Trailing: View>: View {
             } else {
                 Color.clear.frame(width: 34, height: 34)
             }
-            Text(title)
-                .font(.system(size: 16, weight: .semibold))
-                .frame(maxWidth: .infinity)
-            // The 34pt floor keeps the title optically centred when there is
-            // no trailing control; a wider control (the Adjust screen's
-            // canvas menu) nudges it like any nav bar would.
+            if centersTitle {
+                Spacer(minLength: 0)
+            } else {
+                // The 34pt floor keeps the title optically centred when there
+                // is no trailing control; a wider control (the Adjust screen's
+                // canvas menu) nudges it like any nav bar would.
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .frame(maxWidth: .infinity)
+            }
             trailing
                 .frame(minWidth: 34, minHeight: 34, alignment: .trailing)
+        }
+        .overlay {
+            if centersTitle {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .allowsHitTesting(false)
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 12)
@@ -610,7 +647,9 @@ struct FlowHeader<Trailing: View>: View {
 }
 
 extension FlowHeader where Trailing == EmptyView {
-    init(title: String, onBack: (() -> Void)? = nil) {
-        self.init(title: title, onBack: onBack, trailing: { EmptyView() })
+    init(title: String, onBack: (() -> Void)? = nil, centersTitle: Bool = false) {
+        self.init(
+            title: title, onBack: onBack, centersTitle: centersTitle,
+            trailing: { EmptyView() })
     }
 }

@@ -245,6 +245,10 @@ final class AppModel: ObservableObject {
         /// keys' geometry only means anything against this shape, so re-editing
         /// restores it; absent for clips from before it was recorded.
         var canvasRatio: String?
+        /// Where that canvas crop sat along the source's free axis (0…1,
+        /// 0.5 = centred) — the guided builder's repositioned crop. Absent for
+        /// clips rendered before the crop could move, which were all centred.
+        var canvasOffset: Double?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -467,9 +471,15 @@ final class AppModel: ObservableObject {
     /// than one encoding; drives the "Blend from" picker in Adjust.
     @Published var blendSourceCodec: OutputCodec?
     /// The canvas the new blended clip renders to — the Adjust screen's ratio
-    /// chips. `nil` = as shot (no crop). A mismatched canvas centre-crops the
+    /// chips. `nil` = as shot (no crop). A mismatched canvas crops the
     /// finished clip at source pixel scale on its way into the project.
     @Published var blendCanvasRatio: CanvasRatio?
+    /// Where the canvas crop sits along the source's free axis, 0…1 (0.5 =
+    /// centred) — the guided builder's frame pane drags this. Same meaning as
+    /// a collection's per-clip crop, so `CollectionMath.cropBox` reads it
+    /// unchanged. Capture-specific, and recorded on the blend so re-editing
+    /// re-opens the framing that rendered.
+    @Published var blendCanvasOffset: Double = 0.5
     @Published var useRamp = false
     @Published var constantWindow = UserDefaults.standard.object(forKey: DefaultsKey.constantWindow) as? Int
         ?? UserDefaults.standard.object(forKey: DefaultsKey.defaultSpeed) as? Int
@@ -1278,6 +1288,7 @@ final class AppModel: ObservableObject {
         currentCaptureID = nil
         photoBlendDepth = 1
         blendCanvasRatio = nil
+        blendCanvasOffset = 0.5
         warp = nil
         reframe = nil
         reframeLaneFocused = false
@@ -1315,6 +1326,7 @@ final class AppModel: ObservableObject {
         do {
             blendSourceCodec = nil
             blendCanvasRatio = nil
+            blendCanvasOffset = 0.5
             source = try source(for: capture)
             currentCaptureID = capture.id
             photoBlendDepth = 1
@@ -1349,6 +1361,7 @@ final class AppModel: ObservableObject {
         do {
             blendSourceCodec = nil
             blendCanvasRatio = nil
+            blendCanvasOffset = 0.5
             source = try source(for: capture)
             currentCaptureID = capture.id
             warp = nil
@@ -1394,6 +1407,7 @@ final class AppModel: ObservableObject {
             // authored against, so that comes back with it.
             reframe = blend.reframe
             blendCanvasRatio = blend.canvasRatio.flatMap(CanvasRatio.init(rawValue:))
+            blendCanvasOffset = blend.canvasOffset ?? 0.5
             if let savedWarp = blend.warp {
                 warp = savedWarp
             } else if let savedWindows = blend.stretchWindows, !savedWindows.isEmpty {
@@ -2435,6 +2449,10 @@ final class AppModel: ObservableObject {
         let cropIsReal = blendCanvasNeedsCrop()
         let cropCanvas = source.isVideo && (cropIsReal || exportEdge != nil)
             ? effectiveBlendCanvas() : nil
+        // Where that crop sits along the free axis, resolved with the canvas
+        // itself. The reframe path doesn't read it — its wide framings already
+        // carry the offset as their centre.
+        let cropOffset = blendCanvasOffset
         // The punch-in reframe, resolved the same way. It needs the compiled
         // warp's frame map, so the legacy (Advanced-ramp) path renders without
         // it. When it runs it subsumes the canvas crop — its render size IS
@@ -2563,7 +2581,8 @@ final class AppModel: ObservableObject {
                     let cropBand = tailBand.map { willBakeGrade ? slice($0, 0, 0.4) : $0 }
                     let uncropped = output.url
                     let cropped = try await VideoCanvasCropper.croppedCopy(
-                        of: uncropped, canvas: cropCanvas, shortEdge: exportEdge
+                        of: uncropped, canvas: cropCanvas, offset: cropOffset,
+                        shortEdge: exportEdge
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let cropBand else { return }
@@ -2700,6 +2719,7 @@ final class AppModel: ObservableObject {
 
         blendSourceCodec = nil
         blendCanvasRatio = nil
+        blendCanvasOffset = 0.5
         source = captureSource
         currentCaptureID = capture.id
         photoBlendDepth = max(1, blendDepth)
@@ -3638,7 +3658,8 @@ final class AppModel: ObservableObject {
             // Gated like `warp`: the reframe only renders through the compiled
             // path, so a ramp render must not record a punch it never baked.
             reframe: compiledWarp() != nil ? reframe : nil,
-            canvasRatio: source?.isVideo == true ? effectiveBlendCanvas().rawValue : nil
+            canvasRatio: source?.isVideo == true ? effectiveBlendCanvas().rawValue : nil,
+            canvasOffset: source?.isVideo == true ? blendCanvasOffset : nil
         )
     }
 
