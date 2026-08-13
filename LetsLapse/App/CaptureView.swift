@@ -777,6 +777,7 @@ struct CaptureView: View {
 
     private var portraitControls: some View {
         VStack(spacing: 13) {
+            remoteLinkChip
             if testRig.phase != .idle {
                 testCardChip
             }
@@ -855,6 +856,13 @@ struct CaptureView: View {
                 if !isCapturing {
                     zoomChips
                 }
+                // The rail is 108pt wide, far too narrow for the chip's
+                // horizontal form, so landscape gets it stacked instead of
+                // squeezed. Same content, same tokens.
+                remoteLinkChip
+                    .fixedSize()
+                    .scaleEffect(0.85)
+                    .padding(.top, 10)
                 // Lower-left corner, same as portrait.
                 recentCaptureButton
                     .padding(.top, 14)
@@ -1154,6 +1162,27 @@ struct CaptureView: View {
             return sensorSummaryLabel(sensor)
         }
         return camera.selectedResolution.stillLabel
+    }
+
+    // MARK: - Remote link chip
+
+    /// The camera half of pairing: shows the code a Mac has to be told, and
+    /// then who is holding the link.
+    ///
+    /// This has to be ON the capture screen rather than in Settings, because
+    /// the code is regenerated every time the listener starts — which is every
+    /// time this screen appears. A code read anywhere else would already be
+    /// stale by the time it was typed.
+    @ViewBuilder
+    private var remoteLinkChip: some View {
+        #if os(iOS)
+        // The listener is observed by the chip itself, not here: this view
+        // watches `watchRemote`, so the listener's own @Published changes
+        // (code assigned, peer connected) would never redraw it from here.
+        if let listener = watchRemote.remoteListener {
+            RemoteLinkChip(listener: listener)
+        }
+        #endif
     }
 
     // MARK: - Test-card rig chip

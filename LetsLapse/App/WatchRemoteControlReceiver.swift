@@ -64,7 +64,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     /// satisfies.
     /// Created on first use rather than at init: this type is not
     /// `@MainActor`, and both the listener and `UIDevice.current` are.
-    private(set) var remoteListener: CaptureRemoteListener?
+    /// Published so the capture screen redraws when the listener appears —
+    /// its own state is observed separately, by whoever displays it.
+    @Published private(set) var remoteListener: CaptureRemoteListener?
 
     private override init() {
         super.init()
