@@ -467,6 +467,14 @@ struct CaptureView: View {
         updateTestCardWatch()
         #if DEBUG
         applyBurstPreviewHook()
+        // LL_RUN: the same idle/Video gate the card tap uses, plus a beat for
+        // the session and capability matrix to come up — the rig validates the
+        // script's rates against what this device actually offers, and asking
+        // before `startRunning` lands would refuse a perfectly good script.
+        if mode == .video, !isCapturing {
+            let rig = testRig
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) { rig.armFromLaunchHook() }
+        }
         #endif
         #if os(iOS)
         // Geotagging: request permission if needed, start streaming fixes so a

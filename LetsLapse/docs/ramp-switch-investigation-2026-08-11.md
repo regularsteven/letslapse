@@ -126,8 +126,138 @@ burst):** everything engaged.
 
 **Remaining (nice-to-have):**
 
-1. One more short iPhone ramp shoot to confirm the burst-head transient is
-   gone (sky-strip YAVG on the burst's first ~10 frames should be flat).
+1. ~~One more short iPhone ramp shoot to confirm the burst-head transient is
+   gone~~ — **done 2026-08-13**, see below.
 2. Kinematics: re-render E197EC62 (or any honest-stamped shoot) and run the
    train-window frame-diff recipe (warp-ramp-truthfulness) — cut outliers
    should drop below the current ~2× envelope now that leadingGap is exact.
+
+## Follow-up 2026-08-13: exposure latched, cadence didn't
+
+Field shoot 043885DE (4K, 25 base / 100 burst, non-flat, non-stabilised).
+
+**The exposure latch fix works — item 1 above is closed.** Whole-frame YAVG:
+the pre-burst tail runs 117.87–118.03 and the burst opens 117.99, 118.01,
+118.32, 118.43, settling ~118.48. A +0.4 % settle where the pre-fix shoot
+showed a 2-hot-2-low ~7 % flicker. The cut is photometrically clean.
+
+**But the same four frames were still at the wrong CADENCE.** QuickTime calls
+`segment-001.mov` 98.14 fps. That is the average (820 frames ÷ 8.355 s); the
+header declares `r_frame_rate = 100/1` correctly. Per-frame durations at the
+600-tick track timescale:
+
+| frames | durations | rate |
+|---|---|---|
+| 0–3 | 24, 24, **48**, 24 ticks (40, 40, **80**, 40 ms) | 25 fps — the base cadence |
+| 4–819 | 6 ticks (three at 5) | 100.061 fps, dead steady |
+
+The 80 ms frame is one dropped outright as the change landed. At 100.061 fps
+those 8.355 s should hold 836 frames; 820 arrived, and the 16 missing ones are
+exactly the 0.2 s head where 4 frames came instead of 20. No drift, no
+sustained drop — the whole shortfall is the switch still landing inside the
+new file. The step *down* is clean: `segment-002.mov` is 6214 frames, every
+one 24 ticks, zero head transient — slowing the sensor needs no re-timing.
+
+**Why it mattered.** `GuidedPlanner.gatedSpeedChips` offers ¼× only at probed
+fps ≥ `4 × outputFPS × 0.98` = 98.0 at 25 fps out, and
+`Capture.sourceSegmentFPS` probes this file at 98.1448 — 98.0 × 8.355 s =
+818.8 frames against the 820 present, a margin of **1.2 frames**. One more
+transitional frame and the burst silently loses ¼×. Separately `VideoBlender`
+reads source frames sequentially by count against `WarpCompiler`'s uniform
+density assumption, so at an authored ¼× those four 40 ms frames each become
+one 40 ms output frame — 0.16 s playing at 1× before snapping to 4× slow.
+
+**Fix (same day).** `prepareRampRateChange(to:)` writes the new frame duration
+while the old segment is *still recording*, and the switch's `stopRecording`
+is held `min(0.6, max(0.2, 6/oldFPS))` — 0.24 s at a 25 fps base — so the
+sensor has re-timed before the next file opens and the transitional frames
+stay in the old segment's tail, where a 12-minute base segment absorbs them.
+Same shape as the exposure latch above, one layer down.
+
+Gated to the shared-format fast path. This pass's §1 rejected reconfiguring
+during finalize because *"delivery stops the moment the device reconfigures"*
+— true of a full **format** switch, but a duration-only change on an already
+active format does not stop delivery, which is exactly why those four frames
+were there to measure. Where no shared format exists, `prepareRampRateChange`
+returns false and the old ordering runs verbatim.
+
+`Segment` also gained `measuredFrameRate` / `steadyFrameRate` /
+`settleSeconds`, probed in `finishSegment` from a bounded head read of sample
+references (48 samples, no decode, 1.5–2 ms even on a 1.7 GB segment).
+`settleSeconds` is the regression detector for the constant above — 0.200 on
+this shoot, expected ~0 after the fix. Two gotchas worth keeping: the
+reference output repeats the first presentation stamp, and it delivers samples
+chunk-interleaved rather than in order, so the probe over-collects, sorts, and
+keeps a strictly-increasing front half — sorting a tight window instead
+stranded a later sample at the end and invented one huge final interval, which
+read as "never settles" on every base segment.
+
+### Verified on device — iPad Air M1, 2026-08-13
+
+Project 2B6AD47C, 4K portrait, base 25 / burst 50, run hands-free from the Mac
+over the Wi-Fi tunnel with the new `LL_RUN` hook (below), script
+`i25x15,b50x5,i25x10`.
+
+**The burst file opens clean.** Head intervals `20, 20, 20, 20, 20, 20 …` —
+burst cadence from frame 0. `measured 50.016 == steady 50.016, settle 0.000s`.
+Against the pre-fix iPhone burst (`40, 40, 80, 40, 10, 10 …`, measured 98.145
+vs steady 100.061, settle 0.200 s) that is the whole defect gone: the average
+QuickTime reports now equals the real rate.
+
+**The transient moved exactly where it was designed to go** — segment 000's
+tail reads `40, 40, 20, 20, 20, 20, 20, 18.3`. Those 20 ms frames are the
+sensor re-timing to 50 while the base segment was still recording. Which also
+settles the §1 question empirically: **delivery does not stop during a
+duration-only change** — five frames kept arriving and were written.
+
+**Exposure survived the new ordering.** Base→burst cut: tail
+116.51–116.65 → head 116.52–116.59 YAVG, flat *through* the transitional
+frames, so the mid-recording shutter re-clamp and ISO trade work.
+Burst→base: 113.34 → 113.21 (−0.12 %). Hold released 1.02 s into segment 002.
+
+Log line for line: `switch exposure hold: 1/816s ISO 18` → `rampSettle 25→50:
+hold 0.24s` → `applyCaptureFormat fps=50 duration-only (shared format)` →
+`segment 001 cadence: asked 50 measured 50.016 steady 50.016 settle 0.000s`.
+
+**Three caveats the run exposed:**
+
+1. **The step DOWN is not clean on every device.** Segment 002's head reads
+   `20, 20, 20, 40, 40 …` — settle 0.060 s, 3 frames. The hold is skipped on
+   step-downs because the iPhone's 100→25 segment was pristine; that
+   assumption is device-dependent. Consequence is mild (a base segment's head
+   being slightly dense touches no slow-motion gate) but it does leave
+   measured 25.177 ≠ steady 25.005 for that segment. Holding on step-downs
+   too would push those frames into the burst's tail — harmless there, since
+   they are already at burst cadence — at the cost of ~0.12 s of extra burst.
+2. **The base segment's average is inflated by its new tail** — segment 000
+   measured 25.195 against a 25.005 steady, +0.76 %. That is the cost of the
+   design, and it scales away: the same ~6 frames in a 12-minute base segment
+   move the average by ~0.01 %. `settleSeconds` will not catch it, since it
+   only inspects the head.
+3. **The held switch's gap grew.** 0.290 s with the hold versus 0.196 s on the
+   unheld step-down of the same run. The prediction was that it would not move
+   (the old segment merely ends later). Single run, and a different device from
+   the 0.157–0.195 s iPhone baseline — worth re-measuring on the iPhone before
+   reading anything into it.
+
+### `LL_RUN` — hands-free runs without the card
+
+`LL_RUN=i25x15,b50x5,i25x10` (DEBUG, `TestCardRigController.armFromLaunchHook`)
+arms a scripted run with no card in shot, for a device rigged at a window and
+for triggering from the Mac over the Wi-Fi tunnel — touching a mounted iPad to
+start a take shakes the frame the take is measuring. It routes through the same
+`lock` → countdown → `beginRun` path a card sighting takes, so only the ARMING
+differs and the two are directly comparable. Gated on the screen being idle in
+Video mode.
+
+```bash
+xcrun devicectl device process launch --device <udid> --console \
+  --terminate-existing \
+  --environment-variables '{"LL_CAPTURE":"1","LL_RUN":"i25x15,b50x5,i25x10"}' \
+  com.regularsteven.letslapse
+```
+
+Wi-Fi is enough — the iPad reports `transportType: localNetwork`; install,
+launch, console and file pull all work untethered. Note Apple Watch cannot
+drive an iPad: `WCSession.isSupported()` is false on iPadOS, so
+`WatchRemoteControlReceiver` no-ops there.

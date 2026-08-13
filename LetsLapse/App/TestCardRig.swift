@@ -274,4 +274,30 @@ final class TestCardRigController: ObservableObject {
         guard let script = TestCardScript.parse("i25x100,b100x5,i25x100") else { return }
         phase = .countdown(script, endsAt: .distantFuture)
     }
+
+    #if DEBUG
+    /// `LL_RUN=i25x15,b50x5,i25x10` — arm a scripted run WITHOUT the card, for
+    /// a device rigged where no monitor is in shot (a window mount) and for
+    /// hands-free triggering from the Mac over the Wi-Fi tunnel. Touching a
+    /// window-mounted iPad to start a take shakes the very frame the take is
+    /// measuring.
+    ///
+    /// Deliberately routed through the same `lock` → countdown → `beginRun`
+    /// path a card sighting takes, so the run itself — rate selection, the
+    /// real ramp engine, timed bursts, the self-stop — is identical to a
+    /// card-driven one and the two are comparable. Only the ARMING differs,
+    /// which is exactly the part that needs the card's live clock as proof;
+    /// a launch argument is proof enough of intent on a debug build.
+    ///
+    /// Ignored unless the screen is idle, so it can never interrupt a take.
+    func armFromLaunchHook() {
+        guard phase == .idle else { return }
+        guard let raw = ProcessInfo.processInfo.environment["LL_RUN"] else { return }
+        guard let script = TestCardScript.parse(raw) else {
+            return finish("LL_RUN ignored — \(raw) is not a script")
+        }
+        LLog("testcard: LL_RUN \(script.raw) — countdown")
+        lock(script)
+    }
+    #endif
 }

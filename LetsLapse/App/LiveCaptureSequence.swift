@@ -36,6 +36,21 @@ struct LiveCaptureSequence: Codable, Equatable {
         /// inter-file gap is measured rather than bracketed by wall-clock
         /// stamps that err in opposite directions.
         var recordedDuration: TimeInterval? = nil
+        /// Frames ÷ duration for the finished file — the average QuickTime
+        /// reports and `Capture.sourceSegmentFPS` probes, recorded here at
+        /// capture time instead of re-derived from the file much later.
+        /// `frameRate` above stays the rate that was ASKED for.
+        var measuredFrameRate: Double? = nil
+        /// The cadence the file settles at, past any head transient. A
+        /// burst's real rate, undragged by a switch that hadn't finished
+        /// landing when the file opened.
+        var steadyFrameRate: Double? = nil
+        /// How long the file's head ran off that cadence. The regression
+        /// detector for the early frame-duration write: ~0 once the sensor
+        /// has re-timed before the file opens, 0.20 on the 2026-08-13 shoot
+        /// that motivated it (four frames still at the base 25 fps cadence
+        /// inside a 100 fps burst, dragging its average to 98.14).
+        var settleSeconds: Double? = nil
     }
 
     struct Marker: Codable, Equatable {

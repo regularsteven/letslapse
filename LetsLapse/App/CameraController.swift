@@ -1798,6 +1798,72 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// Write a ramp switch's new frame duration EARLY — while the old segment
+    /// is still recording — so the sensor has re-timed by the time the next
+    /// file opens.
+    ///
+    /// A step up costs the ISP a few frames to re-time, and without this they
+    /// land at the head of the NEW file: the 2026-08-13 shoot's "100 fps"
+    /// burst opened with four frames still at the base 25 fps cadence (40,
+    /// 40, 80, 40 ms — one frame dropped outright as the change landed), so
+    /// its 820 frames over 8.355 s averaged 98.14. That average is what
+    /// QuickTime shows and what `sourceSegmentFPS` probes, even though the
+    /// file is a dead-steady 100.06 from frame 4 on. Held here, those frames
+    /// stay in the old segment's tail instead, where a 12-minute base
+    /// segment absorbs them invisibly.
+    ///
+    /// Only safe on the shared-format fast path, and gated on it: assigning
+    /// `activeFormat` tears the pipeline down, which under a live movie
+    /// writer kills the recording. When the target rate needs a different
+    /// format this returns false and the caller keeps today's ordering
+    /// exactly. On the fast path it is a frame-duration write only and
+    /// delivery does NOT stop — which is precisely why those four
+    /// transitional frames existed to be measured.
+    ///
+    /// sessionQueue-confined, like every other device configuration here.
+    private func prepareRampRateChange(to fps: Int) -> Bool {
+        guard let device = videoDevice,
+              let match = captureFormatMatch(
+                for: device, resolution: selectedResolution, fps: fps),
+              device.activeFormat == match.format
+        else { return false }
+
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
+            device.activeVideoMinFrameDuration = duration
+            device.activeVideoMaxFrameDuration = duration
+            // The new interval can force a shorter shutter than the held or
+            // locked one — same clamp-and-trade-ISO the format path runs.
+            reassertExposureLock(on: device)
+            #if os(iOS)
+            if let hold = switchExposureHold, !exposureLocked {
+                applySwitchExposureHold(hold, on: device)
+            }
+            #else
+            if switchExposureHoldActive, !exposureLocked {
+                if device.isExposureModeSupported(.locked) { device.exposureMode = .locked }
+                if device.isWhiteBalanceModeSupported(.locked) { device.whiteBalanceMode = .locked }
+            }
+            #endif
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    /// How long to hold after a step-up's early frame-duration write before
+    /// stopping the old segment. The transient is made of OLD-rate frames
+    /// (four of them, spanning 0.20 s, on the 2026-08-13 25→100 shoot), so it
+    /// scales with the rate being left, not the one being entered. Clamped so
+    /// a very slow base can't stall the switch — `beginTimedBurst` gives up
+    /// on a switch after 3 s — and a fast one still waits long enough to
+    /// matter. `Segment.settleSeconds` is the feedback loop for this number.
+    private static func rampSettleSeconds(leaving fps: Int) -> TimeInterval {
+        min(0.6, max(0.2, 6 / Double(max(1, fps))))
+    }
+
     /// Setting `activeFormat` resets the device to auto exposure/focus, so any
     /// manual lock must be re-applied immediately — otherwise every burst/ramp
     /// segment would flicker back to auto. Runs inside the caller's
@@ -2759,7 +2825,36 @@ final class CameraController: NSObject, ObservableObject {
             // loops already see the switch as in flight during the wait.
             pendingRampFrameRate = targetFrameRate
             beginSwitchExposureHold { [weak self] in
-                self?.movieOutput.stopRecording()
+                guard let self else { return }
+                // Then the CADENCE latch, on the same principle: write the new
+                // frame duration now and hold, so the sensor's re-timing frames
+                // stay in this segment's tail instead of opening the next file
+                // at the wrong rate. A step DOWN needs no wait — slowing down
+                // just means waiting longer between reads, and the 2026-08-13
+                // shoot's 100→25 segment is clean from its first frame.
+                guard targetFrameRate > currentFrameRate,
+                      self.prepareRampRateChange(to: targetFrameRate)
+                else {
+                    LLog("rampSettle \(currentFrameRate)→\(targetFrameRate): skipped ("
+                        + (targetFrameRate > currentFrameRate
+                            ? "format change needed" : "step down") + ")")
+                    self.movieOutput.stopRecording()
+                    return
+                }
+                let settle = Self.rampSettleSeconds(leaving: currentFrameRate)
+                LLog(String(format: "rampSettle %d→%d: hold %.2fs",
+                            currentFrameRate, targetFrameRate, settle))
+                self.sessionQueue.asyncAfter(deadline: .now() + settle) {
+                    // The user's Stop can land inside the hold — it takes the
+                    // recording with it, and the delegate's own ordering
+                    // already lets it win. Don't fire a second stop into
+                    // whatever comes next.
+                    guard self.movieOutput.isRecording, !self.isFinishingSequence else {
+                        LLog("rampSettle: hold elapsed after the run already stopped")
+                        return
+                    }
+                    self.movieOutput.stopRecording()
+                }
             }
         }
     }
@@ -2895,7 +2990,7 @@ final class CameraController: NSObject, ObservableObject {
         // renderers; the warp compiler prefers these to measure the real
         // inter-file hole instead of estimating it.
         let recordedStart = activeSegmentRecordedStartAt?.timeIntervalSince(startedAt)
-        let recordedDuration = Self.probeMovieDurationSeconds(outputFileURL)
+        let timing = Self.probeSegmentTiming(outputFileURL)
         let segment = LiveCaptureSequence.Segment(
             index: index,
             fileName: outputFileURL.lastPathComponent,
@@ -2903,12 +2998,23 @@ final class CameraController: NSObject, ObservableObject {
             relativeStart: relativeStart,
             relativeEnd: relativeEnd,
             recordedStart: recordedStart,
-            recordedDuration: recordedDuration
+            recordedDuration: timing.duration,
+            measuredFrameRate: timing.measuredFrameRate,
+            steadyFrameRate: timing.steadyFrameRate,
+            settleSeconds: timing.settleSeconds
         )
-        if let recordedStart, let recordedDuration {
+        if let recordedStart, let recordedDuration = timing.duration {
             LLog(String(
                 format: "segment %03d honest: %.3f +%.3fs (bracket %.3f–%.3f)",
                 index, recordedStart, recordedDuration, relativeStart, relativeEnd))
+        }
+        if let measured = timing.measuredFrameRate {
+            // asked vs measured is the 98.14-for-100 gap; settle is how much
+            // of it was the switch still landing inside this file.
+            LLog(String(
+                format: "segment %03d cadence: asked %d measured %.3f steady %.3f settle %.3fs",
+                index, frameRate, measured,
+                timing.steadyFrameRate ?? measured, timing.settleSeconds ?? 0))
         }
         sequence.segments.append(segment)
         activeSequence = sequence
@@ -2919,11 +3025,19 @@ final class CameraController: NSObject, ObservableObject {
         activeRecordingFrameRate = nil
     }
 
-    /// Media duration of a finished segment file — the QuickTime header's own
-    /// answer, read synchronously (milliseconds against the finalize that just
-    /// completed on this queue). nil when the file can't say.
-    private static func probeMovieDurationSeconds(_ url: URL) -> Double? {
-        final class Box: @unchecked Sendable { var seconds: Double? }
+    /// What a finished segment file says about its own timing.
+    private struct SegmentTiming {
+        var duration: Double?
+        var measuredFrameRate: Double?
+        var steadyFrameRate: Double?
+        var settleSeconds: Double?
+    }
+
+    /// Timing of a finished segment file — the QuickTime header's own answers,
+    /// read synchronously (milliseconds against the finalize that just
+    /// completed on this queue). Every field is nil when the file can't say.
+    private static func probeSegmentTiming(_ url: URL) -> SegmentTiming {
+        final class Box: @unchecked Sendable { var timing = SegmentTiming() }
         let box = Box()
         let semaphore = DispatchSemaphore(value: 0)
         // userInitiated: the session queue blocks on this — a default-priority
@@ -2931,12 +3045,90 @@ final class CameraController: NSObject, ObservableObject {
         // warning (seen 2026-08-11).
         Task.detached(priority: .userInitiated) {
             defer { semaphore.signal() }
-            guard let duration = try? await AVURLAsset(url: url).load(.duration) else { return }
+            let asset = AVURLAsset(url: url)
+            guard let duration = try? await asset.load(.duration),
+                  duration.seconds.isFinite, duration.seconds > 0
+            else { return }
             let seconds = duration.seconds
-            if seconds.isFinite, seconds > 0 { box.seconds = seconds }
+            box.timing.duration = seconds
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+                  let measured = try? await track.load(.nominalFrameRate), measured > 0
+            else { return }
+            box.timing.measuredFrameRate = Double(measured)
+            guard let settle = settlePoint(in: headFrameDurations(asset, track)) else { return }
+            let remaining = seconds - settle.seconds
+            guard remaining > 0 else { return }
+            // The head's own frames are the only ones off-cadence, so the
+            // steady rate is what's left once they're taken off both sides.
+            let total = Double(measured) * seconds
+            box.timing.settleSeconds = settle.seconds
+            box.timing.steadyFrameRate = (total - Double(settle.frames)) / remaining
         }
         semaphore.wait()
-        return box.seconds
+        return box.timing
+    }
+
+    /// Bound on the settle probe's head read. This runs on the sessionQueue at
+    /// a segment boundary, so walking all 18k samples of a 12-minute base
+    /// segment is not on the table — and the transient it looks for is four
+    /// frames long.
+    private static let settleProbeSampleLimit = 48
+
+    /// The first frame intervals of a file, from sample REFERENCES — the
+    /// reader hands back timing without decoding a single pixel (1.5–2 ms even
+    /// on a 1.7 GB segment). Differenced from presentation stamps rather than
+    /// read per-sample so it holds up whether or not the muxer wrote sample
+    /// durations.
+    private static func headFrameDurations(
+        _ asset: AVURLAsset, _ track: AVAssetTrack
+    ) -> [Double] {
+        guard let reader = try? AVAssetReader(asset: asset) else { return [] }
+        let output = AVAssetReaderSampleReferenceOutput(track: track)
+        guard reader.canAdd(output) else { return [] }
+        reader.add(output)
+        guard reader.startReading() else { return [] }
+        defer { reader.cancelReading() }
+        // Collect DOUBLE the window. References arrive chunk-interleaved
+        // rather than in presentation order (measured: 0, 0, 0.16, 0.08,
+        // 0.04, 0.12 …), so sorting a tight window strands a later sample at
+        // the end and invents one huge final interval — which read as "the
+        // cadence never settles" on every base segment. Sorting a window
+        // twice the size and keeping only its front half discards the
+        // stragglers instead.
+        var times: [Double] = []
+        while times.count < settleProbeSampleLimit * 2,
+              let sample = output.copyNextSampleBuffer() {
+            let pts = CMSampleBufferGetPresentationTimeStamp(sample)
+            if pts.isValid, pts.seconds.isFinite { times.append(pts.seconds) }
+        }
+        guard times.count >= 2 else { return [] }
+        times.sort()
+        // Strictly increasing: the reference output repeats the first stamp,
+        // and a duplicate would read as a zero-length frame.
+        var ordered: [Double] = []
+        for time in times where ordered.last.map({ time > $0 }) ?? true {
+            ordered.append(time)
+            if ordered.count > settleProbeSampleLimit { break }
+        }
+        guard ordered.count >= 2 else { return [] }
+        return zip(ordered.dropFirst(), ordered).map { $0 - $1 }
+    }
+
+    /// Where a file's cadence latches. `steady` is the median of the window's
+    /// back half — past any head transient by construction — and the settle
+    /// point is just after the last sampled frame that missed it.
+    private static func settlePoint(in durations: [Double]) -> (seconds: Double, frames: Int)? {
+        guard durations.count >= 8 else { return nil }
+        let back = durations[(durations.count / 2)...].sorted()
+        let steady = back[back.count / 2]
+        guard steady > 0 else { return nil }
+        var frames = 0
+        for (offset, duration) in durations.enumerated()
+        where abs(duration - steady) / steady > 0.25 {
+            frames = offset + 1
+        }
+        guard frames < durations.count else { return nil }
+        return (durations.prefix(frames).reduce(0, +), frames)
     }
 
     private func completeLiveCapture() {
