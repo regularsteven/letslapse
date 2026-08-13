@@ -1,5 +1,4 @@
 import Foundation
-import WatchConnectivity
 #if os(watchOS)
 import WatchKit
 #endif
@@ -63,8 +62,14 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// session state must not overwrite it.
     private var isDebugPreview = false
 
-    override init() {
+    /// The pipe to the capture screen. Everything below this line is about
+    /// what the remote does with state, not how the bytes travel.
+    private let transport: any CaptureRemoteTransport
+
+    init(transport: any CaptureRemoteTransport = WatchConnectivityTransport()) {
+        self.transport = transport
         super.init()
+        self.transport.delegate = self
         #if os(watchOS)
         // Shoots are hands-off by design; the extended runtime session
         // (syncKeepAwake) is what carries the app through wrist-down.
@@ -78,12 +83,14 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     }
 
     func activate() {
-        guard WCSession.isSupported() else {
-            statusText = "Unavailable"
+        // A permanently unavailable transport must not fall through to
+        // activate + refreshState: the poll's own pre-flight would overwrite
+        // this with "Connecting" and sit there forever.
+        if let reason = transport.unavailabilityReason {
+            statusText = reason
             return
         }
-        WCSession.default.delegate = self
-        WCSession.default.activate()
+        transport.activate()
     }
 
     func refreshState() {
@@ -152,12 +159,14 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // a real reply would stomp the staged state mid-screenshot (replies
         // apply state directly, bypassing applyState's guard).
         guard !isDebugPreview else { return }
-        guard WCSession.default.activationState == .activated else {
+        // Pre-flight rather than letting the transport fail the send: these two
+        // never reach the wire, and neither should mark a send in flight.
+        guard transport.isActivated else {
             statusText = "Connecting"
             return
         }
 
-        guard WCSession.default.isReachable else {
+        guard transport.isReachable else {
             isReachable = false
             statusText = "Phone unavailable"
             return
@@ -176,22 +185,22 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         let token = sendToken
         isSending = true
         statusText = "Sending"
-        WCSession.default.sendMessage(
+        transport.send(
             payload,
-            replyHandler: { [weak self] reply in
-                Task { @MainActor in
-                    self?.apply(reply: reply, startedAt: startedAt, command: command, sent: payload, token: token)
-                }
+            reply: { [weak self] reply in
+                self?.apply(reply: reply, startedAt: startedAt, command: command, sent: payload, token: token)
             },
-            errorHandler: { [weak self] error in
-                Task { @MainActor in
-                    guard let self, self.sendToken == token else { return }
-                    self.isSending = false
-                    self.statusText = error.localizedDescription
+            failure: { [weak self] failure in
+                guard let self, self.sendToken == token else { return }
+                self.isSending = false
+                switch failure {
+                case .notActivated: self.statusText = "Connecting"
+                case .unreachable: self.statusText = "Phone unavailable"
+                case .failed(let message): self.statusText = message
                 }
             }
         )
-        // Watchdog: WC can drop both callbacks when the session resets
+        // Watchdog: a transport can drop both callbacks when the link resets
         // mid-flight. Without this, isSending sticks true and every control —
         // including the recovery ping — stays disabled until app relaunch.
         Task { @MainActor [weak self] in
@@ -633,76 +642,43 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     }
 }
 
-extension WatchCaptureRemote: WCSessionDelegate {
-    nonisolated func session(
-        _ session: WCSession,
-        activationDidCompleteWith activationState: WCSessionActivationState,
-        error: Error?
+extension WatchCaptureRemote: CaptureRemoteTransportDelegate {
+    func transportDidActivate(
+        storedState: [String: Any]?,
+        isReachable: Bool,
+        errorMessage: String?
     ) {
-        let reachable = session.isReachable
-        // The phone pushes a full snapshot into the application context on
-        // every change, and it survives both apps relaunching. Seed from it so
-        // a cold start mid-shoot shows the shoot immediately instead of
-        // betting everything on one live round-trip (which can lose to a busy
-        // phone main thread and leave "open the camera" up during a recording).
-        let storedContext = session.receivedApplicationContext
-        Task { @MainActor in
-            guard !self.isDebugPreview else { return }
-            self.isReachable = reachable
-            self.statusText = error == nil ? "Ready" : (error?.localizedDescription ?? "Connection failed")
-            if !storedContext.isEmpty {
-                self.applyState(storedContext)
-            }
-            self.refreshState()
+        guard !isDebugPreview else { return }
+        self.isReachable = isReachable
+        statusText = errorMessage ?? "Ready"
+        // Seed from the cached snapshot so a cold start mid-shoot shows the
+        // shoot immediately instead of betting everything on one live
+        // round-trip (which can lose to a busy phone main thread and leave
+        // "open the camera" up during a recording).
+        if let storedState {
+            applyState(storedState)
+        }
+        refreshState()
+    }
+
+    func transportReachabilityDidChange(isReachable: Bool) {
+        guard !isDebugPreview else { return }
+        self.isReachable = isReachable
+        statusText = isReachable ? "Ready" : "Phone unavailable"
+        // The phone can come within reach after we've already activated
+        // (screen wakes, capture screen opens, we drift back into range).
+        // Activation's one-shot `refreshState` is long past by then, so
+        // pull the live capture state now — otherwise a shoot that began
+        // while we were out of reach reads as idle until a manual ping.
+        if isReachable {
+            refreshState()
         }
     }
 
-    nonisolated func sessionReachabilityDidChange(_ session: WCSession) {
-        Task { @MainActor in
-            guard !self.isDebugPreview else { return }
-            self.isReachable = session.isReachable
-            self.statusText = session.isReachable ? "Ready" : "Phone unavailable"
-            // The phone can come within reach after we've already activated
-            // (screen wakes, capture screen opens, we drift back into range).
-            // Activation's one-shot `refreshState` is long past by then, so
-            // pull the live capture state now — otherwise a shoot that began
-            // while we were out of reach reads as idle until a manual ping.
-            if session.isReachable {
-                self.refreshState()
-            }
-        }
-    }
-
-    #if os(iOS)
-    nonisolated func sessionDidBecomeInactive(_ session: WCSession) {}
-
-    nonisolated func sessionDidDeactivate(_ session: WCSession) {
-        session.activate()
-    }
-    #endif
-
-    nonisolated func session(
-        _ session: WCSession,
-        didReceiveApplicationContext applicationContext: [String: Any]
-    ) {
-        // Contexts can be delivered from a queue at launch, well after the
-        // phone sent them — reachability comes from the session, not from the
-        // fact that bytes arrived.
-        let reachable = session.isReachable
-        Task { @MainActor in
-            guard !self.isDebugPreview else { return }
-            self.isReachable = reachable
-            self.applyState(applicationContext)
-        }
-    }
-
-    nonisolated func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
-        Task { @MainActor in
-            guard !self.isDebugPreview else { return }
-            // A live message just landed — the counterpart is reachable now.
-            self.isReachable = true
-            self.applyState(message)
-        }
+    func transportDidReceiveState(_ payload: [String: Any], isReachable: Bool) {
+        guard !isDebugPreview else { return }
+        self.isReachable = isReachable
+        applyState(payload)
     }
 }
 
