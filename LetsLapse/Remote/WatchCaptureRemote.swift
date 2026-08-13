@@ -52,6 +52,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// The sequence's resting rate — what the base chip labels itself with.
     /// `captureFPS` reads the burst rate mid-burst, so it can't be the label.
     @Published private(set) var baseFPS = 0
+    /// The rate ⚡ will run at. Distinct from `captureFPS`, which reports the
+    /// segment running right now — the burst chips are durations, not rates,
+    /// so without this the remote can't say what a burst will actually do.
+    @Published private(set) var rampFPS = 0
     @Published private(set) var plannedSpeed = 0
     @Published private(set) var outputFPS = 0
     @Published private(set) var isExposureLocked = false
@@ -532,6 +536,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         sequenceMode = "ramp"
         captureFPS = 24
         baseFPS = 24
+        rampFPS = 100
         plannedSpeed = 30
         outputFPS = 30
         formatLine = "4K · 24 fps"
@@ -616,6 +621,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if let fps = payload[WatchMessageKey.captureFPS] as? Int, fps > 0 {
             captureFPS = fps
+        }
+        if let fps = payload[WatchMessageKey.rampFPS] as? Int {
+            rampFPS = fps
         }
         if let fps = payload[WatchMessageKey.baseFPS] as? Int, fps > 0 {
             baseFPS = fps

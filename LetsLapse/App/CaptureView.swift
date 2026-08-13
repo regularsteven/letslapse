@@ -2568,6 +2568,10 @@ struct CaptureView: View {
             formatLine: formatLine,
             captureFPS: camera.selectedFrameRate,
             baseFPS: camera.activeBaseFrameRate ?? camera.selectedFrameRate,
+            // What ⚡ will do, as distinct from what the camera is doing now.
+            // Only meaningful for Video's ramp; the still modes have no burst
+            // rate, and 0 reads as "don't show one".
+            rampFPS: mode == .video ? camera.selectedRampFrameRate : 0,
             plannedSpeed: model.constantWindow,
             outputFPS: model.outputFPS
         )

@@ -300,6 +300,15 @@ struct WatchControlView: View {
         if let formatLine = remote.formatLine {
             parts.append(formatLine)
         }
+        // What ⚡ will do. The burst chips are durations (1s/4s/8s) and the
+        // toggle's left segment is the base rate, so without this the burst
+        // rate appeared nowhere at all — a camera set to base 25 / burst 50
+        // read exactly like one with no ramp configured. ⚡ matches the burst
+        // segment's own glyph. Suppressed when it matches the base rate, or
+        // in the still modes, which have no burst.
+        if remote.rampFPS > 0, remote.rampFPS != remote.baseFPS {
+            parts.append("⚡\(remote.rampFPS)")
+        }
         if remote.plannedSpeed > 0 {
             parts.append("\(remote.plannedSpeed)× planned")
         }
@@ -600,7 +609,14 @@ struct WatchControlView: View {
     private var sequenceCaption: String {
         let count = remote.rampIntervalCount
         if remote.sequenceMode == "ramp" {
-            let state = remote.isRampHighRate ? "burst active" : "base rate"
+            // Name the rate rather than just the state: "burst active" told
+            // you a burst was running but never at what rate.
+            let state: String
+            if remote.isRampHighRate {
+                state = remote.rampFPS > 0 ? "burst \(remote.rampFPS)" : "burst active"
+            } else {
+                state = remote.baseFPS > 0 ? "base \(remote.baseFPS)" : "base rate"
+            }
             return "\(state) · \(count) interval\(count == 1 ? "" : "s")"
         }
         return "\(count) marker\(count == 1 ? "" : "s")"
@@ -609,9 +625,21 @@ struct WatchControlView: View {
     private var liveEstimateLine: String {
         guard remote.plannedSpeed > 0 else { return "recording…" }
         var line = "@\(remote.plannedSpeed)×"
-        if let startedAt = remote.recordingStartedAt, remote.captureFPS > 0, remote.outputFPS > 0 {
+        // Deliberately the BASE rate, not `captureFPS`. captureFPS reports the
+        // segment running right now, so mid-burst this multiplied the whole
+        // elapsed time by the burst rate — the projected clip length doubled
+        // the instant a burst started and halved when it ended, as though the
+        // entire take had been shot at the burst rate.
+        //
+        // The base rate makes this a slight UNDER-estimate while a burst runs
+        // (those seconds really do yield more frames), which is the honest
+        // direction to be wrong in: it drifts by the burst's share of the take
+        // instead of lying about all of it. An exact figure needs the frame
+        // count per segment, which the camera has and does not send.
+        let estimateFPS = remote.baseFPS > 0 ? remote.baseFPS : remote.captureFPS
+        if let startedAt = remote.recordingStartedAt, estimateFPS > 0, remote.outputFPS > 0 {
             let elapsed = max(0, now.timeIntervalSince(startedAt))
-            let outputSeconds = elapsed * Double(remote.captureFPS)
+            let outputSeconds = elapsed * Double(estimateFPS)
                 / Double(remote.plannedSpeed) / Double(remote.outputFPS)
             line += " → \(clipLabel(outputSeconds))"
         }

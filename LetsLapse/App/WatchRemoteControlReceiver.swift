@@ -47,6 +47,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var formatLine: String?
     private var captureFPS = 0
     private var baseFPS = 0
+    private var rampFPS = 0
     private var plannedSpeed = 0
     private var outputFPS = 0
     private var isExposureLocked = false
@@ -203,17 +204,20 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         formatLine: String?,
         captureFPS: Int,
         baseFPS: Int,
+        rampFPS: Int,
         plannedSpeed: Int,
         outputFPS: Int
     ) {
         let changed = self.formatLine != formatLine
             || self.captureFPS != captureFPS
             || self.baseFPS != baseFPS
+            || self.rampFPS != rampFPS
             || self.plannedSpeed != plannedSpeed
             || self.outputFPS != outputFPS
         self.formatLine = formatLine
         self.captureFPS = captureFPS
         self.baseFPS = baseFPS
+        self.rampFPS = rampFPS
         self.plannedSpeed = plannedSpeed
         self.outputFPS = outputFPS
         if changed {
@@ -348,6 +352,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         }
         payload[WatchMessageKey.captureFPS] = captureFPS
         payload[WatchMessageKey.baseFPS] = baseFPS
+        payload[WatchMessageKey.rampFPS] = rampFPS
         payload[WatchMessageKey.plannedSpeed] = plannedSpeed
         payload[WatchMessageKey.outputFPS] = outputFPS
         payload[WatchMessageKey.captureMode] = captureMode.rawValue

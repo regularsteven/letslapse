@@ -22,6 +22,11 @@ enum WatchMessageKey {
     /// segment (it reads the burst rate mid-burst), so the Watch's base chip
     /// labels itself from this instead.
     static let baseFPS = "baseFPS"
+    /// The rate a burst will run at (`selectedRampFrameRate`), as opposed to
+    /// `captureFPS` which reports whatever segment is running right now. A
+    /// remote showing only the base rate can't tell you what ⚡ is about to do:
+    /// the burst chips are durations (1s/4s/8s), never rates.
+    static let rampFPS = "rampFPS"
     static let plannedSpeed = "plannedSpeed"
     static let outputFPS = "outputFPS"
     static let isExposureLocked = "isExposureLocked"
