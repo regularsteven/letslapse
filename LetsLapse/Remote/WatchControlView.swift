@@ -1,3 +1,10 @@
+// This file is compiled into BOTH the watch app and the universal app target
+// — and that target also builds iOS, where a second WCSession delegate would
+// sit alongside WatchRemoteControlReceiver contending for the single
+// `WCSession.default.delegate` slot. So the condition is macOS-POSITIVE, not
+// watchOS-negative: the remote exists on the wrist and on the Mac, nowhere
+// else. See Remote/ in the project layout.
+#if os(watchOS) || os(macOS)
 import SwiftUI
 
 /// Remote capture in three states: Ready (states its precondition),
@@ -307,13 +314,12 @@ struct WatchControlView: View {
         ScrollView {
             recordingControls
         }
-        .focusable(remote.isExposureLocked)
-        .digitalCrownRotation(
+        .crownAdjustable(
             $isoAdjust,
             from: remote.isoMin,
             through: remote.isoMax,
             by: 50,
-            sensitivity: .medium
+            isEnabled: remote.isExposureLocked
         )
         .onChange(of: isoAdjust) { newValue in
             guard remote.isExposureLocked else { return }
@@ -782,13 +788,11 @@ private struct StopAtSheet: View {
                         }
                         .onEnded { _ in appliedDragSteps = 0 }
                 )
-                .focusable(true)
-                .digitalCrownRotation(
+                .crownAdjustable(
                     $crownValue,
                     from: Double(lowerBound),
                     through: Double(upperBound),
-                    by: 1,
-                    sensitivity: .medium
+                    by: 1
                 )
                 .onChange(of: crownValue) { newValue in
                     let rounded = Int(newValue.rounded())
@@ -968,3 +972,4 @@ private struct SlideToStop: View {
         max(0, 1 - Double(dragOffset / (travel * 0.6)))
     }
 }
+#endif

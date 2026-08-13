@@ -127,6 +127,20 @@ struct LetsLapseApp: App {
         #endif
 
         #if os(macOS)
+        // The camera remote. A distinct window rather than a tab so it can sit
+        // beside the capture window — the Mac build is both a camera and a
+        // remote, and the whole point is watching one screen while driving
+        // another device. `Window`, not `WindowGroup`: there is one remote,
+        // and a second copy would just fight the first over the connection.
+        Window("Camera Remote", id: "remote") {
+            RemoteWindow()
+        }
+        .defaultSize(width: 260, height: 320)
+        // The Watch canvas is a fixed 208×248; a resizable window would let
+        // the mirror drift off-spec, which is the one thing it must not do.
+        .windowResizability(.contentSize)
+        .keyboardShortcut("r", modifiers: [.command, .shift])
+
         // The grading viewer opens as its own window on the Mac — macOS sheets
         // are fixed-size, and an editor wants free resizing and full screen.
         // One window per photo: reopening the same photo fronts its window.

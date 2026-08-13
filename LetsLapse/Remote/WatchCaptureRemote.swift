@@ -1,3 +1,10 @@
+// This file is compiled into BOTH the watch app and the universal app target
+// — and that target also builds iOS, where a second WCSession delegate would
+// sit alongside WatchRemoteControlReceiver contending for the single
+// `WCSession.default.delegate` slot. So the condition is macOS-POSITIVE, not
+// watchOS-negative: the remote exists on the wrist and on the Mac, nowhere
+// else. See Remote/ in the project layout.
+#if os(watchOS) || os(macOS)
 import Foundation
 #if os(watchOS)
 import WatchKit
@@ -66,7 +73,22 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// what the remote does with state, not how the bytes travel.
     private let transport: any CaptureRemoteTransport
 
-    init(transport: any CaptureRemoteTransport = WatchConnectivityTransport()) {
+    /// The pipe each platform's remote speaks by default. A Watch reaches an
+    /// iPhone over WatchConnectivity; a Mac reaches an iPad or iPhone over the
+    /// local network, because `WCSession` does not exist on macOS at all.
+    static func defaultTransport() -> any CaptureRemoteTransport {
+        #if os(watchOS)
+        return WatchConnectivityTransport()
+        #else
+        return LocalNetworkTransport()
+        #endif
+    }
+
+    /// Resolved inside the body rather than as a default argument: default
+    /// arguments are evaluated in a nonisolated context, and both concrete
+    /// transports are main-actor isolated.
+    init(transport: (any CaptureRemoteTransport)? = nil) {
+        let transport = transport ?? Self.defaultTransport()
         self.transport = transport
         super.init()
         self.transport.delegate = self
@@ -702,4 +724,5 @@ extension WatchCaptureRemote: WKExtendedRuntimeSessionDelegate {
         }
     }
 }
+#endif
 #endif

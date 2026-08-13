@@ -89,6 +89,11 @@
 			path = Resources;
 			sourceTree = "<group>";
 		};
+		AA0000000000000000000080 /* Remote */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Remote;
+			sourceTree = "<group>";
+		};
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -121,6 +126,7 @@
 				AA0000000000000000000007 /* App */,
 				AA0000000000000000000030 /* Watch */,
 				AA0000000000000000000060 /* Shared */,
+				AA0000000000000000000080 /* Remote */,
 				AA0000000000000000000070 /* Resources */,
 				AA0000000000000000000006 /* Products */,
 			);
@@ -156,6 +162,7 @@
 				AA0000000000000000000007 /* App */,
 				AA0000000000000000000060 /* Shared */,
 				AA0000000000000000000070 /* Resources */,
+				AA0000000000000000000080 /* Remote */,
 			);
 			name = LetsLapse;
 			packageProductDependencies = (
@@ -185,6 +192,7 @@
 			fileSystemSynchronizedGroups = (
 				AA0000000000000000000030 /* Watch */,
 				AA0000000000000000000060 /* Shared */,
+				AA0000000000000000000080 /* Remote */,
 			);
 			name = "LetsLapse Watch App";
 			packageProductDependencies = (
@@ -413,9 +421,9 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots only when Record audio is turned on in Settings.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -464,9 +472,9 @@
 				INFOPLIST_FILE = App/Info.plist;
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots only when Record audio is turned on in Settings.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
