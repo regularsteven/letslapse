@@ -2574,7 +2574,13 @@ struct CaptureView: View {
     }
 
     private func updateIdleTimer() {
-        UIApplication.shared.isIdleTimerDisabled = camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
+        // Held for the whole time the capture screen is up, not just while
+        // capturing. A mounted iPad waiting for a remote to start a take is
+        // idle by definition — letting it auto-lock backgrounds the app, and
+        // iOS suspends network activity in the background, so the remote link
+        // dies exactly in the state it exists to serve. This is also what
+        // Apple's own Camera app does.
+        UIApplication.shared.isIdleTimerDisabled = true
     }
     #endif
 }

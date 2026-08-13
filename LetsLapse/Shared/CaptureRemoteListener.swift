@@ -27,12 +27,14 @@ final class CaptureRemoteListener: ObservableObject {
     /// restarts, so a code read off the screen an hour ago is not still valid.
     @Published private(set) var pairingCode: String?
 
-    /// Runs a command against the live capture screen and reports whether it
-    /// actually did anything — same contract as the Watch receiver's handler,
-    /// so a guard-dropped command is never reported as accepted.
-    var commandHandler: ((WatchCaptureCommand, [String: Any]) -> Bool)?
-    /// Supplies the current state snapshot for replies and pushes.
-    var stateProvider: (() -> [String: Any])?
+    /// Answers a command message with a reply payload. This is deliberately the
+    /// *same* function the Watch link calls, not a parallel implementation:
+    /// the guards, the status vocabulary and the session logging all live in
+    /// one place, so a command cannot behave differently depending on which
+    /// pipe carried it.
+    var respond: (([String: Any]) -> [String: Any])?
+    /// Current state snapshot, for the TXT record only.
+    var currentState: (() -> [String: Any])?
 
     private var listener: NWListener?
     private var connection: NWConnection?
@@ -89,7 +91,7 @@ final class CaptureRemoteListener: ObservableObject {
         txt[CaptureRemoteService.TXTKey.model] = deviceModel
         txt[CaptureRemoteService.TXTKey.pairingID] = CaptureRemotePairing.pairingID(code: code)
         txt[CaptureRemoteService.TXTKey.recordingState] =
-            (stateProvider?()[WatchMessageKey.recordingState] as? String) ?? WatchRecordingState.idle.rawValue
+            (currentState?()[WatchMessageKey.recordingState] as? String) ?? WatchRecordingState.idle.rawValue
         return txt
     }
 
@@ -97,7 +99,11 @@ final class CaptureRemoteListener: ObservableObject {
         switch state {
         case .ready:
             self.state = .advertising
-            LLog("remote-listener advertising on \(listener?.port.map(String.init(describing:)) ?? "?")")
+            // The code is logged until the camera has UI to show it. It is a
+            // one-shot secret for one link on one LAN, regenerated every time
+            // advertising restarts — but this line should go when the pairing
+            // screen lands, rather than sit in the console forever.
+            LLog("remote-listener advertising on \(listener?.port.map(String.init(describing:)) ?? "?") code=\(pairingCode ?? "?")")
         case .failed(let error):
             // The most likely cause in practice is Local Network permission
             // being denied, which otherwise looks identical to "no cameras
@@ -114,13 +120,17 @@ final class CaptureRemoteListener: ObservableObject {
     // MARK: - Connection
 
     private func accept(_ incoming: NWConnection) {
-        // One remote at a time: two Macs racing start/stop on one camera is
-        // not a feature, and the second one silently losing commands would be
-        // worse than being told it can't connect.
-        guard connection == nil else {
-            LLog("remote-listener refusing second peer")
-            incoming.cancel()
-            return
+        // One remote at a time, and the NEWEST wins. Refusing the newcomer
+        // instead looks tidier and is much worse in practice: a Mac that drops
+        // off Wi-Fi without a clean close leaves a half-open connection here,
+        // and until keepalive notices, every legitimate reconnection would be
+        // turned away — on a window-mounted iPad that means walking over to
+        // restart the capture screen. Entry is gated by the pairing code
+        // shown on this device, so whoever connects is already trusted.
+        if let existing = connection {
+            LLog("remote-listener replacing existing peer")
+            connection = nil
+            existing.cancel()
         }
         connection = incoming
         incoming.stateUpdateHandler = { [weak self] state in
@@ -195,40 +205,10 @@ final class CaptureRemoteListener: ObservableObject {
             // A camera has no use for replies or pushes; only the remote does.
             return
         }
-        let response = respond(to: frame.body)
+        let response = respond?(frame.body)
+            ?? [WatchMessageKey.status: "unavailable",
+                WatchMessageKey.message: "Capture screen is not active"]
         send(CaptureRemoteFrame(id: frame.id, kind: .reply, body: response), on: incoming)
-    }
-
-    /// Deliberately mirrors `WatchRemoteControlReceiver.handle` — same guards,
-    /// same status vocabulary — so a command behaves identically whichever pipe
-    /// carried it.
-    private func respond(to message: [String: Any]) -> [String: Any] {
-        var payload = stateProvider?() ?? [:]
-        guard let raw = message[WatchMessageKey.command] as? String,
-              let command = WatchCaptureCommand(rawValue: raw) else {
-            payload[WatchMessageKey.status] = "error"
-            payload[WatchMessageKey.message] = "Unknown command"
-            return payload
-        }
-        if command == .state {
-            payload[WatchMessageKey.status] = "ok"
-            return payload
-        }
-        guard let commandHandler else {
-            payload[WatchMessageKey.status] = "unavailable"
-            payload[WatchMessageKey.message] = "Capture screen is not active"
-            return payload
-        }
-        guard commandHandler(command, message) else {
-            LLog("remote-listener rejected command=\(command.rawValue)")
-            payload[WatchMessageKey.status] = "rejected"
-            payload[WatchMessageKey.message] = "Command not available right now"
-            return payload
-        }
-        // Re-read: the handler just changed the thing the reply describes.
-        payload = stateProvider?() ?? payload
-        payload[WatchMessageKey.status] = "accepted"
-        return payload
     }
 
     /// Push a state snapshot to the connected remote, if any.

@@ -135,6 +135,11 @@ final class Probe {
 @main
 enum RemoteProbe {
     static func main() {
+        // Unbuffered: this tool is always run under a timeout or piped into
+        // head, and block-buffered stdout means a killed process prints
+        // NOTHING — which reads as "the link is dead" rather than "you never
+        // saw the output".
+        setbuf(stdout, nil)
         let probe = Probe()
         probe.browse()
         RunLoop.main.run()

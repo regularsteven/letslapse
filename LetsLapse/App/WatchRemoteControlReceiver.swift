@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import UIKit
 import WatchConnectivity
 
 // `WatchCaptureCommand` and `WatchRecordingState` live in
@@ -55,6 +56,16 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var isoMin: Float = 25
     private var isoMax: Float = 3200
 
+    /// The local-network camera link. Separate from WatchConnectivity because
+    /// the two are not alternatives: an iPhone can serve a Watch and a Mac at
+    /// once, and an iPad can only ever serve a Mac —
+    /// `WCSession.isSupported()` is false there, since Apple Watch pairs with
+    /// iPhone only. That is the platform test, NOT `#if os(iOS)`, which iPadOS
+    /// satisfies.
+    /// Created on first use rather than at init: this type is not
+    /// `@MainActor`, and both the listener and `UIDevice.current` are.
+    private(set) var remoteListener: CaptureRemoteListener?
+
     private override init() {
         super.init()
     }
@@ -72,8 +83,35 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         let wasActive = commandHandler != nil
         commandHandler = handler
         if wasActive != (handler != nil) {
+            // The listener's life is the capture screen's life. Advertising
+            // from app launch instead would fire the Local Network prompt
+            // before the camera exists, and would offer the Mac a camera that
+            // refuses everything it's asked.
+            if handler != nil {
+                startLocalNetwork()
+            } else {
+                remoteListener?.stop()
+            }
             publishState()
         }
+    }
+
+    @MainActor
+    private func startLocalNetwork() {
+        let listener = remoteListener ?? CaptureRemoteListener(
+            deviceName: UIDevice.current.name,
+            deviceModel: UIDevice.current.model)
+        remoteListener = listener
+        // Both closures route into the same handling the Watch uses, so a
+        // command can't behave differently depending on the pipe.
+        listener.respond = { [weak self] message in
+            guard let self else { return [:] }
+            return self.handle(message)
+        }
+        listener.currentState = { [weak self] in
+            self?.statePayload() ?? [:]
+        }
+        listener.start()
     }
 
     /// Scene-phase mirror: `.background` is "away", everything else counts as
@@ -315,12 +353,19 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
 
     @MainActor
     private func publishState() {
+        // Built once, pushed down every live pipe. Note the ordering: the
+        // local-network push happens BEFORE the WatchConnectivity guard
+        // returns, because on iPad `isSupported()` is false and an early
+        // return would silently take the Mac remote down with the watch link
+        // that device can never have.
+        let payload = statePayload()
+        remoteListener?.publishState(payload)
+
         guard WCSession.isSupported() else { return }
         let session = WCSession.default
-        // Build the payload here (reads @MainActor state), but push it to the
-        // Watch off the main thread: updateApplicationContext blocks on WC's XPC
-        // and will hang the UI (watchdog kill) if run on the main thread.
-        let payload = statePayload()
+        // Push to the Watch off the main thread: updateApplicationContext
+        // blocks on WC's XPC and will hang the UI (watchdog kill) if run on
+        // the main thread.
         Self.wcQueue.async {
             guard session.activationState == .activated else {
                 // Not lost for good: activationDidComplete re-publishes the
