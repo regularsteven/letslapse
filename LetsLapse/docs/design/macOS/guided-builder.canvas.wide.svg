@@ -1,11 +1,11 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Guided clip (experimental) · canvas &amp; opening step, wide output · 1000×700</title>
-  <desc>Mirrors App/GuidedBuilderView.swift (railLayout + canvasStep wideOutput branch + flowStrip) and App/GuidedCanvasFrame.swift — the same merged first step as guided-builder.canvas.svg with 16:9 picked from the shape menu, post the 2026-08-12 mac UI rework. RATIO CLASS DRIVES THE LAYOUT while the opening's framing stays Wide: a wide output is a shallow band, so the frame moves into a well across the top (wellHeight = min(440, max(300, stageHeight − 60)) — 310pt at this 700-tall window, growing with the window) and the controls spread into the freed width below; the moment the opening is PUNCHED this branch flips to the same two-column answers-plus-stage layout every other state uses, so there are never two pictures on screen pretending to be a before-and-after. The menu label and the badge both read "2160×1214" — VideoCanvasCropper.cropSize is the one truth and it even-rounds for the encoder. A cropping shape leaves a free axis, so this state is DRAGGABLE: dragging inside the frame slides the crop along the source (the picture follows the pointer) into AppModel.blendCanvasOffset — persisted on the blend, honoured by VideoCanvasCropper's composition pass and by the guided wide framing's centre, so it round-trips into the full editor either way; the caption inside the well says so. The SOURCE STRIP beside the frame is the whole 2160×3840 source with the kept band in LL.amber. Scroll wheel is NOT bound here — it stays the framing tool's punch zoom; the canvas frame is drag-pan only and shows an open-hand pointer. Chips follow the app idiom (selected white-on-accent, unselected white card); at this window height the FRAMING section scrolls just under the fold — the OVERVIEW STRIP and Back/Next stay pinned below the scroll. The strip: output-proportional blocks (white cards for base runs, LL.ink + amber for the moment), "cut"/ease connectors from the compiled seams, current stretch outlined in accent, exact total trailing. The OUTPUT RATE menu (same-day follow-up) sits above OPENING and pushes the FRAMING section further under the fold at this height; Back on step one returns to the project detail; the floating pill overlays the bottom centre with no tab highlighted during the flow (desc-only). Verified 2026-08-12 on the iPad Pro 13-inch sim (LL_GUIDED=latest LL_CANVAS=16:9, crop dragged by injected touch path) and the Mac.</desc>
+  <desc>Mirrors App/GuidedBuilderView.swift (railLayout + canvasStep wideOutput branch + flowStrip) and App/GuidedCanvasFrame.swift — the same merged first step as guided-builder.canvas.svg with 16:9 picked from the shape menu, post the 2026-08-12 mac UI rework. RATIO CLASS DRIVES THE LAYOUT while the opening's framing stays Wide: a wide output is a shallow band, so the frame moves into a well across the top (wellHeight = min(440, max(300, stageHeight − 60)) — 310pt at this 700-tall window, growing with the window) and the controls spread into the freed width below; the well keeps that height but the pane now cedes ~30pt of it to the scrub strip (paneHeight = wellHeight − 70, so 240pt here → a 427pt-wide 16:9 pane); the moment the opening is PUNCHED this branch flips to the same two-column answers-plus-stage layout every other state uses, so there are never two pictures on screen pretending to be a before-and-after. The menu label and the badge both read "2160×1214" — VideoCanvasCropper.cropSize is the one truth and it even-rounds for the encoder. A cropping shape leaves a free axis, so this state is DRAGGABLE: dragging inside the frame slides the crop along the source (the picture follows the pointer) into AppModel.blendCanvasOffset — persisted on the blend, honoured by VideoCanvasCropper's composition pass and by the guided wide framing's centre, so it round-trips into the full editor either way; the caption inside the well says so. The SOURCE STRIP beside the frame is the whole 2160×3840 source with the kept band in LL.amber. Scroll wheel is NOT bound here — it stays the framing tool's punch zoom; the canvas frame is drag-pan only and shows an open-hand pointer. Chips follow the app idiom (selected white-on-accent, unselected white card); at this window height the FRAMING section scrolls just under the fold — the OVERVIEW STRIP and Back/Next stay pinned below the scroll. The strip: output-proportional blocks (white cards for base runs, LL.ink + amber for the moment), "cut"/ease connectors from the compiled seams, current stretch outlined in accent, exact total trailing. The OUTPUT RATE menu (same-day follow-up) sits above OPENING and pushes the FRAMING section further under the fold at this height; Back on step one returns to the project detail; the floating pill overlays the bottom centre with no tab highlighted during the flow (desc-only). SCRUB PREVIEW (App/GuidedScrubPreview.swift): the pane is wrapped in GuidedScrubOverlay, which hangs GuidedScrubStrip 8pt under it — a 22pt white card capsule exactly the pane's width, left-aligned with the pane. Idle (drawn): 9pt semibold secondary time labels at both ends giving this step's window on the finished clip's clock ("0s" … "2.3s" — stretch 1's frames plus any compiled ease either side, cuts here so none), and a centred accent eye glyph + "Preview" 10pt semibold. Desc-only states, NOT drawn: while scrubbed a 14pt LL.accent knob with a 1.5pt white ring rides the bar and GuidedScrubDisplay replaces the pane's picture with the ≈ keyframe decode through the crop that renders there, badged bottom-leading in a black 55% capsule "≈ preview · 1s of 21s" (white bold 10pt); a drag locks the preview and an xmark.circle.fill ✕ (secondary) appears trailing outside the bar to let it go; on the Mac hovering the strip peeks (scrubs unlocked, clears on exit unless locked). This pane composes the crop, so allowsPaneScrub is false — dragging the picture still slides the crop, never scrubs; scrubbing lives on the strip alone (the iOS axis-classified pane drag applies only to pure-preview panes elsewhere in the flow). Verified 2026-08-12 on the iPad Pro 13-inch sim (LL_GUIDED=latest LL_CANVAS=16:9, crop dragged by injected touch path) and the Mac; scrub strip idiom verified same day against the Mac guided-builder captures (preview-verify set).</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
     <clipPath id="scrollarea"><rect x="272" y="61" width="748" height="557"/></clipPath>
-    <clipPath id="frame"><rect x="416" y="171" width="480" height="270" rx="8"/></clipPath>
-    <clipPath id="strip"><rect x="912" y="272" width="38" height="68" rx="4"/></clipPath>
+    <clipPath id="frame"><rect x="409" y="160" width="427" height="240" rx="8"/></clipPath>
+    <clipPath id="strip"><rect x="846" y="246" width="38" height="68" rx="4"/></clipPath>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#8FB6DA"/><stop offset="1" stop-color="#CBD8E2"/>
     </linearGradient>
@@ -69,7 +69,8 @@
       <!-- frame well: the output band + the source strip, drag caption inside -->
       <g id="frame-well">
         <rect x="302" y="151" width="688" height="310" rx="12" fill="#1C1C1E" fill-opacity="0.04"/>
-        <g clip-path="url(#frame)">
+        <g clip-path="url(#frame)" >
+         <g transform="translate(409 160) scale(0.889) translate(-416 -171)">
           <rect x="416" y="171" width="480" height="270" fill="#000"/>
           <rect x="416" y="171" width="480" height="100" fill="url(#sky)"/>
           <g fill="#FFFFFF" fill-opacity="0.65"><ellipse cx="500" cy="214" rx="48" ry="14"/><ellipse cx="650" cy="198" rx="60" ry="18"/><ellipse cx="800" cy="224" rx="40" ry="12"/></g>
@@ -83,22 +84,34 @@
           <g stroke="#6E6357" stroke-width="1.8" opacity="0.85">
             <path d="M430 441 L566 292"/><path d="M492 441 L594 292"/><path d="M562 441 L628 292"/><path d="M650 441 L656 292"/><path d="M740 441 L686 292"/><path d="M816 441 L714 292"/><path d="M880 441 L742 292"/>
           </g>
+         </g>
         </g>
-        <rect x="416" y="171" width="480" height="270" rx="8" fill="none" stroke="#000" stroke-opacity="0.08"/>
-        <rect x="424" y="409" width="182" height="24" rx="12" fill="#000" fill-opacity="0.55"/>
-        <text x="434" y="425" font-size="10" class="b" fill="#FFFFFF">Frame 1 — exact · 2160×1214</text>
+        <rect x="409" y="160" width="427" height="240" rx="8" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="417" y="368" width="182" height="24" rx="12" fill="#000" fill-opacity="0.55"/>
+        <text x="427" y="384" font-size="10" class="b" fill="#FFFFFF">Frame 1 — exact · 2160×1214</text>
         <!-- source strip: the whole source, kept band in amber -->
         <g id="source-strip">
           <g clip-path="url(#strip)">
-            <rect x="912" y="272" width="38" height="68" fill="#9A8C79"/>
-            <rect x="912" y="272" width="38" height="26" fill="url(#sky)" fill-opacity="0.55"/>
-            <rect x="912" y="296" width="38" height="5" fill="#8A7864" fill-opacity="0.55"/>
+            <rect x="846" y="246" width="38" height="68" fill="#9A8C79"/>
+            <rect x="846" y="246" width="38" height="26" fill="url(#sky)" fill-opacity="0.55"/>
+            <rect x="846" y="270" width="38" height="5" fill="#8A7864" fill-opacity="0.55"/>
           </g>
-          <rect x="912" y="283" width="38" height="46" fill="#FFB340" fill-opacity="0.15"/>
-          <rect x="912" y="283" width="38" height="46" fill="none" stroke="#FFB340" stroke-width="1.5"/>
-          <rect x="912" y="272" width="38" height="68" rx="4" fill="none" stroke="#000" stroke-opacity="0.15"/>
+          <rect x="846" y="257" width="38" height="46" fill="#FFB340" fill-opacity="0.15"/>
+          <rect x="846" y="257" width="38" height="46" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+          <rect x="846" y="246" width="38" height="68" rx="4" fill="none" stroke="#000" stroke-opacity="0.15"/>
         </g>
-        <text x="646" y="452" font-size="11" text-anchor="middle" fill="#6D6D72">Drag the frame to reposition the crop — the strip keeps the rest of the shot in view.</text>
+        <!-- GuidedScrubStrip, idle: 22pt capsule 8pt under the pane, exactly the pane's width -->
+        <g id="scrub-strip">
+          <rect x="409" y="408" width="427" height="22" rx="11" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08" filter="url(#soft)"/>
+          <text x="418" y="422" font-size="9" class="sb" fill="#6D6D72">0s</text>
+          <text x="827" y="422" font-size="9" class="sb" text-anchor="end" fill="#6D6D72">2.3s</text>
+          <g data-symbol="eye" transform="translate(601 419)">
+            <path d="M-5.5 0 Q0 -4.2 5.5 0 Q0 4.2 -5.5 0 Z" fill="none" stroke="#C36A00" stroke-width="1.2"/>
+            <circle r="1.7" fill="#C36A00"/>
+          </g>
+          <text x="611" y="422.5" font-size="10" class="sb" fill="#C36A00">Preview</text>
+        </g>
+        <text x="646" y="449" font-size="11" text-anchor="middle" fill="#6D6D72">Drag the frame to reposition the crop — the strip keeps the rest of the shot in view.</text>
       </g>
       <!-- controls spread below in the freed width -->
       <g id="output-rate">
@@ -180,5 +193,5 @@
   </g>
   <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
   <text x="520" y="752" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Guided clip (experimental) · canvas &amp; opening step, wide output · 1000×700 pt window</text>
-  <text x="520" y="772" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (canvasStep wideOutput branch · flowStrip) + App/GuidedCanvasFrame.swift — frame well with drag + source strip; a punch flips to the two-column stage</text>
+  <text x="520" y="772" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (canvasStep wideOutput · flowStrip) + GuidedCanvasFrame + GuidedScrubPreview — frame well: drag + source strip + scrub strip</text>
 </svg>

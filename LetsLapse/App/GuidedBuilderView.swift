@@ -68,6 +68,14 @@ struct GuidedBuilderView: View {
     /// a response to PICKING a framing mode — arriving on a step whose punch
     /// differs from the last one must not yank the scroll position.
     @State private var foldScrollStep = -1
+    /// The scrub preview's position — an absolute output frame on the
+    /// compiled clock, nil while no preview is showing. `scrubLocked` says
+    /// whether it is held (a drag) or a peek (a hover clears on exit).
+    @State private var scrubFrame: Double?
+    @State private var scrubLocked = false
+    /// The moment step's third framing mode: the stage shows the output
+    /// through the moving crop instead of composing a framing.
+    @State private var previewingMoment = false
 
     private var warp: WarpTimeline { model.activeWarp() }
     private var stretches: [BlendStretch] { model.blendStretches() }
@@ -123,6 +131,21 @@ struct GuidedBuilderView: View {
             // renders. Changing the crop's offset moves no framing — a punch
             // is positioned in source pixels, which the offset doesn't touch.
             reclampPunches()
+        }
+        .onChange(of: stepIndex) { _ in
+            // A preview belongs to the step it was scrubbed on — its window
+            // and its meaning both change with the question.
+            scrubFrame = nil
+            scrubLocked = false
+            previewingMoment = false
+        }
+        .onChange(of: model.compiledWarp()?.outputFrames ?? -1) { _ in
+            // A held preview is a position on the compiled clock; any change
+            // that recompiles the clip (speed, output rate, a seam) makes
+            // that clock a different clock, and a badge reading "18s of 6s"
+            // would be a lie. Let go and let the user scrub the new clip.
+            scrubFrame = nil
+            scrubLocked = false
         }
         .sheet(isPresented: $showCustomSpeed) {
             CustomSpeedSheet(stretch: customSpeedStretch)
@@ -497,6 +520,47 @@ struct GuidedBuilderView: View {
         model.updateReframe { $0 = track }
     }
 
+    // MARK: - Scrub preview plumbing
+
+    /// The survey's answers as the track that would render right now — the
+    /// same construction `materialise()` writes, evaluated for the preview
+    /// without touching the model.
+    private var previewTrack: ReframeTrack {
+        let timeline = model.activeWarp()
+        guard let size = model.sourceDisplaySize(),
+              punches.count == timeline.stretchCount else { return model.activeReframe() }
+        let compiled = model.compiledWarp()
+        return GuidedPlanner.track(
+            punches: punches,
+            warp: timeline,
+            seamEase: { index in
+                guard let eases = compiled?.seamEases, eases.indices.contains(index) else {
+                    return nil
+                }
+                return eases[index]
+            },
+            aspect: model.effectiveBlendCanvas().aspect,
+            sourceSize: size,
+            canvasOffset: model.blendCanvasOffset)
+    }
+
+    /// Everything the scrub needs, read once per body from the same compile
+    /// the estimate and the render use. nil while the source has no shape.
+    private var scrubContext: GuidedScrubContext? {
+        GuidedScrubContext(
+            compiled: model.compiledWarp(),
+            track: previewTrack,
+            aspect: model.effectiveBlendCanvas().aspect,
+            sourceSize: model.sourceDisplaySize(),
+            canvas: model.effectiveBlendCanvas(),
+            canvasOffset: model.blendCanvasOffset,
+            outputFPS: model.outputFPS)
+    }
+
+    private func locateFrame(_ sourceSeconds: Double) -> (url: URL, seconds: Double)? {
+        model.warpFrameLocation(at: sourceSeconds)
+    }
+
     /// Re-seat every authored framing inside the canvas it is composed
     /// against. Called when the shape changes; the punch factor is the user's
     /// answer, so it survives — only the centre is pulled back in bounds.
@@ -629,18 +693,7 @@ struct GuidedBuilderView: View {
                 // No compile yet: source length ÷ speed approximates it.
                 return max(0.2, timeline.length(of: index) / max(0.01, chosen))
             }()
-            let ramp: String? = index == 0 ? nil : {
-                let seamIndex = index - 1
-                let requested = timeline.seams.indices.contains(seamIndex)
-                    ? timeline.seams[seamIndex].ramp : .step
-                guard requested != .step else { return "cut" }
-                if let eases = compiled?.seamEases, eases.indices.contains(seamIndex),
-                   let ease = eases[seamIndex], ease.isClamped {
-                    // The compiled truth, everywhere the ease is spoken of.
-                    return ease.applied < 0.05 ? "cut" : String(format: "%.1fs", ease.applied)
-                }
-                return requested.label
-            }()
+            let ramp: String? = index == 0 ? nil : seamShortLabel(index - 1)
             let punch = punches.indices.contains(index) ? punches[index] : .none
             return StripSegment(
                 id: index,
@@ -970,15 +1023,34 @@ struct GuidedBuilderView: View {
         let width = rail
             ? min(wideOutput ? budget - 120 : 296, max(120, budget - 48))
             : 190
-        let frame = GuidedCanvasFrame(
-            offset: canvasOffsetBinding,
-            canvas: canvas,
-            sourceSize: model.sourceDisplaySize() ?? .zero,
-            anchor: firstFrameAnchor,
-            maxWidth: width,
-            maxHeight: rail ? (wideOutput ? wellHeight - 40 : stageHeight) : 300,
-            cropLabel: canvasCropLabel,
-            showsSourceStrip: rail)
+        // The scrub strip and its gap keep ~30pt of the well for themselves.
+        let paneHeight = rail ? (wideOutput ? wellHeight - 70 : stageHeight) : 300
+        let paneSize = CollectionMath.fit(
+            aspect: canvas.aspect, maxWidth: Double(width), maxHeight: Double(paneHeight))
+        // The pane composes the crop, so it keeps its drag — scrubbing the
+        // opening lives on the strip below, and only covers the picture while
+        // it is being scrubbed. While the ≈ preview covers the pane the crop
+        // drag is masked with it: a crop must only ever be composed on the
+        // exact frame, never on whatever moment happens to be scrubbed.
+        let frame = GuidedScrubOverlay(
+            context: scrubContext,
+            window: scrubContext?.window(forStretch: 0),
+            paneSize: paneSize,
+            locate: locateFrame(_:),
+            scrubFrame: $scrubFrame,
+            locked: $scrubLocked
+        ) {
+            GuidedCanvasFrame(
+                offset: canvasOffsetBinding,
+                canvas: canvas,
+                sourceSize: model.sourceDisplaySize() ?? .zero,
+                anchor: firstFrameAnchor,
+                maxWidth: width,
+                maxHeight: paneHeight,
+                cropLabel: canvasCropLabel,
+                showsSourceStrip: rail,
+                allowsReposition: scrubFrame == nil)
+        }
 
         if rail && wideOutput {
             // A wide output is a shallow band; the pane holds its own height so
@@ -1151,8 +1223,46 @@ struct GuidedBuilderView: View {
                 }
             } else {
                 stretchAnswers(index, role: stretchRole, framingInStage: false)
+                // The column keeps a picture on wide stretches too — the
+                // ending's default state shows (and scrubs) the stretch the
+                // clip really ends on, arrival ramp included.
+                if !(punches.indices.contains(index) ? punches[index] : .none).isPunched {
+                    columnWideStage(index, role: stretchRole)
+                }
             }
         }
+    }
+
+    /// The narrow layout's counterpart of `wideStage`: a compact exact frame
+    /// with the scrub strip under it, centred in the column.
+    @ViewBuilder private func columnWideStage(_ index: Int, role stretchRole: StretchRole) -> some View {
+        let paneSize = CollectionMath.fit(
+            aspect: model.effectiveBlendCanvas().aspect, maxWidth: 190, maxHeight: 300)
+        VStack(alignment: .leading, spacing: 6) {
+            GuidedScrubOverlay(
+                context: scrubContext,
+                window: scrubContext?.window(forStretch: index),
+                paneSize: paneSize,
+                locate: locateFrame(_:),
+                scrubFrame: $scrubFrame,
+                locked: $scrubLocked,
+                allowsPaneScrub: true
+            ) {
+                GuidedCanvasFrame(
+                    offset: .constant(model.blendCanvasOffset),
+                    canvas: model.effectiveBlendCanvas(),
+                    sourceSize: model.sourceDisplaySize() ?? .zero,
+                    anchor: frameAnchor(for: index, atEnd: false),
+                    maxWidth: paneSize.width,
+                    maxHeight: paneSize.height,
+                    cropLabel: canvasCropLabel,
+                    frameName: stretchName(index),
+                    showsSourceStrip: false,
+                    allowsReposition: false)
+            }
+            hint(wideStageCaption(role: stretchRole, onCanvasStep: false))
+        }
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     /// The answers themselves — shared by both layouts; only where the framing
@@ -1361,15 +1471,19 @@ struct GuidedBuilderView: View {
             }
 
             if punch.isPunched, !framingSurfaceInStage {
-                framingTargetChips(punch: punch)
-                framingSurface(index, tallHeight: 320)
-                hint("Drag the box to position, handles or pinch to size — this box is exactly the view that renders."
-                    + horizontalPlatformHint)
-                if case .pan = punch {
-                    panCurveChips(index, punch: punch)
-                }
-                if let caption = stageCaption(punch, role: stretchRole) {
-                    hint(caption)
+                momentModeChips(index, punch: punch)
+                if previewingMoment {
+                    momentPreviewStage(index, width: 340, height: 350)
+                } else {
+                    framingSurface(index, tallHeight: 320)
+                    hint("Drag the box to position, handles or pinch to size — this box is exactly the view that renders."
+                        + horizontalPlatformHint)
+                    if case .pan = punch {
+                        panCurveChips(index, punch: punch)
+                    }
+                    if let caption = stageCaption(punch, role: stretchRole) {
+                        hint(caption)
+                    }
                 }
             }
         }
@@ -1394,18 +1508,60 @@ struct GuidedBuilderView: View {
                     Spacer(minLength: 0)
                     suggestFramingSlot
                 }
-                framingTargetChips(punch: punch)
-                panCurveChips(index, punch: punch)
-                framingSurface(index, tallHeight: height)
-                    .frame(maxWidth: stageSurfaceWidth(width: width, height: height))
-                hint("Drag to position · handles resize · " + scrollZoomWord)
-                if let caption = stageCaption(punch, role: stretchRole) {
-                    hint(caption)
+                momentModeChips(index, punch: punch)
+                if previewingMoment {
+                    momentPreviewStage(index, width: width, height: height)
+                } else {
+                    panCurveChips(index, punch: punch)
+                    framingSurface(index, tallHeight: height)
+                        .frame(maxWidth: stageSurfaceWidth(width: width, height: height))
+                    hint("Drag to position · handles resize · " + scrollZoomWord)
+                    if let caption = stageCaption(punch, role: stretchRole) {
+                        hint(caption)
+                    }
                 }
             } else {
                 wideStage(index, width: width, height: height, role: stretchRole)
             }
         }
+    }
+
+    /// The moment step's Preview stage: the output through the moving crop —
+    /// the punch riding the arriving ramp, the pan (thru or eased, exactly as
+    /// authored) and the release, scrubbed on the finished clip's own clock.
+    @ViewBuilder private func momentPreviewStage(
+        _ index: Int, width: CGFloat, height: CGFloat
+    ) -> some View {
+        if let context = scrubContext {
+            let window = context.window(forStretch: index)
+            let paneSize = CollectionMath.fit(
+                aspect: model.effectiveBlendCanvas().aspect,
+                maxWidth: Double(width), maxHeight: Double(max(120, height - 30)))
+            VStack(alignment: .leading, spacing: 8) {
+                GuidedScrubDisplay(
+                    context: context,
+                    frame: scrubFrame ?? Double(window.lowerBound),
+                    locate: locateFrame(_:),
+                    paneSize: paneSize)
+                    .modifier(GuidedPaneScrub(
+                        window: window, paneWidth: paneSize.width,
+                        scrubFrame: $scrubFrame, locked: $scrubLocked))
+                GuidedScrubStrip(
+                    context: context, window: window,
+                    scrubFrame: $scrubFrame, locked: $scrubLocked, width: paneSize.width)
+            }
+            hint(momentPreviewHint)
+        } else {
+            hint("The preview needs the footage's shape — it appears once the probe lands.")
+        }
+    }
+
+    private var momentPreviewHint: String {
+        #if os(macOS)
+        return "Hover or drag across the picture to scrub — framing edits stay on the exact-frame box."
+        #else
+        return "Drag across the picture to scrub — framing edits stay on the exact-frame box."
+        #endif
     }
 
     /// The wide state's stage: the output itself — the stretch's exact frame
@@ -1417,17 +1573,39 @@ struct GuidedBuilderView: View {
         _ index: Int, width: CGFloat, height: CGFloat, role stretchRole: StretchRole
     ) -> some View {
         let onCanvasStep = index == 0 && currentStep == .canvas
-        GuidedCanvasFrame(
-            offset: onCanvasStep ? canvasOffsetBinding : .constant(model.blendCanvasOffset),
-            canvas: model.effectiveBlendCanvas(),
-            sourceSize: model.sourceDisplaySize() ?? .zero,
-            anchor: index == 0 ? firstFrameAnchor : frameAnchor(for: index, atEnd: false),
-            maxWidth: max(160, width - (onCanvasStep ? 58 : 10)),
-            maxHeight: height,
-            cropLabel: canvasCropLabel,
-            frameName: index == 0 ? "Frame 1" : stretchName(index),
-            showsSourceStrip: onCanvasStep,
-            allowsReposition: onCanvasStep)
+        let paneWidth = max(160, width - (onCanvasStep ? 58 : 10))
+        // The strip's row comes off the stage's height budget so the whole
+        // stage still fits the rail's stage band.
+        let paneHeight = max(120, height - 30)
+        let paneSize = CollectionMath.fit(
+            aspect: model.effectiveBlendCanvas().aspect,
+            maxWidth: Double(paneWidth), maxHeight: Double(paneHeight))
+        GuidedScrubOverlay(
+            context: scrubContext,
+            window: scrubContext?.window(forStretch: index),
+            paneSize: paneSize,
+            locate: locateFrame(_:),
+            scrubFrame: $scrubFrame,
+            locked: $scrubLocked,
+            // Off the canvas step the frame is read-only context, so the
+            // picture itself may scrub; the canvas step's pane composes the
+            // crop and keeps its drag — its scrub lives on the strip.
+            allowsPaneScrub: !onCanvasStep
+        ) {
+            GuidedCanvasFrame(
+                offset: onCanvasStep ? canvasOffsetBinding : .constant(model.blendCanvasOffset),
+                canvas: model.effectiveBlendCanvas(),
+                sourceSize: model.sourceDisplaySize() ?? .zero,
+                anchor: index == 0 ? firstFrameAnchor : frameAnchor(for: index, atEnd: false),
+                maxWidth: paneWidth,
+                maxHeight: paneHeight,
+                cropLabel: canvasCropLabel,
+                frameName: index == 0 ? "Frame 1" : stretchName(index),
+                showsSourceStrip: onCanvasStep,
+                // Masked while the ≈ preview covers the pane — a crop is
+                // composed on the exact frame only.
+                allowsReposition: onCanvasStep && scrubFrame == nil)
+        }
         hint(wideStageCaption(role: stretchRole, onCanvasStep: onCanvasStep))
     }
 
@@ -1476,14 +1654,44 @@ struct GuidedBuilderView: View {
         return min(width, height * size.width / size.height)
     }
 
-    /// Which framing of a pan the surface is editing.
-    @ViewBuilder private func framingTargetChips(punch: GuidedPunch) -> some View {
-        if case .pan = punch {
-            HStack(spacing: 8) {
-                framingModeChip("Start framing", active: !editingExit) { editingExit = false }
-                framingModeChip("End framing", active: editingExit) { editingExit = true }
+    /// Which framing of a pan the surface is editing — or Preview, the third
+    /// mode, where the stage shows the output instead of composing. Preview
+    /// answers nothing, so it never marks the step touched.
+    @ViewBuilder private func momentModeChips(_ index: Int, punch: GuidedPunch) -> some View {
+        HStack(spacing: 8) {
+            if case .pan = punch {
+                framingModeChip("Start framing", active: !previewingMoment && !editingExit) {
+                    previewingMoment = false
+                    editingExit = false
+                }
+                framingModeChip("End framing", active: !previewingMoment && editingExit) {
+                    previewingMoment = false
+                    editingExit = true
+                }
+            } else {
+                framingModeChip("Framing", active: !previewingMoment) {
+                    previewingMoment = false
+                }
             }
+            previewModeChip
         }
+    }
+
+    private var previewModeChip: some View {
+        Button {
+            previewingMoment = true
+        } label: {
+            Text("Preview")
+                .font(.system(size: 13, weight: previewingMoment ? .bold : .semibold))
+                .lineLimit(1)
+                .fixedSize()
+                .foregroundStyle(previewingMoment ? .white : .primary)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(previewingMoment ? LL.accent : LL.cardBackground, in: Capsule())
+                .shadow(color: .black.opacity(previewingMoment ? 0 : 0.06), radius: 1.5, y: 1)
+        }
+        .buttonStyle(.plain)
     }
 
     /// How the pan travels between them.
@@ -1597,6 +1805,9 @@ struct GuidedBuilderView: View {
     private func setPunch(_ punch: GuidedPunch, for index: Int) {
         guard punches.indices.contains(index) else { return }
         punches[index] = punch
+        // Picking a framing mode promises the framing surface — Preview mode
+        // must not outlive the answer it was previewing.
+        previewingMoment = false
     }
 
     private func framingBinding(for index: Int) -> Binding<GuidedFraming> {
@@ -1679,6 +1890,19 @@ struct GuidedBuilderView: View {
         }
     }
 
+    /// The seam in one word: "cut", "1s", "0.4s" — the compiled truth,
+    /// everywhere the ease is spoken of in strip-sized type.
+    private func seamShortLabel(_ seamIndex: Int) -> String {
+        let requested = warp.seams.indices.contains(seamIndex)
+            ? warp.seams[seamIndex].ramp : .step
+        guard requested != .step else { return "cut" }
+        if let eases = model.compiledWarp()?.seamEases, eases.indices.contains(seamIndex),
+           let ease = eases[seamIndex], ease.isClamped {
+            return ease.applied < 0.05 ? "cut" : String(format: "%.1fs", ease.applied)
+        }
+        return requested.label
+    }
+
     /// The compiled truth about a seam's ease — the number on screen is the
     /// number that renders.
     private func seamNote(_ seamIndex: Int) -> String? {
@@ -1700,6 +1924,10 @@ struct GuidedBuilderView: View {
     private var reviewStep: some View {
         VStack(alignment: .leading, spacing: 14) {
             question("Ready to create")
+
+            if let context = scrubContext {
+                storyboard(context)
+            }
 
             VStack(spacing: 0) {
                 ForEach(0..<warp.stretchCount, id: \.self) { index in
@@ -1733,6 +1961,101 @@ struct GuidedBuilderView: View {
             .padding(.horizontal, 4)
         }
         .frame(maxWidth: 620, alignment: .leading)
+    }
+
+    // MARK: Storyboard
+
+    /// The clip as a contact sheet: each stretch's start and end (a moment
+    /// adds its middle, so the pan is visibly travelling), through the crop
+    /// that renders there — the last look before the CTA, in pictures
+    /// instead of rows. Cells jump back to their step.
+    private func storyboard(_ context: GuidedScrubContext) -> some View {
+        let cellHeight: CGFloat = 84
+        let aspect = model.effectiveBlendCanvas().aspect
+        let cellSize = CGSize(
+            width: max(34, min(150, cellHeight * CGFloat(aspect))), height: cellHeight)
+        return VStack(alignment: .leading, spacing: 8) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                // Lazy: a many-burst shoot carries dozens of cells, and each
+                // decodes a frame — only the ones scrolled into view may cost.
+                LazyHStack(alignment: .top, spacing: 10) {
+                    ForEach(0..<warp.stretchCount, id: \.self) { index in
+                        if index > 0 {
+                            storyboardConnector(index - 1)
+                                .padding(.top, 16 + cellHeight / 2 - 6)
+                        }
+                        storyboardGroup(index, context: context, cellSize: cellSize)
+                    }
+                }
+                .padding(2)
+            }
+            hint("≈ preview frames — the clip, start to end. Tap a stretch to revisit its step.")
+        }
+        .padding(.vertical, 12)
+        .padding(.horizontal, 14)
+        .llCard()
+    }
+
+    private func storyboardGroup(
+        _ index: Int, context: GuidedScrubContext, cellSize: CGSize
+    ) -> some View {
+        let range = context.stretchRange(index)
+        let isMoment = stretches.indices.contains(index) && stretches[index].kind == .moment
+        let punch = punches.indices.contains(index) ? punches[index] : .none
+        // A stretch whose framing (or footage) moves earns a middle cell; two
+        // frames tell a wide run's whole story.
+        let samples: [Int] = {
+            let lo = range.lowerBound
+            let hi = range.upperBound
+            guard isMoment || punch.isPunched, hi > lo + 1 else { return [lo, hi] }
+            return [lo, (lo + hi) / 2, hi]
+        }()
+        let outFps = Double(max(1, model.outputFPS))
+        return Button {
+            materialise()
+            editingExit = false
+            stepIndex = min(index, steps.count - 1)
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 3) {
+                    if isMoment {
+                        Image(systemName: "bolt.fill")
+                            .font(.system(size: 8, weight: .semibold))
+                            .foregroundStyle(LL.amber)
+                    }
+                    Text("\(stretchName(index)) · \(WarpTimeline.speedLabel(displaySpeed(of: index)))")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                HStack(spacing: 4) {
+                    ForEach(Array(samples.enumerated()), id: \.offset) { position, frame in
+                        if position > 0 {
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 9, weight: .semibold))
+                                .foregroundStyle(Color.secondary.opacity(0.7))
+                        }
+                        GuidedStoryboardCell(
+                            context: context,
+                            frame: frame,
+                            locate: locateFrame(_:),
+                            cellSize: cellSize,
+                            caption: frame == 0
+                                ? "0s" : SpeedMath.clipLengthCompact(Double(frame) / outFps))
+                    }
+                }
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("\(stretchName(index)) — back to its step")
+    }
+
+    private func storyboardConnector(_ seamIndex: Int) -> some View {
+        Text(seamShortLabel(seamIndex))
+            .font(.system(size: 9, weight: .semibold))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
     }
 
     private func reviewStateRow(_ index: Int) -> some View {

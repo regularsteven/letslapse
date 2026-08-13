@@ -1,0 +1,127 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · capture log detail · portrait</title>
+  <desc>Mirrors App/SettingsView.swift (CaptureLogDetailView), pushed inside the Incomplete Captures sheet. The whole log, one event per line, parsed by CaptureSessionLogger.events(in:): the offset since the log's first event in a 62pt right-aligned monospaced column, the event name in monospaced semibold accent, and that event's data object re-encoded compactly beneath it in monospaced secondary (selectable). A line that fails to parse keeps its raw text and is named "unparsed" in red, so nothing is silently dropped. Header: the file name and a summary — event count, how long the session ran before it stopped writing, and its last event. Toolbar: Copy All puts the file's raw text (newline-delimited JSON, exactly as written) on the pasteboard and flips to "Copied"; the trash confirms in an alert naming the file, deletes it and pops back to the list. Drawn state: a Video ramp shoot that died 42s in, after one 3.2s burst.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.mono{font-family:'SF Mono','Menlo',ui-monospace,monospace}.ev{font-family:'SF Mono','Menlo',ui-monospace,monospace;font-size:12px;font-weight:600;fill:#C36A00}.off{font-family:'SF Mono','Menlo',ui-monospace,monospace;font-size:11px;fill:#6D6D72}.dat{font-family:'SF Mono','Menlo',ui-monospace,monospace;font-size:11px;fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- dimmed Settings tab behind the sheet -->
+      <g id="dimmed-settings" opacity="0.55">
+        <text x="20" y="101" font-size="34" class="b" fill="#000">Settings</text>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#000" opacity="0.18"/>
+
+      <!-- page sheet (same presentation as the list; this screen is pushed inside it) -->
+      <g id="sheet">
+        <rect x="0" y="78" width="393" height="774" rx="20" fill="#F2F2F7"/>
+
+        <!-- inline nav bar: back · title (the session's start time, truncated) · Copy All + delete -->
+        <g id="nav-bar">
+          <circle cx="33" cy="118" r="17" fill="#FFF" filter="url(#soft)"/>
+          <path d="M36 111 l-7 7 7 7" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="151" y="123" font-size="17" class="sb" fill="#000" text-anchor="middle">13 Aug 2026 at 07:41…</text>
+          <rect x="253" y="101" width="124" height="34" rx="17" fill="#FFF" filter="url(#soft)"/>
+          <text x="292" y="123" font-size="17" fill="#C36A00" text-anchor="middle">Copy All</text>
+          <line x1="336" y1="105" x2="336" y2="131" stroke="#000" stroke-opacity="0.08"/>
+          <g id="delete" stroke="#FF3B30" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="trash">
+            <path d="M350 111 h16"/>
+            <path d="M356 108.5 h4"/>
+            <path d="M352 111 l1 16 h10 l1 -16"/>
+            <path d="M356 115 v8 M360 115 v8" stroke-width="1.2"/>
+          </g>
+        </g>
+        <!-- Copy All flips to "Copied" once tapped (checkmark state in code) -->
+
+        <!-- header -->
+        <g id="header">
+          <text x="16" y="168" class="mono sec" font-size="11">capture-4CD554A4-1ABB-419C-9EB2-A9F183C1F099.log</text>
+          <text x="16" y="188" font-size="12" class="sec">7 events · ran 00:42 before it stopped writing · last</text>
+          <text x="16" y="203" font-size="12" class="sec">event burst_end</text>
+        </g>
+
+        <!-- events -->
+        <g id="events">
+          <g id="ev-session-start">
+            <text x="78" y="228" class="off" text-anchor="end">+0.00s</text>
+            <text x="86" y="228" class="ev">session_start</text>
+            <text x="86" y="244" class="dat">{"app":{"build":"1","version":"0.1"},</text>
+            <text x="86" y="258" class="dat">"device":"iPhone17,1","format":{</text>
+            <text x="86" y="272" class="dat">"appleLog":false,"codec":"H.264/HEVC",</text>
+            <text x="86" y="286" class="dat">"fps":30,"height":2160,"lens":"1×",</text>
+            <text x="86" y="300" class="dat">"mode":"Video","resolution":"3840x2160",</text>
+            <text x="86" y="314" class="dat">"stabilization":"Stabilization Auto",</text>
+            <text x="86" y="328" class="dat">"width":3840},"mode":"Video",</text>
+            <text x="86" y="342" class="dat">"system":"iOS 26.1"}</text>
+            <line x1="16" y1="350" x2="377" y2="350" stroke="#000" stroke-opacity="0.08"/>
+          </g>
+
+          <g id="ev-format-change">
+            <text x="78" y="364" class="off" text-anchor="end">+0.18s</text>
+            <text x="86" y="364" class="ev">format_change</text>
+            <text x="86" y="380" class="dat">{"appleLog":false,"codec":"H.264/HEVC",</text>
+            <text x="86" y="394" class="dat">"fps":30,"height":2160,"lens":"1×",</text>
+            <text x="86" y="408" class="dat">"mode":"Video","resolution":"3840x2160",</text>
+            <text x="86" y="422" class="dat">"stabilization":"Stabilization Auto",</text>
+            <text x="86" y="436" class="dat">"width":3840}</text>
+            <line x1="16" y1="444" x2="377" y2="444" stroke="#000" stroke-opacity="0.08"/>
+          </g>
+
+          <g id="ev-burst-set">
+            <text x="78" y="458" class="off" text-anchor="end">+12.44s</text>
+            <text x="86" y="458" class="ev">burst_set</text>
+            <text x="86" y="474" class="dat">{"baseFPS":30,"fps":120,"mode":"ramp"}</text>
+            <line x1="16" y1="482" x2="377" y2="482" stroke="#000" stroke-opacity="0.08"/>
+          </g>
+
+          <g id="ev-capture-start">
+            <text x="78" y="496" class="off" text-anchor="end">+12.44s</text>
+            <text x="86" y="496" class="ev">capture_start</text>
+            <text x="86" y="512" class="dat">{"fps":30,"kind":"video","resolution":</text>
+            <text x="86" y="526" class="dat">"3840x2160","sequenceMode":"ramp"}</text>
+            <line x1="16" y1="534" x2="377" y2="534" stroke="#000" stroke-opacity="0.08"/>
+          </g>
+
+          <g id="ev-burst-start">
+            <text x="78" y="548" class="off" text-anchor="end">+38.91s</text>
+            <text x="86" y="548" class="ev">burst_start</text>
+            <text x="86" y="564" class="dat">{"atSeconds":26.47,"fps":120,"index":0,</text>
+            <text x="86" y="578" class="dat">"mode":"ramp"}</text>
+            <line x1="16" y1="586" x2="377" y2="586" stroke="#000" stroke-opacity="0.08"/>
+          </g>
+
+          <g id="ev-burst-end">
+            <text x="78" y="600" class="off" text-anchor="end">+42.13s</text>
+            <text x="86" y="600" class="ev">burst_end</text>
+            <text x="86" y="616" class="dat">{"atSeconds":29.69,"durationSeconds":3.22,</text>
+            <text x="86" y="630" class="dat">"index":0}</text>
+            <line x1="16" y1="638" x2="377" y2="638" stroke="#000" stroke-opacity="0.08"/>
+          </g>
+        </g>
+        <!-- the log ends there: no session_end, which is the whole point — a session that
+             closed normally would have written one and then deleted its own file. -->
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture log detail (pushed in sheet) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — CaptureLogDetailView over App/CaptureSessionLogger.swift (events(in:) · rawText(of:))</text>
+</svg>

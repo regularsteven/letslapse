@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreImage
 import CoreGraphics
+import os
 
 /// Bakes the punch-in reframe into a finished blend: one composition pass
 /// over the (short) output clip, the way the grade bake works, but with a
@@ -17,6 +18,8 @@ enum ReframeVideoCropper {
     /// GPU-backed and thread-safe; the composition handler runs on
     /// AVFoundation's own queues.
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
+
+    private static let log = Logger(subsystem: "com.regularsteven.letslapse", category: "reframe")
 
     /// The constant output size for a reframed clip: the canvas-shaped crop at
     /// zoom 1 over `displaySize`, even-rounded for the encoder.
@@ -56,9 +59,25 @@ enum ReframeVideoCropper {
         frameSourceTimes: [Double],
         outputFPS: Int
     ) -> [CGRect] {
+        let outputTime = outputTimeMap(
+            frameSourceTimes: frameSourceTimes, outputFPS: outputFPS)
+        return frameSourceTimes.map { time in
+            track.crop(
+                atSource: time, aspect: aspect, sourceSize: sourceSize,
+                outputTime: outputTime)
+        }
+    }
+
+    /// Source seconds → clip seconds through the compiled frame map — the
+    /// render's own clock. The guided builder's scrub preview evaluates its
+    /// crops through this same map, so a previewed move and a rendered move
+    /// can never disagree about where they sit on the viewer's clock.
+    static func outputTimeMap(
+        frameSourceTimes: [Double], outputFPS: Int
+    ) -> (Double) -> Double {
         let outFps = Double(max(1, outputFPS))
         let times = frameSourceTimes
-        let outputTime: (Double) -> Double = { s in
+        return { s in
             guard let first = times.first, let last = times.last, times.count > 1 else { return 0 }
             if s <= first { return 0 }
             if s >= last { return Double(times.count - 1) / outFps }
@@ -72,11 +91,6 @@ enum ReframeVideoCropper {
             let t1 = times[lo]
             let fraction = t1 > t0 ? (s - t0) / (t1 - t0) : 0
             return (Double(lo - 1) + fraction) / outFps
-        }
-        return times.map { time in
-            track.crop(
-                atSource: time, aspect: aspect, sourceSize: sourceSize,
-                outputTime: outputTime)
         }
     }
 
@@ -110,6 +124,26 @@ enum ReframeVideoCropper {
         guard clipSize.width > 0, clipSize.height > 0,
               sourceSize.width > 0, sourceSize.height > 0 else {
             throw ReframeCropError.exportFailed("the clip's size couldn't be read")
+        }
+
+        // The bake indexes rects by rendered frame number, so it is only
+        // correct while the clip really has one frame per compiled map entry.
+        // The blend truncates silently when a source file holds fewer frames
+        // than its schedule budgeted (a burst that under-delivered its nominal
+        // rate) — and from that point every lookup lands early: the punch
+        // drifts, and late keys (the release to wide) are never reached. The
+        // probed per-segment densities should make the counts agree; if they
+        // ever disagree again, say so where a bug report can find it.
+        let clipDuration = try await asset.load(.duration).seconds
+        let clipFrames = Int((clipDuration * Double(max(1, outputFPS))).rounded())
+        if abs(clipFrames - frameSourceTimes.count) > 1 {
+            log.error("""
+                Reframe frame map desynced: the compiled schedule has \
+                \(frameSourceTimes.count) frames but the blended clip has \
+                \(clipFrames) — the schedule was built on a source density the \
+                files didn't deliver. Framing will mis-time from the first \
+                short segment onward.
+                """)
         }
 
         // The keys live in the capture's pixel space; the blend intermediate

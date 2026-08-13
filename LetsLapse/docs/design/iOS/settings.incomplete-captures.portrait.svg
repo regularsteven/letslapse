@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Incomplete Captures sheet · portrait</title>
+  <desc>Mirrors App/SettingsView.swift (IncompleteCapturesView), presented as a full-height page sheet from the Settings ▸ Advanced ▸ Incomplete Captures row over the dimmed Settings tab. NavigationStack with an inline title and Done. One insetGrouped row per orphaned capture log, newest first, from CaptureSessionLogger.orphanedLogs: the session's start time (15 semibold, DateFormatter .medium/.medium so the exact wording follows the device locale), the run's duration on the right (13 monospaced-digit secondary — last event minus first, "—" when the log holds fewer than two stamped events), and a caption of mode · last known event · event count. Tapping a row pushes settings.capture-log.portrait.svg. Section footer explains what a leftover log means; a second section holds Delete All, which confirms in an alert naming the count. With the last log deleted the list becomes one "No incomplete captures." row plus its footer, and the Settings row that opens this sheet disappears (drawn state: two orphans, an Interval shoot and a Video one).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.mono{font-family:'SF Mono','Menlo',ui-monospace,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- dimmed Settings tab behind the sheet -->
+      <g id="dimmed-settings" opacity="0.55">
+        <text x="20" y="101" font-size="34" class="b" fill="#000">Settings</text>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#000" opacity="0.18"/>
+
+      <!-- page sheet -->
+      <g id="sheet">
+        <rect x="0" y="78" width="393" height="774" rx="20" fill="#F2F2F7"/>
+
+        <!-- inline nav bar -->
+        <g id="nav-bar">
+          <text x="196.5" y="123" font-size="17" class="sb" fill="#000" text-anchor="middle">Incomplete Captures</text>
+          <rect x="311" y="101" width="62" height="34" rx="17" fill="#FFF" filter="url(#soft)"/>
+          <text x="342" y="123" font-size="17" fill="#C36A00" text-anchor="middle">Done</text>
+        </g>
+
+        <!-- one row per orphaned log -->
+        <g id="logs-card">
+          <rect x="16" y="152" width="361" height="128" rx="12" fill="#FFF" filter="url(#card)"/>
+
+          <g id="log-row-1">
+            <text x="32" y="178" font-size="15" class="sb" fill="#000">13 Aug 2026 at 07:41:41</text>
+            <text x="345" y="178" font-size="13" class="mono sec" text-anchor="end">00:09</text>
+            <path d="M355 172 l6 6 -6 6" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+            <text x="32" y="195" font-size="12" class="sec">Interval · last: capture_start · 2 events</text>
+          </g>
+          <line x1="32" y1="216" x2="377" y2="216" stroke="#000" stroke-opacity="0.08"/>
+          <g id="log-row-2">
+            <text x="32" y="242" font-size="15" class="sb" fill="#000">12 Aug 2026 at 18:07:02</text>
+            <text x="345" y="242" font-size="13" class="mono sec" text-anchor="end">04:36</text>
+            <path d="M355 236 l6 6 -6 6" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+            <text x="32" y="259" font-size="12" class="sec">Video · last: burst_start · 14 events</text>
+          </g>
+        </g>
+
+        <!-- section footer -->
+        <g id="footer" font-size="12.5" class="sec">
+          <text x="32" y="302">Each of these is a shoot that ended without the app closing</text>
+          <text x="32" y="317">the camera — a crash or a force-quit. Open one and use Copy</text>
+          <text x="32" y="332">All to send it to a developer.</text>
+        </g>
+
+        <!-- delete all -->
+        <g id="delete-all">
+          <rect x="16" y="354" width="361" height="48" rx="12" fill="#FFF" filter="url(#card)"/>
+          <text x="32" y="384" font-size="17" fill="#FF3B30">Delete All</text>
+        </g>
+        <!-- confirms in an alert: "Delete all logs?" / "All 2 incomplete-capture logs are
+             removed. This can't be undone." / Delete All (destructive) · Cancel -->
+
+        <!-- empty state, once the last log is deleted (the Settings row then disappears too):
+             a single row reading "No incomplete captures." in secondary, with the footer
+             "A capture session deletes its own log when the capture screen closes normally,
+             so nothing collects here unless the app stops running mid-shoot." -->
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Incomplete Captures (sheet) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — IncompleteCapturesView over App/CaptureSessionLogger.swift (orphanedLogs)</text>
+</svg>

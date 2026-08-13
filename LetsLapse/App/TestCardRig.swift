@@ -230,7 +230,7 @@ final class TestCardRigController: ObservableObject {
         }
         let total = offset
         let stop = DispatchWorkItem { [weak self] in
-            self?.camera?.stopRecording()
+            self?.camera?.stopRecording(source: .rig)
             self?.finish("test run complete — \(Int(total))s captured")
         }
         scheduled.append(stop)
@@ -244,7 +244,7 @@ final class TestCardRigController: ObservableObject {
             finish("test run cancelled")
         case .running:
             clearSchedule()
-            camera?.stopRecording()
+            camera?.stopRecording(source: .rig)
             finish("test run stopped — partial take kept")
         default:
             break

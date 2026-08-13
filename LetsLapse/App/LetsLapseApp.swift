@@ -8,6 +8,12 @@ struct LetsLapseApp: App {
     init() {
         Self.quietenMetalShaderCompiler()
 
+        // Any capture log still on disk at launch outlived the process that
+        // wrote it — a crash or a force-quit with the camera open. Scanned
+        // before anything can start a new session, so the leftovers are
+        // unambiguous, and surfaced in Settings ▸ Incomplete Captures.
+        CaptureSessionLogger.shared.scanForOrphanedLogs()
+
         #if DEBUG
         // LL_RESET_CAPS=1 — drop the cached device capability matrix before
         // anything can read it, so a tester can force a fresh format probe

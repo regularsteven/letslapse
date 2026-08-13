@@ -1,6 +1,11 @@
 import SwiftUI
 import AVFoundation
 import LetsLapseKit
+#if os(iOS)
+import UIKit
+#else
+import AppKit
+#endif
 
 /// Screens Settings can push. Value-based so ContentView can own the
 /// navigation path and pop it when the Settings tab is reselected.
@@ -18,9 +23,11 @@ enum SettingsDestination: String, Hashable {
 struct SettingsView: View {
     @EnvironmentObject var model: AppModel
     @ObservedObject private var models = ModelManager.shared
+    @ObservedObject private var captureLogs = CaptureSessionLogger.shared
     @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
     @State private var storage: AppModel.LibraryStorage?
     @State private var isClearingCache = false
+    @State private var showIncompleteCaptures = false
     @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
     #if os(iOS)
     @State private var showCaptureBenchmark = false
@@ -99,7 +106,21 @@ struct SettingsView: View {
         #else
         .navigationTitle("Settings")
         #endif
+        .sheet(isPresented: $showIncompleteCaptures) {
+            IncompleteCapturesView()
+        }
         .task {
+            // Re-scan on every visit: a session that crashed since launch
+            // leaves its log behind the moment the app comes back.
+            CaptureSessionLogger.shared.scanForOrphanedLogs()
+            #if DEBUG
+            // LL_INCOMPLETE=1 — open the sheet straight from `simctl launch`
+            // (with LL_TAB=settings), so the screen can be verified without
+            // scrolling Settings by hand.
+            if ProcessInfo.processInfo.environment["LL_INCOMPLETE"] == "1" {
+                showIncompleteCaptures = true
+            }
+            #endif
             if let walked = await model.computeLibraryStorage() {
                 storage = walked
             }
@@ -532,7 +553,11 @@ struct SettingsView: View {
             .buttonStyle(.plain)
 
             NavigationLink(value: SettingsDestination.diagnostics) {
-                LLRow(title: "Diagnostics", subtitle: "Job folders, processing logs", showsDivider: false) {
+                LLRow(
+                    title: "Diagnostics",
+                    subtitle: "Job folders, processing logs",
+                    showsDivider: !captureLogs.orphanedLogs.isEmpty
+                ) {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.tertiary)
@@ -540,6 +565,32 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            // Only ever shown when there is something to show: a capture log
+            // that outlived its process. A clean run deletes its own log, so
+            // this row appearing means the app died with the camera open.
+            if !captureLogs.orphanedLogs.isEmpty {
+                Button {
+                    showIncompleteCaptures = true
+                } label: {
+                    LLRow(
+                        title: "Incomplete Captures",
+                        subtitle: "Logs from shoots that ended in a crash or force-quit",
+                        showsDivider: false
+                    ) {
+                        HStack(spacing: 6) {
+                            Text("\(captureLogs.orphanedLogs.count)")
+                                .font(.system(size: 15).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
         }
         .llCard()
     }
@@ -864,6 +915,224 @@ private struct BlendLearningView: View {
             return "Safe ≈ \(safe)"
         }
         return "learning \(summary.sampleCount)/\(BlendLearningProfile.minSamplesForPrediction)"
+    }
+}
+
+// MARK: - Incomplete captures
+
+/// The orphaned capture logs, one row each. Everything here is for handing to
+/// a developer: the summary says when the shoot died and on what, the detail
+/// screen has the whole log, and Copy All puts it on the clipboard.
+struct IncompleteCapturesView: View {
+    @ObservedObject private var logger = CaptureSessionLogger.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingDeleteAll = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if logger.orphanedLogs.isEmpty {
+                    Section {
+                        Text("No incomplete captures.")
+                            .foregroundStyle(.secondary)
+                    } footer: {
+                        Text("A capture session deletes its own log when the capture screen closes normally, so nothing collects here unless the app stops running mid-shoot.")
+                    }
+                } else {
+                    Section {
+                        ForEach(logger.orphanedLogs) { log in
+                            NavigationLink {
+                                CaptureLogDetailView(log: log)
+                            } label: {
+                                row(for: log)
+                            }
+                        }
+                    } footer: {
+                        Text("Each of these is a shoot that ended without the app closing the camera — a crash or a force-quit. Open one and use Copy All to send it to a developer.")
+                    }
+
+                    Section {
+                        Button("Delete All", role: .destructive) {
+                            confirmingDeleteAll = true
+                        }
+                    }
+                }
+            }
+            .navigationTitle("Incomplete Captures")
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("Done") { dismiss() }
+                }
+            }
+            .alert("Delete all logs?", isPresented: $confirmingDeleteAll) {
+                Button("Delete All", role: .destructive) {
+                    logger.deleteAllOrphanedLogs()
+                }
+                Button("Cancel", role: .cancel) {}
+            } message: {
+                Text("All \(logger.orphanedLogs.count) incomplete-capture logs are removed. This can't be undone.")
+            }
+        }
+        .onAppear { logger.scanForOrphanedLogs() }
+        #if os(macOS)
+        .frame(minWidth: 480, minHeight: 420)
+        #endif
+    }
+
+    private func row(for log: CaptureSessionLogger.OrphanedLog) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(log.startedAt.map { CaptureLogFormat.started($0) } ?? log.fileName)
+                    .font(.system(size: 15, weight: .semibold))
+                Spacer(minLength: 8)
+                Text(log.duration.map { DurationFormatter.recordingTime(from: $0) } ?? "—")
+                    .font(.system(size: 13).monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+            Text(subtitle(for: log))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 2)
+    }
+
+    private func subtitle(for log: CaptureSessionLogger.OrphanedLog) -> String {
+        var parts: [String] = []
+        if let mode = log.mode { parts.append(mode) }
+        parts.append("last: \(log.lastEvent)")
+        parts.append("\(log.eventCount) event\(log.eventCount == 1 ? "" : "s")")
+        return parts.joined(separator: " · ")
+    }
+}
+
+/// One log, line by line. Monospaced and offset-stamped so the sequence of
+/// events (and the gaps between them) reads at a glance.
+private struct CaptureLogDetailView: View {
+    let log: CaptureSessionLogger.OrphanedLog
+
+    @ObservedObject private var logger = CaptureSessionLogger.shared
+    @Environment(\.dismiss) private var dismiss
+    @State private var events: [CaptureSessionLogger.Event] = []
+    @State private var didCopy = false
+    @State private var confirmingDelete = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                header
+                ForEach(events) { event in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(offsetText(event))
+                                .font(.system(size: 11, design: .monospaced).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                                .frame(width: 62, alignment: .trailing)
+                            Text(event.name)
+                                .font(.system(size: 12, weight: .semibold, design: .monospaced))
+                                .foregroundStyle(event.name == "unparsed" ? Color.red : LL.accent)
+                        }
+                        if !event.detail.isEmpty {
+                            Text(event.detail)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .padding(.leading, 70)
+                        } else if event.name == "unparsed" {
+                            Text(event.raw)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundStyle(.secondary)
+                                .textSelection(.enabled)
+                                .padding(.leading, 70)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 5)
+                    Divider()
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.bottom, 24)
+        }
+        .background(LL.screenBackground)
+        .navigationTitle(log.startedAt.map { CaptureLogFormat.started($0) } ?? log.fileName)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button {
+                    CaptureLogFormat.copyToClipboard(logger.rawText(of: log.url))
+                    didCopy = true
+                } label: {
+                    // Spelled out rather than icon-only: this screen exists to
+                    // get a log to a developer, and that is the action. A bare
+                    // Text keeps the words — a Label in a nav bar renders as
+                    // its icon alone whatever label style it is given.
+                    Text(didCopy ? "Copied" : "Copy All")
+                }
+                Button(role: .destructive) {
+                    confirmingDelete = true
+                } label: {
+                    Label("Delete", systemImage: "trash")
+                }
+            }
+        }
+        .alert("Delete this log?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) {
+                logger.delete(log)
+                dismiss()
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("This removes \(log.fileName). Copy it first if a developer still needs it.")
+        }
+        .onAppear { events = logger.events(in: log.url) }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(log.fileName)
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .textSelection(.enabled)
+            Text("\(log.eventCount) events · ran \(log.duration.map { DurationFormatter.recordingTime(from: $0) } ?? "—") before it stopped writing · last event \(log.lastEvent)")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 12)
+    }
+
+    /// Seconds since the log's first event — the axis that matters when
+    /// reading for a stall, not the wall clock.
+    private func offsetText(_ event: CaptureSessionLogger.Event) -> String {
+        guard let offset = event.offset else { return "—" }
+        return String(format: "+%.2fs", offset)
+    }
+}
+
+enum CaptureLogFormat {
+    private static let startedFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .medium
+        return formatter
+    }()
+
+    static func started(_ date: Date) -> String {
+        startedFormatter.string(from: date)
+    }
+
+    static func copyToClipboard(_ text: String) {
+        #if os(iOS)
+        UIPasteboard.general.string = text
+        #else
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+        #endif
     }
 }
 

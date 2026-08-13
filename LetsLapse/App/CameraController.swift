@@ -349,7 +349,12 @@ final class CameraController: NSObject, ObservableObject {
     /// matrix. Not every faster format on the sensor qualifies: a different
     /// field of view or codec would reframe the clip halfway through.
     @Published var availableBurstFrameRates: [Int] = []
-    @Published var selectedRampFrameRate = 120
+    @Published var selectedRampFrameRate = 120 {
+        didSet {
+            guard selectedRampFrameRate != oldValue else { return }
+            CaptureSessionLogger.shared.log("burst_set", ["fps": selectedRampFrameRate])
+        }
+    }
     @Published var isVideoStabilizationEnabled = true
     @Published var videoStabilizationStatus = "Stabilization Auto"
     @Published var activeSequenceMode: LiveCaptureSequence.Mode?
@@ -530,9 +535,42 @@ final class CameraController: NSObject, ObservableObject {
     // camera stays dead until the view is dismissed and reopened.
     private var shouldBeRunning = false
 
+    /// The capture screen's current mode, mirrored here purely so the session
+    /// log can name it ("Photo", "Bulb", "Interval", "Video"). The camera
+    /// itself is mode-agnostic — it is told which run to start — so this is a
+    /// label, never a switch. Set by CaptureView.
+    var loggedCaptureMode = CaptureMode.video.rawValue
+
+    /// What the session log should report as this session's frame count: the
+    /// stills or blended outputs a run produced, else the recorded segment
+    /// count. Whatever is truthfully known at teardown.
+    private var loggedFrameCount: Int? {
+        if photoCount > 0 { return photoCount }
+        if liveBlendOutputCount > 0 { return liveBlendOutputCount }
+        if segmentCount > 0 { return segmentCount }
+        return nil
+    }
+
+    /// The live capture setup, for `session_start` / `format_change`. Reads
+    /// the requested values (not the device's active format) so it is safe to
+    /// call before the session has finished configuring.
+    private func logFormatSnapshot() -> CaptureSessionLogger.FormatSnapshot {
+        CaptureSessionLogger.FormatSnapshot(
+            width: Int(selectedResolution.width),
+            height: Int(selectedResolution.height),
+            fps: selectedFrameRate,
+            codec: selectedResolution.isProRes ? "ProRes" : "H.264/HEVC",
+            stabilization: videoStabilizationStatus,
+            appleLog: appleLogEnabled,
+            lens: selectedStop?.chipLabel,
+            mode: loggedCaptureMode)
+    }
+
     func start() {
         LLog("start() called")
         installSessionLogging()
+        CaptureSessionLogger.shared.beginSession(
+            mode: loggedCaptureMode, format: logFormatSnapshot())
         shouldBeRunning = true
         AVCaptureDevice.requestAccess(for: .video) { granted in
             LLog("access granted=\(granted)")
@@ -550,8 +588,19 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// Closes this session's log: it ends the way a session is supposed to,
+    /// so the file is written off and removed. Only a session that never
+    /// reaches here — a crash, a force-quit — leaves a log behind for
+    /// Incomplete Captures. Idempotent, and called from both ends of the
+    /// capture screen's teardown (`stop()` and its disappear clean-up), since
+    /// not every way out of that screen stops the camera.
+    func endSessionLog(reason: String = "normal") {
+        CaptureSessionLogger.shared.endSession(reason: reason, frameCount: loggedFrameCount)
+    }
+
     func stop() {
         LLog("stop() called")
+        endSessionLog()
         shouldBeRunning = false
         cancelScheduledStop()
         sessionQueue.async {
@@ -1775,7 +1824,15 @@ final class CameraController: NSObject, ObservableObject {
             device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
         }
         if device.isFocusModeSupported(.locked) {
-            device.setFocusModeLocked(lensPosition: lockedLensValue, completionHandler: nil)
+            // `.locked` being supported does NOT imply the device can lock at an
+            // arbitrary lens position — the ultra-wide reports the former and not
+            // the latter, and passing a custom value there raises
+            // NSInvalidArgumentException. `currentLensPosition` is the sentinel
+            // for "lock wherever you already are", which every device accepts.
+            let position = device.isLockingFocusWithCustomLensPositionSupported
+                ? lockedLensValue
+                : AVCaptureDevice.currentLensPosition
+            device.setFocusModeLocked(lensPosition: position, completionHandler: nil)
         }
         #else
         if device.isExposureModeSupported(.locked) {
@@ -2058,6 +2115,20 @@ final class CameraController: NSObject, ObservableObject {
         }
         let line = "Capture \(dims.width)×\(dims.height) @ \(fps) fps · \(stabilizationStatus)"
         let preview = CaptureResolution(width: dims.width, height: dims.height)
+        // Every reconfiguration lands here, so this is the one honest place to
+        // log what the camera is actually set to — from the device's active
+        // format, not from what was requested. The logger drops repeats (a
+        // burst re-publishes the same format on every segment switch).
+        let subType = CMFormatDescriptionGetMediaSubType(device.activeFormat.formatDescription)
+        CaptureSessionLogger.shared.logFormatChange(CaptureSessionLogger.FormatSnapshot(
+            width: Int(dims.width),
+            height: Int(dims.height),
+            fps: fps,
+            codec: Self.proResFourCCs.contains(subType) ? "ProRes" : "H.264/HEVC",
+            stabilization: stabilizationStatus,
+            appleLog: activeColorSpaceIsAppleLog(device),
+            lens: selectedStop?.chipLabel,
+            mode: loggedCaptureMode))
         DispatchQueue.main.async {
             self.videoStabilizationStatus = stabilizationStatus
             self.activeFormatDescription = line
@@ -2065,6 +2136,18 @@ final class CameraController: NSObject, ObservableObject {
                 self.previewDimensions = preview
             }
         }
+    }
+
+    /// Whether the camera is actually shooting Apple Log right now. Asked of
+    /// the device rather than of `appleLogEnabled`: a format without Log
+    /// support silently stays sRGB, and the log should record what happened.
+    private func activeColorSpaceIsAppleLog(_ device: AVCaptureDevice) -> Bool {
+        #if os(iOS)
+        if #available(iOS 17.2, *) {
+            return device.activeColorSpace == .appleLog
+        }
+        #endif
+        return false
     }
 
     /// Point the movie and photo output connections at `orientation` so
@@ -2218,6 +2301,12 @@ final class CameraController: NSObject, ObservableObject {
                 }
                 self.exposureLocked = true
                 #if os(iOS)
+                CaptureSessionLogger.shared.log("exposure_lock", [
+                    "iso": iso,
+                    "shutterSeconds": duration.seconds,
+                    "shutterLabel": "1/\(Int((1 / max(duration.seconds, 0.000001)).rounded()))",
+                    "lensPosition": lens,
+                ])
                 self.lockedISOValue = iso
                 self.lockedShutterValue = duration.seconds
                 self.lockedLensValue = lens
@@ -2234,6 +2323,9 @@ final class CameraController: NSObject, ObservableObject {
                     self.isoRange = minISO...maxISO
                 }
                 #else
+                // The Mac locks by mode, not by custom ISO/shutter values —
+                // there are none to record.
+                CaptureSessionLogger.shared.log("exposure_lock", ["mode": "locked"])
                 DispatchQueue.main.async {
                     self.isExposureLocked = true
                 }
@@ -2259,6 +2351,7 @@ final class CameraController: NSObject, ObservableObject {
                     device.whiteBalanceMode = .continuousAutoWhiteBalance
                 }
                 self.exposureLocked = false
+                CaptureSessionLogger.shared.log("exposure_unlock")
                 DispatchQueue.main.async {
                     self.isExposureLocked = false
                 }
@@ -2360,10 +2453,18 @@ final class CameraController: NSObject, ObservableObject {
                 try device.lockForConfiguration()
                 defer { device.unlockForConfiguration() }
                 let clamped = min(max(position, 0), 1)
-                device.setFocusModeLocked(lensPosition: clamped, completionHandler: nil)
-                self.lockedLensValue = clamped
+                // Devices that support `.locked` but not a custom lens position
+                // (the ultra-wide) throw on an explicit value — lock them where
+                // they are and report back the position they actually hold.
+                let custom = device.isLockingFocusWithCustomLensPositionSupported
+                device.setFocusModeLocked(
+                    lensPosition: custom ? clamped : AVCaptureDevice.currentLensPosition,
+                    completionHandler: nil
+                )
+                let applied = custom ? clamped : device.lensPosition
+                self.lockedLensValue = applied
                 DispatchQueue.main.async {
-                    self.lockedLensPosition = clamped
+                    self.lockedLensPosition = applied
                 }
             } catch {}
         }
@@ -2436,6 +2537,17 @@ final class CameraController: NSObject, ObservableObject {
             self.sequenceSharedRampRates =
                 mode == .ramp && baseFrameRate != self.selectedRampFrameRate
                 ? [baseFrameRate, self.selectedRampFrameRate] : []
+            CaptureSessionLogger.shared.log("burst_set", [
+                "fps": self.selectedRampFrameRate,
+                "mode": mode.rawValue,
+                "baseFPS": baseFrameRate,
+            ])
+            CaptureSessionLogger.shared.log("capture_start", [
+                "kind": "video",
+                "fps": baseFrameRate,
+                "resolution": "\(resolution.width)x\(resolution.height)",
+                "sequenceMode": mode.rawValue,
+            ])
             self.startNextSegment(frameRate: self.selectedFrameRate)
             DispatchQueue.main.async {
                 self.recordingStartedAt = startedAt
@@ -2453,7 +2565,10 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    func stopRecording() {
+    /// `source` names who asked, for the session log only — the stop itself is
+    /// identical whichever way it arrives.
+    func stopRecording(source: CaptureSessionLogger.StopSource = .phone) {
+        CaptureSessionLogger.shared.log("stop_requested", ["source": source.rawValue, "kind": "video"])
         cancelScheduledStop()
         sessionQueue.async {
             if self.movieOutput.isRecording {
@@ -2667,6 +2782,12 @@ final class CameraController: NSObject, ObservableObject {
         sequence.rampIntervals.append(interval)
         activeSequence = sequence
         rampIntervalActive = true
+        CaptureSessionLogger.shared.log("burst_start", [
+            "index": interval.index,
+            "atSeconds": interval.relativeStart,
+            "fps": sequence.rampFrameRate ?? selectedRampFrameRate,
+            "mode": sequence.mode.rawValue,
+        ])
         publishRampState(isActive: true, intervalCount: sequence.rampIntervals.count)
     }
 
@@ -2684,6 +2805,11 @@ final class CameraController: NSObject, ObservableObject {
         sequence.rampIntervals[index].relativeEnd = relativeEnd
         activeSequence = sequence
         rampIntervalActive = false
+        CaptureSessionLogger.shared.log("burst_end", [
+            "index": sequence.rampIntervals[index].index,
+            "atSeconds": relativeEnd,
+            "durationSeconds": relativeEnd - sequence.rampIntervals[index].relativeStart,
+        ])
         publishRampState(isActive: false, intervalCount: sequence.rampIntervals.count)
     }
 
@@ -2926,6 +3052,11 @@ final class CameraController: NSObject, ObservableObject {
             self.intervalFrameCap = frameCap
             self.intervalFramesRequested = 0
             self.intervalActive = true
+            CaptureSessionLogger.shared.log("capture_start", [
+                "kind": "interval",
+                "intervalSeconds": seconds,
+                "frameCap": frameCap ?? 0,
+            ])
             DispatchQueue.main.async {
                 self.photoCount = 0
                 self.captureRunStartedAt = Date()
@@ -2975,7 +3106,8 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    func stopInterval() {
+    func stopInterval(source: CaptureSessionLogger.StopSource = .phone) {
+        CaptureSessionLogger.shared.log("stop_requested", ["source": source.rawValue, "kind": "interval"])
         cancelScheduledStop()
         sessionQueue.async {
             self.finishIntervalOnQueue()
@@ -2992,6 +3124,7 @@ final class CameraController: NSObject, ObservableObject {
         self.intervalTimer?.cancel()
         self.intervalTimer = nil
         let urls = self.photoURLs
+        CaptureSessionLogger.shared.log("capture_end", ["kind": "interval", "frameCount": urls.count])
         self.intervalFrameCap = nil
         self.intervalFramesRequested = 0
         DispatchQueue.main.async {
@@ -3078,13 +3211,13 @@ final class CameraController: NSObject, ObservableObject {
         scheduledStop = nil
         LLog("scheduled stop firing")
         if isRecording {
-            stopRecording()
+            stopRecording(source: .scheduled)
         } else if isIntervalRunning {
-            stopInterval()
+            stopInterval(source: .scheduled)
         } else if isLiveBlendRunning {
             // The user asked for an exact count/time; the window in progress
             // is beyond it, so it is dropped rather than kept as a partial.
-            stopLiveBlend(keepPartial: false)
+            stopLiveBlend(keepPartial: false, source: .scheduled)
         }
     }
 
@@ -3101,6 +3234,12 @@ final class CameraController: NSObject, ObservableObject {
     func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions()) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            CaptureSessionLogger.shared.log("capture_start", [
+                "kind": "liveBlend",
+                "intervalSeconds": interval,
+                "framesPerBlend": depth.fixedFrames ?? 0,
+                "preferDNG": preferDNG,
+            ])
 
             #if os(iOS)
             if preferDNG, self.deviceSupportsBayerRAW() {
@@ -3442,7 +3581,10 @@ final class CameraController: NSObject, ObservableObject {
     /// Graceful stop: the partial window is kept when it has frames (unless
     /// `keepPartial` is false — a scheduled "stop at N" wants exactly N),
     /// then the finish handler fires with everything completed so far.
-    func stopLiveBlend(keepPartial: Bool = true) {
+    func stopLiveBlend(keepPartial: Bool = true, source: CaptureSessionLogger.StopSource = .phone) {
+        CaptureSessionLogger.shared.log("stop_requested", [
+            "source": source.rawValue, "kind": "liveBlend", "keepPartial": keepPartial,
+        ])
         cancelScheduledStop()
         sessionQueue.async {
             #if os(iOS)

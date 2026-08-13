@@ -257,6 +257,7 @@ struct CaptureView: View {
         // as its first.
         .onChange(of: mode) { newMode in
             RecordingSettingsStore.save(captureMode: newMode)
+            syncLoggedCaptureMode(mode: newMode)
             updateAspectPreview()
             syncAppleLog()
             // A pill left by another mode (running or settling) doesn't
@@ -300,6 +301,7 @@ struct CaptureView: View {
         }
         .onChange(of: photoBulbMode) { isBulb in
             RecordingSettingsStore.save(photoBulbMode: isBulb)
+            syncLoggedCaptureMode(bulb: isBulb)
         }
         // A capped DNG Photo shot ends itself: once its single blended DNG is
         // out, stop the open-ended live-blend run. Bulb leaves the flag off.
@@ -594,6 +596,8 @@ struct CaptureView: View {
         let captureSeed = effectiveCaptureOrientation(device: UIDevice.current.orientation) ?? orientation
         camera.setVideoOrientation(captureSeed)
         #endif
+        // Before start(): the session log opens there and names the mode.
+        syncLoggedCaptureMode()
         camera.start()
         updateAspectPreview()
         syncAppleLog()
@@ -669,6 +673,10 @@ struct CaptureView: View {
         // close (or a Photo-mode exit) shouldn't leave motion updates running.
         steadiness.stop()
         camera.stopTestCardTap()
+        // The screen is gone, so the capture session is over however it was
+        // left — including the paths that don't stop the camera (Photo mode
+        // keeps it live for the next shot). Idempotent with `camera.stop()`.
+        camera.endSessionLog()
         #if os(iOS)
         LocationService.shared.stopUpdates()
         watchRemote.setCommandHandler(nil)
@@ -1901,6 +1909,17 @@ struct CaptureView: View {
         camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
     }
 
+    /// Mirror the mode onto the camera for the session log — "Bulb" is Photo
+    /// with the open-ended dial armed, and reads as its own mode in a log.
+    /// The arguments exist because SwiftUI's `onChange` hands over the new
+    /// value before the `@State` behind it has been written.
+    private func syncLoggedCaptureMode(mode newMode: CaptureMode? = nil, bulb: Bool? = nil) {
+        let resolvedMode = newMode ?? mode
+        let resolvedBulb = bulb ?? photoBulbMode
+        camera.loggedCaptureMode = (resolvedMode == .photo && resolvedBulb)
+            ? "Bulb" : resolvedMode.rawValue
+    }
+
     private func shutterAction() {
         switch mode {
         case .video:
@@ -2406,11 +2425,11 @@ struct CaptureView: View {
             return true
         case .stopRecording:
             if camera.isRecording {
-                camera.stopRecording()
+                camera.stopRecording(source: .watch)
             } else if camera.isIntervalRunning {
-                camera.stopInterval()
+                camera.stopInterval(source: .watch)
             } else if camera.isLiveBlendRunning {
-                camera.stopLiveBlend()
+                camera.stopLiveBlend(source: .watch)
             } else {
                 return false
             }

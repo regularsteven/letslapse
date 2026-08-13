@@ -1,11 +1,15 @@
 <svg viewBox="0 0 441 940" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Guided clip (experimental) · closing step · portrait</title>
-  <desc>Mirrors App/GuidedBuilderView.swift (stretchStep for the closing base run: transitionCard + closingDefaultCard, columnLayout). Step 3 of 4 since Canvas and Opening merged (2026-08-12 UX sign-off) — the rail on wide surfaces calls this row "Ending"; the dots keep the question's own words. The labelled progress line ("Step 3 of 4 · Ending") sits under the dots and the title is absolutely centred (FlowHeader centersTitle) so the EXPERIMENTAL capsule cannot displace it. Question "How does it end?". The transition question is ALWAYS asked — the ramp back out of the last moment is part of the answer even when the closing state is the default — so HOW IT ARRIVES sits above the default card (Step "hard cut" active here; choosing an ease welds the punch-out framing move to the same ramp). The closingDefaultCard: arrow.uturn.backward glyph, 15pt semibold "Ends like it starts" (reads "Ends wide" instead when the opening carries a punch — the default closing state is always wide + the opening's speed), 12pt secondary "Wide · 50× smooth — tap Next to keep it." (speed via WarpTimeline.speedLabel + speedWord, synced from the opening on leaving step one — only when the LAST stretch is a base run; a shoot that ends on a recorded moment gets the moment question instead and keeps its seeded ¼×), and the accent "Change…" link which reveals the full speed + framing controls (closingOverride). The sync also never fires once the closing speed already differs from the opening (a deliberate override read back on re-entry). Next lands on Review. Captured from the iPhone 17 Pro sim, mapped onto the 393×852 canvas.</desc>
+  <desc>Mirrors App/GuidedBuilderView.swift (stretchStep for the closing base run: transitionCard + closingDefaultCard, columnLayout). Step 3 of 4 since Canvas and Opening merged (2026-08-12 UX sign-off) — the rail on wide surfaces calls this row "Ending"; the dots keep the question's own words. The labelled progress line ("Step 3 of 4 · Ending") sits under the dots and the title is absolutely centred (FlowHeader centersTitle) so the EXPERIMENTAL capsule cannot displace it. Question "How does it end?". The transition question is ALWAYS asked — the ramp back out of the last moment is part of the answer even when the closing state is the default — so HOW IT ARRIVES sits above the default card (Step "hard cut" active here; choosing an ease welds the punch-out framing move to the same ramp). The closingDefaultCard: arrow.uturn.backward glyph, 15pt semibold "Ends like it starts" (reads "Ends wide" instead when the opening carries a punch — the default closing state is always wide + the opening's speed), 12pt secondary "Wide · 50× smooth — tap Next to keep it." (speed via WarpTimeline.speedLabel + speedWord, synced from the opening on leaving step one — only when the LAST stretch is a base run; a shoot that ends on a recorded moment gets the moment question instead and keeps its seeded ¼×), and the accent "Change…" link which reveals the full speed + framing controls (closingOverride). The sync also never fires once the closing speed already differs from the opening (a deliberate override read back on re-entry). Next lands on Review. NEW (2026-08-12, guided scrub previews): the column layout keeps a picture on the ending — under the default card, columnWideStage centres the output-shaped exact-frame stage wrapped in GuidedScrubOverlay (App/GuidedScrubPreview.swift): a GuidedCanvasFrame of the very frame the clip ends on (ExactFrameLoader, badge "Stretch 2 — exact · as shot"; allowsReposition false — off the canvas step a drag never moves the clip's crop), sized CollectionMath.fit(canvas aspect, max 190×300) → 169×300 for this as-shot 9:16 shoot. 8pt under it, exactly the pane's width, the GuidedScrubStrip: a 22pt white card capsule (primary-8% hairline) covering the ending stretch's slice of the finished clip's clock — 9pt semibold secondary end labels "19s" and "21s" (window start / end+1 over outputFPS; the clip's own zero renders "0s") flanking the idle affordance, an eye glyph + "Preview" in 10pt semibold LL.accent, centred. Below, wideStageCaption for the closing role: "Ends wide — the whole canvas." (11.5pt secondary hint, leading-aligned with the pane). Desc-only states, not drawn: SCRUBBED — dragging the strip (or the pane itself: allowsPaneScrub, GuidedPaneScrub's axis-classified drag so a vertical scroll still wins on iOS) swaps the pane's picture for GuidedScrubDisplay, the ≈ keyframe preview at the scrubbed moment shown through the render's crop with a bottom-leading black-55% capsule badge "≈ preview · 20s of 21s" (white bold 10pt), while a 14pt LL.accent knob with a 1.5pt white ring rides the strip in place of the Preview label; LOCKED — a finished drag holds the preview and an xmark.circle.fill (15pt, secondary) appears trailing OUTSIDE the bar to let it go; macOS hover-to-peek scrubs on strip/pane hover and clears on exit unless locked. Captured from the iPhone 17 Pro sim, mapped onto the 393×852 canvas.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="endingFrame"><rect x="112" y="384" width="169" height="300" rx="8"/></clipPath>
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000000" flood-opacity="0.14"/>
     </filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FB6DA"/><stop offset="1" stop-color="#CBD8E2"/>
+    </linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
@@ -66,6 +70,40 @@
         <text x="60" y="333" font-size="12" fill="#6D6D72">Wide · 50× smooth — tap Next to keep it.</text>
         <text x="32" y="359" font-size="13" class="sb" fill="#C36A00">Change…</text>
       </g>
+      <!-- columnWideStage: the exact frame the clip really ends on, centred,
+           with the GuidedScrubStrip under it (pane width) and the closing hint.
+           Scrubbed/locked/hover states are desc-only. -->
+      <g id="column-wide-stage">
+        <g id="ending-frame">
+          <g clip-path="url(#endingFrame)">
+            <rect x="112" y="384" width="169" height="300" fill="#000"/>
+            <!-- stand-in for the decoded last frame: sky over the rail yard -->
+            <rect x="112" y="384" width="169" height="118" fill="url(#sky)"/>
+            <rect x="112" y="502" width="169" height="182" fill="#9A8C79"/>
+            <path d="M112 512 h169 M112 522 h169" stroke="#B8C6D2" stroke-width="1" opacity="0.5"/>
+            <rect x="166" y="480" width="18" height="22" fill="#B4674B"/>
+            <rect x="186" y="486" width="44" height="16" fill="#8C8F95"/>
+            <rect x="116" y="512" width="30" height="10" fill="#5E7FA3"/>
+            <rect x="238" y="510" width="28" height="10" fill="#8C8F95"/>
+            <path d="M136 684 L180 524 M164 684 L188 524 M196 684 L196 524 M228 684 L204 524" stroke="#6E6357" stroke-width="2" fill="none"/>
+            <path d="M118 684 L172 524 M258 684 L212 524" stroke="#6E6357" stroke-width="1.4" fill="none"/>
+          </g>
+          <rect x="112" y="384" width="169" height="300" rx="8" fill="none" stroke="#000" stroke-opacity="0.08"/>
+          <rect x="120" y="656" width="148" height="20" rx="10" fill="#000" fill-opacity="0.55"/>
+          <text x="194" y="670" font-size="10" class="b" text-anchor="middle" fill="#FFFFFF">Stretch 2 — exact · as shot</text>
+        </g>
+        <g id="scrub-strip">
+          <rect x="112" y="692" width="169" height="22" rx="11" fill="#FFFFFF" stroke="#000" stroke-opacity="0.08"/>
+          <text x="121" y="706" font-size="9" class="sb" fill="#6D6D72">19s</text>
+          <text x="272" y="706" font-size="9" class="sb" text-anchor="end" fill="#6D6D72">21s</text>
+          <g id="preview-affordance" fill="none" stroke="#C36A00">
+            <path d="M166 703 q7.5 -7 15 0 q-7.5 7 -15 0" stroke-width="1.3" data-symbol="eye"/>
+            <circle cx="173.5" cy="703" r="2" fill="#C36A00" stroke="none"/>
+          </g>
+          <text x="185" y="706.5" font-size="10" class="sb" fill="#C36A00">Preview</text>
+        </g>
+        <text id="wide-stage-caption" x="116" y="730" font-size="11.5" fill="#6D6D72">Ends wide — the whole canvas.</text>
+      </g>
       </g>
       <g id="next-button">
         <rect x="16" y="775" width="361" height="50" rx="14" fill="#C36A00"/>
@@ -75,5 +113,5 @@
     </g>
   </g>
   <text x="220" y="906" font-size="13" class="sb" text-anchor="middle" fill="#000">iOS · Guided clip (experimental) · ending step · portrait · 393×852 pt</text>
-  <text x="220" y="924" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift — transitionCard (always asked) + closingDefaultCard with Change… override</text>
+  <text x="220" y="924" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift — transitionCard + closingDefaultCard + columnWideStage (GuidedScrubOverlay)</text>
 </svg>

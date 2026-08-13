@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · portrait</title>
-  <desc>Mirrors App/SettingsView.swift: Creative defaults (Default speed, Output frame rate, True-light), Video (Default ramp, Remember last — the burst slow-motion ramp), Recording (Remember recording settings, Manage resolutions, Record audio), Location (Geotag captures), Storage (library bar + legend, Review large originals, Clear cache). Storage and Advanced scroll below the fold. With DNG output selected, Recording gains the DNG experiment rows + Capture benchmark. Drawn with DNG off and the ramp default Off.</desc>
+  <desc>Mirrors App/SettingsView.swift: Creative defaults (Default speed, Output frame rate, True-light), Video (Default ramp, Remember last — the burst slow-motion ramp), Recording (Remember recording settings, Manage resolutions, Record audio), Location (Geotag captures), Storage (library bar + legend, Review large originals, Clear cache). On-device AI, Storage and Advanced scroll below the fold — see settings.advanced.portrait.svg for the end of the list, including the Incomplete Captures row. With DNG output selected, Recording gains the DNG experiment rows + Capture benchmark. Drawn with DNG off and the ramp default Off.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -112,8 +112,10 @@
         <line x1="32" y1="919" x2="377" y2="919" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="946" font-size="16" fill="#C36A00">Clear cache (542 MB)</text>
       </g>
-      <!-- STORAGE (drawn above, now starting under the tab bar) and the ADVANCED section
-           (Custom frame rate · Blend learning · Performance · Diagnostics) scroll below the fold -->
+      <!-- STORAGE (drawn above, now starting under the tab bar), ON-DEVICE AI and the
+           ADVANCED section (Custom frame rate · Blend learning · Performance · Diagnostics ·
+           Incomplete Captures, the last one only while orphaned capture logs exist) scroll
+           below the fold — drawn in settings.advanced.portrait.svg -->
 
       <!-- floating tab bar (Settings selected) -->
       <g id="tab-bar">

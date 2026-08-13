@@ -248,12 +248,25 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             return response(status: "unavailable", message: "Capture screen is not active")
         }
 
+        // Logged here rather than in the capture screen's handler so the
+        // session log records every command the phone was asked to run,
+        // including the ones its guards refuse. `state` polls are excluded
+        // above — they arrive constantly and say nothing about the shoot.
+        var logged: [String: Any] = ["command": command.rawValue]
+        if let value = message[WatchMessageKey.value] as? Double { logged["value"] = value }
+        if let token = message[WatchMessageKey.captureMode] as? String { logged["captureMode"] = token }
+        if let unit = message[WatchMessageKey.stopAtUnit] as? String { logged["stopAtUnit"] = unit }
+
         guard commandHandler(command, message) else {
             // The handler's guards dropped it (already recording, bad value,
             // wrong mode for the command) — never report that as accepted.
             LLog("watch-link rejected command=\(command.rawValue)")
+            logged["accepted"] = false
+            CaptureSessionLogger.shared.log("watch_command", logged)
             return response(status: "rejected", message: "Command not available right now")
         }
+        logged["accepted"] = true
+        CaptureSessionLogger.shared.log("watch_command", logged)
         return response(status: "accepted")
     }
 

@@ -1,11 +1,29 @@
 <svg viewBox="0 0 441 940" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Guided clip (experimental) · review step · portrait</title>
-  <desc>Mirrors App/GuidedBuilderView.swift (reviewStep: state list card, estimateLine with the resolution + fps menus, exportNote, "Open in the full editor", Create CTA). Step 4 of 4 since Canvas and Opening merged (2026-08-12 UX sign-off); the labelled progress line ("Step 4 of 4 · Review") sits under the dots, the title is absolutely centred (FlowHeader centersTitle), and on wide surfaces the rail carries this step's answer as its own subtitle ("19 s · 3 stretches"). Question "Ready to create". The STATE LIST card: one row per stretch — kind glyph (bolt.fill amber for a recorded moment, arrow.right secondary for a base run), 14.5pt semibold "Stretch 1 · 50× smooth" (speed shown is the one that RENDERS — floored at one source frame per output frame if the fps menu raised the floor after the chips were answered), 11.5pt secondary framing summary ("Wide — full frame", or "Wide — the 1:1 crop" when the chosen canvas really crops / "Punched 2.0×" / "Pan 2.6× → 2.0× (thru)"), and the honest per-stretch share "~4.3s" from the compiled stretchFrames. Between rows: arrow.down transition connectors — "1s ease", "step", and the clamped-ease honesty variants "1s ease — plays as ~0.4s" / "— plays as a step" straight from SeamEase.applied. The ESTIMATE CARD (LL.ink): "Your clip will be", then TWO menus in the header — the EXPORT RESOLUTION picker (collapsed label = the oriented dimensions of the current choice, e.g. "1080×1920"; menu rows "Full — 2160×3840 · 1080 — 1080×1920 · 720 — 720×1280" with a checkmark; the class number is the SHORT edge, so wide material reads 1920×1080/1280×720; only choices genuinely smaller than the source are offered; writes AppModel.exportShortEdge, applied as ONE Lanczos resample in the reframe pass, or a scale in the canvas pass when no punch exists) and the fps menu (24/25/30/50/60 → AppModel.outputFPS); the 28pt bold EXACT length "19 s · 3 stretches" (compiledWarp().outputSeconds — no ≈, the Advanced ramp is forced off on builder entry); and, when a cap is chosen, the export note: "Your 2.0× punch keeps ~1080 px — pixel-sharp at 1080×1920." (kept pixels = base crop ÷ deepest punch, compared on the same axis; reads "— upscaled to …" when the punch keeps fewer than the target, and "Scaled once at export to …" with no punch). Below the card: the quiet accent "Open in the full editor" link (materialises, clears guidedBuilderFocused — the same warp + reframe open in AdjustView with the lane expanded) and the primary "Create 19 s clip" CTA over the reassurance line. Captured from the iPhone 17 Pro sim, mapped onto the 393×852 canvas.</desc>
+  <desc>Mirrors App/GuidedBuilderView.swift (reviewStep: state list card, estimateLine with the resolution + fps menus, exportNote, "Open in the full editor", Create CTA). Step 4 of 4 since Canvas and Opening merged (2026-08-12 UX sign-off); the labelled progress line ("Step 4 of 4 · Review") sits under the dots, the title is absolutely centred (FlowHeader centersTitle), and on wide surfaces the rail carries this step's answer as its own subtitle ("19 s · 3 stretches"). Question "Ready to create". The STORYBOARD card (reviewStep's storyboard/storyboardGroup/storyboardConnector + GuidedStoryboardCell in App/GuidedScrubPreview.swift) sits between the question and the state list: a horizontally scrolling contact sheet of the finished clip, start to end. One group per stretch — a 10pt semibold secondary header ("Stretch 1 · 50×"; the speed is displaySpeed so it always matches the row below; a recorded moment leads with an 8pt amber bolt.fill) over canvas-shaped cells 84pt tall (width from effectiveBlendCanvas().aspect — 47pt at 9:16) each showing the ≈ preview frame at that output moment THROUGH the crop that renders there (GuidedScrubContext.sourceTime/crop). A wide run gets start+end cells; a moment or punched stretch adds its middle cell so the pan visibly travels — small secondary arrow.right glyphs sit between cells, and under each cell a 9pt semibold secondary caption gives its time on the finished clip's clock ("0s" → "4.3s"; "4.3s · 9.8s · 15s"). Between groups the seam's compiled short word rides at cell-middle height (seamShortLabel: "cut" for a step, the ramp label "1s" for an ease, the clamped applied seconds "0.4s" when capped) — drawn here the second connector is clipped mid-word at the scroller's right edge, showing there is more clip to scroll to (Stretch 2's group is off-canvas). The card closes with the hint "≈ preview frames — the clip, start to end. Tap a stretch to revisit its step." Desc-only: tapping a group materialises and jumps stepIndex back to that stretch's step; cells are one-shot WarpPreviewLoader loads (a contact sheet, not a scrubber) at ≈ keyframe fidelity — never claimed exact. The STATE LIST card: one row per stretch — kind glyph (bolt.fill amber for a recorded moment, arrow.right secondary for a base run), 14.5pt semibold "Stretch 1 · 50× smooth" (speed shown is the one that RENDERS — floored at one source frame per output frame if the fps menu raised the floor after the chips were answered), 11.5pt secondary framing summary ("Wide — full frame", or "Wide — the 1:1 crop" when the chosen canvas really crops / "Punched 2.0×" / "Pan 2.6× → 2.0× (thru)"), and the honest per-stretch share "~4.3s" from the compiled stretchFrames. Between rows: arrow.down transition connectors — "1s ease", "step", and the clamped-ease honesty variants "1s ease — plays as ~0.4s" / "— plays as a step" straight from SeamEase.applied. The ESTIMATE CARD (LL.ink): "Your clip will be", then TWO menus in the header — the EXPORT RESOLUTION picker (collapsed label = the oriented dimensions of the current choice, e.g. "1080×1920"; menu rows "Full — 2160×3840 · 1080 — 1080×1920 · 720 — 720×1280" with a checkmark; the class number is the SHORT edge, so wide material reads 1920×1080/1280×720; only choices genuinely smaller than the source are offered; writes AppModel.exportShortEdge, applied as ONE Lanczos resample in the reframe pass, or a scale in the canvas pass when no punch exists) and the fps menu (24/25/30/50/60 → AppModel.outputFPS); the 28pt bold EXACT length "19 s · 3 stretches" (compiledWarp().outputSeconds — no ≈, the Advanced ramp is forced off on builder entry); and, when a cap is chosen, the export note: "Your 2.0× punch keeps ~1080 px — pixel-sharp at 1080×1920." (kept pixels = base crop ÷ deepest punch, compared on the same axis; reads "— upscaled to …" when the punch keeps fewer than the target, and "Scaled once at export to …" with no punch). Below the card: the quiet accent "Open in the full editor" link (materialises, clears guidedBuilderFocused — the same warp + reframe open in AdjustView with the lane expanded) and the primary "Create 19 s clip" CTA over the reassurance line. Captured from the iPhone 17 Pro sim, mapped onto the 393×852 canvas.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-20%" y="-20%" width="140%" height="140%">
       <feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000000" flood-opacity="0.14"/>
     </filter>
+    <linearGradient id="scene-sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5568"/><stop offset="0.45" stop-color="#7A8699"/><stop offset="0.46" stop-color="#A8B2C0"/><stop offset="1" stop-color="#3E3A36"/>
+    </linearGradient>
+    <!-- one storyboard cell's ≈ scene (47×84 = 84pt tall at the 9:16 canvas); moment cells re-use it scaled ≈ the 2.0× punch -->
+    <clipPath id="sbcell"><rect width="47" height="84" rx="6"/></clipPath>
+    <g id="sb-art">
+      <rect width="47" height="84" fill="url(#scene-sky)"/>
+      <g fill="#5A6472" opacity="0.85"><ellipse cx="15" cy="14" rx="10" ry="4"/><ellipse cx="33" cy="9" rx="12" ry="4.5"/></g>
+      <rect y="36" width="47" height="5" fill="#8A7864"/>
+      <rect x="19" y="28" width="4.5" height="10" fill="#B04A38"/>
+      <rect x="4" y="42" width="15" height="3.5" rx="1.5" fill="#4A7AB0"/>
+      <rect y="46" width="47" height="38" fill="#6B5D50"/>
+      <g stroke="#3A332C" stroke-width="0.9" opacity="0.8">
+        <path d="M3 84 L17 47"/><path d="M12 84 L20 47"/><path d="M23.5 84 L23.5 47"/><path d="M35 84 L27 47"/><path d="M44 84 L31 47"/>
+      </g>
+    </g>
+    <!-- the storyboard ScrollView's bounds: card minus its 14pt horizontal padding -->
+    <clipPath id="sb-scroll"><rect x="30" y="172" width="333" height="124"/></clipPath>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
@@ -39,8 +57,42 @@
       <!-- content sits 20pt lower than before the labelled progress line landed -->
       <g id="step-content" transform="translate(0,20)">
       <text id="question" x="16" y="147" font-size="22" class="b" fill="#000">Ready to create</text>
+      <!-- storyboard: horizontally scrolling contact sheet, one group per stretch; tap a group → back to its step -->
+      <g id="storyboard">
+        <rect x="16" y="166" width="361" height="172" rx="16" fill="#FFFFFF" filter="url(#soft)"/>
+        <g clip-path="url(#sb-scroll)">
+          <g id="storyboard-group-1">
+            <text x="32" y="188" font-size="10" class="sb" fill="#6D6D72">Stretch 1 · 50×</text>
+            <g transform="translate(32,194)" clip-path="url(#sbcell)"><use href="#sb-art"/></g>
+            <path d="M84 236 h9 m-3.5 -3.5 3.5 3.5 -3.5 3.5" stroke="#9E9EA3" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.right"/>
+            <g transform="translate(97,194)" clip-path="url(#sbcell)"><use href="#sb-art"/></g>
+            <text x="55.5" y="290" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">0s</text>
+            <text x="120.5" y="290" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">4.3s</text>
+          </g>
+          <!-- seam connector: the compiled short word at cell-middle height -->
+          <text id="storyboard-connector-1" x="154" y="239" font-size="9" class="sb" fill="#6D6D72">1s</text>
+          <g id="storyboard-group-2">
+            <path d="M176.5 179 l-3 5.5 h4 l-3 5.5" stroke="#FFB340" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="bolt.fill"/>
+            <text x="182" y="188" font-size="10" class="sb" fill="#6D6D72">Moment 1 · ¼×</text>
+            <g transform="translate(173,194)" clip-path="url(#sbcell)"><use href="#sb-art" transform="translate(-10.5,-19) scale(1.45)"/></g>
+            <path d="M225 236 h9 m-3.5 -3.5 3.5 3.5 -3.5 3.5" stroke="#9E9EA3" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.right"/>
+            <g transform="translate(238,194)" clip-path="url(#sbcell)"><use href="#sb-art" transform="translate(-12.5,-21) scale(1.45)"/></g>
+            <path d="M290 236 h9 m-3.5 -3.5 3.5 3.5 -3.5 3.5" stroke="#9E9EA3" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.right"/>
+            <g transform="translate(303,194)" clip-path="url(#sbcell)"><use href="#sb-art" transform="translate(-10.5,-19) scale(1.45)"/></g>
+            <text x="196.5" y="290" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">4.3s</text>
+            <text x="261.5" y="290" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">9.8s</text>
+            <text x="326.5" y="290" font-size="9" class="sb" text-anchor="middle" fill="#6D6D72">15s</text>
+          </g>
+          <!-- next seam's "cut" clipped mid-word at the scroller edge — Stretch 2's group is off-canvas to the right -->
+          <text id="storyboard-connector-2" x="360" y="239" font-size="9" class="sb" fill="#6D6D72">cut</text>
+        </g>
+        <g id="storyboard-hint" fill="#6D6D72" font-size="11.5">
+          <text x="34" y="308">≈ preview frames — the clip, start to end. Tap a stretch to</text>
+          <text x="34" y="322">revisit its step.</text>
+        </g>
+      </g>
       <!-- state list -->
-      <g id="state-list">
+      <g id="state-list" transform="translate(0,186)">
         <rect x="16" y="166" width="361" height="188" rx="16" fill="#FFFFFF" filter="url(#soft)"/>
         <g id="state-row-1">
           <path d="M34 191 h14 m-5 -5 5 5 -5 5" stroke="#6D6D72" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="arrow.right"/>
@@ -70,7 +122,7 @@
         </g>
       </g>
       <!-- estimate card with resolution + fps menus and the export note -->
-      <g id="estimate-card">
+      <g id="estimate-card" transform="translate(0,186)">
         <rect x="16" y="372" width="361" height="102" rx="16" fill="#1C1C1E"/>
         <text x="32" y="402" font-size="12" fill="#FFFFFF" fill-opacity="0.55">Your clip will be</text>
         <g id="resolution-menu">
@@ -85,7 +137,7 @@
         <text x="98" y="438" font-size="14" class="sb" fill="#FFB340">· 3 stretches</text>
         <text x="32" y="462" font-size="11" fill="#FFFFFF" fill-opacity="0.45">Your 2.0× punch keeps ~1080 px — pixel-sharp at 1080×1920.</text>
       </g>
-      <text id="open-full-editor" x="18" y="502" font-size="13" class="sb" fill="#C36A00">Open in the full editor</text>
+      <text id="open-full-editor" x="18" y="688" font-size="13" class="sb" fill="#C36A00">Open in the full editor</text>
       </g>
       <g id="create-button">
         <rect x="16" y="748" width="361" height="50" rx="14" fill="#C36A00"/>
@@ -96,5 +148,5 @@
     </g>
   </g>
   <text x="220" y="906" font-size="13" class="sb" text-anchor="middle" fill="#000">iOS · Guided clip (experimental) · review step · portrait · 393×852 pt</text>
-  <text x="220" y="924" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift — reviewStep: state list · estimateLine (resolution + fps menus, exportNote) · Create CTA</text>
+  <text x="220" y="924" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift — reviewStep: storyboard contact sheet · state list · estimateLine (resolution + fps menus, exportNote) · Create CTA</text>
 </svg>

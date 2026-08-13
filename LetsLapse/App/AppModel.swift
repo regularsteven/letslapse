@@ -134,6 +134,15 @@ final class AppModel: ObservableObject {
         /// slowest tail of a seam ease. This map is the truth the warp axis is
         /// built on; nil (pre-probe) falls back to the sidecar spans.
         var sourceSegmentSeconds: [String: Double]?
+        /// Probed DELIVERED frame rate per segment file (same keying). The
+        /// density twin of the span problem above: a burst the sidecar calls
+        /// 100 fps can really deliver half that (a light-starved sensor drops
+        /// frames the sidecar never hears about). A schedule built on the
+        /// nominal rate budgets phantom frames, the blend truncates when the
+        /// decoder runs dry, and every pass keyed to the compiled frame map —
+        /// the reframe bake above all — mis-times from the truncation onward.
+        /// nil (pre-probe) falls back to the sidecar's nominal rate.
+        var sourceSegmentFPS: [String: Double]?
 
         var summary: String {
             switch kind {
@@ -1776,8 +1785,13 @@ final class AppModel: ObservableObject {
 
     /// The physically recorded regions of the warp's source axis, in order —
     /// one per segment file for a ramp-mode shoot, one for everything else.
+    /// Spans AND densities are the probed truth where it exists: the schedule
+    /// counts real frames, so a burst that delivered half its nominal rate
+    /// must compile at what it wrote — otherwise the blend truncates at
+    /// end-of-file and the reframe bake mis-times every frame after it.
     private func warpSourceRegions() -> [WarpCompiler.SourceRegion] {
         let probed = currentCapture?.sourceSegmentSeconds
+        let probedFPS = currentCapture?.sourceSegmentFPS
         switch source {
         case .liveSequence(let live) where live.sequence.mode == .ramp && !live.sequence.segments.isEmpty:
             let ordered = live.sequence.segments.sorted { $0.index < $1.index }
@@ -1818,7 +1832,8 @@ final class AppModel: ObservableObject {
                 }
                 regions.append(WarpCompiler.SourceRegion(
                     span: span,
-                    fps: Double(segment.frameRate > 0 ? segment.frameRate : max(1, live.sequence.baseFrameRate)),
+                    fps: probedFPS?[segment.fileName]
+                        ?? Double(segment.frameRate > 0 ? segment.frameRate : max(1, live.sequence.baseFrameRate)),
                     leadingGap: gap))
             }
             return regions.filter { $0.span > 0 }
@@ -1831,7 +1846,9 @@ final class AppModel: ObservableObject {
                     ?? max(0, whole.relativeEnd - whole.relativeStart)
             }
             guard span > 0 else { return [] }
-            return [WarpCompiler.SourceRegion(span: span, fps: Double(max(1, live.sequence.baseFrameRate)))]
+            return [WarpCompiler.SourceRegion(
+                span: span,
+                fps: whole.flatMap { probedFPS?[$0.fileName] } ?? Double(max(1, live.sequence.baseFrameRate)))]
         case .video:
             guard let capture = currentCapture, let seconds = capture.sourceDurationSeconds,
                   seconds > 0 else { return [] }
@@ -1914,9 +1931,11 @@ final class AppModel: ObservableObject {
         var trim: Double
         var captureID: UUID?
         var codec: OutputCodec?
-        /// Region spans follow the async source probe, not just the capture.
+        /// Region spans and densities follow the async source probe, not just
+        /// the capture.
         var sourceSeconds: Double?
         var segmentSeconds: [String: Double]?
+        var segmentFPS: [String: Double]?
         var value: WarpCompiler.Compiled?
     }
     private var compiledWarpMemo: CompiledWarpMemo?
@@ -1936,7 +1955,8 @@ final class AppModel: ObservableObject {
            memo.captureID == currentCaptureID,
            memo.codec == blendSourceCodec,
            memo.sourceSeconds == currentCapture?.sourceDurationSeconds,
-           memo.segmentSeconds == currentCapture?.sourceSegmentSeconds {
+           memo.segmentSeconds == currentCapture?.sourceSegmentSeconds,
+           memo.segmentFPS == currentCapture?.sourceSegmentFPS {
             return memo.value
         }
         let regions = warpSourceRegions()
@@ -1949,6 +1969,7 @@ final class AppModel: ObservableObject {
             captureID: currentCaptureID, codec: blendSourceCodec,
             sourceSeconds: currentCapture?.sourceDurationSeconds,
             segmentSeconds: currentCapture?.sourceSegmentSeconds,
+            segmentFPS: currentCapture?.sourceSegmentFPS,
             value: compiled)
         return compiled
     }
@@ -3864,7 +3885,8 @@ final class AppModel: ObservableObject {
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
-                    || capture.sourceWidth == nil || capture.sourceSegmentSeconds == nil) {
+                    || capture.sourceWidth == nil || capture.sourceSegmentSeconds == nil
+                    || capture.sourceSegmentFPS == nil) {
                 Task { [weak self] in
                     await self?.refreshVideoMetadata(for: capture.id)
                 }
@@ -3950,32 +3972,49 @@ final class AppModel: ObservableObject {
         guard let capture = captures.first(where: { $0.id == captureID }),
               let captureSource = try? source(for: capture) else { return }
 
-        let urls: [URL]
+        // Probe maps are keyed by the sidecar's LOGICAL segment name — the
+        // key warpSourceRegions/healWarpAxis/warpFrameLocation look up — not
+        // by the resolved file's name. They differ once a clip's ProRes
+        // original is purged after conversion: resolution then lands on the
+        // "-h264"/"-hevc" sibling, and a map keyed by that name silently
+        // misses every lookup while reading as a completed probe.
+        let entries: [(name: String, url: URL)]
         switch captureSource {
         case .video(let url):
-            urls = [url]
+            entries = [(url.lastPathComponent, url)]
         case .liveSequence(let liveSource):
-            urls = liveSource.segmentURLs
+            let ordered = liveSource.sequence.segments.sorted { $0.index < $1.index }
+            if ordered.isEmpty {
+                entries = liveSource.segmentURLs.map { ($0.lastPathComponent, $0) }
+            } else {
+                entries = ordered.compactMap { segment in
+                    liveSource.resolvedByOriginalName[segment.fileName].map { (segment.fileName, $0) }
+                }
+            }
         case .photos:
             return
         }
 
         var totalDuration: Double = 0
         var segmentSeconds: [String: Double] = [:]
+        var segmentFPS: [String: Double] = [:]
         var fps: Double?
         var width: Int?
         var height: Int?
 
-        for url in urls {
+        for (name, url) in entries {
             let asset = AVURLAsset(url: url)
             if let duration = try? await asset.load(.duration).seconds, duration.isFinite {
                 totalDuration += duration
-                segmentSeconds[url.lastPathComponent] = duration
+                segmentSeconds[name] = duration
             }
-            guard fps == nil || width == nil,
-                  let track = try? await asset.loadTracks(withMediaType: .video).first else { continue }
-            if fps == nil, let rate = try? await track.load(.nominalFrameRate), rate > 0 {
-                fps = Double(rate)
+            guard let track = try? await asset.loadTracks(withMediaType: .video).first else { continue }
+            // The DELIVERED rate, probed per segment: nominalFrameRate is
+            // samples ÷ duration, so a burst that dropped frames reports what
+            // it really wrote, not what the sidecar promised.
+            if let rate = try? await track.load(.nominalFrameRate), rate > 0 {
+                if fps == nil { fps = Double(rate) }
+                segmentFPS[name] = Double(rate)
             }
             if width == nil,
                let size = try? await track.load(.naturalSize),
@@ -3991,7 +4030,16 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
         if let fps { captures[index].sourceFPS = fps }
         if totalDuration > 0 { captures[index].sourceDurationSeconds = totalDuration }
-        if !segmentSeconds.isEmpty { captures[index].sourceSegmentSeconds = segmentSeconds }
+        // Merge, never replace: a segment whose file couldn't be read this
+        // pass must not erase a truth an earlier pass established.
+        if !segmentSeconds.isEmpty {
+            captures[index].sourceSegmentSeconds = (captures[index].sourceSegmentSeconds ?? [:])
+                .merging(segmentSeconds) { _, probed in probed }
+        }
+        if !segmentFPS.isEmpty {
+            captures[index].sourceSegmentFPS = (captures[index].sourceSegmentFPS ?? [:])
+                .merging(segmentFPS) { _, probed in probed }
+        }
         if let width, let height {
             captures[index].sourceWidth = width
             captures[index].sourceHeight = height

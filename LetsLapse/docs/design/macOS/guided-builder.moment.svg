@@ -1,9 +1,9 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Guided clip (experimental) · moment step in the rail · 1000×700</title>
-  <desc>Mirrors App/GuidedBuilderView.swift (railLayout · stretchStep · framingStage · flowStrip) and App/GuidedFramingBox.swift + App/GuidedCanvasFrame.swift — a recorded moment answered on the steps rail, as reworked after the 2026-08-12 mac UI review. The rail carries the answers already given (step 1 done, checkmark, "9:16 · 100× streaks"; the current row writes back "½× slow motion · pan" the moment a control is touched). THE STAGE ALWAYS SHOWS A PICTURE: while the framing is Wide it draws the MOMENT'S OWN exact frame at the canvas (GuidedCanvasFrame anchored just inside the stretch, badge "Moment 1 — exact · as shot", caption "Wide — the whole canvas renders. Pick a punch to frame this stretch.") — never the old dashed placeholder; a punch swaps the same stage to the GuidedFramingBox drawn here: Start/End framing + Drift thru/Eased chips above it, the reserved dashed "✦ Suggest framing" seat top-right, the exact decoded frame dimmed outside the aspect-locked amber box with 8 handles, badge "2.0× · 1 080 px", the pointer grammar caption, and the role caption ("The pan drifts from the start framing to the end framing across the whole stretch." / a still reads "Arrives with the transition and holds this framing for the whole stretch."). SPEED honesty per the same review: chips are gated with a 2% density tolerance (GuidedPlanner.gatedSpeedChips) so a probed ~99.6 fps burst still counts as the 100 fps class — ¼× stays offered at 25 fps output and the racing chips stay out; everything displayed speaks the FLOORED speed that renders (displaySpeed, snapped onto ¼×/½× within 5%), so a seeded ¼× that 50 fps output can only honour as ½× reads ½× in the rail, lights the ½× chip, and adds the accent explainer drawn here: "¼× wants 200 fps of footage — this burst is 100 fps, so at 50 fps output it tops out at ½×. A lower output rate on the Review step unlocks it." HOW IT ARRIVES keeps the welded-ramp copy, and a clamped ease leads the section in accent semibold (desc-only state). The OVERVIEW STRIP above the bottom bar shows the whole clip with Moment 1's ink block outlined in accent and a viewfinder glyph once punched; blocks for answered steps are clickable. Chips: selected = white on accent, unselected = white card; active speed chip = LL.ink + amber. On macOS the SCROLL WHEEL zooms the punch about the box centre (NSEvent local monitor gated on hover, re-armed every body pass) and the pointer changes over the box — open hand inside, resizeUpDown/resizeLeftRight on edge handles, crosshair on corners. Same-day follow-up: the output rate is now ALSO asked on step one (OUTPUT RATE menu above OPENING; the rail writes it back — "9:16 · 50 fps · 100× streaks"), the rail rows scroll when a multi-burst shoot outgrows the window, back-jumps keep later checkmarks clickable (maxVisitedStep), and the floating pill shows no tab highlighted during the flow. Verified 2026-08-12 on the Mac (1660×1183 + the 760×680 stacked fallback) and the iPad Pro 13-inch sim (25 fps output: ¼× offered and highlighted, no gate note).</desc>
+  <desc>Mirrors App/GuidedBuilderView.swift (railLayout · stretchStep · framingStage · flowStrip) and App/GuidedFramingBox.swift + App/GuidedCanvasFrame.swift — a recorded moment answered on the steps rail, as reworked after the 2026-08-12 mac UI review. The rail carries the answers already given (step 1 done, checkmark, "9:16 · 100× streaks"; the current row writes back "½× slow motion · pan" the moment a control is touched). THE STAGE ALWAYS SHOWS A PICTURE: while the framing is Wide it draws the MOMENT'S OWN exact frame at the canvas (GuidedCanvasFrame anchored just inside the stretch, badge "Moment 1 — exact · as shot", caption "Wide — the whole canvas renders. Pick a punch to frame this stretch.") — never the old dashed placeholder; a punch swaps the same stage to the GuidedFramingBox drawn here: the momentModeChips row (Start framing / End framing / Preview — a still punch reads Framing / Preview) + Drift thru/Eased chips above it, the reserved dashed "✦ Suggest framing" seat top-right, the exact decoded frame dimmed outside the aspect-locked amber box with 8 handles, badge "2.0× · 1 080 px", the pointer grammar caption, and the role caption ("The pan drifts from the start framing to the end framing across the whole stretch." / a still reads "Arrives with the transition and holds this framing for the whole stretch."). SPEED honesty per the same review: chips are gated with a 2% density tolerance (GuidedPlanner.gatedSpeedChips) so a probed ~99.6 fps burst still counts as the 100 fps class — ¼× stays offered at 25 fps output and the racing chips stay out; everything displayed speaks the FLOORED speed that renders (displaySpeed, snapped onto ¼×/½× within 5%), so a seeded ¼× that 50 fps output can only honour as ½× reads ½× in the rail, lights the ½× chip, and adds the accent explainer drawn here: "¼× wants 200 fps of footage — this burst is 100 fps, so at 50 fps output it tops out at ½×. A lower output rate on the Review step unlocks it." HOW IT ARRIVES keeps the welded-ramp copy, and a clamped ease leads the section in accent semibold (desc-only state). The OVERVIEW STRIP above the bottom bar shows the whole clip with Moment 1's ink block outlined in accent and a viewfinder glyph once punched; blocks for answered steps are clickable. Chips: selected = white on accent, unselected = white card; active speed chip = LL.ink + amber. On macOS the SCROLL WHEEL zooms the punch about the box centre (NSEvent local monitor gated on hover, re-armed every body pass) and the pointer changes over the box — open hand inside, resizeUpDown/resizeLeftRight on edge handles, crosshair on corners. Same-day follow-up: the output rate is now ALSO asked on step one (OUTPUT RATE menu above OPENING; the rail writes it back — "9:16 · 50 fps · 100× streaks"), the rail rows scroll when a multi-burst shoot outgrows the window, back-jumps keep later checkmarks clickable (maxVisitedStep), and the floating pill shows no tab highlighted during the flow. Verified 2026-08-12 on the Mac (1660×1183 + the 760×680 stacked fallback) and the iPad Pro 13-inch sim (25 fps output: ¼× offered and highlighted, no gate note). 2026-08-12 scrub-preview follow-up (App/GuidedScrubPreview.swift): the framing-target row is now momentModeChips — drawn here as Start framing (selected) / End framing / Preview (unselected); Preview answers nothing so it never marks the step touched, and the stage column sits at its code-true leading edge (answers 380pt + 32pt spacing → x 714) so the three chips fit the window. DESC-ONLY STATES, not drawn: (1) Preview mode (previewingMoment) — the curve chips + exact-frame box give way to momentPreviewStage: the output-shaped ≈ scrub pane (GuidedScrubDisplay — the step's slice of the finished clip through the crop that renders, black letterbox, bottom-leading black-55% capsule badge "≈ preview · 16s of 21s" in white bold 10pt) with the 22pt GuidedScrubStrip under it at exactly the pane's width (white card capsule; 9pt semibold secondary window-end times on the finished clip's clock, e.g. "2.1s" … "19s"; centred accent eye glyph + "Preview" 10pt semibold while idle; a 14pt accent knob with a 1.5pt white ring while scrubbed) — behaviour exactly as ipad-scrubbed.png; the pane itself scrubs (GuidedPaneScrub: drag anywhere across the picture, and on the Mac hovering peeks) and the hint reads "Hover or drag across the picture to scrub — framing edits stay on the exact-frame box." (2) The locked ✕ — a finished drag locks the preview and a secondary xmark.circle.fill appears trailing OUTSIDE the bar; tapping it lets the frame go. (3) macOS hover-to-peek on both strip and pane — a hover scrubs but clears on exit unless a drag locked it. (4) iOS's axis-classified pane drag (first movement sideways = scrub, vertical = the survey's scroll) — the iPhone/iPad counterpart, no mac behaviour. ALSO desc-only: the WIDE (unpunched) stage now carries the same GuidedScrubStrip under its exact-frame pane (GuidedScrubOverlay in wideStage; pane scrub allowed there because off the canvas step the frame is read-only context), per ipad-moment.png.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
-    <clipPath id="surface"><rect x="734" y="196" width="191" height="340" rx="9"/></clipPath>
+    <clipPath id="surface"><rect x="714" y="196" width="191" height="340" rx="9"/></clipPath>
     <linearGradient id="scene-sky" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#4A5568"/><stop offset="0.45" stop-color="#7A8699"/><stop offset="0.46" stop-color="#A8B2C0"/><stop offset="1" stop-color="#3E3A36"/>
     </linearGradient>
@@ -111,56 +111,58 @@
         <text x="525" y="418" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Punch + pan</text>
       </g>
     </g>
-    <!-- framing stage: suggest seat, target + curve chips, surface, captions -->
+    <!-- framing stage: suggest seat, mode + curve chips, surface, captions -->
     <g id="framing-stage">
       <g id="suggest-slot">
         <rect x="858" y="88" width="132" height="26" rx="13" fill="none" stroke="#8E8E93" stroke-opacity="0.55" stroke-width="1" stroke-dasharray="3 3"/>
         <path d="M872 101 l2 -4 2 4 4 2 -4 2 -2 4 -2 -4 -4 -2 Z" fill="#8E8E93" fill-opacity="0.55" data-symbol="sparkles"/>
         <text x="886" y="105" font-size="11.5" class="sb" fill="#8E8E93" fill-opacity="0.9">Suggest framing</text>
       </g>
-      <g id="target-chips">
-        <rect x="734" y="122" width="112" height="33" rx="16.5" fill="#C36A00"/>
-        <text x="790" y="143" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Start framing</text>
-        <rect x="854" y="122" width="104" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
-        <text x="906" y="143" font-size="13" class="sb" text-anchor="middle" fill="#000">End framing</text>
+      <g id="moment-mode-chips">
+        <rect x="714" y="122" width="108" height="33" rx="16.5" fill="#C36A00"/>
+        <text x="768" y="143" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Start framing</text>
+        <rect x="830" y="122" width="100" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
+        <text x="880" y="143" font-size="13" class="sb" text-anchor="middle" fill="#000">End framing</text>
+        <rect x="938" y="122" width="76" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
+        <text x="976" y="143" font-size="13" class="sb" text-anchor="middle" fill="#000">Preview</text>
       </g>
       <g id="curve-chips">
-        <rect x="734" y="161" width="90" height="30" rx="15" fill="#C36A00"/>
-        <text x="779" y="181" font-size="12.5" class="b" text-anchor="middle" fill="#FFFFFF">Drift thru</text>
-        <rect x="832" y="161" width="66" height="30" rx="15" fill="#FFFFFF" filter="url(#soft)"/>
-        <text x="865" y="181" font-size="12.5" class="sb" text-anchor="middle" fill="#000">Eased</text>
+        <rect x="714" y="161" width="90" height="30" rx="15" fill="#C36A00"/>
+        <text x="759" y="181" font-size="12.5" class="b" text-anchor="middle" fill="#FFFFFF">Drift thru</text>
+        <rect x="812" y="161" width="66" height="30" rx="15" fill="#FFFFFF" filter="url(#soft)"/>
+        <text x="845" y="181" font-size="12.5" class="sb" text-anchor="middle" fill="#000">Eased</text>
       </g>
       <g id="framing-surface">
         <g clip-path="url(#surface)">
-          <rect x="734" y="196" width="191" height="340" fill="url(#scene-sky)"/>
-          <g fill="#5A6472" opacity="0.85"><ellipse cx="772" cy="230" rx="30" ry="11"/><ellipse cx="846" cy="216" rx="40" ry="14"/><ellipse cx="902" cy="240" rx="24" ry="9"/></g>
-          <rect x="734" y="310" width="191" height="15" fill="#8A7864"/>
-          <rect x="794" y="285" width="15" height="36" rx="1.5" fill="#B04A38"/>
-          <rect x="798" y="279" width="7" height="8" fill="#B04A38"/>
-          <path d="M816 325 a14 14 0 0 1 28 0 Z M846 325 a14 14 0 0 1 28 0 Z" fill="#9BA6B2"/>
-          <rect x="748" y="327" width="44" height="8" rx="3" fill="#4A7AB0"/>
-          <rect x="874" y="329" width="26" height="7" rx="3" fill="#4A7AB0"/>
-          <rect x="734" y="335" width="191" height="201" fill="#6B5D50"/>
+          <rect x="714" y="196" width="191" height="340" fill="url(#scene-sky)"/>
+          <g fill="#5A6472" opacity="0.85"><ellipse cx="752" cy="230" rx="30" ry="11"/><ellipse cx="826" cy="216" rx="40" ry="14"/><ellipse cx="882" cy="240" rx="24" ry="9"/></g>
+          <rect x="714" y="310" width="191" height="15" fill="#8A7864"/>
+          <rect x="774" y="285" width="15" height="36" rx="1.5" fill="#B04A38"/>
+          <rect x="778" y="279" width="7" height="8" fill="#B04A38"/>
+          <path d="M796 325 a14 14 0 0 1 28 0 Z M826 325 a14 14 0 0 1 28 0 Z" fill="#9BA6B2"/>
+          <rect x="728" y="327" width="44" height="8" rx="3" fill="#4A7AB0"/>
+          <rect x="854" y="329" width="26" height="7" rx="3" fill="#4A7AB0"/>
+          <rect x="714" y="335" width="191" height="201" fill="#6B5D50"/>
           <g stroke="#3A332C" stroke-width="1.6" opacity="0.8">
-            <path d="M743 536 L800 338"/><path d="M764 536 L810 338"/><path d="M790 536 L820 339"/><path d="M828 536 L830 339"/><path d="M864 536 L840 339"/><path d="M894 536 L850 338"/><path d="M916 536 L860 338"/>
+            <path d="M723 536 L780 338"/><path d="M744 536 L790 338"/><path d="M770 536 L800 339"/><path d="M808 536 L810 339"/><path d="M844 536 L820 339"/><path d="M874 536 L830 338"/><path d="M896 536 L840 338"/>
           </g>
           <!-- outside-dim: everything but the crop -->
-          <path d="M734 196 h191 v340 h-191 Z M782 281 h96 v170 h-96 Z" fill="#000" fill-opacity="0.5" fill-rule="evenodd"/>
+          <path d="M714 196 h191 v340 h-191 Z M762 281 h96 v170 h-96 Z" fill="#000" fill-opacity="0.5" fill-rule="evenodd"/>
         </g>
-        <rect x="782" y="281" width="96" height="170" fill="none" stroke="#FFB340" stroke-width="1.5"/>
+        <rect x="762" y="281" width="96" height="170" fill="none" stroke="#FFB340" stroke-width="1.5"/>
         <g fill="#FFFFFF" stroke="#FFB340" stroke-width="1.5">
-          <circle cx="782" cy="281" r="4.5"/><circle cx="830" cy="281" r="4.5"/><circle cx="878" cy="281" r="4.5"/>
-          <circle cx="782" cy="366" r="4.5"/><circle cx="878" cy="366" r="4.5"/>
-          <circle cx="782" cy="451" r="4.5"/><circle cx="830" cy="451" r="4.5"/><circle cx="878" cy="451" r="4.5"/>
+          <circle cx="762" cy="281" r="4.5"/><circle cx="810" cy="281" r="4.5"/><circle cx="858" cy="281" r="4.5"/>
+          <circle cx="762" cy="366" r="4.5"/><circle cx="858" cy="366" r="4.5"/>
+          <circle cx="762" cy="451" r="4.5"/><circle cx="810" cy="451" r="4.5"/><circle cx="858" cy="451" r="4.5"/>
         </g>
-        <rect x="742" y="506" width="88" height="20" rx="10" fill="#000" fill-opacity="0.55"/>
-        <text x="750" y="520" font-size="10" class="b" fill="#FFB340">2.0×</text>
-        <text x="775" y="520" font-size="10" class="b" fill="#FFB340" fill-opacity="0.7">· 1 080 px</text>
+        <rect x="722" y="506" width="88" height="20" rx="10" fill="#000" fill-opacity="0.55"/>
+        <text x="730" y="520" font-size="10" class="b" fill="#FFB340">2.0×</text>
+        <text x="755" y="520" font-size="10" class="b" fill="#FFB340" fill-opacity="0.7">· 1 080 px</text>
       </g>
-      <text x="734" y="556" font-size="11.5" fill="#6D6D72">Drag to position · handles resize · scroll wheel</text>
-      <text x="734" y="570" font-size="11.5" fill="#6D6D72">zooms about the box</text>
-      <text x="734" y="588" font-size="11.5" fill="#6D6D72">The pan drifts from the start framing to the end</text>
-      <text x="734" y="602" font-size="11.5" fill="#6D6D72">framing across the whole stretch.</text>
+      <text x="714" y="556" font-size="11.5" fill="#6D6D72">Drag to position · handles resize · scroll wheel</text>
+      <text x="714" y="570" font-size="11.5" fill="#6D6D72">zooms about the box</text>
+      <text x="714" y="588" font-size="11.5" fill="#6D6D72">The pan drifts from the start framing to the end</text>
+      <text x="714" y="602" font-size="11.5" fill="#6D6D72">framing across the whole stretch.</text>
     </g>
     <!-- overview strip -->
     <g id="flow-strip">
@@ -199,5 +201,5 @@
   </g>
   <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
   <text x="520" y="752" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Guided clip (experimental) · moment step in the rail · 1000×700 pt window</text>
-  <text x="520" y="772" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (stretchStep · framingStage · flowStrip · slowMotionGateNote) + App/GuidedFramingBox.swift — punched stage with role caption; wide state shows the moment's own frame</text>
+  <text x="520" y="772" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (framingStage · momentModeChips · flowStrip) + GuidedFramingBox.swift + GuidedScrubPreview.swift — Preview mode + wide-stage strip desc-only</text>
 </svg>

@@ -11,6 +11,14 @@ final class WarpPreviewLoader: ObservableObject {
     @Published var image: CGImage?
     private var generators: [URL: AVAssetImageGenerator] = [:]
     private var task: Task<Void, Never>?
+    /// How long a request may be superseded before it decodes — the timeline's
+    /// 90ms suits a knob drag; the guided scrub runs tighter so a hover feels
+    /// attached to the pointer.
+    private let debounceNanos: UInt64
+
+    init(debounceMilliseconds: UInt64 = 90) {
+        debounceNanos = debounceMilliseconds * 1_000_000
+    }
 
     func load(url: URL, seconds: Double) {
         task?.cancel()
@@ -27,8 +35,8 @@ final class WarpPreviewLoader: ObservableObject {
             generators[url] = g
             return g
         }()
-        task = Task { [weak self] in
-            try? await Task.sleep(nanoseconds: 90_000_000)
+        task = Task { [weak self, debounceNanos] in
+            try? await Task.sleep(nanoseconds: debounceNanos)
             guard !Task.isCancelled else { return }
             let time = CMTime(seconds: max(0, seconds), preferredTimescale: 600)
             let image = try? await generator.image(at: time).image

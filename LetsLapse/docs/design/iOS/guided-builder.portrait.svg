@@ -1,6 +1,6 @@
 <svg viewBox="0 0 441 940" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Guided clip (experimental) · moment step, framing scrolled in · portrait</title>
-  <desc>Mirrors App/GuidedBuilderView.swift (stretchStep for a recorded moment, columnLayout) + App/GuidedFramingBox.swift — the guided builder's richest screen, one per stretch of the seeded warp timeline after the merged first step (step 2 of 4 here; "Step N of M · Moment 1" is the labelled progress line under the dots, and the title is absolutely centred so the EXPERIMENTAL capsule can't displace it). THIS FILE DRAWS THE SCROLLED STATE: picking a framing mode auto-scrolls the framing box into view (2026-08-12 fold-cue sign-off), so this is where the step lands; while the box is still below the fold a dark cue pill "Frame the shot ↓" sits above the Next button in LL.amber on LL.ink — not drawn. Above the fold, unchanged: the 22pt question "What happens at Moment 1?" (names via [BlendStretch].stretchName) and (1) HOW IT ARRIVES — the seam transition chips [Step "hard cut" · 0.5s ease · 1s ease · 2s ease] writing Seam.Ramp at the arriving seam; ONE control welds the speed ramp and the framing move (the materialised ReframeTrack move span follows the COMPILED ease, rounded down to the chip). When that ease is clamped, an accent 11.5pt SEMIBOLD note in the BurstRamp idiom now leads the section, ABOVE the "One ramp — the speed change and the framing move ride it together, in seconds of the finished clip." caption ("Capped to 0.4s — only that much of the 1s ease fits between these stretches." / "The stretches beside this seam are too short for an ease — it plays as a step.") — an honest sub-state, not a footnote; not drawn. Drawn here: (2) SPEED — the fps-gated chips via GuidedPlanner.gatedSpeedChips (burst variant: ¼× ½× 1× 4× 15× ··· custom; active chip LL.ink with amber label), then the honest compiled share caption "Moment 1 becomes ~17s of the clip." (stretchFrames ÷ outputFPS — updates live as the ease eats into the burst). (3) FRAMING — mode chips [Wide · Punch in · Punch + pan]; a pan adds Start framing / End framing chips that switch which of the two framings the box edits AND which exact frame shows (start = incoming file just inside the stretch, end = outgoing near its far edge). The GuidedFramingBox: the EXACT decoded frame (ExactFrameLoader, zero tolerance — never the ≈-keyframe still), dimmed outside the aspect-locked crop box, amber 1.5pt box with 8 white/amber handles (corner/edge resize against the opposite anchor, interior drag repositions, pinch zooms about the centre; on macOS the scroll wheel zooms about the box and the pointer changes over handles); bottom-left badge "2.0× · 1 080 px" (punch factor + kept pixels); a soft warning capsule appears top-centre past a 2× upscale ("Keeps 823 px of 2 160 — this deep a punch renders soft") — not drawn. Below: the gesture hint, then the pan curve chips [Drift thru · Eased] and "The pan drifts from the start framing to the end framing across the whole stretch." Next advances; materialisation to the real ReframeTrack happens on every step change. ≥700×500pt gets the steps rail instead, where the framing surface moves to its own stage beside the answers (macOS/guided-builder.moment.svg). Captured from the iPhone 17 Pro sim (402×874 pt) and mapped onto the 393×852 template canvas.</desc>
+  <desc>Mirrors App/GuidedBuilderView.swift (stretchStep for a recorded moment, columnLayout) + App/GuidedFramingBox.swift — the guided builder's richest screen, one per stretch of the seeded warp timeline after the merged first step (step 2 of 4 here; "Step N of M · Moment 1" is the labelled progress line under the dots, and the title is absolutely centred so the EXPERIMENTAL capsule can't displace it). THIS FILE DRAWS THE SCROLLED STATE: picking a framing mode auto-scrolls the framing box into view (2026-08-12 fold-cue sign-off), so this is where the step lands; while the box is still below the fold a dark cue pill "Frame the shot ↓" sits above the Next button in LL.amber on LL.ink — not drawn. Above the fold, unchanged: the 22pt question "What happens at Moment 1?" (names via [BlendStretch].stretchName) and (1) HOW IT ARRIVES — the seam transition chips [Step "hard cut" · 0.5s ease · 1s ease · 2s ease] writing Seam.Ramp at the arriving seam; ONE control welds the speed ramp and the framing move (the materialised ReframeTrack move span follows the COMPILED ease, rounded down to the chip). When that ease is clamped, an accent 11.5pt SEMIBOLD note in the BurstRamp idiom now leads the section, ABOVE the "One ramp — the speed change and the framing move ride it together, in seconds of the finished clip." caption ("Capped to 0.4s — only that much of the 1s ease fits between these stretches." / "The stretches beside this seam are too short for an ease — it plays as a step.") — an honest sub-state, not a footnote; not drawn. Drawn here: (2) SPEED — the fps-gated chips via GuidedPlanner.gatedSpeedChips (burst variant: ¼× ½× 1× 4× 15× ··· custom; active chip LL.ink with amber label), then the honest compiled share caption "Moment 1 becomes ~17s of the clip." (stretchFrames ÷ outputFPS — updates live as the ease eats into the burst). (3) FRAMING — mode chips [Wide · Punch in · Punch + pan] (Punch in active here); any punched mode adds the momentModeChips row directly under it, same capsule idiom (selected = white-on-accent) — drawn here as the still-punch pair [Framing · Preview] (Framing active); a pan gets [Start framing · End framing · Preview] instead, where Start/End switch which of the two framings the box edits AND which exact frame shows (start = incoming file just inside the stretch, end = outgoing near its far edge). Preview (previewModeChip → previewingMoment) is the third mode and is DESC-ONLY here: momentPreviewStage replaces the framing box with the output-shaped scrub pane (GuidedScrubOverlay, App/GuidedScrubPreview.swift) + GuidedScrubStrip — a 22pt white card capsule bar 8pt under the pane at exactly the pane's width; idle it shows tiny secondary time labels at both ends (the stretch's window start/end on the finished clip's clock, e.g. "0s" … "3.5s") and a centred accent 10pt-semibold eye-glyph "Preview" label; while scrubbing a 14pt accent knob with a 1.5pt white ring rides the bar, an ✕ (xmark.circle.fill, secondary) appears trailing OUTSIDE the bar once drag-locked, and the pane's picture becomes GuidedScrubDisplay — the ≈ preview at the scrubbed moment through the moving crop with a bottom-leading black-55% capsule badge "≈ preview · 16s of 21s" (white bold 10pt). Further desc-only states: macOS hover-to-peek scrubbing over the pane, the iOS axis-classified pane drag (GuidedPaneScrub), and the pan-only rows (Start/End chips; below the box the pan curve chips [Drift thru · Eased] + the drift caption). The GuidedFramingBox: the EXACT decoded frame (ExactFrameLoader, zero tolerance — never the ≈-keyframe still), dimmed outside the aspect-locked crop box, amber 1.5pt box with 8 white/amber handles (corner/edge resize against the opposite anchor, interior drag repositions, pinch zooms about the centre; on macOS the scroll wheel zooms about the box and the pointer changes over handles); bottom-left badge "2.0× · 1 080 px" (punch factor + kept pixels); a soft warning capsule appears top-centre past a 2× upscale ("Keeps 823 px of 2 160 — this deep a punch renders soft") — not drawn. Below: the gesture hint, then the still punch's stage caption "Arrives with the transition and holds this framing for the whole stretch." Next advances; materialisation to the real ReframeTrack happens on every step change. ≥700×500pt gets the steps rail instead, where the framing surface moves to its own stage beside the answers (macOS/guided-builder.moment.svg). Captured from the iPhone 17 Pro sim (402×874 pt) and mapped onto the 393×852 template canvas.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <linearGradient id="scene-sky" x1="0" y1="0" x2="0" y2="1">
@@ -64,22 +64,22 @@
         <text x="349" y="172" font-size="9.5" text-anchor="middle" fill="#6D6D72">custom</text>
       </g>
       <text x="20" y="201" font-size="11.5" fill="#6D6D72">Moment 1 becomes ~17s of the clip.</text>
-      <!-- framing mode + pan target chips -->
+      <!-- framing mode + moment mode chips (Framing/Preview; pan variant Start/End/Preview — desc) -->
       <g id="framing-card">
         <text x="18" y="229" font-size="13" class="sb" fill="#6D6D72" letter-spacing="1">FRAMING</text>
         <g id="mode-chips">
           <rect x="16" y="242" width="57" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
           <text x="44.5" y="263" font-size="13" text-anchor="middle" fill="#000">Wide</text>
-          <rect x="81" y="242" width="80" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
-          <text x="121" y="263" font-size="13" text-anchor="middle" fill="#000">Punch in</text>
-          <rect x="169" y="242" width="105" height="33" rx="16.5" fill="#C36A00"/>
-          <text x="221.5" y="263" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Punch + pan</text>
+          <rect x="81" y="242" width="80" height="33" rx="16.5" fill="#C36A00"/>
+          <text x="121" y="263" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Punch in</text>
+          <rect x="169" y="242" width="105" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="221.5" y="263" font-size="13" text-anchor="middle" fill="#000">Punch + pan</text>
         </g>
-        <g id="pan-target-chips">
-          <rect x="16" y="283" width="112" height="33" rx="16.5" fill="#C36A00"/>
-          <text x="72" y="304" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Start framing</text>
-          <rect x="136" y="283" width="100" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
-          <text x="186" y="304" font-size="13" text-anchor="middle" fill="#000">End framing</text>
+        <g id="moment-mode-chips">
+          <rect x="16" y="283" width="80" height="33" rx="16.5" fill="#C36A00"/>
+          <text x="56" y="304" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Framing</text>
+          <rect x="104" y="283" width="78" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
+          <text x="143" y="304" font-size="13" text-anchor="middle" fill="#000">Preview</text>
         </g>
       </g>
       <!-- the framing box: exact frame, dim outside crop, amber box + 8 handles -->
@@ -123,16 +123,10 @@
         <text x="20" y="659">Drag the box to position, handles or pinch to size — this box is</text>
         <text x="20" y="673">exactly the view that renders.</text>
       </g>
-      <!-- pan curve -->
-      <g id="curve-chips">
-        <rect x="16" y="687" width="98" height="33" rx="16.5" fill="#C36A00"/>
-        <text x="65" y="708" font-size="13" class="b" text-anchor="middle" fill="#FFFFFF">Drift thru</text>
-        <rect x="122" y="687" width="72" height="33" rx="16.5" fill="#FFFFFF" filter="url(#soft)"/>
-        <text x="158" y="708" font-size="13" text-anchor="middle" fill="#000">Eased</text>
-      </g>
+      <!-- still-punch stage caption (stageCaption; a pan shows curve chips + drift caption here instead) -->
       <g fill="#6D6D72" font-size="11.5">
-        <text x="20" y="740">The pan drifts from the start framing to the end framing across</text>
-        <text x="20" y="754">the whole stretch.</text>
+        <text x="20" y="694">Arrives with the transition and holds this framing for the</text>
+        <text x="20" y="708">whole stretch.</text>
       </g>
       <!-- Next CTA -->
       <g id="next-button">
@@ -143,5 +137,5 @@
     </g>
   </g>
   <text x="220" y="906" font-size="13" class="sb" text-anchor="middle" fill="#000">iOS · Guided clip (experimental) · moment step, framing scrolled in · portrait · 393×852 pt</text>
-  <text x="220" y="924" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (stretchStep: transitionCard · speedCard · punchCard) + App/GuidedFramingBox.swift</text>
+  <text x="220" y="924" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GuidedBuilderView.swift (stretchStep: transitionCard · speedCard · punchCard · momentModeChips) + GuidedFramingBox.swift</text>
 </svg>
