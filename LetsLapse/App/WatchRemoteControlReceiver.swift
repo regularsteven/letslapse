@@ -2,27 +2,8 @@
 import Foundation
 import WatchConnectivity
 
-enum WatchCaptureCommand: String {
-    case startRecording
-    case stopRecording
-    case triggerMoment
-    case timedBurst
-    case lockExposure
-    case unlockExposure
-    case setISO
-    case setLensPosition
-    case setCaptureMode
-    case setIntervalSeconds
-    case setFramesPerBlend
-    case scheduleStop
-    case cancelScheduledStop
-    case state
-}
-
-enum WatchRecordingState: String {
-    case idle
-    case recording
-}
+// `WatchCaptureCommand` and `WatchRecordingState` live in
+// Shared/WatchCaptureCommand.swift — both ends of the link need them.
 
 final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     static let shared = WatchRemoteControlReceiver()

@@ -4,11 +4,6 @@ import WatchConnectivity
 import WatchKit
 #endif
 
-enum WatchRecordingState: String {
-    case idle
-    case recording
-}
-
 @MainActor
 final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var recordingState: WatchRecordingState = .idle {
@@ -92,67 +87,67 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     }
 
     func refreshState() {
-        send(command: "state")
+        send(.state)
     }
 
     func startRecording() {
-        send(command: "startRecording")
+        send(.startRecording)
     }
 
     func stopRecording() {
-        send(command: "stopRecording")
+        send(.stopRecording)
     }
 
     func triggerMoment() {
-        send(command: "triggerMoment")
+        send(.triggerMoment)
     }
 
     /// Burst for a fixed window: the phone flips to the ramp rate and reverts
     /// to the base rate on its own after `seconds` — no second tap needed.
     func triggerTimedBurst(seconds: Int) {
-        send(command: "timedBurst", value: Double(seconds))
+        send(.timedBurst, value: Double(seconds))
     }
 
     func lockExposure() {
-        send(command: "lockExposure")
+        send(.lockExposure)
     }
 
     func unlockExposure() {
-        send(command: "unlockExposure")
+        send(.unlockExposure)
     }
 
     func setISO(_ iso: Double) {
-        send(command: "setISO", value: iso)
+        send(.setISO, value: iso)
     }
 
     func setLensPosition(_ position: Double) {
-        send(command: "setLensPosition", value: position)
+        send(.setLensPosition, value: position)
     }
 
     func setCaptureMode(_ mode: CaptureMode) {
-        send(command: "setCaptureMode", extra: [WatchMessageKey.captureMode: mode.rawValue])
+        send(.setCaptureMode, extra: [WatchMessageKey.captureMode: mode.rawValue])
     }
 
     func setIntervalSeconds(_ seconds: Double) {
-        send(command: "setIntervalSeconds", value: seconds)
+        send(.setIntervalSeconds, value: seconds)
     }
 
     func setFramesPerBlend(_ frames: Int) {
-        send(command: "setFramesPerBlend", value: Double(frames))
+        send(.setFramesPerBlend, value: Double(frames))
     }
 
     func scheduleStop(unit: ScheduledStopUnit, amount: Int) {
         send(
-            command: "scheduleStop",
+            .scheduleStop,
             value: Double(amount),
             extra: [WatchMessageKey.stopAtUnit: unit.rawValue])
     }
 
     func cancelScheduledStop() {
-        send(command: "cancelScheduledStop")
+        send(.cancelScheduledStop)
     }
 
-    func send(command: String, value: Double? = nil, extra: [String: Any] = [:]) {
+    func send(_ command: WatchCaptureCommand, value: Double? = nil, extra: [String: Any] = [:]) {
         // A debug-preview dummy never talks to a phone: on a paired simulator
         // a real reply would stomp the staged state mid-screenshot (replies
         // apply state directly, bypassing applyState's guard).
@@ -168,7 +163,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             return
         }
 
-        var payload: [String: Any] = [WatchMessageKey.command: command]
+        var payload: [String: Any] = [WatchMessageKey.command: command.rawValue]
         if let value {
             payload[WatchMessageKey.value] = value
         }
@@ -207,7 +202,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
     }
 
-    private func apply(reply: [String: Any], startedAt: Date, command: String, sent: [String: Any], token: Int) {
+    private func apply(reply: [String: Any], startedAt: Date, command: WatchCaptureCommand, sent: [String: Any], token: Int) {
         // A stale reply (a newer send is already in flight) still carries an
         // authoritative state snapshot — apply it, but leave the bookkeeping
         // and status line to the send that's actually pending.
@@ -234,7 +229,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // nothing else corrects a phantom REC screen — the idle-screen
             // auto-poll deliberately stays off while "recording". One
             // reconciliation pull closes that hole.
-            if command == "startRecording" || command == "stopRecording" {
+            if command == .startRecording || command == .stopRecording {
                 Task { @MainActor [weak self] in
                     try? await Task.sleep(nanoseconds: 3_000_000_000)
                     self?.refreshState()
@@ -274,9 +269,12 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         applyRecordingStartedAt(payload)
     }
 
-    private func applyAcceptedCommand(_ command: String, sent: [String: Any], fallbackStartedAt: Date) {
+    private func applyAcceptedCommand(_ command: WatchCaptureCommand, sent: [String: Any], fallbackStartedAt: Date) {
+        // Exhaustive on purpose — no `default`. A new command should have to
+        // say out loud that it mirrors nothing, rather than silently inheriting
+        // "no optimistic state" from a catch-all.
         switch command {
-        case "startRecording":
+        case .startRecording:
             recordingState = .recording
             if recordingStartedAt == nil {
                 recordingStartedAt = fallbackStartedAt
@@ -285,7 +283,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 segmentCount = 1
             }
             playHaptic(.start)
-        case "stopRecording":
+        case .stopRecording:
             recordingState = .idle
             recordingStartedAt = nil
             markerCount = 0
@@ -295,7 +293,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             isRampHighRate = false
             timedBurstSeconds = nil
             playHaptic(.stop)
-        case "triggerMoment":
+        case .triggerMoment:
             if recordingState == .recording {
                 isRampActive.toggle()
                 isRampHighRate = isRampActive && sequenceMode == "ramp"
@@ -307,7 +305,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 timedBurstSeconds = nil
                 playHaptic(.click)
             }
-        case "timedBurst":
+        case .timedBurst:
             if recordingState == .recording {
                 if !isRampActive {
                     isRampActive = true
@@ -321,13 +319,13 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 }
                 playHaptic(.click)
             }
-        case "lockExposure":
+        case .lockExposure:
             isExposureLocked = true
             playHaptic(.click)
-        case "unlockExposure":
+        case .unlockExposure:
             isExposureLocked = false
             playHaptic(.click)
-        case "setCaptureMode":
+        case .setCaptureMode:
             // The phone's echo lags one UI pass behind the accepted command,
             // so reflect what we sent immediately and let the authoritative
             // state converge.
@@ -336,17 +334,17 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 captureMode = mode
             }
             playHaptic(.click)
-        case "setIntervalSeconds":
+        case .setIntervalSeconds:
             if let seconds = sent[WatchMessageKey.value] as? Double {
                 intervalSeconds = seconds
             }
             playHaptic(.click)
-        case "setFramesPerBlend":
+        case .setFramesPerBlend:
             if let frames = sent[WatchMessageKey.value] as? Double {
                 blendDepth = .fixed(Int(frames))
             }
             playHaptic(.click)
-        case "scheduleStop":
+        case .scheduleStop:
             // Mirror the phone's math immediately; its authoritative echo
             // arrives a beat later. Amounts are totals for the whole run,
             // anchored to its start — never "N more from now".
@@ -374,12 +372,19 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 }
             }
             playHaptic(.click)
-        case "cancelScheduledStop":
+        case .cancelScheduledStop:
             stopAtUnit = nil
             stopAtDeadline = nil
             stopAtTargetCount = nil
             playHaptic(.click)
-        default:
+        case .setISO, .setLensPosition:
+            // The crown already moved the local value as it turned; echoing it
+            // here would fight the gesture. No haptic either — the crown has
+            // its own detents.
+            break
+        case .state:
+            // A poll, not an action. Its reply is a state snapshot and
+            // `apply` has already taken it.
             break
         }
     }
