@@ -412,6 +412,13 @@ struct ProjectDetailView: View {
                         Label("Share project", systemImage: "square.and.arrow.up")
                     }
                     .disabled(isExportingArchive)
+                    #if os(macOS)
+                    Button {
+                        revealInFinder(capture)
+                    } label: {
+                        Label("Show in Finder", systemImage: "folder")
+                    }
+                    #endif
                     Button(role: .destructive) {
                         confirmingProjectDelete = true
                     } label: {
@@ -427,6 +434,24 @@ struct ProjectDetailView: View {
             }
         }
     }
+
+    #if os(macOS)
+    /// Opens the project's folder in Finder with it selected, so the UUID the
+    /// files actually live under is right there rather than something you have
+    /// to work out from the library.
+    ///
+    /// Falls back to the Projects folder if the project's own is missing —
+    /// revealing nothing at all would look like a menu item that does nothing,
+    /// when the interesting fact is that the folder has gone.
+    private func revealInFinder(_ capture: AppModel.CaptureProject) {
+        let folder = model.projectFolderURL(for: capture)
+        guard FileManager.default.fileExists(atPath: folder.path) else {
+            NSWorkspace.shared.activateFileViewerSelecting([model.projectsFolderURL])
+            return
+        }
+        NSWorkspace.shared.activateFileViewerSelecting([folder])
+    }
+    #endif
 
     /// What the hero shows: for a photo capture, the photo itself; otherwise
     /// the source media.

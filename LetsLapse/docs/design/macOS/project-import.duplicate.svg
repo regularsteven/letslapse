@@ -1,0 +1,93 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Project import · already imported · 760×680</title>
+  <desc>Mirrors App/ProjectImport.swift (ProjectImportSheet, phase .duplicate) over AppModel.importProject. Opening an archive the library already holds does NOT quietly make a second copy of a multi-gigabyte project — it asks. The match is on the id in the archive's manifest, tested against both the ids of projects here and the `importedFromID` recorded on projects imported earlier (AppModel.existingImport(of:)), so re-opening the same file finds the copy it made last time, and an archive exported from this Mac finds the project it came from. Import mints a fresh id for every project it creates — folder names key on it, so reusing the original would collide with the source device's own library — and `importedFromID` is the only thread back to where it came from; projects captured here, and projects imported before that field existed, have none. THE QUESTION IS ASKED AFTER UNPACKING, not before: the identifying id lives in project.json *inside* the archive, and reaching it early would mean decompressing the whole stream a second time on every import to spare the rare re-import. The staged tree waits on disk while the question is open — the import is suspended inside importProject on a continuation, not abandoned — and is deleted with the rest if the answer is no. NEITHER ANSWER IS A DEAD END and neither is destructive, which is why the default action (⏎) is the one that spends nothing: "Open the one I have" discards the staged tree and opens the existing project, leaving the library untouched; "Import again as a new project" installs a second, independent project alongside it, carrying the same `importedFromID`. Both land on a project detail. Sheet grows to 380×356 here, past the 300 floor, to seat the second button. Verified 2026-08-13 on the real 2.37 GB archive: second double-click raised this sheet with the library untouched at 24 projects; "Open the one I have" left it at 24 and cleared the staging tree; "Import again" made a 25th with a fresh id and the same origin.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Morning tram 4k</text>
+    </g>
+
+    <!-- The project detail of the copy already in the library — where a second
+         double-click typically lands, since the first one left you here. -->
+    <g id="behind">
+      <rect x="40" y="76" width="720" height="180" rx="10" fill="#8A8A8E" fill-opacity="0.40"/>
+      <rect x="54" y="90" width="118" height="20" rx="10" fill="#000" fill-opacity="0.45"/>
+      <text x="113" y="104" font-size="9.5" class="sb" text-anchor="middle" fill="#FFFFFF">ORIGINAL · 16:20</text>
+      <rect x="666" y="222" width="80" height="20" rx="10" fill="#000" fill-opacity="0.45"/>
+      <text x="706" y="236" font-size="9.5" class="sb" text-anchor="middle" fill="#FFFFFF">4K · 25 fps</text>
+
+      <rect x="40" y="268" width="86" height="28" rx="14" fill="#C36A00"/>
+      <text x="83" y="286" font-size="12" class="sb" text-anchor="middle" fill="#FFFFFF">Natural</text>
+      <rect x="134" y="268" width="86" height="28" rx="14" fill="#FFFFFF"/>
+      <text x="177" y="286" font-size="12" text-anchor="middle" fill="#000">Cinema</text>
+      <rect x="228" y="268" width="86" height="28" rx="14" fill="#FFFFFF"/>
+      <text x="271" y="286" font-size="12" text-anchor="middle" fill="#000">Matte</text>
+
+      <rect x="40" y="308" width="720" height="42" rx="10" fill="#FFFFFF"/>
+      <text x="58" y="334" font-size="14" fill="#000">Customise</text>
+      <rect x="40" y="362" width="720" height="46" rx="10" fill="#C36A00"/>
+      <text x="400" y="391" font-size="15" class="b" text-anchor="middle" fill="#FFFFFF">+  New blended clip</text>
+      <rect x="40" y="420" width="720" height="42" rx="10" fill="#FFFFFF"/>
+      <text x="400" y="447" font-size="14" class="sb" text-anchor="middle" fill="#C36A00">Guided clip (experimental)</text>
+      <rect x="40" y="474" width="720" height="42" rx="10" fill="#FFFFFF"/>
+      <text x="400" y="501" font-size="14" class="sb" text-anchor="middle" fill="#C36A00">Punch-in reframe</text>
+      <text x="44" y="540" font-size="10" class="sb" fill="#6D6D72" letter-spacing="0.4">SOURCE CLIPS · 3</text>
+
+      <g id="tabbar">
+        <rect x="280" y="638" width="240" height="46" rx="23" fill="#FFFFFF"/>
+        <text x="316" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Create</text>
+        <text x="362" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Gallery</text>
+        <rect x="388" y="646" width="46" height="30" rx="15" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="411" y="672" font-size="8.5" class="sb" text-anchor="middle" fill="#C36A00">Projects</text>
+        <text x="459" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Collections</text>
+        <text x="502" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Settings</text>
+      </g>
+    </g>
+
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7" fill-opacity="0.62"/>
+
+    <!-- 380 × 356: the 300 floor plus the room the second button needs. -->
+    <g id="sheet">
+      <rect x="210" y="202" width="380" height="356" rx="12" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+
+      <!-- square.on.square, 30pt, LL.accent -->
+      <g id="icon" transform="translate(400 247)" fill="none" stroke="#C36A00" stroke-width="2.2">
+        <rect x="-13" y="-13" width="20" height="20" rx="4"/>
+        <rect x="-6" y="-6" width="20" height="20" rx="4" fill="#F2F2F7"/>
+      </g>
+
+      <text x="400" y="291" font-size="19" class="sb" text-anchor="middle" fill="#000">Already imported</text>
+      <text x="400" y="313" font-size="14" text-anchor="middle" fill="#6D6D72">Morning tram 4k</text>
+
+      <g id="prose" font-size="13" fill="#6D6D72" text-anchor="middle">
+        <text x="400" y="346">You already have this project as “Morning tram</text>
+        <text x="400" y="363">4k”. Importing it again makes a second,</text>
+        <text x="400" y="380">separate copy — the one you have is not</text>
+        <text x="400" y="397">touched.</text>
+      </g>
+
+      <!-- Default action (⏎) is the one that spends nothing. -->
+      <rect x="234" y="424" width="332" height="50" rx="12" fill="#C36A00"/>
+      <text x="400" y="455" font-size="16" class="b" text-anchor="middle" fill="#FFFFFF">Open the one I have</text>
+
+      <rect x="234" y="484" width="332" height="50" rx="12" fill="#FFFFFF"/>
+      <text x="400" y="515" font-size="16" class="b" text-anchor="middle" fill="#C36A00">Import again as a new project</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="722" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Project import · already imported · 760×680 pt window</text>
+  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/ProjectImport.swift (ProjectImportSheet, .duplicate) — matched on CaptureProject.importedFromID, asked after unpacking</text>
+</svg>

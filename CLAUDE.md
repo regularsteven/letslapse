@@ -14,7 +14,7 @@ The app's screens are mirrored as SVG design specs in `LetsLapse/docs/design/` (
    (A third standard path: the human has already edited the design files themselves — then the edited SVG **is** the spec; implement it.)
 2. **After sign-off on one side, mirror the other side in the same unit of work.** A UI change is not done while its SVG (or its code) is stale.
 3. Any commit touching SwiftUI layout/copy/colors/controls must update the matching SVG(s) — or state why no SVG applies. Track per-screen status in each platform folder's `INDEX.md`.
-4. Verify mirrors against the running app using the DEBUG launch hooks (`LL_TAB`, `LL_OPEN`, `LL_SEED`, `LL_DETAIL`, `LL_PUSH`, `LL_CAPTURE`, `LL_BURST`, `LL_SPEED`, `LL_AUTO`, `LL_VIEWER`, `LL_COLLECTIONS`) via `simctl launch`.
+4. Verify mirrors against the running app using the DEBUG launch hooks (`LL_TAB`, `LL_OPEN`, `LL_SEED`, `LL_DETAIL`, `LL_PUSH`, `LL_CAPTURE`, `LL_BURST`, `LL_SPEED`, `LL_AUTO`, `LL_VIEWER`, `LL_COLLECTIONS`, `LL_IMPORT`) via `simctl launch`.
 
 Design tokens (`LL` in `App/DesignSystem.swift`): accent `#C36A00`, amber `#FFB340`, ink `#1C1C1E` — the README has the full table. If `DesignSystem.swift` changes, the SVGs are stale by definition.
 

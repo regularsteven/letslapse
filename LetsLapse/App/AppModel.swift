@@ -143,6 +143,14 @@ final class AppModel: ObservableObject {
         /// the reframe bake above all — mis-times from the truncation onward.
         /// nil (pre-probe) falls back to the sidecar's nominal rate.
         var sourceSegmentFPS: [String: Double]?
+        /// The `id` this project had in the archive it was imported from — the
+        /// only thread back to where it came from, since import mints a fresh
+        /// `id` (folder names key on it, so reusing the original would collide
+        /// with the source device's own library). Nil for anything captured
+        /// here, and for projects imported before this was recorded. Read it
+        /// through `AppModel.existingImport(of:)`, which is what catches a
+        /// second double-click on an archive already in the library.
+        var importedFromID: UUID?
 
         var summary: String {
             switch kind {
@@ -737,6 +745,21 @@ final class AppModel: ObservableObject {
 
     func mediaKind(for blend: BlendProject) -> MediaKind {
         blend.kind == .video ? .video : .image
+    }
+
+    /// The folder holding everything a project owns — its `source/` and
+    /// `blends/` trees — at `Projects/<id>/` under Application Support. The
+    /// folder is named for the project's `id`, which is why "Show in Finder"
+    /// exists at all: nothing in the UI otherwise tells you which UUID on disk
+    /// is the project you are looking at.
+    func projectFolderURL(for capture: CaptureProject) -> URL {
+        captureFolderURL(for: capture.id)
+    }
+
+    /// Where all projects live. The fallback for revealing a project whose own
+    /// folder has gone missing.
+    var projectsFolderURL: URL {
+        projectsRootURL
     }
 
     func mediaURL(for capture: CaptureProject) -> URL? {
@@ -4511,6 +4534,23 @@ final class AppModel: ObservableObject {
 
     // MARK: - Project archives (share / import)
 
+    /// The archive being brought in, from the moment it is accepted until it
+    /// joins the library — nil the rest of the time. Drives the import sheet,
+    /// which is presented over everything because an import can start with no
+    /// LetsLapse window in front of the human at all.
+    @Published var archiveImport: ArchiveImport?
+    /// Every archive accepted and not yet finished — the one being imported at
+    /// the head, anything opened behind it after. Drained one at a time (two
+    /// concurrent extractions would race for the same disk), and claimed
+    /// synchronously in `openArchive` so two delivery paths landing in the same
+    /// run-loop turn can't both start the same file.
+    private var archiveImportURLs: [URL] = []
+    private var archiveImportCancellation: ArchiveImportCancellation?
+    /// The import paused on the duplicate question, waiting for the sheet's
+    /// answer. Its staging tree is still on disk — the import is suspended
+    /// inside `importProject`, not abandoned.
+    private var duplicateImportDecision: CheckedContinuation<Bool, Never>?
+
     enum ExportError: LocalizedError {
         case insufficientStorage(available: Int64, needed: Int64)
 
@@ -4519,6 +4559,21 @@ final class AppModel: ObservableObject {
             case .insufficientStorage(let available, let needed):
                 return """
                 Not enough storage to export this project. It needs \
+                \(LLFormat.bytes(needed)) but only \(LLFormat.bytes(available)) is available. \
+                Free up space and try again.
+                """
+            }
+        }
+    }
+
+    enum ImportError: LocalizedError {
+        case insufficientStorage(available: Int64, needed: Int64)
+
+        var errorDescription: String? {
+            switch self {
+            case .insufficientStorage(let available, let needed):
+                return """
+                Not enough storage to import this project. It unpacks to at least \
                 \(LLFormat.bytes(needed)) but only \(LLFormat.bytes(available)) is available. \
                 Free up space and try again.
                 """
@@ -4567,22 +4622,128 @@ final class AppModel: ObservableObject {
         return archiveURL
     }
 
+    /// A `.lapse` file handed to the app from outside — a Finder double-click or
+    /// "Open With", a drop on the Dock icon, the Files app on iOS — or picked in
+    /// Create. The single door in: it dedupes, queues, and puts the progress
+    /// sheet up, none of which `importProject` does for itself.
+    func openArchive(at url: URL) {
+        guard ProjectArchive.isArchive(url) else {
+            errorMessage = "\(url.lastPathComponent) isn't a LetsLapse project archive."
+            return
+        }
+        // The same file can be delivered twice — the Finder's open event and the
+        // scene's own URL handling both fire on some launches. Importing it
+        // twice would quietly leave two copies of a multi-gigabyte project.
+        guard !archiveImportURLs.contains(url) else { return }
+        archiveImportURLs.append(url)
+        guard archiveImportURLs.count == 1 else { return }
+        Task { await importProject(from: url) }
+    }
+
+    /// Stops the extraction in flight. Not an error: the sheet closes, the
+    /// half-extracted tree is deleted, and nothing joins the library.
+    func cancelArchiveImport() {
+        archiveImportCancellation?.cancel()
+    }
+
+    /// The project this archive was already imported as, if any.
+    ///
+    /// Matches on the id the archive carries in its manifest, against both the
+    /// ids of projects here and the origins recorded on projects imported
+    /// earlier — so re-opening the same file finds the copy it made last time,
+    /// and an archive exported from this Mac finds the project it came from.
+    private func existingImport(of originID: UUID) -> CaptureProject? {
+        captures.first { $0.id == originID || $0.importedFromID == originID }
+    }
+
+    /// Answers the "you already have this" question. `importAgain` true makes a
+    /// second, independent project; false leaves the library alone. Either way
+    /// a project opens — the new one or the one already here.
+    func resolveDuplicateImport(importAgain: Bool) {
+        let pending = duplicateImportDecision
+        duplicateImportDecision = nil
+        pending?.resume(returning: importAgain)
+    }
+
+    /// Closes a finished-but-failed import — the only phase that waits for the
+    /// human — and starts whatever was opened behind it.
+    func dismissArchiveImport() {
+        finishArchiveImport()
+    }
+
+    /// Retires the archive at the head of the queue and starts the next.
+    private func finishArchiveImport() {
+        archiveImport = nil
+        if !archiveImportURLs.isEmpty { archiveImportURLs.removeFirst() }
+        guard let next = archiveImportURLs.first else { return }
+        Task { await importProject(from: next) }
+    }
+
     /// Restores a `.lapse` archive as a new project. Fresh UUIDs are minted
     /// for the capture and every blend (folder names and lookups key on
     /// them, so reusing the originals would collide with re-imports or the
     /// source device's own library).
-    func importProject(from pickedURL: URL) async {
+    ///
+    /// A project is gigabytes and this takes minutes, so it reports itself
+    /// through `archiveImport` throughout and can be stopped. Nothing is
+    /// published to the library until the whole tree is on disk: a cancelled or
+    /// failed import leaves no half-project behind.
+    private func importProject(from pickedURL: URL) async {
         let scoped = pickedURL.startAccessingSecurityScopedResource()
         defer {
             if scoped { pickedURL.stopAccessingSecurityScopedResource() }
         }
-        let staging = FileManager.default.temporaryDirectory
-            .appendingPathComponent("lapse-import-\(UUID().uuidString)", isDirectory: true)
+        let staging = ImportStaging.makeURL()
         defer { try? FileManager.default.removeItem(at: staging) }
+
+        let archiveBytes = Int64(
+            (try? pickedURL.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0)
+        let progress = ArchiveImport(
+            url: pickedURL,
+            name: pickedURL.deletingPathExtension().lastPathComponent,
+            archiveBytes: archiveBytes)
+        archiveImport = progress
+
+        let cancellation = ArchiveImportCancellation()
+        archiveImportCancellation = cancellation
+        let meter = ArchiveImportMeter()
+        // The archiver calls back per entry from its own worker threads —
+        // thousands of times for an interval project. Sampling the meter on a
+        // timer instead keeps that off the main actor entirely, and 5 Hz is
+        // already faster than a progress bar reads.
+        let ticker = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                guard let self, self.archiveImport?.id == progress.id else { return }
+                self.archiveImport?.extractedBytes = meter.bytes
+            }
+        }
+        defer {
+            ticker.cancel()
+            if archiveImportCancellation === cancellation { archiveImportCancellation = nil }
+        }
+
         do {
+            // lzfse barely shrinks video and stills, so the archive's own size
+            // is a fair floor for what it will unpack to. Refusing here beats
+            // filling the disk and failing somewhere in the middle.
+            let available = Int64(
+                (try? FileManager.default.temporaryDirectory
+                    .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+                    .volumeAvailableCapacityForImportantUsage) ?? 0)
+            if archiveBytes > 0, available < archiveBytes {
+                throw ImportError.insufficientStorage(available: available, needed: archiveBytes)
+            }
+
+            archiveImport?.phase = .extracting
             try await Task.detached(priority: .userInitiated) {
-                try ProjectArchive.extract(pickedURL, to: staging)
+                try ProjectArchive.extract(
+                    pickedURL,
+                    to: staging,
+                    shouldContinue: { !cancellation.isCancelled },
+                    progress: { meter.record($0) })
             }.value
+            archiveImport?.phase = .installing
 
             let manifestURL = staging.appendingPathComponent("project.json")
             guard FileManager.default.fileExists(atPath: manifestURL.path) else {
@@ -4595,9 +4756,30 @@ final class AppModel: ObservableObject {
                 throw ProjectArchiveError.unsupportedVersion(manifest.formatVersion)
             }
 
+            // Asked here, after unpacking, rather than before: the id that
+            // identifies the archive lives in `project.json` *inside* it, and
+            // finding that without a full pass would mean decompressing the
+            // whole stream a second time on every import to spare the rare
+            // re-import. The staged tree waits on disk while the question is
+            // open, and is deleted with the rest if the answer is no.
+            let originID = manifest.capture.id
+            if let existing = existingImport(of: originID) {
+                archiveImport?.phase = .duplicate(existingName: existing.name ?? existing.originalName)
+                let importAgain = await withCheckedContinuation { continuation in
+                    duplicateImportDecision = continuation
+                }
+                guard importAgain else {
+                    finishArchiveImport()
+                    requestedProjectDetailID = existing.id
+                    return
+                }
+                archiveImport?.phase = .installing
+            }
+
             var capture = manifest.capture
             let newID = UUID()
             capture.id = newID
+            capture.importedFromID = originID
             let destination = captureFolderURL(for: newID)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
             for subfolder in ["source", "blends"] {
@@ -4629,9 +4811,20 @@ final class AppModel: ObservableObject {
             captures.insert(capture, at: 0)
             blends.append(contentsOf: importedBlends)
             try persistLibrary()
-            openCapture(capture)
+            finishArchiveImport()
+            // Land on the project itself rather than opening a blend flow over
+            // it: importing is "here is the thing", not "start editing it".
+            requestedProjectDetailID = capture.id
+        } catch is CancellationError {
+            finishArchiveImport()
+        } catch DirectoryArchiveError.cancelled {
+            // The human stopped it — say nothing, just tidy up and move on.
+            finishArchiveImport()
         } catch {
-            errorMessage = "Couldn't import the project: \(error.localizedDescription)"
+            // Held on screen rather than dropped into `errorMessage`: a
+            // double-click import can happen with no LetsLapse window in front
+            // of the human, and a banner on the Create screen would go unread.
+            archiveImport?.phase = .failed(error.localizedDescription)
         }
     }
 

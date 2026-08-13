@@ -1,0 +1,104 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Project import · extracting · 760×680</title>
+  <desc>Mirrors App/ProjectImport.swift (ProjectImportSheet) over AppModel.archiveImport, presented from ContentView in App/LetsLapseApp.swift. The sheet a `.lapse` project archive puts up when it is opened from outside the app — a Finder double-click or "Open With", a drop on the Create screen, or the "Import a LetsLapse project…" row. Launch Services routes it here because App/Info.plist exports the type com.regularsteven.letslapse.project (extension `lapse`, conforms to public.data) and claims it with LSHandlerRank Owner + CFBundleTypeIconSystemGenerated, which is also what gives .lapse files their Finder icon. Presented from the ROOT, over any tab and over the blended-clip flow, because an import can start with no LetsLapse window in front of the human at all. Deliberately BLOCKING and not dismissable by clicking away (interactiveDismissDisabled): the extraction owns the disk for as long as it runs, and a shoot or a render started on top of it would fail for reasons neither could explain — Cancel (⎋) is always reachable, so it is never a trap. The bar is HAND-DRAWN, not ProgressView(value:): the system linear bar renders its fill in the control grey on macOS whatever the tint says. The denominator is the ARCHIVE'S OWN compressed size, hence "of about" — lzfse barely shrinks video and stills, and the true unpacked total is not known until the last entry lands; the tally itself counts payload bytes as each entry finishes (DirectoryArchive.extract's entry filter), so it never claims bytes that are not yet on disk. DESC-ONLY PHASES, not drawn here: (1) `.checking` — sizing the file and testing free space, indeterminate system linear bar in the accent, caption "Checking the file…"; (2) `.installing` — bar full, caption "Adding it to your library…", the moment the unpacked tree is renamed into ~/Library/Application Support/LetsLapse/Projects and library.json is rewritten. DRAWN AS VARIANTS: project-import.duplicate.svg (the archive is already in the library) and project-import.failed.svg. On success the sheet closes and the app lands on the imported project's DETAIL screen (requestedProjectDetailID), not in a blend flow: importing is "here is the thing", not "start editing it". Cancelling says nothing at all — the half-extracted tree is deleted and nothing joins the library. Verified 2026-08-13 by double-clicking a 2.37 GB archive from Finder on a cold launch; a real import of that size finishes in about two seconds on an M4 Max, so this sheet is frozen for screenshots with LL_IMPORT=checking|extracting|installing|duplicate|failed.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Projects</text>
+    </g>
+
+    <!-- Whatever screen the import arrived over. Projects is drawn because it
+         is where the sheet leaves you, but the sheet is root-presented and can
+         cover any tab, or the blended-clip flow. -->
+    <g id="behind">
+      <text x="44" y="100" font-size="28" class="b" fill="#000">Projects</text>
+      <rect x="40" y="116" width="720" height="26" rx="7" fill="#000" fill-opacity="0.05"/>
+      <text x="58" y="133" font-size="12" fill="#8A8A8E">Search projects</text>
+      <rect x="40" y="152" width="720" height="22" rx="6" fill="#000" fill-opacity="0.05"/>
+      <text x="130" y="167" font-size="11" fill="#3C3C43">All</text>
+      <text x="310" y="167" font-size="11" fill="#8A8A8E">Photos</text>
+      <text x="480" y="167" font-size="11" fill="#8A8A8E">Interval</text>
+      <text x="650" y="167" font-size="11" fill="#8A8A8E">Video</text>
+
+      <g id="row-1">
+        <rect x="40" y="186" width="720" height="96" rx="12" fill="#FFFFFF"/>
+        <rect x="54" y="200" width="68" height="46" rx="6" fill="#8A8A8E" fill-opacity="0.45"/>
+        <text x="134" y="212" font-size="13" class="b" fill="#000">Tram morning</text>
+        <text x="134" y="228" font-size="10" fill="#6D6D72">Video · 4K · 25 fps · yesterday</text>
+        <text x="134" y="242" font-size="10" fill="#6D6D72">3 source clips · 1 burst at 100 fps</text>
+        <text x="134" y="256" font-size="10" class="sb" fill="#C36A00">4 blended clips · 2,05 GB</text>
+      </g>
+      <g id="row-2">
+        <rect x="40" y="294" width="720" height="96" rx="12" fill="#FFFFFF"/>
+        <rect x="54" y="308" width="68" height="46" rx="6" fill="#8A8A8E" fill-opacity="0.45"/>
+        <text x="134" y="320" font-size="13" class="b" fill="#000">Afternoon trains</text>
+        <text x="134" y="336" font-size="10" fill="#6D6D72">Video · 4K · 25 fps · 2 days ago</text>
+        <text x="134" y="350" font-size="10" fill="#6D6D72">3 source clips · 1 burst at 100 fps</text>
+        <text x="134" y="364" font-size="10" class="sb" fill="#C36A00">4 blended clips · 1,37 GB</text>
+      </g>
+      <g id="row-3">
+        <rect x="40" y="402" width="720" height="96" rx="12" fill="#FFFFFF"/>
+        <rect x="54" y="416" width="68" height="46" rx="6" fill="#8A8A8E" fill-opacity="0.45"/>
+        <text x="134" y="428" font-size="13" class="b" fill="#000">Test card</text>
+        <text x="134" y="444" font-size="10" fill="#6D6D72">Video · 4K · 25 fps · 2 days ago</text>
+        <text x="134" y="458" font-size="10" fill="#6D6D72">3 source clips · 1 burst at 100 fps</text>
+        <text x="134" y="472" font-size="10" fill="#6D6D72">529 MB</text>
+      </g>
+
+      <g id="tabbar">
+        <rect x="280" y="638" width="240" height="46" rx="23" fill="#FFFFFF"/>
+        <text x="316" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Create</text>
+        <text x="362" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Gallery</text>
+        <rect x="388" y="646" width="46" height="30" rx="15" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="411" y="672" font-size="8.5" class="sb" text-anchor="middle" fill="#C36A00">Projects</text>
+        <text x="459" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Collections</text>
+        <text x="502" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Settings</text>
+      </g>
+    </g>
+
+    <!-- The sheet dims its parent window, as any macOS sheet does. -->
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7" fill-opacity="0.62"/>
+
+    <g id="sheet">
+      <rect x="210" y="230" width="380" height="300" rx="12" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+
+      <!-- shippingbox.fill, 30pt, LL.accent -->
+      <g id="icon" transform="translate(400 275)">
+        <path d="M-15 -9 L0 -15 L15 -9 L15 8 L0 15 L-15 8 Z" fill="#C36A00"/>
+        <path d="M-15 -9 L0 -3 L15 -9 L0 -15 Z" fill="#E08A22"/>
+        <path d="M0 -3 L0 15 L15 8 L15 -9 Z" fill="#A65900"/>
+      </g>
+
+      <text x="400" y="319" font-size="19" class="sb" text-anchor="middle" fill="#000">Importing project</text>
+      <text x="400" y="341" font-size="14" text-anchor="middle" fill="#6D6D72">Morning tram 4k</text>
+
+      <!-- 6pt capsule; track Color.primary 12%, fill LL.accent. Inset 48 each
+           side: the VStack's own 24 plus the bar's 24. -->
+      <g id="bar">
+        <rect x="258" y="369" width="284" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
+        <rect x="258" y="369" width="176" height="6" rx="3" fill="#C36A00"/>
+      </g>
+      <text x="400" y="393" font-size="12.5" class="mono" text-anchor="middle" fill="#6D6D72">1,47 GB of about 2,37 GB</text>
+
+      <!-- LLSecondaryButtonStyle, inset 24 each side, 50pt tall. ⎋ cancels. -->
+      <rect x="234" y="456" width="332" height="50" rx="12" fill="#FFFFFF"/>
+      <text x="400" y="487" font-size="16" class="b" text-anchor="middle" fill="#C36A00">Cancel</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="722" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Project import · extracting · 760×680 pt window</text>
+  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/ProjectImport.swift (ProjectImportSheet) — checking / installing phases desc-only; failure in project-import.failed.svg</text>
+</svg>

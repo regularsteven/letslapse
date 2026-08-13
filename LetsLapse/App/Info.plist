@@ -19,5 +19,58 @@
 		<key>UIColorName</key>
 		<string>LaunchBackground</string>
 	</dict>
+
+	<!-- `.lapse` project archives. LetsLapse writes them (AppModel.exportProject)
+	     and LetsLapse reads them, so we EXPORT the type rather than import it —
+	     this declaration is where the identifier comes from.
+
+	     Conforming to public.data and not public.archive is deliberate: the
+	     payload is an Apple Archive, but nothing outside LetsLapse can do
+	     anything useful with it, and claiming public.archive invites Archive
+	     Utility to offer itself as a handler for a file it would unpack into a
+	     meaningless folder. With LSHandlerRank Owner, a double-click in Finder
+	     comes here. -->
+	<key>UTExportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.regularsteven.letslapse.project</string>
+			<key>UTTypeDescription</key>
+			<string>LetsLapse Project</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>lapse</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeName</key>
+			<string>LetsLapse Project</string>
+			<!-- Viewer, not Editor: opening one imports a copy into the library
+			     and never writes back to the file that was double-clicked. -->
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Owner</string>
+			<!-- Finder draws the document icon by insetting the app icon into a
+			     page, rather than us shipping and maintaining a second .icns
+			     that would drift from the app icon every time it changes. -->
+			<key>CFBundleTypeIconSystemGenerated</key>
+			<true/>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>com.regularsteven.letslapse.project</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

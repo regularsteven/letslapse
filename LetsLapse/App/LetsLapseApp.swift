@@ -14,6 +14,11 @@ struct LetsLapseApp: App {
         // unambiguous, and surfaced in Settings ▸ Incomplete Captures.
         CaptureSessionLogger.shared.scanForOrphanedLogs()
 
+        // Same reasoning, far more disk: a project import that was killed
+        // part-way leaves its whole half-unpacked tree behind, and only a
+        // later launch can know it was abandoned.
+        ImportStaging.sweepOrphans()
+
         #if DEBUG
         // LL_RESET_CAPS=1 — drop the cached device capability matrix before
         // anything can read it, so a tester can force a fresh format probe
@@ -61,6 +66,16 @@ struct LetsLapseApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(model)
+                // A `.lapse` double-clicked in Finder or opened from the Files
+                // app. SwiftUI holds the URL until this view exists, so a file
+                // that *launched* the app arrives here too rather than being
+                // dropped on the floor — verified on a cold launch, which is
+                // the case that actually matters for a double-click. The type
+                // that makes Launch Services route it here at all is declared
+                // in App/Info.plist.
+                .onOpenURL { url in
+                    model.openArchive(at: url)
+                }
                 #if os(iOS)
                 .onAppear {
                     WatchRemoteControlReceiver.shared.setAppActive(scenePhase != .background)
@@ -159,6 +174,16 @@ struct ContentView: View {
             }
         }
         .animation(.spring(response: 0.36, dampingFraction: 0.86), value: model.stage)
+        // Presented from the root so it covers any tab, and the flow with it: a
+        // double-clicked archive can arrive while the app is on any screen at
+        // all, or was not running a moment ago.
+        //
+        // `sheet(item:)` captures the closure's value at presentation and never
+        // refreshes it, so the sheet reads the live progress off the model.
+        .sheet(item: $model.archiveImport) { _ in
+            ProjectImportSheet()
+                .environmentObject(model)
+        }
         .onChange(of: model.requestedProjectDetailID) { requested in
             guard requested != nil else { return }
             selectedTab = .projects
@@ -379,6 +404,33 @@ struct ContentView: View {
             if hook == "detail", let first = model.collections.first {
                 collectionsPath = [first.id]
             }
+        }
+        // LL_IMPORT=checking|extracting|installing|duplicate|failed — freeze the project
+        // import sheet in one phase. A real import of a 2.4 GB archive is over
+        // in about two seconds on an M-series Mac, which is too quick to
+        // screenshot or design against; the sheet still has to be right for a
+        // slow external drive or a much bigger project.
+        if let phase = environment["LL_IMPORT"] {
+            var demo = ArchiveImport(
+                url: URL(fileURLWithPath: "/Demo/Morning tram 4k.lapse"),
+                name: "Morning tram 4k",
+                archiveBytes: 2_372_116_934)
+            switch phase {
+            case "extracting":
+                demo.phase = .extracting
+                demo.extractedBytes = 1_470_000_000
+            case "installing":
+                demo.phase = .installing
+                demo.extractedBytes = demo.archiveBytes
+            case "duplicate":
+                demo.phase = .duplicate(existingName: "Morning tram 4k")
+            case "failed":
+                demo.phase = .failed(
+                    "Not enough storage to import this project. It unpacks to at least 2,37 GB but only 1,1 GB is available. Free up space and try again.")
+            default:
+                demo.phase = .checking
+            }
+            model.archiveImport = demo
         }
         // LL_TAGS=demo — stamp scene metadata across the library so the Projects
         // search field and tag chips can be verified without a 3.3 GB model.

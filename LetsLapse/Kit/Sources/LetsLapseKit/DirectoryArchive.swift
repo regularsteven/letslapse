@@ -4,10 +4,12 @@ import System
 
 public enum DirectoryArchiveError: LocalizedError {
     case streamSetupFailed
+    case cancelled
 
     public var errorDescription: String? {
         switch self {
         case .streamSetupFailed: return "Couldn't open the archive."
+        case .cancelled: return "The archive was cancelled."
         }
     }
 }
@@ -63,7 +65,24 @@ public enum DirectoryArchive {
         }
     }
 
-    public static func extract(_ archiveURL: URL, to directory: URL) throws {
+    /// Restores an archive written by `write(contentsOf:to:)`.
+    ///
+    /// A whole project is gigabytes, so extraction reports what it has written
+    /// and can be stopped part-way. Both hooks run on AppleArchive's own worker
+    /// threads — possibly several at once — so they must be safe to call
+    /// concurrently. `progress` is handed the running total of *payload* bytes
+    /// written (file contents; directory nodes and metadata contribute nothing),
+    /// which is what a caller comparing against the archive's own file size
+    /// wants. Returning `false` from `shouldContinue` throws
+    /// `DirectoryArchiveError.cancelled` rather than leaving the caller to
+    /// interpret an opaque AppleArchive failure; the partial tree is the
+    /// caller's to delete.
+    public static func extract(
+        _ archiveURL: URL,
+        to directory: URL,
+        shouldContinue: (@Sendable () -> Bool)? = nil,
+        progress: (@Sendable (Int64) -> Void)? = nil
+    ) throws {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         guard let readStream = ArchiveByteStream.fileStream(
             path: FilePath(archiveURL.path),
@@ -81,12 +100,103 @@ public enum DirectoryArchive {
             throw DirectoryArchiveError.streamSetupFailed
         }
         defer { try? decodeStream.close() }
+
+        let tally = ExtractionTally(directory: directory, report: progress)
+        // `.cancel` aborts the run from inside AppleArchive, which surfaces as a
+        // generic error out of `process`; the flag is what tells the two apart.
+        let stopped = Cancellation()
+        let filter: ArchiveHeader.EntryFilter? =
+            (shouldContinue == nil && progress == nil) ? nil : { message, path, data in
+                if let shouldContinue, !shouldContinue() {
+                    stopped.stop()
+                    return .cancel
+                }
+                switch message {
+                case .extractBegin:
+                    if case .header(let header)? = data { tally.willExtract(path, header: header) }
+                case .extractEnd:
+                    tally.didExtract(path)
+                default:
+                    break
+                }
+                return .ok
+            }
+
         guard let extractStream = ArchiveStream.extractStream(
             extractingTo: FilePath(directory.path),
+            selectUsing: filter,
             flags: [.ignoreOperationNotPermitted]) else {
             throw DirectoryArchiveError.streamSetupFailed
         }
         defer { try? extractStream.close() }
-        _ = try ArchiveStream.process(readingFrom: decodeStream, writingTo: extractStream)
+        do {
+            _ = try ArchiveStream.process(readingFrom: decodeStream, writingTo: extractStream)
+        } catch {
+            throw stopped.isStopped ? DirectoryArchiveError.cancelled : error
+        }
+        if stopped.isStopped { throw DirectoryArchiveError.cancelled }
+    }
+}
+
+/// A cancellation latch readable from any thread — set inside the entry filter,
+/// read once the archive pump has unwound.
+private final class Cancellation: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stopped = false
+
+    func stop() {
+        lock.lock()
+        stopped = true
+        lock.unlock()
+    }
+
+    var isStopped: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return stopped
+    }
+}
+
+/// Counts payload bytes as entries land, from the entry filter's worker threads.
+///
+/// Sizes are taken from each entry's `DAT` field at `extractBegin` and only
+/// added at `extractEnd`, so the total never claims bytes that aren't on disk
+/// yet. An entry whose header carries no `DAT` (a directory, a symlink, or an
+/// archive that stored its payload some other way) is measured from the file
+/// itself instead, so the tally still moves rather than silently sitting at zero.
+private final class ExtractionTally: @unchecked Sendable {
+    private let lock = NSLock()
+    private let directory: URL
+    private let report: (@Sendable (Int64) -> Void)?
+    private var pending: [String: Int64] = [:]
+    private var written: Int64 = 0
+
+    init(directory: URL, report: (@Sendable (Int64) -> Void)?) {
+        self.directory = directory
+        self.report = report
+    }
+
+    func willExtract(_ path: FilePath, header: ArchiveHeader) {
+        guard report != nil else { return }
+        guard case .blob(_, let size, _)? = header.field(forKey: ArchiveHeader.FieldKey("DAT")) else { return }
+        lock.lock()
+        pending[path.string] = Int64(size)
+        lock.unlock()
+    }
+
+    func didExtract(_ path: FilePath) {
+        guard let report else { return }
+        lock.lock()
+        let size = pending.removeValue(forKey: path.string) ?? Self.sizeOnDisk(directory, path)
+        written += size
+        let total = written
+        lock.unlock()
+        report(total)
+    }
+
+    private static func sizeOnDisk(_ directory: URL, _ path: FilePath) -> Int64 {
+        let url = directory.appendingPathComponent(path.string)
+        let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize
+        return Int64(size ?? 0)
     }
 }

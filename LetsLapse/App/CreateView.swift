@@ -67,9 +67,7 @@ struct CreateView: View {
     @State private var isDropTargeted = false
     #endif
 
-    private static let projectArchiveTypes: [UTType] = [
-        UTType(filenameExtension: ProjectArchive.fileExtension) ?? .data,
-    ]
+    private static let projectArchiveTypes: [UTType] = [.lapseProject]
 
     private let effectColumns = [
         GridItem(.flexible(), spacing: 12),
@@ -161,7 +159,7 @@ struct CreateView: View {
             allowedContentTypes: Self.projectArchiveTypes
         ) { result in
             if case .success(let url) = result {
-                Task { await model.importProject(from: url) }
+                model.openArchive(at: url)
             }
         }
         #else
@@ -180,7 +178,7 @@ struct CreateView: View {
             allowedContentTypes: Self.projectArchiveTypes
         ) { result in
             if case .success(let url) = result {
-                Task { await model.importProject(from: url) }
+                model.openArchive(at: url)
             }
         }
         .dropDestination(for: URL.self) { urls, _ in
@@ -375,8 +373,14 @@ struct CreateView: View {
     }
 
     private func handleDroppedURLs(_ urls: [URL]) -> Bool {
+        // A project archive dropped here is the same gesture as double-clicking
+        // it in Finder, so it goes through the same door.
+        if let archive = urls.first(where: ProjectArchive.isArchive) {
+            model.openArchive(at: archive)
+            return true
+        }
         guard let videoURL = urls.first(where: isVideoURL) else {
-            model.errorMessage = "Drop an MP4, MOV, or M4V video file."
+            model.errorMessage = "Drop an MP4, MOV, or M4V video, or a LetsLapse project (.lapse)."
             return false
         }
         importVideoURL(videoURL)

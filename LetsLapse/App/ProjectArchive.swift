@@ -1,5 +1,6 @@
 import Foundation
 import LetsLapseKit
+import UniformTypeIdentifiers
 
 /// The manifest at the root of a portable `.lapse` project archive, beside
 /// the project folder's `source/` and `blends/` trees.
@@ -32,7 +33,31 @@ enum ProjectArchive {
         try DirectoryArchive.write(contentsOf: directory, to: archiveURL)
     }
 
-    static func extract(_ archiveURL: URL, to directory: URL) throws {
-        try DirectoryArchive.extract(archiveURL, to: directory)
+    /// See `DirectoryArchive.extract` — the hooks run on the archiver's worker
+    /// threads, and `shouldContinue` returning false throws `.cancelled`.
+    static func extract(
+        _ archiveURL: URL,
+        to directory: URL,
+        shouldContinue: (@Sendable () -> Bool)? = nil,
+        progress: (@Sendable (Int64) -> Void)? = nil
+    ) throws {
+        try DirectoryArchive.extract(
+            archiveURL, to: directory, shouldContinue: shouldContinue, progress: progress)
     }
+
+    /// True for anything that looks like a project archive by name. Deliberately
+    /// extension-only: the type declaration is what Launch Services matches on,
+    /// and a file dragged in from a volume that lost its metadata should still
+    /// be *tried* — `extract` rejects a fake soon enough.
+    static func isArchive(_ url: URL) -> Bool {
+        url.pathExtension.lowercased() == fileExtension
+    }
+}
+
+extension UTType {
+    /// The exported type declared in `App/Info.plist`. Changing the identifier
+    /// in one place without the other silently stops Finder handing `.lapse`
+    /// files to the app.
+    static let lapseProject = UTType(
+        exportedAs: "com.regularsteven.letslapse.project", conformingTo: .data)
 }
