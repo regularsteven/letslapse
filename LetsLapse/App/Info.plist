@@ -30,6 +30,20 @@
 	     Utility to offer itself as a handler for a file it would unpack into a
 	     meaningless folder. With LSHandlerRank Owner, a double-click in Finder
 	     comes here. -->
+	<!-- The Bonjour service the Mac remote browses for and the camera
+	     advertises (CaptureRemoteService.type). Like UILaunchScreen above,
+	     this CANNOT be an INFOPLIST_KEY_* build setting: it is an array, and
+	     Xcode's plist generator silently emits an empty value for those. An
+	     empty NSBonjourServices doesn't error — browsing simply never finds
+	     anything, which is indistinguishable from "no cameras on the network".
+
+	     NSLocalNetworkUsageDescription is a plain string and so DOES live in
+	     the build settings, alongside the other usage descriptions. -->
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_letslapse-remote._tcp</string>
+	</array>
+
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

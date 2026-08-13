@@ -411,11 +411,11 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
-				OTHER_LDFLAGS = "-framework AVKit";
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots only when Record audio is turned on in Settings.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -432,6 +432,10 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					AVKit,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.regularsteven.letslapse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;
@@ -458,11 +462,11 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
-				OTHER_LDFLAGS = "-framework AVKit";
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots only when Record audio is turned on in Settings.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -479,6 +483,10 @@
 				);
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 0.1;
+				OTHER_LDFLAGS = (
+					"-framework",
+					AVKit,
+				);
 				PRODUCT_BUNDLE_IDENTIFIER = com.regularsteven.letslapse;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = auto;

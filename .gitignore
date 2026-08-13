@@ -20,3 +20,6 @@ xcuserdata/
 *.xcresult
 *.dSYM/
 *.ipa
+
+# Stage-3 CLI prover binary (built on demand, see remote_probe.swift header)
+tools/remote_probe
