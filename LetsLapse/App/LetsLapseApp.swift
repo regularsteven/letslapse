@@ -4,6 +4,11 @@ import SwiftUI
 struct LetsLapseApp: App {
     @StateObject private var model = AppModel()
     @Environment(\.scenePhase) private var scenePhase
+    #if os(macOS)
+    // Purely to catch files opened while the app is already running — see
+    // `LetsLapseAppDelegate`.
+    @NSApplicationDelegateAdaptor(LetsLapseAppDelegate.self) private var appDelegate
+    #endif
 
     init() {
         Self.quietenMetalShaderCompiler()
@@ -62,21 +67,54 @@ struct LetsLapseApp: App {
         #endif
     }
 
+    /// The app's one screen, shared by both platforms' scenes below.
+    private var root: some View {
+        ContentView()
+            .environmentObject(model)
+            // A `.lapse` double-clicked in Finder or opened from the Files
+            // app. SwiftUI holds the URL until this view exists, so a file
+            // that *launched* the app arrives here too rather than being
+            // dropped on the floor — verified on a cold launch, which is
+            // the case that actually matters for a double-click. The type
+            // that makes Launch Services route it here at all is declared
+            // in App/Info.plist.
+            //
+            // Do NOT reach for `handlesExternalEvents` to stop the Mac opening
+            // a window per file: it does reuse the window, and it also stops
+            // the URL ever arriving here, so opening a project silently does
+            // nothing at all. The single-window scene below is the fix.
+            .onOpenURL { url in
+                model.openArchive(at: url)
+            }
+            #if os(macOS)
+            // The warm half of the same door, and the earliest point a file
+            // that launched the app can be acted on: the model exists from
+            // here, so anything the delegate caught before now is released.
+            .onAppear {
+                LetsLapseAppDelegate.handler = { model.openArchive(at: $0) }
+            }
+            #endif
+    }
+
     var body: some Scene {
+        #if os(macOS)
+        // `Window`, not `WindowGroup`: a group makes a NEW window for every
+        // document opened from the Finder, so a second double-click gives a
+        // second LetsLapse showing the same library — and a third, and a
+        // fourth. There is nothing to put in a second one: every window of the
+        // group renders the same shared AppModel, down to the import sheet
+        // appearing on all of them at once. A `.lapse` is not a document this
+        // app edits in a window, it is a file it swallows into one library, so
+        // the library gets exactly one window and opened files land in it.
+        // (The photo editor below is a genuine per-document window and stays a
+        // group.) The cost is ⌘N, which only ever produced a duplicate.
+        Window("LetsLapse", id: "main") {
+            root
+        }
+        .defaultSize(width: 760, height: 680)
+        #else
         WindowGroup {
-            ContentView()
-                .environmentObject(model)
-                // A `.lapse` double-clicked in Finder or opened from the Files
-                // app. SwiftUI holds the URL until this view exists, so a file
-                // that *launched* the app arrives here too rather than being
-                // dropped on the floor — verified on a cold launch, which is
-                // the case that actually matters for a double-click. The type
-                // that makes Launch Services route it here at all is declared
-                // in App/Info.plist.
-                .onOpenURL { url in
-                    model.openArchive(at: url)
-                }
-                #if os(iOS)
+            root
                 .onAppear {
                     WatchRemoteControlReceiver.shared.setAppActive(scenePhase != .background)
                 }
@@ -85,10 +123,7 @@ struct LetsLapseApp: App {
                 .onChange(of: scenePhase) { phase in
                     WatchRemoteControlReceiver.shared.setAppActive(phase != .background)
                 }
-                #endif
         }
-        #if os(macOS)
-        .defaultSize(width: 760, height: 680)
         #endif
 
         #if os(macOS)

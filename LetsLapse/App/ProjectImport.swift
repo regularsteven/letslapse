@@ -1,4 +1,7 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
 /// A `.lapse` archive on its way into the library, and the sheet that shows it.
 ///
@@ -97,6 +100,45 @@ final class ArchiveImportMeter: @unchecked Sendable {
         return value
     }
 }
+
+// MARK: - Delivery
+
+#if os(macOS)
+/// Receives files opened while the app is already running.
+///
+/// `onOpenURL` covers the cold launch — the file that *started* LetsLapse — but
+/// once the app is up, a second double-click never reaches it: with a
+/// single-`Window` scene there is no new window for SwiftUI to route the open
+/// into, and the event stops at AppKit. Both halves are needed, and both feed
+/// `AppModel.openArchive`, which claims a URL synchronously and so cannot start
+/// the same file twice if they ever overlap.
+final class LetsLapseAppDelegate: NSObject, NSApplicationDelegate {
+    /// Set once the model exists. A file that launched the app can arrive
+    /// before there is anything to hand it to, so it waits here instead.
+    @MainActor static var handler: ((URL) -> Void)? {
+        didSet {
+            guard handler != nil else { return }
+            let waiting = pending
+            pending.removeAll()
+            waiting.forEach { handler?($0) }
+        }
+    }
+    @MainActor private static var pending: [URL] = []
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated {
+            // The app may have been sitting behind whatever the human was
+            // actually looking at; an import sheet back there is no use.
+            NSApp.activate(ignoringOtherApps: true)
+            guard let handler = Self.handler else {
+                Self.pending.append(contentsOf: urls)
+                return
+            }
+            urls.forEach(handler)
+        }
+    }
+}
+#endif
 
 // MARK: - Staging
 

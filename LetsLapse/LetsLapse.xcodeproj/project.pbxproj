@@ -411,6 +411,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
+				OTHER_LDFLAGS = "-framework AVKit";
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
@@ -457,6 +458,7 @@
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = App/Info.plist;
+				OTHER_LDFLAGS = "-framework AVKit";
 				INFOPLIST_KEY_CFBundleDisplayName = LetsLapse;
 				INFOPLIST_KEY_NSCameraUsageDescription = "LetsLapse uses the camera to capture video and interval photos for blending.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
