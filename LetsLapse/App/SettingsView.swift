@@ -25,6 +25,10 @@ struct SettingsView: View {
     @ObservedObject private var models = ModelManager.shared
     @ObservedObject private var captureLogs = CaptureSessionLogger.shared
     @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
+    /// Off by default: this advertises the device on the local network and
+    /// accepts start/stop commands, so it is opt-in rather than something the
+    /// camera does because the build supports it.
+    @AppStorage(CaptureRemoteListener.enabledKey) private var allowRemoteAccess = false
     @State private var storage: AppModel.LibraryStorage?
     @State private var isClearingCache = false
     @State private var showIncompleteCaptures = false
@@ -512,6 +516,17 @@ struct SettingsView: View {
 
     private var advancedCard: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
+            LLRow(
+                title: "Allow remote access",
+                subtitle: "Lets a Mac on the same Wi-Fi control this camera. Only while the capture screen is open, and only after entering the pairing code shown there"
+            ) {
+                Toggle("", isOn: $allowRemoteAccess)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+            #endif
+
             LLRow(
                 title: "Custom frame rate",
                 subtitle: "Adds an extra rate to capture's frame-rate options whenever the camera supports it"

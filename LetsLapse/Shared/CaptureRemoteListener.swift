@@ -15,6 +15,16 @@ import Network
 /// than left to look like a dead link.
 @MainActor
 final class CaptureRemoteListener: ObservableObject {
+    /// Opt-in, and OFF by default. This advertises the device on the local
+    /// network and accepts commands that start and stop recordings, so it is
+    /// not something a camera should do because it happened to be built with
+    /// the feature — it is something the owner turns on. Settings ▸ Advanced.
+    static let enabledKey = "remote.allowRemoteAccess"
+
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: enabledKey)
+    }
+
     enum State: Equatable {
         case idle
         case advertising

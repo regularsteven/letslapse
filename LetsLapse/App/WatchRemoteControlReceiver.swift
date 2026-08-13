@@ -98,8 +98,29 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         }
     }
 
+    /// Re-read the opt-in while the capture screen is up, so toggling the
+    /// setting takes effect immediately rather than on the next visit.
+    @MainActor
+    func syncLocalNetwork() {
+        guard commandHandler != nil else {
+            remoteListener?.stop()
+            remoteListener = nil
+            return
+        }
+        startLocalNetwork()
+    }
+
     @MainActor
     private func startLocalNetwork() {
+        // Opt-in: no listener object at all when the setting is off, so
+        // nothing advertises and the capture screen's chip has nothing to
+        // draw. Checked here rather than inside the listener so the disabled
+        // case costs nothing.
+        guard CaptureRemoteListener.isEnabled else {
+            remoteListener?.stop()
+            remoteListener = nil
+            return
+        }
         let listener = remoteListener ?? CaptureRemoteListener(
             deviceName: UIDevice.current.name,
             deviceModel: UIDevice.current.model)

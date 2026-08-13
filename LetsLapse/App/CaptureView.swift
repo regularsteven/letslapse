@@ -14,6 +14,9 @@ struct CaptureView: View {
 
     @EnvironmentObject var model: AppModel
     @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
+    /// Opt-in remote control (Settings ▸ Advanced), off by default. Read here
+    /// so toggling it takes effect on a capture screen that is already open.
+    @AppStorage(CaptureRemoteListener.enabledKey) private var allowRemoteAccess = false
     /// "Capture Flat" — a flat/log capture profile. Drives Apple Log for video
     /// (via `camera.appleLogEnabled`) and a save-time grade for JPEG stills
     /// (read in `CameraController`'s write path). See the format sheet.
@@ -387,6 +390,9 @@ struct CaptureView: View {
             updateTestCardWatch()
         }
         .onChange(of: testRig.phase) { _ in updateTestCardWatch() }
+        #if os(iOS)
+        .onChange(of: allowRemoteAccess) { _ in watchRemote.syncLocalNetwork() }
+        #endif
         .onChange(of: camera.recordingStartedAt) { _ in
             now = Date()
             updateWatchRecordingState()
