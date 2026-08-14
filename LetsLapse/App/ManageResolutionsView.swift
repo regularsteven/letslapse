@@ -57,6 +57,13 @@ struct ManageResolutionsView: View {
                 }
             } else if domain == .stills {
                 resolutionSection(stillCapabilities, header: "Resolutions", footer: nil)
+            } else if stabilizedVideo.isEmpty {
+                // Nothing this camera offers can be stabilised — true of every
+                // Mac camera, and of external cameras generally. Splitting the
+                // list in two would be a distinction without a difference,
+                // under headings that point at a Stabilization control the
+                // format sheet isn't showing either.
+                resolutionSection(capabilities, header: "Resolutions", footer: nil)
             } else {
                 resolutionSection(
                     stabilizedVideo,

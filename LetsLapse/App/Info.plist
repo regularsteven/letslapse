@@ -59,6 +59,18 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 
+	<!-- Opts the Mac build in to AVCaptureDeviceTypeContinuityCamera, so an
+	     iPhone in Continuity range is discovered as what it is. Without this
+	     key AVFoundation logs "Add NSCameraUseContinuityCameraDeviceType to
+	     your Info.plist" and serves the phone under the DEPRECATED
+	     AVCaptureDeviceTypeExternal instead — indistinguishable, by type, from
+	     a USB webcam. `CameraDevices.connectionLabel` leans on the real type to
+	     say "Continuity Camera" rather than "External".
+
+	     Harmless on iOS, which has no Continuity Camera devices to discover. -->
+	<key>NSCameraUseContinuityCameraDeviceType</key>
+	<true/>
+
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

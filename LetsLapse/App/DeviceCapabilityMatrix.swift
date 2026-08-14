@@ -23,9 +23,10 @@ import Foundation
 /// lookup: `false` means the run doesn't ask for it, and formats that happen
 /// to offer it are then interchangeable with formats that don't.
 struct CaptureCapabilityKey: Hashable, Codable {
-    /// `AVCaptureDevice.DeviceType.rawValue` — the type is a struct wrapping
-    /// a String, and only the String survives a round trip through JSON.
-    let deviceType: String
+    /// Which camera this configuration describes — `DeviceCapabilityMatrix
+    /// .deviceKey(for:)`, which is the device *type* on iOS and the device's
+    /// `uniqueID` on macOS. See that function for why the two platforms differ.
+    let deviceKey: String
     let pixelWidth: Int32
     let pixelHeight: Int32
     /// ProRes and HEVC formats share pixel dimensions but not a codec, and a
@@ -55,6 +56,33 @@ struct DeviceCapabilityMatrix: Codable {
     let systemVersion: String
     let generatedAt: Date
     let validBurstRates: [CaptureCapabilityKey: [Int]]
+    /// The cameras this matrix was probed from. On iOS the model name already
+    /// implies them; on a Mac the camera set changes whenever something is
+    /// plugged in, and a matrix that has never seen the current camera has
+    /// nothing true to say about it. See `loadOrProbe`.
+    let probedDeviceKeys: [String]
+
+    /// How a camera is identified in `CaptureCapabilityKey`.
+    ///
+    /// iOS keys by device type: a phone has exactly one camera of each type,
+    /// so the type names it, and keying that way lets a cached matrix survive
+    /// the `AVCaptureDevice` objects being rebuilt.
+    ///
+    /// macOS keys by `uniqueID`, because the type does NOT name a Mac camera:
+    /// probed on Steven's Mac 2026-08-14, a DJI Osmo Action 4, OBS Virtual
+    /// Camera and an iPhone over Continuity ALL report
+    /// `AVCaptureDeviceTypeExternal`. Keying those by type collapsed three
+    /// unrelated cameras onto one key, where the probe below intersects their
+    /// answers — so the resolution and frame-rate menus showed only what all
+    /// three happened to share, and plugging in a webcam silently changed what
+    /// the other cameras appeared to support.
+    static func deviceKey(for device: AVCaptureDevice) -> String {
+        #if os(macOS)
+        return device.uniqueID
+        #else
+        return device.deviceType.rawValue
+        #endif
+    }
 
     // MARK: - Lookup
 
@@ -69,7 +97,7 @@ struct DeviceCapabilityMatrix: Codable {
         baseFPS: Int
     ) -> [Int]? {
         validBurstRates[CaptureCapabilityKey(
-            deviceType: device.deviceType.rawValue,
+            deviceKey: Self.deviceKey(for: device),
             pixelWidth: resolution.width,
             pixelHeight: resolution.height,
             isProRes: resolution.isProRes,
@@ -84,13 +112,13 @@ struct DeviceCapabilityMatrix: Codable {
     /// *base* rate menu. Which of those are reachable as a burst from a chosen
     /// base is `validBurstRates(...)`, which is a strictly smaller answer.
     func supportedFrameRatesByResolution(
-        forDeviceType deviceType: String,
+        forDeviceKey deviceKey: String,
         stabilizationEnabled: Bool,
         appleLogEnabled: Bool
     ) -> [CameraController.CaptureResolution: Set<Int>] {
         var byResolution: [CameraController.CaptureResolution: Set<Int>] = [:]
         for key in validBurstRates.keys
-        where key.deviceType == deviceType
+        where key.deviceKey == deviceKey
             && key.stabilizationSupported == stabilizationEnabled
             && key.appleLogSupported == appleLogEnabled {
             let resolution = CameraController.CaptureResolution(
@@ -113,10 +141,17 @@ struct DeviceCapabilityMatrix: Codable {
     static func loadOrProbe(devices: [AVCaptureDevice]) -> DeviceCapabilityMatrix {
         let model = currentDeviceModel
         let version = currentSystemVersion
+        let wanted = devices.map(deviceKey(for:))
         if let data = UserDefaults.standard.data(forKey: defaultsKey),
            let cached = try? JSONDecoder().decode(Self.self, from: data),
            cached.deviceModel == model,
-           cached.systemVersion == version {
+           cached.systemVersion == version,
+           // On a Mac "same model" is not "same cameras": every Mac caches
+           // under the sentinel "mac", so without this a matrix probed from
+           // the built-in webcam would be served for a newly-plugged action
+           // cam that it has never seen a single format of. iOS passes this
+           // trivially — the phone's own cameras are always the probed ones.
+           wanted.allSatisfy(cached.probedDeviceKeys.contains) {
             return cached
         }
         let matrix = probe(devices: devices)
@@ -139,7 +174,7 @@ struct DeviceCapabilityMatrix: Codable {
     /// probe cannot cause a sensor swap.
     private struct FormatFacts {
         let uniqueID: String
-        let deviceType: String
+        let deviceKey: String
         let width: Int32
         let height: Int32
         let isProRes: Bool
@@ -155,7 +190,7 @@ struct DeviceCapabilityMatrix: Codable {
     /// field of view, which `CaptureCapabilityKey` does not.
     private struct Fingerprint: Hashable {
         let uniqueID: String
-        let deviceType: String
+        let deviceKey: String
         let width: Int32
         let height: Int32
         let isProRes: Bool
@@ -198,7 +233,7 @@ struct DeviceCapabilityMatrix: Codable {
 
                 facts.append(FormatFacts(
                     uniqueID: device.uniqueID,
-                    deviceType: device.deviceType.rawValue,
+                    deviceKey: deviceKey(for: device),
                     width: dims.width,
                     height: dims.height,
                     isProRes: CameraController.proResFourCCs.contains(subType),
@@ -222,7 +257,7 @@ struct DeviceCapabilityMatrix: Codable {
                     guard !logRequired || fact.appleLogSupported else { continue }
                     let fingerprint = Fingerprint(
                         uniqueID: fact.uniqueID,
-                        deviceType: fact.deviceType,
+                        deviceKey: fact.deviceKey,
                         width: fact.width,
                         height: fact.height,
                         isProRes: fact.isProRes,
@@ -233,7 +268,7 @@ struct DeviceCapabilityMatrix: Codable {
                 for (fingerprint, rates) in groups {
                     for base in rates {
                         let key = CaptureCapabilityKey(
-                            deviceType: fingerprint.deviceType,
+                            deviceKey: fingerprint.deviceKey,
                             pixelWidth: fingerprint.width,
                             pixelHeight: fingerprint.height,
                             isProRes: fingerprint.isProRes,
@@ -259,7 +294,11 @@ struct DeviceCapabilityMatrix: Codable {
             deviceModel: currentDeviceModel,
             systemVersion: currentSystemVersion,
             generatedAt: Date(),
-            validBurstRates: matrix)
+            validBurstRates: matrix,
+            // Recorded from the devices asked for, not from `facts`: a camera
+            // that offers no usable format contributes no facts, and leaving
+            // it out here would re-probe on every single configure.
+            probedDeviceKeys: devices.map(deviceKey(for:)))
     }
 
     // MARK: - Device identity

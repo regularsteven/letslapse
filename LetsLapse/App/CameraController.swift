@@ -127,7 +127,9 @@ final class CameraController: NSObject, ObservableObject {
             AVCaptureDevice.default($0.deviceType, for: .video, position: .back)
         }
         #else
-        let devices = AVCaptureDevice.default(for: .video).map { [$0] } ?? []
+        // The camera the human picked in the Camera menu — Manage resolutions
+        // must list what THIS camera offers, not the built-in webcam's list.
+        let devices = CameraDevices.resolvedDevice().map { [$0] } ?? []
         #endif
         var candidates = preferredFrameRates
         if let custom = RecordingSettingsStore.customFrameRate, !candidates.contains(custom) {
@@ -320,13 +322,17 @@ final class CameraController: NSObject, ObservableObject {
     private var anchorShutterValue: Double = 0
 
     @Published var isAuthorized: Bool?
-    @Published var isRecording = false
+    @Published var isRecording = false {
+        didSet { publishCaptureBusy() }
+    }
     @Published var recordingStartedAt: Date?
     /// Start of the capture run in progress (video, interval, or Live Blend) —
     /// the "Stop at" anchor: stop amounts measure the whole run from here.
     /// Meaningful only while a run flag is true; the next start overwrites it.
     private(set) var captureRunStartedAt: Date?
-    @Published var isIntervalRunning = false
+    @Published var isIntervalRunning = false {
+        didSet { publishCaptureBusy() }
+    }
     @Published var photoCount = 0 {
         didSet { checkScheduledStopCount() }
     }
@@ -356,6 +362,15 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
     @Published var isVideoStabilizationEnabled = true
+    /// Whether this camera can stabilize at all — the gate on showing the
+    /// toggle and the format pill's "· Stab" token.
+    ///
+    /// Always false on macOS, and not as a simplification: `AVCaptureConnection
+    /// .preferredVideoStabilizationMode` is `API_UNAVAILABLE(macos)`, so no Mac
+    /// camera — built-in, USB or Continuity — can be stabilized by AVFoundation
+    /// at all. The toggle used to show there regardless, save a preference, and
+    /// change nothing about the recording.
+    @Published private(set) var supportsVideoStabilization = false
     @Published var videoStabilizationStatus = "Stabilization Auto"
     @Published var activeSequenceMode: LiveCaptureSequence.Mode?
     @Published var markerCount = 0
@@ -375,9 +390,21 @@ final class CameraController: NSObject, ObservableObject {
     @Published var lockedLensPosition: Float = 0.5
     @Published var isoRange: ClosedRange<Float> = 25...3200
     // Live Blend engine — Interval mode's blend/DNG pipeline.
-    @Published var isLiveBlendRunning = false
+    @Published var isLiveBlendRunning = false {
+        didSet { publishCaptureBusy() }
+    }
     @Published var liveBlendOutputCount = 0 {
         didSet { checkScheduledStopCount() }
+    }
+
+    /// Mirrors "a shoot is running" onto the shared camera roster, so the Mac's
+    /// Camera menu greys out instead of offering a switch the session would
+    /// silently refuse. All three flags are written on the main thread.
+    private func publishCaptureBusy() {
+        #if os(macOS)
+        CameraDevices.shared.setCaptureBusy(
+            isRecording || isIntervalRunning || isLiveBlendRunning)
+        #endif
     }
     @Published var liveBlendDiagnostics: LiveBlendDiagnosticsSnapshot?
 
@@ -569,6 +596,9 @@ final class CameraController: NSObject, ObservableObject {
     func start() {
         LLog("start() called")
         installSessionLogging()
+        #if os(macOS)
+        installCameraSelectionObserver()
+        #endif
         CaptureSessionLogger.shared.beginSession(
             mode: loggedCaptureMode, format: logFormatSnapshot())
         shouldBeRunning = true
@@ -765,17 +795,23 @@ final class CameraController: NSObject, ObservableObject {
     /// all of them because a run can be pinned to a constituent, and the
     /// pickers must then describe that constituent's own formats.
     private func allCaptureDevices() -> [AVCaptureDevice] {
+        #if os(macOS)
+        // Every attached camera, not just the one in the session: one probe
+        // then covers whatever the Camera menu switches to, so picking a
+        // different camera doesn't invalidate the cache and re-probe. Reading
+        // format lists opens no session, so the extra cameras cost nothing.
+        return CameraDevices.connectedDevices()
+        #else
         guard let optics = opticsDevice else { return [] }
         var devices = [optics]
-        #if os(iOS)
         func append(_ device: AVCaptureDevice) {
             guard !devices.contains(where: { $0.uniqueID == device.uniqueID }) else { return }
             devices.append(device)
         }
         if optics.isVirtualDevice { optics.constituentDevices.forEach(append) }
         if let wide = Self.physicalWide(of: optics) { append(wide) }
-        #endif
         return devices
+        #endif
     }
 
     /// Bayer RAW formats offered by the photo output *in its current
@@ -1061,7 +1097,10 @@ final class CameraController: NSObject, ObservableObject {
             .compactMap { AVCaptureDevice.default($0, for: .video, position: .back) }
             .first
         #else
-        return AVCaptureDevice.default(for: .video)
+        // The Mac has a bag of unrelated cameras rather than one stack, so the
+        // choice is the human's — see CameraDevices and the Camera menu.
+        // Thread-safe by design: this runs on `sessionQueue`.
+        return CameraDevices.resolvedDevice()
         #endif
     }
 
@@ -1475,6 +1514,77 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    #if os(macOS)
+    private var cameraSelectionObserver: NSObjectProtocol?
+
+    /// Follow the Camera menu. Also fires when the roster itself changes, which
+    /// is what recovers the session when the camera being used is unplugged:
+    /// `resolvedDevice()` then falls back and the session moves rather than
+    /// freezing on a dead input.
+    private func installCameraSelectionObserver() {
+        guard cameraSelectionObserver == nil else { return }
+        cameraSelectionObserver = NotificationCenter.default.addObserver(
+            forName: CameraDevices.selectionDidChange, object: nil, queue: nil
+        ) { [weak self] _ in
+            self?.syncSelectedCaptureDevice()
+        }
+    }
+
+    /// Point the running session at whichever camera the Camera menu (or the
+    /// format sheet's picker) now names.
+    ///
+    /// Everything downstream has to be rebuilt, not just the input: a webcam
+    /// and an iPhone over Continuity share no resolutions, no frame rates and
+    /// no RAW answer. Re-probing the capability matrix here is the whole point
+    /// of the exercise — the format sheet must describe *this* camera.
+    func syncSelectedCaptureDevice() {
+        sessionQueue.async {
+            guard self.isConfigured else { return }
+            // Mid-capture the camera is locked (the menu greys out to match),
+            // and every reconfiguration below is refused anyway.
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil,
+                  !self.isLiveBlendActive else { return }
+            guard let device = Self.captureOpticsDevice() else { return }
+            guard device.uniqueID != self.videoDevice?.uniqueID else { return }
+            guard let input = try? AVCaptureDeviceInput(device: device) else {
+                LLog("camera: \(device.localizedName) refused an input — staying put")
+                return
+            }
+
+            self.session.beginConfiguration()
+            let previousInput = self.videoInput
+            if let previousInput { self.session.removeInput(previousInput) }
+            if self.session.canAddInput(input) {
+                self.session.addInput(input)
+                self.videoInput = input
+                self.videoDevice = device
+                self.opticsDevice = device
+            } else if let previousInput {
+                // Nothing has changed if this fails, so the session keeps
+                // running on the camera it already had rather than going dark.
+                self.session.addInput(previousInput)
+                self.session.commitConfiguration()
+                LLog("camera: session refused \(device.localizedName) — kept "
+                     + "\(self.videoDevice?.localizedName ?? "none")")
+                return
+            }
+            self.session.commitConfiguration()
+
+            // The cached matrix is per-camera (see DeviceCapabilityMatrix's
+            // device key), so this reads the new camera's own formats rather
+            // than the previous one's.
+            self.capabilityMatrix = DeviceCapabilityMatrix.loadOrProbe(devices: self.allCaptureDevices())
+            self.deriveStops()
+            self.refreshCaptureOptions()
+            self.applyVideoStabilization()
+            self.publishFormat()
+            self.publishLiveBlendDNGSupport()
+            LLog("camera: now on \(device.localizedName)"
+                 + " (\(CameraDevices.connectionLabel(for: device)))")
+        }
+    }
+    #endif
+
     func setVideoStabilizationEnabled(_ isEnabled: Bool) {
         DispatchQueue.main.async {
             self.isVideoStabilizationEnabled = isEnabled
@@ -1599,7 +1709,7 @@ final class CameraController: NSObject, ObservableObject {
     ) -> [CaptureResolution: Set<Int>] {
         if let matrix = capabilityMatrix {
             let rates = matrix.supportedFrameRatesByResolution(
-                forDeviceType: device.deviceType.rawValue,
+                forDeviceKey: DeviceCapabilityMatrix.deviceKey(for: device),
                 stabilizationEnabled: videoStabilizationRequested,
                 // The base-rate menu has never been filtered by Capture Flat:
                 // `applyCaptureFormat` falls back to sRGB on a format without
@@ -1700,6 +1810,43 @@ final class CameraController: NSObject, ObservableObject {
             && fps <= range.maxFrameRate + frameRateTolerance
     }
 
+    /// The frame duration to actually write on the device for a nominal rate.
+    ///
+    /// The menus match rates with `frameRateTolerance` of slack, deliberately:
+    /// a webcam that runs at 30.00003 fps should read "30 fps" to a human. The
+    /// DEVICE has no such slack. `activeVideoMinFrameDuration` outside the
+    /// active format's advertised range raises an `NSInvalidArgumentException`
+    /// — an Objective-C exception Swift cannot catch, so it aborts the process.
+    ///
+    /// That is exactly what selecting a DJI Osmo Action 4 did (crash report
+    /// 2026-08-14, `-[AVCaptureDALDevice setActiveVideoMinFrameDuration:]`):
+    /// its only range is 30.00003…30.00003 fps, and the nominal 1/30 sits a
+    /// hair outside it. UVC cameras are full of these off-clock rates; iPhone
+    /// formats are exact, which is why this never bit before the Mac could
+    /// choose its camera.
+    ///
+    /// So: the nominal rate picks the range, and the range decides the
+    /// duration. Clamping is safe in both directions because durations sort
+    /// inversely to rates — `minFrameDuration` is the FASTEST rate.
+    private static func frameDuration(
+        forNominal fps: Int,
+        in format: AVCaptureDevice.Format
+    ) -> CMTime {
+        let ideal = CMTime(value: 1, timescale: CMTimeScale(fps))
+        let ranges = format.videoSupportedFrameRateRanges
+        // The range the picker's own tolerance says this rate belongs to;
+        // failing that the nearest one, so a format match never writes a
+        // duration the format cannot take.
+        let range = ranges.first { supportsFrameRate(Double(fps), in: $0) }
+            ?? ranges.min {
+                abs($0.maxFrameRate - Double(fps)) < abs($1.maxFrameRate - Double(fps))
+            }
+        guard let range else { return ideal }
+        if CMTimeCompare(ideal, range.minFrameDuration) < 0 { return range.minFrameDuration }
+        if CMTimeCompare(ideal, range.maxFrameDuration) > 0 { return range.maxFrameDuration }
+        return ideal
+    }
+
     private func nearestFrameRate(to preferred: Int, in frameRates: [Int]) -> Int {
         frameRates.min { first, second in
             abs(first - preferred) < abs(second - preferred)
@@ -1739,7 +1886,8 @@ final class CameraController: NSObject, ObservableObject {
             if formatChanged {
                 device.activeFormat = match.format
             }
-            let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
+            // Asked of the format being landed on, not the one still active.
+            let duration = Self.frameDuration(forNominal: fps, in: match.format)
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
             selectedPhotoDimensions = match.photoDimensions
@@ -1831,7 +1979,7 @@ final class CameraController: NSObject, ObservableObject {
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            let duration = CMTime(value: 1, timescale: CMTimeScale(fps))
+            let duration = Self.frameDuration(forNominal: fps, in: match.format)
             device.activeVideoMinFrameDuration = duration
             device.activeVideoMaxFrameDuration = duration
             // The new interval can force a shorter shutter than the held or
@@ -2291,7 +2439,28 @@ final class CameraController: NSObject, ObservableObject {
     }
     #endif
 
+    /// Whether the camera in the session offers stabilization on *any* of its
+    /// formats. Asked of the whole format list rather than the active one:
+    /// the toggle's job is to steer which format gets picked, so a camera that
+    /// can stabilize at 1080p but not 4K still has a live toggle.
+    /// sessionQueue-confined.
+    private func publishStabilizationSupport() {
+        #if os(iOS)
+        let supported = videoDevice.map { device in
+            device.formats.contains { stabilizationMode(for: $0) != nil }
+        } ?? false
+        #else
+        let supported = false
+        #endif
+        DispatchQueue.main.async {
+            if self.supportsVideoStabilization != supported {
+                self.supportsVideoStabilization = supported
+            }
+        }
+    }
+
     private func applyVideoStabilization() {
+        publishStabilizationSupport()
         #if os(iOS)
         guard let connection = movieOutput.connection(with: .video) else { return }
 

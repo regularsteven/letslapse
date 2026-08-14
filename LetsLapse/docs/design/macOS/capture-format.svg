@@ -1,0 +1,150 @@
+<svg viewBox="0 0 1000 800" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Capture format sheet · 520×683 over the 960×720 capture sheet</title>
+  <desc>Mirrors the macOS branch of FormatSheet in App/CaptureView.swift, raised from the format pill on the capture sheet (CreateView presents CaptureView at ≥960×720). Drawn in Video mode on an external USB camera (DJI Osmo Action 4) because that is the configuration every macOS-specific decision here exists for. Dark by construction: CaptureView carries .preferredColorScheme(.dark), so this sheet is a dark surface even though the Create window behind it is light.
+
+CAMERA SECTION — macOS only, and FIRST because every list below it belongs to whichever camera is chosen. A Mac has a bag of unrelated cameras rather than one stack (built-in, USB action cam, an iPhone over Continuity), so the choice is the human's: this Picker and the menu-bar Camera menu are two faces of one store, App/CameraDevices.swift, and either writes through to the other. The footer states the connection ("USB", "Built-in", "Continuity Camera", "Desk View") from AVCaptureDevice.transportType, which is also the one thing that tells two identically-named webcams apart. Disabled with the footer "The camera can't change while a capture is running." whenever isRecording/isIntervalRunning/isLiveBlendRunning — swapping mid-shoot would change the clip halfway through, and CameraController refuses it anyway.
+
+NO STABILIZATION ROW — deliberate, not an omission. AVCaptureConnection.preferredVideoStabilizationMode is API_UNAVAILABLE(macos), so no Mac camera can be stabilized by AVFoundation at all; the toggle used to draw here, save a preference and change nothing about the recording. The row is now gated on CameraController.supportsVideoStabilization, which is probed from the device's own format list (any format offering .cinematic or .standard) and is therefore also absent for an external camera on iOS. Same gate hides the format pill's "· Stab" token. The iOS sheet keeps its Stabilization row — see ../iOS/capture-format-sheet.portrait.svg.
+
+BURST FRAME RATE = "None available" — the honest state when the camera's fastest format at this resolution IS the base rate, which is the common case on webcams (the Osmo publishes exactly one rate per size, 30 fps). Previously `rampRates` fell back to the last-chosen rate, so this row read "30 fps" against a 30 fps base: a burst that switches to the speed it is already running at. The footer says why and what to try instead. Plain secondary text, not a pop-up — there is nothing to pick.
+
+Resolution and Base frame rate are the capability matrix's answers for THIS camera. On macOS DeviceCapabilityMatrix keys by uniqueID, not device type: probed on Steven's Mac 2026-08-14, an Osmo Action 4, OBS Virtual Camera and an iPhone over Continuity all report AVCaptureDeviceTypeExternal, and keying by type collapsed three unrelated cameras onto one key whose answers the probe then intersected.
+
+macOS chrome: .formStyle(.grouped) for real section headers and a wrapping footer column (without it the headers rendered as stray rows mid-sheet and "Base frame rate" clipped to "ase frame rate" as the label column was pushed out); a 520×560 minimum because a Mac sheet is never user-resizable; footers left-aligned via formFooterAligned() because macOS otherwise centres them, which reads as a floating caption rather than help text for the row above. Verified against the running app 2026-08-14 with LL_CAPTURE=1 LL_FORMAT=1.
+
+The Camera MENU itself is a system menu and is mirrored as a note in INDEX.md rather than drawn, the same way the project-detail ⋯ menu is. The macOS capture screen behind this sheet has no spec of its own yet — the chrome shown here is indicative only.</desc>
+  <defs>
+    <clipPath id="capsheet"><rect x="20" y="20" width="960" height="720" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="8" stdDeviation="12" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#capsheet)">
+    <!-- The capture sheet. Indicative only: macOS capture is undrawn (INDEX.md). -->
+    <rect x="20" y="20" width="960" height="720" fill="#1C1C1C"/>
+    <rect x="20" y="20" width="960" height="90" fill="#000000" fill-opacity="0.55"/>
+    <rect x="20" y="650" width="960" height="90" fill="#000000" fill-opacity="0.55"/>
+
+    <!-- xmark chrome button, top-left -->
+    <g data-symbol="xmark">
+      <circle cx="74" cy="61" r="20" fill="#2B2B2E" fill-opacity="0.9"/>
+      <path d="M67 54 L81 68 M81 54 L67 68" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+
+    <!-- Mode rail, top-right. VIDEO selected in LL.amber. -->
+    <text x="948" y="52" font-size="12" class="sb" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55" letter-spacing="1.1">PHOTO</text>
+    <text x="948" y="76" font-size="12" class="sb" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55" letter-spacing="1.1">INTERVAL</text>
+    <text x="948" y="100" font-size="12" class="sb" text-anchor="end" fill="#FFB340" letter-spacing="1.1">VIDEO</text>
+
+    <!-- The format pill this sheet is raised from. ONE LINE: the tokens are
+         atoms (.lineLimit(1) + .fixedSize), so "1080p" can no longer break
+         mid-word into "108 / 0p" under width pressure. No "· Stab" token on
+         macOS — see the desc. -->
+    <g id="format-pill">
+      <rect x="30" y="336" width="104" height="26" rx="13" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="44" y="353" font-size="13" class="sb" fill="#FFFFFF">1080p · 30</text>
+      <path d="M118 350 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+    </g>
+
+    <!-- Shutter -->
+    <circle cx="921" cy="320" r="40" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+    <circle cx="921" cy="320" r="32" fill="#FF3B30"/>
+
+    <!-- A macOS sheet dims its parent. -->
+    <rect x="20" y="20" width="960" height="720" fill="#1C1C1C" fill-opacity="0.62"/>
+
+    <!-- ================= Capture format sheet: 520 × 683 ================= -->
+    <g id="format-sheet">
+      <rect x="240" y="38" width="520" height="683" rx="12" fill="#282828" filter="url(#sheetshadow)"/>
+
+      <!-- Sheet title bar -->
+      <rect x="240" y="38" width="520" height="45" rx="12" fill="#2E2E30"/>
+      <rect x="240" y="66" width="520" height="17" fill="#2E2E30"/>
+      <line x1="240" y1="83" x2="760" y2="83" stroke="#FFFFFF" stroke-opacity="0.08"/>
+      <text x="254" y="66" font-size="13" class="sb" fill="#FFFFFF">Capture format</text>
+
+      <!-- ==== Camera (macOS only) ==== -->
+      <text x="268" y="112" font-size="12" class="sb" fill="#FFFFFF" fill-opacity="0.62">Camera</text>
+      <rect x="260" y="127" width="478" height="35" rx="6" fill="#2C2C2E"/>
+      <text x="268" y="149" font-size="13" fill="#FFFFFF">Camera</text>
+      <g id="camera-popup" data-symbol="chevron.up.chevron.down">
+        <rect x="617" y="134" width="115" height="21" rx="5" fill="#48484A"/>
+        <text x="714" y="149" font-size="13" text-anchor="end" fill="#FFFFFF">OsmoAction4</text>
+        <path d="M722 143 l4 -4 l4 4 M722 147 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </g>
+      <text x="260" y="180" font-size="11" fill="#FFFFFF" fill-opacity="0.55">USB — every resolution and frame rate below is probed from this camera.</text>
+
+      <!-- ==== Format ==== -->
+      <text x="268" y="230" font-size="12" class="sb" fill="#FFFFFF" fill-opacity="0.62">Format</text>
+      <rect x="260" y="245" width="478" height="110" rx="6" fill="#2C2C2E"/>
+
+      <text x="268" y="267" font-size="13" fill="#FFFFFF">Resolution</text>
+      <g data-symbol="chevron.up.chevron.down">
+        <rect x="656" y="253" width="76" height="21" rx="5" fill="#48484A"/>
+        <text x="714" y="267" font-size="13" text-anchor="end" fill="#FFFFFF">1080p</text>
+        <path d="M722 261 l4 -4 l4 4 M722 265 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </g>
+      <line x1="268" y1="281" x2="730" y2="281" stroke="#FFFFFF" stroke-opacity="0.08"/>
+
+      <!-- "Base frame rate" while Speed bursts = Switch frame rate; plain
+           "Frame rate" in marker mode. Label drawn IN FULL — it used to clip
+           to "ase frame rate" before .formStyle(.grouped). -->
+      <text x="268" y="304" font-size="13" fill="#FFFFFF">Base frame rate</text>
+      <g data-symbol="chevron.up.chevron.down">
+        <rect x="656" y="290" width="76" height="21" rx="5" fill="#48484A"/>
+        <text x="714" y="304" font-size="13" text-anchor="end" fill="#FFFFFF">30 fps</text>
+        <path d="M722 298 l4 -4 l4 4 M722 302 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </g>
+      <line x1="268" y1="318" x2="730" y2="318" stroke="#FFFFFF" stroke-opacity="0.08"/>
+
+      <text x="268" y="341" font-size="13" fill="#FFFFFF">Manage resolutions</text>
+      <path d="M723 336 l5 5 l-5 5" stroke="#FFFFFF" stroke-opacity="0.35" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+
+      <!-- ==== Capture Flat ==== -->
+      <rect x="260" y="366" width="478" height="47" rx="6" fill="#2C2C2E"/>
+      <text x="268" y="387" font-size="13" fill="#FFFFFF">Capture Flat</text>
+      <text x="268" y="402" font-size="10" fill="#FFFFFF" fill-opacity="0.55">Optimised for post-production editing</text>
+      <!-- Off. macOS webcams have no Apple Log, so this bakes a grade at save. -->
+      <g id="flat-toggle">
+        <rect x="702" y="375" width="28" height="17" rx="8.5" fill="#48484A"/>
+        <circle cx="710.5" cy="383.5" r="7.5" fill="#FFFFFF"/>
+      </g>
+      <text x="260" y="430" font-size="11" fill="#FFFFFF" fill-opacity="0.55">Bakes a low-contrast, desaturated grade into the movie as it saves, keeping</text>
+      <text x="260" y="444" font-size="11" fill="#FFFFFF" fill-opacity="0.55">more room to colour-grade later.</text>
+
+      <!-- ==== Speed bursts ==== -->
+      <text x="268" y="499" font-size="12" class="sb" fill="#FFFFFF" fill-opacity="0.62">Speed bursts</text>
+      <rect x="260" y="514" width="478" height="72" rx="6" fill="#2C2C2E"/>
+
+      <text x="268" y="536" font-size="13" fill="#FFFFFF">Speed bursts</text>
+      <g data-symbol="chevron.up.chevron.down">
+        <rect x="596" y="522" width="136" height="21" rx="5" fill="#48484A"/>
+        <text x="714" y="536" font-size="13" text-anchor="end" fill="#FFFFFF">Switch frame rate</text>
+        <path d="M722 530 l4 -4 l4 4 M722 534 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.75" stroke-width="1.4" fill="none" stroke-linecap="round"/>
+      </g>
+      <line x1="268" y1="550" x2="730" y2="550" stroke="#FFFFFF" stroke-opacity="0.08"/>
+
+      <!-- LabeledContent, both halves secondary: nothing to pick. -->
+      <text x="268" y="573" font-size="13" fill="#FFFFFF" fill-opacity="0.55">Burst frame rate</text>
+      <text x="730" y="573" font-size="13" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55">None available</text>
+
+      <text x="260" y="608" font-size="11" fill="#FFFFFF" fill-opacity="0.55">This camera offers no frame rate faster than 30 fps at 1080p, so there is</text>
+      <text x="260" y="622" font-size="11" fill="#FFFFFF" fill-opacity="0.55">nothing to switch to — bursts will mark intervals instead. Try a smaller</text>
+      <text x="260" y="636" font-size="11" fill="#FFFFFF" fill-opacity="0.55">resolution, or another camera.</text>
+
+      <!-- ==== Confirmation bar ==== -->
+      <line x1="240" y1="671" x2="760" y2="671" stroke="#FFFFFF" stroke-opacity="0.08"/>
+      <rect x="673" y="684" width="65" height="21" rx="5" fill="#C36A00"/>
+      <text x="705.5" y="699" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Done</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="960" height="720" rx="11" fill="none" stroke="#000" stroke-opacity="0.24"/>
+  <!-- Mid-greys, not LL.ink: this canvas is a dark surface, and the caption
+       has to stay legible whether the viewer's page is light or dark — same
+       reasoning as the dark iOS capture files. -->
+  <text x="500" y="765" font-size="13" class="sb" text-anchor="middle" fill="#8A8A90">macOS · Capture format sheet · Video on an external USB camera · 520×683 pt over the 960×720 capture sheet</text>
+  <text x="500" y="783" font-size="11" text-anchor="middle" fill="#8A8A90">mirrors FormatSheet in App/CaptureView.swift + App/CameraDevices.swift — no Stabilization row on macOS (API_UNAVAILABLE); Camera menu noted in INDEX.md</text>
+</svg>

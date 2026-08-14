@@ -112,6 +112,7 @@ struct LetsLapseApp: App {
             root
         }
         .defaultSize(width: 760, height: 680)
+        .commands { CameraCommands() }
         #else
         WindowGroup {
             root

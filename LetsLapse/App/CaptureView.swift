@@ -473,6 +473,34 @@ struct CaptureView: View {
         updateTestCardWatch()
         #if DEBUG
         applyBurstPreviewHook()
+        #if os(macOS)
+        // LL_CAMERA=<name substring> — switch to that camera once the session
+        // is up, driving the exact path the Camera menu drives. Exists because
+        // that path is where an external camera's off-clock frame rates crash
+        // the device configuration (see `frameDuration(forNominal:in:)`), and
+        // a regression there is silent until someone plugs a webcam in.
+        if let wanted = ProcessInfo.processInfo.environment["LL_CAMERA"] {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                let devices = CameraDevices.shared.devices
+                guard let match = devices.first(where: {
+                    $0.localizedName.localizedCaseInsensitiveContains(wanted)
+                }) else {
+                    print("🎥LL LL_CAMERA=\(wanted) matched none of "
+                          + "\(devices.map(\.localizedName))")
+                    return
+                }
+                CameraDevices.shared.select(match)
+            }
+        }
+        #endif
+        // LL_FORMAT=1 — open the Capture format sheet on appear, so it can be
+        // screenshot-verified against its SVG without driving the pointer.
+        // Delayed past the session coming up: the sheet's lists are the
+        // capability matrix's answers, and before `configureIfNeeded` lands it
+        // would be drawn from the seed values rather than the camera.
+        if ProcessInfo.processInfo.environment["LL_FORMAT"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { showFormatSheet = true }
+        }
         // LL_RUN: the same idle/Video gate the card tap uses, plus a beat for
         // the session and capability matrix to come up — the rig validates the
         // script's rates against what this device actually offers, and asking
@@ -1122,7 +1150,7 @@ struct CaptureView: View {
                 Text(formatSummary)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isCapturing ? .white.opacity(0.55) : .white)
-                if camera.isVideoStabilizationEnabled && mode == .video {
+                if camera.supportsVideoStabilization && camera.isVideoStabilizationEnabled && mode == .video {
                     Text("· Stab")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
@@ -1145,6 +1173,13 @@ struct CaptureView: View {
                     .font(.system(size: 10, weight: .semibold))
                     .foregroundStyle(.white.opacity(0.4))
             }
+            // The landscape rail is 108pt and the pill's natural width is more
+            // than that, so without this SwiftUI compresses each Text in turn
+            // and breaks them mid-word — the "108 / 0p · / 15" the pill has
+            // been showing on the Mac and in landscape on iOS. These tokens
+            // are atoms: they lay out at their ideal width or not at all.
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
@@ -2742,6 +2777,21 @@ private func sensorAspectLabel(_ sensor: CameraController.CaptureResolution) -> 
 /// its own dials: Video gets frame rates, stabilization and speed bursts;
 /// Interval gets the output format (JPEG or DNG) instead — stills have no
 /// base frame rate.
+private extension View {
+    /// macOS centres `Form` section footers, which reads as a floating caption
+    /// rather than help text belonging to the control above it. Every footer in
+    /// the format sheet explains the row it sits under, so they hang left like
+    /// the help text in System Settings. No-op on iOS, which already does this.
+    func formFooterAligned() -> some View {
+        #if os(macOS)
+        return multilineTextAlignment(.leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        #else
+        return self
+        #endif
+    }
+}
+
 private struct FormatSheet: View {
     @ObservedObject var camera: CameraController
     @ObservedObject var model: AppModel
@@ -2750,6 +2800,28 @@ private struct FormatSheet: View {
     @Binding var sequenceMode: LiveCaptureSequence.Mode
     @AppStorage(FlatCapture.storageKey) private var captureFlat = false
     @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @ObservedObject private var cameraDevices = CameraDevices.shared
+    #endif
+
+    /// Swapping camera or format mid-shoot would change the clip halfway
+    /// through, and the controller refuses it — so the controls say so.
+    private var isCapturing: Bool {
+        camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
+    }
+
+    #if os(macOS)
+    private var cameraSelection: Binding<String> {
+        Binding(
+            get: { cameraDevices.selectedDevice?.uniqueID ?? "" },
+            set: { id in
+                guard let device = cameraDevices.devices.first(where: { $0.uniqueID == id })
+                else { return }
+                cameraDevices.select(device)
+            }
+        )
+    }
+    #endif
 
     /// Capture Flat is offered for JPEG stills (a save-time Core Image grade)
     /// and for all Video captures. Log-capable hardware (iPhone 15 Pro+) uses
@@ -2808,6 +2880,37 @@ private struct FormatSheet: View {
     var body: some View {
         NavigationStack {
             Form {
+                #if os(macOS)
+                // The Mac has a bag of unrelated cameras rather than one stack,
+                // and every list below belongs to whichever one is chosen — so
+                // it comes first. Mirrors the Camera menu; both write through
+                // the same store.
+                Section {
+                    if cameraDevices.devices.isEmpty {
+                        Text("No camera found.")
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Picker("Camera", selection: cameraSelection) {
+                            ForEach(cameraDevices.devices, id: \.uniqueID) { device in
+                                Text(CameraDevices.menuLabel(for: device, among: cameraDevices.devices))
+                                    .tag(device.uniqueID)
+                            }
+                        }
+                        .disabled(isCapturing)
+                    }
+                } header: {
+                    Text("Camera")
+                } footer: {
+                    if isCapturing {
+                        Text("The camera can't change while a capture is running.")
+                            .formFooterAligned()
+                    } else if let device = cameraDevices.selectedDevice {
+                        Text("\(CameraDevices.connectionLabel(for: device)) — every resolution and frame rate below is probed from this camera.")
+                            .formFooterAligned()
+                    }
+                }
+                #endif
+
                 // Choices with downstream consequences come first: the still
                 // modes' output format decides whether resolution is even
                 // selectable, and Video's stabilization filters the format list
@@ -2832,7 +2935,10 @@ private struct FormatSheet: View {
                 }
 
                 Section {
-                    if mode == .video {
+                    // Only offered when the camera can actually do it. macOS
+                    // never can (see `supportsVideoStabilization`), and neither
+                    // can an external camera on any platform.
+                    if mode == .video && camera.supportsVideoStabilization {
                         Toggle("Stabilization", isOn: Binding(
                             get: { camera.isVideoStabilizationEnabled },
                             set: { camera.setVideoStabilizationEnabled($0) }
@@ -2883,6 +2989,7 @@ private struct FormatSheet: View {
                 } footer: {
                     if mode == .video && pickerResolutions.contains(where: { $0.isProRes }) {
                         Text("* ProRes — very large files")
+                            .formFooterAligned()
                     }
                 }
 
@@ -2898,6 +3005,7 @@ private struct FormatSheet: View {
                         }
                     } footer: {
                         Text(captureFlatFooter)
+                            .formFooterAligned()
                     }
                 }
 
@@ -2909,27 +3017,53 @@ private struct FormatSheet: View {
                         }
 
                         if sequenceMode == .ramp {
-                            Picker("Burst frame rate", selection: $camera.selectedRampFrameRate) {
-                                ForEach(rampRates, id: \.self) { fps in
-                                    Text("\(fps) fps").tag(fps)
+                            if hasBurstRates {
+                                Picker("Burst frame rate", selection: $camera.selectedRampFrameRate) {
+                                    ForEach(rampRates, id: \.self) { fps in
+                                        Text("\(fps) fps").tag(fps)
+                                    }
                                 }
-                            }
-                            .onChange(of: camera.selectedRampFrameRate) { fps in
-                                camera.selectRampFrameRate(fps)
+                                .onChange(of: camera.selectedRampFrameRate) { fps in
+                                    camera.selectRampFrameRate(fps)
+                                }
+                            } else {
+                                // Offering a burst rate here would be a lie:
+                                // `rampRates` falls back to the last-chosen
+                                // rate when the matrix has nothing faster, so
+                                // this row read "30 fps" against a 30 fps base
+                                // — a burst that switches to the speed it is
+                                // already running at. Common on webcams, which
+                                // often publish exactly one rate per size.
+                                LabeledContent("Burst frame rate", value: "None available")
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     } header: {
                         Text("Speed bursts")
                     } footer: {
-                        Text(sequenceMode == .ramp
-                             ? "While recording, the burst button (and Apple Watch) switches to the burst frame rate — those moments stay slow and sharp in the final clip. The lens never changes."
-                             : "Marked intervals keep their real speed in the final clip; the frame rate never changes.")
+                        if sequenceMode == .ramp && !hasBurstRates {
+                            Text("This camera offers no frame rate faster than \(camera.selectedFrameRate) fps at \(camera.selectedResolution.label), so there is nothing to switch to — bursts will mark intervals instead. Try a smaller resolution, or another camera.")
+                                .formFooterAligned()
+                        } else {
+                            Text(sequenceMode == .ramp
+                                 ? "While recording, the burst button (and Apple Watch) switches to the burst frame rate — those moments stay slow and sharp in the final clip. The lens never changes."
+                                 : "Marked intervals keep their real speed in the final clip; the frame rate never changes.")
+                                .formFooterAligned()
+                        }
                     }
                 }
             }
             .navigationTitle("Capture format")
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
+            #else
+            // `.grouped` is what gives a Mac Form real section headers and a
+            // wrapping footer column. Without it the headers render as stray
+            // rows in the middle of the sheet and the footers run off the
+            // right-hand edge — which is what "Bakes a low-contrast…" was
+            // doing, and why "Base frame rate" appeared clipped to "ase frame
+            // rate": the label column was being pushed out of the sheet.
+            .formStyle(.grouped)
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
@@ -2939,6 +3073,11 @@ private struct FormatSheet: View {
         }
         #if os(iOS)
         .presentationDetents([.medium, .large])
+        #else
+        // A Mac sheet is never user-resizable, so it has to open at a size
+        // that fits its widest row — the same reasoning (and the same floor)
+        // as Settings ▸ Incomplete Captures.
+        .frame(minWidth: 520, minHeight: 560)
         #endif
     }
 
@@ -2948,6 +3087,13 @@ private struct FormatSheet: View {
         // between segments (see CameraController.availableBurstFrameRates).
         let higher = camera.availableBurstFrameRates
         return higher.isEmpty ? [camera.selectedRampFrameRate] : higher
+    }
+
+    /// Whether a burst has anywhere to go. False on a camera whose fastest
+    /// format at this resolution IS the base rate — then `rampRates`' fallback
+    /// is a placeholder, not an offer, and the section says so instead.
+    private var hasBurstRates: Bool {
+        !camera.availableBurstFrameRates.isEmpty
     }
 }
 
