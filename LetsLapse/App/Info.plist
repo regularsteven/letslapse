@@ -44,6 +44,21 @@
 		<string>_letslapse-remote._tcp</string>
 	</array>
 
+	<!-- Export compliance, answered in the binary so every TestFlight upload
+	     processes straight through instead of parking in "Missing Compliance"
+	     until someone answers the same question again in the web UI.
+
+	     `false` is the exempt answer, and this app qualifies: it implements no
+	     cryptography of its own. Everything it touches is Apple's — CryptoKit
+	     SHA256 for cache keys (hashing, not encryption), HKDF-SHA256 to derive
+	     the remote's pre-shared key from the pairing code (authentication), and
+	     Network.framework TLS for the remote link itself. If a future change
+	     adds custom crypto, or encrypts user content at rest with our own
+	     scheme, this key has to be revisited — it is a legal declaration, not a
+	     build setting. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
+
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>

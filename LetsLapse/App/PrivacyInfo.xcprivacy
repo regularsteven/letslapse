@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Apple's privacy manifest. Without it, every upload draws an ITMS-91053
+	     "Missing API declaration" mail for each required-reason API the binary
+	     links, which is noise on TestFlight and a blocker at review.
+
+	     The four categories below are the ones this app actually reaches for.
+	     They were found by grep, not guessed, and each entry names the call
+	     sites so the next person can re-check rather than re-derive. Adding a
+	     reason we don't use is as wrong as omitting one we do. -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<!-- @AppStorage throughout, plus the settings UserDefaults reads.
+			     CA92.1 = defaults readable only by this app. We use no app
+			     group, so the broader reasons don't apply. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- ProjectThumbnailCache.key and PhotoPreset stamp cache keys with
+			     contentModificationDate so a re-encoded file invalidates its
+			     thumbnail; ProjectImport sorts extracted media by it. Every one
+			     of those paths is inside the app container, so DDA9.1. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- volumeAvailableCapacityForImportantUsage, checked before a blend
+			     or export commits to writing frames (AppModel, and the Mac
+			     runner's scratch guard). E174.1 = checking there is room to
+			     write. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>E174.1</string>
+			</array>
+		</dict>
+		<dict>
+			<!-- ProcessInfo.systemUptime is the monotonic clock the capture
+			     engine times everything against — interval cadence, ramp
+			     switches, live-blend queue latency. 35F9.1 = measuring elapsed
+			     time between in-app events, which is exactly the use. -->
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Nothing is collected. Captures, projects and the AI's tags stay on the
+	     device; scene analysis runs locally through MLX or Vision and no frame
+	     or derived tag is ever uploaded. The only outbound traffic is model
+	     downloads from Hugging Face and the Bonjour remote link on the user's
+	     own LAN, neither of which carries user data off the device. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+
+	<!-- No tracking, no ad networks, no third-party analytics linked. -->
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+</dict>
+</plist>

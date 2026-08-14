@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store Connect export for the macOS archive, producing a .pkg.
+
+	     NOT USABLE YET. App/LetsLapse.entitlements sets app-sandbox to false,
+	     and the Mac App Store (which is what backs macOS TestFlight) refuses an
+	     unsandboxed binary outright. See docs/testflight.md for the entitlement
+	     set the sandbox needs and what has to be re-verified after switching it
+	     on. This file exists so that work is a one-line change, not a research
+	     task. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+
+	<key>teamID</key>
+	<string>S546K64836</string>
+
+	<key>signingStyle</key>
+	<string>automatic</string>
+
+	<key>uploadSymbols</key>
+	<true/>
+
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>

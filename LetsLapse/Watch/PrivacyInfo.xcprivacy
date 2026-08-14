@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The Watch app is its own binary inside the iOS app's bundle, so it
+	     needs its own manifest rather than inheriting App/PrivacyInfo.xcprivacy.
+
+	     Its list is much shorter than the phone's. Watch/ itself reaches for
+	     none of the required-reason APIs; the one entry below comes from the
+	     Shared/ and Remote/ folders, which compile into this target too:
+	     CaptureRemoteListener reads the remote-enabled flag, and
+	     WatchControlView keeps the armed burst length in @AppStorage. Both are
+	     this app's own defaults, hence CA92.1. -->
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+
+	<!-- Nothing collected, nothing tracked. The Watch app is a remote control:
+	     it sends capture commands over the paired link and stores no user
+	     content of its own. -->
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+</dict>
+</plist>

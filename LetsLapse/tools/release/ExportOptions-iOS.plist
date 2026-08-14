@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store Connect export for the iOS/iPadOS archive (the Watch app
+	     rides along inside it — it is not exported separately).
+
+	     "app-store-connect" is the Xcode 15.3+ spelling of what used to be
+	     "app-store"; the old name still works but warns. -->
+	<key>method</key>
+	<string>app-store-connect</string>
+
+	<key>teamID</key>
+	<string>S546K64836</string>
+
+	<!-- Automatic matches the project's CODE_SIGN_STYLE. The export re-signs
+	     with the distribution certificate, which is what strips get-task-allow
+	     from the archive's development signature — upload rejects the binary if
+	     that entitlement survives. -->
+	<key>signingStyle</key>
+	<string>automatic</string>
+
+	<!-- Ship dSYMs so TestFlight crash reports come back symbolicated. Worth
+	     the upload size every time, and doubly so for a build whose interesting
+	     crashes are in capture timing and MLX. -->
+	<key>uploadSymbols</key>
+	<true/>
+
+	<!-- We set CFBundleVersion ourselves (testflight.sh derives it from the
+	     commit count) so the number in the archive is the number that ships.
+	     Leaving this true lets Xcode silently pick its own, which makes a
+	     TestFlight build impossible to trace back to a commit. -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+
+	<!-- "export" writes an .ipa and stops. testflight.sh uploads as a separate,
+	     explicit step so that producing a build and publishing one to your
+	     testers are never the same command. -->
+	<key>destination</key>
+	<string>export</string>
+</dict>
+</plist>
