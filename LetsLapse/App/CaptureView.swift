@@ -286,6 +286,13 @@ struct CaptureView: View {
         .onChange(of: captureFlat) { _ in
             syncAppleLog()
         }
+        // …and when the device's Log capability lands. On appear the sync runs
+        // before the session has configured, so `supportsAppleLog` is still
+        // false and Log latched off for the whole session (2026-08-14) — this
+        // re-runs the derivation the moment the probe publishes the truth.
+        .onChange(of: camera.supportsAppleLog) { _ in
+            syncAppleLog()
+        }
         .onChange(of: camera.liveBlendDNGSupport) { _ in
             updateAspectPreview()
             revalidateSafeDepth()
@@ -2834,15 +2841,21 @@ private struct FormatSheet: View {
     }
 
     /// Explains what "Capture Flat" does for the active mode. Video wording
-    /// depends on whether the sensor can shoot Apple Log or we grade the movie
-    /// on save instead.
+    /// depends on whether THIS selection will shoot Apple Log — per resolution
+    /// and rate, the capability matrix's answer — or the movie gets the flat
+    /// grade baked in on save instead. The old footer answered for the device
+    /// ("can this phone do Log at all?") and so promised Log at selections
+    /// that would never engage it.
     private var captureFlatFooter: String {
         guard mode == .video else {
             return "Applies a low-contrast, desaturated grade as the JPEG is saved, keeping more room to colour-grade later."
         }
-        return camera.supportsAppleLog
-            ? "Records in Apple Log — a flat, low-contrast profile with maximum grading latitude. Best paired with a colour grade in post."
-            : "Bakes a low-contrast, desaturated grade into the movie as it saves, keeping more room to colour-grade later."
+        if camera.supportsAppleLog {
+            return camera.appleLogAvailableForSelection
+                ? "Records in Apple Log — a flat, low-contrast profile with maximum grading latitude. Best paired with a colour grade in post."
+                : "Apple Log isn't available at this resolution and frame rate — the same flat grade is baked into the movie as it saves instead."
+        }
+        return "Bakes a low-contrast, desaturated grade into the movie as it saves, keeping more room to colour-grade later."
     }
 
     /// Video speaks its own vocabulary ("4K", the ProRes star); the still

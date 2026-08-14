@@ -72,6 +72,13 @@ struct LiveCaptureSequence: Codable, Equatable {
     var segments: [Segment]
     var markers: [Marker]
     var rampIntervals: [RampInterval]
+    /// Whether Capture Flat was requested for this run, and whether Apple Log
+    /// actually engaged — the device's colour space at the first segment's
+    /// first frame, not the request. Distinct fields because the 2026-08-14
+    /// investigation had exactly one question the sidecar couldn't answer:
+    /// "was the toggle even on?". Optional so older sidecars still decode.
+    var captureFlat: Bool?
+    var appleLog: Bool?
 
     enum CodingKeys: String, CodingKey {
         case mode
@@ -82,6 +89,8 @@ struct LiveCaptureSequence: Codable, Equatable {
         case segments
         case markers
         case rampIntervals
+        case captureFlat
+        case appleLog
     }
 
     init(
@@ -92,7 +101,9 @@ struct LiveCaptureSequence: Codable, Equatable {
         rampFrameRate: Int?,
         segments: [Segment],
         markers: [Marker],
-        rampIntervals: [RampInterval]
+        rampIntervals: [RampInterval],
+        captureFlat: Bool? = nil,
+        appleLog: Bool? = nil
     ) {
         self.mode = mode
         self.createdAt = createdAt
@@ -102,6 +113,8 @@ struct LiveCaptureSequence: Codable, Equatable {
         self.segments = segments
         self.markers = markers
         self.rampIntervals = rampIntervals
+        self.captureFlat = captureFlat
+        self.appleLog = appleLog
     }
 
     init(from decoder: Decoder) throws {
@@ -114,6 +127,8 @@ struct LiveCaptureSequence: Codable, Equatable {
         segments = try container.decode([Segment].self, forKey: .segments)
         markers = try container.decodeIfPresent([Marker].self, forKey: .markers) ?? []
         rampIntervals = try container.decodeIfPresent([RampInterval].self, forKey: .rampIntervals) ?? []
+        captureFlat = try container.decodeIfPresent(Bool.self, forKey: .captureFlat)
+        appleLog = try container.decodeIfPresent(Bool.self, forKey: .appleLog)
     }
 
     var summary: String {

@@ -438,23 +438,36 @@ final class CameraController: NSObject, ObservableObject {
         didSet {
             guard appleLogEnabled != oldValue else { return }
             applyVideoColorSpace()
+            // The toggle changes two derived answers, so re-derive both: the
+            // format sort prefers Log-capable formats while Log is on (the
+            // active format may need to change for Log to engage at all), and
+            // the burst list is asked with Log as a requirement (at 1080p a
+            // 240 fps burst exists only without Log). Same busy guards as the
+            // pickers — mid-run the sheet is unreachable anyway.
+            sessionQueue.async {
+                guard self.isConfigured, !self.movieOutput.isRecording,
+                      self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+                self.refreshCaptureOptions()
+                self.publishFormat()
+            }
         }
     }
 
     /// True when the current camera device offers Apple Log on any of its
-    /// formats — the gate for showing the Capture Flat toggle in Video mode.
-    /// Devices without Log support (older iPhones, the Mac) return false and the
-    /// toggle stays hidden.
-    var supportsAppleLog: Bool {
-        #if os(iOS)
-        if #available(iOS 17.2, *) {
-            return videoDevice?.formats.contains {
-                $0.supportedColorSpaces.contains(.appleLog)
-            } ?? false
-        }
-        #endif
-        return false
-    }
+    /// formats — the gate for showing the Capture Flat toggle's Log wording in
+    /// Video mode. Published from `publishFormat()` rather than computed on
+    /// demand: the capture screen evaluates its Log gate on appear, which is
+    /// before `configureIfNeeded` has assigned `videoDevice` — a computed
+    /// property answered false there and the answer was never re-asked, so
+    /// Capture Flat latched off for the whole session (found 2026-08-14).
+    @Published private(set) var supportsAppleLog = false
+
+    /// Whether the *selected* resolution + frame rate can shoot Apple Log —
+    /// the capability matrix's answer, published by `refreshCaptureOptions`.
+    /// `supportsAppleLog` is about the device; this is about the selection
+    /// (a Log-capable phone still has no Log at 4032×3024), and it is what
+    /// the format sheet's footer states.
+    @Published private(set) var appleLogAvailableForSelection = false
 
     /// Applies the requested video colour space (Apple Log when enabled and the
     /// *active* format supports it, otherwise sRGB) to the live device. No-op
@@ -466,20 +479,68 @@ final class CameraController: NSObject, ObservableObject {
         guard #available(iOS 17.2, *) else { return }
         sessionQueue.async {
             guard let device = self.videoDevice, !self.movieOutput.isRecording else { return }
-            let target: AVCaptureColorSpace =
-                (self.appleLogEnabled && device.activeFormat.supportedColorSpaces.contains(.appleLog))
-                ? .appleLog : .sRGB
-            guard device.activeColorSpace != target else { return }
-            do {
-                try device.lockForConfiguration()
-                device.activeColorSpace = target
-                device.unlockForConfiguration()
-            } catch {
-                LLog("applyVideoColorSpace failed: \(error.localizedDescription)")
-            }
+            self.assertColorSpace(on: device)
         }
         #endif
     }
+
+    #if os(iOS)
+    /// The one place the colour space is actually written, and the fix for
+    /// Capture Flat recording Rec.709 no matter what (2026-08-14, verified
+    /// against a real shoot's files): `AVCaptureSession
+    /// .automaticallyConfiguresCaptureDeviceForWideColor` defaults to YES, and
+    /// its header is explicit — *"If you wish to set AVCaptureDevice's
+    /// activeColorSpace manually, and prevent the AVCaptureSession from undoing
+    /// your work, you must set automaticallyConfiguresCaptureDeviceForWideColor
+    /// to NO."* Every `.appleLog` write this app made without taking that
+    /// ownership was silently reverted by the session.
+    ///
+    /// Ownership is taken only while Log is engaged and handed back when it
+    /// isn't, so the still modes keep the session's own wide-colour behaviour
+    /// (P3 photos when a photo output is present).
+    ///
+    /// sessionQueue-confined. `deviceIsLocked` says the caller already holds
+    /// `lockForConfiguration` (the `applyCaptureFormat` re-assert does; nesting
+    /// the lock is undefined, so it must not be taken twice).
+    @available(iOS 17.2, *)
+    private func assertColorSpace(on device: AVCaptureDevice, deviceIsLocked: Bool = false) {
+        let wantLog = appleLogEnabled
+            && device.activeFormat.supportedColorSpaces.contains(.appleLog)
+
+        func write(_ space: AVCaptureColorSpace) {
+            guard device.activeColorSpace != space else { return }
+            if deviceIsLocked {
+                device.activeColorSpace = space
+            } else {
+                do {
+                    try device.lockForConfiguration()
+                    device.activeColorSpace = space
+                    device.unlockForConfiguration()
+                } catch {
+                    LLog("colour space: lockForConfiguration failed — \(error.localizedDescription)")
+                    return
+                }
+            }
+            LLog("colour space → \(space == .appleLog ? "Apple Log" : "sRGB")")
+        }
+
+        if wantLog {
+            // Ownership BEFORE the write, or the session undoes it.
+            if session.automaticallyConfiguresCaptureDeviceForWideColor {
+                session.automaticallyConfiguresCaptureDeviceForWideColor = false
+            }
+            write(.appleLog)
+        } else if !session.automaticallyConfiguresCaptureDeviceForWideColor {
+            // Leave the device in the state the session expects before handing
+            // the colour space back to it.
+            write(.sRGB)
+            session.automaticallyConfiguresCaptureDeviceForWideColor = true
+        }
+        // Ownership never taken and Log not wanted: the session already owns
+        // the colour space and is keeping it sRGB/P3 itself — nothing to do,
+        // and a manual write here would be undone anyway.
+    }
+    #endif
 
     /// A pending "stop at…" set from the Watch remote. Time-based stops hold
     /// a deadline; frame-based stops in Interval/Live Blend hold an absolute
@@ -1689,6 +1750,20 @@ final class CameraController: NSObject, ObservableObject {
             frameRate: frameRate,
             rampFrameRate: rampFrameRate
         )
+        // Can THIS selection shoot Apple Log? The matrix's Log-required pass
+        // answers per resolution + rate, which is the honest footer: a
+        // Log-capable phone still has no Log at, say, 4032×3024 — and there
+        // Capture Flat falls back to the save-time grade instead.
+        #if os(iOS)
+        let logAvailable = capabilityMatrix.map { matrix in
+            matrix.supportedFrameRatesByResolution(
+                forDeviceKey: DeviceCapabilityMatrix.deviceKey(for: listDevice),
+                stabilizationEnabled: videoStabilizationRequested,
+                appleLogEnabled: true)[resolution]?.contains(frameRate) ?? false
+        } ?? false
+        #else
+        let logAvailable = false
+        #endif
         DispatchQueue.main.async {
             self.availableResolutions = resolutions
             self.selectedResolution = resolution
@@ -1696,6 +1771,9 @@ final class CameraController: NSObject, ObservableObject {
             self.selectedFrameRate = frameRate
             self.availableBurstFrameRates = burstRates
             self.selectedRampFrameRate = rampFrameRate
+            if self.appleLogAvailableForSelection != logAvailable {
+                self.appleLogAvailableForSelection = logAvailable
+            }
         }
     }
 
@@ -1919,16 +1997,13 @@ final class CameraController: NSObject, ObservableObject {
                 device.videoZoomFactor = min(
                     CGFloat(stop.rawFactor), device.activeFormat.videoMaxZoomFactor)
             }
-            // Same rule for the colour space (self-guarded by the `!=`):
-            // re-assert Apple Log if Capture Flat is on and the format
-            // supports it (otherwise sRGB).
+            // Same rule for the colour space: re-assert Apple Log if Capture
+            // Flat is on and the format supports it (otherwise sRGB). Goes
+            // through `assertColorSpace` so the session's wide-colour
+            // ownership is taken first — without that the session reverts
+            // the write (see that function).
             if #available(iOS 17.2, *) {
-                let target: AVCaptureColorSpace =
-                    (appleLogEnabled && match.format.supportedColorSpaces.contains(.appleLog))
-                    ? .appleLog : .sRGB
-                if device.activeColorSpace != target {
-                    device.activeColorSpace = target
-                }
+                assertColorSpace(on: device, deviceIsLocked: true)
             }
             #else
             if switchExposureHoldActive, !exposureLocked {
@@ -2256,6 +2331,21 @@ final class CameraController: NSObject, ObservableObject {
                     }
                 }
                 #if os(iOS)
+                // With Capture Flat on, a Log-capable format outranks
+                // everything below: several formats can share one
+                // resolution + rate and differ only in offering Apple Log,
+                // and nothing else in this sort knows Log exists — so the
+                // pick could land on a Log-less sibling and the colour
+                // space would silently stay sRGB (which it did: 2026-08-14,
+                // a 4K·10 Capture Flat shoot came out bt709). An explicit
+                // user intent, so ranked above the stabilization tiebreak.
+                if #available(iOS 17.2, *), appleLogEnabled {
+                    let firstLog = first.format.supportedColorSpaces.contains(.appleLog)
+                    let secondLog = second.format.supportedColorSpaces.contains(.appleLog)
+                    if firstLog != secondLog {
+                        return firstLog
+                    }
+                }
                 let firstStabilization = stabilizationSortScore(for: first.format)
                 let secondStabilization = stabilizationSortScore(for: second.format)
                 if firstStabilization != secondStabilization {
@@ -2343,11 +2433,27 @@ final class CameraController: NSObject, ObservableObject {
             appleLog: activeColorSpaceIsAppleLog(device),
             lens: selectedStop?.chipLabel,
             mode: loggedCaptureMode))
+        // Device-wide Log capability, computed here because every
+        // reconfiguration funnels through publishFormat — including the first
+        // one, which is what makes the answer available to a capture screen
+        // that asked too early on appear (the launch race this replaces a
+        // computed property to fix).
+        var supportsLog = false
+        #if os(iOS)
+        if #available(iOS 17.2, *) {
+            supportsLog = device.formats.contains {
+                $0.supportedColorSpaces.contains(.appleLog)
+            }
+        }
+        #endif
         DispatchQueue.main.async {
             self.videoStabilizationStatus = stabilizationStatus
             self.activeFormatDescription = line
             if self.previewDimensions != preview {
                 self.previewDimensions = preview
+            }
+            if self.supportsAppleLog != supportsLog {
+                self.supportsAppleLog = supportsLog
             }
         }
     }
@@ -4040,11 +4146,16 @@ func currentCaptureOrientation() -> AVCaptureVideoOrientation {
 #endif
 
 extension CameraController: AVCaptureFileOutputRecordingDelegate {
-    /// Video "Capture Flat" on hardware that can't shoot Apple Log: grade the
-    /// recorded movie on save instead. Log-capable devices already flatten at
-    /// the sensor (`appleLogEnabled`), so there's nothing to do for them here.
+    /// Video "Capture Flat" when Apple Log did NOT engage: grade the recorded
+    /// movie on save instead. Asked of the device's actual colour space, not
+    /// of capability — the old gate (`!supportsAppleLog`, device-wide) assumed
+    /// a Log-capable phone always flattens at the sensor, but Log is a
+    /// per-format fact: on a format without it the capture stayed sRGB *and*
+    /// this stayed false, so Capture Flat silently did nothing at all
+    /// (verified against a 2026-08-14 shoot: bt709 tags, unlifted blacks).
     private var shouldSoftwareFlattenVideo: Bool {
-        UserDefaults.standard.bool(forKey: FlatCapture.storageKey) && !supportsAppleLog
+        guard UserDefaults.standard.bool(forKey: FlatCapture.storageKey) else { return false }
+        return !(videoDevice.map(activeColorSpaceIsAppleLog) ?? false)
     }
 
     /// The writer's first frame just landed — the honest start of this file,
@@ -4058,6 +4169,17 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
         let stampedAt = Date()
         sessionQueue.async {
             guard fileURL == self.activeSegmentURL else { return }
+            // First segment of the run: stamp what the run is actually
+            // shooting — Capture Flat as requested, Apple Log as engaged
+            // (read off the device, after the lens pin and format work are
+            // done deciding). Deliberately not at sequence creation, which
+            // runs before both.
+            if self.activeSequence != nil, self.activeSequence?.appleLog == nil,
+               let device = self.videoDevice {
+                self.activeSequence?.captureFlat =
+                    UserDefaults.standard.bool(forKey: FlatCapture.storageKey)
+                self.activeSequence?.appleLog = self.activeColorSpaceIsAppleLog(device)
+            }
             self.activeSegmentRecordedStartAt = stampedAt
             if let startedAt = self.activeSegmentStartedAt {
                 LLog(String(
