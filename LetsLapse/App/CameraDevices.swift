@@ -59,12 +59,20 @@ final class CameraDevices: NSObject, ObservableObject {
     /// controller reads `resolvedDevice()` itself, on its own queue.
     static let selectionDidChange = Notification.Name("letslapse.camera.selectionDidChange")
 
-    /// Continuity and Desk View are named explicitly: without
+    /// `.continuityCamera` is named explicitly because without
     /// `NSCameraUseContinuityCameraDeviceType` in Info.plist an iPhone only
     /// appears under the deprecated `.external` type, and AVFoundation logs a
     /// warning saying so.
+    ///
+    /// `.deskViewCamera` is deliberately ABSENT — Steven's call, and the reason
+    /// is the camera itself: Desk View is a fixed downward-angled crop of an
+    /// ultra-wide, framed at a desk and offering one format. Nothing anyone
+    /// would shoot a timelapse through, so it is noise in a two-item menu.
+    /// Not requesting the type is the whole filter: probed 2026-08-14, both
+    /// Desk View cameras vanish from the roster and neither reappears under
+    /// `.external`.
     private static let deviceTypes: [AVCaptureDevice.DeviceType] = [
-        .builtInWideAngleCamera, .external, .continuityCamera, .deskViewCamera,
+        .builtInWideAngleCamera, .external, .continuityCamera,
     ]
 
     private let discovery = AVCaptureDevice.DiscoverySession(
@@ -170,7 +178,6 @@ final class CameraDevices: NSObject, ObservableObject {
     /// device-type check above it would read "External" — which is true of the
     /// wire and useless to a human looking for their phone.
     static func connectionLabel(for device: AVCaptureDevice) -> String {
-        if device.deviceType == .deskViewCamera { return "Desk View" }
         if device.deviceType == .continuityCamera { return "Continuity Camera" }
         switch transportCode(device) {
         case "bltn": return "Built-in"
@@ -184,8 +191,8 @@ final class CameraDevices: NSObject, ObservableObject {
     }
 
     /// Menu/picker text. Names alone are enough until two cameras share one —
-    /// two of the same webcam model, or an iPhone's camera and its Desk View —
-    /// and then the connection tells them apart.
+    /// two of the same webcam model on one machine — and then the connection
+    /// tells them apart.
     static func menuLabel(for device: AVCaptureDevice, among all: [AVCaptureDevice]) -> String {
         let name = device.localizedName
         let isAmbiguous = all.filter { $0.localizedName == name }.count > 1
