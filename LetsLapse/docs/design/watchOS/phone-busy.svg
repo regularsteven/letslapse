@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>watchOS · Phone state · rendering</title>
+  <desc>The CPU-heavy case. A progress figure and an estimate turn waiting into a decision rather than a mystery. The ring is fed by the remote's existing 4 s state poll rather than by pushes — a blend's progress changes many times a second and pushing each one would flood the link for a number nobody reads that fast.</desc>
+  <defs>
+    <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.h{font-weight:800}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="38" y="16" width="224" height="264" rx="60" fill="none" stroke="#3A3A3F" stroke-width="4"/>
+  <rect x="264" y="86" width="10" height="36" rx="5" fill="#3A3A3F"/>
+  <rect x="264" y="150" width="7" height="44" rx="3.5" fill="#3A3A3F"/>
+
+  <g clip-path="url(#wscreen)">
+    <rect x="46" y="24" width="208" height="248" fill="#000"/>
+    <g transform="translate(46,24)">
+      <text x="197" y="30" font-size="15" class="b" fill="#6D6D72" text-anchor="end">10:09</text>
+      <circle cx="14" cy="48" r="3.25" fill="#FF9F0A"/>
+      <text x="21" y="52" font-size="11" class="b" fill="#FFF" opacity="0.8" letter-spacing="0.7">PHONE BUSY</text>
+      <rect x="11" y="60" width="186" height="1" fill="#FFF" opacity="0.15"/>
+      <circle cx="104" cy="112" r="35.5" fill="none" stroke="#FFF" stroke-opacity="0.14" stroke-width="7"/>
+      <circle cx="104" cy="112" r="35.5" fill="none" stroke="#FF9F0A" stroke-width="7" stroke-linecap="round" stroke-dasharray="93.6 223" transform="rotate(-90 104 112)"/>
+      <text x="104" y="112" font-size="22" class="h m" fill="#FFF" text-anchor="middle">42%</text>
+      <text x="104" y="126" font-size="10" fill="#FFF" opacity="0.5" text-anchor="middle">≈1m 20s</text>
+      <text x="104" y="166" font-size="14" class="b" fill="#FFF" text-anchor="middle">Creating 12.4s clip</text>
+      <text x="104" y="180" font-size="10" fill="#FFF" opacity="0.5" text-anchor="middle">Blended clip · camera unavailable</text>
+      <rect x="11" y="192" width="186" height="32" rx="11" fill="#1C1C1E"/>
+      <rect x="11" y="192" width="186" height="32" rx="11" fill="none" stroke="#FF453A" stroke-opacity="0.55"/>
+      <text x="104" y="213" font-size="12" class="b" fill="#FF453A" text-anchor="middle">Cancel export</text>
+    </g>
+  </g>
+
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Phone busy · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — phoneBusyScreen</text>
+</svg>

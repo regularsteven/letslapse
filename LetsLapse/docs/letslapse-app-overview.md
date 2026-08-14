@@ -715,7 +715,7 @@ A deliberately narrow remote for the iPhone capture screen: **pick the capture m
 Three pieces, one shared contract:
 
 - **Shared** — `Shared/WatchMessageKey.swift`, string keys for every field in the message dictionaries.
-- **Watch side** — `Watch/WatchCaptureRemote.swift` (`WCSessionDelegate`): sends commands, receives state, and keeps a published mirror of phone state for `Watch/WatchControlView.swift`.
+- **Watch side** — `Remote/WatchCaptureRemote.swift` (behind `CaptureRemoteTransport`): sends commands, receives state, and keeps a published mirror of phone state for `Remote/WatchControlView.swift`. Both live in `Remote/`, not `Watch/`, because the macOS remote window compiles the same two files.
 - **iPhone side** — `App/WatchRemoteControlReceiver.swift` (singleton, iOS-only): receives commands and forwards them to whatever handler is registered; publishes state back.
 
 ```mermaid
@@ -748,11 +748,44 @@ Protocol details worth knowing:
 
 ### 7.3 The watch experience
 
-`WatchControlView` switches between three screens:
+Redesigned 2026-08-14 (specs: `docs/design/watchOS/`). The organising rule is **every irreversible gesture goes
+vertical; horizontal stays navigation** — burst commits up, stop commits down, and a sideways swipe can only ever
+change which page you are looking at. That is what makes a multi-tab recording screen safe to wear.
 
-- **Ready** (reachable + camera open): green status, a mode selector, Interval's setting rows opening picker sheets ("Every" interval seconds; "Blend" frames, Off = no blending — the row reads "Psycho"/"Safe" when the phone is in an adaptive depth, and the picker offers the fixed counts to switch back), format + planned speed line, a 92 pt red START button, and a one-tap exposure lock showing ISO · shutter when locked.
-- **Recording**: REC + elapsed time, a mode-appropriate count ("N photos" / "N blends"), an amber live estimate in video mode ("@100× → 8s" — clip length computed on-watch from elapsed × capture fps ÷ speed ÷ output fps), the exposure lock, and a mode-dependent second button — **burst toggle** (base fps vs "⚡ burst") in ramp mode, **Marker / End marker** in marker mode. Amber dots show captured moments (the active one pulses). **Digital Crown adjusts ISO** (in steps of 50 within the phone-reported range) while exposure is locked. Stopping has deliberate friction: a **slide-to-stop** control (release past 85% travel fires) instead of a tappable button, plus a "Stop at…" sheet scheduling a stop after N minutes or N frames — once armed, the slider label counts down and the button flips to "Cancel Stop at".
-- **Unreachable / camera closed**: "Open the camera on iPhone" with a Ping iPhone button.
+`WatchControlView` picks a phase, and within a shoot a tab:
+
+- **Armed** (reachable + camera open), two pages. Page one: mode segmented control, AE/AF Lock, **Check framing**, and
+  a full-width red START. The parameter line is a read-out, not a control. Page two carries the settings the old Ready
+  screen crowded itself with — interval seconds, blend depth, the locked-exposure readout.
+- **Recording**, three tabs under a shared header that lives *outside* the pager (watchOS centres a short page, so a
+  header drawn inside each tab visibly jumped as you paged). **Burst** — a slide-*up* commit pad plus the armed-length
+  chips 1s/4s/8s; in marks-only mode the same pad drops a mark, in Interval it becomes the live output count.
+  **Controls** — the considered settings, and the only screen the Digital Crown owns: the burst-rate ladder in Video
+  (drawn from `availableBurstFPS`, so it can only offer rates the camera can reach), interval + blend in Interval, ISO
+  when the crown is otherwise free. Never scrolls, because a `ScrollView` would take the crown first. **Stop** — a
+  slide-*down* commit pad and the "Stop at…" sheet.
+- **Framing preview** (`Remote/FramingPreviewView.swift`), pushed from Armed. The watch *pulls* a base64 JPEG at 1 Hz
+  while the screen is open and never otherwise, so asking is the subscription. The reply already carries a full state
+  snapshot, so one round trip answers both "what does it see" and "what is it doing". Age is measured from when the
+  frame landed on the watch, not from the phone's clock. A stalled preview is desaturated, blurred, hatched *and*
+  captioned — four independent signals. Thirds plus a horizon bar that turns green inside ±1°, with the angle measured
+  **on the phone** (`App/FramingPreviewService.swift`'s `LevelSensor` — the watch's own attitude describes an arm).
+  Square/tall/wide aspect lenses letterbox to the camera's real pixel dimensions; they are a viewing lens only and
+  change nothing on the phone.
+- **Phone state** — camera closed (one green **Arm camera** button, which presents the capture screen *over* any setup
+  flow and leaves it standing), rendering (progress ring, ETA, and a confirmed **Cancel export**), or in setup (names
+  the flow and its step before taking over). Gated on `phoneAppState`: a backgrounded app can be woken by a message but
+  cannot start an `AVCaptureSession`, so that case falls through to Unreachable rather than offering a button that
+  cannot work.
+- **Unreachable** — "Open the camera on iPhone", or "Open LetsLapse on iPhone" when the app itself is backgrounded.
+- **Controls locked** — after 90 s idle mid-shoot the controls go away entirely, leaving status only; crown rotation
+  unlocks. Slide-to-commit makes a brush harmless but cannot make a sleeve's drag harmless, and a gesture cannot reach
+  a control that is not on screen.
+
+Reliability is visible rather than implied: an in-flight command greys its screen and **fills** its row instead of
+moving the toggle (a switch that flips before the phone agrees is a switch that lies), repeat taps are swallowed rather
+than queued, and a command that does not land raises a card naming what did *not* change ("AE/AF Lock is still OFF")
+with Try again — only for commands a person issued, never for background polls.
 
 Feedback is haptic-first (`.start` / `.stop` / `.click` on accepted commands) with **optimistic local echo**: the watch flips to Recording immediately on `accepted` and reconciles when the authoritative state arrives — the remote feels instant even over WatchConnectivity latency. Edge cases degrade gracefully: unreachable sends short-circuit into a status line; application context replays the last known state after relaunch; the phone re-activates its session on watch-swap; both sides zero sequence counters when idle.
 
@@ -867,7 +900,7 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 | Browsing surfaces | `App/GalleryView.swift`, `App/CapturePhotoGrid.swift`, `App/CaptureFilterBar.swift`, `App/FullscreenMediaSheet.swift` |
 | Browsing performance | `App/MediaWorkQueue.swift`, `App/ProjectThumbnailCache.swift` |
 | UI / design changes | `App/DesignSystem.swift`, then the relevant view file — and the matching SVG under `docs/design/` |
-| Watch protocol | `Shared/WatchMessageKey.swift`, `Watch/WatchCaptureRemote.swift`, `App/WatchRemoteControlReceiver.swift` |
+| Watch protocol | `Shared/WatchMessageKey.swift`, `Shared/WatchCaptureCommand.swift`, `Remote/WatchCaptureRemote.swift`, `App/WatchRemoteControlReceiver.swift` |
 | macOS batch pipeline | `App/MacVideoJobRunner.swift` |
 | Live Blend (video-tap path) | `App/LiveBlendController.swift`, `Kit/Sources/LetsLapseKit/PixelBufferBlender.swift` |
 | Live Blend DNG pipeline | `App/LiveBlendRawController.swift`, `Kit/Sources/LetsLapseKit/DNGAuthor.swift`, `CameraColorTransform.swift`, `LosslessJPEG.swift` |

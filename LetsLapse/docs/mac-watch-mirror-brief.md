@@ -24,6 +24,16 @@ Two goals, and the second is the one that pays for the work:
 Goal 2 is why this should share code with the Watch rather than be a
 lookalike. A Mac remote that merely *resembles* the Watch improves nothing.
 
+> **Status, 2026-08-14.** Steps 1–5 (the scaffolding) landed earlier; the view
+> now lives in `Remote/`, not `Watch/`, because the Mac window compiles it too.
+> **Goal 2 has since been cashed in**: the watchOS redesign shipped, and with it
+> most of the P1 list this brief was written to unblock — state-aware screens
+> for a closed camera / a rendering phone / a phone in setup, an `armCamera`
+> command, and truthful pending + failure states in place of a `statusText`
+> nothing ever displayed. See `docs/design/watchOS/INDEX.md`. Paths written as
+> `Watch/…` below are as they were when this brief was authored; the files moved
+> in `88d957c` / `cfcb40e`.
+
 ## The constraint that shapes the whole job
 
 **WatchConnectivity cannot reach either end of this.**

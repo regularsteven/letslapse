@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>watchOS · Reliability · command in flight</title>
+  <desc>The toggle has NOT moved — it fills instead, and the row says "Sending…". A switch that flips before the phone has agreed is a switch that lies, and once it has lied once you check the phone every time. Repeat taps are swallowed rather than queued: a second tap during a send is impatience, and queueing it would toggle twice.</desc>
+  <defs>
+    <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.h{font-weight:800}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="38" y="16" width="224" height="264" rx="60" fill="none" stroke="#3A3A3F" stroke-width="4"/>
+  <rect x="264" y="86" width="10" height="36" rx="5" fill="#3A3A3F"/>
+  <rect x="264" y="150" width="7" height="44" rx="3.5" fill="#3A3A3F"/>
+
+  <g clip-path="url(#wscreen)">
+    <rect x="46" y="24" width="208" height="248" fill="#000"/>
+    <g transform="translate(46,24)">
+      <text x="197" y="30" font-size="15" class="b" fill="#6D6D72" text-anchor="end">10:09</text>
+      <circle cx="14" cy="48" r="3.25" fill="#FF453A"/>
+      <text x="21" y="52" font-size="12" class="b" fill="#FFF" letter-spacing="0.6">REC</text>
+      <text x="56" y="53" font-size="15" class="sb m" fill="#FFF">04:12</text>
+      <text x="11" y="66" font-size="11" class="m" fill="#FFF" opacity="0.56">@100× → 12.4s</text>
+      <circle cx="155" cy="62" r="2.5" fill="#40C8E0"/>
+      <text x="197" y="66" font-size="9" class="sb" fill="#FFF" opacity="0.7" text-anchor="end">sending</text>
+      <rect x="11" y="72" width="186" height="1" fill="#FFF" opacity="0.15"/>
+      <g opacity="0.45">
+      <rect x="11" y="77" width="186" height="68" rx="14" fill="#FFD60A" opacity="0.10"/>
+      <rect x="11" y="77" width="186" height="68" rx="14" fill="none" stroke="#FFD60A" stroke-opacity="0.42"/>
+      <path d="M98 85 l6 -5 l6 5" fill="none" stroke="#FFD60A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
+      <text x="104" y="97" font-size="12.5" class="sb" fill="#FFD60A" text-anchor="middle">Slide up · 1s</text>
+      <rect x="15" y="115" width="178" height="26" rx="11" fill="#FFD60A"/>
+      <text x="104" y="132.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">BURST</text>
+      </g>
+      <g opacity="0.45">
+      <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="#FFD60A" opacity="0.16"/>
+      <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="none" stroke="#FFD60A" stroke-width="1.5"/>
+      <text x="40.3333" y="166.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="middle">1s</text>
+      <rect x="74.6667" y="150" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
+      <text x="104" y="166.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">4s</text>
+      <rect x="138.333" y="150" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
+      <text x="167.667" y="166.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">8s</text>
+      </g>
+      <rect x="11" y="179" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <rect x="11" y="179" width="81.84" height="30" rx="11" fill="#FFF" opacity="0.10"/>
+      <text x="21" y="198.5" font-size="13.5" class="sb" fill="#FFF">AE/AF Lock</text>
+      <text x="187" y="198" font-size="11" class="sb" fill="#FFF" opacity="0.55" text-anchor="end">Sending…</text>
+      <circle cx="94" cy="232" r="2.5" fill="#FFF" opacity="1"/>
+      <circle cx="104" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
+      <circle cx="114" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
+    </g>
+  </g>
+
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Sending · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — RemoteToggleRow(isPending:)</text>
+</svg>

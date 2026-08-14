@@ -683,6 +683,21 @@ final class AppModel: ObservableObject {
     /// clears it. Screens presented over the tabs (the camera is a full-screen
     /// cover) must dismiss themselves as well; this only moves the selection.
     @Published var requestedTab: LLTab?
+    /// The Watch asking for the camera back. Handled by `ContentView`, which
+    /// presents the capture screen OVER whatever is showing — a setup flow
+    /// underneath is left completely alone, which is what lets the remote
+    /// promise that your steps stay saved. A separate flag from
+    /// `requestedTab` because the camera must open even when Create is
+    /// already the selected tab, and a tab selection that doesn't change
+    /// fires no `onChange`.
+    @Published var requestedCameraOpen = false
+    /// Which step the Guided Clip builder is on, mirrored for the remote.
+    /// `GuidedBuilderView` keeps owning this — the rail, the visited-step
+    /// high-water mark and the `LL_STEP` hook all read its own `@State`, and
+    /// moving the source of truth for a read-only mirror would be a poor
+    /// trade. These are write-only from the builder's side.
+    @Published var guidedStep: Int?
+    @Published var guidedStepCount: Int?
 
     /// Set by screens that want Settings opened on a specific page — the project detail's
     /// "Download a model in Settings" caption. ContentView consumes and clears it.

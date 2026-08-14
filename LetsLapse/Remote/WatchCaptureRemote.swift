@@ -5,10 +5,39 @@
 // watchOS-negative: the remote exists on the wrist and on the Mac, nowhere
 // else. See Remote/ in the project layout.
 #if os(watchOS) || os(macOS)
+import CoreGraphics
 import Foundation
+import ImageIO
 #if os(watchOS)
 import WatchKit
 #endif
+
+/// One decoded look through the phone's lens.
+struct RemotePreviewFrame {
+    let image: CGImage
+    let pixelWidth: Int
+    let pixelHeight: Int
+    /// Signed degrees off level, or nil when the phone has no motion reading
+    /// yet. Nil hides the horizon bar entirely — drawing it at zero would
+    /// claim "perfectly level", the one wrong answer that looks right.
+    let rollDegrees: Double?
+
+    var aspect: Double {
+        guard pixelHeight > 0 else { return 1 }
+        return Double(pixelWidth) / Double(pixelHeight)
+    }
+}
+
+/// A command that did not take effect, and enough to say so honestly and try
+/// again. The payload is kept verbatim so a retry re-sends the original intent
+/// rather than re-deriving one from state that has since moved.
+struct RemoteCommandFailure: Identifiable {
+    let id = UUID()
+    let command: WatchCaptureCommand
+    let payload: [String: Any]
+    /// What the link or the phone said, in its own words.
+    let message: String
+}
 
 @MainActor
 final class WatchCaptureRemote: NSObject, ObservableObject {
@@ -24,6 +53,14 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var isReachable = false
     @Published private(set) var statusText = "Connecting"
     @Published private(set) var isSending = false
+    /// Which command is in flight, so the control that sent it can say so
+    /// itself rather than the whole screen greying out anonymously.
+    @Published private(set) var pendingCommand: WatchCaptureCommand?
+    /// The last command that did not land, kept until it is retried or
+    /// dismissed. A remote that silently drops a command teaches people to
+    /// press everything twice — which is exactly the habit that ends a shoot
+    /// by accident. See `RemoteCommandFailure`.
+    @Published private(set) var lastFailure: RemoteCommandFailure?
     @Published private(set) var sequenceMode = "ramp"
     @Published private(set) var markerCount = 0
     @Published private(set) var rampIntervalCount = 0
@@ -56,6 +93,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// segment running right now — the burst chips are durations, not rates,
     /// so without this the remote can't say what a burst will actually do.
     @Published private(set) var rampFPS = 0
+    /// Every rate a burst could switch to at the current format, ascending.
+    /// Empty means this camera has nothing faster than its base rate — the
+    /// rate ladder says so rather than offering a burst that can't run.
+    @Published private(set) var availableBurstFPS: [Int] = []
     @Published private(set) var plannedSpeed = 0
     @Published private(set) var outputFPS = 0
     @Published private(set) var isExposureLocked = false
@@ -64,6 +105,39 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var lockedLensPosition: Double = 0.5
     @Published private(set) var isoMin: Double = 25
     @Published private(set) var isoMax: Double = 3200
+
+    // MARK: What the phone is doing instead of being a camera
+
+    /// `home` · `setup` · `processing` · `done`.
+    @Published private(set) var phoneFlow = "home"
+    /// "active" while the phone app is on screen, "background" once it truly
+    /// leaves. The phone has published this since the link's first version and
+    /// nothing ever read it — it is the difference between "app open on
+    /// another screen, one tap from the camera" and "locked in a pocket,
+    /// nothing this remote can do".
+    @Published private(set) var phoneAppState = "active"
+    @Published private(set) var flowTitle: String?
+    @Published private(set) var flowStep: Int?
+    @Published private(set) var flowStepCount: Int?
+    @Published private(set) var exportProgress: Double?
+    @Published private(set) var exportETASeconds: Double?
+    @Published private(set) var exportTitle: String?
+    @Published private(set) var exportSubtitle: String?
+    @Published private(set) var lastCaptureAt: Date?
+
+    // MARK: Framing preview
+
+    /// The most recent frame, decoded. Held rather than re-decoded per draw:
+    /// at 1 Hz the decode is cheap, but the view redraws far more often than
+    /// that.
+    @Published private(set) var previewFrame: RemotePreviewFrame?
+    /// When the last frame LANDED, by this device's clock. Deliberately not
+    /// the phone's capture timestamp: the two clocks disagree by an unknown
+    /// amount, and an age readout computed across them can go negative — which
+    /// is a very confident way to lie about how fresh a frame is.
+    @Published private(set) var previewReceivedAt: Date?
+    /// Consecutive failed frame requests. Three is stale; one is a hiccup.
+    @Published private(set) var previewMisses = 0
 
     /// Monotonic id for the in-flight send: lets the reply, the error, and the
     /// stuck-send watchdog agree on which send they're finishing, so a late
@@ -169,6 +243,13 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         send(.setFramesPerBlend, value: Double(frames))
     }
 
+    /// The rate a burst switches to. Unlike the other setters this one is live
+    /// mid-shoot — the whole point of the controls tab is changing what the
+    /// next burst will do without stopping the run.
+    func setBurstFPS(_ fps: Int) {
+        send(.setBurstFPS, value: Double(fps))
+    }
+
     func scheduleStop(unit: ScheduledStopUnit, amount: Int) {
         send(
             .scheduleStop,
@@ -180,7 +261,84 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         send(.cancelScheduledStop)
     }
 
+    func armCamera() {
+        send(.armCamera)
+    }
+
+    /// Ask for one frame. The framing screen calls this on a 1 Hz timer while
+    /// it is on screen and never otherwise — asking IS the subscription, so an
+    /// unopened screen costs the link nothing.
+    func requestPreviewFrame() {
+        #if os(watchOS) && DEBUG
+        // The screenshot rig stands in for a live camera, so a staged frame
+        // has to keep arriving — otherwise every framing screenshot ends up
+        // showing the stale treatment, which is the one variant that stages
+        // itself by backdating instead.
+        if isDebugPreview, debugPreviewScreen != "framing-stale", previewFrame != nil {
+            previewReceivedAt = Date()
+            return
+        }
+        #endif
+        send(.previewFrame)
+    }
+
+    /// Forget the last frame when the framing screen closes, so re-opening it
+    /// shows "waiting" rather than a minute-old view of somewhere else.
+    func clearPreviewFrame() {
+        previewFrame = nil
+        previewReceivedAt = nil
+        previewMisses = 0
+    }
+
+    private func applyPreviewFrame(_ payload: [String: Any]) {
+        guard let encoded = payload[WatchMessageKey.previewImage] as? String,
+              let data = Data(base64Encoded: encoded),
+              let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else {
+            // The reply arrived but carried no usable frame — the camera has
+            // not produced one yet, or the encode failed. That is a miss, not
+            // an error: the next tick usually has one.
+            previewMisses += 1
+            return
+        }
+        previewFrame = RemotePreviewFrame(
+            image: image,
+            pixelWidth: payload[WatchMessageKey.previewPixelWidth] as? Int ?? image.width,
+            pixelHeight: payload[WatchMessageKey.previewPixelHeight] as? Int ?? image.height,
+            rollDegrees: payload[WatchMessageKey.previewRollDegrees] as? Double)
+        previewReceivedAt = Date()
+        previewMisses = 0
+    }
+
+    func cancelExport() {
+        send(.cancelExport)
+    }
+
     func send(_ command: WatchCaptureCommand, value: Double? = nil, extra: [String: Any] = [:]) {
+        var payload: [String: Any] = [WatchMessageKey.command: command.rawValue]
+        if let value {
+            payload[WatchMessageKey.value] = value
+        }
+        for (key, extraValue) in extra {
+            payload[key] = extraValue
+        }
+        dispatch(command, payload: payload)
+    }
+
+    /// Re-send exactly what failed — the same payload, not a freshly built one.
+    /// Rebuilding would re-read current state, and current state has moved on
+    /// from the moment the command was issued.
+    func retryFailedCommand() {
+        guard let failure = lastFailure else { return }
+        lastFailure = nil
+        dispatch(failure.command, payload: failure.payload)
+    }
+
+    func dismissFailure() {
+        lastFailure = nil
+    }
+
+    private func dispatch(_ command: WatchCaptureCommand, payload: [String: Any]) {
         // A debug-preview dummy never talks to a phone: on a paired simulator
         // a real reply would stomp the staged state mid-screenshot (replies
         // apply state directly, bypassing applyState's guard).
@@ -189,27 +347,22 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // never reach the wire, and neither should mark a send in flight.
         guard transport.isActivated else {
             statusText = "Connecting"
+            noteFailure(command, payload: payload, message: "Still connecting to iPhone")
             return
         }
 
         guard transport.isReachable else {
             isReachable = false
             statusText = "Phone unavailable"
+            noteFailure(command, payload: payload, message: "iPhone is out of reach")
             return
-        }
-
-        var payload: [String: Any] = [WatchMessageKey.command: command.rawValue]
-        if let value {
-            payload[WatchMessageKey.value] = value
-        }
-        for (key, extraValue) in extra {
-            payload[key] = extraValue
         }
 
         let startedAt = Date()
         sendToken += 1
         let token = sendToken
         isSending = true
+        pendingCommand = command
         statusText = "Sending"
         transport.send(
             payload,
@@ -219,11 +372,13 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             failure: { [weak self] failure in
                 guard let self, self.sendToken == token else { return }
                 self.isSending = false
+                self.pendingCommand = nil
                 switch failure {
                 case .notActivated: self.statusText = "Connecting"
                 case .unreachable: self.statusText = "Phone unavailable"
                 case .failed(let message): self.statusText = message
                 }
+                self.noteFailure(command, payload: payload, message: self.statusText)
             }
         )
         // Watchdog: a transport can drop both callbacks when the link resets
@@ -233,8 +388,25 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             try? await Task.sleep(nanoseconds: 6_000_000_000)
             guard let self, self.sendToken == token, self.isSending else { return }
             self.isSending = false
+            self.pendingCommand = nil
             self.statusText = "No response from iPhone"
+            self.noteFailure(command, payload: payload, message: "No response from iPhone")
         }
+    }
+
+    /// Records a command that did not take effect — but only the ones a person
+    /// actually asked for. Polls fail all the time on a wrist that drifts out
+    /// of range, and a banner for each would be noise that trains people to
+    /// dismiss banners.
+    private func noteFailure(_ command: WatchCaptureCommand, payload: [String: Any], message: String) {
+        // A frame request that never came back is a miss like any other — the
+        // framing screen counts them to decide when the picture has gone
+        // stale, so the ones that fail on the wire have to count too.
+        if command == .previewFrame {
+            previewMisses += 1
+        }
+        guard command.isUserInitiated else { return }
+        lastFailure = RemoteCommandFailure(command: command, payload: payload, message: message)
     }
 
     private func apply(reply: [String: Any], startedAt: Date, command: WatchCaptureCommand, sent: [String: Any], token: Int) {
@@ -243,6 +415,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // and status line to the send that's actually pending.
         if sendToken == token {
             isSending = false
+            pendingCommand = nil
         }
         isReachable = true
 
@@ -252,6 +425,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         applySequenceState(reply)
         applyRecordingStartedAt(reply)
+        if command == .previewFrame {
+            applyPreviewFrame(reply)
+        }
 
         let status = reply[WatchMessageKey.status] as? String ?? "ok"
         if status == "accepted" {
@@ -275,12 +451,21 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         switch status {
         case "accepted":
             statusText = "Command accepted"
+            // The round trip completed and the phone acted — whatever went
+            // wrong before is over, so the banner goes with it.
+            lastFailure = nil
         case "ok":
             statusText = "Ready"
+            lastFailure = nil
         case "unavailable":
             statusText = reply[WatchMessageKey.message] as? String ?? "Capture screen inactive"
+            noteFailure(command, payload: sent, message: statusText)
         default:
+            // Reached the phone and was refused. A different fact from "didn't
+            // arrive", and the copy says so — retrying a refusal usually needs
+            // something to change first.
             statusText = reply[WatchMessageKey.message] as? String ?? "Command failed"
+            noteFailure(command, payload: sent, message: statusText)
         }
     }
 
@@ -379,6 +564,13 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 blendDepth = .fixed(Int(frames))
             }
             playHaptic(.click)
+        case .setBurstFPS:
+            // Echoed locally so the ladder's selected rung moves with the
+            // crown instead of lagging a round-trip behind it. No haptic —
+            // the crown has its own detents, and this fires on every rung.
+            if let fps = sent[WatchMessageKey.value] as? Double {
+                rampFPS = Int(fps)
+            }
         case .scheduleStop:
             // Mirror the phone's math immediately; its authoritative echo
             // arrives a beat later. Amounts are totals for the whole run,
@@ -417,6 +609,20 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // here would fight the gesture. No haptic either — the crown has
             // its own detents.
             break
+        case .previewFrame:
+            // A poll. Its frame is taken in `apply`, alongside the state
+            // snapshot the same reply carries.
+            break
+        case .armCamera, .cancelExport:
+            // Nothing to mirror optimistically: both are requests for the
+            // phone to change what it is doing, and the honest signal that it
+            // worked is the next state snapshot saying so. Pull one shortly,
+            // because opening a camera takes longer than a reply does.
+            playHaptic(.click)
+            Task { @MainActor [weak self] in
+                try? await Task.sleep(nanoseconds: 1_500_000_000)
+                self?.refreshState()
+            }
         case .state:
             // A poll, not an action. Its reply is a state snapshot and
             // `apply` has already taken it.
@@ -521,15 +727,28 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     #endif
 
     #if os(watchOS) && DEBUG
-    /// `SIMCTL_CHILD_LL_UI_PREVIEW=recording` fakes a live ramp shoot so the
-    /// recording screen can be screenshotted in the Watch simulator without a
-    /// paired phone actually capturing.
+    /// Which screen the screenshot hook asked for, so the view can preselect
+    /// the matching tab. Nil outside the hook.
+    private(set) var debugPreviewScreen: String?
+
+    /// `SIMCTL_CHILD_LL_UI_PREVIEW=<screen>` stages a shoot so any screen can
+    /// be screenshotted in the Watch simulator without a paired phone actually
+    /// capturing. One value per screen the design specs mirror:
+    ///
+    /// `recording` · `controls` · `stop` — the three in-shoot tabs
+    /// `armed` · `armed-setup` — the two idle pages
+    /// `marker` — a Video run in marks-only mode
+    /// `interval` — an Interval run (no burst pad, no rate ladder)
+    /// `no-burst` — a camera whose format has nothing faster than its base
+    /// `sending` · `failed` · `locked` — the reliability and lock states
     private func applyDebugPreviewStateIfRequested() {
-        guard ProcessInfo.processInfo.environment["LL_UI_PREVIEW"] == "recording" else { return }
+        guard let screen = ProcessInfo.processInfo.environment["LL_UI_PREVIEW"],
+              !screen.isEmpty else { return }
         // Freeze this fake state: applyState refuses real session payloads
         // (context seed, live pushes) while the flag is up, so the screenshot
         // can't be yanked back to reality mid-shot.
         isDebugPreview = true
+        debugPreviewScreen = screen
         isReachable = true
         isCameraActive = true
         captureMode = .video
@@ -537,12 +756,119 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         captureFPS = 24
         baseFPS = 24
         rampFPS = 100
+        availableBurstFPS = [30, 60, 100, 120]
         plannedSpeed = 30
         outputFPS = 30
         formatLine = "4K · 24 fps"
         rampIntervalCount = 2
+
+        switch screen {
+        case "marker":
+            sequenceMode = "marker"
+            markerCount = 2
+        case "interval":
+            captureMode = .interval
+            intervalSeconds = 2
+            blendDepth = .fixed(10)
+            captureCount = 148
+            formatLine = "12MP 4:3 · JPEG"
+        case "no-burst":
+            availableBurstFPS = []
+            rampFPS = 24
+        case "armed", "armed-setup":
+            // Idle, camera open — the two pages before a run starts.
+            recordingState = .idle
+            return
+        case "framing", "framing-stale", "framing-aids",
+             "framing-square", "framing-tall", "framing-wide":
+            recordingState = .idle
+            if let image = Self.makeStagedPreviewImage() {
+                previewFrame = RemotePreviewFrame(
+                    image: image,
+                    pixelWidth: 416,
+                    pixelHeight: 234,
+                    // A deliberately un-level phone, so the horizon bar and
+                    // the angle chip are both exercised.
+                    rollDegrees: screen == "framing" ? 0.4 : -3.0)
+                // Stale is staged by backdating the arrival, so the real
+                // staleness rule is what gets screenshotted rather than a
+                // separate flag that could drift from it.
+                previewReceivedAt = screen == "framing-stale"
+                    ? Date().addingTimeInterval(-4.2)
+                    : Date()
+            }
+            return
+        case "camera-closed":
+            isCameraActive = false
+            recordingState = .idle
+            phoneFlow = "home"
+            lastCaptureAt = Date().addingTimeInterval(-120)
+            return
+        case "busy":
+            isCameraActive = false
+            recordingState = .idle
+            phoneFlow = "processing"
+            exportProgress = 0.42
+            exportETASeconds = 80
+            exportTitle = "Creating 12.4s clip"
+            exportSubtitle = "Blended clip · camera unavailable"
+            return
+        case "setup":
+            isCameraActive = false
+            recordingState = .idle
+            phoneFlow = "setup"
+            flowTitle = "Guided Clip"
+            flowStep = 3
+            flowStepCount = 5
+            return
+        case "sending":
+            isSending = true
+            pendingCommand = .lockExposure
+        case "failed":
+            lastFailure = RemoteCommandFailure(
+                command: .lockExposure,
+                payload: [WatchMessageKey.command: WatchCaptureCommand.lockExposure.rawValue],
+                message: "Didn't reach the phone")
+        default:
+            break
+        }
         recordingStartedAt = Date().addingTimeInterval(-83)
         recordingState = .recording
+    }
+
+    /// A stand-in landscape for the framing screenshots: sky, a horizon, and
+    /// ground. Drawn rather than bundled so no asset has to ship in the
+    /// release build for a DEBUG-only hook.
+    private static func makeStagedPreviewImage() -> CGImage? {
+        let width = 416
+        let height = 234
+        guard let context = CGContext(
+            data: nil,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: 0,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else { return nil }
+
+        let horizon = Int(Double(height) * 0.46)
+        for y in 0..<height {
+            let isSky = y < horizon
+            let t = isSky
+                ? Double(y) / Double(max(1, horizon))
+                : Double(y - horizon) / Double(max(1, height - horizon))
+            let colour: CGColor = isSky
+                ? CGColor(red: 0.17 + 0.10 * t, green: 0.24 + 0.11 * t, blue: 0.30 + 0.06 * t, alpha: 1)
+                : CGColor(red: 0.20 - 0.13 * t, green: 0.23 - 0.14 * t, blue: 0.14 - 0.09 * t, alpha: 1)
+            context.setFillColor(colour)
+            context.fill(CGRect(x: 0, y: height - y - 1, width: width, height: 1))
+        }
+        // One dark mass off to the left so the thirds grid has something to
+        // sit against.
+        context.setFillColor(CGColor(red: 0.05, green: 0.06, blue: 0.05, alpha: 0.75))
+        context.fill(CGRect(x: 34, y: 0, width: 60, height: 96))
+        return context.makeImage()
     }
     #endif
 
@@ -575,6 +901,25 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if let cameraActive = payload[WatchMessageKey.cameraActive] as? Bool {
             isCameraActive = cameraActive
+        }
+        if let state = payload[WatchMessageKey.phoneAppState] as? String {
+            phoneAppState = state
+        }
+        if let flow = payload[WatchMessageKey.phoneFlow] as? String {
+            phoneFlow = flow
+        }
+        // Absent means "not applicable", not "unchanged" — every payload is a
+        // full snapshot, so a finished export must be able to clear its own
+        // progress ring rather than leaving it frozen at 87%.
+        flowTitle = payload[WatchMessageKey.flowTitle] as? String
+        flowStep = payload[WatchMessageKey.flowStep] as? Int
+        flowStepCount = payload[WatchMessageKey.flowStepCount] as? Int
+        exportProgress = payload[WatchMessageKey.exportProgress] as? Double
+        exportETASeconds = payload[WatchMessageKey.exportETASeconds] as? Double
+        exportTitle = payload[WatchMessageKey.exportTitle] as? String
+        exportSubtitle = payload[WatchMessageKey.exportSubtitle] as? String
+        if let timestamp = payload[WatchMessageKey.lastCaptureAt] as? TimeInterval {
+            lastCaptureAt = Date(timeIntervalSince1970: timestamp)
         }
         // token-tolerant: a phone build from before the mode merge may still
         // mirror "Live Blend", which resolves to Interval.
@@ -624,6 +969,13 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if let fps = payload[WatchMessageKey.rampFPS] as? Int {
             rampFPS = fps
+        }
+        // No `> 0` guard and no "keep the old value" fallback: empty is
+        // meaningful here. A camera with nothing faster than its base rate
+        // must be able to say so, and a format change that removes the last
+        // burst rate has to clear a ladder drawn for the previous format.
+        if let rates = payload[WatchMessageKey.availableBurstFPS] as? [Int] {
+            availableBurstFPS = rates
         }
         if let fps = payload[WatchMessageKey.baseFPS] as? Int, fps > 0 {
             baseFPS = fps

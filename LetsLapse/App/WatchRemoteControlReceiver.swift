@@ -28,6 +28,12 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     /// "accepted" (the Watch applies optimistic state on accepted replies —
     /// a false accept leaves it showing a recording that never started).
     private var commandHandler: ((WatchCaptureCommand, [String: Any]) -> Bool)?
+    /// Commands about the app rather than the camera — arming the camera,
+    /// cancelling a blend. Registered by the root view, so unlike
+    /// `commandHandler` it is alive for the whole app: these are precisely the
+    /// commands that matter when the capture screen ISN'T there, so gating
+    /// them on it would make them unreachable exactly when they are needed.
+    private var flowCommandHandler: ((WatchCaptureCommand, [String: Any]) -> Bool)?
     private var recordingStartedAt: Date?
     private var captureMode: CaptureMode = .video
     private var intervalSeconds: Double = 2
@@ -48,6 +54,10 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var captureFPS = 0
     private var baseFPS = 0
     private var rampFPS = 0
+    /// Every rate a burst could switch to at this format, ascending. The
+    /// remote draws its rate ladder from this, so it can only ever offer what
+    /// the capability matrix has already cleared.
+    private var availableBurstFPS: [Int] = []
     private var plannedSpeed = 0
     private var outputFPS = 0
     private var isExposureLocked = false
@@ -56,6 +66,15 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var lockedLensPosition: Float = 0.5
     private var isoMin: Float = 25
     private var isoMax: Float = 3200
+    private var phoneFlow = "home"
+    private var flowTitle: String?
+    private var flowStep: Int?
+    private var flowStepCount: Int?
+    private var exportProgress: Double?
+    private var exportETASeconds: Double?
+    private var exportTitle: String?
+    private var exportSubtitle: String?
+    private var lastCaptureAt: Date?
 
     /// The local-network camera link. Separate from WatchConnectivity because
     /// the two are not alternatives: an iPhone can serve a Watch and a Mac at
@@ -97,6 +116,11 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             }
             publishState()
         }
+    }
+
+    @MainActor
+    func setFlowCommandHandler(_ handler: ((WatchCaptureCommand, [String: Any]) -> Bool)?) {
+        flowCommandHandler = handler
     }
 
     /// Re-read the opt-in while the capture screen is up, so toggling the
@@ -205,6 +229,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         captureFPS: Int,
         baseFPS: Int,
         rampFPS: Int,
+        availableBurstFPS: [Int],
         plannedSpeed: Int,
         outputFPS: Int
     ) {
@@ -212,14 +237,60 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             || self.captureFPS != captureFPS
             || self.baseFPS != baseFPS
             || self.rampFPS != rampFPS
+            || self.availableBurstFPS != availableBurstFPS
             || self.plannedSpeed != plannedSpeed
             || self.outputFPS != outputFPS
         self.formatLine = formatLine
         self.captureFPS = captureFPS
         self.baseFPS = baseFPS
         self.rampFPS = rampFPS
+        self.availableBurstFPS = availableBurstFPS
         self.plannedSpeed = plannedSpeed
         self.outputFPS = outputFPS
+        if changed {
+            publishState()
+        }
+    }
+
+    /// What the phone is doing when it isn't being a camera — the flow it's
+    /// in, and how far through a blend it is.
+    ///
+    /// Note what does NOT trigger a push: `exportProgress` and its ETA. A
+    /// blend's progress changes many times a second, and pushing each one
+    /// would flood the link for a number nobody reads that fast. The stored
+    /// value is always current, and the remote already polls every 4 s while
+    /// the camera is closed — which is exactly this situation — so the ring
+    /// stays fresh off the poll. Pushes are reserved for the transitions that
+    /// change which SCREEN the remote should be showing.
+    @MainActor
+    func setPhoneFlowContext(
+        flow: String,
+        flowTitle: String?,
+        flowStep: Int?,
+        flowStepCount: Int?,
+        exportProgress: Double?,
+        exportETASeconds: Double?,
+        exportTitle: String?,
+        exportSubtitle: String?,
+        lastCaptureAt: Date?
+    ) {
+        let changed = self.phoneFlow != flow
+            || self.flowTitle != flowTitle
+            || self.flowStep != flowStep
+            || self.flowStepCount != flowStepCount
+            || self.exportTitle != exportTitle
+            || self.exportSubtitle != exportSubtitle
+            || self.lastCaptureAt != lastCaptureAt
+            || (self.exportProgress == nil) != (exportProgress == nil)
+        self.phoneFlow = flow
+        self.flowTitle = flowTitle
+        self.flowStep = flowStep
+        self.flowStepCount = flowStepCount
+        self.exportProgress = exportProgress
+        self.exportETASeconds = exportETASeconds
+        self.exportTitle = exportTitle
+        self.exportSubtitle = exportSubtitle
+        self.lastCaptureAt = lastCaptureAt
         if changed {
             publishState()
         }
@@ -290,6 +361,47 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             return response(status: "unavailable", message: "LetsLapse is in the background on iPhone")
         }
 
+        // Before the capture-screen guard, and for the same reason `state` is
+        // answered before the app-active guard: these commands exist to fix
+        // the very condition the guard below reports.
+        if command == .armCamera || command == .cancelExport {
+            guard let flowCommandHandler else {
+                return response(status: "unavailable", message: "LetsLapse isn't ready")
+            }
+            var flowLog: [String: Any] = ["command": command.rawValue]
+            guard flowCommandHandler(command, message) else {
+                LLog("watch-link rejected command=\(command.rawValue)")
+                flowLog["accepted"] = false
+                CaptureSessionLogger.shared.log("watch_command", flowLog)
+                return response(status: "rejected", message: command == .armCamera
+                    ? "Can't open the camera while a clip is rendering"
+                    : "Nothing is rendering")
+            }
+            flowLog["accepted"] = true
+            CaptureSessionLogger.shared.log("watch_command", flowLog)
+            return response(status: "accepted")
+        }
+
+        // A poll like `state`, answered the same way — but it needs the camera,
+        // so it sits after the capture-screen check rather than before it.
+        // Deliberately not logged: at 1 Hz it would drown the session log in
+        // entries that say nothing about the shoot.
+        if command == .previewFrame {
+            guard commandHandler != nil else {
+                return response(status: "unavailable", message: "Capture screen is not active")
+            }
+            var payload = response(status: "ok")
+            if let frame = FramingPreviewService.shared.requestFrame() {
+                payload[WatchMessageKey.previewImage] = frame.base64JPEG
+                payload[WatchMessageKey.previewPixelWidth] = frame.pixelWidth
+                payload[WatchMessageKey.previewPixelHeight] = frame.pixelHeight
+                if let roll = frame.rollDegrees {
+                    payload[WatchMessageKey.previewRollDegrees] = roll
+                }
+            }
+            return payload
+        }
+
         guard let commandHandler else {
             return response(status: "unavailable", message: "Capture screen is not active")
         }
@@ -353,6 +465,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.captureFPS] = captureFPS
         payload[WatchMessageKey.baseFPS] = baseFPS
         payload[WatchMessageKey.rampFPS] = rampFPS
+        payload[WatchMessageKey.availableBurstFPS] = availableBurstFPS
         payload[WatchMessageKey.plannedSpeed] = plannedSpeed
         payload[WatchMessageKey.outputFPS] = outputFPS
         payload[WatchMessageKey.captureMode] = captureMode.rawValue
@@ -369,6 +482,31 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         }
         if let stopAtTargetCount {
             payload[WatchMessageKey.stopAtTargetCount] = stopAtTargetCount
+        }
+        payload[WatchMessageKey.phoneFlow] = phoneFlow
+        if let flowTitle {
+            payload[WatchMessageKey.flowTitle] = flowTitle
+        }
+        if let flowStep {
+            payload[WatchMessageKey.flowStep] = flowStep
+        }
+        if let flowStepCount {
+            payload[WatchMessageKey.flowStepCount] = flowStepCount
+        }
+        if let exportProgress {
+            payload[WatchMessageKey.exportProgress] = exportProgress
+        }
+        if let exportETASeconds {
+            payload[WatchMessageKey.exportETASeconds] = exportETASeconds
+        }
+        if let exportTitle {
+            payload[WatchMessageKey.exportTitle] = exportTitle
+        }
+        if let exportSubtitle {
+            payload[WatchMessageKey.exportSubtitle] = exportSubtitle
+        }
+        if let lastCaptureAt {
+            payload[WatchMessageKey.lastCaptureAt] = lastCaptureAt.timeIntervalSince1970
         }
         payload[WatchMessageKey.isExposureLocked] = isExposureLocked
         payload[WatchMessageKey.lockedISO] = Double(lockedISO)

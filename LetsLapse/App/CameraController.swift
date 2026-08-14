@@ -576,6 +576,12 @@ final class CameraController: NSObject, ObservableObject {
     // the Live Blend output this one is REMOVED from the session when the rig
     // stops watching, so recordings never carry an extra output.
     private var testCardOutput: AVCaptureVideoDataOutput?
+    /// The Watch framing preview's tap. A separate output from the test card's
+    /// rather than a shared one with a swappable delegate: whichever attached
+    /// second would silently steal the other's frames, and both are session
+    /// surgery in the one area of this class where a mistake kills recordings
+    /// outright. Two outputs that each own their lifetime cannot do that.
+    private var framingOutput: AVCaptureVideoDataOutput?
     private var liveBlendController: LiveBlendController?
     #if os(iOS)
     private var liveBlendRawController: LiveBlendRawController?
@@ -2826,8 +2832,10 @@ final class CameraController: NSObject, ObservableObject {
             // The rig's preview tap must be gone BEFORE the writer starts —
             // synchronously, on this queue. The view's own detach arrives a
             // beat later and would reconfigure the session under the
-            // recording (see detachTestCardTapNow).
+            // recording (see detachTestCardTapNow). The Watch framing tap is
+            // the same kind of output and carries the same hazard.
             self.detachTestCardTapNow()
+            self.detachFramingTapNow()
             let startedAt = Date()
             // Geotagging: open this take's fix tracking now, so the location
             // baked into every segment is where the recording started — the fix
@@ -3051,6 +3059,69 @@ final class CameraController: NSObject, ObservableObject {
     func stopTestCardTap() {
         sessionQueue.async {
             self.detachTestCardTapNow()
+        }
+    }
+
+    // MARK: - Watch framing tap
+
+    /// Attach the Watch framing preview's tap (see FramingPreviewService).
+    /// Same guards and the same reasoning as the test-card tap: idle only,
+    /// because adding an output reconfigures the session and doing that under
+    /// a live writer kills the recording.
+    // The tap type lives in FramingPreviewService, which is iOS-only — the
+    // Watch link it serves does not exist on a Mac. `detachFramingTapNow` is
+    // deliberately NOT guarded: it is called from the cross-platform capture
+    // starts, and a no-op there is cheaper than another `#if` at each site.
+    #if os(iOS)
+    func startFramingTap(_ tap: FramingFrameTap) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording,
+                  self.activeSequence == nil,
+                  !self.intervalActive else {
+                LLog("framing: tap refused — capture in flight")
+                return
+            }
+            let output: AVCaptureVideoDataOutput
+            if let existing = self.framingOutput {
+                output = existing
+            } else {
+                output = AVCaptureVideoDataOutput()
+                output.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+                ]
+                output.alwaysDiscardsLateVideoFrames = true
+                self.framingOutput = output
+            }
+            if !self.session.outputs.contains(output) {
+                self.session.beginConfiguration()
+                if self.session.canAddOutput(output) {
+                    self.session.addOutput(output)
+                } else {
+                    LLog("framing: session refused the preview tap")
+                }
+                self.session.commitConfiguration()
+            }
+            output.setSampleBufferDelegate(tap, queue: tap.queue)
+        }
+    }
+
+    func stopFramingTap() {
+        sessionQueue.async {
+            self.detachFramingTapNow()
+        }
+    }
+    #endif
+
+    /// sessionQueue-confined, synchronous detach — called inline from every
+    /// capture start for exactly the reason `detachTestCardTapNow` is.
+    private func detachFramingTapNow() {
+        guard let output = framingOutput else { return }
+        output.setSampleBufferDelegate(nil, queue: nil)
+        if session.outputs.contains(output) {
+            session.beginConfiguration()
+            session.removeOutput(output)
+            session.commitConfiguration()
+            LLog("framing: tap detached")
         }
     }
 
@@ -3508,9 +3579,10 @@ final class CameraController: NSObject, ObservableObject {
     func startInterval(every seconds: Double, frameCap: Int? = nil) {
         sessionQueue.async {
             guard self.intervalTimer == nil else { return }
-            // Same ordering rule as startRecording: the rig's tap detaches
+            // Same ordering rule as startRecording: both preview taps detach
             // inline before any capture work.
             self.detachTestCardTapNow()
+            self.detachFramingTapNow()
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("interval-\(Int(Date().timeIntervalSince1970))")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

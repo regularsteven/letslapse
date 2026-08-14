@@ -95,6 +95,22 @@ The palette below is the code's `DesignSystem.swift` (`LL`) rendered to hex. SVG
 | confirm green | `#34C759` | saved banners, steady state, toggles |
 | secondary text | `#6D6D72` (light) / `#FFFFFF` @ 45–60% (dark) | subtitles, captions |
 
+**The remote is the one exception, and it is deliberate.** The watchOS specs (and the macOS remote window, which
+shares their view) draw from `Remote/RemoteTokens.swift`, not from `LL`. Two reasons: `App/DesignSystem.swift` is not
+in the watch target at all, and a watch face is exactly the "bespoke dark surface" the fidelity contract below carves
+out — its job is legibility at arm's length on a tripod, not consistency with a grouped light screen. If
+`RemoteTokens.swift` changes, every file in `watchOS/` is stale by definition, the same way `DesignSystem.swift`
+governs the rest.
+
+| `RemoteTint` | Value | Used for |
+|---|---|---|
+| `record` | `#FF453A` | recording, and the stop commit |
+| `burst` | `#FFD60A` | burst — the high-rate segment and the controls that reach it |
+| `link` | `#40C8E0` | the link itself: connection, information, read-outs |
+| `go` | `#30D158` | armed, and level |
+| `warn` | `#FF9F0A` | a busy phone, a send that did not land |
+| `surface` / `surfaceRaised` / `surfaceTrack` | `#1C1C1E` / `#2C2C2E` / `#39393D` | rows, chips, toggle tracks |
+
 Type is SF Pro (system). SVGs approximate it with the system font stack; weights and sizes in the SVGs are the spec.
 
 Icons: controls are drawn as simplified glyphs; the **authoritative icon is the SF Symbol named in that element's `data-symbol` attribute** in the SVG.

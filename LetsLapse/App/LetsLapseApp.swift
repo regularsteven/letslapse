@@ -264,6 +264,30 @@ struct ContentView: View {
         .onChange(of: selectedTab) { tab in
             if tab == .create { openCameraForCreateTab() }
         }
+        // The Watch asking for the camera back. Unlike the tab path this does
+        // NOT require `stage == .home`: the capture screen is a full-screen
+        // cover presented above the root, so it sits over a parked setup flow
+        // without disturbing it. Closing the camera reveals the flow exactly
+        // as it was, which is what lets the remote promise the steps survive.
+        .onChange(of: model.requestedCameraOpen) { requested in
+            guard requested else { return }
+            model.requestedCameraOpen = false
+            selectedTab = .create
+            cameraIntent = CaptureIntent()
+            // Next turn: the cover is presented from CreateView, and a tab
+            // that was just selected has not built its hierarchy yet — the
+            // same ordering the Settings deep link needs.
+            DispatchQueue.main.async { showCamera = true }
+        }
+        .onChange(of: model.stage) { _ in publishFlowContext() }
+        .onChange(of: model.progress) { _ in publishFlowContext() }
+        .onChange(of: model.processingETADate) { _ in publishFlowContext() }
+        .onChange(of: model.guidedStep) { _ in publishFlowContext() }
+        .onChange(of: model.guidedBuilderFocused) { _ in publishFlowContext() }
+        .onAppear {
+            WatchRemoteControlReceiver.shared.setFlowCommandHandler(handleWatchFlowCommand)
+            publishFlowContext()
+        }
         // When the splash is showing it owns the hand-off; without it (a
         // screenshot run, or a build where it is suppressed) this is the path.
         .onAppear {
@@ -317,6 +341,67 @@ struct ContentView: View {
         guard model.stage == .home else { return }
         cameraIntent = CaptureIntent()
         showCamera = true
+    }
+
+    // MARK: - Watch: what the phone is doing
+
+    /// The two commands the remote can send when the capture screen isn't
+    /// there. Returns whether the command actually ran — a refusal must not
+    /// come back as "accepted", or the wrist shows a camera that never opened.
+    private func handleWatchFlowCommand(_ command: WatchCaptureCommand, payload: [String: Any]) -> Bool {
+        switch command {
+        case .armCamera:
+            // Never over a running blend. The two would contend for the same
+            // GPU, and the remote has a better answer for that case: it shows
+            // the render's progress and offers to cancel it.
+            guard model.stage != .processing else { return false }
+            model.requestedCameraOpen = true
+            return true
+        case .cancelExport:
+            guard model.stage == .processing else { return false }
+            model.cancelProcessing()
+            return true
+        default:
+            return false
+        }
+    }
+
+    private func publishFlowContext() {
+        let flow: String
+        switch model.stage {
+        case .home: flow = "home"
+        case .configure: flow = "setup"
+        case .processing: flow = "processing"
+        case .done: flow = "done"
+        }
+
+        let isGuided = model.guidedBuilderFocused
+        var eta: Double?
+        if model.stage == .processing, let date = model.processingETADate {
+            eta = max(0, date.timeIntervalSinceNow)
+        }
+
+        WatchRemoteControlReceiver.shared.setPhoneFlowContext(
+            flow: flow,
+            flowTitle: model.stage == .configure ? (isGuided ? "Guided Clip" : "Adjust") : nil,
+            // Only the guided builder counts its steps; Adjust is one surface.
+            flowStep: isGuided ? model.guidedStep : nil,
+            flowStepCount: isGuided ? model.guidedStepCount : nil,
+            exportProgress: model.stage == .processing ? model.progress : nil,
+            exportETASeconds: eta,
+            exportTitle: model.stage == .processing ? watchExportTitle : nil,
+            exportSubtitle: model.stage == .processing ? "Blended clip · camera unavailable" : nil,
+            lastCaptureAt: model.captures.first?.createdAt
+        )
+    }
+
+    /// Names the thing being made, not the machinery — "Creating 12.4s clip"
+    /// tells you whether it is worth waiting for; "Encoding" does not.
+    private var watchExportTitle: String {
+        if let summary = model.resultSummary, !summary.isEmpty {
+            return summary
+        }
+        return model.processingStage.title
     }
 
     /// Create is the launch tab and its purpose is the camera, so present it on

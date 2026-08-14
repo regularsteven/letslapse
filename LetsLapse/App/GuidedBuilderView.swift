@@ -138,6 +138,7 @@ struct GuidedBuilderView: View {
             scrubFrame = nil
             scrubLocked = false
             previewingMoment = false
+            publishStepToRemote()
         }
         .onChange(of: model.compiledWarp()?.outputFrames ?? -1) { _ in
             // A held preview is a position on the compiled clock; any change
@@ -180,6 +181,16 @@ struct GuidedBuilderView: View {
         }
         #endif
         maxVisitedStep = max(maxVisitedStep, stepIndex)
+        publishStepToRemote()
+    }
+
+    /// Write-only mirror for the Watch remote, which shows "Step 3 of 5" when
+    /// it explains that arming the camera will leave this flow. The step index
+    /// stays this view's own state — the rail, `maxVisitedStep` and the
+    /// `LL_STEP` hook all read it here — so this only copies it out.
+    private func publishStepToRemote() {
+        model.guidedStep = stepIndex + 1
+        model.guidedStepCount = steps.count
     }
 
     // MARK: - Layouts

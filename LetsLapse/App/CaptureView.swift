@@ -445,6 +445,11 @@ struct CaptureView: View {
         .onChange(of: camera.selectedResolution) { _ in updateWatchContext() }
         .onChange(of: camera.selectedFrameRate) { _ in updateWatchContext() }
         .onChange(of: camera.activeBaseFrameRate) { _ in updateWatchContext() }
+        // The remote's rate ladder is drawn from both of these, and the rate
+        // is now settable FROM the remote — without these pushes a rate picked
+        // on the phone mid-shoot would leave the wrist showing the old rung.
+        .onChange(of: camera.selectedRampFrameRate) { _ in updateWatchContext() }
+        .onChange(of: camera.availableBurstFrameRates) { _ in updateWatchContext() }
         .onChange(of: model.constantWindow) { _ in updateWatchContext() }
         .onChange(of: camera.isExposureLocked) { locked in
             // A fresh lock re-anchors the camera's exposure, so the brightness
@@ -530,6 +535,10 @@ struct CaptureView: View {
         }
         watchRemote.activate()
         watchRemote.setCommandHandler(handleWatchCommand)
+        // The framing preview only exists while this screen does. The service
+        // attaches its own session tap lazily, on the first request, and drops
+        // it again a few seconds after the last one.
+        FramingPreviewService.shared.attach(camera: camera)
         updateWatchRecordingState()
         updateWatchContext()
         updateWatchModeContext()
@@ -722,6 +731,12 @@ struct CaptureView: View {
         // close (or a Photo-mode exit) shouldn't leave motion updates running.
         steadiness.stop()
         camera.stopTestCardTap()
+        #if os(iOS)
+        // The framing tap is an extra session output; leaving it attached
+        // past this screen would reconfigure a session the next recording is
+        // about to use.
+        FramingPreviewService.shared.attach(camera: nil)
+        #endif
         // The screen is gone, so the capture session is over however it was
         // left — including the paths that don't stop the camera (Photo mode
         // keeps it live for the next shot). Idempotent with `camera.stop()`.
@@ -2563,6 +2578,16 @@ struct CaptureView: View {
             blendDepth = .fixed(Int(value))
             lastFixedBlendFrames = Int(value)
             return true
+        case .setBurstFPS:
+            // Live mid-shoot, unlike the other setters: changing what the NEXT
+            // burst does is the whole reason the remote has a controls tab.
+            // Gated on the offered list rather than on `isCapturing` — a rate
+            // outside the matrix would change optic or codec at the segment
+            // switch, which is the one thing a ramp must never do.
+            guard mode == .video, let value,
+                  camera.availableBurstFrameRates.contains(Int(value)) else { return false }
+            camera.selectRampFrameRate(Int(value))
+            return true
         case .scheduleStop:
             guard isCapturing, let value,
                   let token = payload[WatchMessageKey.stopAtUnit] as? String,
@@ -2576,6 +2601,17 @@ struct CaptureView: View {
             // Never reached: the receiver answers `state` from its cache
             // before consulting this handler. Kept for exhaustiveness.
             return true
+        case .armCamera, .cancelExport:
+            // Also never reached, and for a sharper reason: these are the
+            // commands for when the capture screen ISN'T up, so the receiver
+            // routes them to the root view's flow handler before it ever
+            // consults this one. Arriving here would mean the camera is
+            // already open, which is the state `armCamera` exists to reach.
+            return false
+        case .previewFrame:
+            // Answered by the receiver straight from FramingPreviewService —
+            // it is a read of the camera, not a command to it.
+            return false
         }
     }
 
@@ -2614,6 +2650,12 @@ struct CaptureView: View {
             // Only meaningful for Video's ramp; the still modes have no burst
             // rate, and 0 reads as "don't show one".
             rampFPS: mode == .video ? camera.selectedRampFrameRate : 0,
+            // The rungs the remote's rate ladder may draw. Already filtered by
+            // the capability matrix (it drops rates that would change optic or
+            // codec between segments), so an empty list genuinely means this
+            // camera has nowhere faster to go — the remote says exactly that
+            // rather than offering a burst to the rate it's already at.
+            availableBurstFPS: mode == .video ? camera.availableBurstFrameRates : [],
             plannedSpeed: model.constantWindow,
             outputFPS: model.outputFPS
         )
