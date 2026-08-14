@@ -21,23 +21,17 @@
       <circle cx="193" cy="62" r="2.5" fill="#FFD60A" opacity="0.55"/>
       <circle cx="185" cy="62" r="2.5" fill="#FFD60A" opacity="1"/>
       <rect x="11" y="72" width="186" height="1" fill="#FFF" opacity="0.15"/>
-      <rect x="11" y="77" width="186" height="68" rx="14" fill="#FFD60A" opacity="0.10"/>
-      <rect x="11" y="77" width="186" height="68" rx="14" fill="none" stroke="#FFD60A" stroke-opacity="0.42"/>
-      <path d="M98 85 l6 -5 l6 5" fill="none" stroke="#FFD60A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
-      <text x="104" y="97" font-size="12.5" class="sb" fill="#FFD60A" text-anchor="middle">Slide up · 1s</text>
-      <rect x="15" y="115" width="178" height="26" rx="11" fill="#FFD60A"/>
-      <text x="104" y="132.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">MARK IN</text>
-      <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="#FFD60A" opacity="0.16"/>
-      <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="none" stroke="#FFD60A" stroke-width="1.5"/>
-      <text x="40.3333" y="166.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="middle">1s</text>
-      <rect x="74.6667" y="150" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
-      <text x="104" y="166.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">4s</text>
-      <rect x="138.333" y="150" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
-      <text x="167.667" y="166.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">8s</text>
-      <rect x="11" y="179" width="186" height="30" rx="11" fill="#1C1C1E"/>
-      <text x="21" y="198.5" font-size="13.5" class="sb" fill="#FFF">AE/AF Lock</text>
-      <rect x="150" y="183.5" width="37" height="21" rx="10.5" fill="#39393D"/>
-      <circle cx="160.5" cy="194" r="8.5" fill="#FFF"/>
+      <rect x="11" y="77" width="186" height="64" rx="11" fill="#40C8E0" opacity="0.14"/>
+      <rect x="11" y="77" width="186" height="64" rx="11" fill="none" stroke="#40C8E0" stroke-opacity="0.5"/>
+      <text x="104" y="111" font-size="16" class="b" fill="#40C8E0" text-anchor="middle" letter-spacing="0.5">MARK IN</text>
+      <text x="104" y="124" font-size="9" fill="#40C8E0" opacity="0.7" text-anchor="middle">annotate 1s · no rate change</text>
+      <rect x="11" y="146" width="58.6667" height="24" rx="9" fill="#FFD60A" opacity="0.16"/>
+      <rect x="11" y="146" width="58.6667" height="24" rx="9" fill="none" stroke="#FFD60A" stroke-width="1.5"/>
+      <text x="40.3333" y="162.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="middle">1s</text>
+      <rect x="74.6667" y="146" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
+      <text x="104" y="162.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">4s</text>
+      <rect x="138.333" y="146" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
+      <text x="167.667" y="162.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">8s</text>
       <circle cx="94" cy="232" r="2.5" fill="#FFF" opacity="1"/>
       <circle cx="104" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
       <circle cx="114" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>

@@ -67,6 +67,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var segmentCount = 0
     @Published private(set) var isRampActive = false
     @Published private(set) var isRampHighRate = false
+    /// A mark's IN is placed and its OUT is not.
+    @Published private(set) var isMarkActive = false
+    @Published private(set) var markIntervalCount = 0
     @Published private(set) var isCameraActive = false
     /// Seconds of the timed burst now running (1/2/4), nil when none — drives
     /// the highlighted chip in the burst row. Local optimism only; it clears
@@ -213,6 +216,12 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
 
     /// Burst for a fixed window: the phone flips to the ramp rate and reverts
     /// to the base rate on its own after `seconds` — no second tap needed.
+    /// Place a mark's IN, or close the open one. `seconds > 0` asks the phone
+    /// to place the OUT on its own timer.
+    func toggleMark(seconds: Int = 0) {
+        send(.toggleMark, value: seconds > 0 ? Double(seconds) : nil)
+    }
+
     func triggerTimedBurst(seconds: Int) {
         send(.timedBurst, value: Double(seconds))
     }
@@ -524,6 +533,8 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             segmentCount = 0
             isRampActive = false
             isRampHighRate = false
+            isMarkActive = false
+            markIntervalCount = 0
             timedBurstSeconds = nil
             playHaptic(.stop)
         case .triggerMoment:
@@ -636,6 +647,16 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // here would fight the gesture. No haptic either — the crown has
             // its own detents.
             break
+        case .toggleMark:
+            // The pad's word flips IN ⇄ OUT on this, so echo it rather than
+            // leaving the control naming the wrong edge for a round trip.
+            if recordingState == .recording {
+                isMarkActive.toggle()
+                if isMarkActive {
+                    markIntervalCount += 1
+                }
+                playHaptic(.click)
+            }
         case .previewFrame:
             // A poll. Its frame is taken in `apply`, alongside the state
             // snapshot the same reply carries.
@@ -767,6 +788,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// `marker` — a Video run in marks-only mode
     /// `interval` — an Interval run (no burst pad, no rate ladder)
     /// `no-burst` — a camera whose format has nothing faster than its base
+    /// `mark-open` — a mark's IN placed, waiting on its OUT
     /// `sending` · `failed` · `locked` — the reliability and lock states
     private func applyDebugPreviewStateIfRequested() {
         guard let screen = ProcessInfo.processInfo.environment["LL_UI_PREVIEW"],
@@ -794,6 +816,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         case "marker":
             sequenceMode = "marker"
             markerCount = 2
+        case "mark-open":
+            isMarkActive = true
+            markIntervalCount = 1
         case "interval":
             captureMode = .interval
             intervalSeconds = 2
@@ -935,6 +960,12 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         if let isHighRate = payload[WatchMessageKey.isRampHighRate] as? Bool {
             isRampHighRate = isHighRate
         }
+        if let active = payload[WatchMessageKey.isMarkActive] as? Bool {
+            isMarkActive = active
+        }
+        if let count = payload[WatchMessageKey.markIntervalCount] as? Int {
+            markIntervalCount = count
+        }
         if let cameraActive = payload[WatchMessageKey.cameraActive] as? Bool {
             isCameraActive = cameraActive
         }
@@ -1045,6 +1076,8 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if recordingState == .idle {
             markerCount = 0
+            isMarkActive = false
+            markIntervalCount = 0
             rampIntervalCount = 0
             segmentCount = 0
             isRampActive = false

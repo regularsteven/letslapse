@@ -34,6 +34,10 @@
       <rect x="152.75" y="115" width="44.25" height="6" rx="3" fill="#FFD60A"/>
       <text x="174.875" y="133" font-size="9" class="sb" fill="#FFF" opacity="0.45" text-anchor="middle">120</text>
       <text x="11" y="149" font-size="10" fill="#FFF" opacity="0.42">Turn the crown to change</text>
+      <rect x="11" y="159" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <text x="21" y="178.5" font-size="13.5" class="sb" fill="#FFF">AE/AF Lock</text>
+      <rect x="150" y="163.5" width="37" height="21" rx="10.5" fill="#39393D"/>
+      <circle cx="160.5" cy="174" r="8.5" fill="#FFF"/>
       <circle cx="94" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
       <circle cx="104" cy="232" r="2.5" fill="#FFF" opacity="1"/>
       <circle cx="114" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>

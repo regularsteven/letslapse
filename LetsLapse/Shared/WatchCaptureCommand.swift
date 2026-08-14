@@ -49,6 +49,12 @@ enum WatchCaptureCommand: String {
     /// action — the reply carries the frame, so one round trip answers both
     /// "what does it see" and "what is it doing".
     case previewFrame
+    /// Place a mark's IN, or close the open one with an OUT. Annotation only:
+    /// no file, no rate change, no cost to the capture pipeline — which is why
+    /// it is available in any mode and at any moment, where a burst is not.
+    /// An optional `value` in seconds asks the phone to place the OUT on its
+    /// own timer, so it lands even if the watch sleeps.
+    case toggleMark
     /// A state poll, not an action. The receiver answers it before its
     /// app-active and command-handler guards, so it stays truthful about a
     /// backgrounded phone rather than being refused by it.
@@ -72,7 +78,7 @@ extension WatchCaptureCommand {
         case .startRecording, .stopRecording, .triggerMoment, .timedBurst,
              .lockExposure, .unlockExposure, .setISO, .setLensPosition,
              .setCaptureMode, .setIntervalSeconds, .setFramesPerBlend,
-             .setBurstFPS, .setBaseFPS, .setSequenceMode,
+             .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop,
              .armCamera, .cancelExport:
             return true
@@ -108,6 +114,8 @@ extension WatchCaptureCommand {
             return "The camera is still closed."
         case .cancelExport:
             return "The export is still running."
+        case .toggleMark:
+            return "No mark was placed."
         case .setISO, .setLensPosition, .state, .previewFrame:
             return nil
         }

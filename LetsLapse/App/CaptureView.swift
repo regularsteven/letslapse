@@ -410,6 +410,8 @@ struct CaptureView: View {
         .onChange(of: camera.segmentCount) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isRampActive) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isRampHighRate) { _ in updateWatchRecordingState() }
+        .onChange(of: camera.isMarkActive) { _ in updateWatchRecordingState() }
+        .onChange(of: camera.markIntervalCount) { _ in updateWatchRecordingState() }
         .onChange(of: camera.isIntervalRunning) { running in
             updateIdleTimer()
             updateWatchRecordingState()
@@ -2628,6 +2630,14 @@ struct CaptureView: View {
             // consults this one. Arriving here would mean the camera is
             // already open, which is the state `armCamera` exists to reach.
             return false
+        case .toggleMark:
+            // Available in ANY mode and at any moment: a mark opens no file
+            // and touches no format, so none of the guards a burst needs apply
+            // to it. This is the whole reason it belongs on the wrist — making
+            // the same note on the phone means touching a framed camera.
+            guard isCapturing else { return false }
+            camera.toggleMarkInterval(seconds: value ?? 0)
+            return true
         case .previewFrame:
             // Answered by the receiver straight from FramingPreviewService —
             // it is a read of the camera, not a command to it.
@@ -2648,7 +2658,9 @@ struct CaptureView: View {
             rampIntervalCount: camera.rampIntervalCount,
             segmentCount: camera.segmentCount,
             isRampActive: camera.isRampActive,
-            isRampHighRate: camera.isRampHighRate
+            isRampHighRate: camera.isRampHighRate,
+            isMarkActive: camera.isMarkActive,
+            markIntervalCount: camera.markIntervalCount
         )
     }
 

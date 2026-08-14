@@ -53,7 +53,12 @@ enum StretchBuilder {
         guard duration.isFinite, duration > 0 else { return [] }
         let sequenceStart = sequence.segments.first?.relativeStart ?? 0
         let sequenceEnd = sequence.segments.first?.relativeEnd ?? (sequenceStart + duration)
-        let rampRanges = sequence.rampIntervals
+        // Both lists, and they mean the same thing here. A marker run made on
+        // the phone puts its moments in `rampIntervals` (the toggle has always
+        // written there); one made from the wrist puts them in `markIntervals`.
+        // A single run can contain both, so a piece list built from one alone
+        // would silently drop half the moments someone marked.
+        let rampRanges = (sequence.rampIntervals + sequence.markIntervals)
             .compactMap { interval -> ClosedRange<Double>? in
                 let intervalEnd = interval.relativeEnd ?? sequenceEnd
                 let start = max(0, interval.relativeStart - sequenceStart)

@@ -50,6 +50,8 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var segmentCount = 0
     private var isRampActive = false
     private var isRampHighRate = false
+    private var isMarkActive = false
+    private var markIntervalCount = 0
     private var formatLine: String?
     private var captureFPS = 0
     private var baseFPS = 0
@@ -339,7 +341,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         rampIntervalCount: Int = 0,
         segmentCount: Int = 0,
         isRampActive: Bool = false,
-        isRampHighRate: Bool = false
+        isRampHighRate: Bool = false,
+        isMarkActive: Bool = false,
+        markIntervalCount: Int = 0
     ) {
         recordingState = state
         recordingStartedAt = state == .recording ? startedAt : nil
@@ -349,6 +353,8 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         self.segmentCount = state == .recording ? segmentCount : 0
         self.isRampActive = state == .recording ? isRampActive : false
         self.isRampHighRate = state == .recording ? isRampHighRate : false
+        self.isMarkActive = state == .recording ? isMarkActive : false
+        self.markIntervalCount = state == .recording ? markIntervalCount : 0
         publishState()
     }
 
@@ -460,6 +466,8 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.segmentCount] = segmentCount
         payload[WatchMessageKey.isRampActive] = isRampActive
         payload[WatchMessageKey.isRampHighRate] = isRampHighRate
+        payload[WatchMessageKey.isMarkActive] = isMarkActive
+        payload[WatchMessageKey.markIntervalCount] = markIntervalCount
         // "Camera ready" requires the app on screen, not just the capture view
         // alive in a backgrounded hierarchy — backgrounding doesn't fire
         // onDisappear, so the handler alone would keep saying ready forever.

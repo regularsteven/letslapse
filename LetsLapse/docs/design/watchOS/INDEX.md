@@ -34,8 +34,9 @@ rendering / in setup) · **Unreachable** · **Locked**. Photo mode is phone-only
 | Armed | [armed.svg](armed.svg) | `Remote/WatchControlView.swift` (`armedScreen`, `RemoteSegmented`, `exposureLockRow`, `checkFramingRow`, `startButton`) | ✅ |
 | Armed · Setup page (Video) | [armed-setup.svg](armed-setup.svg) | `armedControlsScreen` — Burst/Marks segmented (`setSequenceMode`), `baseRateRow`, `burstRateRow` | ✅ |
 | Armed · Setup page (Interval) | [armed-setup.interval.svg](armed-setup.interval.svg) | `armedControlsScreen` interval branch — `intervalRow`, `framesRow` | ✅ |
-| Recording · Burst (Video, ramp) | [recording-burst.svg](recording-burst.svg) | `burstTab`, `burstPad` (`SlideToCommit` `.up`), `timedBurstRow` chips 1s/4s/8s, `exposureLockRow` | ✅ |
-| Recording · Mark IN (marks only) | [recording-burst.marks.svg](recording-burst.marks.svg) | `markPad` — MARK IN / MARK OUT, `timedBurstRow` arms the auto-OUT | ✅ |
+| Recording · Burst + Mark (Video, ramp) | [recording-burst.svg](recording-burst.svg) | `burstTab`, `burstPad` (`SlideToCommit` `.up`), `markButton`, `timedBurstRow` | ✅ |
+| Recording · mark held open | [recording-burst.mark-open.svg](recording-burst.mark-open.svg) | `markButton` filled, `isMarkActive` | ✅ |
+| Recording · Mark only (no burst rate) | [recording-burst.marks.svg](recording-burst.marks.svg) | `markButton(isSole:)` — the sole control when bursts have nowhere to go | ✅ |
 | Recording · Burst (Interval) | [recording-burst.interval.svg](recording-burst.interval.svg) | `captureCountPanel`, `runSettingsLine` | ✅ |
 | Recording · Controls (Video) | [recording-controls.svg](recording-controls.svg) | `controlsTab`, `burstRateLadder`, `crownOwner == .burstRate` | ✅ |
 | Recording · Controls (Interval) | [recording-controls.interval.svg](recording-controls.interval.svg) | `controlsTab` interval branch — `intervalRow`, `framesRow` | ✅ |
@@ -87,6 +88,36 @@ Two copy changes came with them: the burst bar names its rate (**BURST @ 100**),
 vocabulary they actually are — **MARK IN** then **MARK OUT**, with the duration chips arming an auto-OUT
 on the phone's timer.
 
+## In-shoot marks (2026-08-14, second pass)
+
+The mock's tab 2 offered **Frame rate | Marks only** as a mode switch. That was the wrong shape, and Steven
+called it: on the phone you can't manage any of this mid-shoot without disturbing a framed camera, but on
+the wrist there is no reason to choose. **Both actions are now live at once, on tab 1.**
+
+They are different kinds of act, and the controls say so:
+
+| | Burst | Mark |
+|---|---|---|
+| What it does | switches capture rate, opens a new file | annotates an in/out point, changes nothing |
+| Control | slide-up commit, bar names the rate | plain tap, fills solid while open |
+| Why | irreversible — costs footage if fumbled | harmless — an unwanted mark is ignorable |
+| Sidecar | `sequence.rampIntervals` | `sequence.markIntervals` (new) |
+
+Separate lists on purpose, so the two can overlap freely — mark IN, burst, mark OUT — and neither one's
+meaning shifts under the other. The duration chips arm both: `toggleMark(seconds:)` closes on the phone's
+own timer exactly as a timed burst does, so the OUT lands even if the wrist sleeps. AE/AF Lock moved to the
+controls tab to make the room; it is a tap either way.
+
+**One half of this is not done yet, and it is worth knowing which.** A marker-mode run slices its timeline
+by its marks — `StretchBuilder.markerPieces` now reads both lists, so marks made from the wrist behave
+exactly like marks made on the phone. A **ramp-mode** run does not slice by marks yet. The ramp render
+walks one piece per segment *file* and the warp schedule is indexed by segment (`AppModel` ~:2979,
+`warpSchedules[index]`), so "stretch N retimes piece N" is a load-bearing invariant — splitting a segment
+at a mark boundary means teaching the warp compiler about sub-ranges within a file. That is a real change
+to the render's timing model, not a stretch-builder tweak, and it is the class of change that produced the
+delivered-density bug. Marks in a ramp run are recorded, logged (`mark_in` / `mark_out`) and live on the
+wrist; they just do not yet cut the Adjust timeline.
+
 ## Deliberate departures from the source spec
 
 Recorded here rather than silently absorbed, so a future reader can tell a decision from a drift.
@@ -131,7 +162,7 @@ DEBUG launch hook, one value per screen:
 SIMCTL_CHILD_LL_UI_PREVIEW=recording xcrun simctl launch "LL Watch S11" com.regularsteven.letslapse.watchkitapp
 ```
 
-`recording` · `controls` · `stop` · `marker` · `interval` · `no-burst` · `armed` · `armed-setup` · `armed-setup-marks` · `framing` ·
+`recording` · `controls` · `stop` · `marker` · `interval` · `no-burst` · `mark-open` · `armed` · `armed-setup` · `armed-setup-marks` · `framing` ·
 `framing-stale` · `framing-portrait` · `framing-square` · `framing-tall` · `framing-wide` · `camera-closed` · `busy` · `setup` · `sending` ·
 `failed` · `locked` · `unlocking`.
 

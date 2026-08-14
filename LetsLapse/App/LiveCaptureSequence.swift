@@ -72,6 +72,17 @@ struct LiveCaptureSequence: Codable, Equatable {
     var segments: [Segment]
     var markers: [Marker]
     var rampIntervals: [RampInterval]
+    /// Moments annotated during the run: an in point, an out point, and
+    /// nothing else. **A mark changes no footage.** No file is opened, no
+    /// frame rate is touched — it says "this stretch is worth coming back to",
+    /// at whatever rate the run was already shooting.
+    ///
+    /// A separate list from `rampIntervals` on purpose. A burst IS a rate
+    /// change and already owns that list; keeping marks apart means the two
+    /// can overlap freely (mark IN, burst, mark OUT) and that neither one's
+    /// meaning shifts under the other. Absent in every sidecar written before
+    /// marks existed, which decodes to empty and behaves exactly as before.
+    var markIntervals: [RampInterval]
     /// Whether Capture Flat was requested for this run, and whether Apple Log
     /// actually engaged — the device's colour space at the first segment's
     /// first frame, not the request. Distinct fields because the 2026-08-14
@@ -89,6 +100,7 @@ struct LiveCaptureSequence: Codable, Equatable {
         case segments
         case markers
         case rampIntervals
+        case markIntervals
         case captureFlat
         case appleLog
     }
@@ -102,6 +114,7 @@ struct LiveCaptureSequence: Codable, Equatable {
         segments: [Segment],
         markers: [Marker],
         rampIntervals: [RampInterval],
+        markIntervals: [RampInterval] = [],
         captureFlat: Bool? = nil,
         appleLog: Bool? = nil
     ) {
@@ -113,6 +126,7 @@ struct LiveCaptureSequence: Codable, Equatable {
         self.segments = segments
         self.markers = markers
         self.rampIntervals = rampIntervals
+        self.markIntervals = markIntervals
         self.captureFlat = captureFlat
         self.appleLog = appleLog
     }
@@ -127,17 +141,22 @@ struct LiveCaptureSequence: Codable, Equatable {
         segments = try container.decode([Segment].self, forKey: .segments)
         markers = try container.decodeIfPresent([Marker].self, forKey: .markers) ?? []
         rampIntervals = try container.decodeIfPresent([RampInterval].self, forKey: .rampIntervals) ?? []
+        markIntervals = try container.decodeIfPresent([RampInterval].self, forKey: .markIntervals) ?? []
         captureFlat = try container.decodeIfPresent(Bool.self, forKey: .captureFlat)
         appleLog = try container.decodeIfPresent(Bool.self, forKey: .appleLog)
+    }
+
+    private var markSummary: String {
+        markIntervals.isEmpty ? "" : "\(markIntervals.count) marks · "
     }
 
     var summary: String {
         switch mode {
         case .ramp:
             let highRate = rampFrameRate.map { " -> \($0) fps" } ?? ""
-            return "Ramp capture · \(rampIntervals.count) ramp intervals · \(segments.count) segments · \(baseFrameRate) fps\(highRate)"
+            return "Ramp capture · \(rampIntervals.count) ramp intervals · \(markSummary)\(segments.count) segments · \(baseFrameRate) fps\(highRate)"
         case .marker:
-            return "Marker capture · \(rampIntervals.count) ramp intervals · \(baseFrameRate) fps"
+            return "Marker capture · \(rampIntervals.count) ramp intervals · \(markSummary)\(baseFrameRate) fps"
         }
     }
 }

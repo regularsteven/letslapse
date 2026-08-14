@@ -13,6 +13,11 @@ enum WatchMessageKey {
     static let rampIntervalCount = "rampIntervalCount"
     static let segmentCount = "segmentCount"
     static let isRampActive = "isRampActive"
+    /// A mark's IN is placed and its OUT is not — the remote's mark pad reads
+    /// IN or OUT off this.
+    static let isMarkActive = "isMarkActive"
+    /// How many marks the run has so far.
+    static let markIntervalCount = "markIntervalCount"
     static let isRampHighRate = "isRampHighRate"
     static let message = "message"
     static let cameraActive = "cameraActive"

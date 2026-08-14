@@ -311,28 +311,88 @@ struct WatchControlView: View {
     /// gesture for the same axis, and the whole safety argument rests on that
     /// axis meaning exactly one thing. If this tab ever stops fitting, the
     /// answer is to move something to the controls tab.
+    /// Both in-shoot actions live here, because both are things you do to a
+    /// moment as it happens and neither should cost a swipe to reach.
+    ///
+    /// They are not the same kind of act, and the controls say so. A **burst**
+    /// changes the footage — it switches the capture rate and opens a new file
+    /// — so it keeps the slide-up commit and its deliberate friction. A
+    /// **mark** changes nothing at all: no file, no rate, just an in and an out
+    /// point noting that this stretch is worth coming back to. Friction on a
+    /// harmless act buys nothing and costs the room the burst pad needs, so a
+    /// mark is a plain, large tap.
+    ///
+    /// AE/AF Lock moved to the controls tab to make space. It is a tap either
+    /// way, and one horizontal swipe is the same distance the phone puts it.
     private var burstTab: some View {
         VStack(spacing: RemoteMetric.rowGap) {
-            // The pad outranks the rows below it: if anything has to give,
-            // it must not be the control you use without looking.
-            if isRampMode {
-                burstPad.layoutPriority(1)
-                timedBurstRow
-            } else if isMarkerMode {
-                markPad.layoutPriority(1)
-                // The chips arm a duration for a MARK just as they do for a
-                // burst — the phone closes both on its own timer, so the mark
-                // gets its OUT even if the wrist has gone to sleep.
+            if remote.captureMode == .video {
+                // The pad outranks everything below it: if anything has to
+                // give, it must not be the control you use without looking.
+                if isRampMode {
+                    burstPad.layoutPriority(1)
+                }
+                markButton(isSole: !isRampMode)
+                // The chips arm a duration for BOTH controls — the phone
+                // closes a timed burst and a timed mark on its own timer, so
+                // either gets its OUT even if the wrist has gone to sleep.
                 timedBurstRow
             } else {
                 captureCountPanel.layoutPriority(1)
+                exposureLockRow
             }
-
-            exposureLockRow
             Spacer(minLength: 0)
         }
         .padding(.horizontal, RemoteMetric.gutter)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    /// Names the edge it is about to place: **MARK IN**, then **MARK OUT**.
+    /// Fills solid while a mark is open, so "am I inside one" is answerable at
+    /// a glance from across a room.
+    private func markButton(isSole: Bool) -> some View {
+        let isOpen = remote.isMarkActive
+        return Button {
+            // A timed mark only makes sense when opening one; closing is
+            // always immediate.
+            remote.toggleMark(seconds: isOpen ? 0 : armedBurstSeconds)
+        } label: {
+            VStack(spacing: 1) {
+                Text(isOpen ? "MARK OUT" : "MARK IN")
+                    .font(.system(size: isSole ? 16 : 13, weight: .bold))
+                    .kerning(0.5)
+                if isSole || isOpen {
+                    Text(markCaption)
+                        .font(.system(size: 9))
+                        .opacity(0.7)
+                }
+            }
+            .foregroundStyle(isOpen ? .black : RemoteTint.link)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .frame(maxWidth: .infinity)
+            .frame(height: isSole ? 64 : 32)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            isOpen ? RemoteTint.link : RemoteTint.link.opacity(0.14),
+            in: RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous)
+                .strokeBorder(RemoteTint.link.opacity(isOpen ? 0 : 0.5), lineWidth: 1)
+        )
+        .disabled(remote.isSending || !remote.isReachable)
+        .accessibilityLabel(isOpen ? "Close the open mark" : "Mark this moment")
+    }
+
+    private var markCaption: String {
+        if remote.isMarkActive {
+            return armedBurstSeconds > 0 ? "auto out · or tap" : "tap to close"
+        }
+        if armedBurstSeconds > 0 { return "annotate \(armedBurstSeconds)s · no rate change" }
+        return "annotate a moment · no rate change"
     }
 
     /// The commit that starts a burst — and, while one is running, the commit
@@ -346,7 +406,8 @@ struct WatchControlView: View {
                 tint: RemoteTint.burst,
                 title: burstLiveTitle,
                 hint: "Slide up to end",
-                enabled: !remote.isSending && remote.isReachable
+                enabled: !remote.isSending && remote.isReachable,
+                height: 64
             ) {
                 remote.triggerMoment()
             }
@@ -359,7 +420,8 @@ struct WatchControlView: View {
                 // place to find out was another tab.
                 title: burstIdleTitle,
                 hint: armedBurstSeconds > 0 ? "Slide up · \(armedBurstSeconds)s" : "Slide up to burst",
-                enabled: !remote.isSending && remote.isReachable
+                enabled: !remote.isSending && remote.isReachable,
+                height: 64
             ) {
                 if armedBurstSeconds > 0 {
                     remote.triggerTimedBurst(seconds: armedBurstSeconds)
@@ -378,35 +440,6 @@ struct WatchControlView: View {
     /// told you whether the phone had reached the rate you asked for.
     private var burstLiveTitle: String {
         remote.rampFPS > 0 ? "\(remote.rampFPS) FPS" : "BURSTING"
-    }
-
-    /// A mark is an annotation with a start and an end, made at whatever rate
-    /// the capture is already running — nothing about the footage changes, it
-    /// just says "this moment is worth coming back to".
-    ///
-    /// So the pad names the edge it is about to place: **IN**, then **OUT**.
-    /// The same axis and the same friction as a burst; only the payload
-    /// differs. An armed duration auto-places the OUT, and sliding up again
-    /// places it early — either way the mark closes.
-    private var markPad: some View {
-        SlideToCommit(
-            direction: .up,
-            tint: RemoteTint.burst,
-            title: remote.isRampActive ? "MARK OUT" : "MARK IN",
-            hint: remote.isRampActive
-                ? (remote.timedBurstSeconds != nil ? "Auto out · or slide up" : "Slide up to mark OUT")
-                : (armedBurstSeconds > 0 ? "Slide up · \(armedBurstSeconds)s" : "Slide up to mark IN"),
-            enabled: !remote.isSending && remote.isReachable
-        ) {
-            // An armed duration closes the mark on the phone's own timer, so
-            // it lands even if the watch sleeps — the same mechanism a timed
-            // burst uses, and the reason the chips apply to both.
-            if !remote.isRampActive, armedBurstSeconds > 0 {
-                remote.triggerTimedBurst(seconds: armedBurstSeconds)
-            } else {
-                remote.triggerMoment()
-            }
-        }
     }
 
     /// Interval's counterpart: nothing to commit, so the pad's slot goes to
@@ -492,6 +525,10 @@ struct WatchControlView: View {
             if remote.isExposureLocked {
                 lockedExposureRow
             }
+            // Reachable from the shoot in one horizontal swipe. It is a tap
+            // either way, and tab one's room now goes to the two controls that
+            // act on the moment in front of you.
+            exposureLockRow
             Spacer(minLength: 0)
         }
         .padding(.horizontal, RemoteMetric.gutter)

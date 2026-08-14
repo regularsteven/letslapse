@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>watchOS · Recording · Burst tab (Video, ramp)</title>
-  <desc>Tab 1 of the in-shoot pager, carrying BOTH in-shoot actions — neither should cost a swipe to reach. They are not the same kind of act and the controls say so. A BURST changes the footage (switches capture rate, opens a new file), so it keeps the slide-up commit and its friction; the bar names the rate it will switch to. A MARK changes nothing at all — no file, no rate, just an in and an out point — so it is a plain tap. Friction on a harmless act buys nothing and costs the pad its room. The chips arm a duration for BOTH: the phone closes a timed burst and a timed mark on its own timer. AE/AF Lock moved to the controls tab to make space.</desc>
+  <title>watchOS · Recording · mark held open</title>
+  <desc>A mark's IN is placed and its OUT is not. The control fills solid and flips its word, so "am I inside a mark" is answerable at a glance from across a room. Wholly independent of the burst above it: a mark can be opened before a burst and closed after it, or the other way round, because marks and bursts keep separate lists and separate open flags in the sidecar.</desc>
   <defs>
     <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
   </defs>
@@ -27,9 +27,9 @@
       <text x="104" y="97" font-size="12.5" class="sb" fill="#FFD60A" text-anchor="middle">Slide up · 1s</text>
       <rect x="15" y="111" width="178" height="26" rx="11" fill="#FFD60A"/>
       <text x="104" y="128.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">BURST @ 100</text>
-      <rect x="11" y="146" width="186" height="32" rx="11" fill="#40C8E0" opacity="0.14"/>
-      <rect x="11" y="146" width="186" height="32" rx="11" fill="none" stroke="#40C8E0" stroke-opacity="0.5"/>
-      <text x="104" y="167" font-size="13" class="b" fill="#40C8E0" text-anchor="middle" letter-spacing="0.5">MARK IN</text>
+      <rect x="11" y="146" width="186" height="32" rx="11" fill="#40C8E0"/>
+      <text x="104" y="164" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">MARK OUT</text>
+      <text x="104" y="177" font-size="9" fill="#000" opacity="0.7" text-anchor="middle">auto out · or tap</text>
       <rect x="11" y="183" width="58.6667" height="24" rx="9" fill="#FFD60A" opacity="0.16"/>
       <rect x="11" y="183" width="58.6667" height="24" rx="9" fill="none" stroke="#FFD60A" stroke-width="1.5"/>
       <text x="40.3333" y="199.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="middle">1s</text>
@@ -43,6 +43,6 @@
     </g>
   </g>
 
-  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Recording · Burst · 208×248 pt</text>
-  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — burstPad · markButton</text>
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Recording · mark open · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — markButton · isMarkActive</text>
 </svg>

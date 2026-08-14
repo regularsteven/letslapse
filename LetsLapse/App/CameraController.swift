@@ -308,6 +308,13 @@ final class CameraController: NSObject, ObservableObject {
     private var isFinishingSequence = false
     private var isDiscardingSequence = false
     private var rampIntervalActive = false
+    /// Whether a mark's IN has been placed and its OUT has not. Deliberately
+    /// separate from `rampIntervalActive`: a mark and a burst are independent,
+    /// and either may be open while the other is.
+    private var markIntervalActive = false
+    /// Supersedes a pending auto-OUT when the mark is closed by hand, or when
+    /// a new one is opened.
+    private var markGeneration = 0
     // Manual-exposure lock state, confined to sessionQueue. Source of truth for
     // re-asserting the lock after every activeFormat switch; the @Published
     // mirrors below are for UI/Watch only.
@@ -377,6 +384,9 @@ final class CameraController: NSObject, ObservableObject {
     @Published var rampIntervalCount = 0
     @Published var segmentCount = 0
     @Published var isRampActive = false
+    /// A mark's IN is placed and its OUT is not. Drives the remote's mark pad.
+    @Published var isMarkActive = false
+    @Published var markIntervalCount = 0
     @Published var isRampHighRate = false
     /// The running ramp sequence's locked base rate, nil when idle.
     /// `selectedFrameRate` tracks the ACTIVE segment (it reads the burst rate
@@ -2906,6 +2916,8 @@ final class CameraController: NSObject, ObservableObject {
             self.isFinishingSequence = false
             self.isDiscardingSequence = false
             self.rampIntervalActive = false
+            self.markIntervalActive = false
+            self.markGeneration += 1
             #if os(iOS)
             // One orientation per sequence: every segment records with the
             // pose the run started in (see activeSequenceOrientation).
@@ -2961,6 +2973,11 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             if self.movieOutput.isRecording {
                 self.closeOpenRampInterval(at: Date())
+                // A mark left open at the stop still has a real end — the end
+                // of the run. Closing it here beats writing a sidecar with a
+                // dangling `relativeEnd: nil` that every reader downstream has
+                // to invent a value for.
+                self.closeOpenMarkInterval(at: Date())
                 self.isFinishingSequence = true
                 self.movieOutput.stopRecording()
             }
@@ -3293,6 +3310,87 @@ final class CameraController: NSObject, ObservableObject {
         publishRampState(isActive: false, intervalCount: sequence.rampIntervals.count)
     }
 
+    // MARK: - Marks
+
+    /// Annotate the moment being shot: an in point, an out point, nothing else.
+    ///
+    /// **A mark changes no footage.** It opens no file, switches no frame rate,
+    /// and costs the capture pipeline nothing — it is a note that says "come
+    /// back to this stretch", recorded at whatever rate the run is already
+    /// shooting at. That is why it is available in any mode and at any moment,
+    /// where a burst is not.
+    ///
+    /// Wholly independent of `rampIntervals`: a mark can be opened before a
+    /// burst and closed after it, or the other way round, and neither one's
+    /// state is entangled with the other's.
+    ///
+    /// `seconds > 0` closes it on the phone's own timer, so the OUT lands even
+    /// if the wrist that asked for it has gone to sleep.
+    func toggleMarkInterval(seconds: Double = 0) {
+        sessionQueue.async {
+            guard self.activeSequence != nil, let startedAt = self.activeSequenceStartedAt else { return }
+            if self.markIntervalActive {
+                self.closeOpenMarkInterval(at: Date())
+                return
+            }
+            self.openMarkInterval(at: Date(), sequenceStartedAt: startedAt)
+            guard seconds > 0 else { return }
+            self.markGeneration += 1
+            let generation = self.markGeneration
+            self.sessionQueue.asyncAfter(deadline: .now() + seconds) {
+                // A later manual close (or a new mark) supersedes this timer;
+                // the generation is what tells them apart.
+                guard generation == self.markGeneration, self.markIntervalActive else { return }
+                self.closeOpenMarkInterval(at: Date())
+            }
+        }
+    }
+
+    private func openMarkInterval(at date: Date, sequenceStartedAt: Date) {
+        guard var sequence = activeSequence, !markIntervalActive else { return }
+        let interval = LiveCaptureSequence.RampInterval(
+            index: sequence.markIntervals.count,
+            relativeStart: date.timeIntervalSince(sequenceStartedAt),
+            relativeEnd: nil
+        )
+        sequence.markIntervals.append(interval)
+        activeSequence = sequence
+        markIntervalActive = true
+        CaptureSessionLogger.shared.log("mark_in", [
+            "index": interval.index,
+            "atSeconds": interval.relativeStart,
+        ])
+        publishMarkState(isActive: true, count: sequence.markIntervals.count)
+    }
+
+    private func closeOpenMarkInterval(at date: Date) {
+        guard var sequence = activeSequence,
+              markIntervalActive,
+              let sequenceStartedAt = activeSequenceStartedAt,
+              let index = sequence.markIntervals.lastIndex(where: { $0.relativeEnd == nil })
+        else { return }
+        let relativeEnd = max(
+            sequence.markIntervals[index].relativeStart,
+            date.timeIntervalSince(sequenceStartedAt)
+        )
+        sequence.markIntervals[index].relativeEnd = relativeEnd
+        activeSequence = sequence
+        markIntervalActive = false
+        CaptureSessionLogger.shared.log("mark_out", [
+            "index": sequence.markIntervals[index].index,
+            "atSeconds": relativeEnd,
+            "durationSeconds": relativeEnd - sequence.markIntervals[index].relativeStart,
+        ])
+        publishMarkState(isActive: false, count: sequence.markIntervals.count)
+    }
+
+    private func publishMarkState(isActive: Bool, count: Int) {
+        DispatchQueue.main.async {
+            self.isMarkActive = isActive
+            self.markIntervalCount = count
+        }
+    }
+
     private func publishRampState(isActive: Bool, intervalCount: Int) {
         let spans = (activeSequence?.rampIntervals ?? []).map {
             RampSpan(id: $0.index, start: $0.relativeStart, end: $0.relativeEnd)
@@ -3587,8 +3685,12 @@ final class CameraController: NSObject, ObservableObject {
         isFinishingSequence = false
         isDiscardingSequence = false
         rampIntervalActive = false
+        markIntervalActive = false
+        markGeneration += 1
         DispatchQueue.main.async {
             self.activeSequenceMode = nil
+            self.isMarkActive = false
+            self.markIntervalCount = 0
             self.markerCount = 0
             self.rampIntervalCount = 0
             self.segmentCount = 0
