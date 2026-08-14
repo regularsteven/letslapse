@@ -97,6 +97,8 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// Empty means this camera has nothing faster than its base rate — the
     /// rate ladder says so rather than offering a burst that can't run.
     @Published private(set) var availableBurstFPS: [Int] = []
+    /// Every base frame rate this lens and resolution can shoot, ascending.
+    @Published private(set) var availableBaseFPS: [Int] = []
     @Published private(set) var plannedSpeed = 0
     @Published private(set) var outputFPS = 0
     @Published private(set) var isExposureLocked = false
@@ -248,6 +250,17 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// next burst will do without stopping the run.
     func setBurstFPS(_ fps: Int) {
         send(.setBurstFPS, value: Double(fps))
+    }
+
+    /// Idle only — this one re-applies the capture format on the phone, so the
+    /// armed screen is the only place it is offered.
+    func setBaseFPS(_ fps: Int) {
+        send(.setBaseFPS, value: Double(fps))
+    }
+
+    /// Ramp or marker. Baked into the sequence at start, so idle only too.
+    func setSequenceMode(_ mode: String) {
+        send(.setSequenceMode, extra: [WatchMessageKey.sequenceMode: mode])
     }
 
     func scheduleStop(unit: ScheduledStopUnit, amount: Int) {
@@ -571,6 +584,20 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             if let fps = sent[WatchMessageKey.value] as? Double {
                 rampFPS = Int(fps)
             }
+        case .setBaseFPS:
+            if let fps = sent[WatchMessageKey.value] as? Double {
+                baseFPS = Int(fps)
+                captureFPS = Int(fps)
+            }
+            playHaptic(.click)
+        case .setSequenceMode:
+            // The pad's whole vocabulary changes with this — BURST becomes
+            // MARK IN — so echo it rather than waiting a round trip to find
+            // out what the control in front of you now does.
+            if let mode = sent[WatchMessageKey.sequenceMode] as? String {
+                sequenceMode = mode
+            }
+            playHaptic(.click)
         case .scheduleStop:
             // Mirror the phone's math immediately; its authoritative echo
             // arrives a beat later. Amounts are totals for the whole run,
@@ -757,6 +784,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         baseFPS = 24
         rampFPS = 100
         availableBurstFPS = [30, 60, 100, 120]
+        availableBaseFPS = [24, 25, 30, 60]
         plannedSpeed = 30
         outputFPS = 30
         formatLine = "4K · 24 fps"
@@ -779,14 +807,22 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // Idle, camera open — the two pages before a run starts.
             recordingState = .idle
             return
-        case "framing", "framing-stale", "framing-aids",
+        case "armed-setup-marks":
+            recordingState = .idle
+            sequenceMode = "marker"
+            return
+        case "framing", "framing-stale", "framing-aids", "framing-portrait",
              "framing-square", "framing-tall", "framing-wide":
             recordingState = .idle
-            if let image = Self.makeStagedPreviewImage() {
+            // A portrait stage as well as a landscape one: the phone rotates
+            // the buffer to the pose it is held in, so the watch has to be
+            // able to receive a 9:16 frame and pillarbox it.
+            let portrait = screen == "framing-portrait"
+            if let image = Self.makeStagedPreviewImage(portrait: portrait) {
                 previewFrame = RemotePreviewFrame(
                     image: image,
-                    pixelWidth: 416,
-                    pixelHeight: 234,
+                    pixelWidth: portrait ? 234 : 416,
+                    pixelHeight: portrait ? 416 : 234,
                     // A deliberately un-level phone, so the horizon bar and
                     // the angle chip are both exercised.
                     rollDegrees: screen == "framing" ? 0.4 : -3.0)
@@ -839,9 +875,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// A stand-in landscape for the framing screenshots: sky, a horizon, and
     /// ground. Drawn rather than bundled so no asset has to ship in the
     /// release build for a DEBUG-only hook.
-    private static func makeStagedPreviewImage() -> CGImage? {
-        let width = 416
-        let height = 234
+    private static func makeStagedPreviewImage(portrait: Bool = false) -> CGImage? {
+        let width = portrait ? 234 : 416
+        let height = portrait ? 416 : 234
         guard let context = CGContext(
             data: nil,
             width: width,
@@ -867,7 +903,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // One dark mass off to the left so the thirds grid has something to
         // sit against.
         context.setFillColor(CGColor(red: 0.05, green: 0.06, blue: 0.05, alpha: 0.75))
-        context.fill(CGRect(x: 34, y: 0, width: 60, height: 96))
+        context.fill(CGRect(x: 34, y: 0, width: 60, height: height / 2 - 20))
         return context.makeImage()
     }
     #endif
@@ -976,6 +1012,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // burst rate has to clear a ladder drawn for the previous format.
         if let rates = payload[WatchMessageKey.availableBurstFPS] as? [Int] {
             availableBurstFPS = rates
+        }
+        if let rates = payload[WatchMessageKey.availableBaseFPS] as? [Int] {
+            availableBaseFPS = rates
         }
         if let fps = payload[WatchMessageKey.baseFPS] as? Int, fps > 0 {
             baseFPS = fps

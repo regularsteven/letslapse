@@ -32,6 +32,10 @@ enum WatchMessageKey {
     /// so it can only ever offer what this camera can actually reach — an
     /// empty array means bursts have nowhere to go and the ladder says so.
     static let availableBurstFPS = "availableBurstFPS"
+    /// Every base frame rate this lens and resolution can shoot, ascending.
+    /// Its counterpart to `availableBurstFPS`: the remote's base-rate picker
+    /// draws from it, so it can only offer what the camera can actually do.
+    static let availableBaseFPS = "availableBaseFPS"
     static let plannedSpeed = "plannedSpeed"
     static let outputFPS = "outputFPS"
     static let isExposureLocked = "isExposureLocked"

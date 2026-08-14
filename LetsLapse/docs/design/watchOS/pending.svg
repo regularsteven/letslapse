@@ -27,7 +27,7 @@
       <path d="M98 85 l6 -5 l6 5" fill="none" stroke="#FFD60A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
       <text x="104" y="97" font-size="12.5" class="sb" fill="#FFD60A" text-anchor="middle">Slide up · 1s</text>
       <rect x="15" y="115" width="178" height="26" rx="11" fill="#FFD60A"/>
-      <text x="104" y="132.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">BURST</text>
+      <text x="104" y="132.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">BURST @ 100</text>
       </g>
       <g opacity="0.45">
       <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="#FFD60A" opacity="0.16"/>

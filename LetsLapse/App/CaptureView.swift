@@ -450,6 +450,9 @@ struct CaptureView: View {
         // on the phone mid-shoot would leave the wrist showing the old rung.
         .onChange(of: camera.selectedRampFrameRate) { _ in updateWatchContext() }
         .onChange(of: camera.availableBurstFrameRates) { _ in updateWatchContext() }
+        .onChange(of: camera.availableFrameRates) { _ in updateWatchContext() }
+        // The remote can now pick the mode, so its own picker has to publish.
+        .onChange(of: sequenceMode) { _ in updateWatchRecordingState() }
         .onChange(of: model.constantWindow) { _ in updateWatchContext() }
         .onChange(of: camera.isExposureLocked) { locked in
             // A fresh lock re-anchors the camera's exposure, so the brightness
@@ -2583,10 +2586,27 @@ struct CaptureView: View {
             // burst does is the whole reason the remote has a controls tab.
             // Gated on the offered list rather than on `isCapturing` — a rate
             // outside the matrix would change optic or codec at the segment
-            // switch, which is the one thing a ramp must never do.
+            // switch, which is the one thing a ramp must never do. Also
+            // refused while a burst is actually open, and that refusal is
+            // reported honestly rather than accepted and dropped.
             guard mode == .video, let value,
-                  camera.availableBurstFrameRates.contains(Int(value)) else { return false }
+                  camera.availableBurstFrameRates.contains(Int(value)),
+                  camera.canSelectRampFrameRate else { return false }
             camera.selectRampFrameRate(Int(value))
+            return true
+        case .setBaseFPS:
+            // Re-applies the capture format, so idle only.
+            guard mode == .video, !isCapturing, let value,
+                  camera.availableFrameRates.contains(Int(value)) else { return false }
+            camera.selectFrameRate(Int(value))
+            return true
+        case .setSequenceMode:
+            // The mode is baked into the sequence at start, so it can only be
+            // chosen before one. The remote offers it on the armed screen.
+            guard mode == .video, !isCapturing,
+                  let token = payload[WatchMessageKey.sequenceMode] as? String,
+                  let newMode = LiveCaptureSequence.Mode(rawValue: token) else { return false }
+            sequenceMode = newMode
             return true
         case .scheduleStop:
             guard isCapturing, let value,
@@ -2656,6 +2676,7 @@ struct CaptureView: View {
             // camera has nowhere faster to go — the remote says exactly that
             // rather than offering a burst to the rate it's already at.
             availableBurstFPS: mode == .video ? camera.availableBurstFrameRates : [],
+            availableBaseFPS: mode == .video ? camera.availableFrameRates : [],
             plannedSpeed: model.constantWindow,
             outputFPS: model.outputFPS
         )

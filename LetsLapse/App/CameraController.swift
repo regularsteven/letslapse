@@ -1937,9 +1937,24 @@ final class CameraController: NSObject, ObservableObject {
         } ?? frameRates[0]
     }
 
+    /// Choose the rate a burst switches to.
+    ///
+    /// **Allowed while a run is in progress**, which is the whole point: the
+    /// burst rate is a decision you make between bursts, and a remote that
+    /// cannot change it mid-shoot can only ever repeat the rate you picked
+    /// before you started. Selecting a rate does not touch the session — the
+    /// format switch happens when a burst actually opens — so there is nothing
+    /// here that a live writer could trip over.
+    ///
+    /// The one moment it is refused is while a burst is open or its switch is
+    /// in flight: re-rating a segment that is already recording is meaningless,
+    /// and `pendingRampFrameRate` is mid-handshake with the writer.
     func selectRampFrameRate(_ fps: Int) {
         sessionQueue.async {
-            guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            guard self.pendingRampFrameRate == nil, !self.rampIntervalActive else {
+                LLog("burst rate: refused — a burst is open")
+                return
+            }
             // Only a composition-safe rate can be selected: anything else
             // would swap the optic (or the codec) mid-clip.
             let safeRates = self.availableBurstFrameRates
@@ -1947,10 +1962,24 @@ final class CameraController: NSObject, ObservableObject {
                 ? fps
                 : (safeRates.first ?? self.selectedFrameRate)
             RecordingSettingsStore.save(rampFrameRate: frameRate)
+            // A run bakes its ramp rate into the sequence at start, and the
+            // burst switch reads it from there — so without this the selection
+            // would change everywhere except where it matters. Segments still
+            // record their own real `frameRate`, so the sidecar stays truthful
+            // about what each file actually shot at; this only updates the
+            // run's stated intent for the bursts still to come.
+            self.activeSequence?.rampFrameRate = frameRate
             DispatchQueue.main.async {
                 self.selectedRampFrameRate = frameRate
             }
         }
+    }
+
+    /// Whether a burst-rate change would land right now. The remote asks before
+    /// reporting a command accepted — a false accept leaves the wrist showing a
+    /// rate the next burst will not use.
+    var canSelectRampFrameRate: Bool {
+        !isRampActive
     }
 
     @discardableResult
@@ -2524,6 +2553,16 @@ final class CameraController: NSObject, ObservableObject {
     /// and `updateCaptureOrientation`) rather than reading UIKit — this is
     /// called from `sessionQueue`, where UIKit access is illegal and crashes.
     private func captureOrientation() -> AVCaptureVideoOrientation {
+        latestCaptureOrientation
+    }
+
+    /// The pose a frame captured right now would be tagged with.
+    ///
+    /// A preview pixel buffer always arrives in the sensor's own landscape
+    /// regardless of how the phone is held, so anything that shows one — the
+    /// Watch framing preview — has to rotate it by this or it will show a
+    /// portrait shot lying on its side.
+    var currentCaptureOrientation: AVCaptureVideoOrientation {
         latestCaptureOrientation
     }
     #endif

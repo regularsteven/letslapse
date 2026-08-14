@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>watchOS · Armed · Setup page</title>
-  <desc>Page two of the armed pager: the settings the old Ready screen crowded itself with. One horizontal swipe — the same distance the phone puts them behind a sheet. Video shows a burst read-out here instead, since the rate is dialled on the Controls tab once a run is going.</desc>
+  <title>watchOS · Armed · Setup page (Video)</title>
+  <desc>Page two of the armed pager, and the only place the run's shape can be set: the phone bakes ramp-versus-marker into the sequence at start and re-applies the capture format for a base-rate change, so neither can be offered mid-shoot. Both rate rows open a picker drawn from what the camera actually offers for this lens and resolution — availableBaseFPS and availableBurstFPS — so the remote can never name a rate the camera cannot shoot. Marks hides the burst row: a mark has no rate to switch to.</desc>
   <defs>
     <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
   </defs>
@@ -16,14 +16,20 @@
       <text x="197" y="30" font-size="15" class="b" fill="#6D6D72" text-anchor="end">10:09</text>
       <circle cx="14" cy="48" r="3.25" fill="#30D158"/>
       <text x="21" y="52" font-size="12" class="b" fill="#FFF" letter-spacing="0.6">ARMED</text>
-      <text x="11" y="66" font-size="11" class="m" fill="#FFF" opacity="0.56">12MP 4:3 · JPEG</text>
+      <text x="11" y="66" font-size="11" class="m" fill="#FFF" opacity="0.56">4K · 24 fps · ⚡100</text>
       <rect x="11" y="72" width="186" height="1" fill="#FFF" opacity="0.15"/>
-      <rect x="11" y="77" width="186" height="30" rx="11" fill="#1C1C1E"/>
-      <text x="21" y="96.5" font-size="13.5" class="sb" fill="#FFF">Every</text>
-      <text x="187" y="96.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="end">2 s</text>
-      <rect x="11" y="112" width="186" height="30" rx="11" fill="#1C1C1E"/>
-      <text x="21" y="131.5" font-size="13.5" class="sb" fill="#FFF">Blend</text>
-      <text x="187" y="131.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="end">10 frames</text>
+      <rect x="11" y="77" width="186" height="26" rx="10" fill="#1C1C1E"/>
+      <rect x="13" y="79" width="89" height="22" rx="8" fill="#FFF"/>
+      <text x="58.5" y="94.5" font-size="12.5" class="b" fill="#000" opacity="1" text-anchor="middle">Burst</text>
+      <text x="149.5" y="94.5" font-size="12.5" class="sb" fill="#FFF" opacity="0.58" text-anchor="middle">Marks</text>
+      <rect x="11" y="108" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <text x="21" y="127.5" font-size="13.5" class="sb" fill="#FFF">Base</text>
+      <text x="177" y="127.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="end">24 fps</text>
+      <path d="M183 119 l4 4 l-4 4" fill="none" stroke="#FFF" stroke-opacity="0.35" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+      <rect x="11" y="143" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <text x="21" y="162.5" font-size="13.5" class="sb" fill="#FFF">Burst</text>
+      <text x="177" y="162.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="end">100 fps</text>
+      <path d="M183 154 l4 4 l-4 4" fill="none" stroke="#FFF" stroke-opacity="0.35" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
       <circle cx="99" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
       <circle cx="109" cy="232" r="2.5" fill="#FFF" opacity="1"/>
     </g>

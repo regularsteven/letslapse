@@ -30,6 +30,8 @@ struct WatchControlView: View {
     @State private var recordingTab: RecordingTab = .burst
     @State private var showIntervalPicker = false
     @State private var showFramesPicker = false
+    @State private var showBasePicker = false
+    @State private var showBurstPicker = false
     @State private var showStopAtSheet = false
     /// State-driven rather than a bare `NavigationLink` so the screenshot hook
     /// can land straight on the framing screen.
@@ -169,13 +171,13 @@ struct WatchControlView: View {
         // view's business, not the remote's.
         .onAppear {
             switch remote.debugPreviewScreen {
-            case "controls", "armed-setup": recordingTab = .controls
+            case "controls", "armed-setup", "armed-setup-marks": recordingTab = .controls
             case "stop": recordingTab = .stop
             case "locked": isLocked = true
             case "unlocking":
                 isLocked = true
                 unlockProgress = 0.6
-            case "framing", "framing-stale", "framing-aids",
+            case "framing", "framing-stale", "framing-aids", "framing-portrait",
                  "framing-square", "framing-tall", "framing-wide":
                 showFramingPreview = true
             default: break
@@ -273,7 +275,8 @@ struct WatchControlView: View {
     }
 
     private var burstTabLabel: String {
-        remote.captureMode == .video ? (isMarkerMode ? "Mark" : "Burst") : "Run"
+        guard remote.captureMode == .video else { return "Run" }
+        return isMarkerMode ? "Mark" : "Burst"
     }
 
     /// Whether a burst has anywhere to go.
@@ -317,6 +320,10 @@ struct WatchControlView: View {
                 timedBurstRow
             } else if isMarkerMode {
                 markPad.layoutPriority(1)
+                // The chips arm a duration for a MARK just as they do for a
+                // burst — the phone closes both on its own timer, so the mark
+                // gets its OUT even if the wrist has gone to sleep.
+                timedBurstRow
             } else {
                 captureCountPanel.layoutPriority(1)
             }
@@ -347,7 +354,10 @@ struct WatchControlView: View {
             SlideToCommit(
                 direction: .up,
                 tint: RemoteTint.burst,
-                title: "BURST",
+                // The bar names the rate it will switch to. Without it the
+                // control could not say what it was about to do, and the only
+                // place to find out was another tab.
+                title: burstIdleTitle,
                 hint: armedBurstSeconds > 0 ? "Slide up · \(armedBurstSeconds)s" : "Slide up to burst",
                 enabled: !remote.isSending && remote.isReachable
             ) {
@@ -360,24 +370,42 @@ struct WatchControlView: View {
         }
     }
 
+    private var burstIdleTitle: String {
+        remote.rampFPS > 0 ? "BURST @ \(remote.rampFPS)" : "BURST"
+    }
+
     /// Names the rate a running burst is actually at — "bursting" alone never
     /// told you whether the phone had reached the rate you asked for.
     private var burstLiveTitle: String {
         remote.rampFPS > 0 ? "\(remote.rampFPS) FPS" : "BURSTING"
     }
 
-    /// Marker mode has no rate to switch to, so the pad drops a mark instead.
-    /// Same axis, same friction — the vocabulary doesn't change just because
-    /// the payload does.
+    /// A mark is an annotation with a start and an end, made at whatever rate
+    /// the capture is already running — nothing about the footage changes, it
+    /// just says "this moment is worth coming back to".
+    ///
+    /// So the pad names the edge it is about to place: **IN**, then **OUT**.
+    /// The same axis and the same friction as a burst; only the payload
+    /// differs. An armed duration auto-places the OUT, and sliding up again
+    /// places it early — either way the mark closes.
     private var markPad: some View {
         SlideToCommit(
             direction: .up,
             tint: RemoteTint.burst,
-            title: remote.isRampActive ? "END MARK" : "MARK",
-            hint: remote.isRampActive ? "Slide up to close" : "Slide up to mark",
+            title: remote.isRampActive ? "MARK OUT" : "MARK IN",
+            hint: remote.isRampActive
+                ? (remote.timedBurstSeconds != nil ? "Auto out · or slide up" : "Slide up to mark OUT")
+                : (armedBurstSeconds > 0 ? "Slide up · \(armedBurstSeconds)s" : "Slide up to mark IN"),
             enabled: !remote.isSending && remote.isReachable
         ) {
-            remote.triggerMoment()
+            // An armed duration closes the mark on the phone's own timer, so
+            // it lands even if the watch sleeps — the same mechanism a timed
+            // burst uses, and the reason the chips apply to both.
+            if !remote.isRampActive, armedBurstSeconds > 0 {
+                remote.triggerTimedBurst(seconds: armedBurstSeconds)
+            } else {
+                remote.triggerMoment()
+            }
         }
     }
 
@@ -1161,7 +1189,21 @@ struct WatchControlView: View {
                     intervalRow
                     framesRow
                 } else {
-                    burstRateSummaryRow
+                    // Ramp or marker has to be chosen HERE, before the run:
+                    // the phone bakes the mode into the sequence at start, so
+                    // offering it mid-shoot would be offering something that
+                    // cannot take effect.
+                    RemoteSegmented(
+                        options: [("ramp", "Burst"), ("marker", "Marks")],
+                        selection: remote.sequenceMode,
+                        enabled: !remote.isSending && remote.isReachable
+                    ) { mode in
+                        remote.setSequenceMode(mode)
+                    }
+                    baseRateRow
+                    if remote.sequenceMode == "ramp" {
+                        burstRateRow
+                    }
                 }
 
                 if remote.isExposureLocked {
@@ -1173,23 +1215,88 @@ struct WatchControlView: View {
         }
     }
 
-    /// Video's counterpart of the interval/blend rows — a read-out, because
-    /// the rate is dialled on the controls tab once a shoot is running and on
-    /// the phone before one is.
-    private var burstRateSummaryRow: some View {
-        HStack {
-            Text("Burst")
-                .font(RemoteType.control)
-            Spacer(minLength: 4)
-            Text(remote.availableBurstFPS.isEmpty ? "None available" : "\(remote.rampFPS) fps")
-                .font(RemoteType.control)
-                .foregroundStyle(remote.availableBurstFPS.isEmpty ? .secondary : RemoteTint.burst)
+    /// What everything outside a burst shoots at. Changing it re-applies the
+    /// capture format on the phone, which is why it only exists here, on the
+    /// armed screen, and never mid-shoot.
+    private var baseRateRow: some View {
+        ratePickerRow(
+            title: "Base",
+            value: remote.baseFPS > 0 ? "\(remote.baseFPS) fps" : "—",
+            options: remote.availableBaseFPS,
+            selected: remote.baseFPS,
+            isPresented: $showBasePicker,
+            emptyMessage: "This camera offers one rate"
+        ) { remote.setBaseFPS($0) }
+    }
+
+    /// What a burst switches to. Offered here as well as on the controls tab
+    /// so the whole run can be set up before it starts.
+    private var burstRateRow: some View {
+        ratePickerRow(
+            title: "Burst",
+            value: remote.rampFPS > 0 ? "\(remote.rampFPS) fps" : "—",
+            options: remote.availableBurstFPS,
+            selected: remote.rampFPS,
+            isPresented: $showBurstPicker,
+            emptyMessage: "Nothing faster than \(remote.baseFPS) fps"
+        ) { remote.setBurstFPS($0) }
+    }
+
+    /// A rate row and its sheet. A camera with nothing to choose between says
+    /// so and does not open an empty list.
+    private func ratePickerRow(
+        title: String,
+        value: String,
+        options: [Int],
+        selected: Int,
+        isPresented: Binding<Bool>,
+        emptyMessage: String,
+        onSelect: @escaping (Int) -> Void
+    ) -> some View {
+        let hasChoice = options.count > 1 || (options.count == 1 && options[0] != selected)
+        return Button {
+            guard hasChoice else { return }
+            isPresented.wrappedValue = true
+        } label: {
+            HStack {
+                Text(title)
+                    .font(RemoteType.control)
+                Spacer(minLength: 4)
+                Text(hasChoice ? value : (options.isEmpty ? emptyMessage : value))
+                    .font(RemoteType.control)
+                    .foregroundStyle(options.isEmpty ? .secondary : RemoteTint.burst)
+                if hasChoice {
+                    Image(systemName: "chevron.forward")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white.opacity(0.35))
+                }
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: RemoteMetric.rowHeight)
+            .contentShape(Rectangle())
         }
-        .lineLimit(1)
-        .minimumScaleFactor(0.7)
-        .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, minHeight: RemoteMetric.rowHeight)
+        .buttonStyle(.plain)
         .background(RemoteTint.surface, in: RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous))
+        .disabled(!hasChoice || remote.isSending || !remote.isReachable)
+        .sheet(isPresented: isPresented) {
+            List(options, id: \.self) { fps in
+                Button {
+                    onSelect(fps)
+                    isPresented.wrappedValue = false
+                } label: {
+                    HStack {
+                        Text("\(fps) fps")
+                        Spacer()
+                        if fps == selected {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(RemoteTint.burst)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var intervalRow: some View {

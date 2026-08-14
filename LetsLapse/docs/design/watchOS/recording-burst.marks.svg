@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>watchOS · Recording · Burst tab (Video, marks only)</title>
-  <desc>Marker mode has no rate to switch to, so the same pad drops a mark instead. Same axis, same friction — the vocabulary does not change because the payload does. No duration chips: a mark has no length.</desc>
+  <desc>A mark is an annotation with a start and an end, made at whatever rate the capture is already running — nothing about the footage changes, it just says this moment is worth coming back to. So the pad names the edge it is about to place: MARK IN, then MARK OUT. The duration chips arm an auto-OUT on the phone’s own timer, so the mark closes even if the wrist sleeps; sliding up again closes it early.</desc>
   <defs>
     <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
   </defs>
@@ -24,19 +24,26 @@
       <rect x="11" y="77" width="186" height="68" rx="14" fill="#FFD60A" opacity="0.10"/>
       <rect x="11" y="77" width="186" height="68" rx="14" fill="none" stroke="#FFD60A" stroke-opacity="0.42"/>
       <path d="M98 85 l6 -5 l6 5" fill="none" stroke="#FFD60A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
-      <text x="104" y="97" font-size="12.5" class="sb" fill="#FFD60A" text-anchor="middle">Slide up to mark</text>
+      <text x="104" y="97" font-size="12.5" class="sb" fill="#FFD60A" text-anchor="middle">Slide up · 1s</text>
       <rect x="15" y="115" width="178" height="26" rx="11" fill="#FFD60A"/>
-      <text x="104" y="132.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">MARK</text>
-      <rect x="11" y="150" width="186" height="30" rx="11" fill="#1C1C1E"/>
-      <text x="21" y="169.5" font-size="13.5" class="sb" fill="#FFF">AE/AF Lock</text>
-      <rect x="150" y="154.5" width="37" height="21" rx="10.5" fill="#39393D"/>
-      <circle cx="160.5" cy="165" r="8.5" fill="#FFF"/>
+      <text x="104" y="132.5" font-size="13" class="b" fill="#000" text-anchor="middle" letter-spacing="0.5">MARK IN</text>
+      <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="#FFD60A" opacity="0.16"/>
+      <rect x="11" y="150" width="58.6667" height="24" rx="9" fill="none" stroke="#FFD60A" stroke-width="1.5"/>
+      <text x="40.3333" y="166.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="middle">1s</text>
+      <rect x="74.6667" y="150" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
+      <text x="104" y="166.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">4s</text>
+      <rect x="138.333" y="150" width="58.6667" height="24" rx="9" fill="#2C2C2E"/>
+      <text x="167.667" y="166.5" font-size="13.5" class="sb" fill="#FFF" opacity="0.72" text-anchor="middle">8s</text>
+      <rect x="11" y="179" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <text x="21" y="198.5" font-size="13.5" class="sb" fill="#FFF">AE/AF Lock</text>
+      <rect x="150" y="183.5" width="37" height="21" rx="10.5" fill="#39393D"/>
+      <circle cx="160.5" cy="194" r="8.5" fill="#FFF"/>
       <circle cx="94" cy="232" r="2.5" fill="#FFF" opacity="1"/>
       <circle cx="104" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
       <circle cx="114" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
     </g>
   </g>
 
-  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Recording · Mark · 208×248 pt</text>
-  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — markPad · exposureLockRow</text>
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Recording · Mark IN · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — markPad · timedBurstRow</text>
 </svg>

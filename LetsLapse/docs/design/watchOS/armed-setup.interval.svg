@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>watchOS · Armed · Setup page (Interval)</title>
+  <desc>The same page in Interval, where the considered settings are the interval and the blend depth rather than frame rates. These are the two rows the old Ready screen crowded itself with; nothing the watch could do before the redesign was lost, it moved here.</desc>
+  <defs>
+    <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.h{font-weight:800}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="38" y="16" width="224" height="264" rx="60" fill="none" stroke="#3A3A3F" stroke-width="4"/>
+  <rect x="264" y="86" width="10" height="36" rx="5" fill="#3A3A3F"/>
+  <rect x="264" y="150" width="7" height="44" rx="3.5" fill="#3A3A3F"/>
+
+  <g clip-path="url(#wscreen)">
+    <rect x="46" y="24" width="208" height="248" fill="#000"/>
+    <g transform="translate(46,24)">
+      <text x="197" y="30" font-size="15" class="b" fill="#6D6D72" text-anchor="end">10:09</text>
+      <circle cx="14" cy="48" r="3.25" fill="#30D158"/>
+      <text x="21" y="52" font-size="12" class="b" fill="#FFF" letter-spacing="0.6">ARMED</text>
+      <text x="11" y="66" font-size="11" class="m" fill="#FFF" opacity="0.56">12MP 4:3 · JPEG</text>
+      <rect x="11" y="72" width="186" height="1" fill="#FFF" opacity="0.15"/>
+      <rect x="11" y="77" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <text x="21" y="96.5" font-size="13.5" class="sb" fill="#FFF">Every</text>
+      <text x="187" y="96.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="end">2 s</text>
+      <rect x="11" y="112" width="186" height="30" rx="11" fill="#1C1C1E"/>
+      <text x="21" y="131.5" font-size="13.5" class="sb" fill="#FFF">Blend</text>
+      <text x="187" y="131.5" font-size="13.5" class="sb" fill="#FFD60A" text-anchor="end">10 frames</text>
+      <circle cx="99" cy="232" r="2.5" fill="#FFF" opacity="0.26"/>
+      <circle cx="109" cy="232" r="2.5" fill="#FFF" opacity="1"/>
+    </g>
+  </g>
+
+  <text x="150" y="316" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">watchOS · Armed · Setup (Interval) · 208×248 pt</text>
+  <text x="150" y="334" text-anchor="middle" font-size="9" fill="#8A8A90">mirrors WatchControlView.swift — armedControlsScreen</text>
+</svg>

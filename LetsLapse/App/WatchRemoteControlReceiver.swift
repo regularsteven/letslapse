@@ -58,6 +58,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     /// remote draws its rate ladder from this, so it can only ever offer what
     /// the capability matrix has already cleared.
     private var availableBurstFPS: [Int] = []
+    /// Every base frame rate this lens and resolution can shoot. Counterpart
+    /// to `availableBurstFPS`, for the remote's base-rate picker.
+    private var availableBaseFPS: [Int] = []
     private var plannedSpeed = 0
     private var outputFPS = 0
     private var isExposureLocked = false
@@ -230,6 +233,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         baseFPS: Int,
         rampFPS: Int,
         availableBurstFPS: [Int],
+        availableBaseFPS: [Int],
         plannedSpeed: Int,
         outputFPS: Int
     ) {
@@ -238,6 +242,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             || self.baseFPS != baseFPS
             || self.rampFPS != rampFPS
             || self.availableBurstFPS != availableBurstFPS
+            || self.availableBaseFPS != availableBaseFPS
             || self.plannedSpeed != plannedSpeed
             || self.outputFPS != outputFPS
         self.formatLine = formatLine
@@ -245,6 +250,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         self.baseFPS = baseFPS
         self.rampFPS = rampFPS
         self.availableBurstFPS = availableBurstFPS
+        self.availableBaseFPS = availableBaseFPS
         self.plannedSpeed = plannedSpeed
         self.outputFPS = outputFPS
         if changed {
@@ -466,6 +472,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.baseFPS] = baseFPS
         payload[WatchMessageKey.rampFPS] = rampFPS
         payload[WatchMessageKey.availableBurstFPS] = availableBurstFPS
+        payload[WatchMessageKey.availableBaseFPS] = availableBaseFPS
         payload[WatchMessageKey.plannedSpeed] = plannedSpeed
         payload[WatchMessageKey.outputFPS] = outputFPS
         payload[WatchMessageKey.captureMode] = captureMode.rawValue

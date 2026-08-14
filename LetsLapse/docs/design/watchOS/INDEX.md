@@ -32,9 +32,10 @@ rendering / in setup) · **Unreachable** · **Locked**. Photo mode is phone-only
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
 | Armed | [armed.svg](armed.svg) | `Remote/WatchControlView.swift` (`armedScreen`, `RemoteSegmented`, `exposureLockRow`, `checkFramingRow`, `startButton`) | ✅ |
-| Armed · Setup page | [armed-setup.svg](armed-setup.svg) | `armedControlsScreen` — `intervalRow`, `framesRow`, `lockedExposureRow` | ✅ |
+| Armed · Setup page (Video) | [armed-setup.svg](armed-setup.svg) | `armedControlsScreen` — Burst/Marks segmented (`setSequenceMode`), `baseRateRow`, `burstRateRow` | ✅ |
+| Armed · Setup page (Interval) | [armed-setup.interval.svg](armed-setup.interval.svg) | `armedControlsScreen` interval branch — `intervalRow`, `framesRow` | ✅ |
 | Recording · Burst (Video, ramp) | [recording-burst.svg](recording-burst.svg) | `burstTab`, `burstPad` (`SlideToCommit` `.up`), `timedBurstRow` chips 1s/4s/8s, `exposureLockRow` | ✅ |
-| Recording · Burst (marks only) | [recording-burst.marks.svg](recording-burst.marks.svg) | `markPad` — same axis, drops a mark; no duration chips | ✅ |
+| Recording · Mark IN (marks only) | [recording-burst.marks.svg](recording-burst.marks.svg) | `markPad` — MARK IN / MARK OUT, `timedBurstRow` arms the auto-OUT | ✅ |
 | Recording · Burst (Interval) | [recording-burst.interval.svg](recording-burst.interval.svg) | `captureCountPanel`, `runSettingsLine` | ✅ |
 | Recording · Controls (Video) | [recording-controls.svg](recording-controls.svg) | `controlsTab`, `burstRateLadder`, `crownOwner == .burstRate` | ✅ |
 | Recording · Controls (Interval) | [recording-controls.interval.svg](recording-controls.interval.svg) | `controlsTab` interval branch — `intervalRow`, `framesRow` | ✅ |
@@ -43,6 +44,7 @@ rendering / in setup) · **Unreachable** · **Locked**. Photo mode is phone-only
 | Framing · live | [framing-live.svg](framing-live.svg) | `Remote/FramingPreviewView.swift` (`framePicture`, `aids`, `horizonBar`, `statusChip`) | ✅ |
 | Framing · stalled | [framing-stale.svg](framing-stale.svg) | `StaleTreatment`, `staleBanner`, `isStale` | ✅ |
 | Framing · square lens | [framing-square.svg](framing-square.svg) | `AspectLens`, `fitted(ratio:in:)`, `lensChip` | ✅ |
+| Framing · portrait shoot | [framing-portrait.svg](framing-portrait.svg) | `FramingPreviewService.encode` rotation, `LevelSensor.rollDegrees` | ✅ |
 | Phone · camera closed | [phone-camera-closed.svg](phone-camera-closed.svg) | `cameraClosedScreen`, `armCameraButton` | ✅ |
 | Phone · rendering | [phone-busy.svg](phone-busy.svg) | `phoneBusyScreen`, `exportProgress` / `exportETASeconds` | ✅ |
 | Phone · confirm cancel | [phone-busy.confirm.svg](phone-busy.confirm.svg) | `CancelExportConfirmation` | ✅ |
@@ -52,12 +54,38 @@ rendering / in setup) · **Unreachable** · **Locked**. Photo mode is phone-only
 | Controls locked | [locked.svg](locked.svg) | `Remote/ControlsLockedView.swift`, `updateIdleLock(at:)` | ✅ |
 | Controls locked · unlocking | [locked.unlocking.svg](locked.unlocking.svg) | `unlockRing`, `unlockTravel` | ✅ |
 | Unreachable | [unreachable.svg](unreachable.svg) | `unreachableScreen`, `phoneAppState` | ✅ |
-| Framing · tall / wide lens | — | `AspectLens.tall` / `.wide` — pillarbox and letterbox variants of framing-square | 🟡 |
+| Framing · tall / wide lens | — | `AspectLens.tall` / `.wide` — same treatment as framing-square at 9:16 and 16:9 | 🟡 |
 | Armed (Bulb armed) | — | amber "Bulb · start, then slide to stop" banner | 🟡 |
 | Interval/frames pickers (sheets) | — | `intervalRow` / `framesRow` `.sheet` lists | 🟡 |
 
 Superseded by the redesign and deleted: `ready-interval.svg`, `recording-video.svg`, `recording-video.freeform.svg`,
 `recording-interval.svg`.
+
+## Corrections after the first device build (2026-08-14)
+
+Steven's pass on the built app found four gaps. All four were the same shape: the remote could *show* a
+setting but not *change* it, or showed it in a pose that wasn't true.
+
+- **Burst rate could not change mid-shoot.** `CameraController.selectRampFrameRate` returned early while
+  recording, and a run bakes its ramp rate into the sequence at start — so the watch's ladder moved, the
+  phone ignored it, and the next state push snapped the wrist back to the old rate. The guard is now the
+  narrower and correct one (refuse only while a burst is *open*), the selection updates
+  `activeSequence.rampFrameRate` so the next burst actually uses it, and the phone reports a refusal
+  instead of a false accept.
+- **Base frame rate and ramp-versus-marker had no control at all.** Both are now pickers on the armed
+  setup page, drawn from `availableBaseFPS` / `availableBurstFPS`. Both are idle-only by nature — a base
+  change re-applies the capture format, and the mode is baked into the sequence at start — so the armed
+  screen is the only place they can honestly be offered.
+- **The horizon bar drew itself vertical in landscape.** The angle was measured against portrait, so a
+  level 16:9 shoot reported 90°. It is now measured against the **nearest quarter turn**, which reads 0°
+  when level in any hold.
+- **A portrait shoot arrived lying on its side.** A preview buffer is always in the sensor's landscape;
+  `FramingPreviewService` now rotates by the phone's live capture orientation before encoding and reports
+  the rotated dimensions, so a portrait shoot pillarboxes as 9:16 on the watch.
+
+Two copy changes came with them: the burst bar names its rate (**BURST @ 100**), and marks use the edit
+vocabulary they actually are — **MARK IN** then **MARK OUT**, with the duration chips arming an auto-OUT
+on the phone's timer.
 
 ## Deliberate departures from the source spec
 
@@ -103,8 +131,8 @@ DEBUG launch hook, one value per screen:
 SIMCTL_CHILD_LL_UI_PREVIEW=recording xcrun simctl launch "LL Watch S11" com.regularsteven.letslapse.watchkitapp
 ```
 
-`recording` · `controls` · `stop` · `marker` · `interval` · `no-burst` · `armed` · `armed-setup` · `framing` ·
-`framing-stale` · `framing-square` · `framing-tall` · `framing-wide` · `camera-closed` · `busy` · `setup` · `sending` ·
+`recording` · `controls` · `stop` · `marker` · `interval` · `no-burst` · `armed` · `armed-setup` · `armed-setup-marks` · `framing` ·
+`framing-stale` · `framing-portrait` · `framing-square` · `framing-tall` · `framing-wide` · `camera-closed` · `busy` · `setup` · `sending` ·
 `failed` · `locked` · `unlocking`.
 
 Sign-off is the paired-sim rig (iPhone 17 Pro + "LL Watch S11"). Per `Remote/RemoteWindow.swift`, **no watchOS spec may

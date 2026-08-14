@@ -27,6 +27,14 @@ enum WatchCaptureCommand: String {
     /// dropped the ones that would change optic or codec mid-sequence, so a
     /// remote offering anything else would be offering a burst that can't run.
     case setBurstFPS
+    /// The run's base frame rate — what everything outside a burst shoots at.
+    /// Unlike the burst rate this DOES re-apply the capture format, so it is
+    /// idle-only; the remote offers it on the armed screen and nowhere else.
+    case setBaseFPS
+    /// Ramp (bursts switch frame rate) versus marker (bursts annotate a moment
+    /// at the rate already running). Baked into the sequence at start, so this
+    /// is idle-only too.
+    case setSequenceMode
     case scheduleStop
     case cancelScheduledStop
     /// Bring the camera back without touching the phone. Presents the capture
@@ -64,7 +72,8 @@ extension WatchCaptureCommand {
         case .startRecording, .stopRecording, .triggerMoment, .timedBurst,
              .lockExposure, .unlockExposure, .setISO, .setLensPosition,
              .setCaptureMode, .setIntervalSeconds, .setFramesPerBlend,
-             .setBurstFPS, .scheduleStop, .cancelScheduledStop,
+             .setBurstFPS, .setBaseFPS, .setSequenceMode,
+             .scheduleStop, .cancelScheduledStop,
              .armCamera, .cancelExport:
             return true
         }
@@ -85,6 +94,10 @@ extension WatchCaptureCommand {
             return "No burst was started."
         case .setBurstFPS:
             return "The burst rate is unchanged."
+        case .setBaseFPS:
+            return "The base frame rate is unchanged."
+        case .setSequenceMode:
+            return "The burst behaviour is unchanged."
         case .setCaptureMode:
             return "The capture mode is unchanged."
         case .setIntervalSeconds, .setFramesPerBlend:

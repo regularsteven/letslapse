@@ -97,13 +97,20 @@ final class FramingPreviewService {
     private static let longEdge: CGFloat = 420
 
     private func encode(_ buffer: CVPixelBuffer) -> FramingFrame? {
-        let width = CVPixelBufferGetWidth(buffer)
-        let height = CVPixelBufferGetHeight(buffer)
+        guard CVPixelBufferGetWidth(buffer) > 0, CVPixelBufferGetHeight(buffer) > 0 else { return nil }
+
+        // Rotate to the pose the phone is actually being held in. A preview
+        // buffer always arrives in the sensor's landscape, so without this a
+        // portrait shoot reached the wrist lying on its side — and the aspect
+        // lenses letterboxed a 16:9 frame that should have been 9:16.
+        let oriented = CIImage(cvPixelBuffer: buffer)
+            .oriented(Self.imageOrientation(for: camera?.currentCaptureOrientation ?? .landscapeRight))
+        let width = Int(oriented.extent.width)
+        let height = Int(oriented.extent.height)
         guard width > 0, height > 0 else { return nil }
 
         let scale = min(1, Self.longEdge / CGFloat(max(width, height)))
-        let image = CIImage(cvPixelBuffer: buffer)
-            .transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+        let image = oriented.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
 
         for quality in Self.qualitySteps {
             guard let data = context.jpegRepresentation(
@@ -122,6 +129,20 @@ final class FramingPreviewService {
             }
         }
         return nil
+    }
+
+    /// The back camera's buffer arrives with the scene upright for
+    /// `.landscapeRight`; every other pose is a quarter turn from it.
+    private static func imageOrientation(
+        for orientation: AVCaptureVideoOrientation
+    ) -> CGImagePropertyOrientation {
+        switch orientation {
+        case .landscapeRight: return .up
+        case .portrait: return .right
+        case .landscapeLeft: return .down
+        case .portraitUpsideDown: return .left
+        @unknown default: return .up
+        }
     }
 }
 
@@ -180,20 +201,21 @@ final class LevelSensor {
     /// anticlockwise. Starts the sensor on first ask and returns nil until it
     /// has a reading — an invented zero would read as "perfectly level", which
     /// is the one wrong answer that looks right.
+    ///
+    /// **Measured against the nearest square hold, not against portrait.** A
+    /// phone shooting 16:9 is lying on its side, which is 90° of raw roll; the
+    /// first version folded that into ±90 and reported exactly 90, so the
+    /// horizon bar on the wrist drew itself vertical. What anyone framing a
+    /// shot means by "level" is *how far off the nearest quarter turn*, which
+    /// is right for portrait, either landscape, and upside-down alike.
     var rollDegrees: Double? {
         start()
         guard let gravity = motion.deviceMotion?.gravity else { return nil }
-        // Roll about the device's long axis, which for a phone framing a shot
-        // is the axis the horizon tips around. `atan2` over the two axes in
-        // the screen plane keeps it correct through the full ±180°, where
-        // asin(x) would fold at the extremes.
-        let radians = atan2(gravity.x, -gravity.y)
-        var degrees = radians * 180 / .pi
-        // Landscape holds put the reference 90° away; fold the reading into
-        // ±90 so "level" is 0 whichever way the phone is turned.
-        if degrees > 90 { degrees -= 180 }
-        if degrees < -90 { degrees += 180 }
-        return degrees
+        // `atan2` over the two axes in the screen plane stays correct through
+        // the full ±180°, where `asin` would fold at the extremes.
+        let raw = atan2(gravity.x, -gravity.y) * 180 / .pi
+        let square = (raw / 90).rounded() * 90
+        return raw - square
     }
 
     private func start() {
