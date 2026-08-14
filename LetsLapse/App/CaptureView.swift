@@ -112,11 +112,6 @@ struct CaptureView: View {
     /// a capped shot arms this so the first finished output stops the run. Bulb
     /// leaves it false — the user's second tap stops it.
     @State private var photoDNGAutoStop = false
-    /// Photo's discrete blend presets, high→low, ending at "Off" (a single
-    /// un-stacked frame, depth 1) — the same dial vocabulary Interval uses.
-    private static let photoBlendOptions: [(frames: Int, label: String)] = [
-        (20, "20 frames"), (10, "10 frames"), (5, "5 frames"), (3, "3 frames"), (1, "Off"),
-    ]
     /// Photo mode captures at a fixed fast burst rate — the blend (if any) is
     /// stacked in post, so the frames want dense sampling, not user spacing.
     private static let photoBurstInterval = 1.0 / 10.0
@@ -1549,113 +1544,26 @@ struct CaptureView: View {
     }
     #endif
 
-    /// The two interval dials — spacing and blend depth. One line where it
-    /// fits (Mac, landscape phones/iPads); portrait iPhones fall back to two
-    /// stacked lines.
+    /// The two interval dials — spacing and blend depth. Its own `Equatable`
+    /// view (see CaptureDials.swift): an open `Menu` is a live `UIMenu` on iOS,
+    /// so leaving it in this body made every unrelated re-render cross-fade the
+    /// open dial. `.equatable()` holds it still unless a drawn value moves.
     private var intervalPickerRow: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 8) {
-                intervalEveryPicker
-                blendFramesPicker
-                blendCaption
-            }
-            VStack(alignment: .leading, spacing: 6) {
-                intervalEveryPicker
-                HStack(spacing: 8) {
-                    blendFramesPicker
-                    blendCaption
-                }
-            }
-        }
-    }
-
-    private var intervalEveryPicker: some View {
-        HStack(spacing: 8) {
-            // fixedSize keeps ViewThatFits honest: a wrappable label would
-            // let the one-line layout "fit" by folding the word in half.
-            Text("EVERY")
-                .font(.system(size: 10, weight: .bold))
-                .kerning(0.8)
-                .foregroundStyle(.white.opacity(0.45))
-                .fixedSize()
-            Menu {
-                ForEach(captureIntervalOptions, id: \.self) { seconds in
-                    Button {
-                        interval = seconds
-                    } label: {
-                        if interval == seconds {
-                            Label(intervalLabel(seconds), systemImage: "checkmark")
-                        } else {
-                            Text(intervalLabel(seconds))
-                        }
-                    }
-                }
-            } label: {
-                pickerMenuLabel(intervalLabel(interval))
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
-    }
-
-    private var blendFramesPicker: some View {
-        HStack(spacing: 8) {
-            Text("BLEND")
-                .font(.system(size: 10, weight: .bold))
-                .kerning(0.8)
-                .foregroundStyle(.white.opacity(0.45))
-                .fixedSize()
-            Menu {
-                ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
-                    Button {
-                        blendDepth = .fixed(option.frames)
-                        lastFixedBlendFrames = option.frames
-                    } label: {
-                        if blendDepth == .fixed(option.frames) {
-                            Label(blendOptionLabel(option), systemImage: "checkmark")
-                        } else {
-                            Text(blendOptionLabel(option))
-                        }
-                    }
-                }
-                Divider()
-                Button {
-                    selectPsychoDepth()
-                } label: {
-                    if blendDepth == .unthrottled {
-                        Label("Psycho · as many as it can", systemImage: "checkmark")
-                    } else {
-                        Text("Psycho · as many as it can")
-                    }
-                }
-                // Safe without a matching profile would be a guess; it stays
-                // disabled until Psycho runs have taught one for this
-                // pipeline, interval and thermal state.
-                Button {
-                    blendDepth = .throttled
-                } label: {
-                    if blendDepth == .throttled {
-                        Label("Safe · learned limit", systemImage: "checkmark")
-                    } else {
-                        Text("Safe · learned limit")
-                    }
-                }
-                .disabled(!safeDepthAvailable)
-            } label: {
-                pickerMenuLabel(blendDepthMenuLabel)
-            }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
-    }
-
-    private var blendDepthMenuLabel: String {
-        switch blendDepth {
-        case .fixed(1): return "Off"
-        case .fixed(let frames): return "\(frames) frames"
-        case .unthrottled: return "Psycho"
-        case .throttled: return "Safe"
-        }
+        IntervalDialsRow(
+            intervalSeconds: interval,
+            intervalOptions: captureIntervalOptions,
+            blendDepth: blendDepth,
+            safeDepthAvailable: safeDepthAvailable,
+            captionText: blendCaptionText,
+            onSelectInterval: { interval = $0 },
+            onSelectFixedBlend: { frames in
+                blendDepth = .fixed(frames)
+                lastFixedBlendFrames = frames
+            },
+            onSelectPsycho: selectPsychoDepth,
+            onSelectSafe: { blendDepth = .throttled }
+        )
+        .equatable()
     }
 
     /// First selection shows the honest warmth-and-learning note, once.
@@ -1667,21 +1575,8 @@ struct CaptureView: View {
         }
     }
 
-    private func blendOptionLabel(_ option: (frames: Int, label: String)) -> String {
-        option.frames == 1 ? option.label : "\(option.frames) frames · \(option.label)"
-    }
-
     /// The trailing caption only makes sense while blending; the adaptive
     /// depths say what drives their count instead.
-    @ViewBuilder
-    private var blendCaption: some View {
-        if let text = blendCaptionText {
-            Text(text)
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.4))
-        }
-    }
-
     private var blendCaptionText: String? {
         switch blendDepth {
         case .fixed(let frames):
@@ -1695,20 +1590,6 @@ struct CaptureView: View {
                 intervalSeconds: interval)
             return learned.map { "≈\($0) frames into one image" } ?? "learned limit"
         }
-    }
-
-    private func pickerMenuLabel(_ text: String) -> some View {
-        HStack(spacing: 4) {
-            Text(text)
-                .font(.system(size: 12.5, weight: .semibold))
-            Image(systemName: "chevron.down")
-                .font(.system(size: 9, weight: .semibold))
-                .foregroundStyle(.white.opacity(0.4))
-        }
-        .foregroundStyle(.white)
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
     }
 
     /// Compact pipeline readout while the blend engine runs; the plain photo
@@ -1826,48 +1707,21 @@ struct CaptureView: View {
     /// disarms it and sets the stack depth. Photo captures at a fixed fast
     /// burst, so there's no spacing picker. The capture-when-steady toggle
     /// lives in the shutter-row controls (`steadyToggleCircle`) unchanged.
+    /// Its own `Equatable` view for the same reason as `intervalPickerRow` —
+    /// see CaptureDials.swift. Photo needs it most: `isWaitingForSteady` is not
+    /// `isCapturing`, so this row stays on screen through the steady-gate wait
+    /// while `SteadinessMonitor` publishes at 50 Hz.
     private var photoControlsRow: some View {
-        HStack(spacing: 8) {
-            Text("BLEND")
-                .font(.system(size: 10, weight: .bold))
-                .kerning(0.8)
-                .foregroundStyle(.white.opacity(0.45))
-                .fixedSize()
-            Menu {
-                Button {
-                    photoBulbMode = true
-                } label: {
-                    if photoBulbMode {
-                        Label("Bulb", systemImage: "checkmark")
-                    } else {
-                        Text("Bulb")
-                    }
-                }
-                ForEach(Self.photoBlendOptions, id: \.frames) { option in
-                    Button {
-                        photoBulbMode = false
-                        photoBlendDepth = option.frames
-                    } label: {
-                        if !photoBulbMode && photoBlendDepth == option.frames {
-                            Label(option.label, systemImage: "checkmark")
-                        } else {
-                            Text(option.label)
-                        }
-                    }
-                }
-            } label: {
-                pickerMenuLabel(photoBlendMenuLabel)
+        PhotoBlendDial(
+            isBulb: photoBulbMode,
+            frames: photoBlendDepth,
+            onSelectBulb: { photoBulbMode = true },
+            onSelectFrames: { frames in
+                photoBulbMode = false
+                photoBlendDepth = frames
             }
-            .menuStyle(.borderlessButton)
-            .fixedSize()
-        }
-    }
-
-    /// Photo's blend-menu label — "Bulb" when armed, "Off" for a single frame,
-    /// else the count.
-    private var photoBlendMenuLabel: String {
-        if photoBulbMode { return "Bulb" }
-        return photoBlendDepth <= 1 ? "Off" : "\(photoBlendDepth) frames"
+        )
+        .equatable()
     }
 
     // MARK: - Recent capture tile
