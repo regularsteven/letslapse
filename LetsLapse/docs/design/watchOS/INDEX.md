@@ -88,6 +88,25 @@ Two copy changes came with them: the burst bar names its rate (**BURST @ 100**),
 vocabulary they actually are — **MARK IN** then **MARK OUT**, with the duration chips arming an auto-OUT
 on the phone's timer.
 
+## Lock-screen corrections (2026-08-15)
+
+Steven's wrist run found the idle lock could be a trap: the crown sometimes did nothing at all, and the
+app could not leave the locked state.
+
+- **Nothing owned the crown when the lock came up.** The lock is an overlay; the dial underneath stayed
+  focusable (so a turn could silently drive burst rate or ISO), and idling on the burst tab left nothing
+  focusable at all — watchOS never gave the unlock dial focus on its own. The unlock dial now takes a
+  `@FocusState` binding, asserts it on mount and reclaims it if anything steals it, and the dial
+  underneath un-focuses while locked.
+- **Half of all turns were silent no-ops.** The unlock dial was seeded at the floor of its clamped
+  range, so the decreasing direction never produced a change event — despite the copy promising either
+  direction works. It now seeds mid-range.
+- **A full unlock took several real revolutions.** `unlockTravel` drops 60 → 24 (≈ 0.4 revolution at
+  medium sensitivity); the subline is now ring-based — **Controls return when the ring fills** — so it
+  stays true under wrist tuning of that one constant. `locked.unlocking.svg` moves with it.
+- **A failure arriving while locked was unreachable** (the banner renders under the overlay). A failure
+  now releases the lock, completing the existing "never lock behind a failure banner" rule.
+
 ## In-shoot marks (2026-08-14, second pass)
 
 The mock's tab 2 offered **Frame rate | Marks only** as a mode switch. That was the wrong shape, and Steven

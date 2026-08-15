@@ -41,6 +41,7 @@ struct WatchControlView: View {
     @State private var unlockCrown: Double = 0
     @State private var lastUnlockCrown: Double = 0
     @State private var unlockProgress: Double = 0
+    @FocusState private var unlockCrownFocused: Bool
     /// Armed burst length in seconds; 0 = none, so a commit runs open-ended.
     /// The last choice (including "none") is the default for every later run.
     @AppStorage("letslapse.watch.burstDefaultSeconds") private var armedBurstSeconds = 1
@@ -57,11 +58,15 @@ struct WatchControlView: View {
     /// think between bursts, short enough that a walk to the next vantage
     /// point locks it.
     private let idleLockSeconds: TimeInterval = 90
-    /// Crown units for a full unlock turn. `sensitivity: .medium` puts roughly
-    /// this much travel in one revolution — but crown feel is not decidable on
-    /// a Mac (see CrownAdjustment's note), so this figure is a starting point
-    /// to be judged on a real wrist.
-    private let unlockTravel: Double = 60
+    /// Crown units for the unlock turn. Deliberately UNDER one physical
+    /// revolution at `.medium` — the 2026-08 wrist verdict on 60 was "too many
+    /// rotations". The copy is ring-based ("when the ring fills"), so it stays
+    /// true wherever wrist tuning of this one constant lands.
+    private let unlockTravel: Double = 24
+    /// Mid-range of the 0…10_000 scratch dial. Seeding at the clamp floor 0
+    /// pinned the binding for the decreasing direction — the value never
+    /// changed, so half of all rotation attempts were silent no-ops.
+    private let unlockCrownSeed: Double = 5_000
 
     /// Left to right, in the order the design fixes them: the thing you do
     /// often, the thing you consider, the thing that ends the shoot. Stop is
@@ -173,9 +178,9 @@ struct WatchControlView: View {
             switch remote.debugPreviewScreen {
             case "controls", "armed-setup", "armed-setup-marks": recordingTab = .controls
             case "stop": recordingTab = .stop
-            case "locked": isLocked = true
+            case "locked": engageLock()
             case "unlocking":
-                isLocked = true
+                engageLock()
                 unlockProgress = 0.6
             case "framing", "framing-stale", "framing-aids", "framing-portrait",
                  "framing-square", "framing-tall", "framing-wide":
@@ -538,16 +543,24 @@ struct WatchControlView: View {
             from: crownRange.lowerBound,
             through: crownRange.upperBound,
             by: crownStep,
-            isEnabled: crownOwner != .none
+            // Un-focusing while locked matters as much as the enable: a still-
+            // focusable dial under the lock overlay held the crown, so turning
+            // it drove burst-rate/ISO invisibly instead of the unlock ring.
+            isEnabled: crownOwner != .none && !isLocked
         )
         .onChange(of: burstRateAdjust) { newValue in
             guard crownOwner == .burstRate else { return }
+            // A crown turn is an interaction; without this the idle lock could
+            // engage mid-dial. (After the owner guard, so programmatic seeds
+            // from `onAppear`/phone pushes don't count.)
+            lastInteractionAt = Date()
             let rate = nearestBurstRate(to: newValue)
             guard rate != remote.rampFPS else { return }
             remote.setBurstFPS(rate)
         }
         .onChange(of: isoAdjust) { newValue in
             guard crownOwner == .iso else { return }
+            lastInteractionAt = Date()
             remote.setISO(newValue)
         }
         .onChange(of: remote.isExposureLocked) { locked in
@@ -953,11 +966,28 @@ struct WatchControlView: View {
               remote.lastFailure == nil,
               !remote.isSending,
               !showStopAtSheet,
+              // The framing screen is pushed OVER this view — a lock engaging
+              // under it is invisible, and its always-on crown dial would
+              // contest the unlock dial.
+              !showFramingPreview,
               date.timeIntervalSince(lastInteractionAt) >= idleLockSeconds else { return }
+        engageLock()
+    }
+
+    private func engageLock() {
         isLocked = true
         unlockProgress = 0
-        unlockCrown = 0
-        lastUnlockCrown = 0
+        // Both seeded identically, so the first crown delta is a real delta,
+        // not a 5 000-unit jump.
+        unlockCrown = unlockCrownSeed
+        lastUnlockCrown = unlockCrownSeed
+    }
+
+    private func releaseLock() {
+        isLocked = false
+        unlockProgress = 0
+        // In the same breath, or the 1 Hz timer could re-lock on its next tick.
+        lastInteractionAt = Date()
     }
 
     private var lockedOverlay: some View {
@@ -967,23 +997,43 @@ struct WatchControlView: View {
             stopsAt: lockedStatusLine,
             unlockProgress: unlockProgress
         )
-        // The crown is the only input here, so nothing contests it.
-        .crownAdjustable($unlockCrown, from: 0, through: 10_000, by: 1)
+        // The crown is the only input here — and provably owns it: the dial
+        // underneath un-focuses while locked, and this binding is asserted on
+        // mount and reclaimed if anything steals it.
+        .crownAdjustable($unlockCrown, from: 0, through: 10_000, by: 0.5,
+                         focus: $unlockCrownFocused)
+        .onAppear { assertUnlockFocus() }
+        .onChange(of: unlockCrownFocused) { focused in
+            if !focused && isLocked { assertUnlockFocus() }
+        }
         .onChange(of: unlockCrown) { newValue in
             // Absolute travel, so it unlocks whichever way you turn — a rule
             // about direction is one more thing to remember at the exact
             // moment you want the controls back.
             unlockProgress += abs(newValue - lastUnlockCrown) / unlockTravel
             lastUnlockCrown = newValue
-            if unlockProgress >= 1 {
-                isLocked = false
-                unlockProgress = 0
-                lastInteractionAt = Date()
-            }
+            if unlockProgress >= 1 { releaseLock() }
         }
         // A shoot that ends while locked has nothing left to protect.
         .onChange(of: remote.recordingState) { state in
-            if state != .recording { isLocked = false }
+            if state != .recording { releaseLock() }
+        }
+        // A failure must never be locked away: the banner renders under this
+        // overlay and would be unreachable. (`RemoteCommandFailure` is
+        // Identifiable, not Equatable — observe presence, not value.)
+        .onChange(of: remote.lastFailure != nil) { hasFailure in
+            if hasFailure { releaseLock() }
+        }
+    }
+
+    /// watchOS drops focus assignments made before the focus engine has
+    /// registered a just-mounted view, so assert now and once more a beat
+    /// later. The `onChange` reclaim above covers everything after that.
+    private func assertUnlockFocus() {
+        unlockCrownFocused = true
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 150_000_000)
+            if isLocked { unlockCrownFocused = true }
         }
     }
 

@@ -127,7 +127,7 @@ struct ControlsLockedView: View {
 
             Text("Keep turning")
                 .font(.system(size: 14, weight: .bold))
-            Text("Controls return at full turn")
+            Text("Controls return when the ring fills")
                 .font(.system(size: 10))
                 .foregroundStyle(.white.opacity(0.55))
                 .multilineTextAlignment(.center)

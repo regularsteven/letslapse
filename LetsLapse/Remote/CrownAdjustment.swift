@@ -23,14 +23,16 @@ extension View {
         from lowerBound: Double,
         through upperBound: Double,
         by step: Double,
-        isEnabled: Bool = true
+        isEnabled: Bool = true,
+        focus: FocusState<Bool>.Binding? = nil
     ) -> some View {
         modifier(CrownAdjustment(
             value: value,
             lowerBound: lowerBound,
             upperBound: upperBound,
             step: step,
-            isEnabled: isEnabled))
+            isEnabled: isEnabled,
+            focus: focus))
     }
 }
 
@@ -40,18 +42,38 @@ private struct CrownAdjustment: ViewModifier {
     let upperBound: Double
     let step: Double
     let isEnabled: Bool
+    /// watchOS leaves first focus to chance when several focusable views are
+    /// mounted (or none was, and one appears). A site that must own the crown
+    /// the moment it appears — the lock screen — passes a binding and asserts
+    /// it; everyone else leaves this nil and keeps today's behaviour.
+    var focus: FocusState<Bool>.Binding?
 
+    @ViewBuilder
     func body(content: Content) -> some View {
         #if os(watchOS)
-        content
-            .focusable(isEnabled)
-            .digitalCrownRotation(
-                $value,
-                from: lowerBound,
-                through: upperBound,
-                by: step,
-                sensitivity: .medium)
+        if let focus {
+            content
+                .focusable(isEnabled)
+                .focused(focus)
+                .digitalCrownRotation(
+                    $value,
+                    from: lowerBound,
+                    through: upperBound,
+                    by: step,
+                    sensitivity: .medium)
+        } else {
+            content
+                .focusable(isEnabled)
+                .digitalCrownRotation(
+                    $value,
+                    from: lowerBound,
+                    through: upperBound,
+                    by: step,
+                    sensitivity: .medium)
+        }
         #else
+        // Focus is a crown concept; the Mac's scroll arbiter below already
+        // picks one owner, so the binding is accepted and ignored here.
         content.modifier(ScrollWheelAdjustment(
             value: $value,
             lowerBound: lowerBound,

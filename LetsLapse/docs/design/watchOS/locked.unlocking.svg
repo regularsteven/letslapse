@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 300 352" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>watchOS · Controls locked · unlocking</title>
-  <desc>Crown rotation, the platform's own convention and the one input a sleeve cannot produce. Absolute travel, so it unlocks whichever way you turn — a rule about direction is one more thing to remember at the exact moment you want the controls back.</desc>
+  <desc>Crown rotation, the platform's own convention and the one input a sleeve cannot produce. Absolute travel, so it unlocks whichever way you turn — a rule about direction is one more thing to remember at the exact moment you want the controls back. The dial is seeded mid-range so both directions register from the first detent, and full travel is deliberately under one physical revolution — the 2026-08 wrist verdict on a full turn was "too many rotations".</desc>
   <defs>
     <clipPath id="wscreen"><rect x="46" y="24" width="208" height="248" rx="52"/></clipPath>
   </defs>
@@ -19,7 +19,7 @@
       <rect x="97" y="104" width="14" height="11" rx="2.5" fill="none" stroke="#40C8E0" stroke-width="2"/>
       <path d="M100 104 v-5 a4 4 0 0 1 8 -1" fill="none" stroke="#40C8E0" stroke-width="2" data-symbol="lock.open.fill"/>
       <text x="104" y="172" font-size="14" class="b" fill="#FFF" text-anchor="middle">Keep turning</text>
-      <text x="104" y="188" font-size="10" fill="#FFF" opacity="0.55" text-anchor="middle">Controls return at full turn</text>
+      <text x="104" y="188" font-size="10" fill="#FFF" opacity="0.55" text-anchor="middle">Controls return when the ring fills</text>
     </g>
   </g>
 
