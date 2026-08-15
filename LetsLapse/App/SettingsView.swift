@@ -268,10 +268,22 @@ struct SettingsView: View {
 
             LLRow(
                 title: "Remember last",
-                subtitle: "A project's ramp becomes the next default.",
-                showsDivider: false
+                subtitle: "A project's ramp becomes the next default."
             ) {
                 Toggle("", isOn: $model.burstRampRememberLast)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+
+            LLRow(
+                title: "Bursts can raise resolution",
+                subtitle: "Adds higher-resolution options to the burst picker, so a "
+                    + "moment can shoot 4K off a 1080p base and keep the pixels for a "
+                    + "punch-in. Only formats that frame the scene identically are "
+                    + "offered. The switch takes longer, so the seam eases wider.",
+                showsDivider: false
+            ) {
+                Toggle("", isOn: $model.burstResolutionEnabled)
                     .labelsHidden()
                     .tint(.green)
             }

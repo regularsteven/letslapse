@@ -31,6 +31,7 @@ final class AppModel: ObservableObject {
         static let liveBlendBracketedRAW = "letslapse.liveBlendBracketedRAW"
         static let burstRampDefault = "letslapse.burstRampDefault"
         static let burstRampRememberLast = "letslapse.burstRampRememberLast"
+        static let burstResolution = BurstResolutionSetting.defaultsKey
     }
 
     /// `mode` marker for a one-tap Photo-mode capture — the burst that was
@@ -639,6 +640,12 @@ final class AppModel: ObservableObject {
     @Published var burstRampRememberLast =
         UserDefaults.standard.bool(forKey: DefaultsKey.burstRampRememberLast) {
         didSet { UserDefaults.standard.set(burstRampRememberLast, forKey: DefaultsKey.burstRampRememberLast) }
+    }
+
+    /// Whether a speed burst may change resolution as well as frame rate.
+    /// Off by default — see `BurstResolutionSetting` for what "off" guarantees.
+    @Published var burstResolutionEnabled = BurstResolutionSetting.isEnabled {
+        didSet { UserDefaults.standard.set(burstResolutionEnabled, forKey: DefaultsKey.burstResolution) }
     }
 
     // Recording options

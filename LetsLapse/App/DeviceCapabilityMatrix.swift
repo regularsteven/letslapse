@@ -41,6 +41,30 @@ struct CaptureCapabilityKey: Hashable, Codable {
     let baseFPS: Int
 }
 
+/// The opt-in gate for per-segment burst resolution.
+///
+/// Off by default, and deliberately: with it off the burst picker only ever
+/// offers formats at the base resolution, so no shoot can record two of them
+/// and every path downstream — the capture switch, the sidecar, the stitch, the
+/// reframe — behaves exactly as it did before the feature existed. That makes
+/// the setting a real kill switch for a day in the field rather than a
+/// cosmetic preference.
+///
+/// It gates **capture only**. A recording that already holds two resolutions
+/// still renders through the per-segment path whatever this says, because that
+/// is the only way to render it correctly — turning the setting off cannot
+/// retroactively make a mixed shoot single-resolution.
+enum BurstResolutionSetting {
+    static let defaultsKey = "letslapse.burstResolutionEnabled"
+
+    /// Read straight from `UserDefaults` rather than through `AppModel`, so the
+    /// camera's session queue can ask without hopping to the main actor.
+    /// Absent reads as false, which is the pre-feature behaviour.
+    static var isEnabled: Bool {
+        UserDefaults.standard.bool(forKey: defaultsKey)
+    }
+}
+
 /// One format a burst segment can land on: a frame rate *and* the resolution
 /// it is reached at.
 ///

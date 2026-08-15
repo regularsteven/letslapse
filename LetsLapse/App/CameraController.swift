@@ -1269,6 +1269,7 @@ final class CameraController: NSObject, ObservableObject {
     /// Custom rate last folded into the rate menus, so a Settings change made
     /// while the capture screen was away is picked up on the next start().
     private var lastAppliedCustomFrameRate = RecordingSettingsStore.customFrameRate
+    private var lastAppliedBurstResolutionEnabled = BurstResolutionSetting.isEnabled
 
     /// Settings owns Record audio and the custom frame rate; the capture
     /// screen re-checks both on every start() since they can change while it
@@ -1280,9 +1281,17 @@ final class CameraController: NSObject, ObservableObject {
             lastEnhancedLensesEnabled = enhanced
             deriveStops()
         }
+        // Both of these change what the pickers may offer, so both re-derive
+        // on the way back from Settings. The burst-resolution switch matters
+        // most when it is turned OFF: the burst options must drop back to the
+        // base resolution before the next run, or a shoot would still be armed
+        // for a format the user has just said they don't want.
         let custom = RecordingSettingsStore.customFrameRate
-        guard custom != lastAppliedCustomFrameRate else { return }
+        let burstResolutionEnabled = BurstResolutionSetting.isEnabled
+        guard custom != lastAppliedCustomFrameRate
+            || burstResolutionEnabled != lastAppliedBurstResolutionEnabled else { return }
         lastAppliedCustomFrameRate = custom
+        lastAppliedBurstResolutionEnabled = burstResolutionEnabled
         guard !movieOutput.isRecording, intervalTimer == nil else { return }
         refreshCaptureOptions(preferredFrameRate: selectedFrameRate)
         publishFormat()
@@ -2036,6 +2045,17 @@ final class CameraController: NSObject, ObservableObject {
                 stabilizationEnabled: videoStabilizationRequested,
                 appleLogEnabled: logRequested,
                 baseFPS: baseFrameRate) {
+            // The kill switch, applied at the single point that decides what a
+            // burst may become. With it off nothing else has to know: the
+            // picker lists plain rates, `selectedBurstResolution` re-pins to
+            // the base, `burstChangesResolution` is false, no segment ever
+            // carries a resolution, and every path downstream is the one that
+            // shipped before this feature.
+            guard BurstResolutionSetting.isEnabled else {
+                return options.filter {
+                    $0.pixelWidth == resolution.width && $0.pixelHeight == resolution.height
+                }
+            }
             return options
         }
         return allRates
