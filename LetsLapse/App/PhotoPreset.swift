@@ -3,6 +3,7 @@ import CoreImage
 import CoreImage.CIFilterBuiltins
 import ImageIO
 import LetsLapseKit
+import Metal
 import UniformTypeIdentifiers
 
 /// Non-destructive colour grades for any capture — Photo, Interval or Video.
@@ -27,7 +28,11 @@ enum PhotoPreset: String, CaseIterable, Identifiable, Codable {
     var displayName: String { rawValue }
 
     /// The grade applied to a photo capture until the user picks otherwise.
-    static let `default`: PhotoPreset = .natural
+    /// Original since the engine rebuild: a new capture shows honest pixels,
+    /// and an untouched project exports its original bytes. Projects that
+    /// existed before the change were stamped with an explicit "Natural" so
+    /// their look didn't shift (see `AppModel.stampLegacyDefaultPresets`).
+    static let `default`: PhotoPreset = .original
 
     /// The order the chips appear in the strip.
     static let strip: [PhotoPreset] = [.natural, .cinema, .matte, .vivid, .original]
@@ -37,6 +42,39 @@ enum PhotoPreset: String, CaseIterable, Identifiable, Codable {
     static func resolve(_ name: String?) -> PhotoPreset {
         guard let name, let preset = PhotoPreset(rawValue: name) else { return .default }
         return preset
+    }
+
+    /// The engine-side base recipe each chip stands for — the old Core Image
+    /// chains re-expressed as tone-engine parameters against the same
+    /// calibration frame. The manual sliders layer on top of these.
+    var recipe: GradeRecipe {
+        var recipe = GradeRecipe()
+        switch self {
+        case .original:
+            break
+        case .natural:
+            recipe.highlights = -0.25
+            recipe.shadows = 0.18
+            recipe.vibrance = 0.10
+            recipe.temperatureMired = 8
+        case .cinema:
+            recipe.highlights = -0.45
+            recipe.shadows = 0.35
+            recipe.contrast = -0.05
+            recipe.saturation = -0.15
+            recipe.temperatureMired = -15
+        case .matte:
+            recipe.blacks = 0.35
+            recipe.whites = -0.10
+            recipe.contrast = -0.15
+            recipe.saturation = -0.08
+        case .vivid:
+            recipe.highlights = -0.15
+            recipe.contrast = 0.12
+            recipe.vibrance = 0.30
+            recipe.saturation = 0.12
+        }
+        return recipe
     }
 
     /// Applies this preset's filter chain to a working image. `Original` passes
@@ -184,10 +222,36 @@ enum PhotoGrader {
         return cache
     }()
 
-    /// Renders `url` through `preset`, then through the manual `adjustments` on
-    /// top. `maxDimension`, when set, downscales the longest edge first — cheap,
-    /// low-memory previews; export passes `nil` for full resolution. Works for
-    /// both JPEG and DNG (Core Image decodes RAW).
+    // The engine stack: one decoder and one engine per process, shared by
+    // every surface. Both are cheap to hold and thread-safe to share; the
+    // per-recipe renderers are made per call.
+    private static let linearDecoder = try? LinearFrameDecoder()
+    private static let gradeEngine: GradeEngine? = {
+        guard let decoder = linearDecoder else { return nil }
+        return try? GradeEngine(device: decoder.device)
+    }()
+
+    /// Decoded linear frames, keyed `path|mtime|scale`. A slider tick re-runs
+    /// only the kernel graph on the cached texture, never the decoder.
+    private final class FrameBox {
+        let frame: LinearFrameDecoder.Frame
+        init(_ frame: LinearFrameDecoder.Frame) { self.frame = frame }
+    }
+    private static let decodedCache: NSCache<NSString, FrameBox> = {
+        let cache = NSCache<NSString, FrameBox>()
+        cache.countLimit = 3
+        // Three 2000 px half-float previews ≈ 150 MB; full-resolution decodes
+        // are deliberately never cached (they're one-shot exports).
+        cache.totalCostLimit = 220 * 1024 * 1024
+        return cache
+    }()
+
+    /// Renders `url` through `preset`, then through the manual `adjustments`
+    /// on top — the tone engine end to end: linear RAW decode (headroom
+    /// intact), the grade kernel, Display P3 out. `maxDimension`, when set,
+    /// decodes at reduced scale — cheap, low-memory previews; export passes
+    /// `nil` for full resolution. Preview and export share one decoder and one
+    /// engine, so what the sliders show is what the export bakes.
     static func render(
         url: URL,
         preset: PhotoPreset,
@@ -196,65 +260,68 @@ enum PhotoGrader {
     ) -> CGImage? {
         let key = cacheKey(url: url, preset: preset, adjustments: adjustments, maxDimension: maxDimension)
         if let cached = cache.object(forKey: key) { return cached.image }
-
-        guard var image = sourceImage(url: url, maxDimension: maxDimension) else {
+        do {
+            let grade = PhotoGrade(preset: preset, adjustments: adjustments)
+            let cgImage = try engineRender(url: url, grade: grade, maxDimension: maxDimension)
+            if maxDimension != nil {
+                cache.setObject(Box(cgImage), forKey: key, cost: cgImage.bytesPerRow * cgImage.height)
+            }
+            return cgImage
+        } catch {
             MediaWorkQueue.note(
-                "grade source load failed for \(url.lastPathComponent) exists=\(FileManager.default.fileExists(atPath: url.path))",
+                "grade render failed for \(url.lastPathComponent): \(error.localizedDescription)",
                 isError: true)
             return nil
         }
-        if let maxDimension {
-            let longest = max(image.extent.width, image.extent.height)
-            if longest > maxDimension, longest > 0 {
-                let scale = maxDimension / longest
-                image = image.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
-            }
-        }
-        // Solving the as-shot temperature costs a metadata parse, so only the
-        // white-balance control's own case pays for it.
-        let kelvin = adjustments.isNeutral ? neutralKelvin : asShotKelvin(url: url)
-        let output = filterChain(preset: preset, adjustments: adjustments, asShotKelvin: kelvin)(image)
-        guard output.extent.width > 0, output.extent.height > 0,
-              let cgImage = context.createCGImage(output, from: output.extent) else {
-            return nil
-        }
-        // Full-resolution renders are one-shot exports (~50 MB each); caching
-        // one would evict every preview and pin huge memory for nothing.
-        if maxDimension != nil {
-            cache.setObject(Box(cgImage), forKey: key, cost: cgImage.bytesPerRow * cgImage.height)
-        }
-        return cgImage
     }
 
-    /// The still to grade, loaded at a size that suits what it is for.
-    ///
-    /// Previews decode through ImageIO at a bounded pixel size — the same call
-    /// the thumbnails use, and on this app's own DNGs (Bayer, no embedded
-    /// preview) the only one that behaves. `CIImage(contentsOf:)` hands back a
-    /// lazy full-sensor RAW, so a 12 MP capture wanted a ~200 MB Core Image
-    /// render before being scaled down to a 1400 px card: slow on a phone, and
-    /// on a phone already holding a library's worth of thumbnails it simply
-    /// failed, which is why a DNG project's detail card showed the placeholder
-    /// while its preset strip sat there working.
-    ///
-    /// Export passes no bound and keeps the full-resolution RAW path.
-    private static func sourceImage(url: URL, maxDimension: CGFloat?) -> CIImage? {
-        guard let maxDimension else {
-            return CIImage(contentsOf: url, options: [.applyOrientationProperty: true])
+    /// The engine path shared by previews, exports and the blend loader.
+    static func engineRender(url: URL, grade: PhotoGrade, maxDimension: CGFloat?) throws -> CGImage {
+        guard let decoder = linearDecoder, let engine = gradeEngine else {
+            throw GradeError.renderFailed
         }
-        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-        let options: [CFString: Any] = [
-            kCGImageSourceCreateThumbnailFromImageAlways: true,
-            // Bakes the EXIF/TIFF orientation into the pixels, matching what
-            // `.applyOrientationProperty` does on the full-resolution path.
-            kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceShouldCacheImmediately: true,
-            kCGImageSourceThumbnailMaxPixelSize: Int(maxDimension),
-        ]
-        guard let decoded = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
-            return nil
+        var scale: Float = 1
+        if let maxDimension {
+            let longEdge = sourceLongEdge(url: url)
+            if longEdge > 0 { scale = min(1, Float(maxDimension) / Float(longEdge)) }
         }
-        return CIImage(cgImage: decoded)
+        let frame = try decodedFrame(url: url, scale: scale, decoder: decoder)
+        let reference = GradeReference(
+            asShotTemperatureK: frame.asShotTemperatureK,
+            asShotTint: frame.asShotTint,
+            longEdge: Double(max(frame.texture.width, frame.texture.height)))
+        let renderer = engine.makeRenderer(grade.recipe, reference: reference)
+        let output = try renderer.apply(to: frame.texture)
+        return try decoder.cgImage(from: output)
+    }
+
+    private static func decodedFrame(
+        url: URL, scale: Float, decoder: LinearFrameDecoder
+    ) throws -> LinearFrameDecoder.Frame {
+        // Full-resolution decodes are one-shot exports; caching one would
+        // evict every preview for no gain.
+        guard scale < 1 else { return try decoder.decode(url: url, scale: scale) }
+        let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate?.timeIntervalSince1970 ?? 0
+        let key = "\(url.path)|\(modified)|\(String(format: "%.3f", scale))" as NSString
+        if let boxed = decodedCache.object(forKey: key) { return boxed.frame }
+        let frame = try decoder.decode(url: url, scale: scale)
+        decodedCache.setObject(
+            FrameBox(frame), forKey: key,
+            cost: frame.texture.width * frame.texture.height * 8)
+        return frame
+    }
+
+    /// The source's longest pixel edge, from metadata only — sizes the decode
+    /// scale without touching pixel data.
+    private static func sourceLongEdge(url: URL) -> Int {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any] else {
+            return 0
+        }
+        let width = (properties[kCGImagePropertyPixelWidth] as? Int) ?? 0
+        let height = (properties[kCGImagePropertyPixelHeight] as? Int) ?? 0
+        return max(width, height)
     }
 
     // MARK: - Manual adjustments
@@ -275,12 +342,13 @@ enum PhotoGrader {
     /// Vignette 1.0 maps to this `CIVignette` intensity.
     private static let vignetteMaxIntensity: CGFloat = 2.0
     private static let vignetteRadius: CGFloat = 1.5
-    /// How far `auto` white balance moves toward a fully grey-world-neutral
-    /// image. Damped so a deliberately warm scene (sunset, firelight) isn't
-    /// flattened to grey.
-    private static let autoWhiteBalanceDamping: CGFloat = 0.5
 
     /// Applies the manual grade on top of whatever the preset produced.
+    ///
+    /// This is the *legacy Core Image path*, kept only for the video
+    /// composition (`VideoGrader`) until it moves onto the tone engine — a
+    /// coarse approximation of the engine's math with parametric CI filters.
+    /// Stills never come through here any more.
     ///
     /// Order matters: white balance first (it is a property of the light, so
     /// everything after it grades an already-neutral image), then tone, then
@@ -297,16 +365,50 @@ enum PhotoGrader {
         let baseExtent = image.extent
         var out = image
 
-        out = whiteBalanced(out, adjustments.whiteBalance, asShotKelvin: asShotKelvin)
+        if adjustments.temperature != 0 || adjustments.tint != 0,
+           let filter = CIFilter(name: "CITemperatureAndTint") {
+            // Same semantics as the engine: the sliders declare the scene's
+            // illuminant relative to as-shot; a positive mired offset warms.
+            let asShotMired = 1_000_000 / max(Double(asShotKelvin), 1667)
+            let declaredMired = min(max(asShotMired - Double(adjustments.temperature), 40), 600)
+            filter.setValue(out, forKey: kCIInputImageKey)
+            filter.setValue(
+                CIVector(x: 1_000_000 / declaredMired, y: CGFloat(adjustments.tint) * 50),
+                forKey: "inputNeutral")
+            filter.setValue(CIVector(x: asShotKelvin, y: 0), forKey: "inputTargetNeutral")
+            out = filter.outputImage ?? out
+        }
 
-        if adjustments.highlights != 0 || adjustments.shadows != 0 {
-            // `inputHighlightAmount` is 1.0 at neutral and darkens as it falls;
-            // `inputShadowAmount` is 0.0 at neutral and lifts as it rises. Both
-            // sliders are already expressed in those terms.
+        if adjustments.exposure != 0, let filter = CIFilter(name: "CIExposureAdjust") {
+            filter.setValue(out, forKey: kCIInputImageKey)
+            filter.setValue(adjustments.exposure, forKey: kCIInputEVKey)
+            out = filter.outputImage ?? out
+        }
+
+        if adjustments.highlights < 0 || adjustments.shadows != 0 {
             out = PhotoPreset.highlightShadow(
                 out,
-                highlight: 1.0 + adjustments.highlights,
+                highlight: 1.0 + min(adjustments.highlights, 0),
                 shadow: adjustments.shadows)
+        }
+
+        if adjustments.whites != 0 || adjustments.blacks != 0,
+           let filter = CIFilter(name: "CIColorMatrix") {
+            let gain = CGFloat(1 + 0.15 * adjustments.whites)
+            let lift = CGFloat(0.06 * adjustments.blacks)
+            filter.setValue(out, forKey: kCIInputImageKey)
+            filter.setValue(CIVector(x: gain, y: 0, z: 0, w: 0), forKey: "inputRVector")
+            filter.setValue(CIVector(x: 0, y: gain, z: 0, w: 0), forKey: "inputGVector")
+            filter.setValue(CIVector(x: 0, y: 0, z: gain, w: 0), forKey: "inputBVector")
+            filter.setValue(CIVector(x: lift, y: lift, z: lift, w: 0), forKey: "inputBiasVector")
+            out = filter.outputImage ?? out
+        }
+
+        if adjustments.contrast != 0 || adjustments.saturation != 0 {
+            out = PhotoPreset.colorControls(
+                out,
+                saturation: 1 + 0.8 * adjustments.saturation,
+                contrast: 1 + 0.2 * adjustments.contrast)
         }
 
         if adjustments.vibrance != 0 {
@@ -332,80 +434,6 @@ enum PhotoGrader {
         }
 
         return out.cropped(to: baseExtent)
-    }
-
-    /// Re-balances the image for a chosen illuminant.
-    ///
-    /// `CITemperatureAndTint` adapts *from* `inputNeutral` *to*
-    /// `inputTargetNeutral`, so the scene's declared illuminant goes in the
-    /// first slot and the render's existing neutral in the second. That gives
-    /// the behaviour a white-balance control is expected to have: declaring a
-    /// warm illuminant (Tungsten) cools the picture, and declaring a cool one
-    /// (Cloudy) warms it. Picking the temperature the camera already used is a
-    /// no-op, which is exactly what `As Shot` is.
-    private static func whiteBalanced(
-        _ image: CIImage,
-        _ mode: PhotoAdjustments.WhiteBalance,
-        asShotKelvin: CGFloat
-    ) -> CIImage {
-        switch mode {
-        case .asShot:
-            // The RAW decode already applied the camera's own white balance,
-            // and a JPEG was written with it baked in. Nothing to do.
-            return image
-
-        case .auto:
-            return autoWhiteBalanced(image)
-
-        default:
-            guard let kelvin = mode.kelvin, let filter = CIFilter(name: "CITemperatureAndTint") else {
-                return image
-            }
-            filter.setValue(image, forKey: kCIInputImageKey)
-            filter.setValue(CIVector(x: CGFloat(kelvin), y: 0), forKey: "inputNeutral")
-            filter.setValue(CIVector(x: asShotKelvin, y: 0), forKey: "inputTargetNeutral")
-            return filter.outputImage ?? image
-        }
-    }
-
-    /// A damped grey-world estimate: average the whole frame and pull each
-    /// channel part-way toward that average's mean. Because every channel moves
-    /// toward the *same* mean, overall brightness is preserved and only the
-    /// cast changes — unlike `CIWhitePointAdjust` on a sampled average, which
-    /// scales the image down by its own mean and badly darkens it.
-    ///
-    /// On a frame the camera already balanced well this is close to a no-op,
-    /// which is the honest answer rather than a manufactured shift.
-    private static func autoWhiteBalanced(_ image: CIImage) -> CIImage {
-        guard let average = CIFilter(name: "CIAreaAverage") else { return image }
-        average.setValue(image, forKey: kCIInputImageKey)
-        average.setValue(CIVector(cgRect: image.extent), forKey: kCIInputExtentKey)
-        guard let averaged = average.outputImage else { return image }
-
-        var pixel = [Float](repeating: 0, count: 4)
-        context.render(
-            averaged,
-            toBitmap: &pixel,
-            rowBytes: 16,
-            bounds: CGRect(x: 0, y: 0, width: 1, height: 1),
-            format: .RGBAf,
-            colorSpace: CGColorSpaceCreateDeviceRGB())
-
-        let r = CGFloat(pixel[0]), g = CGFloat(pixel[1]), b = CGFloat(pixel[2])
-        let mean = (r + g + b) / 3
-        // A frame that averages to black (or failed to render) has no cast to
-        // estimate from.
-        guard mean > 0.001, r > 0.001, g > 0.001, b > 0.001 else { return image }
-
-        func gain(_ channel: CGFloat) -> CGFloat {
-            1 + autoWhiteBalanceDamping * (mean / channel - 1)
-        }
-        guard let filter = CIFilter(name: "CIColorMatrix") else { return image }
-        filter.setValue(image, forKey: kCIInputImageKey)
-        filter.setValue(CIVector(x: gain(r), y: 0, z: 0, w: 0), forKey: "inputRVector")
-        filter.setValue(CIVector(x: 0, y: gain(g), z: 0, w: 0), forKey: "inputGVector")
-        filter.setValue(CIVector(x: 0, y: 0, z: gain(b), w: 0), forKey: "inputBVector")
-        return filter.outputImage ?? image
     }
 
     // MARK: - As-shot white balance
@@ -492,23 +520,45 @@ enum PhotoGrader {
                 (d * h - e * g) / determinant, (b * g - a * h) / determinant, (a * e - b * d) / determinant]
     }
 
-    /// One frame of a blend, graded.
-    ///
-    /// Decoding goes through `ImageStacker.loadImage` — the very loader the
-    /// ungraded path uses — so a graded frame and an ungraded one are the same
-    /// pixel size, which is what the stacker requires of every frame after the
-    /// first. Nothing is cached: a blend reads each frame exactly once, and
+    /// One frame of a blend, graded — the tone engine at full resolution.
+    /// Nothing is cached: a blend reads each frame exactly once, and
     /// full-resolution frames would evict every preview for no gain.
     static func renderForBlend(url: URL, grade: PhotoGrade) throws -> CGImage {
-        let image = try ImageStacker.loadImage(at: url)
-        guard !grade.isIdentity else { return image }
-        let kelvin = grade.adjustments.isNeutral ? neutralKelvin : asShotKelvin(url: url)
-        let output = filterChain(grade, asShotKelvin: kelvin)(CIImage(cgImage: image))
-        guard output.extent.width > 0, output.extent.height > 0,
-              let graded = context.createCGImage(output, from: output.extent) else {
+        guard !grade.isIdentity else { return try ImageStacker.loadImage(at: url) }
+        return try engineRender(url: url, grade: grade, maxDimension: nil)
+    }
+
+    /// The pieces the linear blend path needs: a decode closure handing the
+    /// stacker scene-linear half-float textures, and a hook that grades each
+    /// OUTPUT frame's mean. The hook runs for EVERY grade, identity included:
+    /// the engine's neutral is the hidden base look, not a no-op — skipping it
+    /// would render blends scene-linear-flat instead of the way the app has
+    /// always rendered them. The renderer is anchored to the first decoded
+    /// frame's as-shot metadata, which is uniform across a shoot.
+    static func blendSupport(grade: PhotoGrade) throws
+        -> (decode: (URL) throws -> MTLTexture,
+            hook: (MTLTexture, MTLCommandBuffer) throws -> MTLTexture) {
+        guard let decoder = linearDecoder, let engine = gradeEngine else {
             throw GradeError.renderFailed
         }
-        return graded
+        final class RendererBox { var renderer: GradeRenderer? }
+        let box = RendererBox()
+        let recipe = grade.recipe
+        let decode: (URL) throws -> MTLTexture = { url in
+            let frame = try decoder.decode(url: url)
+            if box.renderer == nil {
+                box.renderer = engine.makeRenderer(recipe, reference: GradeReference(
+                    asShotTemperatureK: frame.asShotTemperatureK,
+                    asShotTint: frame.asShotTint,
+                    longEdge: Double(max(frame.texture.width, frame.texture.height))))
+            }
+            return frame.texture
+        }
+        let hook: (MTLTexture, MTLCommandBuffer) throws -> MTLTexture = { texture, commandBuffer in
+            guard let renderer = box.renderer else { return texture }
+            return try renderer.encode(from: texture, commandBuffer: commandBuffer)
+        }
+        return (decode, hook)
     }
 
     /// Renders `url` through `preset` and `adjustments` at full resolution and
@@ -573,7 +623,9 @@ enum PhotoGrader {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
         let size = maxDimension.map { String(Int($0)) } ?? "full"
-        return "\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)|\(size)" as NSString
+        // The engine version is in the key so cached renders self-invalidate
+        // whenever the engine's math changes.
+        return "e\(GradeRecipe.engineVersion)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)|\(size)" as NSString
     }
 }
 

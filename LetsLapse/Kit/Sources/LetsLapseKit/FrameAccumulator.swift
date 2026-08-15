@@ -50,6 +50,21 @@ public final class FrameAccumulator {
     }
 
     public func finalize(into destination: MTLTexture, commandBuffer: MTLCommandBuffer) throws {
+        try finalize(into: destination, pipeline: core.finalizePipeline, commandBuffer: commandBuffer)
+    }
+
+    /// Like `finalize`, but into a float destination that keeps the mean at
+    /// full precision — the input to `BlendCore.encodeGamma`, which owns the
+    /// one quantization step.
+    public func finalizeMean(into destination: MTLTexture, commandBuffer: MTLCommandBuffer) throws {
+        try finalize(into: destination, pipeline: core.finalizeMeanPipeline, commandBuffer: commandBuffer)
+    }
+
+    private func finalize(
+        into destination: MTLTexture,
+        pipeline: MTLComputePipelineState,
+        commandBuffer: MTLCommandBuffer
+    ) throws {
         guard let accumulator, frameCount > 0 else {
             throw LapseError.noInputFrames
         }
@@ -65,7 +80,7 @@ public final class FrameAccumulator {
         encoder.setTexture(accumulator, index: 0)
         encoder.setTexture(destination, index: 1)
         encoder.setBytes(&count, length: MemoryLayout<Float>.size, index: 0)
-        core.dispatch(core.finalizePipeline, encoder: encoder, width: width, height: height)
+        core.dispatch(pipeline, encoder: encoder, width: width, height: height)
         encoder.endEncoding()
     }
 }

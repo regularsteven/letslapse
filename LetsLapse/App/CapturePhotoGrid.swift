@@ -208,8 +208,9 @@ struct CapturePhotoGrid: View {
 }
 
 /// The fullscreen frame viewer: swipe through a project's photos, save the one
-/// on screen to Photos. Save state is per frame, so paging away from a saved
-/// photo doesn't claim the next one is saved too.
+/// on screen — to Photos on iOS, through a save panel on macOS. Save state is
+/// per frame, so paging away from a saved photo doesn't claim the next one is
+/// saved too.
 ///
 /// The frame is shown as the project grades it, and Save writes what is on
 /// screen — a graded JPEG, or the file's own bytes when the grade is untouched.
@@ -322,21 +323,13 @@ private struct CaptureFrameViewer: View {
         .background(.black.opacity(0.35))
     }
 
-    @ViewBuilder private func saveControl(for frame: CaptureFrame) -> some View {
-        #if os(iOS)
+    private func saveControl(for frame: CaptureFrame) -> some View {
         Button {
             save(frame)
         } label: {
-            switch saveStates[frame.id] {
-            case .saving:
-                Label("Saving…", systemImage: "square.and.arrow.down")
-            case .saved:
-                Label("Saved to Photos", systemImage: "checkmark")
-            case .failed:
-                Label("Retry save", systemImage: "square.and.arrow.down")
-            case nil:
-                Label("Save to Photos", systemImage: "square.and.arrow.down")
-            }
+            let state = saveStates[frame.id]
+            Label(saveTitle(for: state),
+                  systemImage: state == .saved ? "checkmark" : "square.and.arrow.down")
         }
         .font(.system(size: 15, weight: .semibold))
         .foregroundStyle(.white)
@@ -346,9 +339,24 @@ private struct CaptureFrameViewer: View {
                     in: Capsule())
         .buttonStyle(.plain)
         .disabled(saveStates[frame.id] == .saving || saveStates[frame.id] == .saved)
+    }
+
+    /// The capsule's caption for one frame's state — Photos-flavoured on iOS,
+    /// file-export-flavoured on macOS, where the same button runs a save panel.
+    private func saveTitle(for state: SaveState?) -> String {
+        #if os(iOS)
+        switch state {
+        case .saving: return "Saving…"
+        case .saved: return "Saved to Photos"
+        case .failed: return "Retry save"
+        case nil: return "Save to Photos"
+        }
         #else
-        ShareLink(item: frame.url) {
-            Label("Share", systemImage: "square.and.arrow.up")
+        switch state {
+        case .saving: return "Exporting…"
+        case .saved: return "Exported"
+        case .failed: return "Retry export"
+        case nil: return "Export…"
         }
         #endif
     }
@@ -369,23 +377,54 @@ private struct CaptureFrameViewer: View {
     }
     #endif
 
+    /// Saves (iOS) or exports (macOS) what the viewer is showing: the grade
+    /// baked into a temporary copy, or the frame's own bytes when it is
+    /// untouched.
     private func save(_ frame: CaptureFrame) {
-        #if os(iOS)
         saveStates[frame.id] = .saving
         Task {
             do {
-                // Saves what the viewer is showing: the grade baked into a
-                // temporary JPEG, or the frame's own bytes when it is untouched.
+                #if os(iOS)
                 if let capture {
                     try await model.saveGradedAsset(at: frame.url, for: capture)
                 } else {
                     try await model.saveSourceClip(at: frame.url)
                 }
                 saveStates[frame.id] = .saved
+                #else
+                let export: (url: URL, isTemporary: Bool)
+                if let capture {
+                    export = try await model.gradedExportCopy(of: frame.url, for: capture)
+                } else {
+                    export = (frame.url, false)
+                }
+                defer {
+                    if export.isTemporary {
+                        try? FileManager.default.removeItem(at: export.url)
+                    }
+                }
+                let exported = try await MacExporter.exportCopy(
+                    of: export.url, suggestedName: suggestedName(for: frame, export: export))
+                // A cancelled panel is not a failure — the button just offers
+                // Export… again.
+                saveStates[frame.id] = exported ? .saved : nil
+                #endif
             } catch {
                 saveStates[frame.id] = .failed(error.localizedDescription)
             }
         }
-        #endif
     }
+
+    #if os(macOS)
+    /// The name the save panel offers: the original's own name when its bytes
+    /// go out untouched, `<name>-graded.<ext>` when the grade was baked into a
+    /// copy — whose extension can differ, since a graded still is a JPEG.
+    private func suggestedName(
+        for frame: CaptureFrame, export: (url: URL, isTemporary: Bool)
+    ) -> String {
+        guard export.isTemporary else { return frame.url.lastPathComponent }
+        return frame.url.deletingPathExtension().lastPathComponent
+            + "-graded." + export.url.pathExtension
+    }
+    #endif
 }

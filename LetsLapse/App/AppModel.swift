@@ -336,6 +336,9 @@ final class AppModel: ObservableObject {
         var blends: [BlendProject] = []
         /// Optional so manifests written before Collections existed decode.
         var collections: [LapseCollection]?
+        /// Bumped by one-time library migrations; nil in manifests written
+        /// before any existed. 1 = the Natural stamp (see `loadLibrary`).
+        var gradingSchemaVersion: Int?
     }
 
     private struct ProcessingOutput {
@@ -2462,8 +2465,18 @@ final class AppModel: ObservableObject {
         processingETADate = Date().addingTimeInterval(remaining)
     }
 
-    func startProcessing() {
+    /// The output format for the next Create run: the Settings default unless
+    /// the Create button's menu overrode it for this tap.
+    nonisolated static let blendFormatDefaultsKey = "blend.outputFormat"
+    private var blendProfileOverride: VideoEncodePolicy.Profile?
+    var defaultBlendProfile: VideoEncodePolicy.Profile {
+        UserDefaults.standard.string(forKey: Self.blendFormatDefaultsKey) == "hevc10"
+            ? .hevcMain10 : .h264High8Bit
+    }
+
+    func startProcessing(blendProfile: VideoEncodePolicy.Profile? = nil) {
         guard let source, let captureID = currentCaptureID else { return }
+        blendProfileOverride = blendProfile
         stage = .processing
         statusMessage = "Preparing job..."
         jobFolderURL = nil
@@ -2583,7 +2596,8 @@ final class AppModel: ObservableObject {
                         // motion blur. Output is a video sequence.
                         output = try await self.blendPhotosSequence(
                             urls: filteredURLs, ramp: .constant(photoDepth), fps: fps,
-                            linear: linear, grade: grade, frameTimes: frameTimes)
+                            linear: linear, grade: grade, frameTimes: frameTimes,
+                            profile: self.blendProfileOverride ?? self.defaultBlendProfile)
                     }
                 }
                 // Tail passes share the plan's reserved band: the crop takes
@@ -2919,7 +2933,7 @@ final class AppModel: ObservableObject {
         let options = VideoBlendOptions(
             ramp: ramp,
             outputFPS: fps,
-            codec: .h264,
+            codec: (blendProfileOverride ?? defaultBlendProfile) == .hevcMain10 ? .hevc : .h264,
             linearLight: linear,
             trimHeadTailSeconds: trimHeadTailSeconds,
             customWindows: customWindows
@@ -3589,28 +3603,51 @@ final class AppModel: ObservableObject {
         fps: Double,
         linear: Bool,
         grade: PhotoGrade = .identity,
-        frameTimes: [Double]? = nil
+        frameTimes: [Double]? = nil,
+        profile: VideoEncodePolicy.Profile = .h264High8Bit
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
         let result = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> StackSequenceResult in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
-            return try stacker.stackSequence(
+            let progress: (Double) -> Void = { fraction in
+                Task { @MainActor in
+                    self?.reportClipProgress(0, fraction: fraction)
+                }
+            }
+            guard linear else {
+                // Gamma-domain averaging is a deliberate "not physically
+                // correct" choice; it stays on the legacy 8-bit path.
+                return try stacker.stackSequence(
+                    imageURLs: urls,
+                    ramp: ramp,
+                    outputFPS: fps,
+                    linearLight: false,
+                    outputURL: output,
+                    frameTimes: frameTimes,
+                    loadFrame: Self.gradedFrameLoader(grade),
+                    progress: progress)
+            }
+            // The engine path: linear half-float decode straight to the
+            // accumulator, the grade applied once per OUTPUT frame after the
+            // average — the order Lightroom would grade the blended still in.
+            let support = try PhotoGrader.blendSupport(grade: grade)
+            return try stacker.stackSequenceLinear(
                 imageURLs: urls,
                 ramp: ramp,
                 outputFPS: fps,
-                linearLight: linear,
                 outputURL: output,
                 frameTimes: frameTimes,
-                loadFrame: Self.gradedFrameLoader(grade),
-                progress: { fraction in
-                    Task { @MainActor in
-                        self?.reportClipProgress(0, fraction: fraction)
-                    }
-                })
+                profile: profile,
+                decodeLinear: support.decode,
+                outputGrade: support.hook,
+                progress: progress)
         }.value
         var summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
+        if profile == .hevcMain10 {
+            summary += " · 10-bit HEVC"
+        }
         if frameTimes != nil {
             summary += " · timed from capture"
         }
@@ -3942,6 +3979,10 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// Library-level migration marker, mirrored from the manifest; see
+    /// `stampLegacyDefaultPresetsIfNeeded`.
+    private var gradingSchemaVersion = 0
+
     private func loadLibrary() {
         do {
             try migrateLegacyApplicationSupportFolderIfNeeded()
@@ -3953,6 +3994,8 @@ final class AppModel: ObservableObject {
             blends = manifest.blends.sorted { $0.createdAt > $1.createdAt }
             // Oldest first — a collection list reads in creation order.
             collections = (manifest.collections ?? []).sorted { $0.createdAt < $1.createdAt }
+            gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
+            stampLegacyDefaultPresetsIfNeeded()
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
@@ -3967,12 +4010,27 @@ final class AppModel: ObservableObject {
         }
     }
 
+    /// One-time migration for the engine rebuild's default flip: projects
+    /// that never chose a preset used to *render* Natural (the old implicit
+    /// default), so write "Natural" into them explicitly before the default
+    /// becomes Original — nothing in the library changes appearance, and only
+    /// new captures start clean.
+    private func stampLegacyDefaultPresetsIfNeeded() {
+        guard gradingSchemaVersion < 1 else { return }
+        gradingSchemaVersion = 1
+        for index in captures.indices where captures[index].selectedPreset == nil {
+            captures[index].selectedPreset = PhotoPreset.natural.rawValue
+        }
+        try? persistLibrary()
+    }
+
     private func persistLibrary() throws {
         // Every path that adds, converts, rotates or deletes a project's files
         // ends here, so this is the one place that has to drop the size cache.
         projectStorageBytes.removeAll()
         try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
-        let manifest = LibraryManifest(captures: captures, blends: blends, collections: collections)
+        var manifest = LibraryManifest(captures: captures, blends: blends, collections: collections)
+        manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(manifest)
@@ -4469,23 +4527,14 @@ final class AppModel: ObservableObject {
             AVVideoWidthKey: width,
             AVVideoHeightKey: height,
         ]
-        // Generous, resolution-aware bitrate so re-encoding doesn't introduce
-        // compression banding that would unfairly sink the blend-quality test.
-        let keyframeInterval = max(1, Int(fps.rounded()))
-        let pixelsPerSecond = Double(width * height) * fps
+        // The shared policy carries the generous, resolution-aware bitrate (so
+        // re-encoding doesn't introduce compression banding) plus the colour
+        // tags every writer stamps now.
         switch codec {
-        case .h264:
-            videoSettings[AVVideoCompressionPropertiesKey] = [
-                AVVideoAverageBitRateKey: Int(pixelsPerSecond * 0.24),
-                AVVideoProfileLevelKey: AVVideoProfileLevelH264HighAutoLevel,
-                AVVideoMaxKeyFrameIntervalKey: keyframeInterval,
-            ]
-        case .hevc:
-            videoSettings[AVVideoCompressionPropertiesKey] = [
-                AVVideoAverageBitRateKey: Int(pixelsPerSecond * 0.18),
-                AVVideoProfileLevelKey: kVTProfileLevel_HEVC_Main10_AutoLevel as String,
-                AVVideoMaxKeyFrameIntervalKey: keyframeInterval,
-            ]
+        case .h264, .hevc:
+            videoSettings = VideoEncodePolicy(
+                profile: codec == .hevc ? .hevcMain10 : .h264High8Bit,
+                width: width, height: height, fps: fps).videoSettings
         case .jpeg:
             videoSettings[AVVideoCompressionPropertiesKey] = [AVVideoQualityKey: 0.95]
         case .prores:
@@ -4928,6 +4977,35 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
+    /// One of a capture's assets as the viewer shows it, ready to leave the app:
+    /// the project's grade baked into a temporary copy — a still through the
+    /// image grader, a clip through a video composition pass. Every "this asset
+    /// as I'm looking at it" export starts here; the platform tails (Photos on
+    /// iOS, a save panel on macOS) decide where the file goes.
+    ///
+    /// When the grade is `Original` *and* the sliders are neutral the original
+    /// URL comes back with `isTemporary` false, so an ungraded project still
+    /// hands over its DNG as a DNG and its ProRes as ProRes. Anything else is
+    /// rendered (a still becomes a JPEG, a clip is re-encoded) into a temp file
+    /// the caller owns and must delete, leaving the on-disk original alone.
+    func gradedExportCopy(
+        of url: URL, for capture: CaptureProject
+    ) async throws -> (url: URL, isTemporary: Bool) {
+        let grade = photoGrade(for: capture)
+        guard !grade.isIdentity else { return (url, false) }
+        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
+        let graded: URL
+        if isImage {
+            graded = try await Task.detached(priority: .userInitiated) {
+                try PhotoGrader.renderJPEG(
+                    url: url, preset: grade.preset, adjustments: grade.adjustments)
+            }.value
+        } else {
+            graded = try await VideoGrader.bakedCopy(of: url, grade: grade)
+        }
+        return (graded, true)
+    }
+
     #if os(iOS)
     enum SourceClipSaveError: LocalizedError {
         case accessDenied
@@ -4950,30 +5028,14 @@ final class AppModel: ObservableObject {
         try await saveGradedAsset(at: url, for: capture)
     }
 
-    /// Saves one of a capture's assets to Photos with the project's grade baked
-    /// into a temporary copy — a still through the image grader, a clip through
-    /// a video composition pass. Every mode's export to Photos comes through
-    /// here: the photo, an interval frame from the browser, a video source clip.
-    ///
-    /// When the grade is `Original` *and* the sliders are neutral the file's own
-    /// bytes are saved unchanged, so an ungraded project still hands Photos its
-    /// DNG as a DNG and its ProRes as ProRes. Anything else is rendered (a still
-    /// becomes a JPEG, a clip is re-encoded), leaving the on-disk original alone.
+    /// Saves one of a capture's assets to Photos as `gradedExportCopy` renders
+    /// it. Every mode's export to Photos comes through here: the photo, an
+    /// interval frame from the browser, a video source clip.
     func saveGradedAsset(at url: URL, for capture: CaptureProject) async throws {
-        let grade = photoGrade(for: capture)
-        guard !grade.isIdentity else {
-            try await saveSourceClip(at: url)
+        let (graded, isTemporary) = try await gradedExportCopy(of: url, for: capture)
+        guard isTemporary else {
+            try await saveSourceClip(at: graded)
             return
-        }
-        let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
-        let graded: URL
-        if isImage {
-            graded = try await Task.detached(priority: .userInitiated) {
-                try PhotoGrader.renderJPEG(
-                    url: url, preset: grade.preset, adjustments: grade.adjustments)
-            }.value
-        } else {
-            graded = try await VideoGrader.bakedCopy(of: url, grade: grade)
         }
         defer { try? FileManager.default.removeItem(at: graded) }
         // Grading re-encodes, which leaves the copy without the original's

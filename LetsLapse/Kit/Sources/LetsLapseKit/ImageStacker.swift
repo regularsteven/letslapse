@@ -125,6 +125,38 @@ public final class ImageStacker {
     /// runs exactly as before. When it is nil the stacker looks for a
     /// `frames.timestamps` sidecar beside the stills and uses that if it
     /// describes this exact set of frames.
+    /// Wall-clock layout, if this shoot recorded one: one presentation time
+    /// per output frame, taken at the first still of each window — the moment
+    /// that window's exposure begins. A sidecar that doesn't describe exactly
+    /// these frames (a filtered blend, a foreign directory) is ignored rather
+    /// than guessed at — the caller can always hand the times in explicitly.
+    private func windowPresentationTimes(
+        imageURLs: [URL],
+        frameTimes: [Double]?,
+        schedule: [Int],
+        outputFPS: Double
+    ) -> [Double]? {
+        let capturedTimes: [Double]? = {
+            if let frameTimes, frameTimes.count == imageURLs.count { return frameTimes }
+            guard frameTimes == nil,
+                  let sidecar = FrameTimestamps.load(besideFrames: imageURLs),
+                  sidecar.entries.count == imageURLs.count
+            else { return nil }
+            return sidecar.elapsedSeconds
+        }()
+        return capturedTimes.flatMap { times in
+            var starts: [Double] = []
+            var index = 0
+            for window in schedule {
+                guard times.indices.contains(index) else { return nil }
+                starts.append(times[index])
+                index += window
+            }
+            return FrameTimeMapping.presentationSeconds(
+                frameTimes: starts, outputFPS: outputFPS)
+        }
+    }
+
     public func stackSequence(
         imageURLs: [URL],
         ramp: BlendRamp,
@@ -141,31 +173,8 @@ public final class ImageStacker {
         let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
         guard !schedule.isEmpty else { throw LapseError.noInputFrames }
 
-        // Wall-clock layout, if this shoot recorded one. A sidecar that
-        // doesn't describe exactly these frames (a filtered blend, a foreign
-        // directory) is ignored rather than guessed at — the caller can always
-        // hand the times in explicitly.
-        let capturedTimes: [Double]? = {
-            if let frameTimes, frameTimes.count == imageURLs.count { return frameTimes }
-            guard frameTimes == nil,
-                  let sidecar = FrameTimestamps.load(besideFrames: imageURLs),
-                  sidecar.entries.count == imageURLs.count
-            else { return nil }
-            return sidecar.elapsedSeconds
-        }()
-        // One presentation time per output frame, taken at the first still of
-        // each window — the moment that window's exposure begins.
-        let windowStartTimes: [Double]? = capturedTimes.flatMap { times in
-            var starts: [Double] = []
-            var index = 0
-            for window in schedule {
-                guard times.indices.contains(index) else { return nil }
-                starts.append(times[index])
-                index += window
-            }
-            return FrameTimeMapping.presentationSeconds(
-                frameTimes: starts, outputFPS: outputFPS)
-        }
+        let windowStartTimes = windowPresentationTimes(
+            imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
 
         let load: (URL) throws -> CGImage = { url in
             try loadFrame?(url) ?? ImageStacker.loadImage(at: url)
@@ -183,21 +192,13 @@ public final class ImageStacker {
         } catch {
             throw LapseError.writerFailed(error.localizedDescription)
         }
-        let videoSettings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
-        ]
-        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
+        let encodePolicy = VideoEncodePolicy(
+            profile: .h264High8Bit, width: width, height: height, fps: outputFPS)
+        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: encodePolicy.videoSettings)
         writerInput.expectsMediaDataInRealTime = false
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
             assetWriterInput: writerInput,
-            sourcePixelBufferAttributes: [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
-                kCVPixelBufferWidthKey as String: width,
-                kCVPixelBufferHeightKey as String: height,
-                kCVPixelBufferMetalCompatibilityKey as String: true,
-            ])
+            sourcePixelBufferAttributes: encodePolicy.pixelBufferAttributes)
         guard writer.canAdd(writerInput) else {
             throw LapseError.writerFailed("cannot attach video input")
         }
@@ -213,6 +214,10 @@ public final class ImageStacker {
 
         let accumulator = FrameAccumulator(core: core)
         let srgb = linearLight
+        // One half-float mean texture, reused per output frame: the average
+        // stays at full precision until `encodeGamma` quantizes it — with
+        // dither — as it lands in the writer's buffer.
+        let meanTexture = try core.makeMeanTexture(width: width, height: height)
         var inputIndex = 0
         var outputFrames = 0
 
@@ -253,11 +258,16 @@ public final class ImageStacker {
             guard poolStatus == kCVReturnSuccess, let outBuffer else {
                 throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
             }
-            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: srgb)
+            // Non-sRGB view: `encodeGamma` applies the transfer curve itself.
+            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: false)
             guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
                 throw LapseError.gpuSetupFailed("could not create a command buffer")
             }
-            try accumulator.finalize(into: destination, commandBuffer: commandBuffer)
+            try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
+            try core.encodeGamma(
+                from: meanTexture, to: destination,
+                ditherLSB: 1.0 / 255.0, frameIndex: outputFrames, applySRGB: srgb,
+                commandBuffer: commandBuffer)
             commandBuffer.commit()
             commandBuffer.waitUntilCompleted()
             if let error = commandBuffer.error {
@@ -276,6 +286,167 @@ public final class ImageStacker {
             let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
                 ?? Double(outputFrames) / outputFPS
             let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
+            VideoEncodePolicy.tagColor(outBuffer)
+            guard adaptor.append(outBuffer, withPresentationTime: time) else {
+                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+            }
+            outputFrames += 1
+            core.flushTextureCache()
+            progress?(min(0.99, Double(inputIndex) / Double(imageURLs.count)))
+        }
+
+        guard outputFrames > 0 else { throw LapseError.noInputFrames }
+
+        writerInput.markAsFinished()
+        let finished = DispatchSemaphore(value: 0)
+        writer.finishWriting { finished.signal() }
+        finished.wait()
+        guard writer.status == .completed else {
+            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+        }
+        progress?(1.0)
+
+        return StackSequenceResult(outputFrames: outputFrames, width: width, height: height)
+    }
+
+    /// The tone-engine era `stackSequence`: frames arrive as scene-linear
+    /// Display P3 half-float textures from `decodeLinear` — no 8-bit hop
+    /// anywhere — the window mean is graded once per OUTPUT frame by
+    /// `outputGrade`, and the writer is configured by `profile`: dithered
+    /// 8-bit H.264 (gamut-converted to BT.709) or true 10-bit HEVC fed
+    /// half-float Display P3. If the Main10 writer refuses to start, the
+    /// blend falls back to H.264 automatically rather than failing.
+    public func stackSequenceLinear(
+        imageURLs: [URL],
+        ramp: BlendRamp,
+        outputFPS: Double,
+        outputURL: URL,
+        frameTimes: [Double]? = nil,
+        profile: VideoEncodePolicy.Profile = .h264High8Bit,
+        decodeLinear: (URL) throws -> MTLTexture,
+        outputGrade: ((MTLTexture, MTLCommandBuffer) throws -> MTLTexture)? = nil,
+        progress: ((Double) -> Void)? = nil
+    ) throws -> StackSequenceResult {
+        guard imageURLs.count >= 2 else {
+            throw LapseError.writerFailed("a timelapse needs at least two photos")
+        }
+        let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
+        guard !schedule.isEmpty else { throw LapseError.noInputFrames }
+        let windowStartTimes = windowPresentationTimes(
+            imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
+
+        let firstTexture = try decodeLinear(imageURLs[0])
+        let width = firstTexture.width
+        let height = firstTexture.height
+
+        try? FileManager.default.removeItem(at: outputURL)
+        func makeWriter(_ policy: VideoEncodePolicy) throws
+            -> (AVAssetWriter, AVAssetWriterInput, AVAssetWriterInputPixelBufferAdaptor) {
+            let writer: AVAssetWriter
+            do {
+                writer = try AVAssetWriter(outputURL: outputURL, fileType: policy.fileType)
+            } catch {
+                throw LapseError.writerFailed(error.localizedDescription)
+            }
+            let input = AVAssetWriterInput(mediaType: .video, outputSettings: policy.videoSettings)
+            input.expectsMediaDataInRealTime = false
+            let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+                assetWriterInput: input, sourcePixelBufferAttributes: policy.pixelBufferAttributes)
+            guard writer.canAdd(input) else {
+                throw LapseError.writerFailed("cannot attach video input")
+            }
+            writer.add(input)
+            guard writer.startWriting() else {
+                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start encoding")
+            }
+            return (writer, input, adaptor)
+        }
+
+        var policy = VideoEncodePolicy(profile: profile, width: width, height: height, fps: outputFPS)
+        let writer: AVAssetWriter
+        let writerInput: AVAssetWriterInput
+        let adaptor: AVAssetWriterInputPixelBufferAdaptor
+        do {
+            (writer, writerInput, adaptor) = try makeWriter(policy)
+        } catch where profile == .hevcMain10 {
+            // The compatibility floor: every supported device encodes H.264.
+            policy = policy.fallbackToH264()
+            try? FileManager.default.removeItem(at: outputURL)
+            (writer, writerInput, adaptor) = try makeWriter(policy)
+        }
+        writer.startSession(atSourceTime: .zero)
+        defer {
+            if writer.status == .writing { writer.cancelWriting() }
+        }
+
+        let accumulator = FrameAccumulator(core: core)
+        let meanTexture = try core.makeMeanTexture(width: width, height: height)
+        let gamut = policy.gamutMatrixFromDisplayP3
+        let ditherLSB: Float = policy.profile == .h264High8Bit ? 1.0 / 255.0 : 0
+        var inputIndex = 0
+        var outputFrames = 0
+
+        for window in schedule {
+            for offset in 0..<window {
+                let index = inputIndex + offset
+                try autoreleasepool {
+                    let texture = index == 0 ? firstTexture : try decodeLinear(imageURLs[index])
+                    guard texture.width == width, texture.height == height else {
+                        throw LapseError.sizeMismatch(
+                            expectedWidth: width, expectedHeight: height,
+                            actualWidth: texture.width, actualHeight: texture.height)
+                    }
+                    guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+                        throw LapseError.gpuSetupFailed("could not create a command buffer")
+                    }
+                    if offset == 0 {
+                        try accumulator.reset(width: width, height: height, commandBuffer: commandBuffer)
+                    }
+                    try accumulator.accumulate(texture, commandBuffer: commandBuffer)
+                    commandBuffer.commit()
+                    commandBuffer.waitUntilCompleted()
+                    if let error = commandBuffer.error {
+                        throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+                    }
+                }
+            }
+            inputIndex += window
+
+            guard let pool = adaptor.pixelBufferPool else {
+                throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
+            }
+            var outBuffer: CVPixelBuffer?
+            let poolStatus = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
+            guard poolStatus == kCVReturnSuccess, let outBuffer else {
+                throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
+            }
+            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: false)
+            guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+                throw LapseError.gpuSetupFailed("could not create a command buffer")
+            }
+            try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
+            let graded = try outputGrade?(meanTexture, commandBuffer) ?? meanTexture
+            try core.encodeGamma(
+                from: graded, to: destination,
+                ditherLSB: ditherLSB, frameIndex: outputFrames, applySRGB: true,
+                gamut: gamut, commandBuffer: commandBuffer)
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            if let error = commandBuffer.error {
+                throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+            }
+            _ = destinationHolder
+
+            while !writerInput.isReadyForMoreMediaData {
+                if writer.status == .failed {
+                    throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
+                }
+                usleep(2000)
+            }
+            let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
+                ?? Double(outputFrames) / outputFPS
+            let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
+            policy.tagColor(outBuffer)
             guard adaptor.append(outBuffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }

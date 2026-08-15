@@ -49,6 +49,7 @@ struct PhotoViewerView: View {
     @State private var renderToken = 0
 
     @State private var isCustomiseExpanded = false
+    @State private var asShotKelvin: Double = 6500
     @State private var isNamingPreset = false
     @State private var newPresetName = ""
     @State private var presetPendingDelete: CustomPreset?
@@ -125,6 +126,12 @@ struct PhotoViewerView: View {
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
             loaded = true
+            // The as-shot anchor for the temperature readout — a cached
+            // metadata parse, off the render path.
+            let viewedURL = url
+            asShotKelvin = await Task.detached(priority: .utility) {
+                Double(PhotoGrader.asShotKelvin(url: viewedURL))
+            }.value
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 isCustomiseExpanded = true
@@ -217,12 +224,12 @@ struct PhotoViewerView: View {
             presetStrip
 
             if isWide {
-                // A side rail has the room to show the sliders outright.
-                sliderPanel
+                // A side rail has the room to show every section outright.
+                sliderPanel(expanded: true)
             } else {
                 customiseDisclosure
                 if isCustomiseExpanded {
-                    sliderPanel
+                    sliderPanel(expanded: false)
                         .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
@@ -332,8 +339,11 @@ struct PhotoViewerView: View {
         .buttonStyle(.plain)
     }
 
-    private var sliderPanel: some View {
-        PhotoAdjustmentsPanel(adjustments: $adjustments)
+    private func sliderPanel(expanded: Bool) -> some View {
+        PhotoAdjustmentsPanel(
+            adjustments: $adjustments,
+            alwaysExpanded: expanded,
+            asShotKelvin: asShotKelvin)
             .onChange(of: adjustments) { _ in scheduleUpdate() }
     }
 
@@ -382,89 +392,5 @@ struct PhotoViewerView: View {
         // screen rather than blanking the viewer. The double optional is the
         // work queue's own "didn't run" wrapped around the grader's "couldn't".
         if let image, let cgImage = image { rendered = cgImage }
-    }
-}
-
-// MARK: - Adjustments panel
-
-/// The manual grade's controls on a card: five sliders, the white-balance
-/// picker, and Reset.
-///
-/// Shared by every surface that customises a grade — this viewer (photo and
-/// interval captures) and the video project's inline Customise panel in
-/// `ProjectDetailView` — so the two can't drift apart. It owns no state and does
-/// no rendering: the binding's owner decides how often to re-render and when to
-/// write the values back to the project.
-struct PhotoAdjustmentsPanel: View {
-    @Binding var adjustments: PhotoAdjustments
-
-    var body: some View {
-        VStack(spacing: 10) {
-            slider("Highlights", value: $adjustments.highlights,
-                   range: PhotoAdjustments.highlightsRange)
-            slider("Shadows", value: $adjustments.shadows,
-                   range: PhotoAdjustments.shadowsRange)
-            slider("Vibrance", value: $adjustments.vibrance,
-                   range: PhotoAdjustments.vibranceRange)
-            slider("Clarity", value: $adjustments.clarity,
-                   range: PhotoAdjustments.clarityRange)
-            slider("Vignette", value: $adjustments.vignetteIntensity,
-                   range: PhotoAdjustments.vignetteRange)
-
-            HStack {
-                Text("White Bal.")
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Picker("White balance", selection: $adjustments.whiteBalance) {
-                    ForEach(PhotoAdjustments.WhiteBalance.allCases) { option in
-                        Text(option.displayName).tag(option)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .tint(LL.accent)
-            }
-
-            Button("Reset adjustments") {
-                adjustments = .neutral
-            }
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(adjustments.isNeutral ? .secondary : LL.accent)
-            .buttonStyle(.plain)
-            .disabled(adjustments.isNeutral)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(.top, 2)
-        }
-        .padding(14)
-        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
-
-    private func slider(
-        _ label: String,
-        value: Binding<Float>,
-        range: ClosedRange<Float>
-    ) -> some View {
-        VStack(spacing: 2) {
-            HStack {
-                Text(label)
-                    .font(.system(size: 13.5))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Text(readout(value.wrappedValue))
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .monospacedDigit()
-                    .foregroundStyle(value.wrappedValue == 0 ? .secondary : .primary)
-            }
-            Slider(value: value, in: range)
-                .tint(LL.accent)
-                .accessibilityLabel(label)
-        }
-    }
-
-    /// Slider values read as -100…100, which is the vocabulary people know from
-    /// every other editor, rather than the -1…1 the filters take.
-    private func readout(_ value: Float) -> String {
-        value == 0 ? "0" : String(format: "%+.0f", value * 100)
     }
 }

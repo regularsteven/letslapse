@@ -663,12 +663,8 @@ enum MacVideoJobRunner {
         try appendLog("Encoding \(frames.count) frames to \(outputURL.lastPathComponent)", to: paths.log)
 
         let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
-        let settings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: first.width,
-            AVVideoHeightKey: first.height,
-            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 12_000_000],
-        ]
+        let settings = VideoEncodePolicy(
+            profile: .h264High8Bit, width: first.width, height: first.height, fps: fps).videoSettings
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         input.expectsMediaDataInRealTime = false
         input.transform = transform
@@ -709,6 +705,7 @@ enum MacVideoJobRunner {
             }
             try draw(image, into: pixelBuffer)
             let time = CMTime(value: Int64((Double(index) / fps * 60000).rounded()), timescale: 60000)
+            VideoEncodePolicy.tagColor(pixelBuffer)
             guard adaptor.append(pixelBuffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }

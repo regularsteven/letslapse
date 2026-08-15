@@ -29,6 +29,15 @@ USAGE:
 
   lapse info <video>                            Print duration / fps / frame estimate
 
+  lapse grade <image> [options]                 Grade one frame through the tone engine
+      --recipe JSON         Slider values, Lightroom-style ±100 numbers, e.g.
+                            '{"highlights":-100,"shadows":49,"vibrance":53}'
+                            (exposure is EV; temperature is a mired offset)
+      --out PATH            Write the graded Display P3 JPEG here
+      --scale N             Decode scale, 1 = full resolution (default 1)
+      --probe               Instead of grading: report linear max/mean and
+                            headroom for the RAW and ImageIO decode paths
+
 EXAMPLES:
   lapse synth -o test.mov --frames 240 --pattern box
   lapse blend test.mov -o blended.mp4 --ramp 1:40 --curve ease-in-out
@@ -185,6 +194,34 @@ do {
         print("fps: \(String(format: "%.2f", fps))")
         print("size: \(Int(size.width))x\(Int(size.height))")
         print("frames (estimated): \(frames)")
+
+    case "grade":
+        let probe = takeFlag(["--probe"])
+        let recipeJSON = takeOption(["--recipe"])
+        let outPath = takeOption(["--out", "-o"])
+        let scale = Float(takeOption(["--scale"]) ?? "1") ?? 1
+        guard args.count == 1 else { fail("grade needs exactly one input image") }
+        let inputURL = URL(fileURLWithPath: args[0])
+        if probe {
+            runGradeProbe(url: inputURL)
+        } else {
+            guard let recipeJSON, let outPath else {
+                fail("grade needs --recipe '<json>' and --out <path> (or --probe)")
+            }
+            try runGradeRender(url: inputURL, recipeJSON: recipeJSON, outPath: outPath, scale: scale)
+        }
+
+    case "stackseq":
+        guard let outputPath = takeOption(["-o", "--output"]) else { fail("stackseq needs -o <output>") }
+        let window = Int(takeOption(["--window", "-w"]) ?? "1") ?? 1
+        let fps = Double(takeOption(["--fps"]) ?? "30") ?? 30
+        let profileName = takeOption(["--profile"]) ?? "h264"
+        let recipeJSON = takeOption(["--recipe"])
+        guard ["h264", "hevc10"].contains(profileName) else { fail("--profile is h264 or hevc10") }
+        guard args.count >= 2 else { fail("stackseq needs at least two input images") }
+        try runStackSequence(
+            urls: args.map { URL(fileURLWithPath: $0) }, outputPath: outputPath,
+            window: max(1, window), fps: fps, profileName: profileName, recipeJSON: recipeJSON)
 
     default:
         printErr("unknown command '\(command)'\n")

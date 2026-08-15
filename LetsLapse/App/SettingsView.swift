@@ -25,6 +25,9 @@ struct SettingsView: View {
     @ObservedObject private var models = ModelManager.shared
     @ObservedObject private var captureLogs = CaptureSessionLogger.shared
     @AppStorage("capture.gpsEnabled") private var gpsEnabled = true
+    /// "h264" (distribution default) or "hevc10" — what one tap of Create
+    /// produces; the button's carat can override either way per run.
+    @AppStorage(AppModel.blendFormatDefaultsKey) private var blendFormat = "h264"
     /// Off by default: this advertises the device on the local network and
     /// accepts start/stop commands, so it is opt-in rather than something the
     /// camera does because the build supports it.
@@ -175,6 +178,33 @@ struct SettingsView: View {
                     }
                 } label: {
                     menuValueLabel("\(model.outputFPS) fps")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+
+            LLRow(title: "New clip format", subtitle: "The Create button's one-tap default") {
+                Menu {
+                    Button {
+                        blendFormat = "h264"
+                    } label: {
+                        if blendFormat == "h264" {
+                            Label("H.264 · widely compatible", systemImage: "checkmark")
+                        } else {
+                            Text("H.264 · widely compatible")
+                        }
+                    }
+                    Button {
+                        blendFormat = "hevc10"
+                    } label: {
+                        if blendFormat == "hevc10" {
+                            Label("10-bit HEVC · highest quality", systemImage: "checkmark")
+                        } else {
+                            Text("10-bit HEVC · highest quality")
+                        }
+                    }
+                } label: {
+                    menuValueLabel(blendFormat == "hevc10" ? "10-bit HEVC" : "H.264")
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()

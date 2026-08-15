@@ -219,13 +219,27 @@ public final class VideoBlender: @unchecked Sendable {
         } catch {
             throw LapseError.writerFailed(error.localizedDescription)
         }
-        var videoSettings: [String: Any] = [
-            AVVideoCodecKey: options.codec.avCodec,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
-        ]
-        if options.codec == .jpeg {
-            videoSettings[AVVideoCompressionPropertiesKey] = [AVVideoQualityKey: 0.95]
+        let videoSettings: [String: Any]
+        switch options.codec {
+        case .h264, .hevc:
+            let policy = VideoEncodePolicy(
+                profile: options.codec == .hevc ? .hevcMain10 : .h264High8Bit,
+                width: width, height: height, fps: options.outputFPS)
+            videoSettings = policy.videoSettings
+        case .prores:
+            videoSettings = [
+                AVVideoCodecKey: options.codec.avCodec,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
+                AVVideoColorPropertiesKey: VideoEncodePolicy.colorProperties,
+            ]
+        case .jpeg:
+            videoSettings = [
+                AVVideoCodecKey: options.codec.avCodec,
+                AVVideoWidthKey: width,
+                AVVideoHeightKey: height,
+                AVVideoCompressionPropertiesKey: [AVVideoQualityKey: 0.95],
+            ]
         }
         let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: videoSettings)
         writerInput.expectsMediaDataInRealTime = false
@@ -256,6 +270,9 @@ public final class VideoBlender: @unchecked Sendable {
         let schedule = options.customWindows.map { $0.map { max(1, $0) } }
             ?? WindowSchedule.make(totalInputFrames: estimatedFrames, ramp: options.ramp)
         let srgb = options.linearLight
+        // One half-float mean texture, reused per output frame — the average
+        // stays at full precision until `encodeGamma` quantizes it, dithered.
+        let meanTexture = try core.makeMeanTexture(width: width, height: height)
         // Bounds how many decoded frames wait on the GPU at once, which keeps
         // peak memory flat even with 50-frame windows on 4K input.
         let inFlight = DispatchSemaphore(value: 3)
@@ -313,11 +330,16 @@ public final class VideoBlender: @unchecked Sendable {
             guard poolStatus == kCVReturnSuccess, let outBuffer else {
                 throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
             }
-            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: srgb)
+            // Non-sRGB view: `encodeGamma` applies the transfer curve itself.
+            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: false)
             guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
                 throw LapseError.gpuSetupFailed("could not create a command buffer")
             }
-            try accumulator.finalize(into: destination, commandBuffer: commandBuffer)
+            try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
+            try core.encodeGamma(
+                from: meanTexture, to: destination,
+                ditherLSB: 1.0 / 255.0, frameIndex: outputFrames, applySRGB: srgb,
+                commandBuffer: commandBuffer)
             commandBuffer.commit()
             commandBuffer.waitUntilCompleted()
             if let error = commandBuffer.error {
@@ -334,6 +356,9 @@ public final class VideoBlender: @unchecked Sendable {
             let time = CMTime(
                 value: Int64((Double(outputFrames) / options.outputFPS * 60000).rounded()),
                 timescale: 60000)
+            if options.codec == .h264 || options.codec == .hevc || options.codec == .prores {
+                VideoEncodePolicy.tagColor(outBuffer)
+            }
             guard adaptor.append(outBuffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }

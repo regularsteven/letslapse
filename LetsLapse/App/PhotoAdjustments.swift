@@ -1,61 +1,50 @@
 import CoreGraphics
 import Foundation
+import LetsLapseKit
 
-/// The manual grade that sits *on top* of a `PhotoPreset` — the five sliders
-/// and the white-balance picker in the photo viewer. Like the presets, this is
-/// non-destructive: the values are stored on the project and re-applied on
-/// demand, so the original file on disk is never rewritten.
+/// The manual grade that sits *on top* of a `PhotoPreset` — the slider panel
+/// in the photo viewer. Non-destructive: the values are stored on the project
+/// and re-applied on demand, so the original file on disk is never rewritten.
 ///
-/// Every field's neutral value is the one that makes its filter a no-op, so
-/// `.neutral` renders exactly the preset on its own.
-///
-/// The ranges were calibrated against a 12 MP iPhone DNG (`frame-00001.dng`)
-/// with a Lightroom edit of the same frame as the target. See
-/// `PhotoGrader.adjust(_:_:asShotKelvin:)` for the filter mappings and
-/// `docs/design/iOS/project-photos.viewer.portrait.svg` for the UI.
+/// v2 (the grading-engine rebuild): Lightroom-basic-panel parity. Fields are
+/// stored in the engine's normalized units — ±1 for the ±100 sliders, EV for
+/// exposure, a mired offset from as-shot for temperature — and map 1:1 onto
+/// `GradeRecipe`. Every field's neutral value is 0, so `.neutral` renders
+/// exactly the preset on its own.
 struct PhotoAdjustments: Codable, Equatable {
-    /// Pulls highlights down. -1 is the strongest reduction, 0 leaves them.
+    /// Exposure in EV stops. −5…+5.
+    var exposure: Float
+    /// Pivoted contrast. −1…+1.
+    var contrast: Float
+    /// Negative recovers highlights, positive lifts them. −1…+1
+    /// (v1 stored only −1…0; those values load unchanged).
     var highlights: Float
-    /// Lifts shadows. 0 leaves them, 1 is the strongest lift.
+    /// Negative deepens shadows, positive lifts them. −1…+1.
     var shadows: Float
-    /// Raises muted colours more than already-saturated ones. -1…1.
+    /// Moves the white point. −1…+1.
+    var whites: Float
+    /// Moves the black point: negative crushes, positive lifts to matte. −1…+1.
+    var blacks: Float
+    /// White balance as a mired offset from the as-shot illuminant; positive
+    /// renders warmer. An offset, not an absolute Kelvin, so a saved preset
+    /// carries "warm it a little" across photos with different as-shot values.
+    var temperature: Float
+    /// Green (−) to magenta (+). −1…+1.
+    var tint: Float
+    /// Raises muted colours more than already-saturated ones. −1…1.
     var vibrance: Float
+    /// Uniform chroma gain. −1…+1.
+    var saturation: Float
     /// Large-radius local contrast. 0…1.
     var clarity: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
-    /// Which illuminant the scene is treated as having been lit by.
-    var whiteBalance: WhiteBalance
 
-    enum WhiteBalance: String, Codable, CaseIterable, Identifiable {
-        case asShot      = "As Shot"
-        case auto        = "Auto"
-        case sunny       = "Sunny"
-        case cloudy      = "Cloudy"
-        case fluorescent = "Fluorescent"
-        case tungsten    = "Tungsten"
-
-        var id: String { rawValue }
-        var displayName: String { rawValue }
-
-        /// The illuminant temperature this option declares the scene to have
-        /// been shot under. `nil` means "don't impose one": `asShot` keeps the
-        /// camera's own white balance and `auto` estimates it from the pixels.
-        var kelvin: Float? {
-            switch self {
-            case .asShot, .auto: return nil
-            case .sunny: return 5500
-            case .cloudy: return 6500
-            case .fluorescent: return 4000
-            case .tungsten: return 3200
-            }
-        }
-    }
-
-    /// Every filter at its no-op value — the preset alone, ungarnished.
+    /// Every slider at its no-op value — the preset alone, ungarnished.
     static var neutral: PhotoAdjustments {
-        .init(highlights: 0, shadows: 0, vibrance: 0, clarity: 0,
-              vignetteIntensity: 0, whiteBalance: .asShot)
+        .init(exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0,
+              blacks: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0,
+              clarity: 0, vignetteIntensity: 0)
     }
 
     /// True when nothing here would change a pixel, so the grader can skip the
@@ -65,47 +54,160 @@ struct PhotoAdjustments: Codable, Equatable {
     // MARK: - Slider ranges
     //
     // Kept next to the values they bound so the viewer's sliders and the
-    // grader's filter mappings can never drift apart.
+    // grader's mappings can never drift apart.
 
-    static let highlightsRange: ClosedRange<Float> = -1...0
-    static let shadowsRange: ClosedRange<Float> = 0...1
+    static let exposureRange: ClosedRange<Float> = -5...5
+    static let contrastRange: ClosedRange<Float> = -1...1
+    static let highlightsRange: ClosedRange<Float> = -1...1
+    static let shadowsRange: ClosedRange<Float> = -1...1
+    static let whitesRange: ClosedRange<Float> = -1...1
+    static let blacksRange: ClosedRange<Float> = -1...1
+    static let temperatureRange: ClosedRange<Float> = -150...150
+    static let tintRange: ClosedRange<Float> = -1...1
     static let vibranceRange: ClosedRange<Float> = -1...1
+    static let saturationRange: ClosedRange<Float> = -1...1
     static let clarityRange: ClosedRange<Float> = 0...1
     static let vignetteRange: ClosedRange<Float> = 0...1
+
+    /// The engine-side recipe these adjustments describe, optionally layered
+    /// on a preset's base recipe (component-wise, clamped to the UI ranges).
+    func recipe(over base: GradeRecipe = GradeRecipe()) -> GradeRecipe {
+        var recipe = base
+        recipe.exposure = min(max(base.exposure + exposure, -5), 5)
+        recipe.contrast = min(max(base.contrast + contrast, -1), 1)
+        recipe.highlights = min(max(base.highlights + highlights, -1), 1)
+        recipe.shadows = min(max(base.shadows + shadows, -1), 1)
+        recipe.whites = min(max(base.whites + whites, -1), 1)
+        recipe.blacks = min(max(base.blacks + blacks, -1), 1)
+        recipe.temperatureMired = min(max(base.temperatureMired + temperature, -150), 150)
+        recipe.tint = min(max(base.tint + tint, -1), 1)
+        recipe.vibrance = min(max(base.vibrance + vibrance, -1), 1)
+        recipe.saturation = min(max(base.saturation + saturation, -1), 1)
+        recipe.clarity = min(max(base.clarity + clarity, 0), 1)
+        recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
+        return recipe
+    }
 
     /// A short, stable string identifying this grade, for the render cache key.
     var cacheToken: String {
         guard !isNeutral else { return "n" }
         return String(
-            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%@",
-            highlights, shadows, vibrance, clarity, vignetteIntensity,
-            whiteBalance.rawValue)
+            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f",
+            exposure, contrast, highlights, shadows, whites, blacks,
+            temperature, tint, vibrance, saturation, clarity, vignetteIntensity)
     }
 
     // MARK: - Codable
     //
-    // Decoded field by field so a grade written by an older build — or one
-    // written before a field existed — still loads, taking the neutral value
-    // for anything missing rather than failing the whole project manifest.
+    // A versioned envelope, per-field tolerant inside a version: v2 decodes
+    // each field with a neutral default so a future field costs nothing, and
+    // anything without a version marker is a v1 payload routed through the
+    // one migration function below.
 
-    init(highlights: Float, shadows: Float, vibrance: Float, clarity: Float,
-         vignetteIntensity: Float, whiteBalance: WhiteBalance) {
+    init(exposure: Float, contrast: Float, highlights: Float, shadows: Float,
+         whites: Float, blacks: Float, temperature: Float, tint: Float,
+         vibrance: Float, saturation: Float, clarity: Float, vignetteIntensity: Float) {
+        self.exposure = exposure
+        self.contrast = contrast
         self.highlights = highlights
         self.shadows = shadows
+        self.whites = whites
+        self.blacks = blacks
+        self.temperature = temperature
+        self.tint = tint
         self.vibrance = vibrance
+        self.saturation = saturation
         self.clarity = clarity
         self.vignetteIntensity = vignetteIntensity
-        self.whiteBalance = whiteBalance
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case version = "v"
+        case exposure, contrast, highlights, shadows, whites, blacks
+        case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
+        case whiteBalance  // v1 only; never written by v2
+    }
+
+    /// The white-balance picker of the v1 model, kept only to decode old
+    /// payloads. The presets became slider-setters; see `migratingV1`.
+    private enum LegacyWhiteBalance: String, Decodable {
+        case asShot = "As Shot"
+        case auto = "Auto"
+        case sunny = "Sunny"
+        case cloudy = "Cloudy"
+        case fluorescent = "Fluorescent"
+        case tungsten = "Tungsten"
+
+        /// The v2 mired offset that declares this preset's illuminant against
+        /// the v1 renderer's 6500 K anchor. `asShot` and `auto` migrate to 0 —
+        /// auto was a damped near-no-op and is now a one-shot action, not a
+        /// stored state.
+        var temperatureOffset: Float {
+            switch self {
+            case .asShot, .auto: return 0
+            case .sunny: return -28       // 5500 K declared
+            case .cloudy: return 0        // 6500 K = the anchor itself
+            case .fluorescent: return -96 // 4000 K
+            case .tungsten: return -150   // 3200 K, clamped to the slider
+            }
+        }
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        highlights = try container.decodeIfPresent(Float.self, forKey: .highlights) ?? 0
-        shadows = try container.decodeIfPresent(Float.self, forKey: .shadows) ?? 0
-        vibrance = try container.decodeIfPresent(Float.self, forKey: .vibrance) ?? 0
-        clarity = try container.decodeIfPresent(Float.self, forKey: .clarity) ?? 0
-        vignetteIntensity = try container.decodeIfPresent(Float.self, forKey: .vignetteIntensity) ?? 0
-        whiteBalance = try container.decodeIfPresent(WhiteBalance.self, forKey: .whiteBalance) ?? .asShot
+        let version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
+        func field(_ key: CodingKeys) -> Float {
+            (try? container.decodeIfPresent(Float.self, forKey: key)) ?? 0
+        }
+        if version >= 2 {
+            self.init(
+                exposure: field(.exposure), contrast: field(.contrast),
+                highlights: field(.highlights), shadows: field(.shadows),
+                whites: field(.whites), blacks: field(.blacks),
+                temperature: field(.temperature), tint: field(.tint),
+                vibrance: field(.vibrance), saturation: field(.saturation),
+                clarity: field(.clarity), vignetteIntensity: field(.vignetteIntensity))
+            return
+        }
+        let legacyWB = (try? container.decodeIfPresent(LegacyWhiteBalance.self, forKey: .whiteBalance)) ?? .asShot
+        self = PhotoAdjustments.migratingV1(
+            highlights: field(.highlights), shadows: field(.shadows),
+            vibrance: field(.vibrance), clarity: field(.clarity),
+            vignetteIntensity: field(.vignetteIntensity), whiteBalance: legacyWB)
+    }
+
+    /// The single v1 → v2 mapping. v1's ranges are subsets of v2's, so the
+    /// tonal fields pass through unchanged; only the white-balance enum needs
+    /// re-expression.
+    private static func migratingV1(
+        highlights: Float, shadows: Float, vibrance: Float, clarity: Float,
+        vignetteIntensity: Float, whiteBalance: LegacyWhiteBalance
+    ) -> PhotoAdjustments {
+        var adjustments = PhotoAdjustments.neutral
+        adjustments.highlights = highlights
+        adjustments.shadows = shadows
+        adjustments.vibrance = vibrance
+        adjustments.clarity = clarity
+        adjustments.vignetteIntensity = vignetteIntensity
+        adjustments.temperature = whiteBalance.temperatureOffset
+        return adjustments
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(2, forKey: .version)
+        try container.encode(exposure, forKey: .exposure)
+        try container.encode(contrast, forKey: .contrast)
+        try container.encode(highlights, forKey: .highlights)
+        try container.encode(shadows, forKey: .shadows)
+        try container.encode(whites, forKey: .whites)
+        try container.encode(blacks, forKey: .blacks)
+        try container.encode(temperature, forKey: .temperature)
+        try container.encode(tint, forKey: .tint)
+        try container.encode(vibrance, forKey: .vibrance)
+        try container.encode(saturation, forKey: .saturation)
+        try container.encode(clarity, forKey: .clarity)
+        try container.encode(vignetteIntensity, forKey: .vignetteIntensity)
     }
 }
 
@@ -124,7 +226,13 @@ struct PhotoGrade: Equatable, Sendable {
     /// be skipped and every export can hand over the original bytes.
     var isIdentity: Bool { preset == .original && adjustments.isNeutral }
 
+    /// The engine recipe for this grade: the preset's base recipe with the
+    /// manual adjustments layered on top.
+    var recipe: GradeRecipe { adjustments.recipe(over: preset.recipe) }
+
     /// A short, stable string identifying this grade — for render cache keys and
     /// for the `task(id:)` that re-renders a preview when the grade changes.
-    var cacheToken: String { "\(preset.rawValue)|\(adjustments.cacheToken)" }
+    /// Prefixed with the engine version so caches self-invalidate when the
+    /// engine's math changes.
+    var cacheToken: String { "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)" }
 }

@@ -1451,7 +1451,9 @@ private struct GradingCard: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 12) {
-                    PhotoAdjustmentsPanel(adjustments: adjustmentsBinding(for: capture))
+                    PhotoAdjustmentsPanel(
+                        adjustments: adjustmentsBinding(for: capture),
+                        alwaysExpanded: true)
                     savePresetButton
                 }
                 .padding(16)

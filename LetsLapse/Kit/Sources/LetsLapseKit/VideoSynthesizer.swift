@@ -30,12 +30,8 @@ public enum VideoSynthesizer {
         } catch {
             throw LapseError.writerFailed(error.localizedDescription)
         }
-        let settings: [String: Any] = [
-            AVVideoCodecKey: AVVideoCodecType.h264,
-            AVVideoWidthKey: width,
-            AVVideoHeightKey: height,
-            AVVideoCompressionPropertiesKey: [AVVideoAverageBitRateKey: 8_000_000],
-        ]
+        let settings = VideoEncodePolicy(
+            profile: .h264High8Bit, width: width, height: height, fps: fps).videoSettings
         let input = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         input.expectsMediaDataInRealTime = false
         let adaptor = AVAssetWriterInputPixelBufferAdaptor(
@@ -68,6 +64,7 @@ public enum VideoSynthesizer {
             }
             fill(buffer, frame: frame, of: frames, pattern: pattern)
             let time = CMTime(value: Int64((Double(frame) / fps * 60000).rounded()), timescale: 60000)
+            VideoEncodePolicy.tagColor(buffer)
             guard adaptor.append(buffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }

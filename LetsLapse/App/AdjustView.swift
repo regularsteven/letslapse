@@ -751,12 +751,38 @@ struct AdjustView: View {
 
     private var bottomBar: some View {
         VStack(spacing: 8) {
-            Button {
-                model.startProcessing()
-            } label: {
-                Text(ctaTitle)
+            HStack(spacing: 8) {
+                Button {
+                    model.startProcessing()
+                } label: {
+                    Text(ctaTitle)
+                }
+                .buttonStyle(LLPrimaryButtonStyle())
+
+                // The pro option lives behind the carat: one tap creates in
+                // the distribution default, the menu offers the other format
+                // for this run. Settings picks which is the default.
+                Menu {
+                    Button {
+                        model.startProcessing(blendProfile: .h264High8Bit)
+                    } label: {
+                        Label("H.264 · widely compatible", systemImage: "square.and.arrow.up")
+                    }
+                    Button {
+                        model.startProcessing(blendProfile: .hevcMain10)
+                    } label: {
+                        Label("10-bit HEVC · highest quality", systemImage: "sparkles")
+                    }
+                } label: {
+                    Image(systemName: "chevron.up")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 44, height: 44)
+                        .background(LL.accent, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
             }
-            .buttonStyle(LLPrimaryButtonStyle())
 
             Text("Your original is kept — you can always make another blended clip.")
                 .font(.system(size: 11.5))
