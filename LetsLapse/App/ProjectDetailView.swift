@@ -28,6 +28,9 @@ struct ProjectDetailView: View {
         let url: URL
         var id: String { url.path }
     }
+    /// The movie opened in the video editor (iOS sheet only — on macOS the
+    /// editor opens as its own window, like the photo editor).
+    @State private var editingVideo: GradingPhoto?
     @State private var renameText = ""
     @State private var confirmingProjectDelete = false
     @State private var versionPendingDelete: AppModel.BlendProject?
@@ -86,6 +89,14 @@ struct ProjectDetailView: View {
                 captureID: captureID,
                 url: photo.url,
                 title: capture?.displayTitle ?? "Photo"
+            )
+            .environmentObject(model)
+        }
+        .sheet(item: $editingVideo) { video in
+            VideoEditorView(
+                captureID: captureID,
+                url: video.url,
+                title: capture?.displayTitle ?? "Video"
             )
             .environmentObject(model)
         }
@@ -259,9 +270,9 @@ struct ProjectDetailView: View {
             VStack(spacing: 14) {
                 // Every mode leads with its graded preview and preset strip —
                 // the grade is non-destructive and applies to photo, interval
-                // and video alike. Photo and interval open the grading viewer
-                // from the preview (they have frame files to open); a video
-                // project plays its original and customises in the card.
+                // and video alike, and every hero carries the same edit pill:
+                // stills open the grading viewer, a movie opens the video
+                // editor with the player beside the same controls.
                 GradingCard(
                     captureID: capture.id,
                     badge: originalBadge(for: capture),
@@ -271,6 +282,7 @@ struct ProjectDetailView: View {
                     formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
                     onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
                     onPlay: { playOriginal(capture) },
+                    onEditVideo: { url in editVideo(capture, url: url) },
                     // Interval only: the shoot has frames to play as motion, so
                     // its card leads with Play and keeps the editor as a second
                     // affordance. Photo has one still and video has a movie —
@@ -972,6 +984,18 @@ struct ProjectDetailView: View {
         #endif
     }
 
+    /// Opens the video editor: the movie playing at its true aspect ratio with
+    /// the same preset strip and adjustment sections the photo editor has.
+    /// A sheet on iOS/iPadOS; a freely resizable window on macOS.
+    private func editVideo(_ capture: AppModel.CaptureProject, url: URL) {
+        #if os(macOS)
+        openWindow(value: VideoEditorWindowRequest(
+            captureID: captureID, url: url, title: capture.displayTitle))
+        #else
+        editingVideo = GradingPhoto(url: url)
+        #endif
+    }
+
     private func saveOriginals(_ capture: AppModel.CaptureProject) {
         #if os(iOS)
         originalsSaveState = .saving
@@ -1154,6 +1178,9 @@ private struct GradingCard: View {
     var onOpenViewer: (URL) -> Void
     /// Video: play the original.
     var onPlay: () -> Void
+    /// Video: open the video editor on this movie — the player beside the
+    /// grading controls, the video sibling of `onOpenViewer`.
+    var onEditVideo: (URL) -> Void
     /// Interval: play the shoot as motion from its frames. When this is set the
     /// card shows two affordances — Play in the middle, Edit photo below it —
     /// because an interval project has both a sequence to watch and a frame to
@@ -1167,23 +1194,7 @@ private struct GradingCard: View {
     /// mtime-keyed and self-heals).
     @ObservedObject private var thumbnailCache = ProjectThumbnailCache.shared
 
-    /// A video project's sliders live here while they move, and are written back
-    /// to the project at the end of the debounce — the same arrangement as the
-    /// grading viewer, so a drag isn't fighting the manifest for every tick.
-    @State private var draft: PhotoAdjustments = .neutral
-    @State private var isDraftOwned = false
-    @State private var isCustomiseExpanded = false
-    @State private var isCustomising = false
-    @State private var isNamingPreset = false
-    @State private var newPresetName = ""
-    @State private var cardWidth: CGFloat = 0
-
-    /// Past this width the Customise panel presents as a sheet instead of
-    /// expanding inline — the same threshold, for the same reason, as the
-    /// grading viewer's side rail.
-    private let wideLayoutThreshold: CGFloat = 500
-    /// How long the controls have to be still before the grade is written and
-    /// the preview re-rendered.
+    /// How long a preset change has to be still before the preview re-renders.
     private let renderDebounce: Duration = .milliseconds(100)
 
     private var capture: AppModel.CaptureProject? {
@@ -1219,59 +1230,15 @@ private struct GradingCard: View {
             VStack(spacing: 10) {
                 imageCard(preview: preview)
                 presetStrip(capture: capture, active: grade.preset, adjustments: grade.adjustments)
-                if capture.kind == .video {
-                    customiseControls(capture: capture)
-                }
-            }
-            .overlay {
-                // Non-participating width probe: the sheet-vs-inline choice for
-                // the Customise panel needs the card's real width, and a
-                // GeometryReader in an overlay reads it without taking part in
-                // the layout.
-                GeometryReader { proxy in
-                    Color.clear
-                        .onAppear { cardWidth = proxy.size.width }
-                        .onChange(of: proxy.size.width) { cardWidth = $0 }
-                }
-                .allowsHitTesting(false)
             }
             .task(id: "\(preview?.url.path ?? "-")|\(grade.cacheToken)|\(thumbnailCache.generation)") {
-                // Debounce: a slider drag re-keys this task on every tick, so a
-                // burst collapses into one manifest write and one render.
+                // Debounce: chip taps and editor writes re-key this task, so a
+                // burst collapses into one render.
                 try? await Task.sleep(for: renderDebounce)
                 guard !Task.isCancelled else { return }
-                if isDraftOwned {
-                    model.setPhotoAdjustments(draft, for: capture)
-                }
                 if let preview {
                     await render(preview, grade: grade)
                 }
-            }
-            .sheet(isPresented: $isCustomising) {
-                customiseSheet(capture: capture)
-            }
-            #if DEBUG
-            // `LL_CUSTOMISE=1` drops a video project's Customise panel open on
-            // launch, so the expanded card can be screenshot-verified against
-            // its SVG without tap automation.
-            .task {
-                guard ProcessInfo.processInfo.environment["LL_CUSTOMISE"] == "1",
-                      capture.kind == .video else { return }
-                isCustomiseExpanded = true
-            }
-            #endif
-            .alert("Save as preset", isPresented: $isNamingPreset) {
-                TextField("Preset name", text: $newPresetName)
-                Button("Save") {
-                    presetStore.save(
-                        name: newPresetName,
-                        basePreset: model.photoPreset(for: capture),
-                        adjustments: adjustments(for: capture))
-                    newPresetName = ""
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("Saves this grade so you can apply it to another project.")
             }
         }
     }
@@ -1294,55 +1261,50 @@ private struct GradingCard: View {
         }
     }
 
-    /// The adjustments on screen: the card's own while a video project's sliders
-    /// are being worked, otherwise the project's stored values. Photo and
-    /// interval captures always read the project, since their sliders live in the
-    /// viewer and this card has to follow whatever that wrote.
+    /// The adjustments on screen: always the project's stored values — every
+    /// mode's sliders live in an editor now (photo viewer or video editor),
+    /// and this card follows whatever those wrote.
     private func adjustments(for capture: AppModel.CaptureProject) -> PhotoAdjustments {
-        guard capture.kind == .video, isDraftOwned else {
-            return model.photoAdjustments(for: capture)
-        }
-        return draft
+        model.photoAdjustments(for: capture)
     }
 
     private func imageCard(preview: Preview?) -> some View {
         ZStack {
             Group {
                 if let rendered {
+                    // True aspect ratio, never cropped: the hero presents the
+                    // asset as it actually is, capped in height so a portrait
+                    // frame doesn't swallow the screen.
                     Image(decorative: rendered, scale: 1)
                         .resizable()
-                        .scaledToFill()
+                        .scaledToFit()
+                        .frame(maxHeight: 340)
                 } else {
                     // Falls back to the ungraded thumbnail while the first
                     // grade renders.
                     ProjectThumbnailView(
                         url: preview?.url, kind: preview?.isMovie == true ? .video : .image)
+                        .frame(height: 210)
+                        .frame(maxWidth: .infinity)
                 }
             }
-            .frame(height: 210)
-            .frame(maxWidth: .infinity)
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
 
             if let preview {
                 heroButton(preview: preview)
             }
         }
+        .frame(maxWidth: .infinity)
         .overlay(alignment: .bottomLeading) {
-            // An interval shoot's second affordance: Play is the main act, and
-            // the frame editor sits under it rather than losing its place to it.
-            if case .still(let url) = preview, onPlaySequence != nil {
-                Button {
-                    onOpenViewer(url)
-                } label: {
-                    Label("Edit photo", systemImage: "slider.horizontal.3")
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.black.opacity(0.45), in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .padding(12)
+            // Every project edits from its hero: the still modes get Edit
+            // photo, a movie gets Edit video — same pill, same place.
+            switch preview {
+            case .still(let url):
+                editPill(title: "Edit photo") { onOpenViewer(url) }
+            case .movie(let url):
+                editPill(title: "Edit video") { onEditVideo(url) }
+            case nil:
+                EmptyView()
             }
         }
         .overlay(alignment: .topLeading) {
@@ -1391,109 +1353,19 @@ private struct GradingCard: View {
         .accessibilityLabel(label)
     }
 
-    // MARK: Customise (video)
-
-    /// The binding the sliders write to: it takes ownership of the values on the
-    /// first edit and re-keys the render/persist task on every change.
-    private func adjustmentsBinding(for capture: AppModel.CaptureProject) -> Binding<PhotoAdjustments> {
-        Binding(
-            get: { adjustments(for: capture) },
-            set: { newValue in
-                draft = newValue
-                isDraftOwned = true
-            }
-        )
-    }
-
-    @ViewBuilder private func customiseControls(capture: AppModel.CaptureProject) -> some View {
-        let isWide = cardWidth >= wideLayoutThreshold
-        Button {
-            if isWide {
-                isCustomising = true
-            } else {
-                withAnimation(.easeInOut(duration: 0.2)) { isCustomiseExpanded.toggle() }
-            }
-        } label: {
-            HStack {
-                Text("Customise")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-                if !adjustments(for: capture).isNeutral {
-                    Circle()
-                        .fill(LL.accent)
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel("edited")
-                }
-                Spacer()
-                Image(systemName: isWide ? "chevron.right" : "chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isWide || isCustomiseExpanded ? 0 : -90))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .contentShape(Rectangle())
+    /// The bottom-left edit affordance every hero carries — Edit photo on the
+    /// still modes, Edit video on a movie.
+    private func editPill(title: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Label(title, systemImage: "slider.horizontal.3")
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(.white)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 7)
+                .background(.black.opacity(0.45), in: Capsule())
         }
         .buttonStyle(.plain)
-
-        if isCustomiseExpanded, !isWide {
-            VStack(spacing: 10) {
-                PhotoAdjustmentsPanel(adjustments: adjustmentsBinding(for: capture))
-                savePresetButton
-            }
-            .transition(.opacity.combined(with: .move(edge: .top)))
-        }
-    }
-
-    private func customiseSheet(capture: AppModel.CaptureProject) -> some View {
-        NavigationStack {
-            ScrollView {
-                VStack(spacing: 12) {
-                    PhotoAdjustmentsPanel(
-                        adjustments: adjustmentsBinding(for: capture),
-                        alwaysExpanded: true)
-                    savePresetButton
-                }
-                .padding(16)
-            }
-            .background(LL.screenBackground)
-            .navigationTitle("Customise")
-            #if os(iOS)
-            .navigationBarTitleDisplayMode(.inline)
-            #endif
-            .toolbar {
-                ToolbarItem(placement: .confirmationAction) {
-                    Button("Done") { isCustomising = false }
-                }
-            }
-        }
-        #if os(macOS)
-        .frame(minWidth: 360, minHeight: 460)
-        #endif
-    }
-
-    private var savePresetButton: some View {
-        VStack(spacing: 6) {
-            Button {
-                newPresetName = ""
-                isNamingPreset = true
-            } label: {
-                Label("Save as Preset", systemImage: "square.and.arrow.down")
-                    .font(.system(size: 15, weight: .semibold))
-                    .frame(maxWidth: .infinity, minHeight: 44)
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(LL.accent)
-            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-
-            if let error = presetStore.lastError {
-                Text(error)
-                    .font(.footnote)
-                    .foregroundStyle(.red)
-            }
-        }
+        .padding(12)
     }
 
     private func presetStrip(
@@ -1522,11 +1394,6 @@ private struct GradingCard: View {
                         accessibilityLabel: "\(custom.name) saved grade"
                     ) {
                         model.applyCustomPreset(custom, for: capture)
-                        // A saved grade sets the sliders too, so the card's own
-                        // copy has to follow it or the panel would keep showing
-                        // the values it replaced.
-                        draft = custom.adjustments
-                        isDraftOwned = capture.kind == .video
                     }
                     .contextMenu {
                         Button(role: .destructive) {

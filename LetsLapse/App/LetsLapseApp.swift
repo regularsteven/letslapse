@@ -160,6 +160,22 @@ struct LetsLapseApp: App {
             }
         }
         .defaultSize(width: 1000, height: 700)
+
+        // The video editor gets the same window treatment as the photo
+        // editor: free resizing, one window per movie, reopen fronts it.
+        WindowGroup(for: VideoEditorWindowRequest.self) { $request in
+            if let request {
+                VideoEditorView(
+                    captureID: request.captureID,
+                    url: request.url,
+                    title: request.title
+                )
+                .environmentObject(model)
+                .navigationTitle(request.title)
+                .frame(minWidth: 720, minHeight: 480)
+            }
+        }
+        .defaultSize(width: 1000, height: 700)
         #endif
     }
 }
