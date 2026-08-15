@@ -158,6 +158,13 @@ struct WatchControlView: View {
                 // Wrist-up is an interaction. Locking the instant you look at
                 // it would be the opposite of helpful.
                 lastInteractionAt = Date()
+                // Coming back to the app — wrist-raise, tap-wake, app-switch
+                // return, relaunch — always lands on live controls (Steven,
+                // 2026-08-15: "let the user do things"). The lock protects an
+                // unattended screen; returning IS attending. If wrist testing
+                // ever wants the sleeve lock back across wrist-down cycles,
+                // move this release to the `.background` transition instead.
+                if isLocked && !isDebugLockPreview { releaseLock() }
             }
         }
         .onReceive(timer) { date in
@@ -988,6 +995,18 @@ struct WatchControlView: View {
         unlockProgress = 0
         // In the same breath, or the 1 Hz timer could re-lock on its next tick.
         lastInteractionAt = Date()
+    }
+
+    /// The screenshot rig stages the lock at launch, and launch itself is a
+    /// `.active` transition — without this exemption the release-on-return
+    /// rule would clear the screen the rig just asked for.
+    private var isDebugLockPreview: Bool {
+        #if os(watchOS) && DEBUG
+        return remote.debugPreviewScreen == "locked"
+            || remote.debugPreviewScreen == "unlocking"
+        #else
+        return false
+        #endif
     }
 
     private var lockedOverlay: some View {

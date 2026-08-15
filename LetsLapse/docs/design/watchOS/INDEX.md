@@ -106,6 +106,10 @@ app could not leave the locked state.
   stays true under wrist tuning of that one constant. `locked.unlocking.svg` moves with it.
 - **A failure arriving while locked was unreachable** (the banner renders under the overlay). A failure
   now releases the lock, completing the existing "never lock behind a failure banner" rule.
+- **Returning to the app never shows the lock.** Wrist-raise, tap-wake, app-switch return, relaunch —
+  any return to the foreground releases it (a cold launch was already safe: the flag was never
+  persisted). The lock protects an unattended screen; returning is attending. The crown ring remains
+  the way out only when the lock engages while you are already looking at it.
 
 ## In-shoot marks (2026-08-14, second pass)
 
