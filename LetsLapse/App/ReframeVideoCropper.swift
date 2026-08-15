@@ -113,6 +113,15 @@ enum ReframeVideoCropper {
         outputFPS: Int,
         grade: PhotoGrade = .identity,
         exportShortEdge: Int? = nil,
+        /// Forces the output size instead of deriving it from `sourceURL`.
+        ///
+        /// Set when this pass runs **per segment** of a mixed-resolution ramp
+        /// shoot, where the segments must all land at one size for the stitch
+        /// to lay them end to end. Deriving it per segment would size the 4K
+        /// burst's output off the burst — which is the one thing this must not
+        /// do, because the extra pixels are meant to be spent on the crop, not
+        /// on the output.
+        renderSizeOverride: CGSize? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize) {
         guard !track.isEmpty, !frameSourceTimes.isEmpty else {
@@ -161,7 +170,16 @@ enum ReframeVideoCropper {
         }
         // An export cap resamples ONCE, straight from the kept pixels to the
         // target — a 2× punch on a 4K source lands pixel-sharp at 1080.
-        let renderSize = exportShortEdge.flatMap { scaledDown(fullSize, shortEdge: $0) } ?? fullSize
+        //
+        // `scale` above is what makes the override honest across a
+        // mixed-resolution shoot: it is computed from the clip this call was
+        // handed, so a 4K burst gets 2.0 and a 1080p base gets 1.0, the keys
+        // land in each segment's own pixel space, and the crop → Lanczos →
+        // renderSize chain below still resamples exactly once. The burst's
+        // extra pixels are therefore spent on the crop and nowhere else.
+        let renderSize = renderSizeOverride
+            ?? exportShortEdge.flatMap { scaledDown(fullSize, shortEdge: $0) }
+            ?? fullSize
 
         let frameRects = rects(
             track: track, aspect: aspect, sourceSize: sourceSize,

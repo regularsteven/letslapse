@@ -52,6 +52,11 @@ enum VideoCanvasCropper {
         offset: Double = 0.5,
         shortEdge: Int? = nil,
         grade: PhotoGrade = .identity,
+        /// Forces the output size. Set when this pass is normalising one
+        /// segment of a mixed-resolution ramp shoot to the size every other
+        /// segment lands at, so the stitch can lay them end to end — see
+        /// `ReframeVideoCropper.croppedCopy`'s override of the same name.
+        renderSizeOverride: CGSize? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize?) {
         let asset = AVURLAsset(url: sourceURL)
@@ -69,8 +74,14 @@ enum VideoCanvasCropper {
         let keptSize = cropped ?? CGSize(
             width: CGFloat(max(2, Int(orientedSize.width.rounded()) & ~1)),
             height: CGFloat(max(2, Int(orientedSize.height.rounded()) & ~1)))
-        let target = shortEdge.flatMap { ReframeVideoCropper.scaledDown(keptSize, shortEdge: $0) }
-        guard cropped != nil || target != nil else { return (sourceURL, nil) }
+        let target = renderSizeOverride
+            ?? shortEdge.flatMap { ReframeVideoCropper.scaledDown(keptSize, shortEdge: $0) }
+        // An override that already matches the kept pixels asks for nothing:
+        // let a base-resolution segment out untouched rather than paying a
+        // full re-encode to arrive where it already is.
+        let needsCrop = cropped != nil
+        let needsScale = target != nil && target != keptSize
+        guard needsCrop || needsScale else { return (sourceURL, nil) }
         let renderSize = target ?? keptSize
         let boxRect = CollectionMath.cropBox(
             clipSize: orientedSize, canvas: canvas, offset: offset)?.rect

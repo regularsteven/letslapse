@@ -458,6 +458,14 @@ private struct FullscreenVideoPage: View {
 
         let composition = AVMutableComposition()
         var cursor = CMTime.zero
+        // A ramp shoot's burst segments can be a different resolution from its
+        // base ones. One composition video track has one `naturalSize`, which
+        // it takes from the first segment inserted — the base, since a run
+        // always opens at the base rate — and the rest are fitted to it. That
+        // is the right answer here rather than a compromise: a burst format is
+        // only ever offered when it matches the base's field of view and aspect
+        // ratio (see `DeviceCapabilityMatrix`), so fitting it to the base's
+        // frame reproduces the base framing exactly, with no crop or pillarbox.
         for url in urls {
             let asset = AVURLAsset(url: url)
             guard let duration = try? await asset.load(.duration),

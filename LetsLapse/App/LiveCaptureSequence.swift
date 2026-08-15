@@ -15,7 +15,7 @@ struct LiveCaptureSequence: Codable, Equatable {
         }
     }
 
-    struct Resolution: Codable, Equatable {
+    struct Resolution: Codable, Equatable, Hashable {
         var width: Int32
         var height: Int32
     }
@@ -51,6 +51,16 @@ struct LiveCaptureSequence: Codable, Equatable {
         /// that motivated it (four frames still at the base 25 fps cadence
         /// inside a 100 fps burst, dragging its average to 98.14).
         var settleSeconds: Double? = nil
+        /// What this file actually recorded at, when it differs from the
+        /// sequence's `lockedResolution` — a burst may shoot 4K off a 1080p
+        /// base so a punch-in has pixels to crop into.
+        ///
+        /// **nil means "the sequence's resolution"**, which is what every
+        /// sidecar written before 2026-08-15 means: those runs were one
+        /// resolution throughout, by construction. `Segment` has no hand-written
+        /// `CodingKeys`, so the synthesized decoder already treats a missing key
+        /// as nil and needs no back-compat code.
+        var resolution: Resolution? = nil
     }
 
     struct Marker: Codable, Equatable {
@@ -144,6 +154,40 @@ struct LiveCaptureSequence: Codable, Equatable {
         markIntervals = try container.decodeIfPresent([RampInterval].self, forKey: .markIntervals) ?? []
         captureFlat = try container.decodeIfPresent(Bool.self, forKey: .captureFlat)
         appleLog = try container.decodeIfPresent(Bool.self, forKey: .appleLog)
+    }
+
+    /// What each segment really recorded at, with `lockedResolution` standing
+    /// in wherever the segment doesn't say — which is every segment of every
+    /// sidecar written before per-segment resolution existed.
+    func resolution(of segment: Segment) -> Resolution {
+        segment.resolution ?? lockedResolution
+    }
+
+    /// Whether this shoot's segments disagree about resolution, i.e. whether a
+    /// burst recorded at a different resolution from the base.
+    ///
+    /// The render path branches on this: a mixed shoot must crop and scale each
+    /// segment to one common size *before* the stitch, because a composition
+    /// track has one size and the burst's extra pixels have to be spent on the
+    /// punch-in crop rather than thrown away by a downscale. A uniform shoot —
+    /// which is every shoot recorded before 2026-08-15 — takes the original
+    /// path untouched.
+    var hasMixedSegmentResolutions: Bool {
+        guard let first = segments.first else { return false }
+        let firstResolution = resolution(of: first)
+        return segments.contains { resolution(of: $0) != firstResolution }
+    }
+
+    /// The distinct resolutions this shoot recorded, largest first.
+    var segmentResolutions: [Resolution] {
+        var seen: [Resolution] = []
+        for segment in segments {
+            let value = resolution(of: segment)
+            if !seen.contains(value) { seen.append(value) }
+        }
+        return seen.sorted {
+            Int64($0.width) * Int64($0.height) > Int64($1.width) * Int64($1.height)
+        }
     }
 
     private var markSummary: String {

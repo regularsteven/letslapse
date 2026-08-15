@@ -1206,6 +1206,19 @@ struct CaptureView: View {
                 Text(formatSummary)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(isCapturing ? .white.opacity(0.55) : .white)
+                // A run whose bursts change resolution has two formats, and a
+                // pill that named only one would be wrong for part of every
+                // clip. Shown while idle as a statement of intent; once
+                // recording, `formatSummary` names the segment actually being
+                // written, so repeating it here would only be noise. Amber like
+                // the other tokens that change what lands on disk, and its own
+                // atom so the landscape rail can't split it.
+                if mode == .video, sequenceMode == .ramp,
+                   camera.burstChangesResolution, !isCapturing {
+                    Text("· ↑\(camera.selectedBurstResolution.label)")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
+                }
                 if camera.supportsVideoStabilization && camera.isVideoStabilizationEnabled && mode == .video {
                     Text("· Stab")
                         .font(.system(size: 13, weight: .semibold))
@@ -1251,7 +1264,12 @@ struct CaptureView: View {
     /// presents the sensor frame ("12MP 4:3"), not the video format.
     private var formatSummary: String {
         if mode == .video {
-            return "\(camera.selectedResolution.label) · \(camera.selectedFrameRate)"
+            // Mid-run this names the segment being written, not the base
+            // selection — the same way the rate already flips to the burst's.
+            // On a mixed-resolution run the pill therefore reads "1080p · 25"
+            // and then "4K · 100" for the length of each burst.
+            let resolution = camera.activeSegmentResolution ?? camera.selectedResolution
+            return "\(resolution.label) · \(camera.selectedFrameRate)"
         }
         if model.intervalOutputFormat == .dng,
            camera.liveBlendDNGSupport.isSupported,
@@ -2728,7 +2746,11 @@ struct CaptureView: View {
             let dngActive = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
             formatLine = "\(formatSummary) · \(dngActive ? "DNG" : "JPEG")"
         } else {
-            formatLine = "\(camera.selectedResolution.label) · \(camera.selectedFrameRate) fps"
+            // The burst's resolution rides the same line when it differs, so
+            // the wrist can see the shoot has two formats without a new screen.
+            let burst = sequenceMode == .ramp && camera.burstChangesResolution
+                ? " · ↑\(camera.selectedBurstResolution.label)" : ""
+            formatLine = "\(camera.selectedResolution.label) · \(camera.selectedFrameRate) fps\(burst)"
         }
         watchRemote.setCaptureContext(
             formatLine: formatLine,
@@ -3162,13 +3184,17 @@ private struct FormatSheet: View {
 
                         if sequenceMode == .ramp {
                             if hasBurstRates {
-                                Picker("Burst frame rate", selection: $camera.selectedRampFrameRate) {
-                                    ForEach(rampRates, id: \.self) { fps in
-                                        Text("\(fps) fps").tag(fps)
+                                // One control for the whole burst format, not
+                                // two. The hardware does not generally offer
+                                // its top rate at its top resolution, so a
+                                // separate resolution menu would let the user
+                                // build a pair the camera can't shoot and find
+                                // out when the burst fires. A list of pairs
+                                // cannot express an illegal combination.
+                                Picker("Burst", selection: burstSelection) {
+                                    ForEach(burstOptions, id: \.self) { option in
+                                        Text(burstOptionLabel(option)).tag(option)
                                     }
-                                }
-                                .onChange(of: camera.selectedRampFrameRate) { fps in
-                                    camera.selectRampFrameRate(fps)
                                 }
                             } else {
                                 // Offering a burst rate here would be a lie:
@@ -3187,6 +3213,13 @@ private struct FormatSheet: View {
                     } footer: {
                         if sequenceMode == .ramp && !hasBurstRates {
                             Text("This camera offers no frame rate faster than \(camera.selectedFrameRate) fps at \(camera.selectedResolution.label), so there is nothing to switch to — bursts will mark intervals instead. Try a smaller resolution, or another camera.")
+                                .formFooterAligned()
+                        } else if sequenceMode == .ramp, camera.burstChangesResolution {
+                            // Named as the punch-in headroom it is, because
+                            // that is the only reason to spend the switch on
+                            // it — the finished clip is still delivered at the
+                            // base resolution either way.
+                            Text("While recording, the burst button (and Apple Watch) switches to \(camera.selectedRampFrameRate) fps at \(camera.selectedBurstResolution.label) — the same framing, with more pixels to punch into. Those moments stay slow and sharp in the final clip. The lens never changes, and the clip is still delivered at \(camera.selectedResolution.label).")
                                 .formFooterAligned()
                         } else {
                             Text(sequenceMode == .ramp
@@ -3225,19 +3258,43 @@ private struct FormatSheet: View {
         #endif
     }
 
-    private var rampRates: [Int] {
-        // Not every rate above the base is offerable: the capability matrix
-        // has already dropped the ones that would change optic or codec
-        // between segments (see CameraController.availableBurstFrameRates).
-        let higher = camera.availableBurstFrameRates
-        return higher.isEmpty ? [camera.selectedRampFrameRate] : higher
+    /// The burst formats on offer. Not every faster format qualifies: the
+    /// capability matrix has already dropped the ones that would change optic,
+    /// codec, field of view or aspect ratio between segments (see
+    /// `CameraController.availableBurstOptions`).
+    private var burstOptions: [BurstOption] {
+        let offered = camera.availableBurstOptions
+        return offered.isEmpty ? [camera.selectedBurstOption] : offered
+    }
+
+    /// The picker's own binding. Reads through to the camera's two published
+    /// values so an option the controller refuses (or re-pins on a base change)
+    /// snaps the row back rather than leaving it showing a lie; writes go
+    /// through `selectBurstOption`, which validates the pair.
+    private var burstSelection: Binding<BurstOption> {
+        Binding(
+            get: { camera.selectedBurstOption },
+            set: { camera.selectBurstOption($0) })
+    }
+
+    /// "100 fps" at the base resolution; "120 fps · 4K" when the burst raises
+    /// it. The resolution is named only when it is news — a row that repeated
+    /// the base resolution on every entry would bury the one that doesn't.
+    private func burstOptionLabel(_ option: BurstOption) -> String {
+        let base = camera.selectedResolution
+        guard option.pixelWidth != base.width || option.pixelHeight != base.height else {
+            return "\(option.fps) fps"
+        }
+        let label = CameraController.CaptureResolution(
+            width: option.pixelWidth, height: option.pixelHeight).label
+        return "\(option.fps) fps · \(label)"
     }
 
     /// Whether a burst has anywhere to go. False on a camera whose fastest
-    /// format at this resolution IS the base rate — then `rampRates`' fallback
-    /// is a placeholder, not an offer, and the section says so instead.
+    /// format at this resolution IS the base rate — then `burstOptions`'
+    /// fallback is a placeholder, not an offer, and the section says so.
     private var hasBurstRates: Bool {
-        !camera.availableBurstFrameRates.isEmpty
+        !camera.availableBurstOptions.isEmpty
     }
 }
 

@@ -298,9 +298,20 @@ final class CameraController: NSObject, ObservableObject {
     /// `startRecording` and runs early by the writer's spin-up time.
     private var activeSegmentRecordedStartAt: Date?
     private var activeRecordingFrameRate: Int?
+    /// The resolution the open segment is recording at — base for most of a
+    /// run, the burst resolution inside a burst. Stamped onto the segment in
+    /// `finishSegment` so `sequence.json` describes each file truthfully.
+    private var activeRecordingResolution: CaptureResolution?
+    /// The burst format's resolution for the whole run, snapshotted at start
+    /// beside `activeSequenceOrientation`. Rate can move between bursts;
+    /// resolution cannot, because the lens pin validated exactly two formats.
+    private var activeSequenceBurstResolution: CaptureResolution?
     private var activeSegmentURL: URL?
     private var segmentURLs: [URL] = []
     private var pendingRampFrameRate: Int?
+    /// The resolution the segment `pendingRampFrameRate` is opening will use.
+    /// Set and cleared in lockstep with it; nil means "the run's base".
+    private var pendingRampResolution: CaptureResolution?
     /// Both rates a running ramp sequence needs, empty outside one. While
     /// non-empty, `captureFormatMatch` prefers a format that carries every
     /// rate here, so the segment switch is a frame-duration change on one
@@ -380,17 +391,54 @@ final class CameraController: NSObject, ObservableObject {
     @Published var selectedResolution = CaptureResolution(width: 1920, height: 1080)
     @Published var availableFrameRates: [Int] = [30]
     @Published var selectedFrameRate = 30
-    /// Burst rates reachable from `selectedFrameRate` at `selectedResolution`
-    /// that keep the framing and the colour identical — a strict subset of
-    /// `availableFrameRates` above the base rate, narrowed by the capability
-    /// matrix. Not every faster format on the sensor qualifies: a different
-    /// field of view or codec would reframe the clip halfway through.
+    /// Burst formats reachable from `selectedFrameRate` at `selectedResolution`
+    /// that keep the framing and the colour identical, narrowed by the
+    /// capability matrix. Not every faster format on the sensor qualifies: a
+    /// different field of view or codec would reframe the clip halfway through.
+    ///
+    /// An option may carry a **higher resolution** than the base — that is the
+    /// point. A burst is the segment a punch-in crops into, so it is where
+    /// pixels are worth spending; 4K bursts off a 1080p base buy 2× of punch
+    /// that costs no upscale at 1080p delivery.
+    @Published var availableBurstOptions: [BurstOption] = []
+    /// The rates of `availableBurstOptions`, deduplicated. Kept as its own
+    /// published value because the watch link and the remote-command guards
+    /// speak in rates alone.
     @Published var availableBurstFrameRates: [Int] = []
     @Published var selectedRampFrameRate = 120 {
         didSet {
             guard selectedRampFrameRate != oldValue else { return }
             CaptureSessionLogger.shared.log("burst_set", ["fps": selectedRampFrameRate])
         }
+    }
+    /// The resolution a burst segment records at. Equal to `selectedResolution`
+    /// unless the user picked an option that raises it, which is the whole of
+    /// the opt-in — every existing shoot keeps one resolution throughout.
+    @Published var selectedBurstResolution = CaptureResolution(width: 1920, height: 1080) {
+        didSet {
+            guard selectedBurstResolution != oldValue else { return }
+            CaptureSessionLogger.shared.log(
+                "burst_set", ["resolution": selectedBurstResolution.id])
+        }
+    }
+
+    /// The resolution the segment being recorded right now landed on, so the
+    /// format pill can tell the truth mid-burst. nil outside a run.
+    @Published var activeSegmentResolution: CaptureResolution?
+
+    /// Whether a burst will reconfigure more than the frame duration. Callers
+    /// use this to decide what the run can promise: the shared-format fast
+    /// path, the seam ease, and what the format pill has to say.
+    var burstChangesResolution: Bool {
+        selectedBurstResolution != selectedResolution
+    }
+
+    /// The burst the pickers are currently pointing at.
+    var selectedBurstOption: BurstOption {
+        BurstOption(
+            pixelWidth: selectedBurstResolution.width,
+            pixelHeight: selectedBurstResolution.height,
+            fps: selectedRampFrameRate)
     }
     @Published var isVideoStabilizationEnabled = true
     /// Whether this camera can stabilize at all — the gate on showing the
@@ -720,11 +768,18 @@ final class CameraController: NSObject, ObservableObject {
         if let resolution = RecordingSettingsStore.resolution {
             selectedResolution = resolution
         }
+        // Seed the burst resolution from the base first, so a store that has
+        // never held one (or a device that no longer offers it) lands on the
+        // pre-feature behaviour of one resolution throughout.
+        selectedBurstResolution = selectedResolution
         if let frameRate = RecordingSettingsStore.frameRate {
             selectedFrameRate = frameRate
         }
         if let rampFrameRate = RecordingSettingsStore.rampFrameRate {
             selectedRampFrameRate = rampFrameRate
+        }
+        if let rampResolution = RecordingSettingsStore.rampResolution {
+            selectedBurstResolution = rampResolution
         }
         if let stabilization = RecordingSettingsStore.stabilization {
             isVideoStabilizationEnabled = stabilization
@@ -953,7 +1008,7 @@ final class CameraController: NSObject, ObservableObject {
         // is safe here on the session queue before the session starts running.
         // Everything downstream (`refreshCaptureOptions`) reads its answers.
         capabilityMatrix = DeviceCapabilityMatrix.loadOrProbe(devices: allCaptureDevices())
-        LLog("capability matrix: \(capabilityMatrix?.validBurstRates.count ?? 0) configurations"
+        LLog("capability matrix: \(capabilityMatrix?.validBurstOptions.count ?? 0) configurations"
              + " from \(allCaptureDevices().count) devices")
         #if os(iOS)
         if let optics { installConstituentLogging(on: optics) }
@@ -1491,10 +1546,16 @@ final class CameraController: NSObject, ObservableObject {
     /// axis, because there is only ever one lens in the session. The stop is
     /// served as a crop of that lens, which is what it already was.
     ///
-    /// Declines — loudly — when the lens can't shoot every rate the run needs
-    /// at the locked resolution. A run that would have to drop the burst rate
-    /// or the resolution is worse than one that keeps the old behaviour.
-    private func pinLensForSequence(rates: [Int]) {
+    /// Declines — loudly — when the lens can't shoot every *format* the run
+    /// needs. A run that would have to drop the burst rate or the resolution is
+    /// worse than one that keeps the old behaviour.
+    ///
+    /// `configurations` is one entry per format the run will switch between:
+    /// the base pair, plus the burst pair when they differ. Checking both here
+    /// is what makes "resolve it before recording starts" true — the
+    /// alternative is discovering it at the moment the burst fires, with a
+    /// segment already open.
+    private func pinLensForSequence(configurations: [(resolution: CaptureResolution, fps: Int)]) {
         // DNG owns the input while it is armed or running; the pin never
         // takes it from another world.
         guard sequenceLensPin == nil,
@@ -1510,9 +1571,13 @@ final class CameraController: NSObject, ObservableObject {
         }
 
         let name = lens.device.localizedName
-        for fps in Set(rates)
-        where captureFormatMatch(for: lens.device, resolution: selectedResolution, fps: fps) == nil {
-            LLog("optics: \(name) cannot shoot \(selectedResolution.label)@\(fps)"
+        for configuration in configurations
+        where captureFormatMatch(
+            for: lens.device,
+            resolution: configuration.resolution,
+            fps: configuration.fps) == nil {
+            LLog("optics: \(name) cannot shoot"
+                 + " \(configuration.resolution.label)@\(configuration.fps)"
                  + " — run stays on the optics device, lens may change mid-shoot")
             return
         }
@@ -1532,8 +1597,11 @@ final class CameraController: NSObject, ObservableObject {
         session.commitConfiguration()
 
         guard sequenceLensPin != nil else { return }
+        let formats = configurations
+            .map { "\($0.resolution.label)@\($0.fps)" }
+            .joined(separator: ", ")
         LLog("optics: run pinned to \(name) at zoom "
-             + "\(String(format: "%.2f", lens.zoomFactor)) for \(Set(rates).sorted())")
+             + "\(String(format: "%.2f", lens.zoomFactor)) for \(formats)")
     }
 
     /// sessionQueue-confined. Hands the optics device back once the run that
@@ -1823,6 +1891,7 @@ final class CameraController: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.availableResolutions = []
                 self.availableFrameRates = []
+                self.availableBurstOptions = []
                 self.availableBurstFrameRates = []
             }
             return
@@ -1850,20 +1919,31 @@ final class CameraController: NSObject, ObservableObject {
         // of the lens the run would pin to, not the optics device — see
         // `effectiveRecordingDevice`.
         let burstDevice = effectiveRecordingDevice(for: currentStop) ?? listDevice
-        let burstRates = burstFrameRates(
+        let burstOptions = self.burstOptions(
             for: burstDevice,
             resolution: resolution,
             baseFrameRate: frameRate,
             allRates: rateSet)
-        let rampFrameRate = burstRates.contains(selectedRampFrameRate)
-            ? selectedRampFrameRate
-            : (burstRates.first ?? selectedRampFrameRate)
+        // Hold the whole pair where it is still offered, so changing the base
+        // rate doesn't silently drop a chosen 4K burst back to the base
+        // resolution. Falling back rate-first (any resolution at the wanted
+        // rate) before giving up keeps the burst as close to the ask as the
+        // hardware allows.
+        let burst = burstOptions.first { $0 == selectedBurstOption }
+            ?? burstOptions.first { $0.fps == selectedRampFrameRate }
+            ?? burstOptions.first
+        let rampFrameRate = burst?.fps ?? selectedRampFrameRate
+        let burstResolution = burst.map {
+            CaptureResolution(
+                width: $0.pixelWidth, height: $0.pixelHeight, isProRes: resolution.isProRes)
+        } ?? resolution
 
         _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
         RecordingSettingsStore.save(
             resolution: resolution,
             frameRate: frameRate,
-            rampFrameRate: rampFrameRate
+            rampFrameRate: rampFrameRate,
+            rampResolution: burstResolution
         )
         // Can THIS selection shoot Apple Log? The matrix's Log-required pass
         // answers per resolution + rate, which is the honest footer: a
@@ -1884,8 +1964,15 @@ final class CameraController: NSObject, ObservableObject {
             self.selectedResolution = resolution
             self.availableFrameRates = frameRates
             self.selectedFrameRate = frameRate
-            self.availableBurstFrameRates = burstRates
+            self.availableBurstOptions = burstOptions
+            // Options are already in picker order, so a rate's first
+            // appearance is the order the ladder wants; `Set` would scramble it.
+            var seenRates = Set<Int>()
+            self.availableBurstFrameRates = burstOptions
+                .map(\.fps)
+                .filter { seenRates.insert($0).inserted }
             self.selectedRampFrameRate = rampFrameRate
+            self.selectedBurstResolution = burstResolution
             if self.appleLogAvailableForSelection != logAvailable {
                 self.appleLogAvailableForSelection = logAvailable
             }
@@ -1922,31 +2009,42 @@ final class CameraController: NSObject, ObservableObject {
         return supportedRates
     }
 
-    /// Burst rates reachable from `baseFrameRate` at `resolution` without the
+    /// Burst formats reachable from `baseFrameRate` at `resolution` without the
     /// framing or the colour changing — the matrix's whole reason to exist.
     /// Falls back to "everything faster at this resolution" (the pre-matrix
     /// behaviour) when the probe hasn't run.
-    private func burstFrameRates(
+    ///
+    /// The fallback deliberately stays at the base resolution. Without a probe
+    /// there is nothing that knows which higher resolution frames the scene
+    /// identically, and guessing one is exactly the reframe this feature exists
+    /// to avoid.
+    private func burstOptions(
         for device: AVCaptureDevice,
         resolution: CaptureResolution,
         baseFrameRate: Int,
         allRates: Set<Int>
-    ) -> [Int] {
+    ) -> [BurstOption] {
         #if os(iOS)
         let logRequested = appleLogEnabled
         #else
         let logRequested = false
         #endif
         if let matrix = capabilityMatrix,
-           let rates = matrix.validBurstRates(
+           let options = matrix.validBurstOptions(
                 for: device,
                 resolution: resolution,
                 stabilizationEnabled: videoStabilizationRequested,
                 appleLogEnabled: logRequested,
                 baseFPS: baseFrameRate) {
-            return rates
+            return options
         }
-        return allRates.filter { $0 > baseFrameRate }.sorted()
+        return allRates
+            .filter { $0 > baseFrameRate }
+            .sorted()
+            .map {
+                BurstOption(
+                    pixelWidth: resolution.width, pixelHeight: resolution.height, fps: $0)
+            }
     }
 
     /// Folds one device's formats into the resolution → frame-rate map.
@@ -2066,11 +2164,34 @@ final class CameraController: NSObject, ObservableObject {
             }
             // Only a composition-safe rate can be selected: anything else
             // would swap the optic (or the codec) mid-clip.
-            let safeRates = self.availableBurstFrameRates
-            let frameRate = safeRates.contains(fps)
-                ? fps
-                : (safeRates.first ?? self.selectedFrameRate)
-            RecordingSettingsStore.save(rampFrameRate: frameRate)
+            //
+            // Resolution is held where it is. A rate change is a frame-duration
+            // decision the run can absorb between bursts; a resolution change
+            // is a heavier reconfiguration and is idle-only (see
+            // `selectBurstOption`). So this prefers the option that keeps the
+            // current burst resolution, and only crosses resolutions when the
+            // rate is unreachable without it — which cannot happen mid-run,
+            // because the candidate list is filtered first.
+            let current = self.selectedBurstResolution
+            var candidates = self.availableBurstOptions
+            if self.isRecording {
+                candidates = candidates.filter {
+                    $0.pixelWidth == current.width && $0.pixelHeight == current.height
+                }
+            }
+            let option = candidates.first {
+                $0.fps == fps && $0.pixelWidth == current.width && $0.pixelHeight == current.height
+            }
+                ?? candidates.first { $0.fps == fps }
+                ?? candidates.first
+            let frameRate = option?.fps ?? self.selectedFrameRate
+            let resolution = option.map {
+                CaptureResolution(
+                    width: $0.pixelWidth,
+                    height: $0.pixelHeight,
+                    isProRes: self.selectedResolution.isProRes)
+            } ?? current
+            RecordingSettingsStore.save(rampFrameRate: frameRate, rampResolution: resolution)
             // A run bakes its ramp rate into the sequence at start, and the
             // burst switch reads it from there — so without this the selection
             // would change everywhere except where it matters. Segments still
@@ -2080,6 +2201,47 @@ final class CameraController: NSObject, ObservableObject {
             self.activeSequence?.rampFrameRate = frameRate
             DispatchQueue.main.async {
                 self.selectedRampFrameRate = frameRate
+                self.selectedBurstResolution = resolution
+            }
+        }
+    }
+
+    /// Choose the whole burst format — rate *and* resolution — as one act.
+    ///
+    /// The format sheet offers pairs rather than two independent menus so that
+    /// an illegal combination cannot be expressed: the hardware does not
+    /// generally offer its top rate at its top resolution, and a user who picks
+    /// them separately would find out at the moment the burst fires. A pair
+    /// list resolves it before recording starts, by construction.
+    ///
+    /// Idle-only where it changes resolution. Unlike a rate change — which is
+    /// a frame-duration write the run can absorb between bursts — landing on a
+    /// different resolution is a full `activeFormat` swap, and the run has
+    /// already pinned a lens and validated both of its formats.
+    func selectBurstOption(_ option: BurstOption) {
+        sessionQueue.async {
+            guard self.pendingRampFrameRate == nil, !self.rampIntervalActive else {
+                LLog("burst format: refused — a burst is open")
+                return
+            }
+            guard self.availableBurstOptions.contains(option) else {
+                LLog("burst format: refused \(option.pixelWidth)x\(option.pixelHeight)"
+                     + "@\(option.fps) — not composition-safe from this base")
+                return
+            }
+            let resolution = CaptureResolution(
+                width: option.pixelWidth,
+                height: option.pixelHeight,
+                isProRes: self.selectedResolution.isProRes)
+            if self.isRecording, resolution != self.selectedBurstResolution {
+                LLog("burst format: refused a resolution change mid-run")
+                return
+            }
+            RecordingSettingsStore.save(rampFrameRate: option.fps, rampResolution: resolution)
+            self.activeSequence?.rampFrameRate = option.fps
+            DispatchQueue.main.async {
+                self.selectedRampFrameRate = option.fps
+                self.selectedBurstResolution = resolution
             }
         }
     }
@@ -2187,11 +2349,16 @@ final class CameraController: NSObject, ObservableObject {
     /// delivery does NOT stop — which is precisely why those four
     /// transitional frames existed to be measured.
     ///
+    /// A burst that also changes **resolution** can never take this path: the
+    /// target is a different format by definition, so this returns false and
+    /// every such boundary pays the full switch. That is the known price of
+    /// per-segment burst resolution, and `Segment.settleSeconds` measures it.
+    ///
     /// sessionQueue-confined, like every other device configuration here.
-    private func prepareRampRateChange(to fps: Int) -> Bool {
+    private func prepareRampRateChange(to resolution: CaptureResolution, fps: Int) -> Bool {
         guard let device = videoDevice,
               let match = captureFormatMatch(
-                for: device, resolution: selectedResolution, fps: fps),
+                for: device, resolution: resolution, fps: fps),
               device.activeFormat == match.format
         else { return false }
 
@@ -2448,8 +2615,19 @@ final class CameraController: NSObject, ObservableObject {
                 #else
                 let stabilizationMatches = true
                 #endif
+                // The codec is part of the resolution's identity, not a
+                // preference: ProRes and HEVC entries share pixel dimensions
+                // and appear as separate rows, `CaptureResolution.id` and
+                // `CaptureCapabilityKey` both key on the flag, and a segment
+                // boundary that changed codec would not stitch. Without this
+                // test a ProRes row could resolve to a same-dimension HEVC
+                // format — and picking base and burst formats on two axes gives
+                // that far more chances to happen.
+                let subType = CMFormatDescriptionGetMediaSubType(format.formatDescription)
+                let codecMatches = Self.proResFourCCs.contains(subType) == resolution.isProRes
                 return dims.width == resolution.width
                     && dims.height == resolution.height
+                    && codecMatches
                     && stabilizationMatches
                     && format.videoSupportedFrameRateRanges.contains { range in
                         Self.supportsFrameRate(targetFPS, in: range)
@@ -3038,6 +3216,12 @@ final class CameraController: NSObject, ObservableObject {
                 height: self.selectedResolution.height
             )
             let baseFrameRate = self.selectedFrameRate
+            // One burst format per sequence, snapshotted here alongside the
+            // orientation and the lens. Rate can still move between bursts;
+            // resolution cannot, because the lens pin below validated exactly
+            // these two formats and nothing revalidates them mid-run.
+            let burstResolution = mode == .ramp ? self.selectedBurstResolution : self.selectedResolution
+            self.activeSequenceBurstResolution = burstResolution
             self.activeSequence = LiveCaptureSequence(
                 mode: mode,
                 createdAt: startedAt,
@@ -3064,20 +3248,32 @@ final class CameraController: NSObject, ObservableObject {
             // One lens per sequence, alongside one orientation per sequence:
             // decided here from every rate the run can reach, held to the last
             // segment (see pinLensForSequence).
-            var runRates = [baseFrameRate]
-            if mode == .ramp { runRates.append(self.selectedRampFrameRate) }
-            self.pinLensForSequence(rates: runRates)
+            var runConfigurations = [(resolution: self.selectedResolution, fps: baseFrameRate)]
+            if mode == .ramp {
+                runConfigurations.append((burstResolution, self.selectedRampFrameRate))
+            }
+            self.pinLensForSequence(configurations: runConfigurations)
             #endif
             // One format per sequence when the sensor offers it, alongside
             // one lens and one orientation: with both rates on a single
             // format, every segment switch is a frame-duration change (see
             // sequenceSharedRampRates). Set before the first segment so the
             // run opens on the shared format rather than switching onto it.
+            //
+            // A burst that changes resolution can have no such format, so the
+            // preference is switched off rather than left to mis-sort: it would
+            // rank formats by whether they carry both rates, when the two
+            // segments are landing on different formats by design. That run
+            // pays the full `activeFormat` switch at every boundary — the cost
+            // the burst resolution is bought with.
             self.sequenceSharedRampRates =
-                mode == .ramp && baseFrameRate != self.selectedRampFrameRate
+                mode == .ramp
+                && baseFrameRate != self.selectedRampFrameRate
+                && burstResolution == self.selectedResolution
                 ? [baseFrameRate, self.selectedRampFrameRate] : []
             CaptureSessionLogger.shared.log("burst_set", [
                 "fps": self.selectedRampFrameRate,
+                "resolution": "\(burstResolution.width)x\(burstResolution.height)",
                 "mode": mode.rawValue,
                 "baseFPS": baseFrameRate,
             ])
@@ -3087,7 +3283,8 @@ final class CameraController: NSObject, ObservableObject {
                 "resolution": "\(resolution.width)x\(resolution.height)",
                 "sequenceMode": mode.rawValue,
             ])
-            self.startNextSegment(frameRate: self.selectedFrameRate)
+            self.startNextSegment(
+                resolution: self.selectedResolution, frameRate: self.selectedFrameRate)
             DispatchQueue.main.async {
                 self.recordingStartedAt = startedAt
                 self.captureRunStartedAt = startedAt
@@ -3352,6 +3549,15 @@ final class CameraController: NSObject, ObservableObject {
             let targetFrameRate = shouldTurnRampOn
                 ? (sequence.rampFrameRate ?? selectedRampFrameRate)
                 : sequence.baseFrameRate
+            // The run's two formats, not the pickers': `selectedResolution` is
+            // the base menu's value and a burst may land somewhere else.
+            let baseResolution = CaptureResolution(
+                width: sequence.lockedResolution.width,
+                height: sequence.lockedResolution.height,
+                isProRes: selectedResolution.isProRes)
+            let targetResolution = shouldTurnRampOn
+                ? (activeSequenceBurstResolution ?? baseResolution)
+                : baseResolution
             let currentFrameRate = activeRecordingFrameRate ?? selectedFrameRate
             guard targetFrameRate != currentFrameRate else { return }
             if shouldTurnRampOn {
@@ -3365,6 +3571,7 @@ final class CameraController: NSObject, ObservableObject {
             // so re-entry (this method's top guard) and the timed-burst wait
             // loops already see the switch as in flight during the wait.
             pendingRampFrameRate = targetFrameRate
+            pendingRampResolution = targetResolution
             beginSwitchExposureHold { [weak self] in
                 guard let self else { return }
                 // Then the CADENCE latch, on the same principle: write the new
@@ -3374,7 +3581,7 @@ final class CameraController: NSObject, ObservableObject {
                 // just means waiting longer between reads, and the 2026-08-13
                 // shoot's 100→25 segment is clean from its first frame.
                 guard targetFrameRate > currentFrameRate,
-                      self.prepareRampRateChange(to: targetFrameRate)
+                      self.prepareRampRateChange(to: targetResolution, fps: targetFrameRate)
                 else {
                     LLog("rampSettle \(currentFrameRate)→\(targetFrameRate): skipped ("
                         + (targetFrameRate > currentFrameRate
@@ -3543,13 +3750,19 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    private func startNextSegment(frameRate: Int) {
+    /// Opens the next segment file at `resolution`/`frameRate`.
+    ///
+    /// Resolution is a parameter rather than `selectedResolution` because a
+    /// ramp run can hold two: base segments at the shot's resolution, burst
+    /// segments at a higher one so a punch-in has pixels to crop. Both were
+    /// validated against the pinned lens before the run started.
+    private func startNextSegment(resolution: CaptureResolution, frameRate: Int) {
         guard let directory = activeSequenceDirectory else { return }
         // Every segment records on the device the run started on: the burst
-        // rate is a format change, never an input change. The rates the picker
-        // offers are exactly the ones this device can shoot without one (see
-        // DeviceCapabilityMatrix).
-        _ = applyCaptureFormat(resolution: selectedResolution, fps: frameRate)
+        // format is a format change, never an input change. The formats the
+        // picker offers are exactly the ones this device can shoot without one
+        // (see DeviceCapabilityMatrix).
+        _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
         #if os(iOS)
         // A new segment reuses the movie output connection; re-assert the
         // run-locked orientation so a fresh connection never records the wrong
@@ -3576,18 +3789,24 @@ final class CameraController: NSObject, ObservableObject {
         // leftover from the previous segment must never masquerade as it.
         activeSegmentRecordedStartAt = nil
         activeRecordingFrameRate = frameRate
+        activeRecordingResolution = resolution
         #if os(iOS)
         LLog("segment \(String(format: "%03d", index)) start: running=\(session.isRunning)"
             + " interrupted=\(session.isInterrupted) inputs=\(session.inputs.count)"
-            + " fps=\(frameRate)")
+            + " fps=\(frameRate) \(resolution.label)")
         #else
         LLog("segment \(String(format: "%03d", index)) start: running=\(session.isRunning)"
-            + " inputs=\(session.inputs.count) fps=\(frameRate)")
+            + " inputs=\(session.inputs.count) fps=\(frameRate) \(resolution.label)")
         #endif
         movieOutput.startRecording(to: url, recordingDelegate: self)
 
         DispatchQueue.main.async {
             self.selectedFrameRate = frameRate
+            // Published separately from `selectedResolution` rather than
+            // overwriting it: that one is the *base* selection the format sheet
+            // and `refreshCaptureOptions` own, and persisting a burst's
+            // resolution into it would silently promote the whole shoot.
+            self.activeSegmentResolution = resolution
             self.segmentCount = index + 1
             if let sequence = self.activeSequence, sequence.mode == .ramp {
                 let highRate = frameRate != sequence.baseFrameRate
@@ -3623,7 +3842,15 @@ final class CameraController: NSObject, ObservableObject {
             recordedDuration: timing.duration,
             measuredFrameRate: timing.measuredFrameRate,
             steadyFrameRate: timing.steadyFrameRate,
-            settleSeconds: timing.settleSeconds
+            settleSeconds: timing.settleSeconds,
+            // Stamped only when it differs from the sequence's locked
+            // resolution, so a single-resolution shoot writes exactly the
+            // sidecar it wrote before this feature existed.
+            resolution: activeRecordingResolution.flatMap { recorded in
+                let value = LiveCaptureSequence.Resolution(
+                    width: recorded.width, height: recorded.height)
+                return value == sequence.lockedResolution ? nil : value
+            }
         )
         if let recordedStart, let recordedDuration = timing.duration {
             LLog(String(
@@ -3645,6 +3872,7 @@ final class CameraController: NSObject, ObservableObject {
         activeSegmentRecordedStartAt = nil
         activeSegmentURL = nil
         activeRecordingFrameRate = nil
+        activeRecordingResolution = nil
     }
 
     /// What a finished segment file says about its own timing.
@@ -3818,10 +4046,14 @@ final class CameraController: NSObject, ObservableObject {
         activeSegmentStartedAt = nil
         activeSegmentRecordedStartAt = nil
         activeRecordingFrameRate = nil
+        activeRecordingResolution = nil
+        activeSequenceBurstResolution = nil
         activeSegmentURL = nil
         segmentURLs = []
         pendingRampFrameRate = nil
+        pendingRampResolution = nil
         isFinishingSequence = false
+        DispatchQueue.main.async { self.activeSegmentResolution = nil }
         isDiscardingSequence = false
         rampIntervalActive = false
         markIntervalActive = false
@@ -4871,8 +5103,10 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
             }
 
             if let nextFrameRate = self.pendingRampFrameRate {
+                let nextResolution = self.pendingRampResolution ?? self.selectedResolution
                 self.pendingRampFrameRate = nil
-                self.startNextSegment(frameRate: nextFrameRate)
+                self.pendingRampResolution = nil
+                self.startNextSegment(resolution: nextResolution, frameRate: nextFrameRate)
                 return
             }
 
@@ -4970,6 +5204,14 @@ enum RecordingSettingsStore {
     private static let resolutionHeightKey = "letslapse.capture.resolutionHeight"
     private static let frameRateKey = "letslapse.capture.frameRate"
     private static let rampFrameRateKey = "letslapse.capture.rampFrameRate"
+    private static let rampResolutionWidthKey = "letslapse.capture.rampResolutionWidth"
+    private static let rampResolutionHeightKey = "letslapse.capture.rampResolutionHeight"
+    /// The ProRes flag of the remembered resolution. Stored separately from
+    /// width/height because it was added later, and because `CaptureResolution`
+    /// treats it as part of the resolution's identity — the capability matrix
+    /// keys on it, so losing it across a launch silently changed which formats
+    /// the burst menu offered.
+    private static let resolutionProResKey = "letslapse.capture.resolutionProRes"
     private static let stabilizationKey = "letslapse.capture.stabilization"
     private static let intervalSecondsKey = "letslapse.capture.intervalSeconds"
     /// Pre-merge key from when Live Blend was its own mode with its own
@@ -5116,7 +5358,26 @@ enum RecordingSettingsStore {
               let height = UserDefaults.standard.object(forKey: resolutionHeightKey) as? Int,
               width > 0, height > 0
         else { return nil }
-        return CameraController.CaptureResolution(width: Int32(width), height: Int32(height))
+        return CameraController.CaptureResolution(
+            width: Int32(width),
+            height: Int32(height),
+            // Absent for anyone upgrading, which reads as false — the same
+            // answer the flag-less version always gave.
+            isProRes: UserDefaults.standard.bool(forKey: resolutionProResKey))
+    }
+
+    /// The remembered burst resolution. Nil when the store predates the
+    /// per-segment burst resolution, which the caller reads as "follow the
+    /// base" — the behaviour every shoot had before it existed.
+    static var rampResolution: CameraController.CaptureResolution? {
+        guard let width = UserDefaults.standard.object(forKey: rampResolutionWidthKey) as? Int,
+              let height = UserDefaults.standard.object(forKey: rampResolutionHeightKey) as? Int,
+              width > 0, height > 0
+        else { return nil }
+        return CameraController.CaptureResolution(
+            width: Int32(width),
+            height: Int32(height),
+            isProRes: UserDefaults.standard.bool(forKey: resolutionProResKey))
     }
 
     static var frameRate: Int? {
@@ -5135,6 +5396,7 @@ enum RecordingSettingsStore {
         resolution: CameraController.CaptureResolution? = nil,
         frameRate: Int? = nil,
         rampFrameRate: Int? = nil,
+        rampResolution: CameraController.CaptureResolution? = nil,
         stabilization: Bool? = nil
     ) {
         guard isEnabled else { return }
@@ -5142,9 +5404,14 @@ enum RecordingSettingsStore {
         if let resolution {
             defaults.set(Int(resolution.width), forKey: resolutionWidthKey)
             defaults.set(Int(resolution.height), forKey: resolutionHeightKey)
+            defaults.set(resolution.isProRes, forKey: resolutionProResKey)
         }
         if let frameRate { defaults.set(frameRate, forKey: frameRateKey) }
         if let rampFrameRate { defaults.set(rampFrameRate, forKey: rampFrameRateKey) }
+        if let rampResolution {
+            defaults.set(Int(rampResolution.width), forKey: rampResolutionWidthKey)
+            defaults.set(Int(rampResolution.height), forKey: rampResolutionHeightKey)
+        }
         if let stabilization { defaults.set(stabilization, forKey: stabilizationKey) }
     }
 
@@ -5154,7 +5421,8 @@ enum RecordingSettingsStore {
         let defaults = UserDefaults.standard
         for key in [
             modeKey, lensKey, stopFactorKey, resolutionWidthKey, resolutionHeightKey,
-            frameRateKey, rampFrameRateKey, stabilizationKey,
+            resolutionProResKey, frameRateKey, rampFrameRateKey,
+            rampResolutionWidthKey, rampResolutionHeightKey, stabilizationKey,
             intervalSecondsKey, liveBlendIntervalSecondsKey, liveBlendFramesPerBlendKey,
             blendDepthKey, photoBlendDepthKey, photoBulbModeKey,
         ] {

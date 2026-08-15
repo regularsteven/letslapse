@@ -143,6 +143,16 @@ final class AppModel: ObservableObject {
         /// the reframe bake above all — mis-times from the truncation onward.
         /// nil (pre-probe) falls back to the sidecar's nominal rate.
         var sourceSegmentFPS: [String: Double]?
+        /// Probed pixel size per segment file, as "WxH" (same keying). The
+        /// spatial twin of the two maps above: a ramp shoot's burst segments
+        /// can record at a different resolution from its base ones, so
+        /// `sourceWidth`/`sourceHeight` — which latch on the FIRST segment, and
+        /// therefore describe the base — no longer describe the whole shoot.
+        /// Anything that needs to know what a particular file holds reads this;
+        /// anything asking "what shape is this project" still reads the pair,
+        /// and is still right, because the reframe keys are authored in the
+        /// base's pixel space.
+        var sourceSegmentSize: [String: String]?
         /// The `id` this project had in the archive it was imported from — the
         /// only thread back to where it came from, since import mints a fresh
         /// `id` (folder names key on it, so reusing the original would collide
@@ -350,6 +360,55 @@ final class AppModel: ObservableObject {
         var outputFrames: Int?
         var width: Int?
         var height: Int?
+        /// Set when the geometry passes (reframe / canvas crop) already ran
+        /// **per segment**, ahead of the stitch, so their tail counterparts
+        /// stand down. Only a mixed-resolution ramp shoot does this — see
+        /// `SegmentNormalization`. The grade is not included: it still bakes
+        /// once over the finished clip, because a pass that no-ops on a segment
+        /// that needs no geometry would otherwise leave that segment ungraded.
+        var geometryBaked = false
+    }
+
+    /// How a mixed-resolution ramp shoot's segments are brought to one size.
+    ///
+    /// A ramp shoot can now hold two resolutions — base segments at the shot's
+    /// resolution, burst segments higher so a punch-in has pixels to crop into.
+    /// `stitchVideos` lays pieces into a single composition track, which has
+    /// exactly one size, so they must agree before they reach it.
+    ///
+    /// **The order is the whole point.** The crop is taken from each segment at
+    /// its own native resolution and Lanczos-scaled straight to `renderSize`,
+    /// so a 2× punch on a 4K burst keeps 1920 px and lands 1:1 at 1080p. Doing
+    /// it the other way round — shrink to the base, then crop — throws the
+    /// burst's extra pixels away before the crop can spend them, which would
+    /// make burst resolution pointless.
+    ///
+    /// `renderSize` is derived from the **base** resolution, so the output is
+    /// the size it always was; the extra pixels are consumed by the crop, not
+    /// by the file.
+    private struct SegmentNormalization {
+        var renderSize: CGSize
+        /// The shoot's output shape. Defaults to the clip's own, in which case
+        /// the canvas pass finds nothing to crop and becomes a pure scale.
+        var canvas: CanvasRatio
+        var canvasOffset: Double
+        /// nil = no punch-in; segments are only scaled (and canvas-cropped) to
+        /// `renderSize`.
+        var reframe: Reframe?
+
+        struct Reframe {
+            var track: ReframeTrack
+            var aspect: Double
+            /// The capture's display-oriented size — the space the keys were
+            /// authored in, which stays the *base* resolution for every
+            /// segment. `ReframeVideoCropper` derives its own per-clip scale
+            /// from it, so a 4K burst resolves to 2.0 and a base segment to 1.0.
+            var sourceSize: CGSize
+            /// One entry per segment, in segment order — the compiled warp's
+            /// `frameSourceTimes` kept per region instead of flattened.
+            var frameTimesBySegment: [[Double]]
+            var outputFPS: Int
+        }
     }
 
     private final class ExportSessionBox: @unchecked Sendable {
@@ -1794,7 +1853,20 @@ final class AppModel: ObservableObject {
             bounds.append((bounds.last ?? 0) + stretch.seconds)
             speeds.append(stretch.kind == .moment ? 0.25 : baseSpeed)
         }
-        let rampSeconds = effectiveBurstRamp(for: currentCapture)
+        var rampSeconds = effectiveBurstRamp(for: currentCapture)
+        // A burst that also changed resolution could not take the shared-format
+        // fast path: `prepareRampRateChange` is gated on the target being the
+        // format already active, so the switch is a full `activeFormat` swap
+        // and the real-time hole at the cut is several times wider (~0.6s
+        // against ~0.17s on the 2026-08-13 measurements). The compiler already
+        // absorbs the measured hole kinematically through `leadingGap`, so the
+        // clip stays truthful either way — but a step seam over a hole that
+        // size reads as a jolt, so the default ease is widened to cover it.
+        // Only the default: an explicit "no ramp" (0) is still honoured, and
+        // every seam stays editable.
+        if rampSeconds > 0, hasMixedResolutionSegments {
+            rampSeconds = max(rampSeconds, 1)
+        }
         let ramp: WarpTimeline.Seam.Ramp =
             rampSeconds <= 0 ? .step
             : rampSeconds <= 0.5 ? .half
@@ -1809,6 +1881,15 @@ final class AppModel: ObservableObject {
             seams.append(ramp != .step && momentEdge ? WarpTimeline.Seam(ramp: ramp) : .step)
         }
         return WarpTimeline(bounds: bounds, speeds: speeds, seams: seams)
+    }
+
+    /// Whether the current project's shoot recorded its bursts at a different
+    /// resolution from its base segments — which is also what tells the render
+    /// path to crop and scale per segment ahead of the stitch, and the seam
+    /// seeding above that its cuts are covering a wider hole.
+    private var hasMixedResolutionSegments: Bool {
+        guard case .liveSequence(let liveSource) = source else { return false }
+        return liveSource.sequence.hasMixedSegmentResolutions
     }
 
     /// Bounds and step seams for a stretch list — the scaffold a legacy
@@ -2234,13 +2315,19 @@ final class AppModel: ObservableObject {
         var count: Int
         var minFPS: Int
         var maxFPS: Int
+        /// The resolution the bursts recorded at, when it differs from the
+        /// shoot's base — nil for a shoot that held one resolution throughout,
+        /// which is every shoot before per-segment burst resolution.
+        var burstResolutionLabel: String?
 
-        /// "2 bursts at 120 fps" / "1 burst at 120–240 fps"; nil at zero so
-        /// the card's source line can end cleanly at its clip count.
+        /// "2 bursts at 120 fps" / "1 burst at 120–240 fps" / "2 bursts at
+        /// 120 fps · 4K"; nil at zero so the card's source line can end cleanly
+        /// at its clip count.
         var label: String? {
             guard count > 0 else { return nil }
             let rate = minFPS == maxFPS ? "\(maxFPS) fps" : "\(minFPS)–\(maxFPS) fps"
-            return count == 1 ? "1 burst at \(rate)" : "\(count) bursts at \(rate)"
+            let head = count == 1 ? "1 burst at \(rate)" : "\(count) bursts at \(rate)"
+            return burstResolutionLabel.map { "\(head) · \($0)" } ?? head
         }
     }
 
@@ -2266,10 +2353,22 @@ final class AppModel: ObservableObject {
                   let sequence = try? decoder.decode(LiveCaptureSequence.self, from: data) else {
                 return BurstClipSummary(count: 0, minFPS: 0, maxFPS: 0)
             }
-            let rates = sequence.segments
-                .filter { $0.frameRate > sequence.baseFrameRate }
-                .map(\.frameRate)
-            return BurstClipSummary(count: rates.count, minFPS: rates.min() ?? 0, maxFPS: rates.max() ?? 0)
+            let bursts = sequence.segments.filter { $0.frameRate > sequence.baseFrameRate }
+            let rates = bursts.map(\.frameRate)
+            // Named only when the bursts really recorded somewhere else — a
+            // shoot that held one resolution throughout has nothing to split.
+            let burstSizes = Set(bursts.map { sequence.resolution(of: $0) })
+            let resolutionLabel: String? = {
+                guard burstSizes.count == 1, let size = burstSizes.first,
+                      size != sequence.lockedResolution else { return nil }
+                return CameraController.CaptureResolution(
+                    width: size.width, height: size.height).label
+            }()
+            return BurstClipSummary(
+                count: rates.count,
+                minFPS: rates.min() ?? 0,
+                maxFPS: rates.max() ?? 0,
+                burstResolutionLabel: resolutionLabel)
         }
         guard let summary else { return nil }
         burstSummaryCache[capture.id] = summary
@@ -2538,6 +2637,40 @@ final class AppModel: ObservableObject {
         let reframeAspect = effectiveBlendCanvas().aspect
         let reframeSourceSize = sourceDisplaySize()
         let reframeFrameTimes = warpCompiled?.frameSourceTimes.flatMap { $0 } ?? []
+        // Kept per region as well as flattened: a mixed-resolution ramp shoot
+        // hands each segment its own slice so the punch can be cropped from
+        // that segment at its own resolution, before the stitch normalises.
+        let reframeFrameTimesBySegment = warpCompiled?.frameSourceTimes ?? []
+        // Only a shoot whose segments disagree about resolution needs the
+        // per-segment path; everything else keeps today's tail passes exactly.
+        let normalization: SegmentNormalization? = {
+            guard case .liveSequence(let liveSource) = source,
+                  liveSource.sequence.hasMixedSegmentResolutions,
+                  let baseSize = reframeSourceSize else { return nil }
+            let canvas = effectiveBlendCanvas()
+            // Derived from the BASE resolution: the finished clip is the size
+            // it always was, and the burst's extra pixels are spent on the crop
+            // rather than on the file.
+            let keptSize: CGSize? = reframeTrack != nil
+                ? ReframeVideoCropper.renderSize(displaySize: baseSize, aspect: reframeAspect)
+                : (VideoCanvasCropper.cropSize(displaySize: baseSize, canvas: canvas) ?? baseSize)
+            guard let keptSize else { return nil }
+            let renderSize = exportEdge
+                .flatMap { ReframeVideoCropper.scaledDown(keptSize, shortEdge: $0) } ?? keptSize
+            return SegmentNormalization(
+                renderSize: renderSize,
+                canvas: canvas,
+                canvasOffset: cropOffset,
+                reframe: reframeTrack.flatMap { track in
+                    guard !reframeFrameTimesBySegment.isEmpty else { return nil }
+                    return SegmentNormalization.Reframe(
+                        track: track,
+                        aspect: reframeAspect,
+                        sourceSize: baseSize,
+                        frameTimesBySegment: reframeFrameTimesBySegment,
+                        outputFPS: outputFPS)
+                })
+        }()
         // Resolved with the other job inputs — the pass must use the fps the
         // schedules were compiled at, not whatever the user opens mid-render.
         let reframeOutputFPS = outputFPS
@@ -2561,7 +2694,8 @@ final class AppModel: ObservableObject {
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(
                         liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                        willBakeGrade: hasTailPass, warpSchedules: warpCompiled?.schedules)
+                        willBakeGrade: hasTailPass, warpSchedules: warpCompiled?.schedules,
+                        normalization: normalization)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
@@ -2615,7 +2749,7 @@ final class AppModel: ObservableObject {
                 // at the canvas shape, so the static canvas crop below is
                 // skipped when this runs — which makes this the last geometry
                 // pass whenever it runs, and therefore the grade's ride.
-                if let reframeTrack, output.kind == .video,
+                if let reframeTrack, output.kind == .video, !output.geometryBaked,
                    let reframeSourceSize, !reframeFrameTimes.isEmpty {
                     self.statusMessage = grade.isIdentity
                         ? "Baking the punch-in reframe..."
@@ -2668,7 +2802,8 @@ final class AppModel: ObservableObject {
                 // output, whichever engine produced it. The grade rides this
                 // pass (it is the last geometry pass when it runs), so the
                 // kept pixels are cropped, graded and encoded exactly once.
-                if let cropCanvas, output.kind == .video, reframeTrack == nil {
+                if let cropCanvas, output.kind == .video, reframeTrack == nil,
+                   !output.geometryBaked {
                     self.statusMessage = grade.isIdentity
                         ? "Cropping to \(cropCanvas.rawValue)..."
                         : "Cropping to \(cropCanvas.rawValue) and baking the \(grade.preset.displayName) grade..."
@@ -2976,6 +3111,56 @@ final class AppModel: ObservableObject {
         )
     }
 
+    /// Brings one blended segment to the shoot's common render size, taking any
+    /// punch-in crop from it **at its own resolution** on the way.
+    ///
+    /// Returns `url` unchanged when the segment already needs nothing — a base
+    /// segment of a shoot with no punch and no canvas crop is already the right
+    /// size, and paying a re-encode to confirm that would be waste.
+    private func normalizedSegment(
+        _ url: URL,
+        segmentIndex: Int,
+        normalization: SegmentNormalization
+    ) async throws -> URL {
+        if let reframe = normalization.reframe {
+            // The slice of the frame map belonging to THIS segment. The warp
+            // compiles one region per segment file, so the indices are already
+            // local to the piece — which is what the cropper's
+            // `compositionTime * fps` lookup wants.
+            let frameTimes = segmentIndex < reframe.frameTimesBySegment.count
+                ? reframe.frameTimesBySegment[segmentIndex] : []
+            guard !frameTimes.isEmpty else {
+                LLog("normalize: segment \(segmentIndex) has no compiled frame map"
+                     + " — scaling without the punch")
+                return try await scaledSegment(url, normalization: normalization)
+            }
+            let reframed = try await ReframeVideoCropper.croppedCopy(
+                of: url,
+                track: reframe.track,
+                aspect: reframe.aspect,
+                sourceSize: reframe.sourceSize,
+                frameSourceTimes: frameTimes,
+                outputFPS: reframe.outputFPS,
+                renderSizeOverride: normalization.renderSize)
+            return reframed.url
+        }
+        return try await scaledSegment(url, normalization: normalization)
+    }
+
+    /// The no-punch path: canvas-crop and/or scale one segment to the common
+    /// render size.
+    private func scaledSegment(
+        _ url: URL,
+        normalization: SegmentNormalization
+    ) async throws -> URL {
+        let cropped = try await VideoCanvasCropper.croppedCopy(
+            of: url,
+            canvas: normalization.canvas,
+            offset: normalization.canvasOffset,
+            renderSizeOverride: normalization.renderSize)
+        return cropped.url
+    }
+
     private func blendLiveSequence(
         _ source: LiveCaptureSource,
         ramp: BlendRamp,
@@ -2983,7 +3168,8 @@ final class AppModel: ObservableObject {
         linear: Bool,
         burstRamp: Double,
         willBakeGrade: Bool,
-        warpSchedules: [[Int]]? = nil
+        warpSchedules: [[Int]]? = nil,
+        normalization: SegmentNormalization? = nil
     ) async throws -> ProcessingOutput {
         guard !source.segmentURLs.isEmpty else { throw LapseError.noInputFrames }
 
@@ -3045,13 +3231,33 @@ final class AppModel: ObservableObject {
             // stitch ramp eases across. A warp render already carries its
             // speeds and eases inside the schedules, so nothing is retimed.
             let slowFactor = Double(segment.frameRate) / fps
+            // Crop THEN shrink, per segment, before anything is stitched.
+            // Nothing here runs for a single-resolution shoot: `normalization`
+            // is nil then and the tail passes work exactly as they always have.
+            var pieceURL = segmentOutput.url
+            if let normalization {
+                pieceURL = try await normalizedSegment(
+                    segmentOutput.url,
+                    segmentIndex: index,
+                    normalization: normalization)
+                if pieceURL != segmentOutput.url,
+                   segmentOutput.url.deletingLastPathComponent().standardizedFileURL
+                    == FileManager.default.temporaryDirectory.standardizedFileURL {
+                    try? FileManager.default.removeItem(at: segmentOutput.url)
+                }
+            }
             processedPieces.append(StitchPiece(
-                url: segmentOutput.url,
+                url: pieceURL,
                 slowFactor: warpSchedules == nil && isRampOn && slowFactor > 1 ? slowFactor : nil))
             inputFrames += segmentOutput.inputFrames ?? 0
             outputFrames += segmentOutput.outputFrames ?? 0
-            outputWidth = outputWidth ?? segmentOutput.width
-            outputHeight = outputHeight ?? segmentOutput.height
+            if let normalization {
+                outputWidth = Int(normalization.renderSize.width)
+                outputHeight = Int(normalization.renderSize.height)
+            } else {
+                outputWidth = outputWidth ?? segmentOutput.width
+                outputHeight = outputHeight ?? segmentOutput.height
+            }
             reportClipProgress(index, fraction: 1)
         }
 
@@ -3083,6 +3289,16 @@ final class AppModel: ObservableObject {
             + "\(stitched.width)×\(stitched.height) · "
             + "\(source.sequence.rampIntervals.count) ramp intervals stitched"
             + burstRampSummary(effectiveBurstRamp, pieces: processedPieces)
+            // The per-segment path consumed the tail passes, so it owns their
+            // half of the summary too.
+            + (normalization.map { plan in
+                let sizes = source.sequence.segmentResolutions
+                    .map { "\($0.width)×\($0.height)" }
+                    .joined(separator: " + ")
+                return " · \(sizes) normalised to "
+                    + "\(Int(plan.renderSize.width))×\(Int(plan.renderSize.height))"
+                    + (plan.reframe != nil ? " · punch-in reframe" : "")
+            } ?? "")
         return ProcessingOutput(
             kind: .video,
             url: output,
@@ -3091,7 +3307,8 @@ final class AppModel: ObservableObject {
             inputFrames: inputFrames,
             outputFrames: finalFrames,
             width: outputWidth ?? stitched.width,
-            height: outputHeight ?? stitched.height
+            height: outputHeight ?? stitched.height,
+            geometryBaked: normalization != nil
         )
     }
 
@@ -3428,6 +3645,7 @@ final class AppModel: ObservableObject {
 
         var cursor = CMTime.zero
         var outputSize: CGSize?
+        var firstNaturalSize = CGSize.zero
         var transform = CGAffineTransform.identity
         // Created lazily on the first segment that carries sound (Record
         // audio setting); a failed audio insert never fails the stitch.
@@ -3464,14 +3682,26 @@ final class AppModel: ObservableObject {
             }
             cursor = cursor + duration
 
+            let naturalSize = try await track.load(.naturalSize)
             if index == 0 {
-                let naturalSize = try await track.load(.naturalSize)
                 transform = try await track.load(.preferredTransform)
                 outputSize = CGRect(origin: .zero, size: naturalSize)
                     .applying(transform)
                     .standardized
                     .size
+            } else if naturalSize != firstNaturalSize {
+                // One composition track has one size, so AVFoundation would
+                // quietly scale this piece to piece 0's and the dimensions
+                // reported below would be a lie for it. Mixed-resolution ramp
+                // shoots are normalised per segment before they get here
+                // (`SegmentNormalization`); anything still mismatched at this
+                // point is a bug, and a silent one without this.
+                LLog("stitch: piece \(index) is \(Int(naturalSize.width))×"
+                     + "\(Int(naturalSize.height)) but piece 0 is "
+                     + "\(Int(firstNaturalSize.width))×\(Int(firstNaturalSize.height))"
+                     + " — it will be scaled to fit and the reported size is piece 0's")
             }
+            if index == 0 { firstNaturalSize = naturalSize }
         }
         compositionTrack.preferredTransform = transform
 
@@ -4143,6 +4373,7 @@ final class AppModel: ObservableObject {
         var totalDuration: Double = 0
         var segmentSeconds: [String: Double] = [:]
         var segmentFPS: [String: Double] = [:]
+        var segmentSize: [String: String] = [:]
         var fps: Double?
         var width: Int?
         var height: Int?
@@ -4161,13 +4392,20 @@ final class AppModel: ObservableObject {
                 if fps == nil { fps = Double(rate) }
                 segmentFPS[name] = Double(rate)
             }
-            if width == nil,
-               let size = try? await track.load(.naturalSize),
+            // Probed for EVERY segment, unlike the project-level pair below:
+            // that one deliberately latches on the first (the base), this one
+            // records what each file really holds.
+            if let size = try? await track.load(.naturalSize),
                let transform = try? await track.load(.preferredTransform) {
                 let rect = CGRect(origin: .zero, size: size).applying(transform).standardized
                 if rect.width > 0, rect.height > 0 {
-                    width = Int(abs(rect.width).rounded())
-                    height = Int(abs(rect.height).rounded())
+                    let segmentWidth = Int(abs(rect.width).rounded())
+                    let segmentHeight = Int(abs(rect.height).rounded())
+                    segmentSize[name] = "\(segmentWidth)x\(segmentHeight)"
+                    if width == nil {
+                        width = segmentWidth
+                        height = segmentHeight
+                    }
                 }
             }
         }
@@ -4184,6 +4422,10 @@ final class AppModel: ObservableObject {
         if !segmentFPS.isEmpty {
             captures[index].sourceSegmentFPS = (captures[index].sourceSegmentFPS ?? [:])
                 .merging(segmentFPS) { _, probed in probed }
+        }
+        if !segmentSize.isEmpty {
+            captures[index].sourceSegmentSize = (captures[index].sourceSegmentSize ?? [:])
+                .merging(segmentSize) { _, probed in probed }
         }
         if let width, let height {
             captures[index].sourceWidth = width
