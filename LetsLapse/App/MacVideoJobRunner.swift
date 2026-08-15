@@ -90,6 +90,8 @@ enum MacVideoJobRunner {
         let fps = try await track.load(.nominalFrameRate)
         let duration = try await asset.load(.duration)
         let transform = try await track.load(.preferredTransform)
+        let formatDescriptions = (try? await track.load(.formatDescriptions)) ?? []
+        let sourceIs10Bit = formatDescriptions.contains(where: describes10BitVideo)
         let sourceFPS = fps > 0 ? Double(fps) : options.outputFPS
         let trim = max(0, options.trimHeadTailSeconds)
         let sourceDuration = duration.seconds
@@ -113,6 +115,7 @@ enum MacVideoJobRunner {
                 transform: transform,
                 timeRange: timeRange,
                 estimatedFrames: estimatedFrames,
+                sourceIs10Bit: sourceIs10Bit,
                 options: options,
                 progress: progress
             )
@@ -134,6 +137,7 @@ enum MacVideoJobRunner {
         transform: CGAffineTransform,
         timeRange: CMTimeRange?,
         estimatedFrames: Int,
+        sourceIs10Bit: Bool,
         options: MacVideoJobOptions,
         progress: @escaping @Sendable (MacVideoJobProgress) -> Void
     ) throws -> MacVideoJobResult {
@@ -216,6 +220,7 @@ enum MacVideoJobRunner {
                 to: paths.extractedFrames,
                 blendOutputFolder: paths.passFrames,
                 estimatedFrames: estimatedFrames,
+                sourceIs10Bit: sourceIs10Bit,
                 options: options,
                 paths: paths,
                 progress: progress
@@ -279,8 +284,11 @@ enum MacVideoJobRunner {
         let trimSuffix = trim > 0 ? String(format: "-trim-%0.1fs-each-end", trim) : ""
         let passName = String(format: "blend-%03d-to-001%@", max(1, blendWindow), trimSuffix)
         // The format is part of the folder name so a PNG run and a HEIC run
-        // never mix frames in one sequence.
-        let formatSuffix = extractFormat == .png ? "" : "-\(extractFormat.rawValue)"
+        // never mix frames in one sequence — and the PNG name carries its bit
+        // depth, so an 8-bit scratch left by a pre-deep-pipeline run is never
+        // silently reused into a 16-bit one. Resume within a depth still works:
+        // a rerun lands in the same -png16 folder.
+        let formatSuffix = extractFormat == .png ? "-png16" : "-\(extractFormat.rawValue)"
         let extractionName = "extracted\(trimSuffix)\(formatSuffix)"
         let paths = JobPaths(
             root: root,
@@ -311,6 +319,7 @@ enum MacVideoJobRunner {
         to extractionFolder: URL,
         blendOutputFolder: URL,
         estimatedFrames: Int,
+        sourceIs10Bit: Bool,
         options: MacVideoJobOptions,
         paths: JobPaths,
         progress: @escaping @Sendable (MacVideoJobProgress) -> Void
@@ -319,7 +328,7 @@ enum MacVideoJobRunner {
         let window = max(1, options.blendWindow)
         let estimatedOutputFrames = max(1, Int(ceil(Double(estimatedFrames) / Double(window))))
         try appendLog(
-            "Starting pipelined extraction + \(window)-to-1 blend; CPU workers \(max(1, options.maxCPUWorkers)), blend batches \(max(1, options.maxBlendBatches))",
+            "Starting pipelined extraction + \(window)-to-1 blend; CPU workers \(max(1, options.maxCPUWorkers)), blend batches \(max(1, options.maxBlendBatches))\(sourceIs10Bit ? "; 10-bit source decode" : "")",
             to: paths.log
         )
 
@@ -327,8 +336,14 @@ enum MacVideoJobRunner {
         if let timeRange {
             reader.timeRange = timeRange
         }
+        // 10-bit sources (HEVC Main10, ProRes) decode at 10 bits so the
+        // 16-bit PNG scratch has real depth to keep; everything else stays on
+        // the cheap 8-bit BGRA path.
+        let readerPixelFormat: OSType = sourceIs10Bit
+            ? kCVPixelFormatType_420YpCbCr10BiPlanarVideoRange
+            : kCVPixelFormatType_32BGRA
         let output = AVAssetReaderTrackOutput(track: track, outputSettings: [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferPixelFormatTypeKey as String: readerPixelFormat,
         ])
         output.alwaysCopiesSampleData = false
         guard reader.canAdd(output) else {
@@ -345,6 +360,9 @@ enum MacVideoJobRunner {
         }
 
         let context = CIContext()
+        guard let scratchColorSpace = CGColorSpace(name: CGColorSpace.sRGB) else {
+            throw LapseError.imageEncodeFailed("sRGB color space unavailable")
+        }
         let blendSemaphore = DispatchSemaphore(value: max(1, options.maxBlendBatches))
         let blendGroup = DispatchGroup()
         let stateLock = NSLock()
@@ -440,7 +458,10 @@ enum MacVideoJobRunner {
                     try Task.checkCancellation()
                     let core = try BlendCore()
                     let stacker = ImageStacker(core: core)
-                    let image = try stacker.stack(imageURLs: frameURLs, linearLight: options.linearLight)
+                    // Deep finalize: the blended frame lands on disk as a
+                    // 16-bit PNG, so the final video encode is this job's only
+                    // 8-bit quantization.
+                    let image = try stacker.stackDeep(imageURLs: frameURLs, linearLight: options.linearLight)
                     try ImageExporter.write(image, to: outputURL, format: .png)
                     if !options.keepExtractedFrames {
                         for frameURL in frameURLs {
@@ -486,7 +507,14 @@ enum MacVideoJobRunner {
                     width: CVPixelBufferGetWidth(pixelBuffer),
                     height: CVPixelBufferGetHeight(pixelBuffer)
                 )
-                guard let cgImage = context.createCGImage(image, from: rect) else {
+                // PNG scratch renders at 16 bits per component — the depth
+                // rides into the file via CGImageDestination — so a 10-bit
+                // decode isn't flattened at its very first write. HEIC stays
+                // the 8-bit lossy compact option.
+                let cgImage = options.extractFormat == .png
+                    ? context.createCGImage(image, from: rect, format: .RGBA16, colorSpace: scratchColorSpace)
+                    : context.createCGImage(image, from: rect)
+                guard let cgImage else {
                     throw LapseError.imageEncodeFailed("could not render extracted frame \(frameIndex)")
                 }
                 try ImageExporter.write(cgImage, to: url, format: options.extractFormat)
@@ -597,7 +625,9 @@ enum MacVideoJobRunner {
                     do {
                         let core = try BlendCore()
                         let stacker = ImageStacker(core: core)
-                        let image = try stacker.stack(imageURLs: windowURLs, linearLight: linearLight)
+                        // Deep finalize, same as the pipelined path: 16-bit
+                        // blended scratch, one 8-bit hop at the video encode.
+                        let image = try stacker.stackDeep(imageURLs: windowURLs, linearLight: linearLight)
                         try ImageExporter.write(image, to: outputURL, format: .png)
                         if deleteSourcesAfterBlend {
                             for windowURL in windowURLs {
@@ -768,6 +798,21 @@ enum MacVideoJobRunner {
         return CGImageSourceCreateImageAtIndex(source, 0, nil)
     }
 
+    /// Whether a track's format carries more than 8 bits per component —
+    /// ProRes by identity (every family member is 10-bit or deeper), anything
+    /// else by the format description's own depth field (HEVC Main10 files
+    /// report `BitsPerComponent = 10` there; 8-bit files omit the key).
+    private static func describes10BitVideo(_ description: CMFormatDescription) -> Bool {
+        if CameraController.proResFourCCs.contains(CMFormatDescriptionGetMediaSubType(description)) {
+            return true
+        }
+        if let bits = CMFormatDescriptionGetExtension(
+            description, extensionKey: kCMFormatDescriptionExtension_BitsPerComponent) as? Int {
+            return bits > 8
+        }
+        return false
+    }
+
     private static func existingExtractedFrames(in folder: URL, format: ImageFormat) throws -> [URL]? {
         guard FileManager.default.fileExists(atPath: folder.path) else { return nil }
         let urls = try FileManager.default.contentsOfDirectory(
@@ -847,7 +892,7 @@ enum MacVideoJobRunner {
         let headroomBytes: Int64 = 10_000_000_000
         if projectedBytes + headroomBytes > available {
             let message = String(
-                format: "Not enough disk space to continue: finishing this job needs about %.0f GB but only %.0f GB is free. Free up space, trim the clip, or switch scratch frames to HEIC in Settings → Performance.",
+                format: "Not enough disk space to continue: finishing this job needs about %.0f GB but only %.0f GB is free. Free up space, trim the clip, or switch scratch frames to HEIC in Settings → Performance (much smaller, but lossy — it can band skies and smooth gradients).",
                 Double(projectedBytes) / 1e9,
                 Double(available) / 1e9
             )

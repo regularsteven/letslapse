@@ -86,6 +86,22 @@ func grayValues(of image: CGImage) -> [UInt8] {
     return (0..<(width * height)).map { bytes[$0 * 4 + 2] }
 }
 
+/// Reads back the red channel of a 16-bpc CGImage as 16-bit values.
+func deepGrayValues(of image: CGImage) -> [UInt16] {
+    let width = image.width
+    let height = image.height
+    var pixels = [UInt16](repeating: 0, count: width * height * 4)
+    pixels.withUnsafeMutableBytes { raw in
+        let context = CGContext(
+            data: raw.baseAddress, width: width, height: height,
+            bitsPerComponent: 16, bytesPerRow: width * 8,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder16Little.rawValue)!
+        context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
+    }
+    return (0..<(width * height)).map { pixels[$0 * 4] }
+}
+
 func meanAbsoluteDeviation(_ values: [UInt8], from center: Double) -> Double {
     values.map { abs(Double($0) - center) }.reduce(0, +) / Double(values.count)
 }

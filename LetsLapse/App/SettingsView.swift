@@ -864,13 +864,13 @@ private struct PerformanceSettingsView: View {
             #if os(macOS)
             Section {
                 Picker("Scratch frame format", selection: $model.scratchFrameFormat) {
-                    Text("PNG · lossless").tag(ImageFormat.png)
-                    Text("HEIC · compact").tag(ImageFormat.heic)
-                    Text("JPEG · compatible").tag(ImageFormat.jpeg)
+                    Text("PNG · lossless 16-bit").tag(ImageFormat.png)
+                    Text("HEIC · compact, lossy").tag(ImageFormat.heic)
+                    Text("JPEG · compatible, lossy").tag(ImageFormat.jpeg)
                 }
                 Toggle("Keep extracted frames", isOn: $model.keepExtractedFrames)
             } footer: {
-                Text("Blending a video decodes it into scratch frames — about 8 MB per 4K frame as PNG, a fraction of that as HEIC. By default each batch's frames are deleted the moment its blended frame is written, so even hour-long clips need only a few GB of scratch. Keep extracted frames leaves every frame in the job folder for inspection and faster re-blends at other speeds — a long 4K clip can then need hundreds of GB.")
+                Text("Blending a video decodes it into scratch frames — 16-bit PNG keeps the pipeline's full depth at tens of MB per 4K frame; HEIC and JPEG are a small fraction of that but lossy 8-bit, which can band skies and smooth gradients. By default each batch's frames are deleted the moment its blended frame is written, so even hour-long clips need only a few GB of scratch. Keep extracted frames leaves every frame in the job folder for inspection and faster re-blends at other speeds — a long 4K clip can then need hundreds of GB.")
             }
             #endif
         }

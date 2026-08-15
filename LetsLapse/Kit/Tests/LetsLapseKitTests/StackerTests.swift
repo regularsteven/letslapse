@@ -1,3 +1,5 @@
+import CoreGraphics
+import ImageIO
 import XCTest
 @testable import LetsLapseKit
 
@@ -42,6 +44,51 @@ final class StackerTests: XCTestCase {
         let stacked = try stacker.stack(images: [image, image, image, image, image], linearLight: true)
         for value in grayValues(of: stacked) {
             XCTAssertLessThanOrEqual(abs(Int(value) - 100), 1)
+        }
+    }
+
+    func testStackDeepKeepsTheSubEightBitMean() throws {
+        let core = try makeCore()
+        let stacker = ImageStacker(core: core)
+        let width = 8
+        let height = 8
+
+        // Two constant frames one 8-bit code apart: the true mean, code 100.5,
+        // does not exist on the 8-bit grid, so only a deeper result can hold it.
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let urls = try [UInt8(100), UInt8(101)].enumerated().map { index, value -> URL in
+            let image = makeGrayImage(
+                width: width, height: height, values: [UInt8](repeating: value, count: width * height))
+            let url = folder.appendingPathComponent("frame-\(index).png")
+            try ImageExporter.write(image, to: url, format: .png)
+            return url
+        }
+
+        // Gamma-space averaging so the expected value is the plain code mean.
+        let deep = try stacker.stackDeep(imageURLs: urls, linearLight: false)
+        XCTAssertEqual(deep.bitsPerComponent, 16)
+        XCTAssertEqual(deep.bitsPerPixel, 64)
+
+        // Tolerance covers the half-float mean hop (~4 of 65535 near this
+        // value); the nearest 8-bit codes sit ~130 away, so a legacy-depth
+        // result cannot sneak through.
+        let expected = 100.5 / 255.0 * 65535.0
+        for value in deepGrayValues(of: deep) {
+            XCTAssertEqual(Double(value), expected, accuracy: 48,
+                "deep stack should land between the 8-bit codes")
+        }
+
+        // The PNG hop must carry the depth: write, reload, same values.
+        let pngURL = folder.appendingPathComponent("deep.png")
+        try ImageExporter.write(deep, to: pngURL, format: .png)
+        let source = try XCTUnwrap(CGImageSourceCreateWithURL(pngURL as CFURL, nil))
+        let reloaded = try XCTUnwrap(CGImageSourceCreateImageAtIndex(source, 0, nil))
+        XCTAssertEqual(reloaded.bitsPerComponent, 16, "16-bpc CGImage should write a 16-bit PNG")
+        for value in deepGrayValues(of: reloaded) {
+            XCTAssertEqual(Double(value), expected, accuracy: 48,
+                "16-bit PNG round-trip should preserve the deep mean")
         }
     }
 

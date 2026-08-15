@@ -610,9 +610,10 @@ final class AppModel: ObservableObject {
     @Published var maxBlendBatches = UserDefaults.standard.object(forKey: DefaultsKey.maxBlendBatches) as? Int ?? 2 {
         didSet { UserDefaults.standard.set(maxBlendBatches, forKey: DefaultsKey.maxBlendBatches) }
     }
-    /// Format for the macOS job runner's scratch frames. PNG is lossless but
-    /// ~8 MB per 4K frame; HEIC/JPEG are a fraction of the size and cheaper to
-    /// encode, with a quality cost the final video encode swamps anyway.
+    /// Format for the macOS job runner's scratch frames. PNG is lossless
+    /// 16-bit — the pipeline's full depth — at tens of MB per 4K frame;
+    /// HEIC/JPEG are lossy 8-bit at a small fraction of the size, which can
+    /// band skies and smooth gradients.
     @Published var scratchFrameFormat: ImageFormat = ImageFormat(
         rawValue: UserDefaults.standard.string(forKey: DefaultsKey.scratchFrameFormat) ?? ""
     ) ?? .png {

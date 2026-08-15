@@ -49,7 +49,75 @@ public final class ImageStacker {
         try stackImages(count: images.count, linearLight: linearLight, progress: progress) { images[$0] }
     }
 
+    /// Deep sibling of `stack(imageURLs:)`: same streaming accumulation, but
+    /// the finalize keeps its precision — `finalizeMean` into half-float, then
+    /// one undithered `encodeGamma` quantization to 16 bits per component. The
+    /// blended frame leaves here carrying the sub-8-bit detail the window mean
+    /// earned, so a caller writing scratch PNGs between blend and encode never
+    /// quantizes to 8 bits along the way.
+    public func stackDeep(
+        imageURLs: [URL],
+        linearLight: Bool = true,
+        progress: ((Double) -> Void)? = nil
+    ) throws -> CGImage {
+        let (accumulator, width, height) = try accumulateImages(
+            count: imageURLs.count, linearLight: linearLight, progress: progress
+        ) { try ImageStacker.loadImage(at: imageURLs[$0]) }
+
+        let meanTexture = try core.makeMeanTexture(width: width, height: height)
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: .rgba16Unorm, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.shaderWrite, .shaderRead]
+        descriptor.storageMode = .private
+        guard let destination = core.device.makeTexture(descriptor: descriptor) else {
+            throw LapseError.textureCreationFailed("\(width)x\(height) deep stack destination")
+        }
+        guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+            throw LapseError.gpuSetupFailed("could not create a command buffer")
+        }
+        try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
+        // The transfer curve is applied in-kernel (rgba16Unorm has no sRGB
+        // view); at 16 bits the quantization step sits below visibility, so
+        // no dither.
+        try core.encodeGamma(
+            from: meanTexture, to: destination,
+            ditherLSB: 0, frameIndex: 0, applySRGB: linearLight,
+            commandBuffer: commandBuffer)
+        let result = try readDeepImage(from: destination, commandBuffer: commandBuffer)
+        progress?(1.0)
+        return result
+    }
+
     private func stackImages(count: Int, linearLight: Bool, progress: ((Double) -> Void)?, imageAt: (Int) throws -> CGImage) throws -> CGImage {
+        let (accumulator, width, height) = try accumulateImages(
+            count: count, linearLight: linearLight, progress: progress, imageAt: imageAt)
+
+        let destinationFormat: MTLPixelFormat = linearLight ? .bgra8Unorm_srgb : .bgra8Unorm
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: destinationFormat, width: width, height: height, mipmapped: false)
+        descriptor.usage = [.shaderWrite, .shaderRead]
+        descriptor.storageMode = .private
+        guard let destination = core.device.makeTexture(descriptor: descriptor) else {
+            throw LapseError.textureCreationFailed("\(width)x\(height) stack destination")
+        }
+        guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+            throw LapseError.gpuSetupFailed("could not create a command buffer")
+        }
+        try accumulator.finalize(into: destination, commandBuffer: commandBuffer)
+        let result = try readImage(from: destination, commandBuffer: commandBuffer)
+        progress?(1.0)
+        return result
+    }
+
+    /// The shared front half of every still stack: streams `count` frames
+    /// through a fresh accumulator one at a time, sizing the stack from the
+    /// first. The finalize — 8-bit legacy or deep — is the caller's.
+    private func accumulateImages(
+        count: Int,
+        linearLight: Bool,
+        progress: ((Double) -> Void)?,
+        imageAt: (Int) throws -> CGImage
+    ) throws -> (accumulator: FrameAccumulator, width: Int, height: Int) {
         guard count > 0 else { throw LapseError.noInputFrames }
         let accumulator = FrameAccumulator(core: core)
         var width = 0
@@ -83,22 +151,7 @@ public final class ImageStacker {
             }
             progress?(Double(index + 1) / Double(count + 1))
         }
-
-        let destinationFormat: MTLPixelFormat = linearLight ? .bgra8Unorm_srgb : .bgra8Unorm
-        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
-            pixelFormat: destinationFormat, width: width, height: height, mipmapped: false)
-        descriptor.usage = [.shaderWrite, .shaderRead]
-        descriptor.storageMode = .private
-        guard let destination = core.device.makeTexture(descriptor: descriptor) else {
-            throw LapseError.textureCreationFailed("\(width)x\(height) stack destination")
-        }
-        guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
-            throw LapseError.gpuSetupFailed("could not create a command buffer")
-        }
-        try accumulator.finalize(into: destination, commandBuffer: commandBuffer)
-        let result = try readImage(from: destination, commandBuffer: commandBuffer)
-        progress?(1.0)
-        return result
+        return (accumulator, width, height)
     }
 
     // MARK: - Sequence (variable-blend timelapse)
@@ -545,6 +598,49 @@ public final class ImageStacker {
                 provider: provider, decode: nil, shouldInterpolate: false,
                 intent: .defaultIntent) else {
             throw LapseError.imageEncodeFailed("could not wrap GPU output as an image")
+        }
+        return image
+    }
+
+    /// The 16-bit sibling of `readImage`: blits an rgba16Unorm texture — 8
+    /// bytes per pixel — into a shared buffer and wraps it as a 16-bpc CGImage
+    /// (RGBA, host-endian components), which CGImageDestination carries into a
+    /// 16-bit PNG verbatim. Round-trip behaviour is pinned by `StackerTests`.
+    private func readDeepImage(from texture: MTLTexture, commandBuffer: MTLCommandBuffer) throws -> CGImage {
+        let width = texture.width
+        let height = texture.height
+        let bytesPerRow = width * 8
+        guard let buffer = core.device.makeBuffer(length: bytesPerRow * height, options: .storageModeShared) else {
+            throw LapseError.gpuSetupFailed("could not allocate readback buffer")
+        }
+        guard let blit = commandBuffer.makeBlitCommandEncoder() else {
+            throw LapseError.gpuSetupFailed("could not encode readback blit")
+        }
+        blit.copy(
+            from: texture, sourceSlice: 0, sourceLevel: 0,
+            sourceOrigin: MTLOrigin(x: 0, y: 0, z: 0),
+            sourceSize: MTLSize(width: width, height: height, depth: 1),
+            to: buffer, destinationOffset: 0,
+            destinationBytesPerRow: bytesPerRow,
+            destinationBytesPerImage: bytesPerRow * height)
+        blit.endEncoding()
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
+        if let error = commandBuffer.error {
+            throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+        }
+
+        let data = Data(bytes: buffer.contents(), count: bytesPerRow * height)
+        guard let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
+              let provider = CGDataProvider(data: data as CFData),
+              let image = CGImage(
+                width: width, height: height,
+                bitsPerComponent: 16, bitsPerPixel: 64, bytesPerRow: bytesPerRow,
+                space: colorSpace,
+                bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue | CGBitmapInfo.byteOrder16Little.rawValue),
+                provider: provider, decode: nil, shouldInterpolate: false,
+                intent: .defaultIntent) else {
+            throw LapseError.imageEncodeFailed("could not wrap GPU output as a deep image")
         }
         return image
     }
