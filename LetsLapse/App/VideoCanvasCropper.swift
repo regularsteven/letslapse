@@ -81,7 +81,23 @@ enum VideoCanvasCropper {
         // full re-encode to arrive where it already is.
         let needsCrop = cropped != nil
         let needsScale = target != nil && target != keptSize
-        guard needsCrop || needsScale else { return (sourceURL, nil) }
+        // ...unless this pass is normalising a mixed-resolution shoot, where
+        // matching SIZE is not enough — the pieces must also agree on how they
+        // are oriented.
+        //
+        // This pass renders display-oriented, so it BAKES rotation and emits an
+        // identity transform. A rotated segment let out untouched keeps its
+        // landscape raster and its −90 tag instead, and `stitchVideos` gives
+        // the whole track one transform — piece 0's. A portrait shoot therefore
+        // came out with its base upright and its burst rotated 90° and
+        // letterboxed, because the burst had already been baked upright and
+        // then got rotated a second time (project A7B4726A, 2026-08-15).
+        //
+        // Gated on the override so the ordinary tail path is untouched: there,
+        // one clip is the whole clip and skipping a pointless re-encode of an
+        // already-correct portrait video is exactly right.
+        let needsOrienting = renderSizeOverride != nil && !preferred.isIdentity
+        guard needsCrop || needsScale || needsOrienting else { return (sourceURL, nil) }
         let renderSize = target ?? keptSize
         let boxRect = CollectionMath.cropBox(
             clipSize: orientedSize, canvas: canvas, offset: offset)?.rect

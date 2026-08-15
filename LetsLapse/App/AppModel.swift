@@ -3690,12 +3690,23 @@ final class AppModel: ObservableObject {
             cursor = cursor + duration
 
             let naturalSize = try await track.load(.naturalSize)
+            let pieceTransform = try await track.load(.preferredTransform)
             if index == 0 {
-                transform = try await track.load(.preferredTransform)
+                transform = pieceTransform
                 outputSize = CGRect(origin: .zero, size: naturalSize)
                     .applying(transform)
                     .standardized
                     .size
+            } else if pieceTransform != transform {
+                // The defect this guard exists for, and the one it originally
+                // missed: a track carries ONE transform, so a piece that bakes
+                // its rotation while its neighbours keep theirs as metadata
+                // gets piece 0's rotation applied on top and plays sideways.
+                // Sizes can match while this is wrong, so it is checked
+                // separately (project A7B4726A, 2026-08-15).
+                LLog("stitch: piece \(index) has a different preferred transform from piece 0"
+                     + " — it will be re-rotated by piece 0's and play wrong."
+                     + " Pieces must be normalised to one orientation first")
             } else if naturalSize != firstNaturalSize {
                 // One composition track has one size, so AVFoundation would
                 // quietly scale this piece to piece 0's and the dimensions
