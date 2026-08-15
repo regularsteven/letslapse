@@ -1,5 +1,7 @@
 import AVFoundation
 import CoreGraphics
+import CoreImage
+import LetsLapseKit
 
 /// Crops a finished blend to the canvas chosen on the Adjust screen — the same
 /// `CollectionMath.cropBox` the preview draws, applied as one composition pass
@@ -9,9 +11,14 @@ import CoreGraphics
 ///
 /// The render stays at source pixel scale: a 1080p 16:9 blend cropped to 9:16
 /// lands at 608×1080, never upscaled to a nominal export size. Rotation is
-/// inherent — the crop works on the clip's display-oriented picture via its
-/// `preferredTransform`, so a metadata-rotated capture crops the way it looks.
+/// inherent — the crop works on the clip's display-oriented picture (the CI
+/// composition applies the `preferredTransform` before the handler sees a
+/// frame), so a metadata-rotated capture crops the way it looks.
 enum VideoCanvasCropper {
+    /// GPU-backed and thread-safe; the composition handler runs on
+    /// AVFoundation's own queues.
+    private static let context = CIContext(options: [.useSoftwareRenderer: false])
+
     /// The kept pixels for `displaySize` on `canvas`, even-rounded for the
     /// encoder. Size is offset-independent — only where the box sits moves —
     /// so this stays the one truth for every "crops to 2160×1214" label.
@@ -33,12 +40,18 @@ enum VideoCanvasCropper {
     /// in the temporary directory, under a `LetsLapse-` name, the caller
     /// owns it. A clip that already matches the canvas at an acceptable size
     /// returns `sourceURL` with a nil size, so callers can invoke this
-    /// unconditionally and tell the two apart.
+    /// unconditionally and tell the two apart — a nil size also means a
+    /// `grade` was NOT baked.
+    ///
+    /// A non-identity `grade` rides the same pass — every frame is already
+    /// decoded and re-encoded here, so folding the colour chain in saves the
+    /// separate grade generation.
     static func croppedCopy(
         of sourceURL: URL,
         canvas: CanvasRatio,
         offset: Double = 0.5,
         shortEdge: Int? = nil,
+        grade: PhotoGrade = .identity,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize?) {
         let asset = AVURLAsset(url: sourceURL)
@@ -63,91 +76,64 @@ enum VideoCanvasCropper {
             clipSize: orientedSize, canvas: canvas, offset: offset)?.rect
             ?? CGRect(origin: .zero, size: orientedSize)
 
-        // Land the oriented picture at the origin, slide the kept rect to the
-        // render origin — same transform chain as the collection export —
-        // then scale once to the export size.
-        let oriented = preferred.concatenating(
-            CGAffineTransform(translationX: -orientedRect.minX, y: -orientedRect.minY))
-        let exportScale = renderSize.width / max(1, keptSize.width)
-        let transform = oriented
-            .concatenating(CGAffineTransform(translationX: -boxRect.minX, y: -boxRect.minY))
-            .concatenating(CGAffineTransform(scaleX: exportScale, y: exportScale))
-
-        let instruction = AVMutableVideoCompositionInstruction()
-        instruction.timeRange = CMTimeRange(start: .zero, duration: try await asset.load(.duration))
-        let layer = AVMutableVideoCompositionLayerInstruction(assetTrack: assetTrack)
-        layer.setTransform(transform, at: .zero)
-        instruction.layerInstructions = [layer]
-
-        let composition = AVMutableVideoComposition()
-        composition.instructions = [instruction]
-        composition.renderSize = renderSize
-        let fps = try await assetTrack.load(.nominalFrameRate)
-        composition.frameDuration = CMTime(value: 1, timescale: CMTimeScale(max(1, fps.rounded())))
-
-        guard let export = AVAssetExportSession(
-            asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw CropError.exportUnavailable
+        // The grade's chain, built once — the movie carries no as-shot
+        // temperature tag, so white balance anchors at D65 like every video
+        // grade (see `VideoGrader`).
+        let chain: ((CIImage) -> CIImage)? = grade.isIdentity
+            ? nil : PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
+        let composition = AVMutableVideoComposition(asset: asset) { request in
+            let extent = request.sourceImage.extent
+            // The box is authored top-left on the display-oriented picture;
+            // Core Image runs bottom-left.
+            let flipped = CGRect(
+                x: boxRect.minX, y: extent.height - boxRect.maxY,
+                width: max(1, boxRect.width), height: max(1, boxRect.height))
+            let croppedImage = request.sourceImage.cropped(to: flipped)
+                .transformed(by: CGAffineTransform(translationX: -flipped.minX, y: -flipped.minY))
+            // Lanczos, like the reframe pass — the layer-instruction transform
+            // this replaces resampled bilinearly, so a downscaled crop landed
+            // softer than a downscaled reframe of the same clip.
+            let scaled = croppedImage.applyingFilter("CILanczosScaleTransform", parameters: [
+                kCIInputScaleKey: renderSize.height / flipped.height,
+                kCIInputAspectRatioKey: (renderSize.width / flipped.width)
+                    / (renderSize.height / flipped.height),
+            ])
+            let framed = scaled.cropped(to: CGRect(origin: .zero, size: renderSize))
+            // Filters like the unsharp mask and the vignette grow the extent;
+            // the frame has to come back the size the writer expects.
+            let graded = chain.map { $0(framed).cropped(to: framed.extent) } ?? framed
+            request.finish(with: graded, context: context)
         }
+        composition.renderSize = renderSize
+
+        let nominalFPS = (try? await assetTrack.load(.nominalFrameRate)) ?? 30
+        let fps = nominalFPS > 0 ? Double(nominalFPS) : 30
+        // The shared policy encodes the pass — deterministic bitrate and full
+        // colour tags, where the export-session preset chose its own and
+        // wrote none.
+        let policy = VideoEncodePolicy(
+            profile: .h264High8Bit,
+            width: Int(renderSize.width), height: Int(renderSize.height), fps: fps)
         let isMP4 = sourceURL.pathExtension.lowercased() == "mp4"
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-cropped-\(UUID().uuidString).\(isMP4 ? "mp4" : "mov")")
-        try? FileManager.default.removeItem(at: outputURL)
-        export.videoComposition = composition
-        export.outputURL = outputURL
-        export.outputFileType = isMP4 ? .mp4 : .mov
-        export.shouldOptimizeForNetworkUse = true
-
-        let box2 = ExportBox(export)
-        let poller: Task<Void, Never>? = progress.map { report in
-            Task.detached {
-                while !Task.isCancelled {
-                    report(Double(box2.session.progress))
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                }
-            }
-        }
-        defer { poller?.cancel() }
         do {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    box2.session.exportAsynchronously {
-                        switch box2.session.status {
-                        case .completed:
-                            continuation.resume()
-                        case .cancelled:
-                            continuation.resume(throwing: CancellationError())
-                        default:
-                            continuation.resume(throwing: CropError.exportFailed(
-                                box2.session.error?.localizedDescription ?? "the crop pass didn't finish"))
-                        }
-                    }
-                }
-            } onCancel: {
-                box2.session.cancelExport()
-            }
+            try await CompositionExporter.export(
+                asset: asset, composition: composition, to: outputURL,
+                fileType: isMP4 ? .mp4 : .mov, policy: policy, progress: progress)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw error
+            throw CropError.exportFailed(error.localizedDescription)
         }
         return (outputURL, renderSize)
     }
 
-    /// `AVAssetExportSession` isn't `Sendable`; boxing it keeps the compiler
-    /// honest about the hop into the completion handler.
-    private final class ExportBox: @unchecked Sendable {
-        let session: AVAssetExportSession
-        init(_ session: AVAssetExportSession) { self.session = session }
-    }
-
     enum CropError: LocalizedError {
-        case exportUnavailable
         case exportFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .exportUnavailable:
-                return "Couldn't start the canvas crop pass on this video."
             case .exportFailed(let reason):
                 return "Couldn't crop to the canvas: \(reason)"
             }

@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreImage
 import CoreGraphics
+import LetsLapseKit
 
 /// The video half of the grading system: the same `PhotoGrade` a still is
 /// rendered through, applied to a movie.
@@ -15,9 +16,15 @@ import CoreGraphics
 ///
 /// The grade runs through `AVMutableVideoComposition`, so every frame is decoded,
 /// put through the Core Image chain, and re-encoded. That means a baked copy is
-/// a re-encode (ProRes lands as H.264/HEVC — `AVAssetExportPresetHighestQuality`
-/// picks), which is the accepted cost of baking a grade into video, and exactly
-/// what `VideoFlatten` already does for Capture Flat on non-Log hardware.
+/// a re-encode (ProRes lands as H.264, via the shared `VideoEncodePolicy`),
+/// which is the accepted cost of baking a grade into video, and exactly what
+/// `VideoFlatten` already does for Capture Flat on non-Log hardware.
+///
+/// This is the STANDALONE bake, for when no geometry pass runs — when the
+/// blend chain also reframes or crops, the grade rides that pass instead (see
+/// the croppers' `grade` parameter) and this file's chain is what they apply.
+/// The chain itself stays the legacy CI one; moving video onto the GPU tone
+/// engine is a flagged follow-up.
 enum VideoGrader {
     /// GPU-backed and thread-safe; the composition handler runs on AVFoundation's
     /// own queues and the frame grab off the media work queue.
@@ -80,56 +87,43 @@ enum VideoGrader {
     ) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
         guard let composition = composition(for: asset, grade: grade) else { return sourceURL }
-        guard let export = AVAssetExportSession(
-            asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw GradeError.exportUnavailable
+        guard let assetTrack = try await asset.loadTracks(withMediaType: .video).first else {
+            throw GradeError.exportFailed("the clip has no video track")
         }
+        // The policy needs the clip's display-oriented shape and rate — probed
+        // the way the croppers probe theirs. Even-rounded for the encoder;
+        // the composition renders the matching size so a stray odd pixel is
+        // cropped, not scaled.
+        let preferred = try await assetTrack.load(.preferredTransform)
+        let natural = try await assetTrack.load(.naturalSize)
+        let orientedRect = CGRect(origin: .zero, size: natural).applying(preferred)
+        let width = max(2, Int(abs(orientedRect.width).rounded()) & ~1)
+        let height = max(2, Int(abs(orientedRect.height).rounded()) & ~1)
+        guard width > 2 || height > 2 else {
+            throw GradeError.exportFailed("the clip's size couldn't be read")
+        }
+        composition.renderSize = CGSize(width: width, height: height)
+        let nominalFPS = (try? await assetTrack.load(.nominalFrameRate)) ?? 30
+        let fps = nominalFPS > 0 ? Double(nominalFPS) : 30
+        // The shared policy encodes the pass — deterministic bitrate and full
+        // colour tags, where the export-session preset chose its own and
+        // wrote none. Video sources are 8-bit, so H.264 High is the profile.
+        let policy = VideoEncodePolicy(
+            profile: .h264High8Bit, width: width, height: height, fps: fps)
 
         // Keeps the container the source used, so an mp4 blend output stays an
         // mp4 and a captured .mov stays a .mov.
         let isMP4 = sourceURL.pathExtension.lowercased() == "mp4"
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-graded-\(UUID().uuidString).\(isMP4 ? "mp4" : "mov")")
-        try? FileManager.default.removeItem(at: outputURL)
-
-        export.videoComposition = composition
-        export.outputURL = outputURL
-        export.outputFileType = isMP4 ? .mp4 : .mov
-        export.shouldOptimizeForNetworkUse = true
-
-        let box = ExportBox(export)
-        // The bake is a whole-clip re-encode; polling its fraction is what
-        // keeps the processing bar moving through the grade band.
-        let poller: Task<Void, Never>? = progress.map { report in
-            Task.detached {
-                while !Task.isCancelled {
-                    report(Double(box.session.progress))
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                }
-            }
-        }
-        defer { poller?.cancel() }
         do {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    box.session.exportAsynchronously {
-                        switch box.session.status {
-                        case .completed:
-                            continuation.resume()
-                        case .cancelled:
-                            continuation.resume(throwing: CancellationError())
-                        default:
-                            continuation.resume(throwing: GradeError.exportFailed(
-                                box.session.error?.localizedDescription ?? "the grade pass didn't finish"))
-                        }
-                    }
-                }
-            } onCancel: {
-                box.session.cancelExport()
-            }
+            try await CompositionExporter.export(
+                asset: asset, composition: composition, to: outputURL,
+                fileType: isMP4 ? .mp4 : .mov, policy: policy, progress: progress)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw error
+            throw GradeError.exportFailed(error.localizedDescription)
         }
         return outputURL
     }
@@ -142,21 +136,11 @@ enum VideoGrader {
         PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
     }
 
-    /// `AVAssetExportSession` isn't `Sendable`; boxing it keeps the compiler
-    /// honest about the hop into the completion handler.
-    private final class ExportBox: @unchecked Sendable {
-        let session: AVAssetExportSession
-        init(_ session: AVAssetExportSession) { self.session = session }
-    }
-
     enum GradeError: LocalizedError {
-        case exportUnavailable
         case exportFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .exportUnavailable:
-                return "Couldn't start the colour grade pass on this video."
             case .exportFailed(let reason):
                 return "Couldn't apply the colour grade: \(reason)"
             }

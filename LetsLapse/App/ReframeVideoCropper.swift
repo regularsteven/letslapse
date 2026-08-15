@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreImage
 import CoreGraphics
+import LetsLapseKit
 import os
 
 /// Bakes the punch-in reframe into a finished blend: one composition pass
@@ -100,6 +101,9 @@ enum ReframeVideoCropper {
     ///
     /// `sourceSize` is the capture's display-oriented size (the keys' space);
     /// the pass rescales if the blend intermediate landed at another scale.
+    /// A non-identity `grade` rides the same pass — every frame is already
+    /// decoded and re-encoded here, so folding the colour chain in saves the
+    /// separate grade generation.
     static func croppedCopy(
         of sourceURL: URL,
         track: ReframeTrack,
@@ -107,6 +111,7 @@ enum ReframeVideoCropper {
         sourceSize: CGSize,
         frameSourceTimes: [Double],
         outputFPS: Int,
+        grade: PhotoGrade = .identity,
         exportShortEdge: Int? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize) {
@@ -163,6 +168,11 @@ enum ReframeVideoCropper {
             frameSourceTimes: frameSourceTimes, outputFPS: outputFPS
         ).map { $0.applying(CGAffineTransform(scaleX: scale, y: scale)) }
 
+        // The grade's chain, built once — the movie carries no as-shot
+        // temperature tag, so white balance anchors at D65 like every video
+        // grade (see `VideoGrader`).
+        let chain: ((CIImage) -> CIImage)? = grade.isIdentity
+            ? nil : PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
         let outFps = Double(max(1, outputFPS))
         let composition = AVMutableVideoComposition(asset: asset) { request in
             let index = Int((request.compositionTime.seconds * outFps).rounded())
@@ -182,75 +192,41 @@ enum ReframeVideoCropper {
                 kCIInputAspectRatioKey: (renderSize.width / flipped.width)
                     / (renderSize.height / flipped.height),
             ])
-            request.finish(
-                with: scaled.cropped(to: CGRect(origin: .zero, size: renderSize)),
-                context: context)
+            let framed = scaled.cropped(to: CGRect(origin: .zero, size: renderSize))
+            // Filters like the unsharp mask and the vignette grow the extent;
+            // the frame has to come back the size the writer expects. Grading
+            // after the scale keeps the vignette centred on the final frame.
+            let graded = chain.map { $0(framed).cropped(to: framed.extent) } ?? framed
+            request.finish(with: graded, context: context)
         }
         composition.renderSize = renderSize
 
-        guard let export = AVAssetExportSession(
-            asset: asset, presetName: AVAssetExportPresetHighestQuality) else {
-            throw ReframeCropError.exportUnavailable
-        }
+        // The shared policy encodes the pass — deterministic bitrate and full
+        // colour tags, where the export-session preset chose its own and
+        // wrote none.
+        let policy = VideoEncodePolicy(
+            profile: .h264High8Bit,
+            width: Int(renderSize.width), height: Int(renderSize.height), fps: outFps)
         let isMP4 = sourceURL.pathExtension.lowercased() == "mp4"
         let outputURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-reframed-\(UUID().uuidString).\(isMP4 ? "mp4" : "mov")")
-        try? FileManager.default.removeItem(at: outputURL)
-        export.videoComposition = composition
-        export.outputURL = outputURL
-        export.outputFileType = isMP4 ? .mp4 : .mov
-        export.shouldOptimizeForNetworkUse = true
-
-        let box = ExportBox(export)
-        let poller: Task<Void, Never>? = progress.map { report in
-            Task.detached {
-                while !Task.isCancelled {
-                    report(Double(box.session.progress))
-                    try? await Task.sleep(nanoseconds: 250_000_000)
-                }
-            }
-        }
-        defer { poller?.cancel() }
         do {
-            try await withTaskCancellationHandler {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                    box.session.exportAsynchronously {
-                        switch box.session.status {
-                        case .completed:
-                            continuation.resume()
-                        case .cancelled:
-                            continuation.resume(throwing: CancellationError())
-                        default:
-                            continuation.resume(throwing: ReframeCropError.exportFailed(
-                                box.session.error?.localizedDescription ?? "the reframe pass didn't finish"))
-                        }
-                    }
-                }
-            } onCancel: {
-                box.session.cancelExport()
-            }
+            try await CompositionExporter.export(
+                asset: asset, composition: composition, to: outputURL,
+                fileType: isMP4 ? .mp4 : .mov, policy: policy, progress: progress)
+        } catch is CancellationError {
+            throw CancellationError()
         } catch {
-            try? FileManager.default.removeItem(at: outputURL)
-            throw error
+            throw ReframeCropError.exportFailed(error.localizedDescription)
         }
         return (outputURL, renderSize)
     }
 
-    /// `AVAssetExportSession` isn't `Sendable`; boxing it keeps the compiler
-    /// honest about the hop into the completion handler.
-    private final class ExportBox: @unchecked Sendable {
-        let session: AVAssetExportSession
-        init(_ session: AVAssetExportSession) { self.session = session }
-    }
-
     enum ReframeCropError: LocalizedError {
-        case exportUnavailable
         case exportFailed(String)
 
         var errorDescription: String? {
             switch self {
-            case .exportUnavailable:
-                return "Couldn't start the punch-in reframe pass on this video."
             case .exportFailed(let reason):
                 return "Couldn't bake the punch-in reframe: \(reason)"
             }

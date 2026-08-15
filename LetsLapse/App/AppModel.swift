@@ -2601,25 +2601,29 @@ final class AppModel: ObservableObject {
                             profile: self.blendProfileOverride ?? self.defaultBlendProfile)
                     }
                 }
-                // Tail passes share the plan's reserved band: the crop takes
-                // its head when both run, the grade the rest.
+                // Tail passes share the plan's reserved band. The geometry
+                // passes carry the grade themselves now, so whichever pass
+                // runs owns the whole band — the old head/tail split paid for
+                // a separate grade generation that no longer exists.
                 let tailBand = self.activeProgressPlan?.gradeBand
-                func slice(_ band: ClosedRange<Double>, _ from: Double, _ to: Double) -> ClosedRange<Double> {
-                    let span = band.upperBound - band.lowerBound
-                    return (band.lowerBound + from * span)...(band.lowerBound + to * span)
-                }
+                // Set when a geometry pass baked the grade, so the standalone
+                // grade pass (one more full re-encode) stands down.
+                var gradeBaked = false
                 // The punch-in reframe bakes the animated crop into the
                 // finished clip — per-frame, at the source moments the
                 // compiled schedule says each output frame shows. It renders
                 // at the canvas shape, so the static canvas crop below is
-                // skipped when this runs.
+                // skipped when this runs — which makes this the last geometry
+                // pass whenever it runs, and therefore the grade's ride.
                 if let reframeTrack, output.kind == .video,
                    let reframeSourceSize, !reframeFrameTimes.isEmpty {
-                    self.statusMessage = "Baking the punch-in reframe..."
+                    self.statusMessage = grade.isIdentity
+                        ? "Baking the punch-in reframe..."
+                        : "Baking the punch-in reframe and \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
-                    let reframeBand = tailBand.map { willBakeGrade ? slice($0, 0, 0.4) : $0 }
+                    let reframeBand = tailBand
                     let unreframed = output.url
                     let reframed = try await ReframeVideoCropper.croppedCopy(
                         of: unreframed,
@@ -2628,6 +2632,7 @@ final class AppModel: ObservableObject {
                         sourceSize: reframeSourceSize,
                         frameSourceTimes: reframeFrameTimes,
                         outputFPS: reframeOutputFPS,
+                        grade: grade,
                         exportShortEdge: exportEdge
                     ) { fraction in
                         Task { @MainActor [weak self] in
@@ -2649,6 +2654,10 @@ final class AppModel: ObservableObject {
                     output.width = Int(reframed.renderSize.width)
                     output.height = Int(reframed.renderSize.height)
                     output.summary += " · punch-in reframe"
+                    if !grade.isIdentity {
+                        gradeBaked = true
+                        output.summary += " · \(grade.preset.displayName) grade baked in"
+                    }
                     if unreframed.deletingLastPathComponent().standardizedFileURL
                         == FileManager.default.temporaryDirectory.standardizedFileURL {
                         try? FileManager.default.removeItem(at: unreframed)
@@ -2656,18 +2665,21 @@ final class AppModel: ObservableObject {
                 }
                 // The Adjust canvas crops the finished clip rather than the
                 // source — one short composition pass over a few seconds of
-                // output, whichever engine produced it, before the grade pass
-                // so the grade re-encodes only the kept pixels.
+                // output, whichever engine produced it. The grade rides this
+                // pass (it is the last geometry pass when it runs), so the
+                // kept pixels are cropped, graded and encoded exactly once.
                 if let cropCanvas, output.kind == .video, reframeTrack == nil {
-                    self.statusMessage = "Cropping to \(cropCanvas.rawValue)..."
+                    self.statusMessage = grade.isIdentity
+                        ? "Cropping to \(cropCanvas.rawValue)..."
+                        : "Cropping to \(cropCanvas.rawValue) and baking the \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
-                    let cropBand = tailBand.map { willBakeGrade ? slice($0, 0, 0.4) : $0 }
+                    let cropBand = tailBand
                     let uncropped = output.url
                     let cropped = try await VideoCanvasCropper.croppedCopy(
                         of: uncropped, canvas: cropCanvas, offset: cropOffset,
-                        shortEdge: exportEdge
+                        shortEdge: exportEdge, grade: grade
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let cropBand else { return }
@@ -2689,23 +2701,26 @@ final class AppModel: ObservableObject {
                         if cropIsReal {
                             output.summary += " · cropped to \(cropCanvas.rawValue)"
                         }
+                        if !grade.isIdentity {
+                            gradeBaked = true
+                            output.summary += " · \(grade.preset.displayName) grade baked in"
+                        }
                         if uncropped.deletingLastPathComponent().standardizedFileURL
                             == FileManager.default.temporaryDirectory.standardizedFileURL {
                             try? FileManager.default.removeItem(at: uncropped)
                         }
                     }
                 }
-                // A video blend grades the finished clip rather than the source:
-                // one short pass over a few seconds of output instead of a full
-                // re-encode of the original before it is even blended.
-                if source.isVideo, output.kind == .video, !grade.isIdentity {
+                // The standalone grade bake, only when no geometry pass ran to
+                // carry it (a nil crop renderSize means the crop pass no-oped
+                // and baked nothing). Still one short pass over a few seconds
+                // of output, never a re-encode of the original source.
+                if source.isVideo, output.kind == .video, !grade.isIdentity, !gradeBaked {
                     self.statusMessage = "Baking the \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
-                    let gradeBand = tailBand.map {
-                        cropCanvas != nil || reframeTrack != nil ? slice($0, 0.4, 1) : $0
-                    }
+                    let gradeBand = tailBand
                     let ungraded = output.url
                     output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade) { fraction in
                         Task { @MainActor [weak self] in
