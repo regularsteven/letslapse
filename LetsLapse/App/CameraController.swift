@@ -250,6 +250,28 @@ final class CameraController: NSObject, ObservableObject {
     private var intervalFrameCap: Int?
     private var intervalFramesRequested = 0
     private var intervalActive = false
+    // Holy Grail — the auto-ramping interval shoot. All sessionQueue-confined.
+    // `holyGrailEngine` is the exposure policy (a pure struct in the Kit);
+    // `holyGrailWriter` appends the per-frame sidecar; `holyGrailPending`
+    // gates a tick while the previous frame's exposure is still settling, so
+    // a slow frame skips its slot instead of stacking up behind it.
+    private var holyGrailEngine: HolyGrailRampEngine?
+    private var holyGrailLimits: HolyGrailRampEngine.HardwareLimits?
+    private var holyGrailWriter: FrameTimestampWriter?
+    private var holyGrailActive = false
+    private var holyGrailPending = false
+    private var holyGrailRawPixelFormat: OSType?
+    private var holyGrailArmedPhotoAspect = false
+    private var holyGrailFramesWritten = 0
+    /// Deliberate over/under exposure, in stops, applied on top of the ramp's
+    /// anchor. sessionQueue-confined mirror of `holyGrailBias`.
+    private var holyGrailBiasStops: Double = 0
+    #if os(iOS)
+    /// Set by `startLiveBlend` when the run is a Holy Grail one, so both blend
+    /// controllers can install the ramp without another parameter reaching
+    /// through their configurations. sessionQueue-confined.
+    private var holyGrailRequestedForRun = false
+    #endif
     private var videoStabilizationRequested = true
     /// When set, captured media is geotagged: stills with the latest location
     /// fix, recorded movies with the fix the take started from.
@@ -319,6 +341,8 @@ final class CameraController: NSObject, ObservableObject {
     // re-asserting the lock after every activeFormat switch; the @Published
     // mirrors below are for UI/Watch only.
     private var exposureLocked = false
+    /// sessionQueue-confined mirror of `isFocusLocked`.
+    private var focusLocked = false
     private var lockedISOValue: Float = 0
     private var lockedShutterValue: Double = 0
     private var lockedLensValue: Float = 0.5
@@ -395,6 +419,9 @@ final class CameraController: NSObject, ObservableObject {
     @Published private(set) var activeBaseFrameRate: Int?
     @Published var rampSpans: [RampSpan] = []
     @Published var isExposureLocked: Bool = false
+    /// Focus (and white balance) held without touching exposure — the Holy
+    /// Grail lock, where exposure belongs to the ramp.
+    @Published var isFocusLocked: Bool = false
     @Published var lockedISO: Float = 0
     @Published var lockedShutterSeconds: Double = 0
     @Published var lockedLensPosition: Float = 0.5
@@ -417,6 +444,78 @@ final class CameraController: NSObject, ObservableObject {
         #endif
     }
     @Published var liveBlendDiagnostics: LiveBlendDiagnosticsSnapshot?
+
+    /// What a running Holy Grail ramp is doing, republished after every frame.
+    /// Nil outside a ramp.
+    struct HolyGrailState: Equatable {
+        var shutterSeconds: Double
+        var iso: Float
+        /// The smoothed scene EV (at ISO 100) the ramp is tracking.
+        var sceneEV: Double
+        var frames: Int
+        /// The shutter is at its ceiling and ISO is carrying the ramp — the
+        /// point where the shoot starts paying in noise.
+        var isISORamping: Bool
+        /// The scene has moved past what the hardware can hold; frames keep
+        /// coming but no longer track the light.
+        var isClipped: Bool
+        /// Whether each frame is also being kept as RAW.
+        var isCapturingRAW: Bool
+        /// The operator's over/under exposure, in stops.
+        var bias: Double = 0
+    }
+
+    @Published var holyGrailState: HolyGrailState?
+
+    /// Over/under exposure for the ramp, in stops — the Holy Grail answer to
+    /// an exposure lock. The ramp keeps following the light; this decides how
+    /// bright "following it" means, relative to what the camera metered when
+    /// the shoot began. Live: turning it mid-run walks the exposure there at
+    /// the ramp's own rate limit, so it can be dialled during a shoot without
+    /// putting a step in the sequence.
+    @Published var holyGrailBias: Double = 0 {
+        didSet {
+            let stops = min(max(holyGrailBias, -3), 3)
+            sessionQueue.async {
+                self.holyGrailBiasStops = stops
+                self.applyExposureTargetBias(stops)
+                #if os(iOS)
+                self.publishHolyGrailState()
+                #endif
+            }
+        }
+    }
+
+    /// Pushes the over/under exposure onto the device's own AE compensation.
+    ///
+    /// This is the whole control, and putting it *on the device* rather than
+    /// inside the ramp is what makes it behave:
+    ///
+    /// - **Before a shoot** the preview moves with it. AE is live then, so the
+    ///   viewfinder shows exactly what the run will open on. (A bias held only
+    ///   inside the ramp engine changed nothing until the first frame — the
+    ///   control looked dead.)
+    /// - **At the start of a shoot** the seed is read off a camera that has
+    ///   already settled at the biased exposure, so the run *begins* where it
+    ///   was set rather than ramping into it a third of a stop at a time.
+    /// - **During a shoot** it shifts the meter's target, so the ramp's own
+    ///   measurement carries it and the exposure walks there smoothly.
+    ///
+    /// sessionQueue-confined.
+    private func applyExposureTargetBias(_ stops: Double) {
+        #if os(iOS)
+        guard let device = videoDevice else { return }
+        let clamped = min(max(Float(stops), device.minExposureTargetBias),
+                          device.maxExposureTargetBias)
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.setExposureTargetBias(clamped, completionHandler: nil)
+        } catch {
+            LLog("exposure bias: lockForConfiguration failed — \(error.localizedDescription)")
+        }
+        #endif
+    }
 
     /// Whether the active camera source can produce Live Blend DNG — i.e.
     /// offers Bayer RAW capture. Honest by construction: computed from the
@@ -2670,6 +2769,46 @@ final class CameraController: NSObject, ObservableObject {
     // MARK: - Manual exposure & focus
 
     /// Freeze exposure, focus and white balance at their current auto values.
+    /// Focus only — the Holy Grail lock. Locking exposure is what a ramping
+    /// shoot must never do (the ramp *is* the exposure), but focus hunting
+    /// mid-shoot is exactly as ruinous here as anywhere else, so the lock
+    /// button keeps its job and drops the half that doesn't apply. White
+    /// balance is locked with it: a ramp that walks into dusk under auto WB
+    /// writes its own colour flicker.
+    func toggleFocusLock() {
+        sessionQueue.async {
+            guard let device = self.videoDevice else { return }
+            let wantsLock = !self.focusLocked
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                if wantsLock {
+                    if device.isFocusModeSupported(.locked) { device.focusMode = .locked }
+                    if device.isWhiteBalanceModeSupported(.locked) { device.whiteBalanceMode = .locked }
+                    #if os(iOS)
+                    self.lockedLensValue = device.lensPosition
+                    let lens = device.lensPosition
+                    DispatchQueue.main.async { self.lockedLensPosition = lens }
+                    #endif
+                } else {
+                    if device.isFocusModeSupported(.continuousAutoFocus) {
+                        device.focusMode = .continuousAutoFocus
+                    }
+                    if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                        device.whiteBalanceMode = .continuousAutoWhiteBalance
+                    }
+                }
+            } catch {
+                LLog("focus lock: lockForConfiguration failed — \(error.localizedDescription)")
+                return
+            }
+            self.focusLocked = wantsLock
+            CaptureSessionLogger.shared.log(
+                wantsLock ? "focus_lock" : "focus_unlock", [:])
+            DispatchQueue.main.async { self.isFocusLocked = wantsLock }
+        }
+    }
+
     func lockExposureAndFocus() {
         sessionQueue.async {
             guard let device = self.videoDevice else { return }
@@ -3803,8 +3942,12 @@ final class CameraController: NSObject, ObservableObject {
         self.intervalActive = false
         self.intervalTimer?.cancel()
         self.intervalTimer = nil
+        let wasHolyGrail = self.holyGrailActive
+        self.endHolyGrailIfActive()
         let urls = self.photoURLs
-        CaptureSessionLogger.shared.log("capture_end", ["kind": "interval", "frameCount": urls.count])
+        CaptureSessionLogger.shared.log(
+            "capture_end",
+            ["kind": wasHolyGrail ? "holyGrail" : "interval", "frameCount": urls.count])
         self.intervalFrameCap = nil
         self.intervalFramesRequested = 0
         DispatchQueue.main.async {
@@ -3814,6 +3957,241 @@ final class CameraController: NSObject, ObservableObject {
             }
         }
     }
+
+    // MARK: - Holy Grail (auto-ramping interval)
+
+    // iOS/iPadOS only, and not by omission: the ramp needs a numeric exposure
+    // envelope (`format.min/maxExposureDuration`, `min/maxISO`), manual
+    // exposure (`setExposureModeCustom`), per-frame EXIF off the capture
+    // (`AVCapturePhoto.metadata`) and Bayer RAW — none of which AVFoundation
+    // offers on macOS. The capture screen hides the RAMP dial there rather
+    // than pretending a webcam can do this.
+    #if os(iOS)
+
+    /// How long to give a custom exposure to take effect before firing the
+    /// shutter, when the device doesn't report the latch itself. The ISP needs
+    /// a few frames for a large ISO move; 0.3 s covers it at every rate the
+    /// photo configuration runs at.
+    private static let holyGrailSettleSeconds: TimeInterval = 0.3
+
+    /// sessionQueue-confined. Seeds the ramp from the exposure AE is delivering
+    /// right now, so the first frame is already correct and the 1/3-stop limit
+    /// costs nothing at the head of the shoot.
+    private func seedHolyGrailRamp(interval: TimeInterval) {
+        guard let device = videoDevice else {
+            holyGrailEngine = nil
+            holyGrailLimits = nil
+            return
+        }
+        let limits = holyGrailHardwareLimits(for: device, interval: interval)
+        holyGrailLimits = limits
+        let seed = HolyGrailRampEngine.ExposureTarget(
+            shutterSeconds: device.exposureDuration.seconds, iso: device.iso)
+        holyGrailEngine = HolyGrailRampEngine(seed: seed, limits: limits)
+    }
+
+    /// sessionQueue-confined. The envelope the ramp may move inside.
+    ///
+    /// Two ceilings, and the tighter wins: the format's own
+    /// `maxExposureDuration` (1.0 s on every iPhone 16 Pro format — there is
+    /// no multi-second native exposure to reach for), and the interval itself.
+    /// A shutter longer than the gap between frames would starve the timer and
+    /// silently stretch the shoot, so it is bounded to most of the interval.
+    private func holyGrailHardwareLimits(
+        for device: AVCaptureDevice, interval: TimeInterval
+    ) -> HolyGrailRampEngine.HardwareLimits {
+        let format = device.activeFormat
+        let hardwareCeiling = format.maxExposureDuration.seconds
+        let intervalCeiling = max(0.05, interval - Self.holyGrailSettleSeconds)
+        let ceiling = max(format.minExposureDuration.seconds, min(hardwareCeiling, intervalCeiling))
+        return HolyGrailRampEngine.HardwareLimits(
+            minShutter: format.minExposureDuration,
+            maxShutter: HolyGrailRampEngine.time(ceiling),
+            minISO: format.minISO,
+            maxISO: format.maxISO,
+            aperture: device.lensAperture)
+    }
+
+    /// How a window's worth of frames reported the scene.
+    ///
+    /// Both cases are **scene-referred**: neither can be moved by the exposure
+    /// the ramp itself chose. That is the property the 2026-08-15 iPad runaway
+    /// was missing — measuring through our own exposure meant darkening a
+    /// frame "proved" the scene had brightened, and the ramp chased itself
+    /// 9.7 stops down at exactly 1/3 stop per frame until the shutter floored.
+    enum HolyGrailMeasurement {
+        /// Mean linear luma of the delivered image (video-tap path). Compared
+        /// against a fixed mid-grey reference; the anchor absorbs the constant.
+        case luma(Double)
+        /// EXIF APEX brightness, straight off the meter (RAW path).
+        case apexBrightness(Double)
+    }
+
+    /// Mid-grey in linear light — the reference the luma measurement is read
+    /// against. Its absolute value doesn't matter (the ramp's anchor folds any
+    /// constant out on the first frame); it only has to stay fixed.
+    private static let holyGrailReferenceLuma = 0.18
+
+    /// sessionQueue-confined. The one place the ramp moves: measure, step,
+    /// write the sidecar line, publish.
+    private func advanceHolyGrailRamp(
+        frame: Int, shutter: Double, iso: Double, measurement: HolyGrailMeasurement?
+    ) {
+        guard let limits = holyGrailLimits, let engine = holyGrailEngine,
+              let measurement
+        else { return }
+        // Both routes end in "the EV that would correctly expose this scene".
+        let measuredEV: Double
+        switch measurement {
+        case .apexBrightness(let brightness):
+            measuredEV = HolyGrailMetering.sceneEV100(apexBrightness: brightness)
+        case .luma(let luma):
+            // The exposure we used says what EV this frame *assumed*; how far
+            // the delivered image sits from mid-grey says how wrong that
+            // assumption was. Darken by a stop and both terms move a stop in
+            // opposite directions — so a still scene reads as a still scene,
+            // which is precisely what makes the loop stable.
+            let gain = HolyGrailRampEngine.lightGain(
+                shutterSeconds: shutter > 0 ? shutter : engine.currentTarget.shutterSeconds,
+                iso: iso > 0 ? Float(iso) : engine.currentTarget.iso)
+            measuredEV = HolyGrailRampEngine.sceneEV100(forGain: gain, aperture: limits.aperture)
+                + log2(max(luma, 1e-6) / Self.holyGrailReferenceLuma)
+        }
+
+        holyGrailEngine?.advance(measuredEV: measuredEV, limits: limits)
+
+        holyGrailWriter?.append(FrameTimestamps.Entry(
+            frame: frame,
+            captureTime: Date(),
+            shutter: shutter,
+            iso: iso,
+            ev: holyGrailEngine?.smoothedEV ?? measuredEV))
+
+        publishHolyGrailState()
+    }
+
+    /// sessionQueue-confined. A blend window is opening: the exposure chosen
+    /// here is held for every frame this window averages.
+    ///
+    /// Honest limitation: the exposure is applied as the window opens, so the
+    /// first frames it collects can still be carrying the previous one while
+    /// the ISP latches (~0.3 s). The ramp moves at most 1/3 stop per window,
+    /// which bounds that error to a third of a stop on a minority of the
+    /// window's frames — visible in the log, not in the picture.
+    private func rampHolyGrailBlendWindow(index: Int, measurement: HolyGrailMeasurement?) {
+        guard holyGrailActive, let engine = holyGrailEngine else { return }
+        // Measure the window that just ended — it ran at the exposure we set
+        // last time — then step, then apply for the window now opening. With
+        // no measurement (a window that saw no frames) the ramp holds where it
+        // is rather than guessing.
+        advanceHolyGrailRamp(
+            frame: index,
+            shutter: engine.currentTarget.shutterSeconds,
+            iso: Double(engine.currentTarget.iso),
+            measurement: measurement)
+        applyHolyGrailExposure()
+    }
+
+    /// sessionQueue-confined. Writes the ramp's current target to the device
+    /// and returns; nothing waits for the latch. The stills path needs the
+    /// latch before it fires a shutter — see
+    /// `applyHolyGrailExposureThenCapture` — but a blend window has no
+    /// shutter to time, only frames arriving continuously.
+    private func applyHolyGrailExposure() {
+        guard let device = videoDevice, let target = holyGrailEngine?.currentTarget,
+              device.isExposureModeSupported(.custom)
+        else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isWhiteBalanceModeSupported(.locked) {
+                device.whiteBalanceMode = .locked
+            }
+            device.setExposureModeCustom(duration: target.shutter, iso: target.iso, completionHandler: nil)
+        } catch {
+            LLog("holygrail: lockForConfiguration failed — \(error.localizedDescription)")
+        }
+    }
+
+    /// Starts the ramp alongside a Live Blend run, so a holy-grail shoot can
+    /// blend on the way through: each output image is still the average of a
+    /// window's frames (the BLEND dial), and the exposure that window is shot
+    /// at is the ramp's. Called from `startLiveBlend` on the sessionQueue,
+    /// after the controller exists and before it starts.
+    private func beginHolyGrailForBlendRun(interval: TimeInterval, directory: URL) {
+        holyGrailActive = true
+        holyGrailPending = false
+        holyGrailRawPixelFormat = nil  // the blend controller owns capture
+        holyGrailWriter = FrameTimestampWriter(directory: directory)
+        holyGrailFramesWritten = 0
+        seedHolyGrailRamp(interval: interval)
+        applyHolyGrailExposure()
+        publishHolyGrailState()
+        LLog("holygrail: blending ramp armed, every \(interval)s"
+             + " seed=\(holyGrailEngine.map { String(format: "%.4fs ISO %.0f", $0.currentTarget.shutterSeconds, $0.currentTarget.iso) } ?? "none")")
+    }
+
+    /// sessionQueue-confined.
+    private func publishHolyGrailState() {
+        guard let engine = holyGrailEngine, let limits = holyGrailLimits else {
+            DispatchQueue.main.async { self.holyGrailState = nil }
+            return
+        }
+        let state = HolyGrailState(
+            shutterSeconds: engine.currentTarget.shutterSeconds,
+            iso: engine.currentTarget.iso,
+            sceneEV: engine.smoothedEV ?? 0,
+            frames: photoURLs.count,
+            isISORamping: engine.isISORamping(limits: limits),
+            isClipped: engine.isClipped(limits: limits),
+            isCapturingRAW: holyGrailRawPixelFormat != nil,
+            bias: holyGrailBiasStops)
+        DispatchQueue.main.async {
+            if self.holyGrailState != state { self.holyGrailState = state }
+        }
+    }
+
+    /// sessionQueue-confined. Called from `finishIntervalOnQueue`, so a Holy
+    /// Grail run tears down through exactly the same path as a plain interval
+    /// shoot — stop button, frame cap, scheduled stop and screen teardown all
+    /// arrive there.
+    private func endHolyGrailIfActive() {
+        holyGrailRequestedForRun = false
+        guard holyGrailActive else { return }
+        holyGrailActive = false
+        holyGrailPending = false
+        LLog("holygrail: end after \(photoURLs.count) frames")
+        holyGrailWriter?.close()
+        holyGrailWriter = nil
+        holyGrailFramesWritten = 0
+        holyGrailEngine = nil
+        holyGrailLimits = nil
+        holyGrailRawPixelFormat = nil
+        // Hand the camera back: manual exposure is the run's, not the app's.
+        if let device = videoDevice, !exposureLocked, (try? device.lockForConfiguration()) != nil {
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            device.unlockForConfiguration()
+        }
+        if holyGrailArmedPhotoAspect {
+            holyGrailArmedPhotoAspect = false
+            disarmPhotoAspectPreview()
+        }
+        DispatchQueue.main.async { self.holyGrailState = nil }
+    }
+
+    #else
+
+    /// macOS has no manual exposure, no per-format ISO envelope and no RAW
+    /// photo capture, so there is no ramp to run. The dial isn't offered
+    /// there; this exists so the shared teardown path still compiles.
+    private func endHolyGrailIfActive() {}
+
+    #endif
 
     // MARK: - Scheduled stop (Watch "stop at…")
 
@@ -3911,15 +4289,18 @@ final class CameraController: NSObject, ObservableObject {
     /// processed video stream is tapped and the output is JPEG. The run
     /// hands its outputs over through `onFinishLiveBlend` exactly like
     /// interval capture hands over `onFinishPhotos`.
-    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions()) {
+    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             CaptureSessionLogger.shared.log("capture_start", [
-                "kind": "liveBlend",
+                "kind": holyGrail ? "holyGrailBlend" : "liveBlend",
                 "intervalSeconds": interval,
                 "framesPerBlend": depth.fixedFrames ?? 0,
                 "preferDNG": preferDNG,
             ])
+            #if os(iOS)
+            self.holyGrailRequestedForRun = holyGrail
+            #endif
 
             #if os(iOS)
             if preferDNG, self.deviceSupportsBayerRAW() {
@@ -4026,6 +4407,19 @@ final class CameraController: NSObject, ObservableObject {
                 return
             }
             controller.onLearningSample = Self.learningRecorder(pipeline: "standard", interval: interval)
+            #if os(iOS)
+            // Holy Grail: one exposure per blend window, chosen by the ramp.
+            if self.holyGrailRequestedForRun {
+                controller.onWindowOpened = { [weak self] index, luma in
+                    guard let self else { return }
+                    self.sessionQueue.async {
+                        self.rampHolyGrailBlendWindow(
+                            index: index, measurement: luma.map { .luma($0) })
+                    }
+                }
+                self.beginHolyGrailForBlendRun(interval: interval, directory: directory)
+            }
+            #endif
             controller.onDiagnostics = { [weak self] snapshot in
                 guard let self else { return }
                 if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
@@ -4038,6 +4432,9 @@ final class CameraController: NSObject, ObservableObject {
                 self.isLiveBlendRunning = false
                 self.sessionQueue.async {
                     self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
+                    #if os(iOS)
+                    self.endHolyGrailIfActive()
+                    #endif
                 }
                 if let result {
                     self.onFinishLiveBlend?(result)
@@ -4193,6 +4590,19 @@ final class CameraController: NSObject, ObservableObject {
             photoOutput: photoOutput,
             captureExecutor: { [weak self] block in self?.sessionQueue.async(execute: block) })
         controller.onLearningSample = Self.learningRecorder(pipeline: "dng", interval: interval)
+        if holyGrailRequestedForRun {
+            controller.onWindowOpened = { [weak self] index, brightness in
+                guard let self else { return }
+                self.sessionQueue.async {
+                    self.rampHolyGrailBlendWindow(
+                        index: index, measurement: brightness.map { .apexBrightness($0) })
+                }
+            }
+            beginHolyGrailForBlendRun(interval: interval, directory: directory)
+            // Every frame of this run is Bayer RAW by construction.
+            holyGrailRawPixelFormat = rawFormat
+            publishHolyGrailState()
+        }
         controller.onDiagnostics = { [weak self] snapshot in
             guard let self else { return }
             if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
@@ -4203,7 +4613,10 @@ final class CameraController: NSObject, ObservableObject {
         controller.onFinished = { [weak self] result in
             guard let self else { return }
             self.isLiveBlendRunning = false
-            self.sessionQueue.async { self.restoreAfterDNGRun() }
+            self.sessionQueue.async {
+                self.endHolyGrailIfActive()
+                self.restoreAfterDNGRun()
+            }
             if let result {
                 self.onFinishLiveBlend?(result)
             }
@@ -4515,8 +4928,12 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
         didFinishProcessingPhoto photo: AVCapturePhoto,
         error: Error?
     ) {
-        guard error == nil, let data = photo.fileDataRepresentation() else { return }
+        // Everything below is sessionQueue-confined state (including the Holy
+        // Grail flags), and these callbacks arrive on AVFoundation's own
+        // queue — so hop first and decide there.
         sessionQueue.async {
+            guard error == nil else { return }
+            guard let data = photo.fileDataRepresentation() else { return }
             guard let directory = self.photoDirectory else { return }
             let url = directory.appendingPathComponent(
                 String(format: "frame-%05d.jpg", self.photoURLs.count))

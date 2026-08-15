@@ -117,12 +117,21 @@ public final class ImageStacker {
     /// the originals on disk stay untouched. Frames must come back at the size
     /// `loadImage(at:)` would give — the first one sizes the writer, and a
     /// mismatch below throws rather than writing a corrupt file.
+    ///
+    /// `frameTimes` — elapsed capture seconds, one per entry in `imageURLs` —
+    /// switches the output from "every frame is 1/fps long" to a layout that
+    /// follows the real capture clock (see `FrameTimeMapping`). Pass it for a
+    /// shoot whose spacing varies; leave it nil and the constant-fps layout
+    /// runs exactly as before. When it is nil the stacker looks for a
+    /// `frames.timestamps` sidecar beside the stills and uses that if it
+    /// describes this exact set of frames.
     public func stackSequence(
         imageURLs: [URL],
         ramp: BlendRamp,
         outputFPS: Double,
         linearLight: Bool = true,
         outputURL: URL,
+        frameTimes: [Double]? = nil,
         loadFrame: ((URL) throws -> CGImage)? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
@@ -131,6 +140,32 @@ public final class ImageStacker {
         }
         let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
         guard !schedule.isEmpty else { throw LapseError.noInputFrames }
+
+        // Wall-clock layout, if this shoot recorded one. A sidecar that
+        // doesn't describe exactly these frames (a filtered blend, a foreign
+        // directory) is ignored rather than guessed at — the caller can always
+        // hand the times in explicitly.
+        let capturedTimes: [Double]? = {
+            if let frameTimes, frameTimes.count == imageURLs.count { return frameTimes }
+            guard frameTimes == nil,
+                  let sidecar = FrameTimestamps.load(besideFrames: imageURLs),
+                  sidecar.entries.count == imageURLs.count
+            else { return nil }
+            return sidecar.elapsedSeconds
+        }()
+        // One presentation time per output frame, taken at the first still of
+        // each window — the moment that window's exposure begins.
+        let windowStartTimes: [Double]? = capturedTimes.flatMap { times in
+            var starts: [Double] = []
+            var index = 0
+            for window in schedule {
+                guard times.indices.contains(index) else { return nil }
+                starts.append(times[index])
+                index += window
+            }
+            return FrameTimeMapping.presentationSeconds(
+                frameTimes: starts, outputFPS: outputFPS)
+        }
 
         let load: (URL) throws -> CGImage = { url in
             try loadFrame?(url) ?? ImageStacker.loadImage(at: url)
@@ -236,9 +271,11 @@ public final class ImageStacker {
                 }
                 usleep(2000)
             }
-            let time = CMTime(
-                value: Int64((Double(outputFrames) / outputFPS * 60000).rounded()),
-                timescale: 60000)
+            // Wall-clock timing where the shoot recorded it, the constant
+            // frame-index layout otherwise.
+            let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
+                ?? Double(outputFrames) / outputFPS
+            let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
             guard adaptor.append(outBuffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }

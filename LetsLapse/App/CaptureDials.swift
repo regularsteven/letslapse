@@ -62,25 +62,38 @@ private struct DialCaption: View {
     }
 }
 
-/// Interval's two dials — spacing and blend depth — plus the trailing caption.
-/// One line where it fits (Mac, landscape phones/iPads); portrait iPhones fall
-/// back to two stacked lines.
+/// Interval's dials — spacing, exposure ramp and blend depth — plus the
+/// trailing caption. One line where it fits (Mac, landscape phones/iPads);
+/// portrait iPhones fall back to two stacked lines.
+///
+/// All three dials stand on their own: BLEND is how many frames are averaged
+/// into each output image (the motion blur is made as the shoot runs), and
+/// RAMP is whether the exposure follows the light. A Holy Grail shoot with
+/// BLEND on is the combination the feature exists for — a day-to-night
+/// timelapse whose frames already carry their blur.
 struct IntervalDialsRow: View, Equatable {
     let intervalSeconds: Double
     let intervalOptions: [Double]
     let blendDepth: BlendDepth
     let safeDepthAvailable: Bool
     let captionText: String?
+    /// Whether this platform can ramp at all — the Mac can't (no manual
+    /// exposure API), so the dial simply isn't there.
+    let rampAvailable: Bool
+    let holyGrail: Bool
     let onSelectInterval: (Double) -> Void
     let onSelectFixedBlend: (Int) -> Void
     let onSelectPsycho: () -> Void
     let onSelectSafe: () -> Void
+    let onSelectHolyGrail: (Bool) -> Void
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.intervalSeconds == rhs.intervalSeconds
             && lhs.blendDepth == rhs.blendDepth
             && lhs.safeDepthAvailable == rhs.safeDepthAvailable
             && lhs.captionText == rhs.captionText
+            && lhs.rampAvailable == rhs.rampAvailable
+            && lhs.holyGrail == rhs.holyGrail
             && lhs.intervalOptions == rhs.intervalOptions
     }
 
@@ -88,16 +101,53 @@ struct IntervalDialsRow: View, Equatable {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 everyPicker
+                if rampAvailable { rampPicker }
                 blendPicker
                 caption
             }
             VStack(alignment: .leading, spacing: 6) {
-                everyPicker
+                HStack(spacing: 8) {
+                    everyPicker
+                    if rampAvailable { rampPicker }
+                }
                 HStack(spacing: 8) {
                     blendPicker
                     caption
                 }
             }
+        }
+    }
+
+    /// The exposure-ramp dial. "Off" is a fixed exposure the whole way
+    /// through; "Holy Grail" hands shutter and ISO to the ramp so a shoot can
+    /// run from daylight into night in one take.
+    private var rampPicker: some View {
+        HStack(spacing: 8) {
+            DialCaption(text: "RAMP")
+            Menu {
+                Button {
+                    onSelectHolyGrail(false)
+                } label: {
+                    if !holyGrail {
+                        Label("Off", systemImage: "checkmark")
+                    } else {
+                        Text("Off")
+                    }
+                }
+                Button {
+                    onSelectHolyGrail(true)
+                } label: {
+                    if holyGrail {
+                        Label("Holy Grail · day to night", systemImage: "checkmark")
+                    } else {
+                        Text("Holy Grail · day to night")
+                    }
+                }
+            } label: {
+                PickerMenuLabel(text: holyGrail ? "Holy Grail" : "Off")
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
         }
     }
 

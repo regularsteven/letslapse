@@ -85,6 +85,19 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
 
     /// Both fired on the main queue.
     var onDiagnostics: ((LiveBlendDiagnosticsSnapshot) -> Void)?
+
+    /// Fired as each interval window opens, on this controller's own queue,
+    /// with the window's index and the scene brightness the last window's
+    /// frames reported (EXIF APEX `BrightnessValue`, nil if none carried it).
+    /// See the twin in `LiveBlendController` for why the ramp must be fed
+    /// something the ramp's own exposure choice cannot influence — here that
+    /// is the metered scene brightness rather than sampled luma, since these
+    /// frames are Bayer RAW and carry a meter reading of their own.
+    var onWindowOpened: ((Int, Double?) -> Void)?
+
+    /// Scene brightness reported by this window's frames. workQueue.
+    private var windowBrightnessSum: Double = 0
+    private var windowBrightnessCount = 0
     var onFinished: ((LiveBlendCaptureResult?) -> Void)?
     /// Fired on the work queue for each completed unthrottled window — what
     /// the learning profiles are built from.
@@ -258,6 +271,13 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         case .throttled: windowFrameTarget = max(1, configuration.throttledFrameTarget?() ?? 2)
         }
         windowThermalAtStart = LiveBlendController.thermalStateName()
+        if onWindowOpened != nil {
+            let mean = windowBrightnessCount > 0
+                ? windowBrightnessSum / Double(windowBrightnessCount) : nil
+            windowBrightnessSum = 0
+            windowBrightnessCount = 0
+            onWindowOpened?(windowIndex, mean)
+        }
         windowFrameBytes = 0
         windowMemoryCapped = false
         let target = windowFrameTarget
@@ -427,6 +447,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     return
                 }
                 if photo.isRawPhoto {
+                    // Scene brightness for the Holy Grail ramp, straight off
+                    // the meter. Scene-referred by construction: it describes
+                    // the light, not the exposure we chose to record it with.
+                    if self.onWindowOpened != nil,
+                       let exif = photo.metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
+                       let brightness = exif[kCGImagePropertyExifBrightnessValue as String] as? Double {
+                        self.windowBrightnessSum += brightness
+                        self.windowBrightnessCount += 1
+                    }
                     self.handleRawPhoto(photo)
                 }
             }

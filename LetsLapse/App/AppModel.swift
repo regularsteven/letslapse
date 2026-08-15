@@ -2551,11 +2551,22 @@ final class AppModel: ObservableObject {
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
                     // blend — they stay on disk, just out of this render.
+                    let keptOrders = urls.indices.filter { !excluded.contains($0) }
                     let filteredURLs = excluded.isEmpty
                         ? urls
-                        : urls.enumerated()
-                            .filter { !excluded.contains($0.offset) }
-                            .map { $0.element }
+                        : keptOrders.map { urls[$0] }
+                    // A ramped shoot's real capture clock, if it recorded one.
+                    // Picked by capture order so a tail-frame exclusion keeps
+                    // the surviving frames on their true moments; a sidecar
+                    // that doesn't describe this shoot frame-for-frame is
+                    // ignored rather than guessed at.
+                    let frameTimes: [Double]? = FrameTimestamps
+                        .load(besideFrames: urls)
+                        .flatMap { stamps in
+                            stamps.entries.count == urls.count
+                                ? stamps.elapsedSeconds(forOrders: keptOrders)
+                                : nil
+                        }
                     // Stills bake their grade frame by frame inside the blend,
                     // so no separate grade band exists on this path.
                     self.beginProgressPlan(.make(
@@ -2572,7 +2583,7 @@ final class AppModel: ObservableObject {
                         // motion blur. Output is a video sequence.
                         output = try await self.blendPhotosSequence(
                             urls: filteredURLs, ramp: .constant(photoDepth), fps: fps,
-                            linear: linear, grade: grade)
+                            linear: linear, grade: grade, frameTimes: frameTimes)
                     }
                 }
                 // Tail passes share the plan's reserved band: the crop takes
@@ -3568,12 +3579,17 @@ final class AppModel: ObservableObject {
     /// `grade` is baked in frame by frame on the way into the blend, which is
     /// where an interval project's colour grade becomes permanent: the written
     /// video carries it, the stills on disk stay exactly as captured.
+    ///
+    /// `frameTimes` — elapsed capture seconds per still, from a ramped shoot's
+    /// sidecar — lays the output on the real capture clock rather than at a
+    /// constant frame interval. Nil for every shoot that kept even spacing.
     private func blendPhotosSequence(
         urls: [URL],
         ramp: BlendRamp,
         fps: Double,
         linear: Bool,
-        grade: PhotoGrade = .identity
+        grade: PhotoGrade = .identity,
+        frameTimes: [Double]? = nil
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
@@ -3586,6 +3602,7 @@ final class AppModel: ObservableObject {
                 outputFPS: fps,
                 linearLight: linear,
                 outputURL: output,
+                frameTimes: frameTimes,
                 loadFrame: Self.gradedFrameLoader(grade),
                 progress: { fraction in
                     Task { @MainActor in
@@ -3594,6 +3611,9 @@ final class AppModel: ObservableObject {
                 })
         }.value
         var summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
+        if frameTimes != nil {
+            summary += " · timed from capture"
+        }
         if !grade.isIdentity {
             summary += " · \(grade.preset.displayName) grade baked in"
         }
@@ -3802,6 +3822,19 @@ final class AppModel: ObservableObject {
                 let destination = root.appendingPathComponent(relativeName)
                 try copySecurityScopedItem(at: url, to: destination)
                 relativeNames.append(relativeName)
+            }
+            // A ramped shoot (Holy Grail) records when each frame was actually
+            // taken; that sidecar travels with the frames, because it is what
+            // lays the finished clip out on the real capture clock instead of
+            // assuming even spacing. Deliberately NOT in `sourceFileNames` —
+            // that list is the project's frames, and this isn't one.
+            if let staging = urls.first?.deletingLastPathComponent() {
+                let sidecar = staging.appendingPathComponent(FrameTimestamps.fileName)
+                if FileManager.default.fileExists(atPath: sidecar.path) {
+                    try? copyReplacingItem(
+                        at: sidecar,
+                        to: root.appendingPathComponent("source/\(FrameTimestamps.fileName)"))
+                }
             }
             capture = CaptureProject(
                 id: id,

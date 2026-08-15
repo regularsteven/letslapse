@@ -229,6 +229,28 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
 
     /// Both fired on the main queue.
     var onDiagnostics: ((LiveBlendDiagnosticsSnapshot) -> Void)?
+
+    /// Fired as each interval window opens, on this controller's own queue,
+    /// with the window's index and the **mean linear luma of the window that
+    /// just ended** (nil if it saw no frames). The Holy Grail ramp hangs off
+    /// it: one exposure is chosen per window and held for every frame that
+    /// window averages, because a window whose frames were shot at different
+    /// exposures blends its own flicker into the output image.
+    ///
+    /// The luma is why this reports rather than just notifies. A ramp must be
+    /// told what the scene is doing by something that does **not** depend on
+    /// the exposure the ramp itself chose — measure through your own exposure
+    /// and darkening the frame "proves" the scene got brighter, which is a
+    /// positive feedback loop (it walked a real shoot 9.7 stops into its
+    /// shutter floor on 2026-08-15). The delivered image's own brightness is
+    /// the honest signal: darker frame, more light needed.
+    var onWindowOpened: ((Int, Double?) -> Void)?
+
+    /// Running mean of the current window's sampled luma. videoQueue.
+    private var windowLumaSum: Double = 0
+    private var windowLumaCount = 0
+    /// The completed window's mean, handed to `onWindowOpened` for the next.
+    private var lastWindowLuma: Double?
     /// nil result = nothing to register (zero outputs, or a discarded run).
     var onFinished: ((LiveBlendCaptureResult?) -> Void)?
     /// Fired on the blend queue for each completed unthrottled window — what
@@ -412,6 +434,13 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 return
             }
             window.frameTimes.append(t)
+            // Cheap scene measurement for the ramp, taken from the frame the
+            // window is about to average — a strided sample, not a full pass.
+            if onWindowOpened != nil,
+               let luma = LiveBlendController.meanLinearLuma(of: pixelBuffer) {
+                windowLumaSum += luma
+                windowLumaCount += 1
+            }
             pending.withLock { $0 += 1 }
             let expectedGeneration = generation.withLock { $0 }
             blendQueue.async {
@@ -436,6 +465,42 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         window.droppedByCamera += 1
     }
 
+    /// Mean linear-light luma of a BGRA buffer, from a strided sample.
+    ///
+    /// ~1,000 pixels regardless of resolution, sRGB-decoded (the 2.2 power is
+    /// close enough to the piecewise curve for a relative measure) and
+    /// Rec.709-weighted. Linear light is the point: the ramp reasons in stops,
+    /// and stops are ratios of linear luminance.
+    static func meanLinearLuma(of buffer: CVPixelBuffer, targetSamples: Int = 1024) -> Double? {
+        guard CVPixelBufferGetPixelFormatType(buffer) == kCVPixelFormatType_32BGRA else { return nil }
+        guard CVPixelBufferLockBaseAddress(buffer, .readOnly) == kCVReturnSuccess else { return nil }
+        defer { CVPixelBufferUnlockBaseAddress(buffer, .readOnly) }
+        guard let base = CVPixelBufferGetBaseAddress(buffer) else { return nil }
+        let width = CVPixelBufferGetWidth(buffer)
+        let height = CVPixelBufferGetHeight(buffer)
+        let bytesPerRow = CVPixelBufferGetBytesPerRow(buffer)
+        guard width > 0, height > 0 else { return nil }
+        let step = max(1, Int((Double(width * height) / Double(targetSamples)).squareRoot()))
+        let pixels = base.assumingMemoryBound(to: UInt8.self)
+        var sum = 0.0
+        var count = 0
+        var y = 0
+        while y < height {
+            let row = pixels + y * bytesPerRow
+            var x = 0
+            while x < width {
+                let p = row + x * 4
+                let b = Double(p[0]) / 255, g = Double(p[1]) / 255, r = Double(p[2]) / 255
+                sum += 0.2126 * pow(r, 2.2) + 0.7152 * pow(g, 2.2) + 0.0722 * pow(b, 2.2)
+                count += 1
+                x += step
+            }
+            y += step
+        }
+        guard count > 0 else { return nil }
+        return sum / Double(count)
+    }
+
     private func targetSeconds(_ index: Int, of target: Int) -> Double {
         let spacing = configuration.intervalSeconds / Double(target)
         return windowStartSeconds + (Double(index) + 0.5) * spacing
@@ -452,6 +517,12 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         case .throttled: target = max(1, configuration.throttledFrameTarget?() ?? 2)
         }
         pushDiagnostics { $0.requestedFramesPerBlend = target ?? 0 }
+        if onWindowOpened != nil {
+            lastWindowLuma = windowLumaCount > 0 ? windowLumaSum / Double(windowLumaCount) : nil
+            windowLumaSum = 0
+            windowLumaCount = 0
+            onWindowOpened?(index, lastWindowLuma)
+        }
         return WindowRecord(
             index: index,
             startSeconds: startSeconds,

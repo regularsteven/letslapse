@@ -44,6 +44,29 @@ struct CaptureView: View {
     /// Where Safe falls back when its profile basis disappears (interval or
     /// format change, learning reset) — the last deliberate fixed choice.
     @State private var lastFixedBlendFrames = 10
+    /// Interval's RAMP dial: with Holy Grail armed, shutter and ISO are ramped
+    /// automatically through a lighting transition so one shoot can run from
+    /// daylight into night. Persisted on its own key rather than through
+    /// `RecordingSettingsStore` — it is a shooting *intent* the user sets for
+    /// a specific evening, not part of the remembered format snapshot.
+    @AppStorage("letslapse.capture.holyGrail") private var holyGrailEnabled = false
+    /// True while Interval's RAMP dial is on Holy Grail on a platform that
+    /// can ramp — the state in which exposure belongs to the ramp and the
+    /// lock button, the readout and the ±EV control all change meaning.
+    private var holyGrailArmed: Bool {
+        mode == .interval && holyGrailEnabled && Self.holyGrailAvailable
+    }
+
+    /// The ramp needs manual exposure, a numeric ISO/shutter envelope and RAW
+    /// — iOS/iPadOS only. On the Mac the dial isn't offered and a remembered
+    /// "on" is ignored rather than silently shooting something else.
+    static let holyGrailAvailable: Bool = {
+        #if os(iOS)
+        return true
+        #else
+        return false
+        #endif
+    }()
     @State private var showPsychoNotice = false
     private static let psychoNoticeShownKey = "letslapse.capture.psychoNoticeShown"
     private let captureIntervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
@@ -292,6 +315,12 @@ struct CaptureView: View {
             updateAspectPreview()
             revalidateSafeDepth()
         }
+        // Arming the Holy Grail ramp puts the session in the photo
+        // configuration too (RAW lives nowhere else), so the viewfinder shows
+        // the 4:3 sensor frame the run will actually capture.
+        .onChange(of: holyGrailEnabled) { _ in
+            updateAspectPreview()
+        }
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
             revalidateSafeDepth()
@@ -484,6 +513,8 @@ struct CaptureView: View {
         }
         updateTestCardWatch()
         #if DEBUG
+        applyModePreviewHook()
+        applyHolyGrailPreviewHook()
         applyBurstPreviewHook()
         #if os(macOS)
         // LL_CAMERA=<name substring> — switch to that camera once the session
@@ -596,7 +627,10 @@ struct CaptureView: View {
             let tail = Self.trailingNoisyCount(
                 from: steadiness.captureLog, threshold: steadiness.stillThreshold)
             dismiss()
-            model.setSource(.photos(urls), mode: "Interval · JPEG")
+            model.setSource(
+                .photos(urls),
+                mode: holyGrailEnabled && Self.holyGrailAvailable
+                    ? "Interval · Holy Grail" : "Interval · JPEG")
             // A minimum run of 2 filters a lone bad frame (a passing cloud, a
             // single bump); the half-session ceiling keeps a shaky handheld
             // shoot from reading as a tail event.
@@ -1432,6 +1466,7 @@ struct CaptureView: View {
             VStack(spacing: 8) {
                 intervalRunningPills
                 blendDiagnosticsReadout
+                holyGrailReadout
             }
         } else {
             // The output format lives in the format pill and its sheet — no
@@ -1449,6 +1484,7 @@ struct CaptureView: View {
             VStack(alignment: .leading, spacing: 6) {
                 intervalRunningPills
                 blendDiagnosticsReadout
+                holyGrailReadout
             }
         } else {
             intervalPickerRow
@@ -1527,6 +1563,40 @@ struct CaptureView: View {
     }
 
     #if DEBUG
+    /// `LL_MODE=photo|interval|video` opens the capture screen in that mode,
+    /// instead of whichever one was last used. Screenshot runs need a stated
+    /// mode: the remembered one follows whoever shot last.
+    private func applyModePreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_MODE"],
+              let wanted = CaptureMode(rawValue: raw.capitalized)
+        else { return }
+        mode = wanted
+        syncLoggedCaptureMode(mode: wanted)
+        updateAspectPreview()
+    }
+
+    /// `LL_HOLYGRAIL=armed` arms the ramp dial; `LL_HOLYGRAIL=running` also
+    /// freezes a mid-ramp state on screen — the readout the simulator can
+    /// never produce for itself, since it has no camera to ramp. Implies
+    /// Interval mode. Pair with `LL_CAPTURE=1`.
+    private func applyHolyGrailPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_HOLYGRAIL"] else { return }
+        mode = .interval
+        holyGrailEnabled = true
+        updateAspectPreview()
+        guard raw == "running" else { return }
+        camera.holyGrailState = CameraController.HolyGrailState(
+            shutterSeconds: 1.0,
+            iso: 1250,
+            sceneEV: 1.4,
+            frames: 24,
+            isISORamping: true,
+            isClipped: false,
+            isCapturingRAW: true)
+        framingStartedAt = Date().addingTimeInterval(-602)
+        mountBurstPill(taken: 24, total: nil)
+    }
+
     /// `LL_BURST=7/10` (capped fill) or `LL_BURST=47` (zebra) freezes the
     /// burst pill on screen for SVG-mirror screenshots — the simulator has
     /// no camera, so a live run can't reach this state. Add `LL_BURST_MODE=
@@ -1555,13 +1625,16 @@ struct CaptureView: View {
             blendDepth: blendDepth,
             safeDepthAvailable: safeDepthAvailable,
             captionText: blendCaptionText,
+            rampAvailable: Self.holyGrailAvailable,
+            holyGrail: holyGrailEnabled && Self.holyGrailAvailable,
             onSelectInterval: { interval = $0 },
             onSelectFixedBlend: { frames in
                 blendDepth = .fixed(frames)
                 lastFixedBlendFrames = frames
             },
             onSelectPsycho: selectPsychoDepth,
-            onSelectSafe: { blendDepth = .throttled }
+            onSelectSafe: { blendDepth = .throttled },
+            onSelectHolyGrail: { holyGrailEnabled = $0 }
         )
         .equatable()
     }
@@ -1576,8 +1649,19 @@ struct CaptureView: View {
     }
 
     /// The trailing caption only makes sense while blending; the adaptive
-    /// depths say what drives their count instead.
+    /// depths say what drives their count instead. A Holy Grail shoot has no
+    /// live blend at all — its caption says what the ramp will do.
     private var blendCaptionText: String? {
+        if holyGrailEnabled, Self.holyGrailAvailable {
+            // The ramp's caption has to name what BLEND is doing to it: with
+            // a depth the frames are averaged as the shoot runs, without one
+            // they are single sharp stills kept as a RAW pair.
+            switch blendDepth {
+            case .fixed(1): return "ramping exposure"
+            case .fixed: return "ramping exposure · blended as it shoots"
+            case .unthrottled, .throttled: return "ramping exposure · max frames per image"
+            }
+        }
         switch blendDepth {
         case .fixed(let frames):
             return frames > 1 ? "into one image" : nil
@@ -1604,6 +1688,35 @@ struct CaptureView: View {
                 Text("out \(diagnostics.lastOutputIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "–") (req \(String(format: "%.1f s", diagnostics.requestedIntervalSeconds)))")
                 Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–")\(diagnostics.outputFormatLabel.map { " · \($0)" } ?? "") · \(diagnostics.status.rawValue)")
                     .foregroundStyle(blendStatusTint(diagnostics.status))
+            }
+            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.75))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    /// The Holy Grail ramp's live readout: the exposure the next frame will be
+    /// taken at, the scene EV it is tracking, and — the part that decides
+    /// whether to keep shooting — whether ISO has started carrying the ramp,
+    /// or the scene has run past what the hardware can hold.
+    @ViewBuilder
+    private var holyGrailReadout: some View {
+        if let state = camera.holyGrailState {
+            VStack(alignment: .leading, spacing: 2) {
+                // %.0f, not an Int interpolation: `Text` group-separates an
+                // interpolated number by locale ("ISO 1 250"), which reads as
+                // two values in a monospaced technical line.
+                Text("\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))\(state.isCapturingRAW ? " · RAW" : "")")
+                Text(String(format: "scene EV %.1f · %d frames", state.sceneEV, state.frames))
+                if state.isClipped {
+                    Text("past the sensor's limit — frames no longer track")
+                        .foregroundStyle(Color.red)
+                } else if state.isISORamping {
+                    Text("shutter at max · ISO ramping")
+                        .foregroundStyle(LL.amber)
+                }
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
             .foregroundStyle(.white.opacity(0.75))
@@ -2041,6 +2154,25 @@ struct CaptureView: View {
         // shoot on a guess.
         revalidateSafeDepth()
         let wantsDNG = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+        // Holy Grail is an exposure layer, not an engine of its own: the
+        // shoot is the ordinary Interval shoot the dials describe — the
+        // format dial picks JPEG or DNG, the BLEND dial picks how many frames
+        // are averaged into each image — and the ramp decides what exposure
+        // each window is shot at. Deliberately one path: the JPEG route takes
+        // its frames from the video stream, so it is **silent**, where a
+        // per-frame still capture makes the system shutter sound on every
+        // frame, which is intolerable in a timelapse.
+        if holyGrailEnabled, Self.holyGrailAvailable {
+            steadiness.resetLog()
+            steadiness.start()
+            camera.startLiveBlend(
+                every: interval,
+                depth: blendDepth,
+                preferDNG: wantsDNG,
+                options: liveBlendDNGOptions,
+                holyGrail: true)
+            return
+        }
         if !wantsDNG && blendDepth == .fixed(1) {
             // Only the plain-JPEG interval path finishes through
             // `onFinishPhotos`, so arm the motion log here — each frame is
@@ -2116,20 +2248,33 @@ struct CaptureView: View {
     /// landscape rail. The locked readout and fine ISO/focus sliders live in
     /// `exposurePanel` (portrait) once locked.
     private var exposureLockCircle: some View {
-        Button {
-            toggleExposureLock()
+        // While the ramp owns exposure, this button locks FOCUS only —
+        // locking exposure would stop the very thing the mode exists to do.
+        // Over/under exposure lives on the ±EV slider instead.
+        let ramping = holyGrailArmed
+        let isLocked = ramping ? camera.isFocusLocked : camera.isExposureLocked
+        return Button {
+            if ramping {
+                camera.toggleFocusLock()
+            } else {
+                toggleExposureLock()
+            }
         } label: {
-            Image(systemName: camera.isExposureLocked ? "lock.fill" : "lock.open")
+            Image(systemName: ramping
+                  ? (isLocked ? "camera.metering.spot" : "camera.metering.center.weighted")
+                  : (isLocked ? "lock.fill" : "lock.open"))
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(camera.isExposureLocked ? .black : .white)
+                .foregroundStyle(isLocked ? .black : .white)
                 .frame(width: 44, height: 44)
                 .background(
-                    camera.isExposureLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
+                    isLocked ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
                     in: Circle()
                 )
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(camera.isExposureLocked ? "Unlock exposure and focus" : "Lock exposure and focus")
+        .accessibilityLabel(ramping
+            ? (isLocked ? "Unlock focus" : "Lock focus")
+            : (isLocked ? "Unlock exposure and focus" : "Lock exposure and focus"))
     }
 
     /// Right of the shutter: delay + capture-when-steady toggles idle, the
@@ -2269,7 +2414,16 @@ struct CaptureView: View {
             gridToggleCircle
             exposureLockCircle
 
-            if camera.isExposureLocked {
+            // The rail carries whichever readout is true of this mode: the
+            // frozen pair under a lock, the ramp's live pair under Holy Grail.
+            if holyGrailArmed {
+                Text(holyGrailExposureReadout)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundStyle(LL.amber)
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.6)
+                    .frame(maxWidth: 96)
+            } else if camera.isExposureLocked {
                 Text(exposureReadout)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(LL.amber)
@@ -2305,13 +2459,61 @@ struct CaptureView: View {
         return "1/\(Int((1 / seconds).rounded()))"
     }
 
+    /// What the ramp is doing right now, or — before it starts — what it is
+    /// set to do. Deliberately not called a "lock": nothing here is frozen.
+    private var holyGrailExposureReadout: String {
+        var text: String
+        if let state = camera.holyGrailState {
+            text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))"
+        } else {
+            text = "ramping · exposure follows the light"
+        }
+        if abs(camera.holyGrailBias) >= 0.05 {
+            text += String(format: " · %+.1f EV", camera.holyGrailBias)
+        }
+        return text
+    }
+
+    /// Over/under exposure for the ramp. Unlike the locked-exposure slider
+    /// this is not an offset from a frozen pair — it shifts the whole ramp,
+    /// and the ramp walks there at its own rate limit, so it can be turned
+    /// mid-shoot without stepping the sequence.
+    private var holyGrailBiasBinding: Binding<Float> {
+        Binding(
+            get: { Float(camera.holyGrailBias) },
+            set: { camera.holyGrailBias = Double($0) })
+    }
+
     #if os(iOS)
     /// The locked-exposure readout and fine ISO/focus sliders, shown in any
     /// mode once AE/AF is locked. The lock toggle itself is the circular
     /// button beside the shutter (`exposureLockCircle`).
     @ViewBuilder
     private var exposurePanel: some View {
-        if camera.isExposureLocked {
+        if holyGrailArmed {
+            // No locked exposure to report and none to offer: the ramp is
+            // driving. What the operator gets instead is where the ramp sits
+            // relative to the camera's own metering — over or under — plus
+            // the focus slider once focus is held.
+            VStack(spacing: 10) {
+                HStack {
+                    Text(holyGrailExposureReadout)
+                        .font(.system(size: 12, design: .monospaced))
+                        .foregroundStyle(LL.amber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
+                    Spacer()
+                }
+                exposureSlider(
+                    icon: "plusminus.circle",
+                    value: holyGrailBiasBinding,
+                    range: Self.exposureStopsRange)
+                if camera.isFocusLocked {
+                    exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+                }
+            }
+            .padding(.horizontal, 16)
+        } else if camera.isExposureLocked {
             VStack(spacing: 10) {
                 HStack {
                     Text(exposureReadout)

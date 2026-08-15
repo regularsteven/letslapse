@@ -412,7 +412,10 @@ struct ContentView: View {
     private func openCameraOnLaunch() -> Bool {
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED"]
+        // LL_PROBE_FORMATS is in this list for a different reason than the
+        // rest: the probe drives its own capture session, and the camera the
+        // launch would otherwise open owns the device while it does.
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -572,6 +575,19 @@ struct ContentView: View {
         if environment["LL_TAGS"] == "demo" {
             model.debugSeedSceneTags()
         }
+        // LL_PROBE_FORMATS=1 — log the exposure/ISO envelope of every Bayer RAW
+        // format on the back cameras (`LL_PROBE` lines, os_log category
+        // "FormatProbe"). Delayed so the camera the launch opens has settled
+        // and the active format reported at the end is the real one.
+        // iOS-only, like the probe itself — none of what it reads exists on a
+        // Mac camera.
+        #if os(iOS)
+        if environment["LL_PROBE_FORMATS"] == "1" {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                HolyGrailFormatProbe.run()
+            }
+        }
+        #endif
         // LL_AI=<image path> — run SceneAnalyser on one frame and log the result
         // (LL_AI_PLACE / LL_AI_LIGHT set the context). devicectl and simctl can't
         // tap the Settings row, so this is the automation path for the on-device

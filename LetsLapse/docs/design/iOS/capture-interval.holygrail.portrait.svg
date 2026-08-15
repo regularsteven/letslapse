@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (idle, Holy Grail armed) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (intervalPickerRow, blendCaptionText, exposurePanel, exposureLockCircle) + App/CaptureDials.swift (IntervalDialsRow.rampPicker). RAMP set to Holy Grail: shutter and ISO follow the light so one shoot can run from daylight into night. BLEND stays available and is the point — each output image is that window's frames averaged at that window's exposure, so the motion blur is made as the shoot runs; BLEND Off instead keeps single sharp stills as a RAW + processed pair. The exposure control changes meaning while the ramp is armed: there is no exposure to lock (locking it would stop the mode doing its job), so the lock button holds FOCUS only and a plus/minus EV slider sets deliberate over/under exposure on top of the ramp's anchor — turning it mid-shoot walks the exposure there at the ramp's own 1/3-stop limit rather than stepping the sequence. The readout above the slider is the ramp's live pair, or "ramping · exposure follows the light" before it starts. A JPEG ramp takes its frames from the video stream, which is what keeps it silent — a per-frame still capture makes the system shutter sound on every frame. the format pill keeps naming the format dial’s own answer (JPEG here, DNG when armed) — the ramp introduces no file format of its own. Positions measured from the running app on an iPhone 17 Pro. iOS/iPadOS only — macOS has no manual exposure API and draws no RAMP dial.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder: full 4:3 sensor = 393×524, top-anchored under the top bar -->
+      <g id="viewfinder">
+        <rect x="0" y="86" width="393" height="440" fill="url(#sky)"/>
+        <circle cx="132" cy="252" r="28" fill="#FFB340" opacity="0.9"/>
+        <circle cx="132" cy="252" r="48" fill="#FFB340" opacity="0.15"/>
+        <polygon points="0,370 70,330 150,364 235,308 310,357 393,321 393,526 0,526" fill="#141A24"/>
+        <polygon points="0,429 85,395 185,434 268,405 393,429 393,526 0,526" fill="#0B0E14"/>
+        <rect x="0" y="473" width="393" height="53" fill="#080A0E"/>
+      </g>
+
+      <!-- top bar -->
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <!-- a Holy Grail run writes its own pair whatever the format dial
+               says, so the pill names what lands: RAW + HEIC, in amber -->
+          <rect x="198" y="70" width="179" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="212" y="92" font-size="13" class="sb" fill="#FFF">12MP 4:3</text>
+          <text x="274" y="92" font-size="13" class="sb" fill="#FFF">· JPEG</text>
+          <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+        </g>
+      </g>
+
+      <!-- interval dials: EVERY + RAMP on line 1, BLEND + caption on
+           line 2 (the portrait ViewThatFits fallback) -->
+      <g id="interval-dials">
+        <g id="every-row">
+          <text x="22" y="576" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">EVERY</text>
+          <rect x="66" y="558" width="62" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="78" y="576" font-size="12.5" class="sb" fill="#FFF">5 s</text>
+          <path d="M108 569 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="136" y="576" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">RAMP</text>
+          <rect x="174" y="558" width="98" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="186" y="576" font-size="12.5" class="sb" fill="#FFF">Holy Grail</text>
+          <path d="M252 569 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+        </g>
+        <g id="blend-row">
+          <text x="22" y="610" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
+          <rect x="68" y="592" width="96" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="80" y="610" font-size="12.5" class="sb" fill="#FFF">10 frames</text>
+          <path d="M144 603 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="172" y="610" font-size="11" fill="#FFF" opacity="0.4">ramping exposure · blended as it shoots</text>
+        </g>
+      </g>
+
+      <!-- mode row + zoom chips -->
+      <g id="mode-row" font-size="13" class="sb">
+        <text x="44" y="642" fill="#FFF" opacity="0.5" letter-spacing="0.3">PHOTO</text>
+        <text x="105" y="642" fill="#FFB340" letter-spacing="0.3">INTERVAL</text>
+        <text x="185" y="642" fill="#FFF" opacity="0.5" letter-spacing="0.3">VIDEO</text>
+        <g id="zoom-chips" data-symbol="lens buttons">
+          <circle cx="256" cy="637" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="256" y="641" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">.5×</text>
+          <circle cx="294" cy="637" r="15" fill="none" stroke="#FFB340" stroke-opacity="0.8"/>
+          <text x="294" y="641" font-size="12" class="sb" fill="#FFB340" text-anchor="middle">1×</text>
+          <circle cx="332" cy="637" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="332" y="641" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">3×</text>
+        </g>
+      </g>
+
+      <!-- exposure panel, ramp variant: live readout + over/under exposure.
+           No focus slider here — that row appears only once focus is held
+           (the lock button below). -->
+      <g id="ramp-exposure-panel">
+        <text x="16" y="670" font-size="12" class="m" fill="#FFB340">ramping · exposure follows the light</text>
+        <g id="ev-slider">
+          <g data-symbol="plusminus.circle">
+            <circle cx="26" cy="698" r="7" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.2"/>
+            <path d="M22.5 696 h7 M26 692.5 v7 M22.5 701.5 h7" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.1" stroke-linecap="round"/>
+          </g>
+          <rect x="47" y="695.5" width="330" height="5" rx="2.5" fill="#FFF" opacity="0.25"/>
+          <rect x="47" y="695.5" width="165" height="5" rx="2.5" fill="#FFB340"/>
+          <circle cx="212" cy="698" r="11" fill="#FFF"/>
+        </g>
+      </g>
+
+      <!-- shutter row -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#3A3123"/>
+            <polygon points="16,772 40,750 62,768 76,758 76,788 16,788" fill="#241E15"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <g id="grid-toggle" data-symbol="grid.circle">
+          <circle cx="108" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
+        </g>
+        <!-- focus lock, NOT AE/AF lock: exposure belongs to the ramp -->
+        <g id="focus-lock" data-symbol="camera.metering.center.weighted">
+          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="108" cy="784" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <circle cx="108" cy="784" r="4.5" fill="#FFF"/>
+        </g>
+        <g id="shutter" data-symbol="record button">
+          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <circle cx="196.5" cy="758" r="30" fill="#FF3B30"/>
+        </g>
+        <g id="delay-toggle" data-symbol="timer">
+          <circle cx="285" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="285" cy="733" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
+          <path d="M285 733 v-6 M282 723 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
+        </g>
+        <g id="steady-toggle" data-symbol="hand.raised">
+          <circle cx="285" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M280 789 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (idle, Holy Grail armed) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureDials.swift — IntervalDialsRow (EVERY · RAMP · BLEND) + ramp exposure panel</text>
+</svg>
