@@ -122,6 +122,16 @@ enum ReframeVideoCropper {
         /// do, because the extra pixels are meant to be spent on the crop, not
         /// on the output.
         renderSizeOverride: CGSize? = nil,
+        /// Pre-computed crop rects, in `sourceSize` pixels, one per frame of
+        /// THIS clip — still scaled by this clip's own `scale` below.
+        ///
+        /// Required when the pass runs per segment, because move spans are
+        /// measured on the viewer's clock and `outputTimeMap` derives that
+        /// clock from the array it is given: handed one segment's slice, it
+        /// restarts the clip at zero for every segment and each one replays
+        /// the whole punch. The rects must therefore be computed ONCE over the
+        /// whole clip's frame map and sliced, never recomputed per segment.
+        rectsOverride: [CGRect]? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (url: URL, renderSize: CGSize) {
         guard !track.isEmpty, !frameSourceTimes.isEmpty else {
@@ -181,9 +191,9 @@ enum ReframeVideoCropper {
             ?? exportShortEdge.flatMap { scaledDown(fullSize, shortEdge: $0) }
             ?? fullSize
 
-        let frameRects = rects(
+        let frameRects = (rectsOverride ?? rects(
             track: track, aspect: aspect, sourceSize: sourceSize,
-            frameSourceTimes: frameSourceTimes, outputFPS: outputFPS
+            frameSourceTimes: frameSourceTimes, outputFPS: outputFPS)
         ).map { $0.applying(CGAffineTransform(scaleX: scale, y: scale)) }
 
         // The grade's chain, built once — the movie carries no as-shot

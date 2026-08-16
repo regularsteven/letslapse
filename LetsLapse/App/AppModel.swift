@@ -408,6 +408,18 @@ final class AppModel: ObservableObject {
             /// One entry per segment, in segment order — the compiled warp's
             /// `frameSourceTimes` kept per region instead of flattened.
             var frameTimesBySegment: [[Double]]
+            /// The crop rects for the whole clip, computed once and sliced to
+            /// match `frameTimesBySegment`.
+            ///
+            /// Computed globally on purpose. A move's span is measured on the
+            /// viewer's clock, and that clock is derived from the frame map it
+            /// is given — so computing rects from one segment's slice restarts
+            /// the clip at zero for that segment and replays the entire punch
+            /// inside it. That is what produced a hard cut back to wide at the
+            /// burst boundary and a second punch-in (project D29464DA,
+            /// 2026-08-16). Slicing finished rects keeps the per-segment render
+            /// frame-for-frame identical to the whole-clip pass.
+            var rectsBySegment: [[CGRect]]
             var outputFPS: Int
         }
     }
@@ -2669,12 +2681,31 @@ final class AppModel: ObservableObject {
                 canvas: canvas,
                 canvasOffset: cropOffset,
                 reframe: reframeTrack.flatMap { track in
-                    guard !reframeFrameTimesBySegment.isEmpty else { return nil }
+                    guard !reframeFrameTimesBySegment.isEmpty,
+                          !reframeFrameTimes.isEmpty else { return nil }
+                    // ONE pass over the whole clip's frame map, then sliced —
+                    // see `rectsBySegment`. `reframeFrameTimes` is the flatMap
+                    // of `reframeFrameTimesBySegment`, so the counts line up
+                    // exactly and each slice is that segment's own frames.
+                    let all = ReframeVideoCropper.rects(
+                        track: track,
+                        aspect: reframeAspect,
+                        sourceSize: baseSize,
+                        frameSourceTimes: reframeFrameTimes,
+                        outputFPS: outputFPS)
+                    var sliced: [[CGRect]] = []
+                    var cursor = 0
+                    for region in reframeFrameTimesBySegment {
+                        let end = min(all.count, cursor + region.count)
+                        sliced.append(cursor < end ? Array(all[cursor..<end]) : [])
+                        cursor = end
+                    }
                     return SegmentNormalization.Reframe(
                         track: track,
                         aspect: reframeAspect,
                         sourceSize: baseSize,
                         frameTimesBySegment: reframeFrameTimesBySegment,
+                        rectsBySegment: sliced,
                         outputFPS: outputFPS)
                 })
         }()
@@ -3136,7 +3167,9 @@ final class AppModel: ObservableObject {
             // `compositionTime * fps` lookup wants.
             let frameTimes = segmentIndex < reframe.frameTimesBySegment.count
                 ? reframe.frameTimesBySegment[segmentIndex] : []
-            guard !frameTimes.isEmpty else {
+            let frameRects = segmentIndex < reframe.rectsBySegment.count
+                ? reframe.rectsBySegment[segmentIndex] : []
+            guard !frameTimes.isEmpty, frameRects.count == frameTimes.count else {
                 LLog("normalize: segment \(segmentIndex) has no compiled frame map"
                      + " — scaling without the punch")
                 return try await scaledSegment(url, normalization: normalization)
@@ -3148,7 +3181,8 @@ final class AppModel: ObservableObject {
                 sourceSize: reframe.sourceSize,
                 frameSourceTimes: frameTimes,
                 outputFPS: reframe.outputFPS,
-                renderSizeOverride: normalization.renderSize)
+                renderSizeOverride: normalization.renderSize,
+                rectsOverride: frameRects)
             return reframed.url
         }
         return try await scaledSegment(url, normalization: normalization)
