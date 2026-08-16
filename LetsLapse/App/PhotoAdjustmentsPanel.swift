@@ -3,22 +3,26 @@ import SwiftUI
 /// The manual grade's controls — Lightroom-basic-panel parity, grouped the way
 /// Lightroom groups them: White Balance, Light, Color, Effects.
 ///
-/// Shared by every surface that customises a grade — the photo viewer (photo
-/// and interval captures) and the video project's Customise panel in
-/// `ProjectDetailView` — so the surfaces can't drift apart. It owns no render
+/// Shared by both editors — `PhotoViewerView` (photo and interval captures) and
+/// `VideoEditorView` — so the surfaces can't drift apart. It owns no render
 /// state: the binding's owner decides how often to re-render and when to write
 /// the values back to the project.
 ///
-/// Two layouts: `alwaysExpanded` (the macOS rail, wide viewers, the video
-/// customise sheet) shows every section open under plain headers; the stacked
-/// phone layout collapses each section into its own card, Light open by
-/// default, with an accent dot marking sections that hold a non-neutral value.
+/// Two layouts: `alwaysExpanded` (the macOS rail, wide viewers) shows every
+/// section open under plain headers; the stacked phone layout collapses each
+/// section into its own card, Light open by default, with an accent dot marking
+/// sections that hold a non-neutral value.
 struct PhotoAdjustmentsPanel: View {
     @Binding var adjustments: PhotoAdjustments
     var alwaysExpanded: Bool = false
     /// The as-shot anchor for the temperature readout and the white-balance
     /// quick-picks. D65 when the file declares nothing.
     var asShotKelvin: Double = 6500
+    /// The highlight colour for active values, tints and reset affordances.
+    /// Defaults to the app accent, which is what the light macOS rail wants; the
+    /// always-dark iOS editors pass `LL.amber` instead, per the design system's
+    /// "highlights over dark" rule.
+    var accent: Color = LL.accent
 
     enum PanelSection: String, CaseIterable, Identifiable {
         case whiteBalance = "White Balance"
@@ -72,13 +76,13 @@ struct PhotoAdjustmentsPanel: View {
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundStyle(.secondary)
             if !isNeutral(section) {
-                Circle().fill(LL.accent).frame(width: 6, height: 6)
+                Circle().fill(accent).frame(width: 6, height: 6)
             }
             Spacer()
             if !isNeutral(section) {
                 Button("Reset") { reset(section) }
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(LL.accent)
+                    .foregroundStyle(accent)
                     .buttonStyle(.plain)
             }
             if collapsible {
@@ -140,7 +144,7 @@ struct PhotoAdjustmentsPanel: View {
             adjustments = .neutral
         }
         .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(adjustments.isNeutral ? .secondary : LL.accent)
+        .foregroundStyle(adjustments.isNeutral ? .secondary : accent)
         .buttonStyle(.plain)
         .disabled(adjustments.isNeutral)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -167,7 +171,7 @@ struct PhotoAdjustmentsPanel: View {
                 Button("Tungsten") { setWhiteBalance(kelvin: 3200) }
             }
             .font(.system(size: 13, weight: .semibold))
-            .tint(LL.accent)
+            .tint(accent)
         }
     }
 
@@ -225,7 +229,7 @@ struct PhotoAdjustmentsPanel: View {
             // slider — the idiom every editor teaches.
             .onTapGesture(count: 2) { value.wrappedValue = 0 }
             Slider(value: value, in: range)
-                .tint(LL.accent)
+                .tint(accent)
                 .accessibilityLabel(label)
         }
     }

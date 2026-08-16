@@ -12,20 +12,20 @@ struct PhotoEditorWindowRequest: Hashable, Codable {
 }
 #endif
 
-/// The full-screen photo viewer with grading controls: the graded image, the
-/// preset chip strip, and a Customise panel of sliders that re-render the
-/// preview live.
+/// The full-screen photo editor: the graded image, the preset chip strip, and
+/// the adjustment sliders, which re-render the preview live.
 ///
-/// On iOS/iPadOS it presents as a sheet with its own Done bar. On macOS it is
-/// the content of its own resizable window (`PhotoEditorWindowRequest` scene in
-/// `LetsLapseApp`), so the window chrome owns the title and close and no Done
-/// bar is drawn.
+/// On iOS/iPadOS it is a `fullScreenCover` on black — the asset pinned at the
+/// top at its true aspect ratio, the controls scrolling beneath it, and a
+/// floating back button top-left. The asset never scrolls: you can always see
+/// what you are grading. On macOS it is the content of its own resizable window
+/// (`PhotoEditorWindowRequest` scene in `LetsLapseApp`), so the window chrome
+/// owns the title and close.
 ///
 /// Layout follows the available width rather than the device: past
 /// `wideLayoutThreshold` the controls move into a side rail beside the image
-/// (iPhone landscape, iPad, always on the Mac); below it they stack under
-/// the image and the slider panel collapses so the photo is never pushed off
-/// screen.
+/// (iPhone landscape, iPad, always on the Mac); below it the image is pinned
+/// above a scrolling control stack.
 struct PhotoViewerView: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -33,7 +33,10 @@ struct PhotoViewerView: View {
 
     let captureID: UUID
     let url: URL
-    var title: String
+    /// False when something else already owns the chrome — the fullscreen media
+    /// sheet embeds this view as its photo page and draws its own close button,
+    /// share and page counter above it.
+    var showsBackButton: Bool = true
 
     /// Live edit state. Seeded from the project on appear and written back —
     /// debounced — as the controls move, so the detail screen and the export
@@ -48,25 +51,44 @@ struct PhotoViewerView: View {
     /// of slider ticks collapses into one render.
     @State private var renderToken = 0
 
-    @State private var isCustomiseExpanded = false
     @State private var asShotKelvin: Double = 6500
     @State private var isNamingPreset = false
     @State private var newPresetName = ""
     @State private var presetPendingDelete: CustomPreset?
 
-    /// Below this width the controls stack under the image instead of sitting
-    /// beside it.
+    /// The still's display aspect (w ÷ h). nil until the metadata probe lands —
+    /// see `mediaFrame(in:)` for what the layout does in the meantime.
+    @State private var aspect: Double?
+    /// Where the drag handle sits, as a fraction between the floor and the
+    /// ceiling. 1 = the ceiling, which is where every presentation starts.
+    @State private var mediaScale: CGFloat = 1
+    /// The scale at the start of the current drag, so cumulative translations
+    /// apply once instead of compounding.
+    @State private var dragBase: CGFloat?
+    /// Recognition liveness: @GestureState flips false on cancel as well as end,
+    /// so the healer below can clear `dragBase` when a gesture dies without
+    /// `onEnded` ever running.
+    @GestureState private var handleLive = false
+
+    /// Below this width the image is pinned above the controls instead of
+    /// sitting beside them.
     ///
     /// 500 rather than a rounder 600 because of where the real widths fall: the
-    /// widest iPhone portrait is 440pt (Pro Max), while this sheet presents at
-    /// ~578pt on iPad — which a 600pt cutover left stacked on a screen with
-    /// obvious room for the rail. 500 puts both firmly on the right side, with
-    /// ~60pt of clearance below and ~78pt above.
+    /// widest iPhone portrait is 440pt (Pro Max), while a cover on iPad hands
+    /// over the whole scene — 834pt portrait, 1024pt landscape. Only Slide Over
+    /// (320pt) or a narrow Split View reaches the stacked branch on iPad, which
+    /// is the right outcome.
     private let wideLayoutThreshold: CGFloat = 500
 
+    /// The most of the available height the media may take. It is a ceiling and
+    /// the starting position, not a fixed size — the drag handle trades media
+    /// height for control room below it.
+    private let mediaCeilingFraction: CGFloat = 0.8
+    /// The least the handle can shrink the media to.
+    private let mediaFloorFraction: CGFloat = 0.25
+
     /// Side-rail width. Fixed on macOS — resizing the window grows the photo,
-    /// never the controls. Capped-proportional on iOS/iPadOS, where the
-    /// presented widths vary more (a 578pt iPad sheet gets a 243pt rail).
+    /// never the controls. Capped-proportional on iOS/iPadOS.
     private func railWidth(in totalWidth: CGFloat) -> CGFloat {
         #if os(macOS)
         return 340
@@ -74,6 +96,18 @@ struct PhotoViewerView: View {
         return min(340, totalWidth * 0.42)
         #endif
     }
+
+    /// Amber over the dark editor, per the "highlights over dark" rule the rest
+    /// of the app's dark surfaces follow; the Mac window is a light surface and
+    /// keeps the standard accent.
+    private var accentColor: Color {
+        #if os(iOS)
+        return LL.amber
+        #else
+        return LL.accent
+        #endif
+    }
+
     /// How long the controls have to be still before a render starts. Long
     /// enough that dragging a slider doesn't queue a render per frame, short
     /// enough to feel live.
@@ -95,30 +129,27 @@ struct PhotoViewerView: View {
                 if isWide {
                     HStack(spacing: 0) {
                         imagePane
+                            .frame(maxWidth: .infinity, maxHeight: .infinity)
+                            .overlay(alignment: .top) { chrome }
                         Divider()
-                        controlRail(isWide: true)
+                        controlRail
                             .frame(width: railWidth(in: proxy.size.width))
                     }
                 } else {
-                    VStack(spacing: 0) {
-                        imagePane
-                        Divider()
-                        // Hugs its content so the photo keeps every point the
-                        // controls don't need — a greedy rail left the image
-                        // squeezed against a slab of empty background.
-                        controlRail(isWide: false)
-                            .layoutPriority(1)
-                    }
+                    stackedBody(in: proxy.size)
                 }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .background(LL.screenBackground)
+        .background(editorBackground)
         #if os(iOS)
-        // The sheet draws its own Done bar; on macOS the window's own title
-        // bar and close button do this job.
-        .safeAreaInset(edge: .top, spacing: 0) { titleBar }
+        .preferredColorScheme(.dark)
         #endif
+        // @GestureState flips false on end AND cancel, so the anchor can't stay
+        // stuck when a drag dies without onEnded.
+        .onChange(of: handleLive) { live in
+            if !live { dragBase = nil }
+        }
         .task {
             // Seed once from the project, then let this view own the values —
             // re-seeding on every model change would fight the sliders.
@@ -126,15 +157,25 @@ struct PhotoViewerView: View {
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
             loaded = true
+            let viewedURL = url
+            // First, because it sizes the layout: a metadata-only read, well
+            // ahead of the render that would otherwise have to land before the
+            // image slot knew its shape.
+            if let size = await Task.detached(priority: .utility, operation: {
+                MediaGeometry.stillDisplaySize(url: viewedURL)
+            }).value, size.height > 0 {
+                aspect = size.width / size.height
+            }
             // The as-shot anchor for the temperature readout — a cached
             // metadata parse, off the render path.
-            let viewedURL = url
             asShotKelvin = await Task.detached(priority: .utility) {
                 Double(PhotoGrader.asShotKelvin(url: viewedURL))
             }.value
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
-                isCustomiseExpanded = true
+                // The handle dragged all the way up — the state the "expanded"
+                // design spec draws.
+                mediaScale = 0
             }
             #endif
             renderToken += 1
@@ -166,31 +207,145 @@ struct PhotoViewerView: View {
         }
     }
 
-    // MARK: - Title bar (iOS sheet only)
-
-    #if os(iOS)
-    private var titleBar: some View {
-        HStack {
-            Button("Done") { dismiss() }
-                .font(.system(size: 15.5, weight: .semibold))
-                .foregroundStyle(LL.accent)
-                .buttonStyle(.plain)
-            Spacer()
-            Text(title)
-                .font(.system(size: 15.5, weight: .semibold))
-                .lineLimit(1)
-            Spacer()
-            // Balances the leading button so the title stays centred.
-            Text("Done")
-                .font(.system(size: 15.5, weight: .semibold))
-                .opacity(0)
-                .accessibilityHidden(true)
-        }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 12)
-        .background(.bar)
+    private var editorBackground: some View {
+        #if os(iOS)
+        // Painted behind the safe areas so the screen reads edge to edge. The
+        // layout itself stays inside them — the media's 80% is 80% of the space
+        // people can actually see.
+        Color.black.ignoresSafeArea()
+        #else
+        LL.screenBackground
+        #endif
     }
-    #endif
+
+    // MARK: - Stacked layout (iPhone portrait)
+
+    /// The image pinned at the top with the controls scrolling beneath it. The
+    /// image is given an exact frame, so the scroll view can only have the room
+    /// left over — the ordering that keeps a greedy `ScrollView` from claiming
+    /// the screen and squeezing the picture to a sliver.
+    private func stackedBody(in container: CGSize) -> some View {
+        let media = mediaFrame(in: container)
+        let span = dragSpan(in: container)
+        return VStack(spacing: 0) {
+            imagePane
+                .frame(width: media.width, height: media.height)
+                .frame(maxWidth: .infinity)
+                .overlay(alignment: .top) { chrome }
+            if span > 0 {
+                dragHandle(span: span)
+            }
+            ScrollView(.vertical) {
+                controlStack(isWide: false)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 14)
+            }
+            .scrollBounceBehavior(.basedOnSize)
+        }
+    }
+
+    /// The media's exact frame: full width at its true aspect, capped at
+    /// `mediaCeilingFraction` of the height and then wherever the handle has
+    /// been dragged to. Always centred, always anchored to the top.
+    private func mediaFrame(in container: CGSize) -> CGSize {
+        guard container.width > 0, container.height > 0 else { return .zero }
+        // A nil aspect — the probe hasn't landed — makes `fit` hand back the
+        // whole box, which is the largest the media could ever be. The first
+        // paint therefore reserves the slot and the resolve shrinks it once,
+        // rather than the picture growing into place.
+        let ceiling = CollectionMath.fit(
+            aspect: aspect ?? 0,
+            maxWidth: container.width,
+            maxHeight: (container.height * mediaCeilingFraction).rounded())
+        guard let aspect, ceiling.height > mediaFloor(in: container) else { return ceiling }
+        let floor = mediaFloor(in: container)
+        let height = (floor + (ceiling.height - floor) * mediaScale).rounded()
+        return CGSize(
+            width: min(container.width, (height * aspect).rounded()),
+            height: height)
+    }
+
+    private func mediaFloor(in container: CGSize) -> CGFloat {
+        (container.height * mediaFloorFraction).rounded()
+    }
+
+    /// How much height the handle has to give away. Zero — no handle — when the
+    /// media is already shorter than the floor, which is where a very wide clip
+    /// lands: there is no width left for it to grow into.
+    private func dragSpan(in container: CGSize) -> CGFloat {
+        guard let aspect, container.width > 0, container.height > 0 else { return 0 }
+        let ceiling = CollectionMath.fit(
+            aspect: aspect,
+            maxWidth: container.width,
+            maxHeight: (container.height * mediaCeilingFraction).rounded())
+        return max(0, ceiling.height - mediaFloor(in: container))
+    }
+
+    private func dragHandle(span: CGFloat) -> some View {
+        Capsule()
+            .fill(.white.opacity(0.35))
+            .frame(width: 36, height: 5)
+            .frame(maxWidth: .infinity, minHeight: 28)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .updating($handleLive) { _, live, _ in live = true }
+                    .onChanged { value in
+                        let base = dragBase ?? mediaScale
+                        if dragBase == nil { dragBase = base }
+                        mediaScale = min(1, max(0, base + value.translation.height / span))
+                    }
+                    .onEnded { _ in dragBase = nil }
+            )
+            // Double-tap to reset, the same idiom the sliders teach.
+            .onTapGesture(count: 2) {
+                withAnimation(.easeOut(duration: 0.2)) { mediaScale = 1 }
+            }
+            .accessibilityElement()
+            .accessibilityLabel("Preview size")
+            .accessibilityValue("\(Int((mediaScale * 100).rounded()))%")
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment: mediaScale = min(1, mediaScale + 0.1)
+                case .decrement: mediaScale = max(0, mediaScale - 0.1)
+                @unknown default: break
+                }
+            }
+    }
+
+    // MARK: - Chrome
+
+    /// Floats over the media rather than sitting above it, so the picture keeps
+    /// the top of the screen.
+    ///
+    /// The back button and nothing else. The project's name belongs on the
+    /// screen you came from — here you are looking at the picture, not
+    /// identifying it. And no scrim: a gradient over the top of the frame would
+    /// darken the very pixels you are grading. The button carries its own disc
+    /// for contrast, the same one the fullscreen player uses.
+    @ViewBuilder private var chrome: some View {
+        #if os(iOS)
+        if showsBackButton {
+            HStack {
+                Button { dismiss() } label: {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 36, height: 36)
+                        .background(.black.opacity(0.4), in: Circle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Back")
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+        }
+        #else
+        // The window's own title bar and close button do this job.
+        EmptyView()
+        #endif
+    }
 
     // MARK: - Image
 
@@ -214,25 +369,27 @@ struct PhotoViewerView: View {
                     .allowsHitTesting(false)
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: - Controls
 
-    @ViewBuilder private func controlRail(isWide: Bool) -> some View {
-        let content = VStack(alignment: .leading, spacing: 14) {
+    /// The side rail is tall and narrow, so it scrolls on its own. (The stacked
+    /// layout's scroll view lives in `stackedBody`, outside the media.)
+    private var controlRail: some View {
+        ScrollView {
+            controlStack(isWide: true)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+        }
+    }
+
+    private func controlStack(isWide: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
             presetStrip
 
-            if isWide {
-                // A side rail has the room to show every section outright.
-                sliderPanel(expanded: true)
-            } else {
-                customiseDisclosure
-                if isCustomiseExpanded {
-                    sliderPanel(expanded: false)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-            }
+            // No disclosure to open: with the picture pinned and the controls
+            // scrolling, hiding the sliders behind an accordion only adds a tap.
+            sliderPanel(expanded: isWide)
 
             Button {
                 newPresetName = ""
@@ -243,7 +400,7 @@ struct PhotoViewerView: View {
                     .frame(maxWidth: .infinity, minHeight: 44)
             }
             .buttonStyle(.plain)
-            .foregroundStyle(LL.accent)
+            .foregroundStyle(accentColor)
             .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
             if let error = presetStore.lastError {
@@ -251,15 +408,6 @@ struct PhotoViewerView: View {
                     .font(.footnote)
                     .foregroundStyle(.red)
             }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-
-        if isWide {
-            // The side rail is tall and narrow, so it scrolls on its own.
-            ScrollView { content }
-        } else {
-            content
         }
     }
 
@@ -300,50 +448,22 @@ struct PhotoViewerView: View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 13.5, weight: .semibold))
-                .foregroundStyle(isActive ? Color.white : Color.primary)
+                .foregroundStyle(isActive ? Color.black : Color.primary)
                 .lineLimit(1)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 8)
-                .background(Capsule().fill(isActive ? LL.accent : LL.cardBackground))
+                .background(Capsule().fill(isActive ? accentColor : LL.cardBackground))
         }
         .buttonStyle(.plain)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    private var customiseDisclosure: some View {
-        Button {
-            withAnimation(.easeInOut(duration: 0.2)) { isCustomiseExpanded.toggle() }
-        } label: {
-            HStack {
-                Text("Customise")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundStyle(.primary)
-                if !adjustments.isNeutral {
-                    Circle()
-                        .fill(LL.accent)
-                        .frame(width: 6, height: 6)
-                        .accessibilityLabel("edited")
-                }
-                Spacer()
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                    .rotationEffect(.degrees(isCustomiseExpanded ? 0 : -90))
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
     }
 
     private func sliderPanel(expanded: Bool) -> some View {
         PhotoAdjustmentsPanel(
             adjustments: $adjustments,
             alwaysExpanded: expanded,
-            asShotKelvin: asShotKelvin)
+            asShotKelvin: asShotKelvin,
+            accent: accentColor)
             .onChange(of: adjustments) { _ in scheduleUpdate() }
     }
 
@@ -391,6 +511,21 @@ struct PhotoViewerView: View {
         // A nil render (cancelled, or a missing file) leaves whatever is on
         // screen rather than blanking the viewer. The double optional is the
         // work queue's own "didn't run" wrapped around the grader's "couldn't".
-        if let image, let cgImage = image { rendered = cgImage }
+        if let image, let cgImage = image {
+            rendered = cgImage
+            reconcileAspect(with: cgImage)
+        }
+    }
+
+    /// The rendered image is the last word on shape. If it disagrees with the
+    /// metadata probe by more than a rounding error the probe read the
+    /// orientation wrong, and the layout would otherwise hold a portrait photo
+    /// in a landscape slot for the life of the screen.
+    private func reconcileAspect(with image: CGImage) {
+        guard image.height > 0 else { return }
+        let measured = Double(image.width) / Double(image.height)
+        guard measured > 0 else { return }
+        if let aspect, abs(measured - aspect) / aspect <= 0.01 { return }
+        aspect = measured
     }
 }

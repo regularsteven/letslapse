@@ -115,6 +115,10 @@ extension View {
 
 /// The one in-app player: black, edge to edge, close top-left and share
 /// top-right, swipe across to the next item in the same set and down to leave.
+///
+/// A still that belongs to a project shows the grading editor rather than a flat
+/// image (`photoPage`). That page brings scrolling controls, so drag-to-dismiss
+/// steps aside for it — the close button is the way out there.
 struct FullscreenMediaSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
@@ -137,17 +141,14 @@ struct FullscreenMediaSheet: View {
         request.items.indices.contains(selection) ? request.items[selection] : request.items.first
     }
 
-    /// The photo editor draws its own Done bar on iOS, so the sheet stands back
-    /// rather than stacking a second close button over it. Everywhere else —
-    /// and always on macOS, where the editor has no bar of its own — the sheet
-    /// owns the chrome.
-    private var showsChrome: Bool {
-        #if os(iOS)
-        if case .photo = current, request.captureID != nil { return false }
-        return true
-        #else
-        return true
-        #endif
+    /// True when the page on screen is the grading editor rather than a passive
+    /// viewer. The editor brings its own scrolling controls, which the sheet has
+    /// to stand back from: `dismissDrag` would read a control scroll as a
+    /// drag-to-dismiss, and the editor is told to drop its own back button so
+    /// the sheet's chrome stays the single way out.
+    private var showsEditor: Bool {
+        if case .photo = current, request.captureID != nil { return true }
+        return false
     }
 
     /// The grade the project applies to material that carries none of its own —
@@ -165,16 +166,18 @@ struct FullscreenMediaSheet: View {
             pager
                 .offset(y: dragOffset)
                 .opacity(1 - min(abs(dragOffset) / (dismissDistance * 3), 0.5))
-            if showsChrome {
-                VStack(spacing: 0) {
-                    topBar
-                    Spacer(minLength: 0)
-                }
+            VStack(spacing: 0) {
+                topBar
+                Spacer(minLength: 0)
             }
         }
         #if os(iOS)
         .statusBarHidden()
-        .simultaneousGesture(dismissDrag)
+        // Never over the editor: its controls scroll vertically, and a
+        // simultaneous drag gesture would take every scroll as a dismiss.
+        // `.subviews` switches this gesture off while leaving the page's own
+        // gestures alone — `isEnabled:` would be tidier but is iOS 18+.
+        .simultaneousGesture(dismissDrag, including: showsEditor ? .subviews : .all)
         #endif
     }
 
@@ -217,7 +220,9 @@ struct FullscreenMediaSheet: View {
 
     @ViewBuilder private func photoPage(_ url: URL) -> some View {
         if let captureID = request.captureID {
-            PhotoViewerView(captureID: captureID, url: url, title: request.title)
+            // No back button of its own: the sheet's chrome is already up there,
+            // and it carries Share and the page counter the editor doesn't have.
+            PhotoViewerView(captureID: captureID, url: url, showsBackButton: false)
                 .environmentObject(model)
         } else {
             // No project context (or a finished version, which carries its own

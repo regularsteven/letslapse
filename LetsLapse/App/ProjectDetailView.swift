@@ -82,23 +82,17 @@ struct ProjectDetailView: View {
         .fullscreenMedia($fullscreenMedia, model: model)
         .llToast($collectionToast)
         #if os(iOS)
-        // macOS has no grading sheet: `previewGradedPhoto` opens the viewer in
-        // its own resizable window instead (see the scene in `LetsLapseApp`).
-        .sheet(item: $gradingPhoto) { photo in
-            PhotoViewerView(
-                captureID: captureID,
-                url: photo.url,
-                title: capture?.displayTitle ?? "Photo"
-            )
-            .environmentObject(model)
+        // Covers, not sheets: an editor wants the whole screen, and a page
+        // sheet's card inset was costing the asset height on a phone.
+        // macOS has no cover — `previewGradedPhoto` opens the viewer in its own
+        // resizable window instead (see the scene in `LetsLapseApp`).
+        .fullScreenCover(item: $gradingPhoto) { photo in
+            PhotoViewerView(captureID: captureID, url: photo.url)
+                .environmentObject(model)
         }
-        .sheet(item: $editingVideo) { video in
-            VideoEditorView(
-                captureID: captureID,
-                url: video.url,
-                title: capture?.displayTitle ?? "Video"
-            )
-            .environmentObject(model)
+        .fullScreenCover(item: $editingVideo) { video in
+            VideoEditorView(captureID: captureID, url: video.url)
+                .environmentObject(model)
         }
         #endif
         .sheet(item: $autoName.proposal) { proposal in
@@ -228,20 +222,24 @@ struct ProjectDetailView: View {
             }
         }
         #if DEBUG
-        // `LL_VIEWER=1` opens the grading viewer straight away and
-        // `LL_VIEWER=expanded` opens it with the Customise panel down, so both
-        // states can be screenshot-verified against their SVG without tap
-        // automation — the same trick as the other LL_* hooks in LetsLapseApp.
-        // Works for a photo capture and for an interval shoot's first frame,
-        // which are the two kinds that have a frame file to open.
+        // `LL_VIEWER=1` opens the editor straight away and
+        // `LL_VIEWER=expanded` opens it with the preview dragged down to its
+        // floor, so both states can be screenshot-verified against their SVG
+        // without tap automation — the same trick as the other LL_* hooks in
+        // LetsLapseApp. Routes by kind: a movie opens the video editor, a photo
+        // capture or an interval shoot's first frame opens the photo editor.
         .task {
             let hook = ProcessInfo.processInfo.environment["LL_VIEWER"]
-            guard hook == "1" || hook == "expanded",
-                  let capture, capture.kind == .photos,
-                  let url = capture.isPhotoCapture
+            guard hook == "1" || hook == "expanded", let capture else { return }
+            if capture.kind == .video {
+                guard let url = model.sourceClipURLs(for: capture).first else { return }
+                editVideo(capture, url: url)
+            } else if capture.kind == .photos {
+                guard let url = capture.isPhotoCapture
                     ? model.heroImageURL(for: capture)
                     : model.sourceFrameURLs(for: capture).first else { return }
-            previewGradedPhoto(capture, url: url)
+                previewGradedPhoto(capture, url: url)
+            }
         }
         #endif
     }
@@ -974,7 +972,7 @@ struct ProjectDetailView: View {
 
     /// Opens the grading viewer: the photo at size, rendered through its
     /// current grade, with the preset strip and the adjustment sliders.
-    /// A sheet on iOS/iPadOS; a freely resizable window on macOS.
+    /// A full-screen cover on iOS/iPadOS; a freely resizable window on macOS.
     private func previewGradedPhoto(_ capture: AppModel.CaptureProject, url: URL) {
         #if os(macOS)
         openWindow(value: PhotoEditorWindowRequest(
@@ -986,7 +984,7 @@ struct ProjectDetailView: View {
 
     /// Opens the video editor: the movie playing at its true aspect ratio with
     /// the same preset strip and adjustment sections the photo editor has.
-    /// A sheet on iOS/iPadOS; a freely resizable window on macOS.
+    /// A full-screen cover on iOS/iPadOS; a freely resizable window on macOS.
     private func editVideo(_ capture: AppModel.CaptureProject, url: URL) {
         #if os(macOS)
         openWindow(value: VideoEditorWindowRequest(

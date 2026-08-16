@@ -147,12 +147,10 @@ struct LetsLapseApp: App {
         // One window per photo: reopening the same photo fronts its window.
         WindowGroup(for: PhotoEditorWindowRequest.self) { $request in
             if let request {
-                PhotoViewerView(
-                    captureID: request.captureID,
-                    url: request.url,
-                    title: request.title
-                )
+                PhotoViewerView(captureID: request.captureID, url: request.url)
                 .environmentObject(model)
+                // The window's own title bar carries the name; the editor
+                // content deliberately doesn't repeat it.
                 .navigationTitle(request.title)
                 // Floor only. The rail is fixed at 340pt, so 720 leaves the
                 // image pane a workable ~380pt at the smallest.
@@ -165,11 +163,7 @@ struct LetsLapseApp: App {
         // editor: free resizing, one window per movie, reopen fronts it.
         WindowGroup(for: VideoEditorWindowRequest.self) { $request in
             if let request {
-                VideoEditorView(
-                    captureID: request.captureID,
-                    url: request.url,
-                    title: request.title
-                )
+                VideoEditorView(captureID: request.captureID, url: request.url)
                 .environmentObject(model)
                 .navigationTitle(request.title)
                 .frame(minWidth: 720, minHeight: 480)
@@ -431,7 +425,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
