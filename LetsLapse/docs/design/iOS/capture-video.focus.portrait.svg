@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — tap to focus · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (viewfinder → FocusReticle / FocusReticleView, focusTap) over App/CameraController.swift (focusPreview(atLayerPoint:), applyTapFocus). A single tap anywhere on the viewfinder focuses there and PINS the lens at what it finds. The reticle is a 74×74 amber (#FFB340) square, 1.2pt stroke, 3pt corner radius, with a 7×1.2pt tick at the centre of each edge, drawn tick-outward from the edge. It lands at 1.32× scale and springs to 1.0 over ~0.28s, then fades from full strength to 50% after half a second — it recedes to a marker rather than leaving, because it is the viewfinder's statement of where focus is being held. It stays for as long as the pin does (including through the whole of a recording) and disappears only when the pin is given up: either lock button's unlock, or a drag of the focus slider. Drawn here at the LL_FOCUS default — viewfinder-local (196.5, 385), which is screen (196.5, 500) — over the idle Video screen; the same reticle appears identically in Photo and Interval and in the landscape rails, so those get no separate file. Nothing else on the screen changes: the lock button stays "open", because a tap is not the lock BUTTON's state (isFocusLocked) but the camera's hold (isFocusHeld). Taps are REFUSED while a shoot is running and in the letterbox bars outside the image, and no reticle is drawn for a refused tap. Reproduce with LL_CAPTURE=1 LL_MODE=video LL_FOCUS=1.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <!-- device frame -->
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder: 1080p 16:9 in portrait = 393×699, centered in safe area -->
+      <g id="viewfinder">
+        <rect x="0" y="89" width="393" height="699" fill="url(#sky)"/>
+        <circle cx="132" cy="360" r="30" fill="#FFB340" opacity="0.9"/>
+        <circle cx="132" cy="360" r="52" fill="#FFB340" opacity="0.15"/>
+        <polygon points="0,552 70,500 150,544 235,472 310,534 393,490 393,788 0,788" fill="#141A24"/>
+        <polygon points="0,638 85,594 185,646 268,608 393,640 393,788 0,788" fill="#0B0E14"/>
+        <rect x="0" y="700" width="393" height="88" fill="#080A0E"/>
+        <rect x="30" y="716" width="140" height="2" fill="#FFB340" opacity="0.12"/>
+        <rect x="200" y="726" width="120" height="2" fill="#FFB340" opacity="0.08"/>
+      </g>
+
+      <!-- tap-to-focus reticle, settled (50%). Centre 196.5,500 = the viewfinder
+           region's own (196.5,385): the region starts at y 115 (59 safe area +
+           10 + 38 top bar + 8). Square 74, ticks 7×1.2 at each edge centre. -->
+      <g id="focus-reticle" opacity="0.5" data-state="settled">
+        <rect x="159.5" y="463" width="74" height="74" rx="3" fill="none" stroke="#FFB340" stroke-width="1.2"/>
+        <rect x="195.9" y="463" width="1.2" height="7" rx="0.6" fill="#FFB340"/>
+        <rect x="195.9" y="530" width="1.2" height="7" rx="0.6" fill="#FFB340"/>
+        <rect x="159.5" y="499.4" width="7" height="1.2" rx="0.6" fill="#FFB340"/>
+        <rect x="226.5" y="499.4" width="7" height="1.2" rx="0.6" fill="#FFB340"/>
+      </g>
+
+      <!-- top bar (below the 59pt safe-area inset) -->
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <rect x="227" y="70" width="150" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="241" y="92" font-size="13" class="sb" fill="#FFF">1080p · 30</text>
+          <text x="309" y="92" font-size="13" class="sb" fill="#FFB340">· Stab</text>
+          <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+        </g>
+      </g>
+
+      <!-- speed row: the per-preset chips (10× · 25× · 50× · 100×) are gone;
+           speed is set from the Target sheet, so only its entry point is here,
+           centered in the controls stack -->
+      <g id="speed-chips">
+        <rect x="160.5" y="639" width="72" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+        <text x="196.5" y="657" font-size="12.5" fill="#FFF" text-anchor="middle">Target…</text>
+      </g>
+
+      <!-- mode row + zoom chips -->
+      <g id="mode-row" font-size="13" class="sb">
+        <text x="44" y="697" fill="#FFF" opacity="0.5" letter-spacing="0.3">PHOTO</text>
+        <text x="105" y="697" fill="#FFF" opacity="0.5" letter-spacing="0.3">INTERVAL</text>
+        <text x="185" y="697" fill="#FFB340" letter-spacing="0.3">VIDEO</text>
+        <g id="zoom-chips" data-symbol="lens buttons">
+          <circle cx="256" cy="692" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="256" y="696" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">.5×</text>
+          <circle cx="294" cy="692" r="15" fill="none" stroke="#FFB340" stroke-opacity="0.8"/>
+          <text x="294" y="696" font-size="12" class="sb" fill="#FFB340" text-anchor="middle">1×</text>
+          <circle cx="332" cy="692" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="332" y="696" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">3×</text>
+        </g>
+      </g>
+
+      <!-- shutter row: recent tile · grid+lock column · shutter · timer+steady column.
+           The lock stays OPEN under a tap pin — the tap is the camera's hold, not
+           this button's state. -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#3A3123"/>
+            <polygon points="16,772 40,750 62,768 76,758 76,788 16,788" fill="#241E15"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <g id="grid-toggle" data-symbol="grid.circle">
+          <circle cx="108" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
+        </g>
+        <g id="exposure-lock" data-symbol="lock.open">
+          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <rect x="102" y="783" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/>
+          <path d="M105 783 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/>
+        </g>
+        <g id="shutter" data-symbol="record button">
+          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <circle cx="196.5" cy="758" r="30" fill="#FF3B30"/>
+        </g>
+        <g id="delay-toggle" data-symbol="timer">
+          <circle cx="285" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="285" cy="733" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
+          <path d="M285 733 v-6 M282 723 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
+        </g>
+        <g id="steady-toggle" data-symbol="hand.raised">
+          <circle cx="285" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M280 789 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <!-- caption -->
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — tap to focus · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — viewfinder · focusTap · FocusReticleView</text>
+</svg>

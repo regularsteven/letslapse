@@ -81,6 +81,12 @@ struct CaptureView: View {
     /// Rolling reference scale for the lens pinch — each threshold crossing
     /// steps one lens and re-anchors here, so a long pinch walks the range.
     @State private var pinchBaseline: CGFloat = 1
+    /// The last accepted tap-to-focus, in viewfinder coordinates. Set only when
+    /// the camera took the tap, and cleared when the pin behind it is given up.
+    @State private var focusReticle: FocusReticle?
+    /// Names the stage ZStack, which the preview layer fills exactly — the one
+    /// hop tap-to-focus needs between a touch and the layer's own space.
+    private static let stageSpace = "captureStage"
     /// On-phone shutter delay: tapping record waits 2 s before starting.
     /// Watch remote starts are deliberately immediate — the wrist is already
     /// hands-off the phone.
@@ -225,6 +231,11 @@ struct CaptureView: View {
                     }
                 }
             }
+            // The preview layer fills this stack exactly (it is an unsized ZStack
+            // child), so a point named here reaches the layer's own coordinates
+            // by undoing only the top-anchor slide — which is what tap-to-focus
+            // hands to `captureDevicePointConverted`.
+            .coordinateSpace(name: Self.stageSpace)
         }
         .background(Color.black.ignoresSafeArea())
         .preferredColorScheme(.dark)
@@ -516,6 +527,7 @@ struct CaptureView: View {
         applyModePreviewHook()
         applyHolyGrailPreviewHook()
         applyBurstPreviewHook()
+        applyFocusPreviewHook()
         #if os(macOS)
         // LL_CAMERA=<name substring> — switch to that camera once the session
         // is up, driving the exact path the Camera menu drives. Exists because
@@ -1097,14 +1109,52 @@ struct CaptureView: View {
                     Color.black.opacity(0.85)
                         .allowsHitTesting(false)
                 }
+                if let reticle = focusReticle {
+                    FocusReticleView()
+                        .position(reticle.point)
+                        .id(reticle.id)
+                        .allowsHitTesting(false)
+                }
             }
             .animation(.easeInOut(duration: 0.16), value: camera.isSwitchingLens)
             .frame(width: geometry.size.width, height: geometry.size.height)
+            #if os(iOS)
+            // The whole region takes the tap, not just whatever is drawn in it.
+            .contentShape(Rectangle())
+            .simultaneousGesture(
+                SpatialTapGesture().onEnded { value in
+                    focusTap(at: value.location, region: geometry, screenSize: screenSize)
+                }
+            )
+            #endif
         }
         .contentShape(Rectangle())
         .simultaneousGesture(modeSwipeGesture)
         .simultaneousGesture(lensPinchGesture)
+        // A pin the user gave up on (either unlock button, the focus slider)
+        // takes its reticle with it.
+        .onChange(of: camera.isFocusPinnedByTap) { pinned in
+            if !pinned { focusReticle = nil }
+        }
     }
+
+    #if os(iOS)
+    /// Tap the viewfinder to focus there. The camera refuses this outright once
+    /// a shoot is running — focus is locked for the whole of one — so the
+    /// reticle is only drawn for a tap that was actually accepted.
+    private func focusTap(at point: CGPoint, region: GeometryProxy, screenSize: CGSize) {
+        // This region's origin gets the tap into stage space; undoing the
+        // top-anchor slide gets it into the preview layer's, which is where the
+        // layer's own conversion starts from.
+        let frame = region.frame(in: .named(Self.stageSpace))
+        let layerPoint = CGPoint(
+            x: point.x + frame.minX,
+            y: point.y + frame.minY - previewTopAnchorOffset(in: screenSize)
+        )
+        guard camera.focusPreview(atLayerPoint: layerPoint) else { return }
+        focusReticle = FocusReticle(point: point)
+    }
+    #endif
 
     /// Swipe across the viewfinder to change modes, matching the mode row's
     /// order (PHOTO · INTERVAL · VIDEO): swipe left steps right along the row,
@@ -1629,6 +1679,20 @@ struct CaptureView: View {
         burstPillTotal = parts.count > 1 ? Int(parts[1]) : nil
         burstPillMode = mode
         burstPillPhase = .running
+    }
+
+    /// `LL_FOCUS=1` freezes a tap-to-focus reticle in the middle of the
+    /// viewfinder for SVG-mirror screenshots. Same reason as the burst hook: the
+    /// simulator has no camera, so a real tap is refused before it ever draws
+    /// one (`focusPreview` needs a device point inside the image). `LL_FOCUS=
+    /// x,y` places it elsewhere, in viewfinder points. Pair with `LL_CAPTURE=1`.
+    private func applyFocusPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_FOCUS"] else { return }
+        let parts = raw.split(separator: ",").compactMap { Double($0) }
+        let point = parts.count == 2
+            ? CGPoint(x: parts[0], y: parts[1])
+            : CGPoint(x: 196.5, y: 385)
+        focusReticle = FocusReticle(point: point)
     }
     #endif
 
@@ -3446,6 +3510,63 @@ private struct CaptureTargetSheet: View {
     }
 }
 
+// MARK: - Focus reticle
+
+/// One accepted tap's worth of reticle: where it landed in viewfinder
+/// coordinates, plus an identity that changes per tap — so tapping the same
+/// spot twice still replays the animation.
+private struct FocusReticle: Identifiable, Equatable {
+    let id = UUID()
+    let point: CGPoint
+}
+
+/// The tap-to-focus target. Lands large, settles onto the subject, and then
+/// stays — dimmed — for as long as the lens is pinned to it, so the viewfinder
+/// always says where focus is being held. It goes bright again on the next tap
+/// and disappears only when the pin is given up.
+private struct FocusReticleView: View {
+    @State private var scale: CGFloat = 1.32
+    @State private var opacity: Double = 0
+
+    private static let size: CGFloat = 74
+
+    var body: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: 3)
+                .stroke(LL.amber, lineWidth: 1.2)
+                .frame(width: Self.size, height: Self.size)
+            // A centre tick per edge: the native language for "focus target",
+            // and it reads against a busy frame where a bare square doesn't.
+            ForEach(0..<4, id: \.self) { edge in
+                Capsule()
+                    .fill(LL.amber)
+                    .frame(width: 1.2, height: 7)
+                    .offset(y: -Self.size / 2 + 3.5)
+                    .rotationEffect(.degrees(Double(edge) * 90))
+            }
+        }
+        .compositingGroup()
+        .shadow(color: .black.opacity(0.45), radius: 2, y: 0.5)
+        .scaleEffect(scale)
+        .opacity(opacity)
+        .onAppear {
+            scale = 1.32
+            opacity = 0
+            withAnimation(.spring(response: 0.28, dampingFraction: 0.62)) {
+                scale = 1
+                opacity = 1
+            }
+            // Then it recedes to a marker rather than leaving: the shot is
+            // being composed through this frame, and a full-strength square
+            // parked on the subject is in the way of that.
+            withAnimation(.easeOut(duration: 0.35).delay(0.5)) {
+                opacity = 0.5
+            }
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 // MARK: - Preview layer
 
 #if os(iOS)
@@ -3503,6 +3624,10 @@ struct CameraPreview: UIViewRepresentable {
         let view = PreviewView()
         view.previewLayer.session = session
         view.previewLayer.videoGravity = videoGravity
+        // Tap-to-focus converts through this layer — it is the only thing that
+        // knows the letterbox, the mirroring and the rotation sitting between a
+        // touch on glass and a point on the sensor.
+        camera.previewLayer = view.previewLayer
         view.reapplyOrientation = { [weak view] in
             guard let view else { return }
             applyOrientation(to: view, from: "reapply")
@@ -3515,6 +3640,9 @@ struct CameraPreview: UIViewRepresentable {
     func updateUIView(_ uiView: PreviewView, context: Context) {
         if uiView.previewLayer.videoGravity != videoGravity {
             uiView.previewLayer.videoGravity = videoGravity
+        }
+        if camera.previewLayer !== uiView.previewLayer {
+            camera.previewLayer = uiView.previewLayer
         }
         uiView.reapplyOrientation = { [weak uiView] in
             guard let uiView else { return }

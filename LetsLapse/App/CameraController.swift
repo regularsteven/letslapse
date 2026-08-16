@@ -357,6 +357,26 @@ final class CameraController: NSObject, ObservableObject {
     private var lockedISOValue: Float = 0
     private var lockedShutterValue: Double = 0
     private var lockedLensValue: Float = 0.5
+    /// sessionQueue-confined. Focus pinned for the length of a capture run —
+    /// taken at the shutter press, released when the run ends. Deliberately
+    /// separate from `focusLocked` (the user's own lock button) so the release
+    /// can only ever undo what the run itself took.
+    private var runFocusLocked = false
+    /// sessionQueue-confined. Focus pinned by a tap on the preview while idle.
+    /// Outlives the run it was set up for: a second take of the same shot has
+    /// to land on the same plane as the first.
+    private var tapFocusLocked = false
+    /// sessionQueue-confined. Where the last preview tap asked to focus, in the
+    /// device's own normalized space. Survives a lens change — it is image
+    /// geometry, not a lens position — which is what lets the re-focus after
+    /// one aim at the same subject.
+    private var tapFocusPoint: CGPoint?
+    /// Every reason the lens might be pinned right now. Anything that re-applies
+    /// a held focus after a configuration change gates on this: a shoot's own
+    /// hold counts exactly as much as the user's lock.
+    private var focusIsHeld: Bool {
+        focusLocked || exposureLocked || runFocusLocked || tapFocusLocked
+    }
     // The exposure the lock froze at — the zero point `setExposureOffset`
     // works either side of. Fixed at lock time (not updated as the offset is
     // dragged) so the brightness slider's centre keeps meaning "as locked".
@@ -470,6 +490,21 @@ final class CameraController: NSObject, ObservableObject {
     /// Focus (and white balance) held without touching exposure — the Holy
     /// Grail lock, where exposure belongs to the ramp.
     @Published var isFocusLocked: Bool = false
+    /// True whenever the lens is pinned for any reason — a preview tap, either
+    /// lock button, or the automatic hold every running shoot takes. This is
+    /// not `isFocusLocked`, which stays the lock BUTTON's own state.
+    @Published private(set) var isFocusHeld: Bool = false
+    /// Set while a preview tap owns the focus, so the viewfinder can keep its
+    /// reticle sitting on the subject the user picked.
+    @Published private(set) var isFocusPinnedByTap: Bool = false
+    #if os(iOS)
+    /// The live preview's layer, handed over by `CameraPreview`. A tap arrives
+    /// in layer coordinates and only the layer knows the letterboxing, the
+    /// mirroring and the rotation between what is on screen and what the
+    /// sensor sees — so it does the conversion (see `focusPreview`).
+    /// Main-thread only.
+    weak var previewLayer: AVCaptureVideoPreviewLayer?
+    #endif
     @Published var lockedISO: Float = 0
     @Published var lockedShutterSeconds: Double = 0
     @Published var lockedLensPosition: Float = 0.5
@@ -1494,6 +1529,7 @@ final class CameraController: NSObject, ObservableObject {
             RecordingSettingsStore.save(stopFactor: stop.displayFactor)
             if self.physicalWorldActive {
                 self.selectPhysicalStop(stop)
+                self.refocusPinIfNeeded()
             } else {
                 self.applyZoom(stop, animated: true)
                 // The burst menu is read from the lens this stop would pin to,
@@ -1505,6 +1541,11 @@ final class CameraController: NSObject, ObservableObject {
                     guard !self.movieOutput.isRecording, self.intervalTimer == nil,
                           !self.isLiveBlendActive else { return }
                     self.refreshCaptureOptions()
+                    // The framing just moved under a tapped point, and a virtual
+                    // camera may have handed over to a different constituent
+                    // while it did — re-acquire the subject rather than hold a
+                    // lens position that now means something else.
+                    self.refocusPinIfNeeded()
                 }
             }
         }
@@ -2303,6 +2344,10 @@ final class CameraController: NSObject, ObservableObject {
             // can force a shorter shutter than the held/locked one, and both
             // helpers clamp against it.
             reassertExposureLock(on: device)
+            // Ungated by design — a shoot holds focus whether or not the user
+            // locked exposure, and this call is the only thing standing between
+            // an `activeFormat` write and a hunt at the head of the new file.
+            reassertFocusLock(on: device)
             #if os(iOS)
             if let hold = switchExposureHold, !exposureLocked {
                 applySwitchExposureHold(hold, on: device)
@@ -2391,6 +2436,7 @@ final class CameraController: NSObject, ObservableObject {
             // The new interval can force a shorter shutter than the held or
             // locked one — same clamp-and-trade-ISO the format path runs.
             reassertExposureLock(on: device)
+            reassertFocusLock(on: device)
             #if os(iOS)
             if let hold = switchExposureHold, !exposureLocked {
                 applySwitchExposureHold(hold, on: device)
@@ -2443,28 +2489,52 @@ final class CameraController: NSObject, ObservableObject {
         if device.isExposureModeSupported(.custom) {
             device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
         }
-        if device.isFocusModeSupported(.locked) {
-            // `.locked` being supported does NOT imply the device can lock at an
-            // arbitrary lens position — the ultra-wide reports the former and not
-            // the latter, and passing a custom value there raises
-            // NSInvalidArgumentException. `currentLensPosition` is the sentinel
-            // for "lock wherever you already are", which every device accepts.
-            let position = device.isLockingFocusWithCustomLensPositionSupported
-                ? lockedLensValue
-                : AVCaptureDevice.currentLensPosition
-            device.setFocusModeLocked(lensPosition: position, completionHandler: nil)
-        }
         #else
         if device.isExposureModeSupported(.locked) {
             device.exposureMode = .locked
-        }
-        if device.isFocusModeSupported(.locked) {
-            device.focusMode = .locked
         }
         #endif
         if device.isWhiteBalanceModeSupported(.locked) {
             device.whiteBalanceMode = .locked
         }
+    }
+
+    /// Re-apply the held focus after a configuration change, whatever is
+    /// holding it.
+    ///
+    /// Assigning `activeFormat` hands the lens back to continuous auto-focus,
+    /// and so does adding a device input. Until 2026-08-16 the only re-assert
+    /// lived inside `reassertExposureLock`, which returns early unless the user
+    /// has manually locked *exposure* — so on an ordinary shoot the shutter
+    /// press (which does both) and every burst segment switch (which does the
+    /// first) re-opened the hunt the shoot had already settled. Focus is now
+    /// its own concern, gated on `focusIsHeld`, and called unconditionally from
+    /// both format paths.
+    ///
+    /// Runs inside the caller's `lockForConfiguration` block on the sessionQueue.
+    private func reassertFocusLock(on device: AVCaptureDevice) {
+        guard focusIsHeld, device.isFocusModeSupported(.locked) else { return }
+        #if os(iOS)
+        // `.locked` being supported does NOT imply the device can lock at an
+        // arbitrary lens position — the ultra-wide reports the former and not
+        // the latter, and passing a custom value there raises
+        // NSInvalidArgumentException. `currentLensPosition` is the sentinel
+        // for "lock wherever you already are", which every device accepts.
+        let custom = device.isLockingFocusWithCustomLensPositionSupported
+        // Nothing is asked of a lens that is already where it should be: a
+        // burst boundary on the shared-format fast path never reset focus in
+        // the first place, and a redundant write there is a chance for the
+        // motor to twitch inside the one transition that must not move.
+        let alreadyHeld = device.focusMode == .locked
+            && (!custom || abs(device.lensPosition - lockedLensValue) < 0.001)
+        guard !alreadyHeld else { return }
+        device.setFocusModeLocked(
+            lensPosition: custom ? lockedLensValue : AVCaptureDevice.currentLensPosition,
+            completionHandler: nil)
+        #else
+        guard device.focusMode != .locked else { return }
+        device.focusMode = .locked
+        #endif
     }
 
     // MARK: - Segment-switch exposure hold
@@ -2989,7 +3059,8 @@ final class CameraController: NSObject, ObservableObject {
                     DispatchQueue.main.async { self.lockedLensPosition = lens }
                     #endif
                 } else {
-                    if device.isFocusModeSupported(.continuousAutoFocus) {
+                    if !self.retainFocusIfCapturing(),
+                       device.isFocusModeSupported(.continuousAutoFocus) {
                         device.focusMode = .continuousAutoFocus
                     }
                     if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
@@ -3001,8 +3072,13 @@ final class CameraController: NSObject, ObservableObject {
                 return
             }
             self.focusLocked = wantsLock
+            // Unlocking is the user asking for the camera back, which includes
+            // giving up a tapped subject — otherwise the button would report
+            // "auto" over a lens still pinned to a point they can't see.
+            if !wantsLock { self.clearTapFocus() }
             CaptureSessionLogger.shared.log(
                 wantsLock ? "focus_lock" : "focus_unlock", [:])
+            self.publishFocusHold()
             DispatchQueue.main.async { self.isFocusLocked = wantsLock }
         }
     }
@@ -3033,6 +3109,7 @@ final class CameraController: NSObject, ObservableObject {
                     device.whiteBalanceMode = .locked
                 }
                 self.exposureLocked = true
+                self.publishFocusHold()
                 #if os(iOS)
                 CaptureSessionLogger.shared.log("exposure_lock", [
                     "iso": iso,
@@ -3077,14 +3154,19 @@ final class CameraController: NSObject, ObservableObject {
                 if device.isExposureModeSupported(.continuousAutoExposure) {
                     device.exposureMode = .continuousAutoExposure
                 }
-                if device.isFocusModeSupported(.continuousAutoFocus) {
+                if !self.retainFocusIfCapturing(),
+                   device.isFocusModeSupported(.continuousAutoFocus) {
                     device.focusMode = .continuousAutoFocus
                 }
                 if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
                     device.whiteBalanceMode = .continuousAutoWhiteBalance
                 }
                 self.exposureLocked = false
+                // This already put the lens back on continuous auto above, so
+                // the pin is dropped without a second write.
+                self.clearTapFocus()
                 CaptureSessionLogger.shared.log("exposure_unlock")
+                self.publishFocusHold()
                 DispatchQueue.main.async {
                     self.isExposureLocked = false
                 }
@@ -3196,6 +3278,12 @@ final class CameraController: NSObject, ObservableObject {
                 )
                 let applied = custom ? clamped : device.lensPosition
                 self.lockedLensValue = applied
+                // Driving the lens by hand supersedes a tapped subject: leaving
+                // the pin standing would let the next re-acquire pull the slider
+                // back to wherever the tap landed.
+                self.tapFocusLocked = false
+                self.tapFocusPoint = nil
+                self.publishFocusHold()
                 DispatchQueue.main.async {
                     self.lockedLensPosition = applied
                 }
@@ -3205,6 +3293,269 @@ final class CameraController: NSObject, ObservableObject {
         _ = position
         #endif
     }
+
+    // MARK: - Focus hold (tap to focus, and the lock every shoot takes)
+
+    /// sessionQueue → main. The one place that decides what the viewfinder is
+    /// told about focus.
+    private func publishFocusHold() {
+        let held = focusIsHeld
+        let byTap = tapFocusLocked
+        DispatchQueue.main.async {
+            if self.isFocusHeld != held { self.isFocusHeld = held }
+            if self.isFocusPinnedByTap != byTap { self.isFocusPinnedByTap = byTap }
+        }
+    }
+
+    /// sessionQueue-confined. Bounded wait for the lens to stop moving.
+    ///
+    /// Modelled on `awaitConstituentSettle`: a blocking poll is the honest
+    /// shape, because everything queued behind it — the lock, the format write,
+    /// the first segment — is ordered work on this queue that must not overtake
+    /// it. `expectStart` covers a focus we just asked for: the ISP takes a beat
+    /// to even begin moving, and without the grace window the poll reads
+    /// "settled" off the frame before the hunt started. A hunt that outlasts the
+    /// budget is locked wherever it got to and said out loud — carrying on into
+    /// the run under continuous auto-focus is the failure this path exists to
+    /// prevent.
+    private func awaitFocusSettle(
+        on device: AVCaptureDevice,
+        expectStart: Bool = false,
+        timeout: TimeInterval = 1.5
+    ) {
+        if expectStart {
+            let graceUntil = Date().addingTimeInterval(0.12)
+            while !device.isAdjustingFocus, Date() < graceUntil {
+                Thread.sleep(forTimeInterval: 0.02)
+            }
+        }
+        let deadline = Date().addingTimeInterval(timeout)
+        while device.isAdjustingFocus, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        if device.isAdjustingFocus {
+            LLog(String(format: "focus: still hunting after %.1fs — pinning where it is", timeout))
+        }
+    }
+
+    /// sessionQueue-confined. Pin the lens where it is now and remember the
+    /// position, so every later configuration change can put it back.
+    private func pinFocusHere(on device: AVCaptureDevice) {
+        guard device.isFocusModeSupported(.locked) else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            #if os(iOS)
+            let custom = device.isLockingFocusWithCustomLensPositionSupported
+            device.setFocusModeLocked(
+                lensPosition: custom ? device.lensPosition : AVCaptureDevice.currentLensPosition,
+                completionHandler: nil)
+            lockedLensValue = device.lensPosition
+            let lens = device.lensPosition
+            DispatchQueue.main.async { self.lockedLensPosition = lens }
+            #else
+            device.focusMode = .locked
+            #endif
+        } catch {
+            LLog("focus: lockForConfiguration failed — \(error.localizedDescription)")
+        }
+    }
+
+    /// Pin the lens for the length of a capture run.
+    ///
+    /// A user presses record when the shot looks right, and that includes
+    /// focus — so the lens has to stop moving at exactly that moment and stay
+    /// stopped until the run ends. Before this, the opposite happened: the
+    /// shutter press pins the run to one physical lens (a device input swap)
+    /// and then writes `activeFormat`, and each of those hands focus back to
+    /// continuous auto — so the opening frames of a take were shot through a
+    /// hunt, and every burst boundary re-opened one mid-shoot.
+    ///
+    /// `deviceChanged` means the run just moved to a different camera, which
+    /// buys a grace window for a lens that may start hunting on its own as it
+    /// joins the session — and a re-aim when the user had tapped a subject,
+    /// since a point of interest is per-device state. Otherwise nothing is
+    /// asked of the lens at all: it is pinned exactly where the user left it.
+    ///
+    /// sessionQueue-confined. Called after any input swap the run performs and
+    /// before its first frame.
+    private func lockFocusForRun(deviceChanged: Bool) {
+        guard let device = videoDevice, device.isFocusModeSupported(.locked) else { return }
+        // A lock the user took themselves already owns focus, and owns it past
+        // the end of this run — taking a second one over the top would mean
+        // releasing theirs when ours ends.
+        guard !focusLocked, !exposureLocked else { return }
+
+        // Aim again only when the user picked a subject and the run has moved to
+        // a different camera: a point of interest is per-device state, so the
+        // new lens has never been told about it. Deliberately NOT an
+        // unconditional re-focus on every device change — an `AVCaptureDevice`
+        // is a shared object, and the constituent a run pins to is usually the
+        // one that was already driving the preview, focused on what the user is
+        // looking at. Re-hunting that would be a visible pump at the shutter
+        // press, in the name of finding the plane it was already on.
+        if deviceChanged, let point = tapFocusPoint {
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                if device.isFocusPointOfInterestSupported {
+                    device.focusPointOfInterest = point
+                }
+                if device.isFocusModeSupported(.autoFocus) { device.focusMode = .autoFocus }
+            } catch {
+                LLog("focus: run lock could not aim — \(error.localizedDescription)")
+            }
+        }
+        // Never pin mid-hunt. A lens caught between two planes is worse than the
+        // hunt was, because nothing will correct it for the whole run. The grace
+        // window on a device change covers both the aim above and a fresh input
+        // that starts hunting for itself the moment it joins the session.
+        awaitFocusSettle(on: device, expectStart: deviceChanged)
+        pinFocusHere(on: device)
+        runFocusLocked = true
+        publishFocusHold()
+        CaptureSessionLogger.shared.log("focus_run_lock", [
+            "lensPosition": lockedLensValue,
+            "source": tapFocusLocked ? "tap" : "auto",
+            "deviceChanged": deviceChanged,
+        ])
+        LLog(String(format: "focus: run pinned at lens %.3f%@", lockedLensValue,
+                    deviceChanged ? " (after lens change)" : ""))
+    }
+
+    /// Undo exactly what `lockFocusForRun` took, and nothing else.
+    ///
+    /// A tap outlives the run that used it — a second take of the same shot has
+    /// to land on the same plane — so a pinned point is re-acquired rather than
+    /// dropped. With no tap and no lock button pressed, the camera goes back to
+    /// focusing for itself, which is what an idle viewfinder should do.
+    ///
+    /// sessionQueue-confined.
+    private func releaseRunFocusLock() {
+        guard runFocusLocked else { return }
+        runFocusLocked = false
+        guard !focusLocked, !exposureLocked else { publishFocusHold(); return }
+        if tapFocusLocked, let point = tapFocusPoint {
+            // The run may have ended on a different device than the tap was
+            // taken on (a pinned lens is handed back at the stop), so re-acquire
+            // the point rather than restore a lens position from another camera.
+            // Queued rather than run inline: this is teardown, and the re-acquire
+            // waits on the lens — the finished shoot must not be held behind it.
+            sessionQueue.async { self.applyTapFocus(point) }
+        } else if let device = videoDevice {
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                if device.isFocusModeSupported(.continuousAutoFocus) {
+                    device.focusMode = .continuousAutoFocus
+                }
+            } catch {}
+        }
+        publishFocusHold()
+        LLog("focus: run lock released")
+    }
+
+    /// sessionQueue-confined. Aim the lens at a point the user picked, then pin
+    /// it there.
+    ///
+    /// `.autoFocus` parks the lens when it converges but leaves the device one
+    /// subject-area change away from moving again, so the settled result is
+    /// promoted to a hard lock. That is what makes the promise hold: what the
+    /// user tapped is what the shutter press inherits.
+    private func applyTapFocus(_ point: CGPoint) {
+        guard let device = videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isFocusPointOfInterestSupported {
+                device.focusPointOfInterest = point
+            }
+            if device.isFocusModeSupported(.autoFocus) {
+                device.focusMode = .autoFocus
+            }
+        } catch {
+            LLog("focus tap: lockForConfiguration failed — \(error.localizedDescription)")
+            return
+        }
+        tapFocusPoint = point
+        tapFocusLocked = true
+        publishFocusHold()
+        awaitFocusSettle(on: device, expectStart: true)
+        pinFocusHere(on: device)
+        CaptureSessionLogger.shared.log("focus_tap", [
+            "x": Double(point.x), "y": Double(point.y), "lensPosition": lockedLensValue,
+        ])
+        LLog(String(format: "focus: tap at %.2f,%.2f pinned at lens %.3f",
+                    point.x, point.y, lockedLensValue))
+    }
+
+    /// sessionQueue-confined. An unlock that lands mid-shoot gives the user
+    /// their exposure and white balance back, but never the lens: a running
+    /// shoot holds focus, full stop, and a lock button is not an exception to
+    /// that. The hold is transferred to the run, so the ordinary end-of-run
+    /// release still hands the camera back at the right moment.
+    ///
+    /// Returns true when the caller must leave focus alone.
+    private func retainFocusIfCapturing() -> Bool {
+        guard movieOutput.isRecording || intervalTimer != nil || isLiveBlendActive
+        else { return false }
+        runFocusLocked = true
+        LLog("focus: unlock kept the lens pinned — a shoot is running")
+        return true
+    }
+
+    /// Give up a tapped subject. Both callers are unlock paths that have already
+    /// put the lens back on continuous auto in the same configuration block, so
+    /// this only drops the state that would otherwise re-acquire the point later
+    /// — it never writes to the device itself.
+    /// sessionQueue-confined.
+    private func clearTapFocus() {
+        guard tapFocusLocked || tapFocusPoint != nil else { return }
+        tapFocusLocked = false
+        tapFocusPoint = nil
+        publishFocusHold()
+    }
+
+    /// sessionQueue-confined. Re-acquire a tapped subject after the framing has
+    /// moved under it. A stop change re-crops the image the point is expressed
+    /// in, and on a virtual camera it can hand over to a different constituent
+    /// outright — which resets focus anyway.
+    private func refocusPinIfNeeded() {
+        guard tapFocusLocked, let point = tapFocusPoint,
+              !movieOutput.isRecording, intervalTimer == nil, !isLiveBlendActive
+        else { return }
+        applyTapFocus(point)
+    }
+
+    #if os(iOS)
+    /// A tap on the viewfinder: focus there, and hold it.
+    ///
+    /// `point` is in the preview layer's own coordinates — the layer converts
+    /// it, because only the layer knows the letterboxing, the mirroring and the
+    /// rotation between what is on screen and what the sensor sees. A tap that
+    /// lands in the letterbox bars converts to a point outside the image and is
+    /// refused rather than clamped to an edge nobody aimed at.
+    ///
+    /// Refused outright while a shoot is running: focus is locked for the whole
+    /// of one, and a stray touch on a rigged phone must not be able to move it.
+    /// Returns false when the tap was refused, so the viewfinder doesn't draw a
+    /// reticle for something that didn't happen.
+    @discardableResult
+    func focusPreview(atLayerPoint point: CGPoint) -> Bool {
+        guard let layer = previewLayer else { return false }
+        guard !isRecording, !isIntervalRunning, !isLiveBlendRunning else { return false }
+        let devicePoint = layer.captureDevicePointConverted(fromLayerPoint: point)
+        guard (0...1).contains(devicePoint.x), (0...1).contains(devicePoint.y) else { return false }
+        sessionQueue.async {
+            // Authoritative re-check on the queue that owns the device: the
+            // published flags above can lag a run that has just started.
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil,
+                  !self.isLiveBlendActive else { return }
+            self.applyTapFocus(devicePoint)
+        }
+        return true
+    }
+    #endif
 
     // MARK: - Movie recording
 
@@ -3272,7 +3623,16 @@ final class CameraController: NSObject, ObservableObject {
             if mode == .ramp {
                 runConfigurations.append((burstResolution, self.selectedRampFrameRate))
             }
+            let deviceBeforePin = self.videoDevice
             self.pinLensForSequence(configurations: runConfigurations)
+            // Focus is decided HERE — at the shutter press, on whatever the run
+            // will actually shoot through — and held to the last segment. After
+            // the pin, because a swapped input arrives with its own lens to
+            // settle; before the first segment, because that segment's format
+            // write would otherwise hand focus straight back to auto.
+            self.lockFocusForRun(deviceChanged: self.videoDevice !== deviceBeforePin)
+            #else
+            self.lockFocusForRun(deviceChanged: false)
             #endif
             // One format per sequence when the sensor offers it, alongside
             // one lens and one orientation: with both rates on a single
@@ -4056,6 +4416,11 @@ final class CameraController: NSObject, ObservableObject {
         #endif
         restoreBaseFrameRateIfNeeded()
         endSwitchExposureHold()
+        // After the pin release and the resting-format re-pin, not before: both
+        // re-apply a format, and holding focus through them keeps the idle
+        // viewfinder still while the run winds down. Only then does the lens go
+        // back to whatever should own it now (see releaseRunFocusLock).
+        releaseRunFocusLock()
         timedBurstGeneration += 1
         activeSequence = nil
         activeSequenceDirectory = nil
@@ -4115,6 +4480,11 @@ final class CameraController: NSObject, ObservableObject {
             // inline before any capture work.
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
+            // Same rule as a video take: the shot is in focus when the user
+            // presses the shutter, so the lens stops there for the whole run.
+            // An interval shoot is the least forgiving of the three — a hunt
+            // three frames in is baked into the finished timelapse for good.
+            self.lockFocusForRun(deviceChanged: false)
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("interval-\(Int(Date().timeIntervalSince1970))")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -4196,6 +4566,7 @@ final class CameraController: NSObject, ObservableObject {
         self.intervalTimer = nil
         let wasHolyGrail = self.holyGrailActive
         self.endHolyGrailIfActive()
+        self.releaseRunFocusLock()
         let urls = self.photoURLs
         CaptureSessionLogger.shared.log(
             "capture_end",
@@ -4687,6 +5058,7 @@ final class CameraController: NSObject, ObservableObject {
                     #if os(iOS)
                     self.endHolyGrailIfActive()
                     #endif
+                    self.releaseRunFocusLock()
                 }
                 if let result {
                     self.onFinishLiveBlend?(result)
@@ -4704,6 +5076,10 @@ final class CameraController: NSObject, ObservableObject {
                 connection.videoOrientation = self.captureOrientation()
             }
             #endif
+            // A blend run is a timelapse like any other: focus stops at the
+            // shutter press and stays stopped. No input swap here, so there is
+            // nothing to settle first.
+            self.lockFocusForRun(deviceChanged: false)
             output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
             controller.start()
             DispatchQueue.main.async {
@@ -4728,6 +5104,7 @@ final class CameraController: NSObject, ObservableObject {
     /// finish), then RAW photo captures feed a linear-space average — one
     /// blended DNG per interval.
     private func startLiveBlendDNG(every interval: Double, depth: BlendDepth, options: LiveBlendCaptureOptions) {
+        let deviceBeforeSwap = videoDevice
         // DNG frames come from a physical camera. The armed framing preview
         // normally swapped the input already, but the arm is async — if the
         // run starts from the standard world, move to the nearest optical
@@ -4868,12 +5245,17 @@ final class CameraController: NSObject, ObservableObject {
             self.sessionQueue.async {
                 self.endHolyGrailIfActive()
                 self.restoreAfterDNGRun()
+                self.releaseRunFocusLock()
             }
             if let result {
                 self.onFinishLiveBlend?(result)
             }
         }
         liveBlendRawController = controller
+        // Last thing before the first RAW frame is asked for, and after both
+        // the constituent swap above and the photo-preset switch — either would
+        // have handed focus back to auto under the pin.
+        lockFocusForRun(deviceChanged: videoDevice !== deviceBeforeSwap)
         controller.start()
         DispatchQueue.main.async {
             self.captureRunStartedAt = Date()
