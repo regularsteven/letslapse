@@ -62,7 +62,7 @@ Quality note stated honestly in-product where relevant: sensor-crop stops cost n
 
 ## Ramp (locked decision, lands with the model)
 
-Chips become zoom targets on the one virtual-device input: `ramp(toVideoZoomFactor:rate:)` through switchovers, system-managed constituent handoff and AE carry-over, continuous imagery throughout. The stepped pinch becomes a continuous zoom (chips highlight by nearest band, native-style). No session transaction on any stop change. Cold start/resume keep the freeze-frame cover from the investigation plan; dissolve is otherwise dead.
+Chips become zoom targets on the one virtual-device input: `ramp(toVideoZoomFactor:rate:)` through switchovers, system-managed constituent handoff and AE carry-over, continuous imagery throughout. The stepped pinch becomes a continuous zoom (chips highlight by nearest band, native-style) — keeping the direction the stepped version settled on: fingers **apart** = tighter, fingers **together** = wider, as in native Camera. No session transaction on any stop change. Cold start/resume keep the freeze-frame cover from the investigation plan; dissolve is otherwise dead.
 
 ## Validation workflow — status
 

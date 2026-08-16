@@ -1216,9 +1216,13 @@ struct CaptureView: View {
         mode = Self.modeOrder[next]
     }
 
-    /// Pinch steps through the lens stops one per threshold crossed:
-    /// pinch in walks wide → tight, pinch out walks back, stopping at the
-    /// ends. Each step is a zoom ramp, so a fast pinch reads as continuous.
+    /// Pinch steps through the lens stops one per threshold crossed, in the
+    /// direction native Camera uses: fingers moving **apart** step tighter
+    /// (1× → 3×), fingers moving **together** step wider (1× → 0.5×), stopping
+    /// at the ends. Stated as finger movement rather than "pinch in/out" on
+    /// purpose — that wording is ambiguous enough to have hidden this being
+    /// backwards through a whole field test. Each step is a zoom ramp, so a
+    /// fast pinch reads as continuous.
     private var lensPinchGesture: some Gesture {
         MagnificationGesture()
             .onChanged { value in
@@ -1226,11 +1230,11 @@ struct CaptureView: View {
                 let threshold: CGFloat = 1.35
                 while value / pinchBaseline > threshold {
                     pinchBaseline *= threshold
-                    stepLens(tighter: false)
+                    stepLens(tighter: true)
                 }
                 while value / pinchBaseline < 1 / threshold {
                     pinchBaseline /= threshold
-                    stepLens(tighter: true)
+                    stepLens(tighter: false)
                 }
             }
             .onEnded { _ in
