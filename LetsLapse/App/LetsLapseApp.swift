@@ -193,6 +193,12 @@ struct ContentView: View {
     /// returns from the background, so a warm resume never re-arms the splash.
     @State private var showLaunch = LaunchAnimationView.shouldPlayOnLaunch
     #if os(macOS)
+    #if DEBUG
+    /// Used only by `applyUIPreviewHooks` to front the remote window for a
+    /// screenshot run — the remote is otherwise behind ⌘⇧R, which no headless
+    /// verification can press.
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @State private var lastStage: AppModel.Stage = .home
     #endif
 
@@ -425,7 +431,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_PROJECT_SCANNER"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -439,6 +445,19 @@ struct ContentView: View {
     /// so screens can be screenshot-verified without tap automation.
     private func applyUIPreviewHooks() {
         let environment = ProcessInfo.processInfo.environment
+        #if os(macOS)
+        // Both remote hooks open the window, because it is behind ⌘⇧R and no
+        // headless run can press that. They are mutually exclusive in practice:
+        // `LL_UI_PREVIEW=<screen>` stages FAKE state and freezes out real
+        // payloads (`WatchCaptureRemote.applyDebugPreviewStateIfRequested`),
+        // while `LL_REMOTE_CONNECT=<code>` dials a REAL camera — the one that
+        // answers "does the Mac show what the iPad is actually doing?".
+        if let screen = environment["LL_UI_PREVIEW"], !screen.isEmpty {
+            openWindow(id: "remote")
+        } else if let code = environment["LL_REMOTE_CONNECT"], code.count == 6 {
+            openWindow(id: "remote")
+        }
+        #endif
         switch environment["LL_TAB"] {
         case "projects": selectedTab = .projects
         case "gallery": selectedTab = .gallery
@@ -455,6 +474,22 @@ struct ContentView: View {
         if environment["LL_DETAIL"] == "latest", let capture = model.captures.first {
             selectedTab = .projects
             model.requestedProjectDetailID = capture.id
+        }
+        // LL_PROJECT_SCANNER[=<poses>|corrected] — fabricate a finished Scanner
+        // shoot and open its project. The only way to see that screen
+        // off-device: a Scanner set cannot be captured on a simulator (no
+        // camera to difference frames from, nothing flat to detect), so nothing
+        // else can produce a project the Scanner route recognises. `corrected`
+        // stages the set with its rectified pages already written, which is the
+        // screen's other state.
+        if let hook = environment["LL_PROJECT_SCANNER"] {
+            let corrected = hook == "corrected"
+            let poses = Int(hook) ?? 12
+            if let id = model.debugSeedScannerProject(
+                poses: max(1, min(poses, 72)), corrected: corrected) {
+                selectedTab = .projects
+                model.requestedProjectDetailID = id
+            }
         }
         if let rawDestination = environment["LL_PUSH"],
            let destination = SettingsDestination(rawValue: rawDestination) {

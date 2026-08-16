@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 // The capture screen's dial menus, extracted from `CaptureView` and made
 // `Equatable` so they re-render only when a value they draw actually moves.
@@ -62,53 +63,82 @@ private struct DialCaption: View {
     }
 }
 
-/// Interval's dials — spacing, exposure ramp and blend depth — plus the
+/// Interval's dials — spacing, mode and blend depth — plus the
 /// trailing caption. One line where it fits (Mac, landscape phones/iPads);
 /// portrait iPhones fall back to two stacked lines.
 ///
-/// All three dials stand on their own: BLEND is how many frames are averaged
-/// into each output image (the motion blur is made as the shoot runs), and
-/// RAMP is whether the exposure follows the light. A Holy Grail shoot with
-/// BLEND on is the combination the feature exists for — a day-to-night
-/// timelapse whose frames already carry their blur.
+/// ```
+/// EVERY:  0.5s · 1s · 3s · 5s · 10s … Auto
+/// MODE:   Off · Holy Grail · Scanner
+/// BLEND:  Off · 3 · 5 · 10 … Safe · Psycho
+/// ```
+///
+/// BLEND is how many frames are averaged into each output image (the motion
+/// blur is made as the shoot runs). A Holy Grail shoot with BLEND on is the
+/// combination that feature exists for — a day-to-night timelapse whose frames
+/// already carry their blur.
+///
+/// **MODE was called RAMP until Scanner arrived**, and the rename is not
+/// cosmetic: only one of the two things it now selects is a ramp. What the dial
+/// actually picks is *which decision the shoot takes away from the timer* —
+/// Holy Grail takes exposure, Scanner takes the firing itself.
+///
+/// **EVERY and MODE are not independent, and the dial says so rather than
+/// letting the pair go invalid:**
+///
+/// - **Auto appears only when MODE isn't Off** (see `everyPicker`).
+/// - **Scanner requires Auto**, because the scene sets the spacing. The fixed
+///   values stay visible but disabled under a header saying why: a greyed row
+///   that explains itself teaches the model, where a missing row just looks
+///   broken.
+/// - **Holy Grail works either way.** On Auto the ramp paces itself; on a fixed
+///   value the user has pinned the floor and the ramp manages exposure above
+///   it. Both are deliberate, so neither is disabled.
 struct IntervalDialsRow: View, Equatable {
     let intervalSeconds: Double
     let intervalOptions: [Double]
+    /// EVERY is on Auto — the mode paces the shoot itself.
+    let intervalIsAuto: Bool
     let blendDepth: BlendDepth
     let safeDepthAvailable: Bool
     let captionText: String?
-    /// Whether this platform can ramp at all — the Mac can't (no manual
-    /// exposure API), so the dial simply isn't there.
-    let rampAvailable: Bool
-    let holyGrail: Bool
+    /// Whether this platform has a MODE dial at all — the Mac doesn't (no
+    /// manual exposure API, no RAW), so it simply isn't drawn there.
+    let modeAvailable: Bool
+    let intervalMode: IntervalCaptureMode
     let onSelectInterval: (Double) -> Void
+    let onSelectAutoInterval: () -> Void
     let onSelectFixedBlend: (Int) -> Void
     let onSelectPsycho: () -> Void
     let onSelectSafe: () -> Void
-    let onSelectHolyGrail: (Bool) -> Void
+    let onSelectMode: (IntervalCaptureMode) -> Void
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.intervalSeconds == rhs.intervalSeconds
+            && lhs.intervalIsAuto == rhs.intervalIsAuto
             && lhs.blendDepth == rhs.blendDepth
             && lhs.safeDepthAvailable == rhs.safeDepthAvailable
             && lhs.captionText == rhs.captionText
-            && lhs.rampAvailable == rhs.rampAvailable
-            && lhs.holyGrail == rhs.holyGrail
+            && lhs.modeAvailable == rhs.modeAvailable
+            && lhs.intervalMode == rhs.intervalMode
             && lhs.intervalOptions == rhs.intervalOptions
     }
+
+    /// Scanner owns the spacing outright; the fixed pills grey out under it.
+    private var fixedIntervalsDisabled: Bool { intervalMode.requiresAutoInterval }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 everyPicker
-                if rampAvailable { rampPicker }
+                if modeAvailable { modePicker }
                 blendPicker
                 caption
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     everyPicker
-                    if rampAvailable { rampPicker }
+                    if modeAvailable { modePicker }
                 }
                 HStack(spacing: 8) {
                     blendPicker
@@ -118,33 +148,26 @@ struct IntervalDialsRow: View, Equatable {
         }
     }
 
-    /// The exposure-ramp dial. "Off" is a fixed exposure the whole way
-    /// through; "Holy Grail" hands shutter and ISO to the ramp so a shoot can
-    /// run from daylight into night in one take.
-    private var rampPicker: some View {
+    /// The MODE dial. "Off" is the plain timer shoot; "Holy Grail" hands
+    /// shutter and ISO to the ramp so a shoot can run from daylight into night
+    /// in one take; "Scanner" hands the shutter itself to the scene.
+    private var modePicker: some View {
         HStack(spacing: 8) {
-            DialCaption(text: "RAMP")
+            DialCaption(text: "MODE")
             Menu {
-                Button {
-                    onSelectHolyGrail(false)
-                } label: {
-                    if !holyGrail {
-                        Label("Off", systemImage: "checkmark")
-                    } else {
-                        Text("Off")
-                    }
-                }
-                Button {
-                    onSelectHolyGrail(true)
-                } label: {
-                    if holyGrail {
-                        Label("Holy Grail · day to night", systemImage: "checkmark")
-                    } else {
-                        Text("Holy Grail · day to night")
+                ForEach(IntervalCaptureMode.allCases) { option in
+                    Button {
+                        onSelectMode(option)
+                    } label: {
+                        if intervalMode == option {
+                            Label(option.menuLabel, systemImage: "checkmark")
+                        } else {
+                            Text(option.menuLabel)
+                        }
                     }
                 }
             } label: {
-                PickerMenuLabel(text: holyGrail ? "Holy Grail" : "Off")
+                PickerMenuLabel(text: intervalMode.chipLabel)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -155,69 +178,131 @@ struct IntervalDialsRow: View, Equatable {
         HStack(spacing: 8) {
             DialCaption(text: "EVERY")
             Menu {
-                ForEach(intervalOptions, id: \.self) { seconds in
+                // The inline reason, at the point of interaction: a header
+                // above the disabled rows, so the greying explains itself
+                // where it is met and not only in the caption below.
+                if fixedIntervalsDisabled {
+                    Section("Interval set by the scene") {
+                        fixedIntervalButtons
+                    }
+                } else {
+                    fixedIntervalButtons
+                }
+                // Auto is offered only by a mode that can pace itself. With
+                // MODE Off there is nothing for it to mean, so rather than
+                // showing a choice that then has to be rejected — or silently
+                // changing MODE under the user's hand, which is worse — the
+                // row simply isn't there.
+                if intervalMode.supportsAutoInterval {
+                    Divider()
                     Button {
-                        onSelectInterval(seconds)
+                        onSelectAutoInterval()
                     } label: {
-                        if intervalSeconds == seconds {
-                            Label(Self.intervalLabel(seconds), systemImage: "checkmark")
+                        if intervalIsAuto {
+                            Label(autoMenuLabel, systemImage: "checkmark")
                         } else {
-                            Text(Self.intervalLabel(seconds))
+                            Text(autoMenuLabel)
                         }
                     }
                 }
             } label: {
-                PickerMenuLabel(text: Self.intervalLabel(intervalSeconds))
+                PickerMenuLabel(text: intervalIsAuto ? "Auto" : Self.intervalLabel(intervalSeconds))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
     }
 
+    /// What Auto means depends on who is doing the pacing, so the row says
+    /// which rather than leaving the user to guess.
+    private var autoMenuLabel: String {
+        switch intervalMode {
+        case .scanner: return "Auto · when the scene stills"
+        case .holyGrail: return "Auto · the ramp paces itself"
+        case .off: return "Auto"
+        }
+    }
+
+    @ViewBuilder
+    private var fixedIntervalButtons: some View {
+        ForEach(intervalOptions, id: \.self) { seconds in
+            Button {
+                onSelectInterval(seconds)
+            } label: {
+                if !intervalIsAuto && intervalSeconds == seconds {
+                    Label(Self.intervalLabel(seconds), systemImage: "checkmark")
+                } else {
+                    Text(Self.intervalLabel(seconds))
+                }
+            }
+            .disabled(fixedIntervalsDisabled)
+        }
+    }
+
+    /// Every fixed count and both adaptive depths — except under Scanner,
+    /// where Phase 1 captures exactly one frame per pose and there is no
+    /// window to average over. Greyed with a header saying so, the same
+    /// treatment the fixed intervals get: a shoot whose dial claims a 10-frame
+    /// blend and then writes single frames would be lying, and hiding the dial
+    /// would just make Scanner look like a different screen.
     private var blendPicker: some View {
         HStack(spacing: 8) {
             DialCaption(text: "BLEND")
             Menu {
-                ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
-                    Button {
-                        onSelectFixedBlend(option.frames)
-                    } label: {
-                        if blendDepth == .fixed(option.frames) {
-                            Label(Self.blendOptionLabel(option), systemImage: "checkmark")
-                        } else {
-                            Text(Self.blendOptionLabel(option))
-                        }
-                    }
+                if intervalMode == .scanner {
+                    Section("One frame per pose in Scanner") { blendOptionButtons }
+                } else {
+                    blendOptionButtons
                 }
-                Divider()
-                Button {
-                    onSelectPsycho()
-                } label: {
-                    if blendDepth == .unthrottled {
-                        Label("Psycho · as many as it can", systemImage: "checkmark")
-                    } else {
-                        Text("Psycho · as many as it can")
-                    }
-                }
-                // Safe without a matching profile would be a guess; it stays
-                // disabled until Psycho runs have taught one for this
-                // pipeline, interval and thermal state.
-                Button {
-                    onSelectSafe()
-                } label: {
-                    if blendDepth == .throttled {
-                        Label("Safe · learned limit", systemImage: "checkmark")
-                    } else {
-                        Text("Safe · learned limit")
-                    }
-                }
-                .disabled(!safeDepthAvailable)
             } label: {
-                PickerMenuLabel(text: menuLabel)
+                PickerMenuLabel(text: intervalMode == .scanner ? "Off" : menuLabel)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
         }
+    }
+
+    @ViewBuilder
+    private var blendOptionButtons: some View {
+        Group {
+            ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
+                Button {
+                    onSelectFixedBlend(option.frames)
+                } label: {
+                    if blendDepth == .fixed(option.frames) {
+                        Label(Self.blendOptionLabel(option), systemImage: "checkmark")
+                    } else {
+                        Text(Self.blendOptionLabel(option))
+                    }
+                }
+            }
+            Divider()
+            Button {
+                onSelectPsycho()
+            } label: {
+                if blendDepth == .unthrottled {
+                    Label("Psycho · as many as it can", systemImage: "checkmark")
+                } else {
+                    Text("Psycho · as many as it can")
+                }
+            }
+            // Safe without a matching profile would be a guess; it stays
+            // disabled until Psycho runs have taught one for this
+            // pipeline, interval and thermal state.
+            Button {
+                onSelectSafe()
+            } label: {
+                if blendDepth == .throttled {
+                    Label("Safe · learned limit", systemImage: "checkmark")
+                } else {
+                    Text("Safe · learned limit")
+                }
+            }
+            .disabled(!safeDepthAvailable)
+        }
+        // Scanner takes one frame per pose, so none of the above is a choice
+        // it can honour.
+        .disabled(intervalMode == .scanner)
     }
 
     /// The trailing caption only makes sense while blending; the adaptive
@@ -246,6 +331,63 @@ struct IntervalDialsRow: View, Equatable {
 
     private static func intervalLabel(_ seconds: Double) -> String {
         seconds == floor(seconds) ? "\(Int(seconds)) s" : String(format: "%.1f s", seconds)
+    }
+}
+
+/// Scanner's paper dial: what shape the flat thing in front of the camera
+/// really is, for the perspective correction taken later.
+///
+/// ```
+/// PAPER:  Auto · A4 · Letter · 4×6 · Square
+/// ```
+///
+/// A pill row rather than a menu, and it is the only dial on this screen that
+/// is: the values are few, short and worth comparing at a glance, and unlike
+/// EVERY or BLEND this one is set once for a stack of documents rather than
+/// tuned between shots.
+///
+/// **It changes nothing about the capture.** Every frame is shot and written
+/// exactly the same way whatever this says; the hint is recorded intent, spent
+/// at export when the corners in the sidecar are turned into a rectified sibling
+/// (see `PerspectiveCorrector`). Auto is the default and means "whatever shape
+/// the detected quad implies" — the honest answer for an object whose
+/// proportions nobody has promised.
+struct ScannerAspectRow: View, Equatable {
+    let aspect: PerspectiveAspect
+    let onSelect: (PerspectiveAspect) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.aspect == rhs.aspect }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            DialCaption(text: "PAPER")
+            HStack(spacing: 6) {
+                ForEach(PerspectiveAspect.allCases, id: \.self) { option in
+                    let isSelected = option == aspect
+                    Button {
+                        onSelect(option)
+                    } label: {
+                        Text(option.label)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(isSelected ? LL.amber : .white.opacity(0.6))
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 5)
+                            .background(
+                                Capsule().fill(
+                                    isSelected
+                                        ? LL.amber.opacity(0.18)
+                                        : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9))
+                            )
+                            .overlay(
+                                Capsule().stroke(
+                                    isSelected ? LL.amber.opacity(0.8) : .clear, lineWidth: 1)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Correct to \(option.label)")
+                }
+            }
+        }
     }
 }
 

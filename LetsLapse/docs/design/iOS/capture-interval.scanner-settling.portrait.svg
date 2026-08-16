@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (Scanner running, settling) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (scannerReadout, scannerStateText, scannerStateTint) over CameraController.ScannerState in the disturbed phase, with App/ScannerEngine.swift behind it. The other half of the Scanner loop, and the only visible difference from the settled variant is the state line: amber "Settling…" instead of green "Waiting for you to move". That is deliberate — the operator's hand is in frame right now and they are not reading the screen, so nothing else moves and no layout reflows under them. The engine is in `disturbed`: motion has crossed the threshold, and it will fire the moment the scene has read as still for the full settle delay (1.0 s, anchored in WALL-CLOCK time rather than a frame count, because preview frames arrive at whatever rate the light allows and "still for 30 frames" means something different every time the light changes). The count and the ring do not move during this phase — the pose is not banked until the shutter fires — which is precisely why the click, not the pixels, is the confirmation. Two signals must agree before a frame is taken: the scene must be still (frame differencing over a 64×48 luma grid) AND the device must be steady (SteadinessMonitor); a still scene shot from a drifting phone is a blurred frame a solver will accept and then reconstruct badly, and the scene difference cannot see it because the whole frame moves together. When the device vetoes, this line reads red "Hold the phone still" instead. Reachable off-device only through LL_SCANNER=disturbed with LL_CAPTURE=1. Positions on the same grid as capture-interval.scanner.portrait.svg. iOS/iPadOS only.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A2A2E"/><stop offset="0.7" stop-color="#1A1A1D"/><stop offset="1" stop-color="#121214"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}.r{font-family:ui-rounded,-apple-system,sans-serif}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder: the same 4:3 sensor frame, mid-disturbance — the object
+           part-turned with the operator's hand still in shot. This is what the
+           engine is differencing against the previous frame. -->
+      <g id="viewfinder">
+        <rect x="0" y="86" width="393" height="440" fill="url(#table)"/>
+        <ellipse cx="196" cy="430" rx="150" ry="34" fill="#0E0E10"/>
+        <ellipse cx="196" cy="424" rx="150" ry="34" fill="#232327"/>
+        <path d="M150 424 L164 300 Q196 268 228 300 L242 424 Z" fill="#4A4038"/>
+        <path d="M150 424 L164 300 Q180 284 196 282 L196 424 Z" fill="#5C5046"/>
+        <ellipse cx="196" cy="424" rx="46" ry="11" fill="#3A322C"/>
+        <ellipse cx="196" cy="284" rx="32" ry="8" fill="#6B5C50"/>
+        <!-- the hand, withdrawing -->
+        <g id="hand" opacity="0.92">
+          <path d="M300 526 L300 400 Q300 378 316 378 Q330 378 330 398 L330 356 Q330 338 345 338 Q359 338 359 356 L359 366 Q359 348 373 348 Q386 348 386 366 L386 380 Q386 364 393 364 L393 526 Z" fill="#8A6A52"/>
+          <path d="M300 452 Q262 442 258 418 Q256 404 268 406 Q280 410 300 428 Z" fill="#8A6A52"/>
+        </g>
+      </g>
+
+      <!-- top bar -->
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <rect x="198" y="70" width="179" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="212" y="92" font-size="13" class="sb" fill="#FFF">12MP 4:3</text>
+          <text x="274" y="92" font-size="13" class="sb" fill="#FFB340">· DNG</text>
+          <g data-symbol="lock.fill" opacity="0.4">
+            <rect x="353" y="86" width="12" height="9" rx="2" fill="#FFFFFF"/>
+            <path d="M355.5 86 v-3 a3.5 3.5 0 0 1 7 0 v3" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- Scanner HUD, disturbed. Count and ring are UNCHANGED from the
+           settled variant: the pose is not banked until the shutter fires. -->
+      <g id="scanner-hud">
+        <rect x="12" y="596" width="318" height="114" rx="12" fill="#000" opacity="0.5"/>
+        <text x="24" y="646" font-size="44" class="b r" fill="#FFF">12</text>
+        <text x="80" y="646" font-size="17" class="sb r" fill="#FFF" opacity="0.45">/ 36</text>
+        <!-- the one thing that changes between the two Scanner variants -->
+        <text x="124" y="646" font-size="13" class="sb" fill="#FFB340">Settling…</text>
+        <text x="24" y="672" font-size="10.5" class="m" fill="#FFF" opacity="0.6">1/120 · ISO 200 · locked · RAW</text>
+        <g id="delete-last" data-symbol="arrow.uturn.backward">
+          <rect x="24" y="682" width="112" height="22" rx="11" fill="#FFF" opacity="0.14"/>
+          <path d="M36 691 h7 a3.5 3.5 0 0 1 0 7 h-2 M36 691 l3.5 -3.5 M36 691 l3.5 3.5" stroke="#FFF" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="52" y="697" font-size="12" class="sb" fill="#FFF">Delete last</text>
+        </g>
+      </g>
+
+      <!-- shutter row -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#2E2A26"/>
+            <ellipse cx="46" cy="772" rx="24" ry="6" fill="#3A322C"/>
+            <path d="M34 772 L38 746 Q46 740 54 746 L58 772 Z" fill="#4A4038"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <g id="grid-toggle" data-symbol="grid.circle">
+          <circle cx="108" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
+        </g>
+        <g id="exposure-lock" data-symbol="lock.fill">
+          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <rect x="101" y="783" width="14" height="11" rx="2.5" fill="#FFB340"/>
+          <path d="M104 783 v-4 a4 4 0 0 1 8 0 v4" fill="none" stroke="#FFB340" stroke-width="1.8"/>
+        </g>
+        <g id="shutter" data-symbol="stop button + pose ring">
+          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <path d="M196.5 720 A 38 38 0 0 1 229.4 777" fill="none" stroke="#FFB340" stroke-width="4" stroke-linecap="round"/>
+          <rect x="180.5" y="742" width="32" height="32" rx="8" fill="#FF3B30"/>
+        </g>
+        <g id="delay-toggle" data-symbol="timer">
+          <circle cx="285" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="285" cy="733" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
+          <path d="M285 733 v-6 M282 723 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
+        </g>
+        <g id="steady-toggle" data-symbol="hand.raised">
+          <circle cx="285" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M280 789 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (Scanner running, settling) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — scannerReadout, disturbed phase · LL_SCANNER=disturbed</text>
+</svg>

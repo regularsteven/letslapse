@@ -30,6 +30,7 @@ struct WatchControlView: View {
     @State private var recordingTab: RecordingTab = .burst
     @State private var showIntervalPicker = false
     @State private var showFramesPicker = false
+    @State private var showIntervalModePicker = false
     @State private var showBasePicker = false
     @State private var showBurstPicker = false
     @State private var showStopAtSheet = false
@@ -178,12 +179,13 @@ struct WatchControlView: View {
         .onChange(of: remote.recordingState) { _ in
             recordingTab = .burst
         }
-        #if os(watchOS) && DEBUG
+        #if DEBUG && (os(watchOS) || os(macOS))
         // The screenshot hook names a screen; the tab it lives on is the
         // view's business, not the remote's.
         .onAppear {
             switch remote.debugPreviewScreen {
-            case "controls", "armed-setup", "armed-setup-marks": recordingTab = .controls
+            case "controls", "armed-setup", "armed-setup-marks",
+                 "holygrail", "scanner-armed": recordingTab = .controls
             case "stop": recordingTab = .stop
             case "locked": engageLock()
             case "unlocking":
@@ -217,15 +219,28 @@ struct WatchControlView: View {
     /// a lot of new code for a window nobody swipes. The Mac gets the same
     /// screens behind a segmented header — the same split `CrownAdjustment`
     /// already makes for crown-versus-scroll-wheel.
+    ///
+    /// **The builder takes the tab and returns ONE screen**, rather than taking
+    /// a tuple of pre-tagged screens. That signature is the fix for a real bug,
+    /// not a tidy-up: with a tuple, the macOS branch dropped its children
+    /// straight into a `VStack`, which renders *all* of them. Every Mac remote
+    /// screen was therefore drawing all three tabs stacked — burst pad, then
+    /// the controls rows, then the stop slider — inside a 248 pt canvas, which
+    /// overflowed hard enough to push the header off the top of the window. The
+    /// tags did nothing there because nothing was reading them; only watchOS's
+    /// `TabView` ever consumed them. Asking for one tab at a time makes the
+    /// stacking unrepresentable on both platforms.
     @ViewBuilder
     private func paged<Content: View>(
         selection: Binding<RecordingTab>,
         labels: [(RecordingTab, String)],
-        @ViewBuilder content: () -> Content
+        @ViewBuilder content: @escaping (RecordingTab) -> Content
     ) -> some View {
         #if os(watchOS)
         TabView(selection: selection) {
-            content()
+            ForEach(labels, id: \.0) { tab, _ in
+                content(tab).tag(tab)
+            }
         }
         .tabViewStyle(.page)
         #else
@@ -249,7 +264,7 @@ struct WatchControlView: View {
                 }
             }
             .padding(.horizontal, RemoteMetric.gutter)
-            content()
+            content(selection.wrappedValue)
         }
         #endif
     }
@@ -270,10 +285,12 @@ struct WatchControlView: View {
             paged(
                 selection: $recordingTab,
                 labels: [(.burst, burstTabLabel), (.controls, "Set"), (.stop, "End")]
-            ) {
-                burstTab.tag(RecordingTab.burst)
-                controlsTab.tag(RecordingTab.controls)
-                stopTab.tag(RecordingTab.stop)
+            ) { tab in
+                switch tab {
+                case .burst: burstTab
+                case .controls: controlsTab
+                case .stop: stopTab
+                }
             }
             // Covers the pager, not the header: the run's identity stays
             // readable while you deal with the failure, and the card can be
@@ -351,7 +368,20 @@ struct WatchControlView: View {
                 timedBurstRow
             } else {
                 captureCountPanel.layoutPriority(1)
-                exposureLockRow
+                // A Scanner run has already taken AE/AF/WB for itself, so the
+                // lock row would offer something that is not on offer. What
+                // belongs in that slot instead is the one Scanner control that
+                // isn't start or stop — and the one most worth having at a
+                // distance, since the operator is at the object and the pose
+                // that needs re-shooting is still in front of them.
+                if remote.scanner != nil {
+                    deleteLastFrameRow
+                } else {
+                    if let ramp = remote.holyGrail {
+                        rampReadoutRow(ramp)
+                    }
+                    exposureLockRow
+                }
             }
             Spacer(minLength: 0)
         }
@@ -458,14 +488,16 @@ struct WatchControlView: View {
     /// the number that is actually changing.
     private var captureCountPanel: some View {
         VStack(spacing: 2) {
-            Text("\(remote.captureCount)")
+            Text("\(countPanelValue)")
                 .font(RemoteType.hero.monospacedDigit())
                 .foregroundStyle(RemoteTint.burst)
                 .lineLimit(1)
                 .minimumScaleFactor(0.6)
-            Text(remote.blendDepth.blends ? "blends" : "photos")
+            Text(countPanelCaption)
                 .font(RemoteType.caption)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(countPanelCaptionTint)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity)
         .frame(height: RemoteMetric.padHeight)
@@ -473,6 +505,104 @@ struct WatchControlView: View {
             RoundedRectangle(cornerRadius: RemoteMetric.padCorner, style: .continuous)
                 .fill(RemoteTint.surface)
         )
+    }
+
+    /// Scanner counts its own poses. It is deliberately NOT read off
+    /// `captureCount`: the two can disagree for a moment after a "Delete last",
+    /// and on the one screen where the number is the entire interface the
+    /// authoritative one has to win.
+    private var countPanelValue: Int {
+        remote.scanner?.frames ?? remote.captureCount
+    }
+
+    /// The caption doubles as Scanner's state line — it is the only phrase on
+    /// the remote that says whose turn it is.
+    private var countPanelCaption: String {
+        if let scan = remote.scanner {
+            if scan.waitingForDeviceSteady { return "hold still" }
+            return scan.isSettling ? "settling…" : "your move"
+        }
+        return remote.blendDepth.blends ? "blends" : "photos"
+    }
+
+    private var countPanelCaptionTint: Color {
+        guard let scan = remote.scanner else { return .secondary }
+        if scan.waitingForDeviceSteady { return RemoteTint.record }
+        return scan.isSettling ? RemoteTint.warn : RemoteTint.go
+    }
+
+    /// The ramp's live pair, plus the two facts that decide whether to keep
+    /// shooting: ISO has started carrying it, or the scene has outrun the
+    /// sensor. One line, because that is all the room there is — and because
+    /// the exposure is the headline and the flags are the exception.
+    private func rampReadoutRow(_ ramp: WatchCaptureRemote.HolyGrailReadout) -> some View {
+        VStack(spacing: 1) {
+            // %.0f, never an Int interpolation: SwiftUI's `Text` group-
+            // separates an interpolated number by locale, so the ramp read
+            // "ISO 1 250" — which scans as two values in a monospaced
+            // technical line. The phone's own readout dodges this the same
+            // way; the two must not disagree about one number.
+            Text("\(remoteShutterLabel(ramp.shutterSeconds)) · ISO \(String(format: "%.0f", ramp.iso))")
+                .font(RemoteType.control.monospacedDigit())
+                .foregroundStyle(.white)
+            Text(rampStatusLine(ramp))
+                .font(RemoteType.caption)
+                .foregroundStyle(rampStatusTint(ramp))
+        }
+        .lineLimit(1)
+        .minimumScaleFactor(0.7)
+        .frame(maxWidth: .infinity, minHeight: RemoteMetric.rowHeight)
+        .background(RemoteTint.surface, in: RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous))
+    }
+
+    private func rampStatusLine(_ ramp: WatchCaptureRemote.HolyGrailReadout) -> String {
+        if ramp.isClipped { return "past the sensor's limit" }
+        if ramp.isISORamping { return "shutter at max · ISO ramping" }
+        return String(format: "scene EV %.1f", ramp.sceneEV)
+    }
+
+    private func rampStatusTint(_ ramp: WatchCaptureRemote.HolyGrailReadout) -> Color {
+        if ramp.isClipped { return RemoteTint.record }
+        return ramp.isISORamping ? RemoteTint.warn : .secondary
+    }
+
+    /// Fractional above 1/2 s, decimal below — the same reading the phone's own
+    /// readout gives, so the two surfaces never describe one exposure two ways.
+    private func remoteShutterLabel(_ seconds: Double) -> String {
+        guard seconds > 0 else { return "—" }
+        if seconds >= 0.5 { return String(format: "%.1fs", seconds) }
+        return "1/\(Int((1 / seconds).rounded()))"
+    }
+
+    /// Names the mode a run is in, and what it is writing. Small and quiet: the
+    /// operator already knows what they started — this is the line that
+    /// confirms the camera agrees, which over a link to a tripod across a field
+    /// is not a given.
+    private func runModeCaption(_ text: String) -> some View {
+        Text(text)
+            .font(RemoteType.caption)
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
+            .frame(maxWidth: .infinity)
+    }
+
+    /// Throws away the pose just taken without ending the scan.
+    private var deleteLastFrameRow: some View {
+        Button {
+            remote.deleteLastFrame()
+        } label: {
+            Label("Delete last", systemImage: "arrow.uturn.backward")
+                .font(RemoteType.control)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .frame(maxWidth: .infinity, minHeight: RemoteMetric.rowHeight)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(RemoteTint.surface, in: RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous))
+        .disabled(remote.isSending || !remote.isReachable || (remote.scanner?.frames ?? 0) == 0)
     }
 
     /// The armed burst length — a setting, not a trigger. One chip may be
@@ -529,6 +659,17 @@ struct WatchControlView: View {
                 burstRateLadder
             } else if isMarkerMode {
                 markerModeNote
+            } else if let ramp = remote.holyGrail {
+                // A running MODE refuses every setting on this tab — the phone
+                // gates them on `!isCapturing` — so showing them would be
+                // showing controls that do nothing. The ramp's own numbers are
+                // what a Holy Grail operator is here for anyway: this is the
+                // screen you check to decide whether to stop the shoot.
+                rampReadoutRow(ramp)
+                runModeCaption("Holy Grail\(ramp.isCapturingRAW ? " · RAW" : "")")
+            } else if let scan = remote.scanner {
+                deleteLastFrameRow
+                runModeCaption("Scanner\(scan.isCapturingRAW ? " · RAW" : "") · \(remoteShutterLabel(scan.shutterSeconds)) · ISO \(String(format: "%.0f", scan.iso))")
             } else {
                 intervalRow
                 framesRow
@@ -1167,9 +1308,14 @@ struct WatchControlView: View {
             paged(
                 selection: armedTabBinding,
                 labels: [(.burst, "Ready"), (.controls, "Setup")]
-            ) {
-                armedScreen.tag(RecordingTab.burst)
-                armedControlsScreen.tag(RecordingTab.controls)
+            ) { tab in
+                // `.stop` never appears here (see `armedTabBinding`), so it
+                // shares the Ready screen rather than needing a case that can't
+                // be reached.
+                switch tab {
+                case .controls: armedControlsScreen
+                case .burst, .stop: armedScreen
+                }
             }
         }
     }
@@ -1292,8 +1438,16 @@ struct WatchControlView: View {
         ScrollView {
             VStack(spacing: RemoteMetric.rowGap) {
                 if remote.captureMode == .interval {
+                    // MODE first: it governs the two below it (Scanner pins
+                    // EVERY to Auto and takes BLEND out of play), and this is
+                    // the row that makes a Holy Grail or Scanner shoot
+                    // startable from a Mac without touching the camera.
+                    intervalModeRow
                     intervalRow
-                    framesRow
+                    if remote.intervalMode != .scanner {
+                        // One frame per pose in Scanner — nothing to average.
+                        framesRow
+                    }
                 } else {
                     // Ramp or marker has to be chosen HERE, before the run:
                     // the phone bakes the mode into the sequence at start, so
@@ -1405,15 +1559,69 @@ struct WatchControlView: View {
         }
     }
 
+    /// Interval's MODE dial on the wrist and on the Mac — the row that makes a
+    /// Holy Grail or Scanner shoot reachable without walking to the camera.
+    ///
+    /// Idle-only, because the phone refuses it under a live run: both modes
+    /// reconfigure the session for RAW at start and Scanner adds a preview tap,
+    /// neither of which can happen mid-shoot. It sits above Every/Blend because
+    /// it governs them — picking Scanner pins EVERY to Auto and takes BLEND out
+    /// of play, and seeing the row that caused that immediately above is what
+    /// makes it read as a consequence rather than a glitch.
+    private var intervalModeRow: some View {
+        Button {
+            showIntervalModePicker = true
+        } label: {
+            HStack {
+                Text("Mode")
+                    .font(RemoteType.control)
+                Spacer(minLength: 4)
+                Text(remote.intervalMode.chipLabel)
+                    .font(RemoteType.control)
+                    .foregroundStyle(remote.intervalMode == .off ? .secondary : RemoteTint.burst)
+            }
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+            .padding(.horizontal, 10)
+            .frame(maxWidth: .infinity, minHeight: RemoteMetric.rowHeight)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(RemoteTint.surface, in: RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous))
+        .disabled(remote.isSending || !remote.isReachable)
+        .sheet(isPresented: $showIntervalModePicker) {
+            List(IntervalCaptureMode.allCases) { option in
+                Button {
+                    remote.setIntervalMode(option)
+                    showIntervalModePicker = false
+                } label: {
+                    HStack {
+                        Text(option.chipLabel)
+                        Spacer()
+                        if remote.intervalMode == option {
+                            Image(systemName: "checkmark")
+                                .foregroundStyle(RemoteTint.burst)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     private var intervalRow: some View {
         Button {
+            // Scanner's spacing is the scene's, so there is nothing to pick.
+            // The row stays visible reading "Auto" rather than disappearing —
+            // a control that vanishes reads as a bug, one that is greyed and
+            // states its value reads as an explanation.
+            guard !remote.intervalMode.requiresAutoInterval else { return }
             showIntervalPicker = true
         } label: {
             HStack {
                 Text("Every")
                     .font(RemoteType.control)
                 Spacer(minLength: 4)
-                Text(intervalLabel(remote.intervalSeconds))
+                Text(remote.intervalAuto ? "Auto" : intervalLabel(remote.intervalSeconds))
                     .font(RemoteType.control)
                     .foregroundStyle(RemoteTint.burst)
             }
@@ -1425,19 +1633,40 @@ struct WatchControlView: View {
         }
         .buttonStyle(.plain)
         .background(RemoteTint.surface, in: RoundedRectangle(cornerRadius: RemoteMetric.rowCorner, style: .continuous))
-        .disabled(remote.isSending || !remote.isReachable)
+        .opacity(remote.intervalMode.requiresAutoInterval ? 0.5 : 1)
+        .disabled(remote.isSending || !remote.isReachable
+                  || remote.intervalMode.requiresAutoInterval)
         .sheet(isPresented: $showIntervalPicker) {
-            List(intervalOptions, id: \.self) { seconds in
-                Button {
-                    remote.setIntervalSeconds(seconds)
-                    showIntervalPicker = false
-                } label: {
-                    HStack {
-                        Text(intervalLabel(seconds))
-                        Spacer()
-                        if remote.intervalSeconds == seconds {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(RemoteTint.burst)
+            List {
+                // Only a mode that can pace itself offers Auto, matching the
+                // phone's own dial — the rule lives there and this mirrors it.
+                if remote.intervalMode.supportsAutoInterval {
+                    Button {
+                        remote.setAutoInterval(true)
+                        showIntervalPicker = false
+                    } label: {
+                        HStack {
+                            Text("Auto")
+                            Spacer()
+                            if remote.intervalAuto {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(RemoteTint.burst)
+                            }
+                        }
+                    }
+                }
+                ForEach(intervalOptions, id: \.self) { seconds in
+                    Button {
+                        remote.setIntervalSeconds(seconds)
+                        showIntervalPicker = false
+                    } label: {
+                        HStack {
+                            Text(intervalLabel(seconds))
+                            Spacer()
+                            if !remote.intervalAuto, remote.intervalSeconds == seconds {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(RemoteTint.burst)
+                            }
                         }
                     }
                 }
@@ -1778,7 +2007,18 @@ struct WatchControlView: View {
         if remote.isBulbMode {
             return remote.blendDepth == .fixed(1) ? "Bulb · single frame" : "Bulb · long exposure"
         }
-        let every = "every \(intervalLabel(remote.intervalSeconds))"
+        // Scanner has no spacing at all — the scene decides — so naming one
+        // would be inventing a number the camera is not using.
+        if remote.scanner != nil {
+            return "Scanner · when the scene stills"
+        }
+        // Under Auto the ramp paces itself, and `intervalSeconds` reports where
+        // the pacing has ARRIVED rather than anything anyone chose. Saying
+        // "auto" first is what keeps that honest — the number is an
+        // observation, not a setting.
+        let every = remote.intervalAuto
+            ? "auto · \(intervalLabel(remote.intervalSeconds))"
+            : "every \(intervalLabel(remote.intervalSeconds))"
         switch remote.blendDepth {
         case .fixed(1): return every
         case .fixed(let frames): return "\(every) · \(frames) fr"

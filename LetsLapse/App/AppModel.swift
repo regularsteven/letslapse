@@ -39,6 +39,13 @@ final class AppModel: ObservableObject {
     /// captures across launches (persisted in the manifest via `mode`).
     static let photoCaptureMode = "Photo"
 
+    /// The `mode` line a Scanner shoot registers with — written by
+    /// `CaptureView.intervalSourceModeName`, and the back-stop that identifies
+    /// Scanner projects registered before `CaptureProject.captureMode` existed.
+    /// If the display string is ever reworded, the stored mode carries on
+    /// working and only pre-existing projects fall through to the sidecar.
+    static let scannerCaptureMode = "Interval · Scanner"
+
     enum CaptureKind: String, Codable {
         case video
         case photos
@@ -54,6 +61,22 @@ final class AppModel: ObservableObject {
     enum BlendKind: String, Codable {
         case video
         case image
+    }
+
+    /// The capture mode a project came out of, where the library has to tell
+    /// one *photo sequence* from another long after the fact.
+    ///
+    /// `CaptureKind` says video-or-photos and `mode` is a display string
+    /// ("Interval · Scanner") that exists to be read by a human — neither is
+    /// something to branch a whole screen on. This is: a small closed set,
+    /// written at registration, that survives into the sidecar-free future
+    /// where the mode line might be reworded.
+    ///
+    /// Only Scanner today, because Scanner is the only mode whose *output* is a
+    /// different kind of thing: a set of individually-composed frames for
+    /// export, where every other photo shoot is material for a blend.
+    enum CaptureProjectMode: String, Codable {
+        case scanner
     }
 
     enum MediaKind: Hashable {
@@ -162,6 +185,24 @@ final class AppModel: ObservableObject {
         /// through `AppModel.existingImport(of:)`, which is what catches a
         /// second double-click on an archive already in the library.
         var importedFromID: UUID?
+        /// The capture mode this project came out of (`CaptureProjectMode`),
+        /// when it is one the app routes on. Optional in both directions:
+        /// absent for everything registered before it existed and for every
+        /// mode that doesn't need it, which is why the reader is
+        /// `AppModel.isScannerProject(_:)` — it falls back to the sidecar for
+        /// the Scanner shoots that predate this field.
+        var captureMode: String?
+
+        /// A Scanner shoot, said outright by the project itself. The stored
+        /// field first; the display string second, which catches every Scanner
+        /// project registered between the mode shipping and this field
+        /// existing. Anything older still is caught by the sidecar heuristic in
+        /// `AppModel.isScannerProject(_:)` — don't read this property directly
+        /// when routing.
+        var isScannerCapture: Bool {
+            if captureMode == CaptureProjectMode.scanner.rawValue { return true }
+            return kind == .photos && mode == AppModel.scannerCaptureMode
+        }
 
         var summary: String {
             switch kind {
@@ -199,6 +240,10 @@ final class AppModel: ObservableObject {
             }
             let stamp = createdAt.formatted(.dateTime.day().month(.abbreviated).hour().minute())
             if isPhotoCapture { return "Photo \(stamp)" }
+            // "Stack" is the wrong noun for a Scanner set — nothing about it is
+            // going to be stacked, and the title is the one place the library
+            // names what a project IS.
+            if isScannerCapture { return "Scan \(stamp)" }
             return kind == .photos ? "Stack \(stamp)" : "Capture \(stamp)"
         }
 
@@ -216,7 +261,12 @@ final class AppModel: ObservableObject {
                 return parts.joined(separator: " · ")
             case .photos:
                 // A Photo-mode capture is one photo — never a frame count.
-                return isPhotoCapture ? "Photo" : "Interval · \(sourceMediaCount) photos"
+                if isPhotoCapture { return "Photo" }
+                // And a Scanner set is not an interval shoot: nothing about it
+                // was paced by a timer, and its frames are poses rather than
+                // photos of a scene.
+                if isScannerCapture { return "Scan · \(sourceMediaCount) frames" }
+                return "Interval · \(sourceMediaCount) photos"
             }
         }
 
@@ -756,6 +806,11 @@ final class AppModel: ObservableObject {
     /// When the current tail stage (stitch/grade export) began, for its ETA.
     private var tailPhaseStartedAt: Date?
 
+    /// Memo for `isScannerProject`'s last-resort sidecar read, keyed by project.
+    /// Not published: it answers a question about files on disk, and a project
+    /// does not stop being a Scanner shoot while anyone is looking.
+    private var scannerSidecarCache: [UUID: Bool] = [:]
+
     /// Set by screens that want the Projects tab to open a specific project
     /// (e.g. Result → Done). ContentView consumes and clears it.
     @Published var requestedProjectDetailID: UUID?
@@ -887,6 +942,86 @@ final class AppModel: ObservableObject {
         return capture.sourceFileNames
             .filter { !$0.hasSuffix(".json") }
             .map { root.appendingPathComponent($0) }
+    }
+
+    // MARK: - Scanner projects
+
+    /// Whether this project came out of a Scanner shoot, and should therefore
+    /// be presented as a set of frames to export rather than as a timelapse to
+    /// blend.
+    ///
+    /// Three answers in decreasing order of confidence, which is the whole
+    /// design: the stored `captureMode`, then the mode line, then — for a
+    /// project registered before either could say so, or imported from a device
+    /// that was — the sidecar. A Scanner run is the only thing in the app that
+    /// writes a `rectangle` into `frames.timestamps`, so one entry carrying one
+    /// is proof; the absence of them is not a disproof, which is why this is
+    /// the last resort rather than the test.
+    ///
+    /// Answered synchronously because it decides which screen to build, and
+    /// cached because a view body asks per redraw. The read behind the cache is
+    /// one small NDJSON file, and only for photo projects that actually have
+    /// one.
+    func isScannerProject(_ capture: CaptureProject) -> Bool {
+        if capture.isScannerCapture { return true }
+        guard capture.kind == .photos, !capture.isPhotoCapture else { return false }
+        if let known = scannerSidecarCache[capture.id] { return known }
+        let found = scannerSidecar(for: capture)?.entries.contains { $0.rectangle != nil } ?? false
+        scannerSidecarCache[capture.id] = found
+        return found
+    }
+
+    /// The per-frame capture record beside a photo project's frames, or nil
+    /// when the shoot didn't write one (every interval shoot before Holy Grail
+    /// and Scanner existed).
+    func scannerSidecar(for capture: CaptureProject) -> FrameTimestamps? {
+        let url = captureFolderURL(for: capture.id)
+            .appendingPathComponent("source/\(FrameTimestamps.fileName)")
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try? FrameTimestamps.load(from: url)
+    }
+
+    /// The human-viewable file for one pose, best first: the rectified
+    /// `-corrected.heic` where the correction has been run, then the processed
+    /// sibling a RAW pose was shot with, and finally the frame itself — which
+    /// on the no-RAW fallback *is* the processed still, and on a RAW pose is a
+    /// DNG the thumbnail pipeline can still decode (slowly).
+    ///
+    /// `frameNumber` is 1-based, matching the file names.
+    func scannerViewableURL(for capture: CaptureProject, frameNumber: Int) -> URL? {
+        let sourceFolder = captureFolderURL(for: capture.id).appendingPathComponent("source")
+        let base = String(format: "frame-%05d", frameNumber)
+        let candidates = ["\(base)\(PerspectiveCorrector.correctedSuffix).heic"]
+            + ["heic", "jpg", "jpeg"].map { "\(base).\($0)" }
+        for name in candidates {
+            let url = sourceFolder.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        let frames = sourceFrameURLs(for: capture)
+        guard frames.indices.contains(frameNumber - 1) else { return nil }
+        return frames[frameNumber - 1]
+    }
+
+    /// Whether a rectified sibling exists for this pose — what makes the
+    /// difference between "Export frames" shipping corrected pages and shipping
+    /// the photographs they were rectified from.
+    func scannerCorrectedURL(for capture: CaptureProject, frameNumber: Int) -> URL? {
+        let url = captureFolderURL(for: capture.id)
+            .appendingPathComponent("source")
+            .appendingPathComponent(
+                String(format: "frame-%05d%@.heic", frameNumber, PerspectiveCorrector.correctedSuffix))
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+    }
+
+    /// Drops what `isScannerProject` remembers about a project, after anything
+    /// that could change the answer (a correction pass writing new files, a
+    /// project going away).
+    func invalidateScannerCache(for id: UUID? = nil) {
+        if let id {
+            scannerSidecarCache.removeValue(forKey: id)
+        } else {
+            scannerSidecarCache.removeAll()
+        }
     }
 
     /// The individual source video segments backing a capture. Live sequences
@@ -1330,6 +1465,124 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
+    /// `LL_PROJECT_SCANNER` screenshot hook: a whole Scanner shoot, fabricated.
+    ///
+    /// It exists for the same reason every other Scanner hook does, one step
+    /// further downstream. A Scanner project cannot be reached on a simulator
+    /// by any amount of tapping — there is no camera to difference frames from,
+    /// no scene to disturb and nothing flat to find a rectangle in — so the
+    /// screen that presents the finished set has no way to be seen, let alone
+    /// mirrored against its SVG.
+    ///
+    /// The fake goes in through the **real** registration path, deliberately: a
+    /// staging directory of numbered stills and a `frames.timestamps` written
+    /// the way the camera writes it, handed to `setSource`. So it exercises the
+    /// sidecar copy, the `captureMode` stamp and the sibling handling rather
+    /// than sidestepping them, and the resulting project is a real one — the
+    /// perspective correction runs on it, and deleting it deletes files.
+    ///
+    /// The corners are left **uncorrected** by default: that is the state a
+    /// shoot ends in, and the one the Correct-perspective action exists for.
+    /// `corrected: true` runs that same action's `correctSequence` call on the
+    /// way in, for the other half of the screen's life.
+    @discardableResult
+    func debugSeedScannerProject(poses: Int = 12, corrected: Bool = false) -> UUID? {
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("scanner-demo-\(UUID().uuidString)", isDirectory: true)
+        guard (try? FileManager.default.createDirectory(
+            at: staging, withIntermediateDirectories: true)) != nil else { return nil }
+        guard let writer = FrameTimestampWriter(directory: staging) else { return nil }
+
+        var urls: [URL] = []
+        let start = Date().addingTimeInterval(-Double(poses) * 6)
+        for index in 0..<poses {
+            // The page drifts a little between poses, the way a real hand
+            // leaves it, so the grid doesn't read as twelve copies of one file.
+            let drift = Double(index) * 0.004
+            let quad = NormalizedQuad(
+                topLeft: .init(x: 0.185 + drift, y: 0.815 - drift / 2),
+                topRight: .init(x: 0.826 + drift, y: 0.833),
+                bottomLeft: .init(x: 0.122 + drift, y: 0.196),
+                bottomRight: .init(x: 0.884 + drift, y: 0.181 + drift / 2),
+                confidence: 0.9)
+            let url = staging.appendingPathComponent(String(format: "frame-%05d.jpg", index + 1))
+            guard Self.writeDemoScannerFrame(quad: quad, number: index + 1, to: url) else { continue }
+            urls.append(url)
+            writer.append(FrameTimestamps.Entry(
+                frame: index,
+                captureTime: start.addingTimeInterval(Double(index) * 6),
+                shutter: 1.0 / 120,
+                iso: 200,
+                // Two poses with nothing flat in view, so the header's "on N of
+                // M frames" line and the grid's mixed state are real rather
+                // than a phrase nothing can produce.
+                rectangle: index % 6 == 5 ? nil : quad))
+        }
+        writer.close()
+        guard !urls.isEmpty else { return nil }
+
+        setSource(.photos(urls), mode: Self.scannerCaptureMode, captureMode: .scanner)
+        let id = captures.first?.id
+        if corrected, let capture = captures.first {
+            PerspectiveCorrector.correctSequence(
+                in: projectFolderURL(for: capture).appendingPathComponent("source"),
+                aspect: .a4)
+        }
+        // `setSource` opens the capture into the blend flow; this hook wants the
+        // project screen, so hand the stage back before the tab switch.
+        reset()
+        return id
+    }
+
+    /// One fabricated pose: a desk, a keystoned page traced from `quad`, and
+    /// enough type-like ruling that a thumbnail reads as a document rather than
+    /// a white box.
+    private static func writeDemoScannerFrame(
+        quad: NormalizedQuad, number: Int, to url: URL
+    ) -> Bool {
+        let width = 900, height = 1200
+        guard let context = CGContext(
+            data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0,
+            space: CGColorSpace(name: CGColorSpace.sRGB)!,
+            bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue) else { return false }
+        context.setFillColor(CGColor(red: 0.16, green: 0.15, blue: 0.14, alpha: 1))
+        context.fill(CGRect(x: 0, y: 0, width: width, height: height))
+
+        // The quad is bottom-left-origin normalised, which is exactly what a
+        // CGContext is, so the page draws with no flip.
+        func point(_ corner: NormalizedQuad.Point) -> CGPoint {
+            CGPoint(x: corner.x * Double(width), y: corner.y * Double(height))
+        }
+        context.beginPath()
+        context.move(to: point(quad.topLeft))
+        context.addLine(to: point(quad.topRight))
+        context.addLine(to: point(quad.bottomRight))
+        context.addLine(to: point(quad.bottomLeft))
+        context.closePath()
+        context.setFillColor(CGColor(red: 0.95, green: 0.94, blue: 0.91, alpha: 1))
+        context.fillPath()
+
+        context.setFillColor(CGColor(red: 0.35, green: 0.33, blue: 0.31, alpha: 1))
+        let left = point(quad.bottomLeft).x + 60
+        let right = point(quad.bottomRight).x - 60
+        let bottom = point(quad.bottomLeft).y + 90
+        let top = point(quad.topLeft).y - 120
+        var y = top
+        var line = 0
+        while y > bottom {
+            let width = (right - left) * (line % 4 == 3 ? 0.55 : 0.92)
+            context.fill(CGRect(x: left, y: y, width: width, height: 14))
+            y -= 46
+            line += 1
+        }
+
+        guard let image = context.makeImage() else { return false }
+        guard let destination = CGImageDestinationCreateWithURL(
+            url as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return false }
+        CGImageDestinationAddImage(destination, image, nil)
+        return CGImageDestinationFinalize(destination)
+    }
+
     /// LL_ADJUST=demo screenshot hook: the newest video capture opened on the
     /// Adjust screen inside a fabricated two-moment sequence — the design's
     /// 8:16 sample (178s + 24s@120 + 198s + 8s@120 + 88s) — so the output-time
@@ -1384,9 +1637,9 @@ final class AppModel: ObservableObject {
     }
     #endif
 
-    func setSource(_ source: Source, mode: String = "Import") {
+    func setSource(_ source: Source, mode: String = "Import", captureMode: CaptureProjectMode? = nil) {
         do {
-            let capture = try registerCapture(from: source, mode: mode)
+            let capture = try registerCapture(from: source, mode: mode, captureMode: captureMode)
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
@@ -4121,7 +4374,9 @@ final class AppModel: ObservableObject {
         return blend
     }
 
-    private func registerCapture(from source: Source, mode: String) throws -> CaptureProject {
+    private func registerCapture(
+        from source: Source, mode: String, captureMode: CaptureProjectMode? = nil
+    ) throws -> CaptureProject {
         let id = UUID()
         let root = captureFolderURL(for: id)
         let sourceFolder = root.appendingPathComponent("source")
@@ -4141,7 +4396,8 @@ final class AppModel: ObservableObject {
                 originalName: url.lastPathComponent,
                 mode: mode,
                 sourceFileNames: [relativeName],
-                sourceFPS: nil
+                sourceFPS: nil,
+                captureMode: captureMode?.rawValue
             )
         case .liveSequence(let liveSource):
             return try registerSequenceCapture(LiveCaptureResult(
@@ -4157,6 +4413,9 @@ final class AppModel: ObservableObject {
                 let destination = root.appendingPathComponent(relativeName)
                 try copySecurityScopedItem(at: url, to: destination)
                 relativeNames.append(relativeName)
+                if captureMode == .scanner {
+                    copyScannerSiblings(of: url, frameNumber: index + 1, into: sourceFolder)
+                }
             }
             // A ramped shoot (Holy Grail) records when each frame was actually
             // taken; that sidecar travels with the frames, because it is what
@@ -4178,7 +4437,8 @@ final class AppModel: ObservableObject {
                 originalName: "\(relativeNames.count) photos",
                 mode: mode,
                 sourceFileNames: relativeNames,
-                sourceFPS: nil
+                sourceFPS: nil,
+                captureMode: captureMode?.rawValue
             )
         }
 
@@ -4191,6 +4451,46 @@ final class AppModel: ObservableObject {
         }
         autoTagIfEnabled(capture)
         return capture
+    }
+
+    /// Brings a Scanner pose's *other* files into the project beside the frame
+    /// itself: the processed sibling (`frame-00001.heic`) a RAW pose is shot
+    /// with, and the rectified `frame-00001-corrected.heic` if one has been
+    /// written.
+    ///
+    /// Deliberately **not** added to `sourceFileNames`. That list is the
+    /// project's frames, and one pose is one frame however many files describe
+    /// it — put the siblings in it and every count in the app (the frame
+    /// browser, the stack estimate, "36 source frames") doubles or triples.
+    /// They are found by name instead, exactly as `PerspectiveCorrector` finds
+    /// them, which is why the numbering is re-derived from the frame's new
+    /// index rather than copied from the staging name.
+    ///
+    /// Without this the siblings are simply lost: only `photoURLs` — the DNGs —
+    /// is handed to registration, and the staging directory is temporary. The
+    /// human-viewable half of a whole Scanner set would have gone with it.
+    private func copyScannerSiblings(of frame: URL, frameNumber: Int, into sourceFolder: URL) {
+        let staging = frame.deletingLastPathComponent()
+        let stagedBase = frame.deletingPathExtension().lastPathComponent
+        let base = String(format: "frame-%05d", frameNumber)
+        for ext in ["heic", "jpg", "jpeg"] {
+            let processed = staging.appendingPathComponent("\(stagedBase).\(ext)")
+            // On the no-RAW fallback the pose's only file IS the processed
+            // still, and it has already been copied as the frame — copying it
+            // over itself would be a delete-then-copy of the same path.
+            guard processed != frame,
+                  FileManager.default.fileExists(atPath: processed.path) else { continue }
+            try? copyReplacingItem(
+                at: processed, to: sourceFolder.appendingPathComponent("\(base).\(ext)"))
+            let corrected = PerspectiveCorrector.correctedURL(for: processed)
+            if FileManager.default.fileExists(atPath: corrected.path) {
+                try? copyReplacingItem(
+                    at: corrected,
+                    to: sourceFolder.appendingPathComponent(
+                        "\(base)\(PerspectiveCorrector.correctedSuffix).heic"))
+            }
+            break
+        }
     }
 
     private func registerSequenceCapture(_ result: LiveCaptureResult) throws -> CaptureProject {

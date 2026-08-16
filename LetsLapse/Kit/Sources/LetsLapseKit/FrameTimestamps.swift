@@ -25,13 +25,32 @@ public struct FrameTimestamps: Equatable, Sendable {
         /// The scene EV the ramp was chasing when this frame was taken, at
         /// ISO 100. Nil for a frame captured outside a ramp.
         public var ev: Double?
+        /// The flat object the Scanner had in view at the moment this frame was
+        /// requested — four normalised corners and the detector's confidence.
+        ///
+        /// Absent, not null, for a frame taken with no rectangle in view: the
+        /// key's presence *is* the answer to "can this frame be rectified?",
+        /// and a sequence shot half against a page and half against a table
+        /// says so line by line. Nothing here modifies the frame itself — the
+        /// correction is a separate file written later (see
+        /// `PerspectiveCorrector`), so the sidecar stays a record rather than
+        /// an instruction.
+        public var rectangle: NormalizedQuad?
 
-        public init(frame: Int, captureTime: Date, shutter: Double, iso: Double, ev: Double? = nil) {
+        public init(
+            frame: Int,
+            captureTime: Date,
+            shutter: Double,
+            iso: Double,
+            ev: Double? = nil,
+            rectangle: NormalizedQuad? = nil
+        ) {
             self.frame = frame
             self.captureTime = captureTime
             self.shutter = shutter
             self.iso = iso
             self.ev = ev
+            self.rectangle = rectangle
         }
     }
 

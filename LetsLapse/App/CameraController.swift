@@ -271,6 +271,63 @@ final class CameraController: NSObject, ObservableObject {
     /// controllers can install the ramp without another parameter reaching
     /// through their configurations. sessionQueue-confined.
     private var holyGrailRequestedForRun = false
+    /// Whether that run's EVERY dial was on Auto. Same reason as above.
+    private var holyGrailAutoRequestedForRun = false
+    /// The spacing a Holy Grail run on EVERY=Auto is currently using, so a
+    /// re-pace only happens when the policy's answer has really moved (see
+    /// `HolyGrailAutoInterval.isMeaningfulChange`). Nil when EVERY is a fixed
+    /// value — Auto is the only mode that re-paces. sessionQueue-confined.
+    private var holyGrailAutoIntervalSeconds: Double?
+    // Scanner — the motion-triggered interval shoot. All sessionQueue-confined
+    // except the tap itself, which owns its own queue.
+    private var scannerEngine: ScannerEngine?
+    private var scannerAnalyzer: ScannerMotionAnalyzer?
+    private var scannerOutput: AVCaptureVideoDataOutput?
+    private var scannerWriter: FrameTimestampWriter?
+    private var scannerActive = false
+    /// True between asking for a frame and that frame landing. Without it a
+    /// scene that re-settles while a capture is still in flight fires a second
+    /// shot of the same pose.
+    private var scannerCapturePending = false
+    /// The RAW format this run is capturing in, or nil when the honest RAW
+    /// check came back negative and the run fell back to processed stills.
+    private var scannerRawPixelFormat: OSType?
+    /// Preset and photo-aspect state to undo when the run ends.
+    private var scannerPreviousPreset: AVCaptureSession.Preset?
+    private var scannerArmedPhotoAspect = false
+    /// Frames whose files have landed, newest last — what "Delete last"
+    /// removes from. Each entry is one pose: the RAW and, when there is one,
+    /// its processed sibling.
+    private var scannerFrames: [ScannerFrame] = []
+    /// Auto-stop after this many poses (36 = the canonical turntable set).
+    private var scannerFrameCap: Int?
+    /// Which pose each in-flight capture request belongs to, keyed by the
+    /// settings' `uniqueID`. Assigned when the shutter is asked for, so the
+    /// file index never depends on the order the parts come back in.
+    private var scannerPoseIndexByRequest: [Int64: Int] = [:]
+    /// Finds the flat object in the preview, when there is one. Lives for the
+    /// length of a run beside the differencing analyzer, on the same tap.
+    private var scannerRectangleDetector: RectangleDetector?
+    /// The quad each in-flight request was fired against, keyed the same way as
+    /// the pose index. Snapshotted at *request* time, not when the file lands:
+    /// the sidecar's job is to record the geometry the shutter was taken on,
+    /// and by the time a DNG has been written the page may already be gone.
+    private var scannerQuadByRequest: [Int64: NormalizedQuad] = [:]
+    /// The quad from the most recent sample — the truth the sidecar is stamped
+    /// from, unthrottled.
+    private var scannerLatestQuad: NormalizedQuad?
+    /// The most recently *published* overlay quad and when it went out, so the
+    /// viewfinder isn't asked to redraw for detector jitter.
+    private var scannerPublishedQuad: NormalizedQuad?
+    private var scannerQuadPublishedAt = Date.distantPast
+    #if DEBUG
+    /// Throttle for the magnitude log above.
+    private var scannerLastMagnitudeLogAt = Date.distantPast
+    #endif
+    /// The scene re-settled but the device was moving, so the pose was held
+    /// back. Drawn in the HUD so a shoot that has quietly stopped firing
+    /// explains itself.
+    private var scannerWaitingForSteady = false
     #endif
     private var videoStabilizationRequested = true
     /// When set, captured media is geotagged: stills with the latest location
@@ -580,6 +637,84 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     @Published var holyGrailState: HolyGrailState?
+
+    /// One captured pose: the file(s) a single Scanner fire produced. Kept as a
+    /// pair rather than two flat lists so "Delete last" can take a whole pose
+    /// away in one step and never leave an orphaned sibling behind.
+    struct ScannerFrame: Equatable {
+        var raw: URL
+        /// The processed sibling (HEIC), when the device gave one. Nil on the
+        /// fallback path, where the processed still *is* `raw`.
+        var processed: URL?
+
+        /// Every file this pose owns — what the delete removes and what the
+        /// project is registered from.
+        var urls: [URL] { [raw] + (processed.map { [$0] } ?? []) }
+    }
+
+    /// What a running Scanner shoot is doing, republished on every state
+    /// change. Nil outside a Scanner run.
+    struct ScannerState: Equatable {
+        /// The engine's state, verbatim — the HUD's headline is a reading of
+        /// this and nothing else.
+        var phase: String
+        /// Poses captured so far. The primary signal: the operator is looking
+        /// at the object, not the screen, so this is what the HUD makes big.
+        var frames: Int
+        /// The exposure every frame of this run is locked to.
+        var shutterSeconds: Double
+        var iso: Float
+        /// Whether frames are landing as RAW, or the honest fallback ran.
+        var isCapturingRAW: Bool
+        /// How far through the settle window the scene is, 0…1. Nil unless
+        /// something is settling.
+        var settleProgress: Double?
+        /// The device itself is moving too much to shoot, so a scene that has
+        /// re-settled is being held back. Both signals must agree.
+        var waitingForDeviceSteady: Bool
+        /// Whether a flat object is in frame — i.e. whether the run is settling
+        /// on four corners standing still (the strong signal) or on the frame
+        /// difference (the fallback). Phase 2.
+        var hasRectangle: Bool = false
+    }
+
+    @Published var scannerState: ScannerState?
+
+    /// The flat object the Scanner can currently see, normalised bottom-left
+    /// origin, or nil when there is none. Drawn as the viewfinder's quad
+    /// overlay and stamped into the sidecar at capture.
+    ///
+    /// Separate from `scannerState` rather than a field on it, because the two
+    /// change at different rates and for different reasons: the state changes
+    /// when the shoot's phase does, the quad moves whenever the page or the
+    /// camera does. Folding them together would redraw the whole HUD at the
+    /// detector's rate.
+    @Published var scannerRectangle: NormalizedQuad?
+
+    /// Which way up the image `scannerRectangle` was measured in — the run's
+    /// **capture** orientation, frozen at start with everything else about the
+    /// run.
+    ///
+    /// It travels with the quad because a quad without it is ambiguous. The
+    /// corners are in the pose the *still* is written at (so the sidecar and
+    /// `PerspectiveCorrector` need no conversion), and the preview is drawn in
+    /// the *interface* orientation. Those are the same thing right up until
+    /// they are not — the rotation lock, and the flat-over-a-desk pose a copy
+    /// stand puts the device in, where `UIDeviceOrientation` reads faceUp and
+    /// the last known pose stands. The overlay converts by the difference; a
+    /// quarter turn of error is the whole width of a page.
+    @Published var scannerRectangleOrientation: QuadOrientation = .right
+
+    /// The spacing the run in flight is really using, or nil when nothing is
+    /// running or nothing is pacing itself.
+    ///
+    /// Exists because the dial's value stops being the truth the moment EVERY
+    /// goes to Auto. A remote reading the dial then reports a number the camera
+    /// is not using — observed on an iPad Air (2026-08-16): the wire said
+    /// "every 5 s" for a Holy Grail run whose frames were landing 5.4 s apart
+    /// off a 3 s Auto floor, so the one surface that exists to tell you what a
+    /// camera across a field is doing was quoting a setting instead.
+    @Published var activeIntervalSeconds: Double?
 
     /// Over/under exposure for the ramp, in stops — the Holy Grail answer to
     /// an exposure lock. The ramp keeps following the light; this decides how
@@ -4891,6 +5026,32 @@ final class CameraController: NSObject, ObservableObject {
             iso: Double(engine.currentTarget.iso),
             measurement: measurement)
         applyHolyGrailExposure()
+        repaceHolyGrailAutoInterval()
+    }
+
+    /// sessionQueue-confined. EVERY=Auto only: asks the pacing policy what this
+    /// exposure deserves and, if the answer has really moved, hands it to
+    /// whichever blend controller is running.
+    ///
+    /// A no-op on a fixed EVERY — the user pinned the floor there and the ramp
+    /// manages exposure above it, which is a valid and deliberate combination.
+    private func repaceHolyGrailAutoInterval() {
+        guard let current = holyGrailAutoIntervalSeconds,
+              let engine = holyGrailEngine, let limits = holyGrailLimits else { return }
+        let next = HolyGrailAutoInterval.seconds(for: engine, limits: limits)
+        guard HolyGrailAutoInterval.isMeaningfulChange(from: current, to: next) else { return }
+        holyGrailAutoIntervalSeconds = next
+        DispatchQueue.main.async { self.activeIntervalSeconds = next }
+        liveBlendController?.setIntervalSeconds(next)
+        liveBlendRawController?.setIntervalSeconds(next)
+        // The envelope moves with the spacing: a wider interval is a longer
+        // shutter the ramp is now allowed to reach for.
+        if let device = videoDevice {
+            let relaxed = holyGrailHardwareLimits(for: device, interval: next)
+            holyGrailLimits = relaxed
+            holyGrailEngine?.reclamp(to: relaxed)
+        }
+        LLog("holygrail: auto interval → \(next)s")
     }
 
     /// sessionQueue-confined. Writes the ramp's current target to the device
@@ -4919,16 +5080,25 @@ final class CameraController: NSObject, ObservableObject {
     /// window's frames (the BLEND dial), and the exposure that window is shot
     /// at is the ramp's. Called from `startLiveBlend` on the sessionQueue,
     /// after the controller exists and before it starts.
-    private func beginHolyGrailForBlendRun(interval: TimeInterval, directory: URL) {
+    private func beginHolyGrailForBlendRun(
+        interval: TimeInterval, directory: URL, autoInterval: Bool
+    ) {
         holyGrailActive = true
         holyGrailPending = false
         holyGrailRawPixelFormat = nil  // the blend controller owns capture
         holyGrailWriter = FrameTimestampWriter(directory: directory)
         holyGrailFramesWritten = 0
+        // Auto starts at the policy's floor and widens from there as the ramp
+        // pushes ISO; a fixed EVERY leaves this nil and never re-paces.
+        holyGrailAutoIntervalSeconds = autoInterval ? interval : nil
+        if autoInterval {
+            let opening = interval
+            DispatchQueue.main.async { self.activeIntervalSeconds = opening }
+        }
         seedHolyGrailRamp(interval: interval)
         applyHolyGrailExposure()
         publishHolyGrailState()
-        LLog("holygrail: blending ramp armed, every \(interval)s"
+        LLog("holygrail: blending ramp armed, every \(interval)s\(autoInterval ? " (auto)" : "")"
              + " seed=\(holyGrailEngine.map { String(format: "%.4fs ISO %.0f", $0.currentTarget.shutterSeconds, $0.currentTarget.iso) } ?? "none")")
     }
 
@@ -4958,6 +5128,9 @@ final class CameraController: NSObject, ObservableObject {
     /// arrive there.
     private func endHolyGrailIfActive() {
         holyGrailRequestedForRun = false
+        holyGrailAutoRequestedForRun = false
+        holyGrailAutoIntervalSeconds = nil
+        DispatchQueue.main.async { self.activeIntervalSeconds = nil }
         guard holyGrailActive else { return }
         holyGrailActive = false
         holyGrailPending = false
@@ -4985,12 +5158,595 @@ final class CameraController: NSObject, ObservableObject {
         DispatchQueue.main.async { self.holyGrailState = nil }
     }
 
+    // MARK: - Scanner (motion-triggered interval)
+
+    // Same platform story as the ramp above, for overlapping reasons: Scanner
+    // needs a preview tap to difference frames, manual exposure to lock, and
+    // RAW to be worth shooting for. The MODE dial doesn't offer it on macOS.
+    //
+    // Two things make a Scanner run different from every other capture in this
+    // file, and both follow from what the frames are *for* — a photogrammetry
+    // solver or a compositing stack, not a timelapse:
+    //
+    // 1. **Nothing about the exposure may move.** A solver seeing the same
+    //    surface at two exposures or two white balances reconstructs it worse
+    //    than if it had seen it once. AE, AF and WB are locked for the whole
+    //    run (§`lockScannerCamera`), and focus in particular is pinned before
+    //    the first frame so it cannot hunt between poses.
+    // 2. **The shutter is audible on purpose.** Everywhere else in the app a
+    //    per-frame shutter sound would be intolerable; here it is the entire
+    //    interface. The operator's eyes are on the object, and the click is
+    //    what tells them the pose is banked and their hand can go back in.
+    //    That is why this path uses real still captures rather than the silent
+    //    video tap the Holy Grail JPEG route takes.
+
+    /// How long a fire waits for the device to stop wobbling before it gives up
+    /// and skips this pose. Short: the scene has already been still for the
+    /// settle delay, so if the phone is *also* not steady by now, something is
+    /// holding it and the next re-settle will come round soon enough.
+    private static let scannerSteadyTimeout: TimeInterval = 1.5
+
+    /// Answers "is the device itself steady right now?". Set by the capture
+    /// screen, which owns the `SteadinessMonitor` — the camera deliberately
+    /// doesn't import CoreMotion.
+    ///
+    /// Scanner requires **both** signals: a still scene and a still device. The
+    /// engine watches the scene, this watches the phone, and neither can stand
+    /// in for the other — a hand-held phone drifting over a motionless object
+    /// produces exactly the frame that ruins a reconstruction, and the scene
+    /// difference cannot see it because the whole frame moves together.
+    var scannerDeviceIsSteady: (() -> Bool)?
+
+    /// Whether a Scanner run is in flight. Read on the main thread through
+    /// `scannerState`; this is the sessionQueue truth.
+    var isScannerActive: Bool { scannerActive }
+
+    /// Starts a Scanner shoot. `frameCap` auto-stops the run once that many
+    /// poses have landed — 36 is the canonical turntable set (10° a step), and
+    /// the target sheet offers it.
+    ///
+    /// The run opens by capturing the pose that is already framed, then waits
+    /// for the scene to be disturbed and go still again for each one after it.
+    func startScanner(frameCap: Int? = nil) {
+        sessionQueue.async {
+            guard !self.movieOutput.isRecording, self.intervalTimer == nil,
+                  !self.isLiveBlendActive, !self.scannerActive else { return }
+            // Same ordering rule as every other capture start: the other
+            // preview taps detach inline before any capture work, because
+            // adding or removing an output reconfigures the session.
+            self.detachTestCardTapNow()
+            self.detachFramingTapNow()
+
+            let directory = FileManager.default.temporaryDirectory
+                .appendingPathComponent("scanner-\(Int(Date().timeIntervalSince1970))")
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+            } catch {
+                LLog("scanner: could not create temp directory: \(error)")
+                return
+            }
+
+            // RAW is the default and the point — but claimed honestly. If this
+            // device, under this configuration, doesn't offer Bayer RAW, the
+            // run shoots processed stills and says so in the log and the HUD
+            // rather than writing something that isn't a DNG into a .dng.
+            self.scannerPreviousPreset = self.session.sessionPreset
+            self.session.beginConfiguration()
+            self.session.sessionPreset = .photo
+            self.session.commitConfiguration()
+            self.scannerRawPixelFormat = self.availableBayerRawFormats().first
+            if self.scannerRawPixelFormat == nil {
+                LLog("scanner: no Bayer RAW under the photo configuration — capturing processed stills")
+            }
+            self.publishFormat()
+            if let dimensions = self.videoDevice?.activeFormat.supportedMaxPhotoDimensions.last {
+                self.photoOutput.maxPhotoDimensions = dimensions
+            }
+            // One orientation for the run, set after the preset switch (which
+            // rebuilds the photo connection) — the same rule the interval and
+            // DNG paths follow.
+            if let connection = self.photoOutput.connection(with: .video),
+               connection.isVideoOrientationSupported {
+                connection.videoOrientation = self.captureOrientation()
+            }
+
+            self.photoDirectory = directory
+            self.photoURLs = []
+            self.scannerFrames = []
+            self.scannerFrameCap = frameCap
+            self.scannerCapturePending = false
+            self.scannerActive = true
+            self.scannerWriter = FrameTimestampWriter(directory: directory)
+            self.scannerPoseIndexByRequest = [:]
+
+            // Exposure before the first frame, not after: everything the run
+            // captures has to have been shot under one set of numbers.
+            self.lockScannerCamera()
+
+            let engine = ScannerEngine()
+            self.scannerEngine = engine
+            self.attachScannerTapOnQueue()
+
+            CaptureSessionLogger.shared.log("capture_start", [
+                "kind": "scanner",
+                "frameCap": frameCap ?? 0,
+                "raw": self.scannerRawPixelFormat != nil,
+                "settleDelay": engine.settleDelay,
+            ])
+            LLog("scanner: start cap=\(frameCap.map(String.init) ?? "none")"
+                 + " raw=\(self.scannerRawPixelFormat != nil) settle=\(engine.settleDelay)s")
+
+            DispatchQueue.main.async {
+                self.photoCount = 0
+                self.captureRunStartedAt = Date()
+                self.isIntervalRunning = true
+            }
+            // The opening pose is already framed — fire it rather than making
+            // the operator disturb a scene they just finished arranging.
+            if engine.start(at: Date()) {
+                self.fireScannerCapture()
+            }
+            self.publishScannerState()
+        }
+    }
+
+    func stopScanner(source: CaptureSessionLogger.StopSource = .phone) {
+        CaptureSessionLogger.shared.log("stop_requested", ["source": source.rawValue, "kind": "scanner"])
+        cancelScheduledStop()
+        sessionQueue.async {
+            self.finishScannerOnQueue()
+        }
+    }
+
+    /// Discards the most recent pose without ending the shoot — the control
+    /// that matters more here than anywhere else in the app, because a
+    /// mis-fire (a hand caught withdrawing, a pose the operator changed their
+    /// mind about) is otherwise carried all the way into the solver.
+    ///
+    /// Returns the new frame count on the main queue. Deleting takes the files
+    /// with it: the next capture reuses the index, so the sequence stays
+    /// gap-free and `frame-00001…N` still means exactly what it says.
+    func deleteLastScannerFrame(completion: ((Int) -> Void)? = nil) {
+        sessionQueue.async {
+            guard self.scannerActive, let frame = self.scannerFrames.popLast() else {
+                let count = self.scannerFrames.count
+                DispatchQueue.main.async { completion?(count) }
+                return
+            }
+            for url in frame.urls {
+                try? FileManager.default.removeItem(at: url)
+            }
+            self.photoURLs.removeAll { frame.urls.contains($0) }
+            let count = self.scannerFrames.count
+            LLog("scanner: deleted last pose — \(count) frames remain")
+            CaptureSessionLogger.shared.log("scanner_delete_last", ["frameCount": count])
+            DispatchQueue.main.async {
+                self.photoCount = count
+                completion?(count)
+            }
+            self.publishScannerState()
+        }
+    }
+
+    /// sessionQueue-confined. Locks everything that could otherwise drift
+    /// between poses.
+    ///
+    /// Exposure is frozen as a **custom** pair rather than `.locked` so the
+    /// numbers are knowable and reportable — the HUD shows the shutter and ISO
+    /// every frame of this set was taken at, which is the difference between a
+    /// set an operator can trust and one they have to inspect afterwards.
+    /// Focus is pinned at wherever it currently is, deliberately: the operator
+    /// framed and focused before pressing the shutter, and a lens that hunts
+    /// between poses is the single most damaging thing that can happen to a
+    /// reconstruction.
+    private func lockScannerCamera() {
+        guard let device = videoDevice else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.isExposureModeSupported(.custom) {
+                device.setExposureModeCustom(
+                    duration: device.exposureDuration, iso: device.iso, completionHandler: nil)
+            } else if device.isExposureModeSupported(.locked) {
+                device.exposureMode = .locked
+            }
+            if device.isWhiteBalanceModeSupported(.locked) {
+                device.whiteBalanceMode = .locked
+            }
+        } catch {
+            LLog("scanner: lockForConfiguration failed — \(error.localizedDescription)")
+        }
+        // Focus goes through the run lock rather than a bare `focusMode =
+        // .locked`, because that helper is the one that refuses to pin a lens
+        // caught mid-hunt — and a lens pinned between two planes for a whole
+        // 36-pose set is the worst outcome available here. `deviceChanged:
+        // true` is not a lie about the input: it asks for the settle grace
+        // window, which the `.photo` preset switch just above genuinely needs,
+        // and re-aims at the user's tapped subject if they picked one.
+        lockFocusForRun(deviceChanged: true)
+    }
+
+    /// Whether AE, AF and WB are all held right now — what the capture screen's
+    /// pre-flight warning reads. Answered on the main thread from the device's
+    /// own modes, so it describes the camera rather than an app-side flag.
+    var scannerCameraIsLocked: Bool {
+        guard let device = videoDevice else { return false }
+        let exposureHeld = device.exposureMode == .locked || device.exposureMode == .custom
+        let focusHeld = device.focusMode == .locked
+        let balanceHeld = device.whiteBalanceMode == .locked
+        return exposureHeld && focusHeld && balanceHeld
+    }
+
+    /// sessionQueue-confined. Adds the differencing tap, the same way the
+    /// test-card and Watch framing taps are added.
+    private func attachScannerTapOnQueue() {
+        let analyzer = scannerAnalyzer ?? ScannerMotionAnalyzer()
+        scannerAnalyzer = analyzer
+        let detector = scannerRectangleDetector ?? RectangleDetector()
+        scannerRectangleDetector = detector
+        // The pose the run is being shot at, taken once here: the whole run is
+        // one orientation (see `startScanner`), and reading it per frame from
+        // the tap's queue would be reading main-thread state off it. The same
+        // write publishes it, because the overlay has to know which way up the
+        // corners it is about to draw were measured.
+        let runOrientation = captureOrientation()
+        detector.setCaptureOrientation(runOrientation)
+        let quadOrientation = detector.quadOrientation
+        DispatchQueue.main.async { self.scannerRectangleOrientation = quadOrientation }
+        analyzer.rectangleDetector = detector
+        analyzer.reset()
+        analyzer.onSample = { [weak self] magnitude, quad, time in
+            guard let self else { return }
+            self.sessionQueue.async {
+                self.ingestScannerSample(magnitude: magnitude, quad: quad, at: time)
+            }
+        }
+        let output: AVCaptureVideoDataOutput
+        if let existing = scannerOutput {
+            output = existing
+        } else {
+            output = AVCaptureVideoDataOutput()
+            output.videoSettings = [
+                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            ]
+            output.alwaysDiscardsLateVideoFrames = true
+            scannerOutput = output
+        }
+        if !session.outputs.contains(output) {
+            session.beginConfiguration()
+            if session.canAddOutput(output) {
+                session.addOutput(output)
+            } else {
+                LLog("scanner: session refused the motion tap")
+            }
+            session.commitConfiguration()
+        }
+        output.setSampleBufferDelegate(analyzer, queue: analyzer.queue)
+    }
+
+    /// sessionQueue-confined, synchronous detach — same reasoning as
+    /// `detachTestCardTapNow`.
+    private func detachScannerTapNow() {
+        guard let output = scannerOutput else { return }
+        output.setSampleBufferDelegate(nil, queue: nil)
+        if session.outputs.contains(output) {
+            session.beginConfiguration()
+            session.removeOutput(output)
+            session.commitConfiguration()
+            LLog("scanner: motion tap detached")
+        }
+        scannerAnalyzer?.onSample = nil
+        scannerAnalyzer?.rectangleDetector = nil
+        scannerRectangleDetector = nil
+        publishScannerRectangle(nil, at: Date(), force: true)
+    }
+
+    /// sessionQueue-confined. One measurement in; a capture out, or not.
+    private func ingestScannerSample(magnitude: Float, quad: NormalizedQuad?, at time: Date) {
+        guard scannerActive, let engine = scannerEngine else { return }
+        publishScannerRectangle(quad, at: time)
+        #if DEBUG
+        // The measurement `defaultMotionThreshold`'s TODO is waiting on. The
+        // threshold has to sit above a scene's noise floor (sensor grain, AE
+        // micro-adjustments) and below a hand crossing the frame, and neither
+        // bound is knowable without printing what a real camera actually
+        // reports. Throttled to ~1 Hz so a 30 fps tap doesn't drown the log.
+        if time.timeIntervalSince(scannerLastMagnitudeLogAt) >= 1 {
+            scannerLastMagnitudeLogAt = time
+            // The rectangle half is logged in the same line and to the same
+            // end: the corner threshold is as unmeasured today as the motion
+            // one was, and this is what a field run has to read to move it.
+            let rectangle = quad.map {
+                String(format: " rect=%.2f cornerThreshold=%.4f",
+                       $0.confidence, engine.cornerStabilityThreshold)
+            } ?? " rect=none"
+            LLog(String(format: "scanner: mag=%.5f threshold=%.5f state=%@",
+                        magnitude, engine.motionThreshold, engine.state.rawValue) + rectangle)
+        }
+        #endif
+        let previousPhase = engine.state
+        let shouldFire = engine.observe(magnitude: magnitude, quad: quad, at: time)
+        // A fresh disturbance clears the steady veto. Without this the HUD
+        // would keep reading "Hold the phone still" for the rest of the run
+        // after one skipped pose, long after the phone had settled — the flag
+        // is about the pose that was refused, not about the device.
+        if engine.state == .disturbed, previousPhase != .disturbed {
+            scannerWaitingForSteady = false
+        }
+        if shouldFire {
+            // The scene says yes. The device still has a veto — see
+            // `scannerDeviceIsSteady`. A vetoed pose isn't lost: the scene is
+            // still disturbed as far as the operator is concerned, so the next
+            // settle window comes round on its own.
+            let steady = scannerDeviceIsSteady?() ?? true
+            if steady {
+                fireScannerCapture()
+            } else {
+                scannerWaitingForSteady = true
+                LLog("scanner: scene settled but the device is not steady — pose skipped")
+            }
+        }
+        if shouldFire || engine.state != previousPhase {
+            publishScannerState()
+        } else if engine.state == .disturbed {
+            // Settle progress moves every tick while disturbed; the HUD's ring
+            // is drawn from it, so republish at the tap's own rate.
+            publishScannerState()
+        }
+    }
+
+    /// sessionQueue-confined. Asks the photo output for this pose.
+    private func fireScannerCapture() {
+        guard scannerActive, !scannerCapturePending else { return }
+        if let cap = scannerFrameCap, scannerFrames.count >= cap { return }
+        scannerCapturePending = true
+        scannerWaitingForSteady = false
+
+        let settings: AVCapturePhotoSettings
+        if let rawFormat = scannerRawPixelFormat {
+            // RAW plus the processed sibling in one request: the DNG is what a
+            // solver wants and the HEIC is what a human can look at without a
+            // raw converter.
+            let processed: [String: Any]? = photoOutput.availablePhotoCodecTypes.contains(.hevc)
+                ? [AVVideoCodecKey: AVVideoCodecType.hevc]
+                : nil
+            settings = AVCapturePhotoSettings(
+                rawPixelFormatType: rawFormat, processedFormat: processed)
+        } else {
+            settings = AVCapturePhotoSettings()
+        }
+        if scannerRawPixelFormat == nil {
+            // Both of these are illegal on a RAW request and only the second
+            // says so politely.
+            //
+            // `maxPhotoDimensions` here would carry the *video* preset's frame
+            // into a run that switched to `.photo`, which is the wrong size to
+            // be asking for; the output-level value set in `startScanner` is
+            // the sensor's own and already governs.
+            //
+            // `photoQualityPrioritization` **throws** on a RAW request —
+            // `NSInvalidArgumentException: Unsupported when capturing RAW` —
+            // and it took an iPad to find out. Nothing in the simulator
+            // captures RAW, so the simulator never reaches this line at all;
+            // the first real Scanner start on device died on it (2026-08-16).
+            // On the processed fallback the preference is still worth stating:
+            // there is no window to starve here, since the next frame waits on
+            // a human moving an object, and every frame is a measurement.
+            if let dimensions = selectedPhotoDimensions {
+                settings.maxPhotoDimensions = dimensions
+            }
+            settings.photoQualityPrioritization = .quality
+        }
+        scannerPoseIndexByRequest[settings.uniqueID] = scannerFrames.count
+        // The geometry this pose is being shot on, frozen with the request. It
+        // rides to the sidecar in `handleScannerPhoto` and no further: nothing
+        // here touches the frame itself.
+        if let quad = scannerLatestQuad {
+            scannerQuadByRequest[settings.uniqueID] = quad
+        }
+        photoOutput.capturePhoto(with: settings, delegate: self)
+    }
+
+    /// sessionQueue-confined. Hands the overlay its quad, but only when it has
+    /// really moved.
+    ///
+    /// The detector runs at 10 Hz and its corners jitter by a fraction of a
+    /// percent on a stationary page. Publishing every one of those would
+    /// invalidate the capture screen's body ten times a second for a change
+    /// nobody can see — and this is the screen with forty-odd observers on it.
+    /// So a quad goes out when it appears, when it disappears, or when a corner
+    /// has moved a visible amount; and never more often than 10 Hz.
+    ///
+    /// The threshold is deliberately far below the settle test's: this decides
+    /// whether a *line moves on screen*, not whether the page is still.
+    private func publishScannerRectangle(_ quad: NormalizedQuad?, at time: Date, force: Bool = false) {
+        let previous = scannerPublishedQuad
+        scannerLatestQuad = quad
+        if !force {
+            switch (previous, quad) {
+            case (nil, nil):
+                return
+            case (let old?, let new?):
+                guard old.maxCornerDistance(to: new) > 0.002,
+                      time.timeIntervalSince(scannerQuadPublishedAt) >= 0.1 else { return }
+            default:
+                break  // appeared or disappeared — always worth drawing.
+            }
+        }
+        scannerPublishedQuad = quad
+        scannerQuadPublishedAt = time
+        DispatchQueue.main.async { self.scannerRectangle = quad }
+    }
+
+    /// sessionQueue-confined. Called from the capture delegate as each part of
+    /// a pose lands.
+    fileprivate func handleScannerPhoto(_ photo: AVCapturePhoto) {
+        guard scannerActive, let directory = photoDirectory else { return }
+        guard let index = scannerPoseIndexByRequest[photo.resolvedSettings.uniqueID] else { return }
+        guard let data = photo.fileDataRepresentation() else { return }
+
+        // Sequential and deterministic, assigned at request time — never read
+        // back off the filesystem, whose ordering is not a promise anyone made.
+        let isRaw = photo.isRawPhoto
+        let name = String(format: "frame-%05d.%@", index + 1,
+                          isRaw ? "dng" : (scannerRawPixelFormat != nil ? "heic" : "jpg"))
+        let url = directory.appendingPathComponent(name)
+        let written = isRaw
+            ? ((try? data.write(to: url)) != nil)
+            : writeCapturedPhoto(data, to: url)
+        guard written else { return }
+
+        if isRaw || scannerRawPixelFormat == nil {
+            // The frame itself: the DNG, or — on the honest fallback — the
+            // processed still standing in for it.
+            var frame = ScannerFrame(raw: url, processed: nil)
+            if index < scannerFrames.count {
+                frame.processed = scannerFrames[index].processed
+                scannerFrames[index] = frame
+            } else {
+                scannerFrames.append(frame)
+            }
+            // Only the primary file is registered as a project frame, so every
+            // count in the app (HUD, target ring, stack estimate) means poses.
+            photoURLs.append(url)
+            scannerWriter?.append(FrameTimestamps.Entry(
+                frame: index,
+                captureTime: Date(),
+                shutter: videoDevice?.exposureDuration.seconds ?? 0,
+                iso: Double(videoDevice?.iso ?? 0),
+                ev: 0,
+                // Present only when there was a rectangle at the moment the
+                // shutter was asked for — the key's absence is how a later
+                // correction knows this frame has no geometry to rectify from.
+                rectangle: scannerQuadByRequest[photo.resolvedSettings.uniqueID]))
+        } else if index < scannerFrames.count {
+            scannerFrames[index].processed = url
+        }
+    }
+
+    /// sessionQueue-confined. The whole pose is done — release the gate and
+    /// check the cap.
+    fileprivate func finishScannerCapture(uniqueID: Int64) {
+        scannerPoseIndexByRequest.removeValue(forKey: uniqueID)
+        scannerQuadByRequest.removeValue(forKey: uniqueID)
+        scannerCapturePending = false
+        let count = scannerFrames.count
+        DispatchQueue.main.async { self.photoCount = count }
+        publishScannerState()
+        if let cap = scannerFrameCap, count >= cap {
+            LLog("scanner: reached the \(cap)-pose target")
+            finishScannerOnQueue()
+        }
+    }
+
+    /// sessionQueue-confined.
+    private func publishScannerState() {
+        guard scannerActive, let engine = scannerEngine else {
+            DispatchQueue.main.async { self.scannerState = nil }
+            return
+        }
+        let state = ScannerState(
+            phase: engine.state.rawValue,
+            frames: scannerFrames.count,
+            shutterSeconds: videoDevice?.exposureDuration.seconds ?? 0,
+            iso: videoDevice?.iso ?? 0,
+            isCapturingRAW: scannerRawPixelFormat != nil,
+            settleProgress: engine.settleProgress(at: Date()),
+            waitingForDeviceSteady: scannerWaitingForSteady,
+            hasRectangle: engine.isTrackingRectangle)
+        DispatchQueue.main.async {
+            if self.scannerState != state { self.scannerState = state }
+        }
+    }
+
+    /// sessionQueue-confined. Tears the run down exactly once — the stop
+    /// button, the pose cap and the screen teardown all arrive here.
+    private func finishScannerOnQueue() {
+        guard scannerActive else { return }
+        scannerActive = false
+        scannerCapturePending = false
+        detachScannerTapNow()
+        scannerEngine?.stop()
+        scannerEngine = nil
+        scannerWriter?.close()
+        scannerWriter = nil
+        scannerPoseIndexByRequest = [:]
+        scannerQuadByRequest = [:]
+        scannerLatestQuad = nil
+        scannerWaitingForSteady = false
+        let urls = photoURLs
+        // TODO (Phase 2, export): offer the perspective correction here, or
+        // wherever the finished set is presented. Everything it needs is
+        // already on disk and complete —
+        //
+        //     PerspectiveCorrector.correctSequence(in: directory, aspect: hint)
+        //
+        // reads the corners out of `frames.timestamps` and writes
+        // `frame-NNNNN-corrected.heic` beside each pose that had a rectangle in
+        // view. It is not called from here on purpose: the aspect hint is the
+        // operator's (`ScannerAspectSetting`, on the capture screen), correcting
+        // a 36-pose set is seconds of GPU work that belongs behind an explicit
+        // "Correct perspective" action rather than in a capture teardown, and
+        // the originals stay untouched either way.
+        LLog("scanner: end after \(urls.count) poses")
+        CaptureSessionLogger.shared.log("capture_end", ["kind": "scanner", "frameCount": urls.count])
+        scannerFrameCap = nil
+        scannerFrames = []
+
+        // Hand the camera back. The run owned the exposure; the framing screen
+        // shouldn't inherit a frozen one.
+        if let device = videoDevice, !exposureLocked, (try? device.lockForConfiguration()) != nil {
+            if device.isExposureModeSupported(.continuousAutoExposure) {
+                device.exposureMode = .continuousAutoExposure
+            }
+            if device.isWhiteBalanceModeSupported(.continuousAutoWhiteBalance) {
+                device.whiteBalanceMode = .continuousAutoWhiteBalance
+            }
+            if device.isFocusModeSupported(.continuousAutoFocus) {
+                device.focusMode = .continuousAutoFocus
+            }
+            device.unlockForConfiguration()
+        }
+        if let preset = scannerPreviousPreset {
+            scannerPreviousPreset = nil
+            session.beginConfiguration()
+            session.sessionPreset = preset
+            session.commitConfiguration()
+            applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            publishFormat()
+        }
+        if scannerArmedPhotoAspect {
+            scannerArmedPhotoAspect = false
+            disarmPhotoAspectPreview()
+        }
+        releaseRunFocusLock()
+        DispatchQueue.main.async {
+            self.isIntervalRunning = false
+            self.scannerState = nil
+            if !urls.isEmpty {
+                self.onFinishPhotos?(urls)
+            }
+        }
+    }
+
     #else
 
     /// macOS has no manual exposure, no per-format ISO envelope and no RAW
-    /// photo capture, so there is no ramp to run. The dial isn't offered
-    /// there; this exists so the shared teardown path still compiles.
+    /// photo capture, so there is no ramp to run and no Scanner to run it
+    /// beside. Neither is offered in the MODE dial there; these exist so the
+    /// shared teardown paths still compile.
     private func endHolyGrailIfActive() {}
+    var isScannerActive: Bool { false }
+    var scannerCameraIsLocked: Bool { false }
+    var scannerDeviceIsSteady: (() -> Bool)? {
+        get { nil }
+        set { _ = newValue }
+    }
+    func startScanner(frameCap: Int? = nil) {}
+    func stopScanner(source: CaptureSessionLogger.StopSource = .phone) {}
+    func deleteLastScannerFrame(completion: ((Int) -> Void)? = nil) {
+        DispatchQueue.main.async { completion?(0) }
+    }
 
     #endif
 
@@ -5090,17 +5846,22 @@ final class CameraController: NSObject, ObservableObject {
     /// processed video stream is tapped and the output is JPEG. The run
     /// hands its outputs over through `onFinishLiveBlend` exactly like
     /// interval capture hands over `onFinishPhotos`.
-    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false) {
+    /// `autoInterval` means the EVERY dial is on Auto: `interval` is only the
+    /// spacing the run *opens* at, and the ramp widens it as the light dies
+    /// (see `HolyGrailAutoInterval`). It is meaningless without `holyGrail`.
+    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": holyGrail ? "holyGrailBlend" : "liveBlend",
                 "intervalSeconds": interval,
+                "autoInterval": autoInterval,
                 "framesPerBlend": depth.fixedFrames ?? 0,
                 "preferDNG": preferDNG,
             ])
             #if os(iOS)
             self.holyGrailRequestedForRun = holyGrail
+            self.holyGrailAutoRequestedForRun = holyGrail && autoInterval
             #endif
 
             #if os(iOS)
@@ -5218,7 +5979,9 @@ final class CameraController: NSObject, ObservableObject {
                             index: index, measurement: luma.map { .luma($0) })
                     }
                 }
-                self.beginHolyGrailForBlendRun(interval: interval, directory: directory)
+                self.beginHolyGrailForBlendRun(
+                    interval: interval, directory: directory,
+                    autoInterval: self.holyGrailAutoRequestedForRun)
             }
             #endif
             controller.onDiagnostics = { [weak self] snapshot in
@@ -5405,7 +6168,9 @@ final class CameraController: NSObject, ObservableObject {
                         index: index, measurement: brightness.map { .apexBrightness($0) })
                 }
             }
-            beginHolyGrailForBlendRun(interval: interval, directory: directory)
+            beginHolyGrailForBlendRun(
+                interval: interval, directory: directory,
+                autoInterval: holyGrailAutoRequestedForRun)
             // Every frame of this run is Bayer RAW by construction.
             holyGrailRawPixelFormat = rawFormat
             publishHolyGrailState()
@@ -5747,6 +6512,15 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
         // queue — so hop first and decide there.
         sessionQueue.async {
             guard error == nil else { return }
+            #if os(iOS)
+            // A Scanner run writes RAW and its processed sibling under a pose
+            // index assigned at request time, so it takes its own path rather
+            // than this one's "next slot in photoURLs" naming.
+            if self.isScannerActive {
+                self.handleScannerPhoto(photo)
+                return
+            }
+            #endif
             guard let data = photo.fileDataRepresentation() else { return }
             guard let directory = self.photoDirectory else { return }
             let url = directory.appendingPathComponent(
@@ -5764,6 +6538,27 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
             }
         }
     }
+
+    #if os(iOS)
+    /// The end of a whole capture request, RAW and processed sibling included.
+    /// Scanner releases its one-pose-at-a-time gate here rather than in
+    /// `didFinishProcessingPhoto`, which fires once per part — releasing on the
+    /// first part would let a re-settle fire a second shot of the same pose
+    /// while the sibling was still being written.
+    func photoOutput(
+        _ output: AVCapturePhotoOutput,
+        didFinishCaptureFor resolvedSettings: AVCaptureResolvedPhotoSettings,
+        error: Error?
+    ) {
+        sessionQueue.async {
+            guard self.isScannerActive else { return }
+            if let error {
+                LLog("scanner: capture failed — \(error.localizedDescription)")
+            }
+            self.finishScannerCapture(uniqueID: resolvedSettings.uniqueID)
+        }
+    }
+    #endif
 }
 
 // MARK: - Remembered recording settings

@@ -224,7 +224,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
 
     let videoQueue = DispatchQueue(label: "com.letslapse.liveblend.video")
     private let blendQueue = DispatchQueue(label: "com.letslapse.liveblend.blend", qos: .userInitiated)
-    private let configuration: Configuration
+    /// `var`, not `let`, for exactly one reason: EVERY=Auto. A Holy Grail run
+    /// on Auto re-paces itself as the light dies (see `HolyGrailAutoInterval`).
+    /// Only `setIntervalSeconds` writes it, and only on `videoQueue`, where
+    /// every reader already lives.
+    private var configuration: Configuration
     private let blender: PixelBufferBlender
 
     /// Both fired on the main queue.
@@ -348,6 +352,18 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             self.armWatchdog()
             LLog("liveblend: start interval=\(self.configuration.intervalSeconds)s depth=\(self.configuration.blendDepth.token) log=\(self.configuration.logURL.path)")
             self.blendQueue.async { self.rewriteLog() }
+        }
+    }
+
+    /// Re-paces a running shoot — the EVERY=Auto path, and nothing else calls
+    /// it. Applied from the next window boundary onward, so the window in
+    /// flight is never truncated mid-capture.
+    func setIntervalSeconds(_ seconds: Double) {
+        videoQueue.async {
+            let next = min(max(seconds, 0.5), 600)
+            guard self.configuration.intervalSeconds != next else { return }
+            LLog("liveblend: re-paced \(self.configuration.intervalSeconds)s → \(next)s")
+            self.configuration.intervalSeconds = next
         }
     }
 

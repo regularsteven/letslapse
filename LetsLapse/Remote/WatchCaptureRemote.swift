@@ -84,6 +84,43 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// a start/stop toggle over one long exposure.
     @Published private(set) var isBulbMode = false
     @Published private(set) var captureCount = 0
+    /// Interval's MODE dial as the camera has it — Off · Holy Grail · Scanner.
+    @Published private(set) var intervalMode: IntervalCaptureMode = .off
+    /// EVERY is pacing itself. `intervalSeconds` then reports what the pacing
+    /// has *arrived at*, not what anyone chose, so the remote labels it "Auto".
+    @Published private(set) var intervalAuto = false
+    /// Whichever MODE readout is live, nil when neither is. See
+    /// `WatchMessageKey`'s notes: absent means "no such run", never "zeroed".
+    @Published private(set) var holyGrail: HolyGrailReadout?
+    @Published private(set) var scanner: ScannerReadout?
+
+    /// The ramp's live numbers as they arrive over the wire.
+    struct HolyGrailReadout: Equatable {
+        var shutterSeconds: Double
+        var iso: Double
+        var sceneEV: Double
+        /// Shutter is pinned and ISO is carrying the ramp — the operator's cue
+        /// to stop the shoot or accept grain.
+        var isISORamping: Bool
+        /// The scene has outrun the hardware; frames keep coming but no longer
+        /// track the light.
+        var isClipped: Bool
+        var isCapturingRAW: Bool
+    }
+
+    /// Scanner's live numbers. `phase` is `ScannerEngine.State.rawValue`, kept
+    /// as a String because the engine is an iOS-only app type and this struct
+    /// has to decode on watchOS too.
+    struct ScannerReadout: Equatable {
+        var phase: String
+        var frames: Int
+        var shutterSeconds: Double
+        var iso: Double
+        var isCapturingRAW: Bool
+        var waitingForDeviceSteady: Bool
+
+        var isSettling: Bool { phase == "disturbed" }
+    }
     @Published private(set) var stopAtUnit: ScheduledStopUnit?
     @Published private(set) var stopAtDeadline: Date?
     @Published private(set) var stopAtTargetCount: Int?
@@ -180,9 +217,14 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // (syncKeepAwake) is what carries the app through wrist-down.
         // `isFrontmostTimeoutExtended` used to stretch the frontmost grace
         // period too, but it's been a no-op since watchOS 7.
-        #if DEBUG
-        applyDebugPreviewStateIfRequested()
         #endif
+        // The screenshot hook runs on the Mac too, not just the watch. The Mac
+        // remote is the same `WatchControlView` on a 208×248 canvas, and it is
+        // the surface these screens are hardest to reach on for real: driving
+        // an iPad on a tripod through a sunset is not a screenshot run. Same
+        // DEBUG gate, same frozen state.
+        #if DEBUG && (os(watchOS) || os(macOS))
+        applyDebugPreviewStateIfRequested()
         #endif
         activate()
     }
@@ -250,6 +292,26 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         send(.setIntervalSeconds, value: seconds)
     }
 
+    /// Arms Interval's MODE dial from the remote — the command that makes a
+    /// Holy Grail or Scanner shoot startable without walking to the camera.
+    /// Idle-only on the phone; it also switches the camera to Interval, since
+    /// that is the only mode these belong to.
+    func setIntervalMode(_ mode: IntervalCaptureMode) {
+        send(.setIntervalMode, extra: [WatchMessageKey.intervalMode: mode.rawValue])
+    }
+
+    /// EVERY on/off Auto. The phone owns the validity rule (Scanner can't leave
+    /// it, Off can't reach it) and rejects rather than silently ignoring, so a
+    /// refusal surfaces as a banner instead of a control that did nothing.
+    func setAutoInterval(_ auto: Bool) {
+        send(.setAutoInterval, value: auto ? 1 : 0)
+    }
+
+    /// Scanner only: throw away the pose just captured, without ending the run.
+    func deleteLastFrame() {
+        send(.deleteLastFrame)
+    }
+
     func setFramesPerBlend(_ frames: Int) {
         send(.setFramesPerBlend, value: Double(frames))
     }
@@ -310,6 +372,31 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         previewFrame = nil
         previewReceivedAt = nil
         previewMisses = 0
+    }
+
+    /// The shutter key is the presence test for each readout: a ramp that is
+    /// running always has an exposure, and a payload without one is a payload
+    /// from a camera that isn't ramping.
+    private static func holyGrailReadout(from payload: [String: Any]) -> HolyGrailReadout? {
+        guard let shutter = payload[WatchMessageKey.holyGrailShutter] as? Double else { return nil }
+        return HolyGrailReadout(
+            shutterSeconds: shutter,
+            iso: payload[WatchMessageKey.holyGrailISO] as? Double ?? 0,
+            sceneEV: payload[WatchMessageKey.holyGrailSceneEV] as? Double ?? 0,
+            isISORamping: payload[WatchMessageKey.holyGrailISORamping] as? Bool ?? false,
+            isClipped: payload[WatchMessageKey.holyGrailClipped] as? Bool ?? false,
+            isCapturingRAW: payload[WatchMessageKey.holyGrailRAW] as? Bool ?? false)
+    }
+
+    private static func scannerReadout(from payload: [String: Any]) -> ScannerReadout? {
+        guard let phase = payload[WatchMessageKey.scannerPhase] as? String else { return nil }
+        return ScannerReadout(
+            phase: phase,
+            frames: payload[WatchMessageKey.scannerFrames] as? Int ?? 0,
+            shutterSeconds: payload[WatchMessageKey.scannerShutter] as? Double ?? 0,
+            iso: payload[WatchMessageKey.scannerISO] as? Double ?? 0,
+            isCapturingRAW: payload[WatchMessageKey.scannerRAW] as? Bool ?? false,
+            waitingForDeviceSteady: payload[WatchMessageKey.scannerWaitingForSteady] as? Bool ?? false)
     }
 
     private func applyPreviewFrame(_ payload: [String: Any]) {
@@ -581,7 +668,37 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         case .setIntervalSeconds:
             if let seconds = sent[WatchMessageKey.value] as? Double {
                 intervalSeconds = seconds
+                // Picking a spacing is also how you leave Auto — mirroring the
+                // coupling the phone applies, so the row doesn't read "Auto"
+                // over a number the user just chose.
+                intervalAuto = false
             }
+            playHaptic(.click)
+        case .setIntervalMode:
+            if let token = sent[WatchMessageKey.intervalMode] as? String {
+                let mode = IntervalCaptureMode(token: token)
+                intervalMode = mode
+                // The phone switches to Interval for these, and forces Auto
+                // under Scanner. Echo both so the whole row settles at once
+                // rather than in two visible steps a round-trip apart.
+                captureMode = .interval
+                if mode.requiresAutoInterval {
+                    intervalAuto = true
+                } else if !mode.supportsAutoInterval {
+                    intervalAuto = false
+                }
+            }
+            playHaptic(.click)
+        case .setAutoInterval:
+            if let value = sent[WatchMessageKey.value] as? Double {
+                intervalAuto = value != 0
+            }
+            playHaptic(.click)
+        case .deleteLastFrame:
+            // Deliberately no optimistic decrement: the phone owns the count,
+            // and a delete that raced a landing frame would leave the remote
+            // one ahead of the camera — on the one screen where the count is
+            // the whole point. The push that follows carries the truth.
             playHaptic(.click)
         case .setFramesPerBlend:
             if let frames = sent[WatchMessageKey.value] as? Double {
@@ -774,7 +891,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     }
     #endif
 
-    #if os(watchOS) && DEBUG
+    #if DEBUG && (os(watchOS) || os(macOS))
     /// Which screen the screenshot hook asked for, so the view can preselect
     /// the matching tab. Nil outside the hook.
     private(set) var debugPreviewScreen: String?
@@ -821,10 +938,54 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             markIntervalCount = 1
         case "interval":
             captureMode = .interval
+            clearVideoOnlyStaging()
             intervalSeconds = 2
             blendDepth = .fixed(10)
             captureCount = 148
             formatLine = "12MP 4:3 · JPEG"
+        // The two MODE runs, staged. Neither is otherwise reachable on a Mac:
+        // they need a paired iPad on a tripod actually shooting, which is the
+        // whole situation this remote exists to make unnecessary — and a
+        // screenshot run can hardly go and shoot a sunset.
+        case "holygrail":
+            captureMode = .interval
+            clearVideoOnlyStaging()
+            intervalMode = .holyGrail
+            intervalAuto = true
+            intervalSeconds = 9
+            blendDepth = .fixed(10)
+            captureCount = 214
+            formatLine = "12MP 4:3 · DNG"
+            // Mid-ramp, deep enough that ISO has taken over — the state whose
+            // whole purpose is telling the operator to decide something.
+            holyGrail = HolyGrailReadout(
+                shutterSeconds: 1.0, iso: 1250, sceneEV: 1.4,
+                isISORamping: true, isClipped: false, isCapturingRAW: true)
+        case "scanner", "scanner-settling":
+            captureMode = .interval
+            clearVideoOnlyStaging()
+            intervalMode = .scanner
+            intervalAuto = true
+            blendDepth = .fixed(1)
+            captureCount = 12
+            formatLine = "12MP 4:3 · DNG"
+            scanner = ScannerReadout(
+                phase: screen == "scanner-settling" ? "disturbed" : "settled",
+                frames: 12,
+                shutterSeconds: 1.0 / 120,
+                iso: 200,
+                isCapturingRAW: true,
+                waitingForDeviceSteady: false)
+        case "scanner-armed":
+            // Idle with Scanner selected: the setup page a Mac uses to arm the
+            // iPad before walking away from it.
+            captureMode = .interval
+            clearVideoOnlyStaging()
+            intervalMode = .scanner
+            intervalAuto = true
+            formatLine = "12MP 4:3 · DNG"
+            recordingState = .idle
+            return
         case "no-burst":
             availableBurstFPS = []
             rampFPS = 24
@@ -895,6 +1056,19 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         recordingStartedAt = Date().addingTimeInterval(-83)
         recordingState = .recording
+    }
+
+    /// Undoes the video defaults this hook seeds before the switch, for the
+    /// screens that aren't video. A real Interval camera sends `rampFPS: 0` and
+    /// an empty burst ladder (see `CaptureView.updateWatchContext`), so leaving
+    /// them set would stage a header no camera can produce — a burst rate on a
+    /// shoot that has no bursts.
+    private func clearVideoOnlyStaging() {
+        rampFPS = 0
+        availableBurstFPS = []
+        availableBaseFPS = []
+        plannedSpeed = 0
+        rampIntervalCount = 0
     }
 
     /// A stand-in landscape for the framing screenshots: sky, a horizon, and
@@ -1010,6 +1184,26 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         }
         if let count = payload[WatchMessageKey.captureCount] as? Int {
             captureCount = count
+        }
+        // Absent means the phone predates the MODE dial, so hold what we have
+        // rather than snapping a live Scanner run back to Off.
+        if let token = payload[WatchMessageKey.intervalMode] as? String {
+            intervalMode = IntervalCaptureMode(token: token)
+        }
+        if let auto = payload[WatchMessageKey.intervalAuto] as? Bool {
+            intervalAuto = auto
+        }
+        // These two CLEAR on absence, unlike the settings above, and the
+        // asymmetry is deliberate: a state payload is a full snapshot, so a
+        // missing readout means that mode is no longer running. Holding the
+        // last one would leave the remote showing a ramp's final exposure over
+        // a camera that stopped shooting minutes ago — the one lie a readout
+        // whose whole job is "what is it doing right now" must not tell.
+        // Guarded on a key every phone build sends, so a command reply (which
+        // is not a snapshot) can't clear them.
+        if payload[WatchMessageKey.captureMode] != nil {
+            holyGrail = Self.holyGrailReadout(from: payload)
+            scanner = Self.scannerReadout(from: payload)
         }
         // Scheduled stop: every payload is a full snapshot, so an absent unit
         // means no schedule — clear rather than keep stale countdowns. Command

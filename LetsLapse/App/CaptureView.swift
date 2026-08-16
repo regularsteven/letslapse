@@ -44,29 +44,71 @@ struct CaptureView: View {
     /// Where Safe falls back when its profile basis disappears (interval or
     /// format change, learning reset) — the last deliberate fixed choice.
     @State private var lastFixedBlendFrames = 10
-    /// Interval's RAMP dial: with Holy Grail armed, shutter and ISO are ramped
-    /// automatically through a lighting transition so one shoot can run from
-    /// daylight into night. Persisted on its own key rather than through
+    /// Interval's MODE dial — which decision this shoot takes away from the
+    /// timer. Off is the plain timer shoot, Holy Grail takes exposure, Scanner
+    /// takes the firing itself. Persisted on its own key rather than through
     /// `RecordingSettingsStore` — it is a shooting *intent* the user sets for
-    /// a specific evening, not part of the remembered format snapshot.
-    @AppStorage("letslapse.capture.holyGrail") private var holyGrailEnabled = false
-    /// True while Interval's RAMP dial is on Holy Grail on a platform that
+    /// a specific evening (or a specific object), not part of the remembered
+    /// format snapshot. The key is the one the Bool it replaced used, and
+    /// `IntervalCaptureMode(token:)` decodes the two values that Bool wrote.
+    @AppStorage("letslapse.capture.holyGrail") private var intervalModeToken = IntervalCaptureMode.off.rawValue
+    private var intervalMode: IntervalCaptureMode {
+        let decoded = IntervalCaptureMode(token: intervalModeToken)
+        // A Mac that inherited an iCloud-synced "on" shoots the plain interval
+        // rather than silently shooting something the platform can't do.
+        return Self.intervalModesAvailable ? decoded : .off
+    }
+    /// EVERY is on Auto: the mode paces the shoot. Only meaningful with a MODE
+    /// that can pace — see `IntervalCaptureMode.supportsAutoInterval`.
+    @AppStorage("letslapse.capture.intervalAuto") private var intervalAutoEnabled = false
+    /// Scanner's PAPER dial — the stock the flat object is, for the perspective
+    /// correction taken at export. Persisted like the MODE dial (a shooting
+    /// intent, not part of the remembered format snapshot) and read back by the
+    /// correction rather than by the capture, which it does not affect.
+    @AppStorage("letslapse.capture.scannerAspect")
+    private var scannerAspectToken = PerspectiveAspect.auto.rawValue
+    private var scannerAspect: PerspectiveAspect {
+        PerspectiveAspect(rawValue: scannerAspectToken) ?? .auto
+    }
+    /// The spacing to fall back to when Auto stops being available (MODE went
+    /// back to Off), so turning a mode off doesn't lose the number the user
+    /// last chose.
+    @State private var lastFixedInterval: Double = 2
+    /// Poses banked as of the last time the count was observed — so the fire
+    /// haptic can tell a capture from a "Delete last".
+    @State private var lastScannerFrameCount = 0
+    /// True while Interval's MODE dial is on Holy Grail on a platform that
     /// can ramp — the state in which exposure belongs to the ramp and the
     /// lock button, the readout and the ±EV control all change meaning.
     private var holyGrailArmed: Bool {
-        mode == .interval && holyGrailEnabled && Self.holyGrailAvailable
+        mode == .interval && intervalMode == .holyGrail
+    }
+    /// True while Interval's MODE dial is on Scanner.
+    private var scannerArmed: Bool {
+        mode == .interval && intervalMode == .scanner
+    }
+    /// Whether EVERY is effectively Auto right now — the dial's value only
+    /// means Auto under a mode that can pace, and Scanner is always Auto.
+    private var intervalIsAuto: Bool {
+        guard mode == .interval else { return false }
+        if intervalMode.requiresAutoInterval { return true }
+        return intervalAutoEnabled && intervalMode.supportsAutoInterval
     }
 
-    /// The ramp needs manual exposure, a numeric ISO/shutter envelope and RAW
-    /// — iOS/iPadOS only. On the Mac the dial isn't offered and a remembered
-    /// "on" is ignored rather than silently shooting something else.
-    static let holyGrailAvailable: Bool = {
+    /// Both non-`off` modes need manual exposure, a numeric ISO/shutter
+    /// envelope and RAW — iOS/iPadOS only. On the Mac the MODE dial isn't
+    /// offered and a remembered value is ignored rather than silently shooting
+    /// something else.
+    static let intervalModesAvailable: Bool = {
         #if os(iOS)
         return true
         #else
         return false
         #endif
     }()
+    /// Kept under its old name for the several places that ask specifically
+    /// about the ramp; it is the same platform answer.
+    static var holyGrailAvailable: Bool { intervalModesAvailable }
     @State private var showPsychoNotice = false
     private static let psychoNoticeShownKey = "letslapse.capture.psychoNoticeShown"
     private let captureIntervalOptions: [Double] = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
@@ -257,6 +299,7 @@ struct CaptureView: View {
         }
         .sheet(isPresented: $showTargetSheet) {
             CaptureTargetSheet(
+                kind: scannerArmed ? .scannerPoses : .clip,
                 captureFPS: camera.selectedFrameRate,
                 outputFPS: model.outputFPS
             ) { plan in
@@ -326,11 +369,27 @@ struct CaptureView: View {
             updateAspectPreview()
             revalidateSafeDepth()
         }
-        // Arming the Holy Grail ramp puts the session in the photo
+        // Arming Holy Grail or Scanner puts the session in the photo
         // configuration too (RAW lives nowhere else), so the viewfinder shows
-        // the 4:3 sensor frame the run will actually capture.
-        .onChange(of: holyGrailEnabled) { _ in
+        // the 4:3 sensor frame the run will actually capture. Scanner also
+        // pins EVERY to Auto — the scene sets the spacing, so a fixed value
+        // isn't a promise the mode could keep.
+        .onChange(of: intervalModeToken) { _ in
+            reconcileIntervalAuto()
             updateAspectPreview()
+        }
+        // A pose landed. Everything the operator gets from a Scanner run that
+        // isn't the shutter's own click hangs off this one signal — which is
+        // why it must only fire on the count going *up*. "Delete last" moves
+        // it down, and answering that with the capture haptic would tell the
+        // operator a frame had just been banked at the exact moment one was
+        // thrown away.
+        .onChange(of: camera.scannerState?.frames) { frames in
+            let previous = lastScannerFrameCount
+            lastScannerFrameCount = frames ?? 0
+            guard let frames, frames > previous else { return }
+            announceScannerFrame()
+            checkScannerTarget(frames: frames)
         }
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
@@ -478,6 +537,15 @@ struct CaptureView: View {
         .onChange(of: photoBulbMode) { _ in updateWatchModeContext() }
         .onChange(of: camera.photoCount) { _ in updateWatchModeContext() }
         .onChange(of: camera.liveBlendOutputCount) { _ in updateWatchModeContext() }
+        // The MODE dial and its Auto flag travel with the rest of the dials, so
+        // a remote that set them sees its own change confirmed.
+        .onChange(of: intervalModeToken) { _ in updateWatchModeContext() }
+        .onChange(of: intervalAutoEnabled) { _ in updateWatchModeContext() }
+        .onChange(of: camera.activeIntervalSeconds) { _ in updateWatchModeContext() }
+        // Each mode's live readout. Pushed on every change — for these two the
+        // numbers ARE the interface (see `updateWatchIntervalReadout`).
+        .onChange(of: camera.holyGrailState) { _ in updateWatchIntervalReadout() }
+        .onChange(of: camera.scannerState) { _ in updateWatchIntervalReadout() }
         .onChange(of: camera.scheduledStop) { _ in updateWatchScheduledStop() }
         .onChange(of: camera.selectedResolution) { _ in updateWatchContext() }
         .onChange(of: camera.selectedFrameRate) { _ in updateWatchContext() }
@@ -526,6 +594,7 @@ struct CaptureView: View {
         #if DEBUG
         applyModePreviewHook()
         applyHolyGrailPreviewHook()
+        applyScannerPreviewHook()
         applyBurstPreviewHook()
         applyFocusPreviewHook()
         applyRecordingPreviewHook()
@@ -588,6 +657,7 @@ struct CaptureView: View {
         updateWatchModeContext()
         updateWatchScheduledStop()
         updateWatchExposure()
+        updateWatchIntervalReadout()
         updateIdleTimer()
         #endif
         camera.onFinishLiveCapture = { result in
@@ -641,9 +711,11 @@ struct CaptureView: View {
                 from: steadiness.captureLog, threshold: steadiness.stillThreshold)
             dismiss()
             model.setSource(
-                .photos(urls),
-                mode: holyGrailEnabled && Self.holyGrailAvailable
-                    ? "Interval · Holy Grail" : "Interval · JPEG")
+                .photos(urls), mode: intervalSourceModeName,
+                // Scanner output is a set of individually-composed frames for
+                // export, not material for a blend, and the Projects tab has to
+                // be able to tell the two apart long after the shoot.
+                captureMode: scannerArmed ? .scanner : nil)
             // A minimum run of 2 filters a lone bad frame (a passing cloud, a
             // single bump); the half-session ceiling keeps a shaky handheld
             // shoot from reading as a tail event.
@@ -720,9 +792,13 @@ struct CaptureView: View {
     /// should be framing on the full 4:3 sensor, not the 16:9 video format.
     /// Photo and Interval share the gate: both run the same DNG pipeline.
     private var wantsPhotoAspectPreview: Bool {
-        (mode == .interval || mode == .photo)
-            && model.intervalOutputFormat == .dng
-            && camera.liveBlendDNGSupport.isSupported
+        guard mode == .interval || mode == .photo else { return false }
+        guard camera.liveBlendDNGSupport.isSupported else { return false }
+        // Scanner shoots RAW by default whatever the format dial says — the
+        // frames are for a solver — so it frames on the sensor too, and the
+        // viewfinder shows what the run will really capture rather than the
+        // 16:9 crop the video format would have given.
+        return model.intervalOutputFormat == .dng || scannerArmed
     }
 
     /// A Photo shot should land as DNG when the format is selected and the
@@ -1151,8 +1227,27 @@ struct CaptureView: View {
                         .id(reticle.id)
                         .allowsHitTesting(false)
                 }
+                #if os(iOS)
+                // The Scanner's quad, traced over the live page — in this
+                // region's own coordinates, mapped corner by corner through the
+                // preview layer (see `scannerOverlayCorners`). It fills the
+                // region rather than a hand-fitted rect because the letterbox
+                // is no longer the view's to guess at.
+                if let quad = scannerOverlayQuad {
+                    ScannerRectangleOverlay(
+                        corners: scannerOverlayCorners(
+                            quad, region: geometry, screenSize: screenSize))
+                        // Never in the way of a focus tap or the HUD: the
+                        // overlay is picture, not chrome.
+                        .allowsHitTesting(false)
+                        .transition(.opacity)
+                }
+                #endif
             }
             .animation(.easeInOut(duration: 0.16), value: camera.isSwitchingLens)
+            // Corner-to-corner interpolation, so a page being nudged reads as
+            // the quad following it rather than as a new quad each frame.
+            .animation(.easeOut(duration: 0.12), value: scannerOverlayQuad)
             .frame(width: geometry.size.width, height: geometry.size.height)
             #if os(iOS)
             // The whole region takes the tap, not just whatever is drawn in it.
@@ -1173,6 +1268,95 @@ struct CaptureView: View {
             if !pinned { focusReticle = nil }
         }
     }
+
+    /// The quad to draw over the live image, or nil. Only under Scanner: the
+    /// detector doesn't run in any other mode, and a stale quad surviving a
+    /// mode switch would be drawing something the camera is no longer watching.
+    private var scannerOverlayQuad: NormalizedQuad? {
+        scannerArmed ? camera.scannerRectangle : nil
+    }
+
+    #if os(iOS)
+    /// Where the detected page's four corners land **in the viewfinder region's
+    /// own coordinates**.
+    ///
+    /// The chain, and why each link is there:
+    ///
+    /// 1. Vision reported the corners in the *oriented* image it was handed —
+    ///    the run's capture pose (`camera.scannerRectangleOrientation`), which
+    ///    is the pose the still is written at and need not be the pose the
+    ///    preview is drawn at. `sensorCorners(measuredIn:)` un-turns them into
+    ///    the camera's own landscape space with a top-left origin, which is
+    ///    exactly the "capture device point" AVFoundation speaks.
+    /// 2. `layerPointConverted(fromCaptureDevicePoint:)` puts that on glass.
+    ///    **This is the only thing that knows the letterbox** — the video
+    ///    gravity (`.resizeAspect` here), the bars it leaves, the connection's
+    ///    own rotation and any mirroring. It is the same conversion
+    ///    tap-to-focus runs in reverse, so the overlay and a focus tap can no
+    ///    longer disagree about where a point on the picture is.
+    /// 3. The preview layer fills the whole capture stage and is then slid up
+    ///    (`previewTopAnchorOffset`), so undoing that slide and this region's
+    ///    own origin lands the point here. Exactly `focusTap`'s arithmetic,
+    ///    read backwards.
+    ///
+    /// Without a live connection — the simulator, or before the session has
+    /// configured — step 2 has nothing to convert against, so it falls back to
+    /// fitting the image into this region by hand. That path is what the
+    /// `LL_SCANNER_RECT` screenshot hook draws, and it still converts the
+    /// orientation, because a staged quad is in capture space like a real one.
+    private func scannerOverlayCorners(
+        _ quad: NormalizedQuad, region: GeometryProxy, screenSize: CGSize
+    ) -> ScannerQuadCorners {
+        let sensor = quad.sensorCorners(measuredIn: camera.scannerRectangleOrientation)
+        let frame = region.frame(in: .named(Self.stageSpace))
+
+        if let layer = camera.previewLayer, layer.connection != nil,
+           layer.bounds.width > 1, layer.bounds.height > 1 {
+            let slide = previewTopAnchorOffset(in: screenSize)
+            func map(_ point: NormalizedQuad.Point) -> CGPoint {
+                let onLayer = layer.layerPointConverted(fromCaptureDevicePoint: point.cgPoint)
+                return CGPoint(x: onLayer.x - frame.minX, y: onLayer.y + slide - frame.minY)
+            }
+            return ScannerQuadCorners(
+                topLeft: map(sensor.topLeft), topRight: map(sensor.topRight),
+                bottomRight: map(sensor.bottomRight), bottomLeft: map(sensor.bottomLeft))
+        }
+
+        // Fallback. The quad is restated in the *preview's* orientation and laid
+        // on the image rect worked out the way the preview layer lays itself
+        // out: `.resizeAspect` centres the image in the **stage** — which the
+        // layer fills — and the top-anchor offset then slides the finished
+        // layer up. Both are in stage coordinates, so this region's own origin
+        // comes off last.
+        //
+        // Not the region's own rect, which is what this drew before and is
+        // wrong twice over: in portrait the region starts below the top bar
+        // while the picture starts at its letterbox (23 pt apart on an iPhone
+        // 17 Pro), and in landscape the region sits between a 108 pt rail and a
+        // 118 pt one, so its centre is 5 pt off the picture's.
+        let preview = quad.converted(
+            from: camera.scannerRectangleOrientation,
+            to: QuadOrientation(captureOrientation: orientation))
+        let fitted = aspectFitSize(
+            aspectRatio: previewAspectRatio,
+            maxWidth: screenSize.width, maxHeight: screenSize.height)
+        let origin = CGPoint(
+            x: (screenSize.width - fitted.width) / 2 - frame.minX,
+            y: (screenSize.height - fitted.height) / 2
+                + previewTopAnchorOffset(in: screenSize) - frame.minY)
+        func map(_ point: NormalizedQuad.Point) -> CGPoint {
+            CGPoint(
+                x: origin.x + CGFloat(point.x) * fitted.width,
+                // The one flip: the corners keep Vision's bottom-left origin
+                // all the way to Core Image (see `NormalizedQuad`), and
+                // SwiftUI's y runs the other way.
+                y: origin.y + CGFloat(1 - point.y) * fitted.height)
+        }
+        return ScannerQuadCorners(
+            topLeft: map(preview.topLeft), topRight: map(preview.topRight),
+            bottomRight: map(preview.bottomRight), bottomLeft: map(preview.bottomLeft))
+    }
+    #endif
 
     #if os(iOS)
     /// Tap the viewfinder to focus there. The camera refuses this outright once
@@ -1318,7 +1502,11 @@ struct CaptureView: View {
                     // The output format is part of the pill in the still modes —
                     // DNG in amber (it changes what lands on disk), JPEG in
                     // the ordinary weight. Photo mirrors Interval exactly.
-                    if model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported {
+                    // Scanner defaults to RAW regardless of the dial (see
+                    // `scannerCapturesRAW`), so the pill names what will
+                    // actually land rather than what the dial happens to say.
+                    if scannerCapturesRAW
+                        || (model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported) {
                         Text("· DNG")
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundStyle(isCapturing ? LL.amber.opacity(0.6) : LL.amber)
@@ -1361,12 +1549,21 @@ struct CaptureView: View {
             let resolution = camera.activeSegmentResolution ?? camera.selectedResolution
             return "\(resolution.label) · \(camera.selectedFrameRate)"
         }
-        if model.intervalOutputFormat == .dng,
-           camera.liveBlendDNGSupport.isSupported,
+        if scannerCapturesRAW || (model.intervalOutputFormat == .dng
+                                  && camera.liveBlendDNGSupport.isSupported),
            let sensor = camera.liveBlendDNGSupport.sensorDimensions {
             return sensorSummaryLabel(sensor)
         }
         return camera.selectedResolution.stillLabel
+    }
+
+    /// Whether a Scanner run on this device will really write DNG. RAW is
+    /// Scanner's default because the frames are destined for solvers and
+    /// compositing pipelines — but the claim is only made where the hardware
+    /// backs it, and `startScanner` falls back to processed stills (and logs
+    /// it) on a source that can't deliver Bayer RAW.
+    private var scannerCapturesRAW: Bool {
+        scannerArmed && camera.liveBlendDNGSupport.isSupported
     }
 
     // MARK: - Remote link chip
@@ -1572,14 +1769,28 @@ struct CaptureView: View {
     private var intervalStatusRow: some View {
         if showsIntervalRunningRow {
             VStack(spacing: 8) {
-                intervalRunningPills
-                blendDiagnosticsReadout
-                holyGrailReadout
+                // A Scanner run has no spacing to report and no blend windows,
+                // so it replaces the pills outright rather than sitting under
+                // counters that would mean nothing.
+                if camera.scannerState != nil {
+                    scannerReadout
+                } else {
+                    intervalRunningPills
+                    blendDiagnosticsReadout
+                    holyGrailReadout
+                }
             }
         } else {
             // The output format lives in the format pill and its sheet — no
-            // duplicate copy line here.
-            intervalPickerRow
+            // duplicate copy line here. Scanner is the exception, and only
+            // because it writes a file the dial never named (see
+            // `scannerOutputNote`).
+            VStack(spacing: 6) {
+                scannerLockWarning
+                scannerOutputNote
+                intervalPickerRow
+                scannerAspectRow
+            }
         }
     }
 
@@ -1590,14 +1801,57 @@ struct CaptureView: View {
     private var landscapeIntervalRow: some View {
         if showsIntervalRunningRow {
             VStack(alignment: .leading, spacing: 6) {
-                intervalRunningPills
-                blendDiagnosticsReadout
-                holyGrailReadout
+                if camera.scannerState != nil {
+                    scannerReadout
+                } else {
+                    intervalRunningPills
+                    blendDiagnosticsReadout
+                    holyGrailReadout
+                }
             }
         } else {
-            intervalPickerRow
-                .padding(.horizontal, 12)
-                .padding(.vertical, 5)
+            VStack(alignment: .leading, spacing: 6) {
+                scannerLockWarning
+                scannerOutputNote
+                intervalPickerRow
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+                scannerAspectRow
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 5)
+                    .background(Color.black.opacity(0.5), in: Capsule())
+            }
+        }
+    }
+
+    /// Scanner's PAPER dial, under the EVERY/MODE/BLEND row and only while
+    /// Scanner is the armed mode — it means nothing to a timer shoot, and a
+    /// dial that is always there but usually inert teaches the wrong model.
+    @ViewBuilder
+    private var scannerAspectRow: some View {
+        if scannerArmed {
+            ScannerAspectRow(aspect: scannerAspect) { scannerAspectToken = $0.rawValue }
+                .equatable()
+        }
+    }
+
+    /// What a Scanner run really writes, said under the format pill.
+    ///
+    /// The pill can only name one format, and a Scanner pose that sees a page
+    /// lands as *two* files: the DNG the pill names, and a rectified HEIC beside
+    /// it. Poses shot with no rectangle in view land as one. Rather than have
+    /// the pill flicker between claims — or, worse, quietly under-report what
+    /// fills the operator's storage — the pill keeps saying DNG and this line
+    /// states the rest of the deal, once, where the dials are read.
+    @ViewBuilder
+    private var scannerOutputNote: some View {
+        if scannerArmed, !isIntervalCapturing {
+            Text("DNG + corrected HEIC when rectangle detected")
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.55))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
                 .background(Color.black.opacity(0.5), in: Capsule())
         }
     }
@@ -1683,14 +1937,64 @@ struct CaptureView: View {
         updateAspectPreview()
     }
 
-    /// `LL_HOLYGRAIL=armed` arms the ramp dial; `LL_HOLYGRAIL=running` also
-    /// freezes a mid-ramp state on screen — the readout the simulator can
-    /// never produce for itself, since it has no camera to ramp. Implies
-    /// Interval mode. Pair with `LL_CAPTURE=1`.
+    /// `LL_SCANNER=settled|disturbed` arms the MODE dial on Scanner and freezes
+    /// a running shoot in that state — the HUD the simulator can never reach
+    /// for itself, having no camera to difference frames from and no scene to
+    /// disturb. Implies Interval mode. Pair with `LL_CAPTURE=1`.
+    ///
+    /// `settled` is the resting state ("Waiting for you to move"); `disturbed`
+    /// is mid-settle, with the ring part-filled. Both draw 12 of a 36-pose
+    /// target, which is what makes the count and the ring legible in a mirror
+    /// screenshot.
+    private func applyScannerPreviewHook() {
+        let environment = ProcessInfo.processInfo.environment
+        let rectangleHook = environment["LL_SCANNER_RECT"]
+        guard let raw = environment["LL_SCANNER"] ?? rectangleHook.map({ _ in "1" }) else { return }
+        mode = .interval
+        intervalModeToken = IntervalCaptureMode.scanner.rawValue
+        reconcileIntervalAuto()
+        updateAspectPreview()
+        // `LL_SCANNER_RECT=detected` freezes a quad over the viewfinder;
+        // `none` (or leaving it unset) draws no overlay. Same reason as every
+        // other hook on this screen, one step further along: the simulator has
+        // no camera, so there is nothing for Vision to find a rectangle in, and
+        // the overlay is otherwise unreachable off-device. The corners are a
+        // plausible keystoned page — narrower at the top, where the far edge is.
+        if rectangleHook == "detected" {
+            camera.scannerRectangle = NormalizedQuad(
+                topLeft: .init(x: 0.185, y: 0.815),
+                topRight: .init(x: 0.826, y: 0.833),
+                bottomLeft: .init(x: 0.122, y: 0.196),
+                bottomRight: .init(x: 0.884, y: 0.181),
+                confidence: 0.94)
+        }
+        guard raw == "settled" || raw == "disturbed" else { return }
+        let disturbed = raw == "disturbed"
+        activeTarget = CaptureTargetPlan(
+            clipSeconds: 0, speed: 1, recordSeconds: 0, autoStop: true, poseTarget: 36)
+        camera.scannerState = CameraController.ScannerState(
+            phase: disturbed
+                ? ScannerEngine.State.disturbed.rawValue
+                : ScannerEngine.State.settled.rawValue,
+            frames: 12,
+            shutterSeconds: 1.0 / 120,
+            iso: 200,
+            isCapturingRAW: true,
+            settleProgress: disturbed ? 0.55 : nil,
+            waitingForDeviceSteady: false,
+            hasRectangle: rectangleHook == "detected")
+        camera.isIntervalRunning = true
+        framingStartedAt = Date().addingTimeInterval(-96)
+    }
+
+    /// `LL_HOLYGRAIL=armed` arms the MODE dial on Holy Grail;
+    /// `LL_HOLYGRAIL=running` also freezes a mid-ramp state on screen — the
+    /// readout the simulator can never produce for itself, since it has no
+    /// camera to ramp. Implies Interval mode. Pair with `LL_CAPTURE=1`.
     private func applyHolyGrailPreviewHook() {
         guard let raw = ProcessInfo.processInfo.environment["LL_HOLYGRAIL"] else { return }
         mode = .interval
-        holyGrailEnabled = true
+        intervalModeToken = IntervalCaptureMode.holyGrail.rawValue
         updateAspectPreview()
         guard raw == "running" else { return }
         camera.holyGrailState = CameraController.HolyGrailState(
@@ -1794,21 +2098,63 @@ struct CaptureView: View {
         IntervalDialsRow(
             intervalSeconds: interval,
             intervalOptions: captureIntervalOptions,
+            intervalIsAuto: intervalIsAuto,
             blendDepth: blendDepth,
             safeDepthAvailable: safeDepthAvailable,
             captionText: blendCaptionText,
-            rampAvailable: Self.holyGrailAvailable,
-            holyGrail: holyGrailEnabled && Self.holyGrailAvailable,
-            onSelectInterval: { interval = $0 },
+            modeAvailable: Self.intervalModesAvailable,
+            intervalMode: intervalMode,
+            onSelectInterval: { seconds in
+                intervalAutoEnabled = false
+                lastFixedInterval = seconds
+                interval = seconds
+            },
+            onSelectAutoInterval: { intervalAutoEnabled = true },
             onSelectFixedBlend: { frames in
                 blendDepth = .fixed(frames)
                 lastFixedBlendFrames = frames
             },
             onSelectPsycho: selectPsychoDepth,
             onSelectSafe: { blendDepth = .throttled },
-            onSelectHolyGrail: { holyGrailEnabled = $0 }
+            onSelectMode: { intervalModeToken = $0.rawValue }
         )
         .equatable()
+    }
+
+    /// Keeps the EVERY/MODE pair valid after a MODE change.
+    ///
+    /// Two directions, and each is the least surprising answer available:
+    /// Scanner turns Auto on (its spacing is the scene's, and the dial already
+    /// says so), and a mode that can no longer pace turns Auto off, restoring
+    /// the fixed spacing the user last picked rather than leaving the dial
+    /// reading "Auto" for a shoot with nothing to do the pacing.
+    private func reconcileIntervalAuto() {
+        if intervalMode.requiresAutoInterval {
+            intervalAutoEnabled = true
+            return
+        }
+        if !intervalMode.supportsAutoInterval, intervalAutoEnabled {
+            intervalAutoEnabled = false
+            interval = lastFixedInterval
+        }
+    }
+
+    /// What a shoot opens at when EVERY is on Auto. Holy Grail starts at the
+    /// pacing policy's floor and widens from there as the light dies; Scanner
+    /// has no timer at all, so the number only exists to satisfy the API and
+    /// the floor is as good as any.
+    private var autoIntervalSeed: Double { HolyGrailAutoInterval.floorSeconds }
+
+    /// What the project's `mode` string says this shoot was. It is the label
+    /// the rest of the app reads a capture's intent from — the Adjust screen
+    /// turns "Scanner" into an Export-frames CTA rather than a timelapse one —
+    /// so it names the MODE dial, not just the file format.
+    private var intervalSourceModeName: String {
+        switch intervalMode {
+        case .scanner: return "Interval · Scanner"
+        case .holyGrail: return "Interval · Holy Grail"
+        case .off: return "Interval · JPEG"
+        }
     }
 
     /// First selection shows the honest warmth-and-learning note, once.
@@ -1824,7 +2170,14 @@ struct CaptureView: View {
     /// depths say what drives their count instead. A Holy Grail shoot has no
     /// live blend at all — its caption says what the ramp will do.
     private var blendCaptionText: String? {
-        if holyGrailEnabled, Self.holyGrailAvailable {
+        if scannerArmed {
+            // Scanner's caption carries both consequences of the mode at once:
+            // where the spacing comes from, and that there is no blend window
+            // to set a depth over. It is the inline reason for two greyed
+            // dials, so it says both things rather than the prettier one.
+            return "fires when the scene stills · one frame per pose"
+        }
+        if holyGrailArmed {
             // The ramp's caption has to name what BLEND is doing to it: with
             // a depth the frames are averaged as the shoot runs, without one
             // they are single sharp stills kept as a RAW pair.
@@ -1895,6 +2248,147 @@ struct CaptureView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    // MARK: - Scanner HUD
+
+    /// What a running Scanner shoot shows, and in what order of importance.
+    ///
+    /// The design constraint here is unusual for this app and drives
+    /// everything: **the operator is not looking at the screen.** Their hands
+    /// are on the object and their eyes are on the pose. So the count is set
+    /// enormous — it is the one thing worth a glance — the state line is a
+    /// short imperative rather than a status, and the real feedback channel is
+    /// the shutter click plus a haptic, not any of these pixels (see
+    /// `announceScannerFrame`).
+    @ViewBuilder
+    private var scannerReadout: some View {
+        if let state = camera.scannerState {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("\(state.frames)")
+                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                        .monospacedDigit()
+                        .foregroundStyle(.white)
+                    if let poses = activeTarget?.poseTarget {
+                        Text("/ \(poses)")
+                            .font(.system(size: 17, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .foregroundStyle(.white.opacity(0.45))
+                    }
+                    Text(scannerStateText(state))
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(scannerStateTint(state))
+                    // Which of the two settle signals is deciding. The operator
+                    // needs this the moment the shoot behaves differently from
+                    // the last one: with a page in view the fire waits on four
+                    // corners standing still, without one it waits on the whole
+                    // frame going quiet, and they do not feel the same. The
+                    // glyph is the overlay's own accent, so the mark on screen
+                    // and the mark in the HUD are visibly the same fact.
+                    if state.hasRectangle {
+                        Image(systemName: "doc.viewfinder")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(LL.accent)
+                            .accessibilityLabel("Rectangle detected — settling on its corners")
+                    }
+                }
+                Text(scannerExposureText(state))
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.white.opacity(0.6))
+                scannerDeleteLastButton(frames: state.frames)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    /// Imperative, not descriptive: the settled state's job is to tell the
+    /// operator it is their turn, which "Waiting for you to move" does and
+    /// "Idle" does not.
+    private func scannerStateText(_ state: CameraController.ScannerState) -> String {
+        if state.waitingForDeviceSteady { return "Hold the phone still" }
+        return state.phase == ScannerEngine.State.disturbed.rawValue
+            ? "Settling…" : "Waiting for you to move"
+    }
+
+    private func scannerStateTint(_ state: CameraController.ScannerState) -> Color {
+        if state.waitingForDeviceSteady { return .red }
+        return state.phase == ScannerEngine.State.disturbed.rawValue
+            ? LL.amber : Color(red: 0.2, green: 0.78, blue: 0.35)
+    }
+
+    /// The locked pair every frame of the set was taken at — the number that
+    /// makes a set trustable without inspecting it afterwards.
+    private func scannerExposureText(_ state: CameraController.ScannerState) -> String {
+        var text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso)) · locked"
+        text += state.isCapturingRAW ? " · RAW" : " · no RAW on this device"
+        return text
+    }
+
+    /// Discards the pose just taken without ending the shoot.
+    ///
+    /// This control earns its place here more than anywhere else in the app: a
+    /// Scanner set is consumed whole by a solver, and one frame with a hand in
+    /// it degrades the entire reconstruction rather than being a bad frame you
+    /// scroll past. Catching it in the moment — while the object is still in
+    /// the pose that needs re-shooting — costs one tap; catching it later costs
+    /// the shoot.
+    @ViewBuilder
+    private func scannerDeleteLastButton(frames: Int) -> some View {
+        Button {
+            camera.deleteLastScannerFrame { _ in
+                #if os(iOS)
+                // Confirmation the operator can feel without looking up, which
+                // is the same reason the fire itself is a click.
+                UINotificationFeedbackGenerator().notificationOccurred(.warning)
+                #endif
+            }
+        } label: {
+            Label("Delete last", systemImage: "arrow.uturn.backward")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(frames > 0 ? .white : .white.opacity(0.3))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.white.opacity(frames > 0 ? 0.14 : 0.06), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .disabled(frames == 0)
+        .accessibilityLabel("Delete the last captured angle")
+    }
+
+    /// A pose landed. The haptic is the point: paired with the system shutter
+    /// sound the still capture makes for itself, it tells the operator the
+    /// frame is banked and their hand can go back in — without their eyes
+    /// leaving the object.
+    private func announceScannerFrame() {
+        #if os(iOS)
+        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+        #endif
+    }
+
+    /// The pre-flight warning, shown in place of the dial row while Scanner is
+    /// armed and the camera is not fully held.
+    ///
+    /// Inline and non-blocking on purpose: the operator is about to press the
+    /// shutter, and a modal in front of that would be answered by dismissing it
+    /// rather than by reading it. It is also mostly advisory — `startScanner`
+    /// locks AE, AF and WB for itself either way — so its real job is to say
+    /// *that the run will take the exposure it can currently see*, which is
+    /// worth knowing before you press rather than after.
+    @ViewBuilder
+    private var scannerLockWarning: some View {
+        if scannerArmed, !isIntervalCapturing, !camera.scannerCameraIsLocked {
+            Label(
+                "Exposure, focus and white balance lock when the scan starts — frame and meter first.",
+                systemImage: "exclamationmark.triangle.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(LL.amber)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 5)
+                .background(Color.black.opacity(0.5), in: Capsule())
         }
     }
 
@@ -2076,9 +2570,9 @@ struct CaptureView: View {
                     .stroke(.white, lineWidth: 4)
                     .frame(width: 76, height: 76)
 
-                if let target = activeTarget, camera.isRecording {
+                if let progress = targetRingProgress {
                     Circle()
-                        .trim(from: 0, to: min(1, elapsedSeconds / max(1, target.recordSeconds)))
+                        .trim(from: 0, to: progress)
                         .stroke(targetReached ? Color.green : LL.amber, style: StrokeStyle(lineWidth: 4, lineCap: .round))
                         .rotationEffect(.degrees(-90))
                         .frame(width: 76, height: 76)
@@ -2100,6 +2594,20 @@ struct CaptureView: View {
         .buttonStyle(.plain)
         .disabled(camera.isAuthorized != true)
         .accessibilityLabel(isCapturing ? "Stop" : "Record")
+    }
+
+    /// How full the shutter's target ring is, or nil when no target is running.
+    /// The two shapes of target fill it from different quantities — a clip
+    /// target from elapsed time, a Scanner target from poses banked — which is
+    /// the whole difference between them.
+    private var targetRingProgress: Double? {
+        guard let target = activeTarget else { return nil }
+        if let poses = target.poseTarget {
+            guard let state = camera.scannerState else { return nil }
+            return min(1, Double(state.frames) / Double(max(1, poses)))
+        }
+        guard camera.isRecording else { return nil }
+        return min(1, elapsedSeconds / max(1, target.recordSeconds))
     }
 
     /// "2s" while the delay is armed; the live countdown once tapped.
@@ -2179,7 +2687,12 @@ struct CaptureView: View {
                 camera.startRecording(mode: sequenceMode)
             }
         case .interval:
-            if camera.isIntervalRunning {
+            // Scanner runs through `isIntervalRunning` like the plain timer
+            // shoot, so its stop has to be tested first — `stopInterval` would
+            // reach a timer that was never started.
+            if camera.isScannerActive {
+                camera.stopScanner()
+            } else if camera.isIntervalRunning {
                 camera.stopInterval()
             } else if camera.isLiveBlendRunning {
                 camera.stopLiveBlend()
@@ -2334,15 +2847,32 @@ struct CaptureView: View {
         // its frames from the video stream, so it is **silent**, where a
         // per-frame still capture makes the system shutter sound on every
         // frame, which is intolerable in a timelapse.
-        if holyGrailEnabled, Self.holyGrailAvailable {
+        // Scanner takes the shutter away from the timer entirely, so it is the
+        // one Interval variant that isn't a spacing at all. The steadiness
+        // monitor is armed as a *gate* here rather than as a tail-frame log:
+        // the camera asks it, per pose, whether the phone is still enough to
+        // shoot (see `CameraController.scannerDeviceIsSteady`).
+        if scannerArmed {
+            steadiness.resetLog()
+            steadiness.start()
+            camera.scannerDeviceIsSteady = { [weak steadiness] in
+                guard let steadiness else { return true }
+                return steadiness.magnitude < steadiness.stillThreshold
+            }
+            camera.startScanner(frameCap: activeTarget?.autoStop == true
+                ? activeTarget?.poseTarget : nil)
+            return
+        }
+        if holyGrailArmed {
             steadiness.resetLog()
             steadiness.start()
             camera.startLiveBlend(
-                every: interval,
+                every: intervalIsAuto ? autoIntervalSeed : interval,
                 depth: blendDepth,
                 preferDNG: wantsDNG,
                 options: liveBlendDNGOptions,
-                holyGrail: true)
+                holyGrail: true,
+                autoInterval: intervalIsAuto)
             return
         }
         if !wantsDNG && blendDepth == .fixed(1) {
@@ -2509,6 +3039,17 @@ struct CaptureView: View {
     // MARK: - Target capture
 
     private func startTargetCapture(_ plan: CaptureTargetPlan) {
+        // A pose target belongs to a Scanner run and stays in Interval; only
+        // the clip target moves the screen to Video.
+        if plan.poseTarget != nil {
+            activeTarget = plan
+            targetReached = false
+            framingStartedAt = Date()
+            if !isIntervalCapturing {
+                startIntervalCapture()
+            }
+            return
+        }
         model.useRamp = false
         model.constantWindow = plan.speed
         activeTarget = plan
@@ -2517,6 +3058,22 @@ struct CaptureView: View {
         framingStartedAt = Date()
         if !camera.isRecording {
             camera.startRecording(mode: sequenceMode)
+        }
+    }
+
+    /// The pose-count twin of `checkTarget`. `startScanner` already carries the
+    /// cap and stops itself, so this is the *announcement* — the success
+    /// haptic and the green ring — plus the honest no-auto-stop case, where
+    /// the target is a marker rather than an ending.
+    private func checkScannerTarget(frames: Int) {
+        guard let target = activeTarget, let poses = target.poseTarget,
+              !targetReached, frames >= poses else { return }
+        targetReached = true
+        #if os(iOS)
+        UINotificationFeedbackGenerator().notificationOccurred(.success)
+        #endif
+        if target.autoStop, camera.isScannerActive {
+            camera.stopScanner()
         }
     }
 
@@ -2757,7 +3314,17 @@ struct CaptureView: View {
             shutterAction()
             return true
         case .stopRecording:
-            if camera.isRecording {
+            // Scanner is tested FIRST and must stay first. It reports through
+            // `isIntervalRunning` like the plain timer shoot, but it owns no
+            // interval timer — `stopInterval` reaches `finishIntervalOnQueue`,
+            // whose `intervalActive` guard a Scanner run never sets, so the
+            // stop would do nothing while this method returned `true`. A false
+            // accept is the worst answer available here: the remote applies
+            // optimistic state to an accept, so a tripod-mounted iPad would go
+            // on shooting behind a remote showing a stopped camera.
+            if camera.isScannerActive {
+                camera.stopScanner(source: .watch)
+            } else if camera.isRecording {
                 camera.stopRecording(source: .watch)
             } else if camera.isIntervalRunning {
                 camera.stopInterval(source: .watch)
@@ -2801,7 +3368,47 @@ struct CaptureView: View {
             return true
         case .setIntervalSeconds:
             guard !isCapturing, let value, captureIntervalOptions.contains(value) else { return false }
+            // Choosing a fixed spacing is also how the remote leaves Auto —
+            // the same coupling the on-screen dial has, so the two surfaces
+            // can't end up disagreeing about what EVERY means.
+            guard !intervalMode.requiresAutoInterval else { return false }
+            intervalAutoEnabled = false
+            lastFixedInterval = value
             interval = value
+            return true
+        case .setIntervalMode:
+            // Idle-only: both non-`off` modes reconfigure the session for RAW
+            // at start, and Scanner adds a preview tap on top of that. Neither
+            // can happen under a live run.
+            guard !isCapturing, Self.intervalModesAvailable,
+                  let token = payload[WatchMessageKey.intervalMode] as? String,
+                  let newMode = IntervalCaptureMode(rawValue: token) else { return false }
+            // Interval is the only mode these belong to. Switching there as a
+            // side effect is the honest thing to do — the alternative is
+            // accepting a MODE the screen will not act on.
+            mode = .interval
+            intervalModeToken = newMode.rawValue
+            reconcileIntervalAuto()
+            updateAspectPreview()
+            return true
+        case .setAutoInterval:
+            guard !isCapturing, let value else { return false }
+            let wantsAuto = value != 0
+            // The phone owns the validity rule, not the remote: Scanner cannot
+            // leave Auto and Off cannot reach it. Both refusals are reported
+            // rather than accepted and dropped.
+            if wantsAuto {
+                guard intervalMode.supportsAutoInterval else { return false }
+                intervalAutoEnabled = true
+            } else {
+                guard !intervalMode.requiresAutoInterval else { return false }
+                intervalAutoEnabled = false
+                interval = lastFixedInterval
+            }
+            return true
+        case .deleteLastFrame:
+            guard camera.isScannerActive else { return false }
+            camera.deleteLastScannerFrame()
             return true
         case .setFramesPerBlend:
             // The Watch picker only offers the fixed counts; the adaptive
@@ -2937,10 +3544,45 @@ struct CaptureView: View {
         }
         watchRemote.setModeContext(
             mode: mode,
-            intervalSeconds: interval,
+            // Under Auto the dial is not the truth — the run's own pacing is.
+            // A remote quoting the dial there describes a setting nobody is
+            // using (see `CameraController.activeIntervalSeconds`).
+            intervalSeconds: camera.activeIntervalSeconds ?? interval,
             blendDepth: blendDepth,
             isBulbMode: mode == .photo && photoBulbMode,
-            captureCount: count)
+            captureCount: count,
+            intervalMode: intervalMode,
+            intervalAuto: intervalIsAuto)
+    }
+
+    /// Mirrors whichever MODE readout is live to the remotes, so a Mac driving
+    /// a mounted iPad sees the same numbers the iPad's own HUD is showing.
+    ///
+    /// Without this the remote can start a Holy Grail or Scanner run and then
+    /// has nothing to say about it — and these are precisely the two modes
+    /// where the numbers *are* the interface. A ramp's operator is deciding
+    /// whether ISO has started carrying it; a scan's is deciding whether the
+    /// last pose landed.
+    private func updateWatchIntervalReadout() {
+        let ramp = camera.holyGrailState.map {
+            WatchRemoteControlReceiver.HolyGrailRemoteReadout(
+                shutterSeconds: $0.shutterSeconds,
+                iso: $0.iso,
+                sceneEV: $0.sceneEV,
+                isISORamping: $0.isISORamping,
+                isClipped: $0.isClipped,
+                isCapturingRAW: $0.isCapturingRAW)
+        }
+        let scan = camera.scannerState.map {
+            WatchRemoteControlReceiver.ScannerRemoteReadout(
+                phase: $0.phase,
+                frames: $0.frames,
+                shutterSeconds: $0.shutterSeconds,
+                iso: $0.iso,
+                isCapturingRAW: $0.isCapturingRAW,
+                waitingForDeviceSteady: $0.waitingForDeviceSteady)
+        }
+        watchRemote.setIntervalRunReadout(holyGrail: ramp, scanner: scan)
     }
 
     private func updateWatchScheduledStop() {
@@ -3459,10 +4101,26 @@ struct CaptureTargetPlan: Equatable {
     var speed: Int
     var recordSeconds: Double
     var autoStop: Bool
+    /// Scanner's target is a **pose count**, not a duration — a scan finishes
+    /// when the object has been photographed from enough angles, and how long
+    /// that takes is entirely up to how fast the operator's hands move. Nil for
+    /// the Video target, which is the duration the rest of this struct
+    /// describes.
+    var poseTarget: Int?
 }
 
-/// "I want a 6 s clip at 100×" — pick the clip, we tell you how long to record.
+/// The target sheet, in one of its two shapes.
+///
+/// Video: "I want a 6 s clip at 100×" — pick the clip, we tell you how long to
+/// record. Scanner: "I want 36 angles" — pick the count, and the shutter ring
+/// fills as the poses land. They share the sheet because they are the same
+/// promise from the user's side ("stop when you've got what I asked for"), and
+/// the same auto-stop toggle honours it.
 private struct CaptureTargetSheet: View {
+    /// Which shape to draw. The capture screen's current mode decides.
+    enum Kind { case clip, scannerPoses }
+
+    var kind: Kind = .clip
     var captureFPS: Int
     var outputFPS: Int
     var onStart: (CaptureTargetPlan) -> Void
@@ -3471,10 +4129,135 @@ private struct CaptureTargetSheet: View {
     @State private var clipSeconds: Double = 6
     @State private var speed = 100
     @State private var autoStop = true
+    /// 36 is the canonical photogrammetry set — one frame every 10° around a
+    /// turntable — so it is what the sheet opens on.
+    @State private var poseTarget = 36
 
     private let speeds = [25, 50, 100, 200]
+    /// Every 15°, every 10°, every 7.5°, every 5°. Named by their angle in the
+    /// row's caption, because that is how the shoot is actually performed.
+    private let poseTargets = [24, 36, 48, 72]
 
     var body: some View {
+        if kind == .scannerPoses {
+            scannerBody
+        } else {
+            clipBody
+        }
+    }
+
+    private var scannerBody: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Capsule()
+                .fill(.white.opacity(0.25))
+                .frame(width: 36, height: 4)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 10)
+                .padding(.bottom, 18)
+
+            Text("Scan for a target")
+                .font(.system(size: 19, weight: .bold))
+                .foregroundStyle(.white)
+            Text("Pick how many angles you want — the ring fills as they land.")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(0.5))
+                .padding(.top, 2)
+                .padding(.bottom, 20)
+
+            Text("Angles")
+                .font(.system(size: 14))
+                .foregroundStyle(.white)
+                .padding(.bottom, 8)
+
+            HStack(spacing: 8) {
+                ForEach(poseTargets, id: \.self) { candidate in
+                    let isSelected = poseTarget == candidate
+                    Button {
+                        poseTarget = candidate
+                    } label: {
+                        Text("\(candidate)")
+                            .font(.system(size: 13, weight: isSelected ? .bold : .regular))
+                            .foregroundStyle(isSelected ? .black : .white)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 9)
+                            .background(
+                                isSelected ? LL.amber : Color.white.opacity(0.1),
+                                in: RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.bottom, 18)
+
+            HStack(spacing: 14) {
+                Image(systemName: "arrow.trianglehead.2.clockwise.rotate.90")
+                    .font(.system(size: 20))
+                    .foregroundStyle(LL.amber)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("\(poseTarget) angles · \(poseAngleText)")
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(.white)
+                    Text("Move the object, take your hand out, wait for the click. Repeat.")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.55))
+                }
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(LL.amber.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(LL.amber.opacity(0.35), lineWidth: 1)
+            )
+            .padding(.bottom, 14)
+
+            Toggle(isOn: $autoStop) {
+                Text("Stop automatically at target")
+                    .font(.system(size: 14))
+                    .foregroundStyle(.white)
+            }
+            .tint(LL.amber)
+            .padding(.bottom, 16)
+
+            Button {
+                dismiss()
+                onStart(CaptureTargetPlan(
+                    clipSeconds: 0,
+                    speed: 1,
+                    recordSeconds: 0,
+                    autoStop: autoStop,
+                    poseTarget: poseTarget
+                ))
+            } label: {
+                Text("Start scan")
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(.black)
+                    .frame(maxWidth: .infinity, minHeight: 50)
+                    .background(LL.amber, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            }
+            .buttonStyle(.plain)
+
+            Spacer(minLength: 12)
+        }
+        .padding(.horizontal, 20)
+        .background(Color(red: 0.11, green: 0.11, blue: 0.12))
+        .preferredColorScheme(.dark)
+        #if os(iOS)
+        .presentationDetents([.height(400)])
+        #endif
+    }
+
+    /// A full turn divided by the count — the instruction the operator's hands
+    /// actually follow.
+    private var poseAngleText: String {
+        let degrees = 360.0 / Double(max(poseTarget, 1))
+        return degrees == degrees.rounded()
+            ? "one every \(Int(degrees))°"
+            : String(format: "one every %.1f°", degrees)
+    }
+
+    private var clipBody: some View {
         VStack(alignment: .leading, spacing: 0) {
             Capsule()
                 .fill(.white.opacity(0.25))
@@ -3569,7 +4352,8 @@ private struct CaptureTargetSheet: View {
                     clipSeconds: clipSeconds,
                     speed: speed,
                     recordSeconds: recordSeconds,
-                    autoStop: autoStop
+                    autoStop: autoStop,
+                    poseTarget: nil
                 ))
             } label: {
                 Text("Start capture")
@@ -3654,6 +4438,111 @@ private struct FocusReticleView: View {
             }
         }
         .accessibilityHidden(true)
+    }
+}
+
+// MARK: - Scanner rectangle overlay
+
+/// The detected page, traced over the live image.
+///
+/// Thin, accent-coloured and half-transparent by design: this is the one piece
+/// of chrome that sits *on* the subject rather than beside it, and a Scanner
+/// operator is judging framing and lighting through it. It says "I can see the
+/// page and I am watching these four points" and then gets out of the way.
+///
+/// Corner markers as well as edges, because the corners are what the shoot
+/// actually uses — the settle test measures their travel and the correction
+/// rectifies from them — so a corner sitting a centimetre off the page is worth
+/// seeing before the set is shot rather than after.
+private struct ScannerRectangleOverlay: View {
+    let corners: ScannerQuadCorners
+
+    var body: some View {
+        ScannerQuadShape(corners: corners)
+            .stroke(
+                LL.accent.opacity(0.6),
+                style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+            // Over live picture the accent alone can vanish into a dark page;
+            // the same trick the reticle uses keeps it readable without
+            // brightening it.
+            .shadow(color: .black.opacity(0.35), radius: 2)
+            .accessibilityHidden(true)
+    }
+}
+
+/// The detected page's four corners, already in the viewfinder region's own
+/// coordinate space.
+///
+/// Points rather than a `NormalizedQuad` on purpose: mapping normalised corners
+/// onto the live image needs the preview layer (its gravity, its letterbox, the
+/// quarter turn between the capture's orientation and the interface's), and a
+/// `Shape` handed only a `rect` cannot see any of that. Doing the conversion
+/// where those things are known — `CaptureView.scannerOverlayCorners` — leaves
+/// this side with nothing to get wrong.
+struct ScannerQuadCorners: Equatable {
+    var topLeft: CGPoint
+    var topRight: CGPoint
+    var bottomRight: CGPoint
+    var bottomLeft: CGPoint
+}
+
+/// The quad's outline plus a rounded marker at each corner, in one animatable
+/// path — one shape rather than five views so the whole figure interpolates
+/// together as the detection moves.
+private struct ScannerQuadShape: Shape {
+    var corners: ScannerQuadCorners
+
+    private static let markerSize: CGFloat = 11
+    private static let markerRadius: CGFloat = 3
+
+    /// The eight numbers that describe the figure, so SwiftUI can walk a quad
+    /// from where it was to where it is. Without this the shape would snap:
+    /// `Path` is not animatable on its own, and the four corners move
+    /// independently.
+    var animatableData: AnimatablePair<
+        AnimatablePair<AnimatablePair<Double, Double>, AnimatablePair<Double, Double>>,
+        AnimatablePair<AnimatablePair<Double, Double>, AnimatablePair<Double, Double>>
+    > {
+        get {
+            AnimatablePair(
+                AnimatablePair(
+                    AnimatablePair(corners.topLeft.x, corners.topLeft.y),
+                    AnimatablePair(corners.topRight.x, corners.topRight.y)),
+                AnimatablePair(
+                    AnimatablePair(corners.bottomLeft.x, corners.bottomLeft.y),
+                    AnimatablePair(corners.bottomRight.x, corners.bottomRight.y)))
+        }
+        set {
+            corners.topLeft = CGPoint(x: newValue.first.first.first, y: newValue.first.first.second)
+            corners.topRight = CGPoint(x: newValue.first.second.first, y: newValue.first.second.second)
+            corners.bottomLeft = CGPoint(x: newValue.second.first.first, y: newValue.second.first.second)
+            corners.bottomRight = CGPoint(x: newValue.second.second.first, y: newValue.second.second.second)
+        }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        // `rect` is deliberately unused: the corners are already points in this
+        // view's space, converted where the letterbox and the orientation were
+        // known.
+        _ = rect
+        let corners = [
+            self.corners.topLeft, self.corners.topRight,
+            self.corners.bottomRight, self.corners.bottomLeft,
+        ]
+
+        var path = Path()
+        path.addLines(corners)
+        path.closeSubpath()
+        for corner in corners {
+            path.addRoundedRect(
+                in: CGRect(
+                    x: corner.x - Self.markerSize / 2,
+                    y: corner.y - Self.markerSize / 2,
+                    width: Self.markerSize,
+                    height: Self.markerSize),
+                cornerSize: CGSize(width: Self.markerRadius, height: Self.markerRadius))
+        }
+        return path
     }
 }
 

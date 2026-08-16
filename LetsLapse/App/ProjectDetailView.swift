@@ -266,106 +266,118 @@ struct ProjectDetailView: View {
 
         return ScrollView {
             VStack(spacing: 14) {
-                // Every mode leads with its graded preview and preset strip —
-                // the grade is non-destructive and applies to photo, interval
-                // and video alike, and every hero carries the same edit pill:
-                // stills open the grading viewer, a movie opens the video
-                // editor with the player beside the same controls.
-                GradingCard(
-                    captureID: capture.id,
-                    badge: originalBadge(for: capture),
-                    // A Photo capture's card carries the one PHOTO pill and
-                    // nothing else — its pixel size is a property of the stack,
-                    // not of the asset the card is showing.
-                    formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
-                    onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
-                    onPlay: { playOriginal(capture) },
-                    onEditVideo: { url in editVideo(capture, url: url) },
-                    // Interval only: the shoot has frames to play as motion, so
-                    // its card leads with Play and keeps the editor as a second
-                    // affordance. Photo has one still and video has a movie —
-                    // neither has a sequence to preview.
-                    onPlaySequence: capture.kind == .photos && !capture.isPhotoCapture
-                        ? { previewSequence(capture) } : nil
-                )
-
-                // A Photo-mode capture is ONE photo — no clip list, no
-                // versions, no re-processing. Just save, share, manage.
-                if capture.isPhotoCapture {
-                    photoActions(for: capture)
-                    // A blended Photo shot stacks a burst into its one asset and
-                    // keeps the frames on disk. They stay stacking material —
-                    // no versions, no re-processing — but they are reachable
-                    // now, one frame at a time. An unblended shot captured a
-                    // single frame, which *is* the photo above: nothing to open.
-                    if capture.sourceMediaCount > 1 {
-                        originalsSection(for: capture)
+                // A Scanner shoot is a set of frames for export, not material
+                // for a blend, so it gets its own body — leading with the
+                // frames and with Export, and keeping the blend path as one
+                // secondary button. Everything around it (title, the toolbar's
+                // rename/share/delete, the management card) is the same screen,
+                // because a Scanner set is still a project.
+                if model.isScannerProject(capture) {
+                    ScannerProjectSections(capture: capture) {
+                        model.openCapture(capture)
                     }
                 } else {
-                    // Results lead: the blended clips already made, then the
-                    // button that makes the next one, then the source material
-                    // they're made from. No clips yet hides the section — the
-                    // button right under the hero is the empty state.
-                    if !versions.isEmpty {
-                        VStack(alignment: .leading, spacing: 8) {
-                            LLSectionHeader("Blended clips · \(versions.count)")
+                    // Every mode leads with its graded preview and preset strip —
+                    // the grade is non-destructive and applies to photo, interval
+                    // and video alike, and every hero carries the same edit pill:
+                    // stills open the grading viewer, a movie opens the video
+                    // editor with the player beside the same controls.
+                    GradingCard(
+                        captureID: capture.id,
+                        badge: originalBadge(for: capture),
+                        // A Photo capture's card carries the one PHOTO pill and
+                        // nothing else — its pixel size is a property of the stack,
+                        // not of the asset the card is showing.
+                        formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
+                        onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
+                        onPlay: { playOriginal(capture) },
+                        onEditVideo: { url in editVideo(capture, url: url) },
+                        // Interval only: the shoot has frames to play as motion, so
+                        // its card leads with Play and keeps the editor as a second
+                        // affordance. Photo has one still and video has a movie —
+                        // neither has a sequence to preview.
+                        onPlaySequence: capture.kind == .photos && !capture.isPhotoCapture
+                            ? { previewSequence(capture) } : nil
+                    )
 
-                            VStack(spacing: 0) {
-                                ForEach(versions) { blend in
-                                    versionRow(blend, in: capture)
-                                    if blend.id != versions.last?.id {
-                                        Divider().padding(.leading, 84)
+                    // A Photo-mode capture is ONE photo — no clip list, no
+                    // versions, no re-processing. Just save, share, manage.
+                    if capture.isPhotoCapture {
+                        photoActions(for: capture)
+                        // A blended Photo shot stacks a burst into its one asset and
+                        // keeps the frames on disk. They stay stacking material —
+                        // no versions, no re-processing — but they are reachable
+                        // now, one frame at a time. An unblended shot captured a
+                        // single frame, which *is* the photo above: nothing to open.
+                        if capture.sourceMediaCount > 1 {
+                            originalsSection(for: capture)
+                        }
+                    } else {
+                        // Results lead: the blended clips already made, then the
+                        // button that makes the next one, then the source material
+                        // they're made from. No clips yet hides the section — the
+                        // button right under the hero is the empty state.
+                        if !versions.isEmpty {
+                            VStack(alignment: .leading, spacing: 8) {
+                                LLSectionHeader("Blended clips · \(versions.count)")
+
+                                VStack(spacing: 0) {
+                                    ForEach(versions) { blend in
+                                        versionRow(blend, in: capture)
+                                        if blend.id != versions.last?.id {
+                                            Divider().padding(.leading, 84)
+                                        }
                                     }
                                 }
+                                .llCard()
                             }
-                            .llCard()
                         }
-                    }
 
-                    Button {
-                        model.openCapture(capture)
-                    } label: {
-                        Label("New blended clip", systemImage: "plus")
-                    }
-                    .buttonStyle(LLPrimaryButtonStyle())
-
-                    // An experimental side-step into the SAME flow: a survey
-                    // that authors the warp + reframe as states and
-                    // transitions instead of a timeline. It must never
-                    // displace the primary button above.
-                    if capture.kind == .video {
                         Button {
                             model.openCapture(capture)
-                            model.guidedBuilderFocused = true
                         } label: {
-                            Label("Guided clip (experimental)", systemImage: "wand.and.stars")
+                            Label("New blended clip", systemImage: "plus")
                         }
-                        .buttonStyle(LLSecondaryButtonStyle())
-                    }
+                        .buttonStyle(LLPrimaryButtonStyle())
 
-                    // The other door into the SAME flow: a punch-in move on
-                    // top of the speed warp. It opens the blended-clip editor
-                    // with the reframe lane already expanded — one process,
-                    // two entry points. Video only — a photo stack has no
-                    // frame to crop into over time.
-                    if capture.kind == .video {
-                        Button {
-                            model.openCapture(capture)
-                            model.reframeLaneFocused = true
-                        } label: {
-                            Label("Punch-in reframe", systemImage: "viewfinder")
+                        // An experimental side-step into the SAME flow: a survey
+                        // that authors the warp + reframe as states and
+                        // transitions instead of a timeline. It must never
+                        // displace the primary button above.
+                        if capture.kind == .video {
+                            Button {
+                                model.openCapture(capture)
+                                model.guidedBuilderFocused = true
+                            } label: {
+                                Label("Guided clip (experimental)", systemImage: "wand.and.stars")
+                            }
+                            .buttonStyle(LLSecondaryButtonStyle())
                         }
-                        .buttonStyle(LLSecondaryButtonStyle())
-                    }
 
-                    if capture.kind == .video, !clipNames.isEmpty {
-                        sourceClipsSection(for: capture, clipNames: clipNames)
-                    }
-                    // Interval frames are stacking material, not clips — one
-                    // compact row stands in for the whole set, with the export
-                    // path to Photos the originals never had.
-                    if capture.kind == .photos {
-                        originalsSection(for: capture)
+                        // The other door into the SAME flow: a punch-in move on
+                        // top of the speed warp. It opens the blended-clip editor
+                        // with the reframe lane already expanded — one process,
+                        // two entry points. Video only — a photo stack has no
+                        // frame to crop into over time.
+                        if capture.kind == .video {
+                            Button {
+                                model.openCapture(capture)
+                                model.reframeLaneFocused = true
+                            } label: {
+                                Label("Punch-in reframe", systemImage: "viewfinder")
+                            }
+                            .buttonStyle(LLSecondaryButtonStyle())
+                        }
+
+                        if capture.kind == .video, !clipNames.isEmpty {
+                            sourceClipsSection(for: capture, clipNames: clipNames)
+                        }
+                        // Interval frames are stacking material, not clips — one
+                        // compact row stands in for the whole set, with the export
+                        // path to Photos the originals never had.
+                        if capture.kind == .photos {
+                            originalsSection(for: capture)
+                        }
                     }
                 }
 

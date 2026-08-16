@@ -41,6 +41,36 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var blendDepthToken = "5"
     private var isBulbMode = false
     private var captureCount = 0
+    /// Interval's MODE dial, and whether EVERY is pacing itself.
+    private var intervalMode: IntervalCaptureMode = .off
+    private var intervalAuto = false
+    /// Each mode's live readout, nil outside a run of that mode. Nil rather
+    /// than zeroed: a remote drawing "ISO 0" would state something false about
+    /// a camera it cannot see.
+    private var holyGrailReadout: HolyGrailRemoteReadout?
+    private var scannerReadout: ScannerRemoteReadout?
+
+    /// The ramp's numbers as they travel — a flat mirror of
+    /// `CameraController.HolyGrailState`, declared here so the receiver stays
+    /// buildable without reaching into the capture layer's types.
+    struct HolyGrailRemoteReadout: Equatable {
+        var shutterSeconds: Double
+        var iso: Float
+        var sceneEV: Double
+        var isISORamping: Bool
+        var isClipped: Bool
+        var isCapturingRAW: Bool
+    }
+
+    /// Scanner's, likewise mirroring `CameraController.ScannerState`.
+    struct ScannerRemoteReadout: Equatable {
+        var phase: String
+        var frames: Int
+        var shutterSeconds: Double
+        var iso: Float
+        var isCapturingRAW: Bool
+        var waitingForDeviceSteady: Bool
+    }
     private var stopAtUnit: ScheduledStopUnit?
     private var stopAtDeadline: Date?
     private var stopAtTargetCount: Int?
@@ -204,7 +234,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         intervalSeconds: Double,
         blendDepth: BlendDepth,
         isBulbMode: Bool,
-        captureCount: Int
+        captureCount: Int,
+        intervalMode: IntervalCaptureMode = .off,
+        intervalAuto: Bool = false
     ) {
         let framesPerBlend = blendDepth.fixedFrames ?? 0
         let changed = self.captureMode != mode
@@ -213,12 +245,41 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
             || self.blendDepthToken != blendDepth.token
             || self.isBulbMode != isBulbMode
             || self.captureCount != captureCount
+            || self.intervalMode != intervalMode
+            || self.intervalAuto != intervalAuto
         self.captureMode = mode
         self.intervalSeconds = intervalSeconds
         self.framesPerBlend = framesPerBlend
         self.blendDepthToken = blendDepth.token
         self.isBulbMode = isBulbMode
         self.captureCount = captureCount
+        self.intervalMode = intervalMode
+        self.intervalAuto = intervalAuto
+        if changed {
+            publishState()
+        }
+    }
+
+    /// The live readout of whichever MODE is running, mirrored so a remote can
+    /// answer the question each mode actually poses.
+    ///
+    /// These push on **every** change, unlike `exportProgress` (see
+    /// `setPhoneFlowContext`), and the difference is what the number is for. A
+    /// blend's progress bar is decoration nobody reads at speed. These are the
+    /// numbers the operator decides on: whether ISO has started carrying the
+    /// ramp (stop, or accept grain), whether the scene has outrun the sensor,
+    /// whether a Scanner shoot has quietly stopped firing because the tripod is
+    /// being knocked. A stale one is worse than none — and they change at most
+    /// once per captured frame, which for a 3–15 s ramp or a hand-paced scan is
+    /// nothing like a flood.
+    @MainActor
+    func setIntervalRunReadout(
+        holyGrail: HolyGrailRemoteReadout?,
+        scanner: ScannerRemoteReadout?
+    ) {
+        let changed = self.holyGrailReadout != holyGrail || self.scannerReadout != scanner
+        self.holyGrailReadout = holyGrail
+        self.scannerReadout = scanner
         if changed {
             publishState()
         }
@@ -489,6 +550,26 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.blendDepth] = blendDepthToken
         payload[WatchMessageKey.isBulbMode] = isBulbMode
         payload[WatchMessageKey.captureCount] = captureCount
+        payload[WatchMessageKey.intervalMode] = intervalMode.rawValue
+        payload[WatchMessageKey.intervalAuto] = intervalAuto
+        // Absent, not zeroed, when the mode isn't running — see the key
+        // declarations. A remote can then tell "no ramp" from "a ramp at ISO 0".
+        if let holyGrailReadout {
+            payload[WatchMessageKey.holyGrailShutter] = holyGrailReadout.shutterSeconds
+            payload[WatchMessageKey.holyGrailISO] = Double(holyGrailReadout.iso)
+            payload[WatchMessageKey.holyGrailSceneEV] = holyGrailReadout.sceneEV
+            payload[WatchMessageKey.holyGrailISORamping] = holyGrailReadout.isISORamping
+            payload[WatchMessageKey.holyGrailClipped] = holyGrailReadout.isClipped
+            payload[WatchMessageKey.holyGrailRAW] = holyGrailReadout.isCapturingRAW
+        }
+        if let scannerReadout {
+            payload[WatchMessageKey.scannerPhase] = scannerReadout.phase
+            payload[WatchMessageKey.scannerFrames] = scannerReadout.frames
+            payload[WatchMessageKey.scannerShutter] = scannerReadout.shutterSeconds
+            payload[WatchMessageKey.scannerISO] = Double(scannerReadout.iso)
+            payload[WatchMessageKey.scannerRAW] = scannerReadout.isCapturingRAW
+            payload[WatchMessageKey.scannerWaitingForSteady] = scannerReadout.waitingForDeviceSteady
+        }
         if let stopAtUnit {
             payload[WatchMessageKey.stopAtUnit] = stopAtUnit.rawValue
         }

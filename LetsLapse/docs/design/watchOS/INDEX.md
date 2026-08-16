@@ -33,13 +33,15 @@ rendering / in setup) · **Unreachable** · **Locked**. Photo mode is phone-only
 |---|---|---|---|
 | Armed | [armed.svg](armed.svg) | `Remote/WatchControlView.swift` (`armedScreen`, `RemoteSegmented`, `exposureLockRow`, `checkFramingRow`, `startButton`) | ✅ |
 | Armed · Setup page (Video) | [armed-setup.svg](armed-setup.svg) | `armedControlsScreen` — Burst/Marks segmented (`setSequenceMode`), `baseRateRow`, `burstRateRow` | ✅ |
-| Armed · Setup page (Interval) | [armed-setup.interval.svg](armed-setup.interval.svg) | `armedControlsScreen` interval branch — `intervalRow`, `framesRow` | ✅ |
+| Armed · Setup page (Interval) | [armed-setup.interval.svg](armed-setup.interval.svg) | `armedControlsScreen` interval branch — `intervalRow`, `framesRow` — **stale 2026-08-16**: the branch gained a **Mode** row above Every (`intervalModeRow` → `setIntervalMode`, Off · Holy Grail · Scanner), Every now reads `Auto` when the mode paces itself, and under Scanner Every greys out (the scene sets the spacing) while the Blend row is dropped entirely (one frame per pose). This file still draws Every + Blend alone | ⚠️ |
+| Armed · Setup page (Scanner) | — | `armedControlsScreen` with MODE=Scanner: Mode row amber, Every greyed reading `Auto`, no Blend row. The screen a Mac uses to arm a tripod-mounted iPad before walking away from it. `LL_UI_PREVIEW=scanner-armed`; not yet drawn | 🟡 |
 | Recording · Burst + Mark (Video, ramp) | [recording-burst.svg](recording-burst.svg) | `burstTab`, `burstPad` (`SlideToCommit` `.up`), `markButton`, `timedBurstRow` | ✅ |
 | Recording · mark held open | [recording-burst.mark-open.svg](recording-burst.mark-open.svg) | `markButton` filled, `isMarkActive` | ✅ |
 | Recording · Mark only (no burst rate) | [recording-burst.marks.svg](recording-burst.marks.svg) | `markButton(isSole:)` — the sole control when bursts have nowhere to go | ✅ |
-| Recording · Burst (Interval) | [recording-burst.interval.svg](recording-burst.interval.svg) | `captureCountPanel`, `runSettingsLine` | ✅ |
+| Recording · Burst (Interval) | [recording-burst.interval.svg](recording-burst.interval.svg) | `captureCountPanel`, `runSettingsLine` — **stale 2026-08-16**: under Scanner the count panel reports **poses** and its caption becomes the state line — green "your move", amber "settling…", red "hold still" when the device veto is holding a pose back — and the AE/AF row is replaced by `deleteLastFrameRow` (the run already owns AE/AF/WB). Under Holy Grail the ramp's exposure sits under the count instead. `runSettingsLine` also now says "auto · Ns" or "Scanner · when the scene stills" rather than inventing a spacing | ⚠️ |
+| Recording · Scanner (settled / settling) | — | `captureCountPanel` + `deleteLastFrameRow` over `WatchCaptureRemote.ScannerReadout`. Two states, one line apart — see the iOS twins in `iOS/capture-interval.scanner*.portrait.svg` for the reasoning. `LL_UI_PREVIEW=scanner` / `scanner-settling`; not yet drawn | 🟡 |
 | Recording · Controls (Video) | [recording-controls.svg](recording-controls.svg) | `controlsTab`, `burstRateLadder`, `crownOwner == .burstRate` | ✅ |
-| Recording · Controls (Interval) | [recording-controls.interval.svg](recording-controls.interval.svg) | `controlsTab` interval branch — `intervalRow`, `framesRow` | ✅ |
+| Recording · Controls (Interval) | [recording-controls.interval.svg](recording-controls.interval.svg) | `controlsTab` interval branch — `intervalRow`, `framesRow` — **stale 2026-08-16**: while a Holy Grail or Scanner run is live this tab no longer shows Every/Blend at all. The phone refuses every setting on it mid-run (`!isCapturing`), so showing them would be showing controls that do nothing; it now carries `rampReadoutRow` (exposure + "shutter at max · ISO ramping" / "past the sensor's limit") or `deleteLastFrameRow`, under a `runModeCaption` naming the mode and its output format | ⚠️ |
 | Recording · Stop | [recording-stop.svg](recording-stop.svg) | `stopTab`, `SlideToCommit` `.down`, `stopAtRow` | ✅ |
 | Stop at… (sheet) | [stop-at-sheet.svg](stop-at-sheet.svg) | `StopAtSheet` — total-anchored from run START, dial floors at elapsed+1, Frames hidden for Video | ✅ |
 | Framing · live | [framing-live.svg](framing-live.svg) | `Remote/FramingPreviewView.swift` (`framePicture`, `aids`, `horizonBar`, `statusChip`) | ✅ |
@@ -187,7 +189,9 @@ SIMCTL_CHILD_LL_UI_PREVIEW=recording xcrun simctl launch "LL Watch S11" com.regu
 
 `recording` · `controls` · `stop` · `marker` · `interval` · `no-burst` · `mark-open` · `armed` · `armed-setup` · `armed-setup-marks` · `framing` ·
 `framing-stale` · `framing-portrait` · `framing-square` · `framing-tall` · `framing-wide` · `camera-closed` · `busy` · `setup` · `sending` ·
-`failed` · `locked` · `unlocking`.
+`failed` · `locked` · `unlocking` · `holygrail` · `scanner` · `scanner-settling` · `scanner-armed`.
+
+The hook now runs on **macOS as well as watchOS** (same `DEBUG` gate), and on the Mac `applyUIPreviewHooks` opens the Camera Remote window for it — ⌘⇧R is not something a headless verification run can press. That is what makes the four MODE screens above reachable at all: staging them for real means driving a tripod-mounted iPad through a sunset. The sign-off rule below is unchanged — a Mac screenshot verifies the *wiring*, never the watchOS spec.
 
 Sign-off is the paired-sim rig (iPhone 17 Pro + "LL Watch S11"). Per `Remote/RemoteWindow.swift`, **no watchOS spec may
 be marked ✅ from a Mac-mirror screenshot** — the Mac remote shares this view but not its input model.

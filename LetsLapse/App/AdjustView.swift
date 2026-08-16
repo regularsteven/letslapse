@@ -794,12 +794,33 @@ struct AdjustView: View {
         .background(LL.screenBackground)
     }
 
+    /// A Scanner capture is a **set of angles**, not a sequence: it exists to
+    /// be handed to a photogrammetry solver or a compositing stack, and the
+    /// order the frames happen to be in carries no time. Reading it off the
+    /// capture's own mode string keeps the intent with the project rather than
+    /// asking the user to re-declare it here.
+    private var isScannerCapture: Bool {
+        model.currentCapture?.mode.contains("Scanner") == true
+    }
+
     private var ctaTitle: String {
         if model.source?.isVideo == true {
             if let seconds = model.estimatedOutputSeconds() {
                 return "Create \(SpeedMath.clipLength(seconds)) clip"
             }
             return "Create clip"
+        }
+        // TODO (Scanner): this label still lies — it states the intent and then
+        // routes into the blend. The export it names now exists and is wired up
+        // one screen along, in `App/ScannerProjectView.swift`
+        // (`ScannerFrameExport.buildFolder` → the share sheet, corrected pages
+        // where they have been written), reached from the project rather than
+        // from here. Point this button at the same call, or drop the Scanner
+        // case entirely and let Adjust mean what it means everywhere else —
+        // "Create timelapse" is already the honest label for what it does.
+        if isScannerCapture {
+            let count = model.currentCapture?.sourceMediaCount ?? 0
+            return count > 0 ? "Export \(count) frames" : "Export frames"
         }
         if model.photosProduceSingleImage {
             return "Create long exposure"

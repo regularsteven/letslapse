@@ -22,6 +22,25 @@ enum WatchCaptureCommand: String {
     case setCaptureMode
     case setIntervalSeconds
     case setFramesPerBlend
+    /// Interval's MODE dial — Off · Holy Grail · Scanner
+    /// (`IntervalCaptureMode`). Idle-only: both non-`off` modes reconfigure the
+    /// session for RAW at start, and Scanner adds a preview tap, neither of
+    /// which can happen under a live run.
+    ///
+    /// Without this the remote could *start* a Holy Grail or Scanner shoot —
+    /// `startRecording` dispatches on whatever the capture screen is set to —
+    /// but only if someone had already armed the dial by hand, which is
+    /// exactly the walk to the tripod the remote exists to avoid.
+    case setIntervalMode
+    /// EVERY on Auto: the MODE paces the shoot instead of a fixed spacing.
+    /// Refused when the mode can't pace (Off) — the phone owns that rule, and
+    /// the refusal is reported rather than silently accepted.
+    case setAutoInterval
+    /// Scanner only: discard the pose just captured without ending the shoot.
+    /// The one Scanner control that isn't start or stop, and the one most
+    /// worth having at a distance — the operator is at the object, and the
+    /// pose that needs re-shooting is still in front of them.
+    case deleteLastFrame
     /// The rate a burst switches to (`selectedRampFrameRate`). Only rates in
     /// `availableBurstFPS` are accepted — the capability matrix has already
     /// dropped the ones that would change optic or codec mid-sequence, so a
@@ -78,6 +97,7 @@ extension WatchCaptureCommand {
         case .startRecording, .stopRecording, .triggerMoment, .timedBurst,
              .lockExposure, .unlockExposure, .setISO, .setLensPosition,
              .setCaptureMode, .setIntervalSeconds, .setFramesPerBlend,
+             .setIntervalMode, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop,
              .armCamera, .cancelExport:
@@ -108,6 +128,12 @@ extension WatchCaptureCommand {
             return "The capture mode is unchanged."
         case .setIntervalSeconds, .setFramesPerBlend:
             return "The setting is unchanged."
+        case .setIntervalMode:
+            return "The shoot mode is unchanged."
+        case .setAutoInterval:
+            return "The interval is unchanged."
+        case .deleteLastFrame:
+            return "No frame was deleted."
         case .scheduleStop, .cancelScheduledStop:
             return "The scheduled stop is unchanged."
         case .armCamera:

@@ -38,7 +38,12 @@ struct RemoteWindow: View {
             }
         }
         .frame(width: 260)
-        .onAppear { transport.startBrowsing() }
+        .onAppear {
+            transport.startBrowsing()
+            #if DEBUG
+            autoConnectIfRequested()
+            #endif
+        }
         // A camera that goes away must take the selection with it. Otherwise
         // the picker shows "Looking for cameras…" AND an enabled Connect
         // button wired to a stale endpoint — found while testing, and it dials
@@ -189,6 +194,35 @@ struct RemoteWindow: View {
         }
         .padding(14)
     }
+
+    #if DEBUG
+    /// `LL_REMOTE_CONNECT=<6-digit code>` dials the first camera found as soon
+    /// as one appears.
+    ///
+    /// Pairing is deliberately a human act — a code read off the camera's own
+    /// screen, typed here — which is exactly right for the product and exactly
+    /// wrong for verifying the link, because it makes the one thing worth
+    /// checking (does the Mac show what the iPad is really doing?) unreachable
+    /// without a person at both ends. The code still has to be correct, so this
+    /// weakens nothing: it types, it does not bypass. DEBUG-only.
+    private func autoConnectIfRequested() {
+        guard let wanted = ProcessInfo.processInfo.environment["LL_REMOTE_CONNECT"],
+              wanted.count == 6 else { return }
+        code = wanted
+        // Poll rather than hook the browser: discovery is asynchronous and can
+        // take a couple of seconds on a busy network.
+        Task { @MainActor in
+            for _ in 0..<40 {
+                if transport.isReachable { return }
+                if selected == nil, let first = transport.cameras.first {
+                    selected = first
+                    connect()
+                }
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+        }
+    }
+    #endif
 
     private func connect() {
         guard let selected, code.count == 6 else { return }

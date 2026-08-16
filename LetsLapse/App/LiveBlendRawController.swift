@@ -64,7 +64,12 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private static let unthrottledWindowByteBudget = 600 << 20
     private static let unthrottledFrameCeiling = 120
 
-    private let configuration: Configuration
+    /// `var`, not `let`, for exactly one reason: EVERY=Auto. A Holy Grail run
+    /// on Auto re-paces itself as the light dies (see `HolyGrailAutoInterval`),
+    /// and `intervalSeconds` is where that lands. Everything else in here is
+    /// still fixed for the run — only `setIntervalSeconds` below writes it, and
+    /// only on `workQueue`, where every reader already lives.
+    private var configuration: Configuration
     private let photoOutput: AVCapturePhotoOutput
     private let captureExecutor: (@escaping () -> Void) -> Void
     private let workQueue = DispatchQueue(label: "com.letslapse.liveblend.raw", qos: .userInitiated)
@@ -223,6 +228,20 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     self?.workQueue.async { self?.pumpCaptures() }
                 }
             }
+        }
+    }
+
+    /// Re-paces a running shoot — the EVERY=Auto path, and nothing else calls
+    /// it. Applied from the *next* window onward: `windowStartUptime` already
+    /// anchors the window in flight, so the change never truncates a window
+    /// that is mid-capture. The value is clamped to something a shoot can
+    /// actually run at rather than trusted blindly.
+    func setIntervalSeconds(_ seconds: Double) {
+        workQueue.async {
+            let next = min(max(seconds, 0.5), 600)
+            guard self.configuration.intervalSeconds != next else { return }
+            LLog("liveblend-dng: re-paced \(self.configuration.intervalSeconds)s → \(next)s")
+            self.configuration.intervalSeconds = next
         }
     }
 

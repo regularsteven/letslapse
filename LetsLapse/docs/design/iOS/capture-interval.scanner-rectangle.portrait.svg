@@ -1,0 +1,139 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (Scanner running, rectangle detected) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (ScannerRectangleOverlay + ScannerQuadShape drawn in viewfinder(in:), scannerReadout with its rectangle glyph, scannerExposureText, scannerDeleteLastButton, targetRingProgress) over CameraController.scannerRectangle and CameraController.ScannerState.hasRectangle, with App/RectangleDetector.swift (VNDetectRectanglesRequest) and App/ScannerEngine.swift behind them. Scanner Phase 2: a flat object — page, document, print — is in frame, so the shoot has a far stronger settle signal than frame differencing gives it. The quad is the accent (#C36A00 at 60%), 2 pt, with a rounded marker on each of the four corners, because the corners are what the shoot actually uses: the settle test measures their travel (all four still to within 2% of the frame across the settle window ⇒ fire) and the perspective correction rectifies from them. It is drawn on the fitted image and never on the letterbox beside it, takes no touches, and interpolates corner-to-corner as the page moves rather than snapping. The HUD is the settled variant plus one thing: the doc.viewfinder glyph in the same accent, which says WHICH settle path is deciding — with a page in view the fire waits on four corners standing still, without one it waits on the whole frame going quiet, and the two do not feel the same from behind the camera. No rectangle means no glyph and no overlay, and the Phase 1 differencing path unchanged. Off-device only through LL_SCANNER=settled LL_SCANNER_RECT=detected with LL_CAPTURE=1: the simulator has no camera, so there is nothing for Vision to find. Positions on the same grid as capture-interval.scanner.portrait.svg. iOS/iPadOS only.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="table" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2A2A2E"/><stop offset="0.7" stop-color="#1A1A1D"/><stop offset="1" stop-color="#121214"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}.r{font-family:ui-rounded,-apple-system,sans-serif}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder: the full 4:3 sensor frame = 393×440, top-anchored under
+           the top bar. A page on a desk, seen slightly from above — the far
+           edge is narrower, which is the keystone the correction undoes. -->
+      <g id="viewfinder">
+        <rect x="0" y="86" width="393" height="440" fill="url(#table)"/>
+        <path d="M72.7 167.4 L324.6 159.5 L347.4 446.4 L47.9 439.8 Z" fill="#EDEAE3"/>
+        <path d="M72.7 167.4 L324.6 159.5 L326 177 L74 185 Z" fill="#DCD8CF" opacity="0.55"/>
+        <g stroke="#B9B3A8" stroke-width="2.6" stroke-linecap="round" opacity="0.85">
+          <path d="M92 226 L300 220"/>
+          <path d="M90 258 L306 252"/>
+          <path d="M89 290 L262 284"/>
+          <path d="M87 334 L308 328"/>
+          <path d="M86 366 L303 360"/>
+          <path d="M84 398 L232 392"/>
+        </g>
+      </g>
+
+      <!-- the detected quad. LL.accent at 60%, 2 pt, rounded joins, with an
+           11 pt rounded marker centred on each corner. One shape in code, so
+           the whole figure animates together as the detection moves. -->
+      <g id="rectangle-overlay" stroke="#C36A00" stroke-opacity="0.6" stroke-width="2" fill="none"
+         stroke-linejoin="round" stroke-linecap="round">
+        <path d="M72.7 167.4 L324.6 159.5 L347.4 446.4 L47.9 439.8 Z"/>
+        <rect x="67.2" y="161.9" width="11" height="11" rx="3"/>
+        <rect x="319.1" y="154.0" width="11" height="11" rx="3"/>
+        <rect x="341.9" y="440.9" width="11" height="11" rx="3"/>
+        <rect x="42.4" y="434.3" width="11" height="11" rx="3"/>
+      </g>
+
+      <!-- top bar. The pill names what will really land: the sensor frame and
+           DNG in amber. The corrected HEIC is the second file a pose with a
+           rectangle writes — stated on the idle screen, under the dials. -->
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <rect x="198" y="70" width="179" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="212" y="92" font-size="13" class="sb" fill="#FFF">12MP 4:3</text>
+          <text x="274" y="92" font-size="13" class="sb" fill="#FFB340">· DNG</text>
+          <g data-symbol="lock.fill" opacity="0.4">
+            <rect x="353" y="86" width="12" height="9" rx="2" fill="#FFFFFF"/>
+            <path d="M355.5 86 v-3 a3.5 3.5 0 0 1 7 0 v3" fill="none" stroke="#FFFFFF" stroke-width="1.6"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- Scanner HUD. The settled readout, plus the rectangle glyph. -->
+      <g id="scanner-hud">
+        <rect x="12" y="596" width="318" height="114" rx="12" fill="#000" opacity="0.5"/>
+        <!-- the count is the primary signal: eyes are on the object, not here -->
+        <text x="24" y="646" font-size="44" class="b r" fill="#FFF">12</text>
+        <text x="80" y="646" font-size="17" class="sb r" fill="#FFF" opacity="0.45">/ 36</text>
+        <!-- imperative, not descriptive: it is the operator's turn -->
+        <text x="124" y="646" font-size="13" class="sb" fill="#34C759">Waiting for you to move</text>
+        <!-- which settle path is deciding: corners, not frame differencing -->
+        <g id="rectangle-mark" data-symbol="doc.viewfinder" stroke="#C36A00" stroke-width="1.5"
+           fill="none" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M291 637 v-2.5 a1.5 1.5 0 0 1 1.5 -1.5 h2.5"/>
+          <path d="M303 633 h2.5 a1.5 1.5 0 0 1 1.5 1.5 v2.5"/>
+          <path d="M307 645 v2.5 a1.5 1.5 0 0 1 -1.5 1.5 h-2.5"/>
+          <path d="M295 649 h-2.5 a1.5 1.5 0 0 1 -1.5 -1.5 v-2.5"/>
+          <rect x="294.5" y="636.5" width="9" height="9" rx="1.5"/>
+        </g>
+        <text x="24" y="672" font-size="10.5" class="m" fill="#FFF" opacity="0.6">1/120 · ISO 200 · locked · RAW</text>
+        <g id="delete-last" data-symbol="arrow.uturn.backward">
+          <rect x="24" y="682" width="112" height="22" rx="11" fill="#FFF" opacity="0.14"/>
+          <path d="M36 691 h7 a3.5 3.5 0 0 1 0 7 h-2 M36 691 l3.5 -3.5 M36 691 l3.5 3.5" stroke="#FFF" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <text x="52" y="697" font-size="12" class="sb" fill="#FFF">Delete last</text>
+        </g>
+      </g>
+
+      <!-- shutter row. No mode row while capturing; no zoom chips either. -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#2E2A26"/>
+            <path d="M27 740 L65 738 L67 780 L25 778 Z" fill="#EDEAE3"/>
+            <g stroke="#B9B3A8" stroke-width="1.6" opacity="0.85">
+              <path d="M32 752 h26"/><path d="M32 760 h26"/><path d="M32 768 h16"/>
+            </g>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <g id="grid-toggle" data-symbol="grid.circle">
+          <circle cx="108" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
+        </g>
+        <!-- the lock reads HELD: startScanner takes AE, AF and WB for the run -->
+        <g id="exposure-lock" data-symbol="lock.fill">
+          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <rect x="101" y="783" width="14" height="11" rx="2.5" fill="#FFB340"/>
+          <path d="M104 783 v-4 a4 4 0 0 1 8 0 v4" fill="none" stroke="#FFB340" stroke-width="1.8"/>
+        </g>
+        <g id="shutter" data-symbol="stop button + pose ring">
+          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <!-- the ring fills with POSES BANKED, not elapsed time: 12 of 36 -->
+          <path d="M196.5 720 A 38 38 0 0 1 229.4 777" fill="none" stroke="#FFB340" stroke-width="4" stroke-linecap="round"/>
+          <rect x="180.5" y="742" width="32" height="32" rx="8" fill="#FF3B30"/>
+        </g>
+        <g id="delay-toggle" data-symbol="timer">
+          <circle cx="285" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="285" cy="733" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
+          <path d="M285 733 v-6 M282 723 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
+        </g>
+        <g id="steady-toggle" data-symbol="hand.raised">
+          <circle cx="285" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M280 789 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (Scanner running, rectangle detected) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — ScannerRectangleOverlay over CameraController.scannerRectangle · LL_SCANNER=settled LL_SCANNER_RECT=detected</text>
+</svg>

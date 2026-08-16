@@ -53,6 +53,52 @@ enum WatchMessageKey {
     static let intervalSeconds = "intervalSeconds"
     static let framesPerBlend = "framesPerBlend"
     static let blendDepth = "blendDepth"
+
+    // MARK: Interval's MODE dial and its two live readouts
+    //
+    // A remote that can only start "whatever the camera is set to" is not much
+    // of a remote for these two: both modes need arming before the shutter, and
+    // both spend the whole run reporting numbers that decide whether to keep
+    // shooting. So the dial travels, and so does each mode's HUD.
+    //
+    // Every key below is absent rather than zeroed when it doesn't apply — a
+    // remote drawing "ISO 0" would be stating something false about a camera it
+    // cannot see.
+
+    /// `off` · `holyGrail` · `scanner` (`IntervalCaptureMode.rawValue`).
+    static let intervalMode = "intervalMode"
+    /// EVERY is on Auto — the mode paces the shoot. The remote shows "Auto"
+    /// where it would show a spacing, and `intervalSeconds` then reports what
+    /// the pacing has *arrived at* rather than what anyone chose.
+    static let intervalAuto = "intervalAuto"
+
+    /// Holy Grail, live: the exposure the next frame will be taken at, the
+    /// smoothed scene EV being tracked, and the two flags that decide whether
+    /// to keep shooting — ISO has started carrying the ramp, or the scene has
+    /// outrun the hardware entirely.
+    static let holyGrailShutter = "holyGrailShutter"
+    static let holyGrailISO = "holyGrailISO"
+    static let holyGrailSceneEV = "holyGrailSceneEV"
+    static let holyGrailISORamping = "holyGrailISORamping"
+    static let holyGrailClipped = "holyGrailClipped"
+    static let holyGrailRAW = "holyGrailRAW"
+
+    /// Scanner, live. `scannerPhase` is `ScannerEngine.State.rawValue` —
+    /// `settled` (waiting for the operator to move something) or `disturbed`
+    /// (settling toward a fire). `scannerFrames` is poses banked, which is the
+    /// count the remote makes big; it is deliberately separate from
+    /// `captureCount` so a remote can tell a *deleted* pose from a run that
+    /// never fired.
+    static let scannerPhase = "scannerPhase"
+    static let scannerFrames = "scannerFrames"
+    static let scannerShutter = "scannerShutter"
+    static let scannerISO = "scannerISO"
+    static let scannerRAW = "scannerRAW"
+    /// The scene re-settled but the device was moving, so the pose was held
+    /// back. Both signals must agree before a frame is taken, and a remote that
+    /// couldn't see this would watch a shoot quietly stop firing for no stated
+    /// reason.
+    static let scannerWaitingForSteady = "scannerWaitingForSteady"
     /// Photo mode's Bulb (hold-open) toggle, mirrored so the Watch can label
     /// its start/stop control. The generic start/stop commands drive it — the
     /// phone routes a stop to `stopInterval` while the Bulb burst runs.
