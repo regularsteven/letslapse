@@ -528,6 +528,7 @@ struct CaptureView: View {
         applyHolyGrailPreviewHook()
         applyBurstPreviewHook()
         applyFocusPreviewHook()
+        applyRecordingPreviewHook()
         #if os(macOS)
         // LL_CAMERA=<name substring> — switch to that camera once the session
         // is up, driving the exact path the Camera menu drives. Exists because
@@ -978,7 +979,13 @@ struct CaptureView: View {
                 .overlay(alignment: .bottomLeading) {
                     Group {
                         if mode == .video {
-                            landscapeEstimateChips
+                            // Same swap portrait makes: the idle estimates give
+                            // way to the run's own readout once recording.
+                            if camera.isRecording {
+                                landscapeRecordingReadout
+                            } else {
+                                landscapeEstimateChips
+                            }
                         } else if mode == .photo {
                             if burstPillPhase != .hidden && burstPillMode == .photo {
                                 burstStatusPill
@@ -1068,6 +1075,35 @@ struct CaptureView: View {
                 monospaced: true
             )
         }
+    }
+
+    /// How wide the landscape readout is allowed to grow. The strip is a
+    /// timeline, so width is resolution — but it rides over the live image
+    /// here, and an unbounded panel would stretch the length of a Mac window.
+    /// 560 pt is comfortably wider than portrait's 361 and still leaves clear
+    /// frame beside it on a phone.
+    private static let landscapeReadoutMaxWidth: CGFloat = 560
+
+    /// Landscape and macOS twin of portrait's recording readout — the same
+    /// `speedMarquee` over the same `segmentStrip`, in the same order. Portrait
+    /// stacks them in the letterbox under the image; the side rails leave no
+    /// letterbox here, so the pair rides the viewfinder's bottom-leading corner
+    /// on the dark panel the rest of the landscape chrome uses to stay legible
+    /// over live picture. Nothing is dropped for the smaller slot: the burst
+    /// spans are what let you balance the end of a take, and the marquee still
+    /// swaps to the elapsed/target line when a target is set.
+    private var landscapeRecordingReadout: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            speedMarquee
+            segmentStrip
+        }
+        .frame(maxWidth: Self.landscapeReadoutMaxWidth, alignment: .leading)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 9)
+        .background(
+            Color.black.opacity(0.5),
+            in: RoundedRectangle(cornerRadius: 14, style: .continuous)
+        )
     }
 
     // MARK: - Viewfinder
@@ -1693,6 +1729,56 @@ struct CaptureView: View {
             ? CGPoint(x: parts[0], y: parts[1])
             : CGPoint(x: 196.5, y: 385)
         focusReticle = FocusReticle(point: point)
+    }
+
+    /// `LL_RECORDING=1` freezes a Video shoot mid-take — the recording pill,
+    /// the speed marquee and the segment strip with its burst spans — for
+    /// SVG-mirror screenshots in either orientation. Same reason as the burst
+    /// and focus hooks: the simulator has no camera, so `startRecording` never
+    /// lands and this whole readout is otherwise unreachable off-device.
+    ///
+    /// `LL_RECORDING=<seconds>` sets the elapsed take (default 132), and
+    /// `LL_RECORDING=<seconds>:<a>-<b>,<c>-` spells the burst spans out in
+    /// seconds from the start, a trailing `-` meaning a burst still open. It
+    /// stages published state only — no session, no writer, no file behind it.
+    /// Pair with `LL_CAPTURE=1`.
+    private func applyRecordingPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_RECORDING"] else { return }
+        let halves = raw.split(separator: ":", maxSplits: 1)
+        // `LL_RECORDING=1` is the plain on-switch the other hooks use; anything
+        // longer than a second is read as the take's own length.
+        let requested = halves.first.flatMap { Double($0) } ?? 0
+        let elapsed = requested > 1 ? requested : 132
+        let spans: [CameraController.RampSpan] = halves.count > 1
+            ? halves[1].split(separator: ",").enumerated().compactMap { index, field in
+                let bounds = field.split(separator: "-", omittingEmptySubsequences: false)
+                guard let start = bounds.first.flatMap({ Double($0) }) else { return nil }
+                // "12-" is a burst that hasn't closed yet; the strip runs it
+                // to the playhead, which is what `end == nil` means.
+                let end = bounds.count > 1 ? Double(bounds[1]) : start + 4
+                return CameraController.RampSpan(id: index, start: start, end: end)
+            }
+            // Three bursts across the take, the last one still open — the
+            // shape the field readout is actually judged on.
+            : [
+                CameraController.RampSpan(id: 0, start: elapsed * 0.10, end: elapsed * 0.13),
+                CameraController.RampSpan(id: 1, start: elapsed * 0.42, end: elapsed * 0.48),
+                CameraController.RampSpan(id: 2, start: elapsed * 0.89, end: nil),
+            ]
+        mode = .video
+        sequenceMode = .ramp
+        // Deferred past `camera.start()`, which resets the sequence counters on
+        // the main queue — staged from here directly, that reset lands second
+        // and wipes the whole take back to idle.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            camera.activeSequenceMode = .ramp
+            camera.recordingStartedAt = Date().addingTimeInterval(-elapsed)
+            camera.isRecording = true
+            camera.rampSpans = spans
+            camera.rampIntervalCount = spans.count
+            camera.isRampHighRate = spans.contains { $0.end == nil }
+            camera.isRampActive = camera.isRampHighRate
+        }
     }
     #endif
 

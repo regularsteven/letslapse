@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Video (recording) · landscape</title>
+  <desc>Mirrors App/CaptureView.swift (landscapeLayout, landscapeRecordingReadout, speedMarquee, segmentStrip, leadingControl). The landscape twin of capture-video.recording.portrait.svg: same take, same moment, rails instead of letterbox. Portrait stacks the marquee and the segment strip in the black band under the image; the side rails leave no band here, so the pair rides the viewfinder's bottom-leading corner on the same 50%-black panel the interval row and the estimate chips use to stay legible over live picture. Nothing is dropped for the smaller slot — the burst spans are what let an operator judge and balance the end of a take. The panel takes the width the region gives it, capped at 560 pt of content so a Mac window can't stretch it end to end (measured 464 pt on this canvas). While recording: the red elapsed pill replaces the close button, the format pill locks, the zoom chips hide, and the rail's lower slot swaps the framing toggles for the burst trigger. Geometry measured on the iPhone 17 Pro simulator (874×402 pt, LL_CAPTURE=1 LL_RECORDING=1) and restated on this 852×393 canvas.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="83" y="296" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="852" height="393" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- The preview layer aspect-fits the WHOLE screen, so in landscape a
+           16:9 feed fills the height and pillarboxes at 76.6/775.3. The rails
+           sit over its edges; there is no letterbox band to put chrome in. -->
+      <g id="viewfinder">
+        <rect x="76.6" y="0" width="698.7" height="393" fill="url(#sky)"/>
+        <circle cx="300" cy="150" r="26" fill="#FFB340" opacity="0.9"/>
+        <circle cx="300" cy="150" r="46" fill="#FFB340" opacity="0.15"/>
+        <polygon points="76.6,268 200,222 330,264 470,200 600,250 775.3,212 775.3,393 76.6,393" fill="#141A24"/>
+        <polygon points="76.6,320 220,288 380,326 520,300 775.3,322 775.3,393 76.6,393" fill="#0B0E14"/>
+      </g>
+
+      <!-- left rail: 108 pt wide, inset 59 from the screen edge (59..167) -->
+      <g id="left-rail">
+        <!-- recordingPill — takes the close button's slot for the whole take -->
+        <g id="recording-pill">
+          <rect x="69.5" y="15" width="87" height="34" rx="17" fill="#FF3B30" opacity="0.16"/>
+          <rect x="69.5" y="15" width="87" height="34" rx="17" fill="none" stroke="#FF3B30" stroke-opacity="0.5"/>
+          <circle cx="87.5" cy="32" r="4" fill="#FF3B30"/>
+          <text x="99" y="37" font-size="14" class="b m" fill="#FFF">02:12</text>
+        </g>
+        <!-- formatPill: dimmed and padlocked — format is frozen mid-take -->
+        <g id="format-pill">
+          <rect x="58" y="150" width="110" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="70" y="172" font-size="13" class="sb" fill="#FFF" opacity="0.55">1080p · 30</text>
+          <g data-symbol="lock.fill" opacity="0.4">
+            <rect x="146" y="167" width="10" height="8" rx="1.5" fill="#FFF"/>
+            <path d="M148 167 v-1.5 a3 3 0 0 1 6 0 V167" fill="none" stroke="#FFF" stroke-width="1.6"/>
+          </g>
+        </g>
+        <!-- zoomChips are gone while capturing (`if !isCapturing`) -->
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="83" y="296" width="60" height="60" fill="#3A3123"/>
+            <polygon points="83,340 107,318 129,336 143,326 143,356 83,356" fill="#241E15"/>
+          </g>
+          <rect x="83" y="296" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+      </g>
+
+      <!-- landscapeRecordingReadout: marquee over strip on one dark panel, in
+           the viewfinder region's bottom-leading corner (region 167..675, the
+           overlay's own 10 pt inset, then 12/9 inside the panel). -->
+      <g id="recording-readout">
+        <rect x="177" y="292.5" width="488" height="70.5" rx="14" fill="#000" opacity="0.5"/>
+
+        <g id="speed-marquee" class="m" font-size="12.5">
+          <text x="189" y="313">
+            <tspan fill="#FFF" opacity="0.45">25× → 5.3s</tspan>
+            <tspan dx="14" fill="#FFB340" font-weight="700">50× → 2.6s</tspan>
+            <tspan dx="14" fill="#FFF" opacity="0.45">100× → 1.3s</tspan>
+          </text>
+        </g>
+
+        <!-- segmentStrip: the take's timeline, bursts layered over it. Same
+             three spans as the portrait spec at the same fractions of the
+             elapsed take — the third is still open, so it runs to the head. -->
+        <g id="segment-strip">
+          <rect x="189" y="323" width="464" height="14" rx="4" fill="#3B3B3D"/>
+          <rect x="235" y="325" width="31" height="10" rx="2" fill="#FFB340"/>
+          <rect x="387" y="325" width="49" height="10" rx="2" fill="#FFB340"/>
+          <rect x="611" y="325" width="39" height="10" rx="2" fill="#FFB340"/>
+          <text x="189" y="353" font-size="10" fill="#FFF" opacity="0.45">30 fps base</text>
+          <text x="653" y="353" font-size="10" fill="#FFB340" text-anchor="end">▲ 120 fps burst live · 3</text>
+        </g>
+      </g>
+
+      <!-- right rail: 118 pt wide, inset 59 (675..793, centred on 734) -->
+      <g id="right-rail">
+        <!-- the mode labels stay on screen mid-take but are inert -->
+        <g id="mode-stack" font-size="11" class="b" text-anchor="middle">
+          <text x="734" y="26" fill="#FFF" opacity="0.5" letter-spacing="0.6">PHOTO</text>
+          <text x="734" y="49.5" fill="#FFF" opacity="0.5" letter-spacing="0.6">INTERVAL</text>
+          <text x="734" y="73" fill="#FFB340" letter-spacing="0.6">VIDEO</text>
+        </g>
+        <g id="shutter" data-symbol="stop button">
+          <circle cx="734" cy="195" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
+          <rect x="718" y="179" width="32" height="32" rx="8" fill="#FF3B30"/>
+        </g>
+        <!-- leadingControl: mid-take the rail's lower slot is the burst
+             trigger, filled amber while the burst is open -->
+        <g id="burst-trigger">
+          <circle cx="734" cy="335" r="22" fill="#FFB340"/>
+          <text x="734" y="340" font-size="12" class="b" fill="#000" text-anchor="middle">120</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="11" y="134.5" width="36" height="124" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="359" y="380" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="450" y="450" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (recording) · landscape · 852×393 pt</text>
+  <text x="450" y="468" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — landscapeLayout · landscapeRecordingReadout · speedMarquee · segmentStrip</text>
+</svg>
