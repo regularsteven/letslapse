@@ -1,0 +1,82 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Scan page viewer · portrait</title>
+  <desc>Mirrors App/ScanPageViewer.swift (topBar, controls, correctedToggle, exposureRow, pageIndicator, ScanZoomableImage). The corrected page, with the original one tap away. The toggle is the whole promise made visible: "corrected" is a view rather than a state that can be lost. The exposure row comes from the frames.timestamps sidecar and is set monospaced so a column of pages compares by eye while swiping. Page dots cap at eight; past that the position is spelled out as "3 / 36". Pinch to zoom, drag to pan once zoomed, double-tap to fit; status bar hidden.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.mono{font-family:ui-monospace,Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+      <!-- status bar -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#000"/>
+      <rect x="0" y="120" width="393" height="556" fill="#000"/>
+      <rect x="16" y="120" width="361" height="556" fill="#F2F0EA"/>
+      <rect x="34" y="170" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="208" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="246" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="284" width="180" height="8" fill="#59544E"/>
+      <rect x="34" y="322" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="360" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="398" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="436" width="180" height="8" fill="#59544E"/>
+      <rect x="34" y="474" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="512" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="550" width="322" height="8" fill="#59544E"/>
+      <rect x="34" y="588" width="180" height="8" fill="#59544E"/>
+      <rect x="34" y="626" width="322" height="8" fill="#59544E"/>
+
+      <!-- top bar -->
+      <g id="top-bar">
+        <rect x="0" y="0" width="393" height="120" fill="#000" fill-opacity="0.35"/>
+        <text x="20" y="76" font-size="15.5" class="sb" fill="#FFF">Done</text>
+        <text x="373" y="70" font-size="13" class="sb" fill="#FFF" fill-opacity="0.75" text-anchor="end">Page 3 of 8</text>
+        <text x="373" y="88" font-size="12" fill="#FFF" fill-opacity="0.5" text-anchor="end">16 Aug at 21:23:41</text>
+      </g>
+
+      <!-- controls -->
+      <g id="controls">
+        <rect x="0" y="600" width="393" height="252" fill="#000" fill-opacity="0.74"/>
+        <rect x="20" y="640" width="200" height="34" rx="11" fill="#FFF" fill-opacity="0.14"/>
+        <rect x="23" y="643" width="97" height="28" rx="8" fill="#FFB340"/>
+        <g transform="translate(41 657) scale(0.5455) translate(-11 -11)" fill="none" stroke="#1C1C1E" stroke-width="3.48" stroke-linejoin="round" data-symbol="perspective"><polygon points="5,6 17,7.5 17,14.5 5,16"/></g>
+        <text x="79" y="662" font-size="11.5" class="b" fill="#1C1C1E" text-anchor="middle">Corrected</text>
+        <text x="169" y="662" font-size="11.5" class="sb" fill="#FFF" fill-opacity="0.75" text-anchor="middle">Original</text>
+
+        <!-- exposure, monospaced so a column of pages compares by eye -->
+        <g id="exposure">
+          <text x="20" y="697" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.45" letter-spacing="0.5">SHUTTER</text>
+          <text x="20" y="717" font-size="15" class="sb mono" fill="#FFF">1/125</text>
+          <text x="88" y="697" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.45" letter-spacing="0.5">ISO</text>
+          <text x="88" y="717" font-size="15" class="sb mono" fill="#FFF">200</text>
+          <text x="139" y="697" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.45" letter-spacing="0.5">EV</text>
+          <text x="139" y="717" font-size="15" class="sb mono" fill="#FFF">−0.3</text>
+          <text x="192" y="697" font-size="10.5" class="sb" fill="#FFF" fill-opacity="0.45" letter-spacing="0.5">PAPER</text>
+          <text x="192" y="717" font-size="15" class="sb mono" fill="#FFF">A4</text>
+        </g>
+        <rect x="20" y="734" width="309" height="44" rx="12" fill="#FFF" fill-opacity="0.16"/>
+        <g transform="translate(140 756) scale(0.7727) translate(-11 -11)" fill="none" stroke="#FFB340" stroke-width="2.46" stroke-linejoin="round" data-symbol="perspective"><polygon points="4,6.5 18,8 18,14 4,15.5"/><path d="M1.5 11 h19 M11 3 v16"/></g>
+        <text x="157" y="761" font-size="14" class="sb" fill="#FFF">Re-correct…</text>
+        <rect x="337" y="734" width="44" height="44" rx="12" fill="#FFF" fill-opacity="0.16"/>
+        <g transform="translate(359 756) scale(1.05) translate(-9 -10)" fill="none" stroke="#FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="square.and.arrow.up"><path d="M4 9 v9 h10 V9"/><path d="M9 14 V1 M5 5 l4 -4 4 4"/></g>
+        <g id="page-dots"><circle cx="175.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/><circle cx="187.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/><circle cx="199.5" cy="800" r="3" fill="#FFF" fill-opacity="1"/><circle cx="211.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/><circle cx="223.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/><circle cx="235.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/><circle cx="247.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/><circle cx="259.5" cy="800" r="3" fill="#FFF" fill-opacity="0.3"/></g>
+      </g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Scan page viewer · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ScanPageViewer.swift — Corrected/Original · sidecar exposure · Re-correct…</text>
+</svg>

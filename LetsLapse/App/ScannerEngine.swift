@@ -10,13 +10,16 @@ import CoreVideo
 /// **Scanner** — the decision of *when* to fire, taken from the scene instead
 /// of from a timer.
 ///
+/// There are **two of those decisions**, not one with a filter on it, and which
+/// one runs is chosen by the PAPER dial (`Trigger`).
+///
+/// ### Motion (PAPER = Auto) — "capture what happens"
+///
 /// The shooting loop it exists for: put the object down, take your hand out of
 /// frame, hear the click, reach in, move it, take your hand out again, hear the
 /// click. Thirty-six times around a turntable is the canonical photogrammetry
 /// set, and every one of those frames is a pose the operator chose — so the
 /// camera's whole job is to notice that the choosing has finished.
-///
-/// Three states, and the transition that matters is the third:
 ///
 /// | State | Meaning |
 /// |---|---|
@@ -28,6 +31,60 @@ import CoreVideo
 /// and drops straight back to `settled`, because the frame it just took *is*
 /// this pose. There is no state in which the engine is "ready to fire and
 /// waiting" — readiness and firing are the same instant.
+///
+/// ### Rectangle (PAPER = A4 · Letter · 4×6 · Square) — "capture the page"
+///
+/// **Motion is irrelevant here, and treating it as the trigger was the bug.**
+/// A document scan has no disturb/re-settle cycle to wait for: the page is put
+/// down and stays put, which under the motion model is a scene that never
+/// changes and therefore never fires. Worse, measured on a *handheld* phone
+/// (2026-08-17, screen recording), the page's corners drift across the frame
+/// with the operator's hand every single tick, so the motion machine re-armed
+/// its window continuously and the HUD read "Settling…" for a whole recording
+/// with one frame banked.
+///
+/// So the question changes from "has the scene stopped changing?" to "**is
+/// there a page, and is it holding still?**":
+///
+/// | State | Meaning |
+/// |---|---|
+/// | `waitingForPage` | Nothing flat in view. Nothing to photograph. |
+/// | `holding` | Corners found; they have stayed inside `documentStabilityThreshold` since `holdStartedAt`. Fire when the window is full. |
+/// | `captured` | This page is banked. Nothing more until it is taken away — see below. |
+///
+/// The stability window is about **blur, not composition**: the corners are
+/// re-detected on every frame and the ones stamped into the sidecar are the
+/// fired frame's own, so a page that has shifted since the last shot is still
+/// rectified correctly. All the window has to establish is that the page is not
+/// moving *now*, which is why its threshold is looser than the turntable
+/// path's — it has to sit above hand tremor and below a page being slid.
+///
+/// `captured` is what stops a page sitting on a desk from being photographed
+/// twenty times — and it took three attempts to get right, each failing on a
+/// real desk:
+///
+/// 1. A **time cooldown** re-armed on its own, so a stationary sheet was taken
+///    again every couple of seconds.
+/// 2. **"The corners moved far enough"** re-armed when the detector merely
+///    re-acquired the same page a few percent off, which it does constantly.
+/// 3. **"The rectangle went missing"** re-armed on a single dropped detection —
+///    and the detector blinks on its own, 22 times in one run over a sheet that
+///    never moved.
+///
+/// 4. **Absence alone** re-armed on a detector that goes quiet for *seconds*
+///    over a page it is still pointed at — measured, with the frame difference
+///    at 0.0014 against a 0.028 threshold, i.e. a scene where provably nothing
+///    happened.
+///
+/// So a removal now has to be **seen happening**: the page out of sight for
+/// `pageAbsenceDelay` *and* the frame having visibly changed since the capture
+/// (`sceneChangedSinceCapture`). Lifting a sheet does both — a hand arrives, the
+/// desk appears. A blinking detector over a still desk does neither, however
+/// long it blinks. Put a page down and leave it, and exactly one frame exists of
+/// it, however badly the detector behaves and however long the camera watches.
+///
+/// The order those states may be visited in is not an outcome of any of this —
+/// it is a table (`legalPageTransitions`) that every move is checked against.
 ///
 /// **The settle delay is wall-clock, not a frame count.** Preview frames arrive
 /// at whatever rate the session and the light allow (a dark scene at a long
@@ -43,12 +100,51 @@ import CoreVideo
 /// for the measurement side.
 final class ScannerEngine {
 
+    /// Which question the shutter is waiting on. Set once per run from the
+    /// PAPER dial — a run does not change its mind halfway through, and the
+    /// operator's stock is the declaration that decides it.
+    enum Trigger: String, Equatable {
+        /// Auto: the scene's own motion decides. Turntables, objects, street.
+        case motion
+        /// A named stock: a flat page holding still decides. Documents.
+        case rectangle
+    }
+
     enum State: String, Equatable {
         case settled
         case disturbed
         /// Transient — see the note above; the engine never rests here.
         case reSettled
+        // Rectangle-trigger states.
+        case waitingForPage
+        case holding
+        case captured
     }
+
+    /// **The document trigger's only legal moves.** The order is the product
+    /// requirement, so it is a structure rather than an outcome:
+    ///
+    ///     waitingForPage ──page seen──▶ holding ──window full──▶ captured
+    ///            ▲                        │                         │
+    ///            └────page removed────────┴───────page removed──────┘
+    ///
+    /// Two things this makes impossible rather than merely unlikely. A pose
+    /// cannot be banked without a completed hold window before it, because
+    /// `captured` is reachable only from `holding` and only through
+    /// `didCapture`. And a run cannot go back to hunting for a page without
+    /// passing through the banked state first, because `waitingForPage` is
+    /// reachable only from `holding` or `captured` — never from itself, and
+    /// never skipped.
+    ///
+    /// Anything else is refused and recorded in `lastRejectedTransition`, and
+    /// trips an assertion in DEBUG. The states were being assigned from six
+    /// places with nothing checking the edges; every ordering bug reported so
+    /// far was a move that this table would not have allowed.
+    private static let legalPageTransitions: [State: Set<State>] = [
+        .waitingForPage: [.holding],
+        .holding: [.waitingForPage, .captured],
+        .captured: [.waitingForPage],
+    ]
 
     // MARK: Tuning
 
@@ -117,9 +213,76 @@ final class ScannerEngine {
     /// `-scanner.cornerThreshold 0.01`.
     static let defaultCornerStabilityThreshold: Double = 0.02
 
+    /// The rectangle trigger's own stability threshold: how far a corner may
+    /// travel, as a fraction of the frame, during the hold window and still
+    /// count as a page holding still.
+    ///
+    /// **Much looser than `defaultCornerStabilityThreshold`, deliberately, and
+    /// the tight value is what broke document scanning.** That number describes
+    /// a page on a copy stand under a phone that is not moving; a *handheld*
+    /// scan moves the whole frame, so the corners of a perfectly still page
+    /// drift with the operator's hand. At 2% that drift read as "the page is
+    /// being moved" on every tick and the window never completed once in a full
+    /// screen recording.
+    ///
+    /// 4.5% sits above hand tremor at arm's length and well below a page being
+    /// placed or slid, which moves corners by tens of percent. It can afford to
+    /// be loose because of what the window is *for*: it establishes that the
+    /// page is not moving right now, so the frame isn't smeared — not that the
+    /// page is where it was before. The corners that rectify the shot are the
+    /// fired frame's own.
+    ///
+    /// **TODO (calibration):** measured only against one recording on an iPhone
+    /// 16 Pro. It wants the treatment `defaultMotionThreshold` got — a run that
+    /// logs corner travel for a still page held by hand, at several distances,
+    /// against one being placed. Override in the field with
+    /// `-scanner.documentThreshold 0.03`.
+    static let defaultDocumentStabilityThreshold: Double = 0.045
+
+    /// How long the rectangle must be **gone** before the next page may be
+    /// taken.
+    ///
+    /// This one number is the whole re-arm rule, and everything else was wrong.
+    /// A page photographed and left where it is must never be photographed
+    /// again — the only thing that starts the next pose is the operator taking
+    /// this one away. So the clock does not start at the capture; it starts
+    /// when the page **disappears**, and until it has been gone this long the
+    /// shutter stays shut however still and however detected the scene is.
+    ///
+    /// It has to be a *duration* rather than a single absent frame because the
+    /// detector blinks. Measured on an iPhone 16 Pro over a stationary page
+    /// (2026-08-17): 22 `rect=none` samples in one run where nothing moved at
+    /// all, plus re-acquisitions that land the corners several percent from
+    /// where they were. Treating either as "the page was removed" re-armed the
+    /// machine, and the same sheet was photographed twenty times over.
+    static let defaultPageAbsenceDelay: TimeInterval = 0.5
+
+    /// How long after a capture a disappearance is ignored entirely.
+    ///
+    /// The shutter is itself a detector dropout: the preview stutters, AE
+    /// steps, the operator's hand comes back into frame. Without this, a run
+    /// could photograph a page, blink for half a second *because* it
+    /// photographed it, call that a removal and take it again — the exact loop
+    /// this is fixing, arrived at by a different road.
+    static let defaultPostCaptureBlanking: TimeInterval = 0.6
+
     let settleDelay: TimeInterval
     let motionThreshold: Float
     let cornerStabilityThreshold: Double
+    let documentStabilityThreshold: Double
+    let pageAbsenceDelay: TimeInterval
+    let postCaptureBlanking: TimeInterval
+
+    /// Which decision this run's shutter is waiting on — set from the **PAPER**
+    /// dial and fixed for the run.
+    ///
+    /// `Auto` means "photograph whatever settles", which is the turntable case.
+    /// Naming a stock (A4, Letter, 4×6, Square) is a declaration that the
+    /// operator is shooting documents, and that changes the trigger outright
+    /// rather than filtering it: a page is not a scene that stops changing, and
+    /// under the motion model a page put down and left alone is a scene that
+    /// never fires. See the class note.
+    let trigger: Trigger
 
     #if DEBUG
     /// Field-tuning overrides, read from `UserDefaults` so they can arrive as
@@ -157,6 +320,18 @@ final class ScannerEngine {
         let value = UserDefaults.standard.double(forKey: "scanner.cornerThreshold")
         return value > 0 ? value : nil
     }
+
+    /// The lever for the document trigger's own threshold, which is the one
+    /// number in this file measured against a single recording — see
+    /// `defaultDocumentStabilityThreshold`'s TODO. A too-tight value here is
+    /// exactly the bug that made document scanning never fire, so being able to
+    /// walk it up and down in front of a real page matters more here than
+    /// anywhere else: `-scanner.documentThreshold 0.03`.
+    static func overriddenDocumentThreshold() -> Double? {
+        guard UserDefaults.standard.object(forKey: "scanner.documentThreshold") != nil else { return nil }
+        let value = UserDefaults.standard.double(forKey: "scanner.documentThreshold")
+        return value > 0 ? value : nil
+    }
     #endif
 
     // MARK: State
@@ -174,24 +349,67 @@ final class ScannerEngine {
     /// times rather than a count for the same reason the settle delay is wall
     /// clock: the preview's frame rate is not a constant.
     private var cornerSamples: [(time: Date, quad: NormalizedQuad)] = []
-    /// Whether the last measurement had a rectangle in it — i.e. which of the
-    /// two settle paths is currently deciding when to fire.
+    /// Whether the last measurement had a rectangle in it — under the motion
+    /// trigger, which of the two settle signals is deciding; under the rectangle
+    /// trigger, simply whether there is a page in view.
     private(set) var isTrackingRectangle = false
+    /// The rectangle trigger has nothing flat to photograph. Drawn by the HUD: a
+    /// camera that is deliberately not firing has to say why, or the shoot reads
+    /// as one that has hung.
+    private(set) var isWaitingForRectangle = false
+    /// When the current hold window began — the rectangle trigger's clock.
+    private var holdStartedAt: Date?
+    /// The quad the hold window is measured against. Held rather than compared
+    /// pairwise so slow drift accumulates: a page creeping a millimetre a tick
+    /// passes every frame-to-frame test and fails this one, which is the whole
+    /// point of a window.
+    private var holdReference: NormalizedQuad?
+    /// When the rectangle was first missing, in the run of missing samples the
+    /// engine is currently in. Nil whenever a page is in view. **The absence
+    /// clock**: the only thing that re-arms a document run.
+    private var absentSince: Date?
+    /// When the last pose was taken, so the shutter's own dropout doesn't read
+    /// as the page being removed. See `defaultPostCaptureBlanking`.
+    private var capturedAt: Date?
+    /// Whether anything has **visibly happened** since the last capture — the
+    /// other half of "the page was removed", and the half that was missing.
+    ///
+    /// A page being lifted is a large visual event: a hand comes in, a whole
+    /// sheet leaves, the desk appears. A detector losing a page it is still
+    /// looking at is not an event at all. Measured on device (2026-08-17), a
+    /// full re-capture cycle ran with the frame difference at 0.0014–0.0019
+    /// against a 0.028 threshold — 15× below it — so nothing in that scene
+    /// moved and the sheet was photographed again anyway.
+    private var sceneChangedSinceCapture = false
+    /// The last transition the machine refused, for the camera to log. Kept as a
+    /// string rather than reported through a logger so the engine stays free of
+    /// app dependencies and can be driven by a bare harness.
+    private(set) var lastRejectedTransition: String?
 
     init(
         settleDelay: TimeInterval = ScannerEngine.defaultSettleDelay,
         motionThreshold: Float = ScannerEngine.defaultMotionThreshold,
-        cornerStabilityThreshold: Double = ScannerEngine.defaultCornerStabilityThreshold
+        cornerStabilityThreshold: Double = ScannerEngine.defaultCornerStabilityThreshold,
+        documentStabilityThreshold: Double = ScannerEngine.defaultDocumentStabilityThreshold,
+        pageAbsenceDelay: TimeInterval = ScannerEngine.defaultPageAbsenceDelay,
+        postCaptureBlanking: TimeInterval = ScannerEngine.defaultPostCaptureBlanking,
+        trigger: Trigger = .motion
     ) {
+        self.trigger = trigger
+        self.pageAbsenceDelay = pageAbsenceDelay
+        self.postCaptureBlanking = postCaptureBlanking
         var resolvedDelay = settleDelay
         var resolvedThreshold = motionThreshold
         var resolvedCornerThreshold = cornerStabilityThreshold
+        var resolvedDocumentThreshold = documentStabilityThreshold
         #if DEBUG
         resolvedDelay = ScannerEngine.overriddenSettleDelay() ?? resolvedDelay
         resolvedThreshold = ScannerEngine.overriddenThreshold() ?? resolvedThreshold
         resolvedCornerThreshold = ScannerEngine.overriddenCornerThreshold() ?? resolvedCornerThreshold
+        resolvedDocumentThreshold = ScannerEngine.overriddenDocumentThreshold() ?? resolvedDocumentThreshold
         #endif
         self.cornerStabilityThreshold = resolvedCornerThreshold
+        self.documentStabilityThreshold = resolvedDocumentThreshold
         // The delay is clamped to the range the UI will eventually offer; the
         // threshold deliberately isn't, because tuning it means being able to
         // go absurdly low on purpose and watch what fires.
@@ -200,56 +418,191 @@ final class ScannerEngine {
         self.motionThreshold = resolvedThreshold
     }
 
-    /// Arms the engine for a run and asks for the opening frame.
+    /// Arms the engine for a run, and — under the motion trigger — asks for the
+    /// opening frame.
     ///
-    /// The first pose is already framed — the operator set it up before
-    /// pressing the shutter — so it is captured immediately rather than made to
-    /// wait for a disturb/re-settle cycle that would require them to touch a
-    /// scene they had just finished arranging.
+    /// **Motion:** the first pose is already framed, because the operator set it
+    /// up before pressing the shutter, so it is captured immediately rather than
+    /// made to wait for a disturb/re-settle cycle that would require them to
+    /// touch a scene they had just finished arranging. Returns `true`, which the
+    /// caller treats exactly like any other fire signal, so the opening frame
+    /// goes through the same steadiness gate and the same capture path as every
+    /// frame after it.
     ///
-    /// Returns `true`, which the caller treats exactly like any other fire
-    /// signal, so the opening frame goes through the same steadiness gate and
-    /// the same capture path as every frame after it.
+    /// **Rectangle:** returns `false` and opens on `waitingForPage`. There is
+    /// nothing to photograph yet — the tap has only just been attached and the
+    /// desk may be empty — and "the first pose is already framed" is an
+    /// assumption about a turntable, not about a document shoot. A page already
+    /// lying still in front of the camera is photographed as soon as the hold
+    /// window it opens completes, which is a second later and correct, rather
+    /// than instantly and possibly of a bare desk.
     @discardableResult
     func start(at time: Date) -> Bool {
-        state = .settled
         lastMotionAt = nil
         lastMagnitude = 0
         cornerSamples = []
         isTrackingRectangle = false
+        isWaitingForRectangle = false
+        holdStartedAt = nil
+        holdReference = nil
+        absentSince = nil
+        capturedAt = nil
+        sceneChangedSinceCapture = false
+        lastRejectedTransition = nil
         hasFiredFirstPose = true
-        return true
+        switch trigger {
+        case .motion:
+            state = .settled
+            return true
+        case .rectangle:
+            state = .waitingForPage
+            isWaitingForRectangle = true
+            return false
+        }
     }
 
     /// One frame's worth of everything the camera can say about the scene: how
     /// different it is from the last frame, and where the flat object in it is
-    /// — if there is one. Returns `true` on the tick the scene has just
-    /// finished re-settling, exactly as `motionMagnitude` does.
+    /// — if there is one. Returns "the shutter should go".
     ///
-    /// **Two settle paths, and the rectangle is the better one.** With a quad
-    /// in view the re-settle test is the four corners standing still, which is
-    /// a measurement of *the object* rather than of the frame: it sees a page
-    /// creeping a millimetre a second, which a frame difference averages into
-    /// nothing, and it ignores a lighting shift or a shadow crossing the desk,
-    /// which a frame difference reads as motion. With no quad — the object is
-    /// out of frame, unlit, or simply isn't flat — the path falls back to the
-    /// Phase 1 differencing unchanged, because a signal that doesn't exist is
-    /// worse than a coarse one that does.
+    /// Which question that answers is `trigger`'s to decide, and the two are
+    /// genuinely different machines rather than one with a filter on it:
     ///
-    /// The two are not exclusive on the *disturb* side, and deliberately so: a
-    /// hand crossing the frame or the page being swapped for another in the
-    /// same place moves the frame without moving the corners, and either should
-    /// restart the settle window. So anything disturbs, and only corners settle.
+    /// - **motion** — has the scene been disturbed and gone still again? A quad,
+    ///   when there is one, sharpens the *settle* half of that test: four
+    ///   corners standing still is a measurement of the object rather than of
+    ///   the frame, so it sees a page creeping a millimetre a second, which a
+    ///   frame difference averages into nothing, and ignores a shadow crossing
+    ///   the desk, which a frame difference reads as motion. Anything disturbs
+    ///   and only corners settle, deliberately: a hand crossing the frame, or a
+    ///   page swapped for another in the same place, moves the frame without
+    ///   moving the corners and should restart the window.
+    /// - **rectangle** — is there a page, and is it holding still? Motion plays
+    ///   no part. See `observePage`.
     @discardableResult
     func observe(magnitude: Float, quad: NormalizedQuad?, at time: Date) -> Bool {
+        lastMagnitude = magnitude
+        switch trigger {
+        case .rectangle:
+            return observePage(magnitude: magnitude, quad: quad, at: time)
+        case .motion:
+            return observeMotion(magnitude: magnitude, quad: quad, at: time)
+        }
+    }
+
+    /// Moves the document machine, or refuses to.
+    ///
+    /// Every rectangle-state change goes through here, which is the only reason
+    /// the order in `legalPageTransitions` is a guarantee rather than a habit. A
+    /// refused move leaves the state exactly as it was — a machine that has lost
+    /// track of itself should stall visibly, in a state the HUD can name, rather
+    /// than take a photograph it cannot justify.
+    @discardableResult
+    private func transition(to next: State) -> Bool {
+        guard next != state else { return true }
+        guard Self.legalPageTransitions[state]?.contains(next) == true else {
+            // Recorded, never fatal. This ships in a Debug build that is being
+            // used to scan real documents, and an assertion that trips mid-set
+            // would take the shoot with it — the refusal is the enforcement,
+            // and `CameraController` prints `REJECTED=…` so a field run says so.
+            lastRejectedTransition = "\(state.rawValue)→\(next.rawValue)"
+            return false
+        }
+        state = next
+        isWaitingForRectangle = next == .waitingForPage
+        return true
+    }
+
+    /// The **rectangle** trigger: a page, holding still, for the length of the
+    /// window. No motion anywhere in it.
+    ///
+    /// Returns "the shutter should go now", and says so on every tick it remains
+    /// true rather than on one edge — because the caller can refuse. A device
+    /// that isn't steady enough vetoes the pose (see
+    /// `CameraController.scannerDeviceIsSteady`), and a vetoed pose must not be
+    /// silently lost: nothing here is committed until the caller confirms with
+    /// `didCapture`, so the next steady tick takes the same page.
+    private func observePage(magnitude: Float, quad: NormalizedQuad?, at time: Date) -> Bool {
+        guard hasFiredFirstPose else { return false }
+
+        // The shutter is itself a visual event and a detector dropout: the
+        // preview stutters, AE steps, a hand comes back into frame. For as long
+        // as the blanking lasts, neither signal below is evidence of anything.
+        let blanked = capturedAt.map { time.timeIntervalSince($0) < postCaptureBlanking } ?? false
+        if state == .captured, !blanked, magnitude > motionThreshold {
+            sceneChangedSinceCapture = true
+        }
+
+        guard let quad else {
+            isTrackingRectangle = false
+            // **A missing rectangle is not a removed page.** The detector blinks
+            // — measured at roughly every other sample over a sheet that never
+            // moved, for stretches well past `pageAbsenceDelay` — so absence is
+            // a duration rather than a sample, and even a long one is only half
+            // the test.
+            if blanked {
+                absentSince = nil
+                return false
+            }
+            let since = absentSince ?? time
+            absentSince = since
+            let gone = time.timeIntervalSince(since) >= pageAbsenceDelay
+            guard gone else { return false }
+
+            if state == .captured {
+                // **Both signals, or nothing.** The page is out of sight AND
+                // something visibly happened while it went. A blinking detector
+                // over a still desk supplies the first and never the second,
+                // which is exactly the run that photographed one sheet four
+                // times: 0.0014 magnitude throughout, 15× under the threshold.
+                guard sceneChangedSinceCapture else { return false }
+                capturedAt = nil
+                sceneChangedSinceCapture = false
+            }
+            holdStartedAt = nil
+            holdReference = nil
+            transition(to: .waitingForPage)
+            return false
+        }
+
+        isTrackingRectangle = true
+        absentSince = nil
+
+        // A page already banked stays banked, however still it is and however
+        // long it lies there. Nothing on this side of the branch can fire again:
+        // only a removal re-arms the run, and a removal has to be *seen*
+        // happening. Three earlier rules all failed here — a time cooldown, a
+        // corner-jump test, and absence on its own.
+        if state == .captured { return false }
+
+        // Hold window: measured against the quad it started with, so slow drift
+        // accumulates into a restart instead of passing frame by frame.
+        guard let reference = holdReference, let started = holdStartedAt,
+              reference.maxCornerDistance(to: quad) <= documentStabilityThreshold else {
+            holdReference = quad
+            holdStartedAt = time
+            transition(to: .holding)
+            return false
+        }
+        transition(to: .holding)
+        // The fire signal is only ever raised from `holding`, which is what
+        // makes "no capture without a completed window" structural: `didCapture`
+        // refuses from anywhere else.
+        return state == .holding && time.timeIntervalSince(started) >= settleDelay
+    }
+
+    /// The **motion** trigger — the Phase 1 machine, unchanged, with the corner
+    /// path as its stronger settle signal when a quad happens to be there.
+    private func observeMotion(magnitude: Float, quad: NormalizedQuad?, at time: Date) -> Bool {
         guard let quad else {
             cornerSamples = []
             isTrackingRectangle = false
+            isWaitingForRectangle = false
             return motionMagnitude(magnitude, at: time)
         }
 
-        lastMagnitude = magnitude
         isTrackingRectangle = true
+        isWaitingForRectangle = false
         guard hasFiredFirstPose else { return false }
 
         let cornersMoved = cornerSamples.last
@@ -319,22 +672,70 @@ final class ScannerEngine {
         return true
     }
 
-    /// How far through the settle window the scene currently is, 0…1 — the
-    /// progress the HUD draws while `disturbed`. Nil when nothing is settling.
-    func settleProgress(at time: Date) -> Double? {
-        guard state == .disturbed, let since = lastMotionAt else { return nil }
-        return min(max(time.timeIntervalSince(since) / settleDelay, 0), 1)
+    /// The frame asked for by the last `true` from `observe` has been taken.
+    ///
+    /// The rectangle trigger needs telling, because it is the only one that
+    /// holds a *state* about the page it just photographed — and because the
+    /// caller can refuse a fire (an unsteady device vetoes the pose). Nothing is
+    /// committed inside `observe`, so a vetoed pose keeps the window satisfied
+    /// and the same page is taken as soon as the phone is still. Confirming is
+    /// what starts the cooldown and what makes this page "banked" until it
+    /// changes.
+    ///
+    /// A no-op under the motion trigger, whose own fire path has already moved
+    /// the machine on — there, a vetoed pose comes round again with the next
+    /// disturbance, which is the operator's next move anyway.
+    func didCapture(at time: Date) {
+        guard trigger == .rectangle else { return }
+        // Structural, not defensive: a pose that did not come out of a
+        // completed hold window is a pose nothing asked for, and banking it
+        // would let `captured` appear before `holding` — the ordering the HUD
+        // was reported showing. Refused and recorded instead.
+        guard state == .holding else {
+            lastRejectedTransition = "didCapture from \(state.rawValue)"
+            return
+        }
+        capturedAt = time
+        absentSince = nil
+        sceneChangedSinceCapture = false
+        holdStartedAt = nil
+        holdReference = nil
+        transition(to: .captured)
     }
 
-    /// Ends the run. A stopped engine reports `settled` and fires nothing —
-    /// `start` is the only thing that re-arms it.
+    /// How far through the current window the run is, 0…1 — the progress the HUD
+    /// draws. Nil when nothing is running towards a shot.
+    ///
+    /// One number for both triggers because it means the same thing in both: how
+    /// much of the wait is done. Under motion that is the settle window since the
+    /// last disturbance; under the rectangle trigger it is the hold window since
+    /// the page last moved.
+    func settleProgress(at time: Date) -> Double? {
+        switch trigger {
+        case .motion:
+            guard state == .disturbed, let since = lastMotionAt else { return nil }
+            return min(max(time.timeIntervalSince(since) / settleDelay, 0), 1)
+        case .rectangle:
+            guard state == .holding, let since = holdStartedAt else { return nil }
+            return min(max(time.timeIntervalSince(since) / settleDelay, 0), 1)
+        }
+    }
+
+    /// Ends the run. A stopped engine fires nothing — `start` is the only thing
+    /// that re-arms it.
     func stop() {
-        state = .settled
+        state = trigger == .rectangle ? .waitingForPage : .settled
         lastMotionAt = nil
         hasFiredFirstPose = false
         lastMagnitude = 0
         cornerSamples = []
         isTrackingRectangle = false
+        isWaitingForRectangle = false
+        holdStartedAt = nil
+        holdReference = nil
+        absentSince = nil
+        capturedAt = nil
+        sceneChangedSinceCapture = false
     }
 }
 

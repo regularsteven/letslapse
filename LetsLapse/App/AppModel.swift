@@ -192,6 +192,14 @@ final class AppModel: ObservableObject {
         /// `AppModel.isScannerProject(_:)` — it falls back to the sidecar for
         /// the Scanner shoots that predate this field.
         var captureMode: String?
+        /// The paper stock the capture screen's PAPER row named when this scan
+        /// was shot, as a `PerspectiveAspect` raw value. Recorded per session
+        /// because the Scans list badges it per session, and because the global
+        /// setting is the *next* shoot's answer rather than this one's — a scan
+        /// made on A4 must not relabel itself the moment the dial moves to 4×6.
+        /// Nil for every scan registered before this existed; read it through
+        /// `AppModel.scannerPaper(for:)`, which falls back to the live setting.
+        var scannerPaper: String?
 
         /// A Scanner shoot, said outright by the project itself. The stored
         /// field first; the display string second, which catches every Scanner
@@ -815,6 +823,26 @@ final class AppModel: ObservableObject {
     /// (e.g. Result → Done). ContentView consumes and clears it.
     @Published var requestedProjectDetailID: UUID?
 
+    /// The Scans tab's twin of the above: open this session. Set when a scanner
+    /// run finishes, because a finished scan is a document to look at rather
+    /// than footage to configure a blend from — see `finishScannerCapture`.
+    @Published var requestedScanDetailID: UUID?
+
+    /// How far the automatic perspective pass has got, per scan.
+    ///
+    /// Published because it is the header of the screen the operator is taken to
+    /// the moment a scan ends: a set arrives needing a minute of GPU work, and
+    /// "Correcting 6 of 34 pages…" is the difference between a screen that is
+    /// working and one that looks finished but wrong.
+    @Published private(set) var scanCorrections: [UUID: ScanCorrection] = [:]
+
+    struct ScanCorrection: Equatable {
+        var completed: Int
+        var total: Int
+        var isRunning: Bool { completed < total }
+        var line: String { "Correcting \(completed + 1) of \(total) pages…" }
+    }
+
     /// Set by screens that want a specific tab brought front — the camera's
     /// recent-capture tile asking for the Gallery. ContentView consumes and
     /// clears it. Screens presented over the tabs (the camera is a full-screen
@@ -971,6 +999,99 @@ final class AppModel: ObservableObject {
         return found
     }
 
+    /// The library split the Scans tab is built on, and the one Projects and
+    /// Gallery are built on.
+    ///
+    /// A scan is a document, so it lives in exactly one place: its own tab. It
+    /// is *not* a timelapse waiting to be blended, and leaving it in the two
+    /// library tabs was the wrong mental model the Scans tab exists to fix.
+    /// The route back in is deliberate and single — "View as timelapse" on the
+    /// session's export sheet, which opens `ScannerProjectView` as before.
+    var scanSessions: [CaptureProject] {
+        captures.filter(isScannerProject)
+    }
+
+    /// Everything that is not a scan: what Projects and Gallery list.
+    var libraryCaptures: [CaptureProject] {
+        captures.filter { !isScannerProject($0) }
+    }
+
+    /// The page numbers a scan actually holds, ascending — read off the
+    /// registered file names (`frame-00007.jpg` → 7).
+    ///
+    /// Deliberately not `1...sourceMediaCount`: pages keep their numbers when
+    /// one is deleted, so a count is only right until the first deletion. Names
+    /// that don't parse fall back to their position, which is what every
+    /// pre-Scanner photo project's frames are.
+    func scanPageNumbers(for capture: CaptureProject) -> [Int] {
+        let names = capture.sourceFileNames.filter { !$0.hasSuffix(".json") }
+        return names.enumerated().map { offset, name in
+            let base = ((name as NSString).lastPathComponent as NSString).deletingPathExtension
+            guard base.hasPrefix("frame-"), let parsed = Int(base.dropFirst("frame-".count))
+            else { return offset + 1 }
+            return parsed
+        }.sorted()
+    }
+
+    /// Everything `ScanSession.load` needs to resolve one session, gathered
+    /// here so the walk itself can run off the main actor without holding a
+    /// reference to the model.
+    func scanSessionRequest(for capture: CaptureProject) -> ScanSession.Request {
+        ScanSession.Request(
+            id: capture.id,
+            createdAt: capture.createdAt,
+            paper: scannerPaper(for: capture),
+            name: capture.name,
+            sourceFolder: captureFolderURL(for: capture.id).appendingPathComponent("source"),
+            frameNumbers: scanPageNumbers(for: capture),
+            frameURLs: sourceFrameURLs(for: capture))
+    }
+
+    /// The paper stock a scan was shot on: what the session recorded, or — for
+    /// a scan made before that was stamped — whatever the capture screen's
+    /// PAPER row says now, which is the same answer the correction has always
+    /// used.
+    func scannerPaper(for capture: CaptureProject) -> PerspectiveAspect {
+        capture.scannerPaper.flatMap(PerspectiveAspect.init(rawValue:)) ?? Self.storedScannerPaper
+    }
+
+    /// The capture screen's PAPER setting, read straight from defaults. The
+    /// same key `CaptureView` and `ScannerProjectSections` bind with
+    /// `@AppStorage`; this is the non-view reader.
+    static var storedScannerPaper: PerspectiveAspect {
+        UserDefaults.standard.string(forKey: "letslapse.capture.scannerAspect")
+            .flatMap(PerspectiveAspect.init(rawValue:)) ?? .auto
+    }
+
+    /// Records the stock a session is presented as, after a re-correction has
+    /// gone through on a different one.
+    func setScannerPaper(_ paper: PerspectiveAspect, for id: UUID) {
+        guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
+        captures[index].scannerPaper = paper.rawValue
+        try? persistLibrary()
+    }
+
+    /// The photograph a pose was shot as — never the rectified page.
+    ///
+    /// The counterpart to `scannerViewableURL`, and the whole basis of the
+    /// viewer's Corrected/Original toggle: correction is non-destructive, so
+    /// there is always something to toggle *to*, and the re-correct sheet has
+    /// something to re-measure corners on.
+    func scannerOriginalURL(for capture: CaptureProject, frameNumber: Int) -> URL? {
+        let sourceFolder = captureFolderURL(for: capture.id).appendingPathComponent("source")
+        let base = String(format: "frame-%05d", frameNumber)
+        for name in ["heic", "jpg", "jpeg"].map({ "\(base).\($0)" }) {
+            let url = sourceFolder.appendingPathComponent(name)
+            if FileManager.default.fileExists(atPath: url.path) { return url }
+        }
+        // A pose shot without a processed sibling: the frame itself is the
+        // photograph (the honest no-RAW fallback), or a DNG that at least
+        // decodes.
+        let frames = sourceFrameURLs(for: capture)
+        guard frames.indices.contains(frameNumber - 1) else { return nil }
+        return frames[frameNumber - 1]
+    }
+
     /// The per-frame capture record beside a photo project's frames, or nil
     /// when the shoot didn't write one (every interval shoot before Holy Grail
     /// and Scanner existed).
@@ -991,9 +1112,13 @@ final class AppModel: ObservableObject {
     func scannerViewableURL(for capture: CaptureProject, frameNumber: Int) -> URL? {
         let sourceFolder = captureFolderURL(for: capture.id).appendingPathComponent("source")
         let base = String(format: "frame-%05d", frameNumber)
-        let candidates = ["\(base)\(PerspectiveCorrector.correctedSuffix).heic"]
-            + ["heic", "jpg", "jpeg"].map { "\(base).\($0)" }
-        for name in candidates {
+        // The corrected page only counts if it was written since the
+        // orientation fix; otherwise the original is the better picture of the
+        // two (see `scannerCorrectedURL`).
+        if let corrected = scannerCorrectedURL(for: capture, frameNumber: frameNumber) {
+            return corrected
+        }
+        for name in ["heic", "jpg", "jpeg"].map({ "\(base).\($0)" }) {
             let url = sourceFolder.appendingPathComponent(name)
             if FileManager.default.fileExists(atPath: url.path) { return url }
         }
@@ -1010,7 +1135,42 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("source")
             .appendingPathComponent(
                 String(format: "frame-%05d%@.heic", frameNumber, PerspectiveCorrector.correctedSuffix))
-        return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        guard FileManager.default.fileExists(atPath: url.path),
+              // Same rule as `ScanSession.load`: a page corrected before the
+              // orientation fix doesn't count as corrected.
+              !PerspectiveCorrector.isSupersededCorrection(at: url) else { return nil }
+        return url
+    }
+
+    /// Throws one page out of a scan: its photograph, its rectified sibling and
+    /// its line in the sidecar.
+    ///
+    /// **Nothing is renumbered.** The files, the sidecar and every reference
+    /// anyone has already taken all name a pose by its index, so closing the
+    /// gap would quietly re-point them at a different photograph. A missing
+    /// number is the honest record of a page that was thrown away, and the
+    /// export renumbers from 1 on its way out anyway (`ScanFrameExport`), so
+    /// nothing downstream ever sees the hole.
+    func deleteScanPage(_ number: Int, from capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        let sourceFolder = captureFolderURL(for: capture.id).appendingPathComponent("source")
+        let base = String(format: "frame-%05d", number)
+        var removed: [URL] = []
+        for name in ["\(base).heic", "\(base).jpg", "\(base).jpeg", "\(base).dng",
+                     "\(base)\(PerspectiveCorrector.correctedSuffix).heic"] {
+            let url = sourceFolder.appendingPathComponent(name)
+            guard FileManager.default.fileExists(atPath: url.path) else { continue }
+            try? FileManager.default.removeItem(at: url)
+            removed.append(url)
+        }
+        // The sidecar counts from 0 where the files count from 1.
+        try? FrameTimestamps.deleteEntry(frame: number - 1, in: sourceFolder)
+        captures[index].sourceFileNames.removeAll { name in
+            (name as NSString).lastPathComponent.hasPrefix("\(base).")
+        }
+        try? persistLibrary()
+        ProjectThumbnailCache.shared.invalidate(urls: removed)
+        invalidateScannerCache(for: capture.id)
     }
 
     /// Drops what `isScannerProject` remembers about a project, after anything
@@ -1485,8 +1645,43 @@ final class AppModel: ObservableObject {
     /// shoot ends in, and the one the Correct-perspective action exists for.
     /// `corrected: true` runs that same action's `correctSequence` call on the
     /// way in, for the other half of the screen's life.
+    /// `LL_SCANS=seed` screenshot hook: the three sessions the Scans list is
+    /// drawn from — a finished A4 document, a part-corrected 4×6 set, and a
+    /// Letter set the detector never found a rectangle in — so the list's three
+    /// correction states (pill, ring, nothing at all) are all real rather than
+    /// states only prose can describe.
+    func debugSeedScanLibrary() {
+        guard scanSessions.isEmpty else { return }
+        let now = Date()
+        debugSeedScannerProject(
+            poses: 12, corrected: false, paper: .letter,
+            createdAt: Calendar.current.date(byAdding: .day, value: -1, to: now),
+            spacingSeconds: 30, detectRectangles: false)
+        debugSeedScannerProject(
+            poses: 3, corrected: true, paper: .fourBySix,
+            createdAt: now.addingTimeInterval(-3 * 3600), spacingSeconds: 20, correctedLimit: 2)
+        debugSeedScannerProject(poses: 8, corrected: true, paper: .a4, spacingSeconds: 27)
+    }
+
+    /// - Parameters:
+    ///   - paper: stamped on the session, so the list badges it and the pages
+    ///     are drawn at that stock's proportions.
+    ///   - correctedLimit: corrects only the first N pages, which is the only
+    ///     way to stage the partial ring — a real half-corrected set comes
+    ///     from a correction pass that was interrupted.
+    ///   - createdAt: back-dates the session, for the list's date sections.
+    ///   - detectRectangles: false writes a sidecar with no corners at all, the
+    ///     state where no correction is possible and no indicator is shown.
     @discardableResult
-    func debugSeedScannerProject(poses: Int = 12, corrected: Bool = false) -> UUID? {
+    func debugSeedScannerProject(
+        poses: Int = 12,
+        corrected: Bool = false,
+        paper: PerspectiveAspect = .auto,
+        createdAt: Date? = nil,
+        spacingSeconds: Double = 6,
+        correctedLimit: Int? = nil,
+        detectRectangles: Bool = true
+    ) -> UUID? {
         let staging = FileManager.default.temporaryDirectory
             .appendingPathComponent("scanner-demo-\(UUID().uuidString)", isDirectory: true)
         guard (try? FileManager.default.createDirectory(
@@ -1494,7 +1689,8 @@ final class AppModel: ObservableObject {
         guard let writer = FrameTimestampWriter(directory: staging) else { return nil }
 
         var urls: [URL] = []
-        let start = Date().addingTimeInterval(-Double(poses) * 6)
+        let shotAt = createdAt ?? Date()
+        let start = shotAt.addingTimeInterval(-Double(poses) * spacingSeconds)
         for index in 0..<poses {
             // The page drifts a little between poses, the way a real hand
             // leaves it, so the grid doesn't read as twelve copies of one file.
@@ -1510,23 +1706,39 @@ final class AppModel: ObservableObject {
             urls.append(url)
             writer.append(FrameTimestamps.Entry(
                 frame: index,
-                captureTime: start.addingTimeInterval(Double(index) * 6),
+                captureTime: start.addingTimeInterval(Double(index) * spacingSeconds),
                 shutter: 1.0 / 120,
                 iso: 200,
-                // Two poses with nothing flat in view, so the header's "on N of
-                // M frames" line and the grid's mixed state are real rather
+                ev: -0.3,
+                // One pose in six with nothing flat in view, so the header's
+                // "on N of M" line and the grid's mixed state are real rather
                 // than a phrase nothing can produce.
-                rectangle: index % 6 == 5 ? nil : quad))
+                rectangle: !detectRectangles || index % 6 == 5 ? nil : quad))
         }
         writer.close()
         guard !urls.isEmpty else { return nil }
 
         setSource(.photos(urls), mode: Self.scannerCaptureMode, captureMode: .scanner)
         let id = captures.first?.id
-        if corrected, let capture = captures.first {
-            PerspectiveCorrector.correctSequence(
-                in: projectFolderURL(for: capture).appendingPathComponent("source"),
-                aspect: .a4)
+        if let index = captures.firstIndex(where: { $0.id == id }) {
+            captures[index].scannerPaper = paper.rawValue
+            if let createdAt { captures[index].createdAt = createdAt }
+            captures.sort { $0.createdAt > $1.createdAt }
+            try? persistLibrary()
+        }
+        if corrected, let capture = captures.first(where: { $0.id == id }) {
+            let folder = projectFolderURL(for: capture).appendingPathComponent("source")
+            PerspectiveCorrector.correctSequence(in: folder, aspect: paper)
+            // A half-corrected set is what an interrupted correction leaves
+            // behind, and it is the only way to stage the partial ring.
+            if let correctedLimit {
+                for number in (correctedLimit + 1)...max(poses, correctedLimit + 1) {
+                    try? FileManager.default.removeItem(
+                        at: folder.appendingPathComponent(String(
+                            format: "frame-%05d%@.heic",
+                            number, PerspectiveCorrector.correctedSuffix)))
+                }
+            }
         }
         // `setSource` opens the capture into the blend flow; this hook wants the
         // project screen, so hand the stage back before the tab switch.
@@ -1643,6 +1855,79 @@ final class AppModel: ObservableObject {
             openCapture(capture)
         } catch {
             errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
+        }
+    }
+
+    /// A finished **scan**: registered, opened in the Scans tab, and corrected
+    /// on its own.
+    ///
+    /// Deliberately not `setSource`, which ends in `openCapture` — the blend
+    /// flow. That is the right destination for every other capture the camera
+    /// makes and the wrong one for this: a scan's next step is reading it,
+    /// exporting it or re-correcting a page, none of which live behind a screen
+    /// asking how many frames to average together. Scans are excluded from
+    /// Projects and Gallery for the same reason (`libraryCaptures`), so sending
+    /// one to the blend screen would also have been sending it to the one place
+    /// the library no longer lists it.
+    func finishScannerCapture(urls: [URL], mode: String) {
+        do {
+            let capture = try registerCapture(from: .photos(urls), mode: mode, captureMode: .scanner)
+            requestedScanDetailID = capture.id
+            autoCorrectScan(capture)
+        } catch {
+            errorMessage = "Couldn't preserve the capture: \(error.localizedDescription)"
+        }
+    }
+
+    /// Rectifies a scan's pages the moment it is registered, at the stock the
+    /// run was shot on.
+    ///
+    /// The correction used to wait behind a button, on the reasoning that it is
+    /// seconds of GPU work and the paper stock is the operator's call. Both
+    /// halves have since answered themselves: the stock is now *recorded on the
+    /// run* (`scannerPaper`), so there is nothing left to ask, and a scan whose
+    /// pages are still keystoned is not yet the thing the operator was making —
+    /// leaving it a tap away meant a set could be exported un-rectified without
+    /// anyone noticing.
+    ///
+    /// Only for a run that named its stock: PAPER = Auto is the turntable case,
+    /// whose frames are poses of an object rather than pages, and rectifying
+    /// those would be a distortion rather than a correction.
+    func autoCorrectScan(_ capture: CaptureProject) {
+        let paper = scannerPaper(for: capture)
+        guard paper != .auto else { return }
+        let correctable = scannerSidecar(for: capture)?.entries.filter { $0.rectangle != nil }.count ?? 0
+        guard correctable > 0 else { return }
+        runScanCorrection(capture, aspect: paper, total: correctable)
+    }
+
+    /// The pass itself, shared by the automatic run and the manual re-run.
+    ///
+    /// `correctSequence` is synchronous and GPU-bound, so it goes to a detached
+    /// task; every progress tick hops back to the main actor, which is where the
+    /// header reads it and where the page grid is told to reload so each
+    /// rectified page appears as it lands rather than all at the end.
+    func runScanCorrection(_ capture: CaptureProject, aspect: PerspectiveAspect, total: Int) {
+        let id = capture.id
+        guard scanCorrections[id]?.isRunning != true else { return }
+        let folder = captureFolderURL(for: capture.id).appendingPathComponent("source")
+        scanCorrections[id] = ScanCorrection(completed: 0, total: total)
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let result = PerspectiveCorrector.correctSequence(in: folder, aspect: aspect) { done, count in
+                Task { @MainActor [weak self] in
+                    self?.scanCorrections[id] = ScanCorrection(completed: done, total: count)
+                }
+            }
+            await MainActor.run { [weak self] in
+                // A re-run overwrites files already on screen, so the tiles have
+                // to be told; a first run writes files nobody has decoded.
+                ProjectThumbnailCache.shared.invalidate(urls: result.written)
+                self?.scanCorrections[id] = nil
+                if !result.failures.isEmpty {
+                    LLog("scan correction: \(result.written.count) written,"
+                         + " \(result.failures.count) failed")
+                }
+            }
         }
     }
 
@@ -4438,7 +4723,12 @@ final class AppModel: ObservableObject {
                 mode: mode,
                 sourceFileNames: relativeNames,
                 sourceFPS: nil,
-                captureMode: captureMode?.rawValue
+                captureMode: captureMode?.rawValue,
+                // Read here rather than plumbed through `setSource`: this is
+                // the same defaults key the capture screen's PAPER row writes,
+                // so the stamp is what the operator had chosen at the moment
+                // the shoot ended, with no new argument on a shared path.
+                scannerPaper: captureMode == .scanner ? Self.storedScannerPaper.rawValue : nil
             )
         }
 

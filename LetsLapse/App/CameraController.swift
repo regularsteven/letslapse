@@ -289,9 +289,17 @@ final class CameraController: NSObject, ObservableObject {
     /// scene that re-settles while a capture is still in flight fires a second
     /// shot of the same pose.
     private var scannerCapturePending = false
-    /// The RAW format this run is capturing in, or nil when the honest RAW
-    /// check came back negative and the run fell back to processed stills.
+    /// The RAW format this run is capturing in, or nil when RAW wasn't asked
+    /// for, or when it was and the honest check came back negative.
     private var scannerRawPixelFormat: OSType?
+    /// Whether this run lit the torch, so the teardown only puts out a lamp it
+    /// turned on itself.
+    private var scannerTorchOn = false
+    /// Whether RAW was *asked* for. Kept beside the format because the two
+    /// nil cases are different things to say out loud: "JPEG, as you chose" and
+    /// "no RAW on this device" are not the same sentence, and the HUD used to
+    /// print the second one at anybody who picked the first.
+    private var scannerWantedRAW = true
     /// Preset and photo-aspect state to undo when the run ends.
     private var scannerPreviousPreset: AVCaptureSession.Preset?
     private var scannerArmedPhotoAspect = false
@@ -664,8 +672,12 @@ final class CameraController: NSObject, ObservableObject {
         /// The exposure every frame of this run is locked to.
         var shutterSeconds: Double
         var iso: Float
-        /// Whether frames are landing as RAW, or the honest fallback ran.
+        /// Whether frames are landing as RAW.
         var isCapturingRAW: Bool
+        /// Whether RAW was asked for at all. With `isCapturingRAW` false this
+        /// separates "no RAW on this device" from "JPEG, as the format dial
+        /// says" — the HUD printed the first at everyone who chose the second.
+        var wantedRAW: Bool = true
         /// How far through the settle window the scene is, 0…1. Nil unless
         /// something is settling.
         var settleProgress: Double?
@@ -676,6 +688,13 @@ final class CameraController: NSObject, ObservableObject {
         /// on four corners standing still (the strong signal) or on the frame
         /// difference (the fallback). Phase 2.
         var hasRectangle: Bool = false
+        /// The rectangle trigger has nothing flat to photograph. A camera that
+        /// is deliberately not firing must say why.
+        var waitingForRectangle: Bool = false
+        /// Which machine is deciding — `ScannerEngine.Trigger`'s raw value. The
+        /// HUD's whole vocabulary changes with it: under the document trigger
+        /// there is no "move something" to ask for.
+        var trigger: String = ScannerEngine.Trigger.motion.rawValue
     }
 
     @Published var scannerState: ScannerState?
@@ -1100,6 +1119,14 @@ final class CameraController: NSObject, ObservableObject {
                 controller.requestStop(discard: true)
                 DispatchQueue.main.async { self.isLiveBlendRunning = false }
             }
+            #if os(iOS)
+            // Backstop for the abandoned-run path: closing the screen mid-scan
+            // stops the session without going through `finishScannerOnQueue`
+            // (an abandoned run's frames are Incomplete Captures' business),
+            // and a torch left burning behind a closed camera screen is the
+            // most conspicuous bug this feature could have. Idempotent.
+            self.disableScannerTorch()
+            #endif
             if self.session.isRunning {
                 LLog("stopRunning()")
                 self.session.stopRunning()
@@ -1216,6 +1243,25 @@ final class CameraController: NSObject, ObservableObject {
         if !session.outputs.contains(photoOutput), session.canAddOutput(photoOutput) {
             session.addOutput(photoOutput)
         }
+        #if os(iOS)
+        // The ceiling every `AVCapturePhotoSettings` this app makes is measured
+        // against — raised here, inside the configuration block and before the
+        // session ever runs, which is the only place raising it is free.
+        //
+        // It defaults to `.balanced`, and `capturePhoto(with:)` raises
+        // `NSInvalidArgumentException` — not an error, a **crash** — for any
+        // settings asking for more than the output allows. Scanner asks for
+        // `.quality` on its processed path, because a pose is a measurement and
+        // nothing is waiting on the next frame but a human moving an object.
+        // That path was unreachable on any device with Bayer RAW until the
+        // format dial started being honoured (2026-08-17), so the mismatch had
+        // never been executed; the first JPEG Scanner shoot on an iPhone 16 Pro
+        // died on it.
+        if photoOutput.maxPhotoQualityPrioritization.rawValue
+            < AVCapturePhotoOutput.QualityPrioritization.quality.rawValue {
+            photoOutput.maxPhotoQualityPrioritization = .quality
+        }
+        #endif
         session.commitConfiguration()
         // An `AVCaptureDevice` is process-global: its focus mode outlives this
         // session, this controller and the capture screen, while every flag that
@@ -3886,6 +3932,7 @@ final class CameraController: NSObject, ObservableObject {
             // the same kind of output and carries the same hazard.
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
+
             let startedAt = Date()
             // Geotagging: open this take's fix tracking now, so the location
             // baked into every segment is where the recording started — the fix
@@ -5207,7 +5254,21 @@ final class CameraController: NSObject, ObservableObject {
     ///
     /// The run opens by capturing the pose that is already framed, then waits
     /// for the scene to be disturbed and go still again for each one after it.
-    func startScanner(frameCap: Int? = nil) {
+    ///
+    /// `preferRAW` is the **format dial's** answer, not Scanner's own opinion.
+    /// The mode used to take RAW unconditionally on the grounds that its frames
+    /// are for solvers; that made the capture-format control silently
+    /// inoperative under Scanner, which is worse — a shoot must capture what
+    /// the format sheet says it will. RAW is still what the dial defaults to.
+    ///
+    /// `trigger` is the paper stock's: `Auto` keeps the motion machine (put it
+    /// down, take your hand out, hear the click), a named stock switches to the
+    /// document machine (a page, holding still, fires). They are different
+    /// questions, not one with a filter on it — see `ScannerEngine`.
+    func startScanner(
+        frameCap: Int? = nil, preferRAW: Bool = true,
+        trigger: ScannerEngine.Trigger = .motion
+    ) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil,
                   !self.isLiveBlendActive, !self.scannerActive else { return }
@@ -5216,6 +5277,13 @@ final class CameraController: NSObject, ObservableObject {
             // adding or removing an output reconfigures the session.
             self.detachTestCardTapNow()
             self.detachFramingTapNow()
+
+            // The scene's own light, read before anything in this method
+            // disturbs it. The framing preview has been live for as long as the
+            // operator took to aim, so AE is settled here; the `.photo` preset
+            // switch below re-runs it, and a value read mid-convergence would
+            // decide the torch on a transient.
+            let sceneEV = self.sceneExposureValue()
 
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("scanner-\(Int(Date().timeIntervalSince1970))")
@@ -5226,17 +5294,23 @@ final class CameraController: NSObject, ObservableObject {
                 return
             }
 
-            // RAW is the default and the point — but claimed honestly. If this
-            // device, under this configuration, doesn't offer Bayer RAW, the
-            // run shoots processed stills and says so in the log and the HUD
-            // rather than writing something that isn't a DNG into a .dng.
+            // The preset switch is not about RAW and happens either way: a
+            // Scanner pose is a full-sensor still whatever it is encoded as,
+            // and the viewfinder is already framing on 4:3 for it.
             self.scannerPreviousPreset = self.session.sessionPreset
             self.session.beginConfiguration()
             self.session.sessionPreset = .photo
             self.session.commitConfiguration()
-            self.scannerRawPixelFormat = self.availableBayerRawFormats().first
-            if self.scannerRawPixelFormat == nil {
+            // RAW when the format dial asked for it — and claimed honestly. If
+            // this device, under this configuration, doesn't offer Bayer RAW,
+            // the run shoots processed stills and says so in the log and the
+            // HUD rather than writing something that isn't a DNG into a .dng.
+            self.scannerWantedRAW = preferRAW
+            self.scannerRawPixelFormat = preferRAW ? self.availableBayerRawFormats().first : nil
+            if preferRAW, self.scannerRawPixelFormat == nil {
                 LLog("scanner: no Bayer RAW under the photo configuration — capturing processed stills")
+            } else if !preferRAW {
+                LLog("scanner: capturing processed stills — the format dial is on JPEG")
             }
             self.publishFormat()
             if let dimensions = self.videoDevice?.activeFormat.supportedMaxPhotoDimensions.last {
@@ -5259,11 +5333,31 @@ final class CameraController: NSObject, ObservableObject {
             self.scannerWriter = FrameTimestampWriter(directory: directory)
             self.scannerPoseIndexByRequest = [:]
 
-            // Exposure before the first frame, not after: everything the run
-            // captures has to have been shot under one set of numbers.
-            self.lockScannerCamera()
+            // Light first, meter second, freeze third. A document run lights
+            // the page (see `enableScannerTorch`), and the lamp changes the
+            // scene it is about to be metered on — so when it comes on, the
+            // exposure lock waits `scannerTorchSettle` for AE to find the newly
+            // lit page instead of freezing a pair metered in the dark.
+            //
+            // The wait costs nothing that matters: this trigger's first pose
+            // needs a page in view and a full hold window anyway, and the
+            // capture path checks `scannerActive` again on the far side in case
+            // the run was stopped inside the gap.
+            let lit = trigger == .rectangle
+                ? self.enableScannerTorch(sceneEV: sceneEV) : false
+            if lit {
+                self.sessionQueue.asyncAfter(deadline: .now() + Self.scannerTorchSettle) {
+                    guard self.scannerActive else { return }
+                    self.lockScannerCamera()
+                    self.publishScannerState()
+                }
+            } else {
+                // Exposure before the first frame, not after: everything the run
+                // captures has to have been shot under one set of numbers.
+                self.lockScannerCamera()
+            }
 
-            let engine = ScannerEngine()
+            let engine = ScannerEngine(trigger: trigger)
             self.scannerEngine = engine
             self.attachScannerTapOnQueue()
 
@@ -5271,10 +5365,13 @@ final class CameraController: NSObject, ObservableObject {
                 "kind": "scanner",
                 "frameCap": frameCap ?? 0,
                 "raw": self.scannerRawPixelFormat != nil,
+                "rawRequested": preferRAW,
+                "trigger": trigger.rawValue,
                 "settleDelay": engine.settleDelay,
             ])
             LLog("scanner: start cap=\(frameCap.map(String.init) ?? "none")"
-                 + " raw=\(self.scannerRawPixelFormat != nil) settle=\(engine.settleDelay)s")
+                 + " raw=\(self.scannerRawPixelFormat != nil) (requested \(preferRAW))"
+                 + " trigger=\(trigger.rawValue) settle=\(engine.settleDelay)s")
 
             DispatchQueue.main.async {
                 self.photoCount = 0
@@ -5282,7 +5379,9 @@ final class CameraController: NSObject, ObservableObject {
                 self.isIntervalRunning = true
             }
             // The opening pose is already framed — fire it rather than making
-            // the operator disturb a scene they just finished arranging.
+            // the operator disturb a scene they just finished arranging. Under
+            // a named paper stock the engine declines this (there is no page in
+            // view yet, and it says so) and takes the first one it sees.
             if engine.start(at: Date()) {
                 self.fireScannerCapture()
             }
@@ -5364,6 +5463,129 @@ final class CameraController: NSObject, ObservableObject {
         // window, which the `.photo` preset switch just above genuinely needs,
         // and re-aims at the user's tapped subject if they picked one.
         lockFocusForRun(deviceChanged: true)
+    }
+
+    /// How bright the document lamp burns. **Not full**, deliberately.
+    ///
+    /// A page is a flat white sheet a hand's length from the lens: at 1.0 the
+    /// near edge blows out and the far one falls away, and the specular sheen
+    /// off coated stock lands straight in the middle of the text. It is also the
+    /// setting that heats the phone fastest, and a scan is minutes of holding
+    /// still. 0.6 lifts a desk-lit page clear of its own shadow — which is the
+    /// whole reason to light it, since the operator's own head and phone are
+    /// between the page and the room — without either problem.
+    private static let scannerTorchLevel: Float = 0.6
+
+    /// How long AE is given to see the lamp before the run freezes the
+    /// exposure.
+    ///
+    /// The order matters more than the number: light the page, let the meter
+    /// find it, *then* lock. Locking first and lighting second freezes a pair
+    /// metered in the dark and every page in the set comes out blown, which is
+    /// the same class of mistake as locking focus mid-hunt.
+    private static let scannerTorchSettle: TimeInterval = 0.45
+
+    /// Below this scene EV (at ISO 100) a document run lights its own page.
+    ///
+    /// EV 5 is the line between "this room is lighting the page" and "the page
+    /// is in my own shadow". For scale: bright overcast daylight indoors by a
+    /// window is EV 9–11, an ordinary lit living room is EV 5–6, a desk under
+    /// one lamp is EV 4–5, and a page held over a table away from the lamp is
+    /// EV 2–3. The subject is the case that makes the threshold necessary: a
+    /// phone held a hand's length above a sheet puts the operator's head and the
+    /// phone itself between the page and the room, so the page is often two or
+    /// three stops darker than the room reads.
+    ///
+    /// Above the line the torch is worse than nothing — it flattens the page,
+    /// throws a specular sheen off coated stock, and heats the phone through a
+    /// job that takes minutes.
+    private static let scannerTorchEVThreshold: Double = 5
+
+    /// The scene's brightness in APEX EV at ISO 100, from what the meter is
+    /// currently doing: `EV = log2(N² / t) + log2(ISO / 100)`.
+    ///
+    /// Read while AE is still free — the run freezes exposure a moment later,
+    /// and a locked pair describes the decision rather than the room. Returns
+    /// nil when the device can't be metered (no aperture, a zero duration, an
+    /// ISO of zero), which is the honest answer rather than a fabricated EV.
+    private func sceneExposureValue() -> Double? {
+        guard let device = videoDevice else { return nil }
+        let aperture = Double(device.lensAperture)
+        let seconds = device.exposureDuration.seconds
+        let iso = Double(device.iso)
+        guard aperture > 0, seconds > 0, iso > 0, seconds.isFinite else { return nil }
+        return log2(aperture * aperture / seconds) + log2(iso / 100)
+    }
+
+    /// sessionQueue-confined. Lights the page for a document run **if the room
+    /// isn't already doing it**.
+    ///
+    /// Document mode only — a named paper stock says the subject is a sheet at
+    /// arm's length, which is exactly the subject a torch helps. Auto is the
+    /// turntable/street case, where the operator has lit the scene themselves
+    /// and a lamp firing on the object would wreck it; the torch is never
+    /// touched there.
+    ///
+    /// **The decision is taken once, here, and never revisited.** Every frame in
+    /// a set has to have been shot under one light: a lamp that came on for
+    /// page 14 because a cloud passed would make that page a different
+    /// photograph from its thirteen predecessors, and a set whose exposure and
+    /// white balance are already locked for exactly that reason cannot then have
+    /// its illumination change underneath it. So this is measured before the AE
+    /// lock, decided, and left alone until the run ends.
+    @discardableResult
+    private func enableScannerTorch(sceneEV: Double?) -> Bool {
+        guard let device = videoDevice,
+              device.isTorchAvailable, device.isTorchModeSupported(.on) else {
+            LLog("scanner: no torch on this device — shooting on ambient light")
+            return false
+        }
+        // Metered by the caller before the preset switch; see
+        // `sceneExposureValue`. Falls back to a reading taken now if the early
+        // one couldn't be taken at all.
+        let ev = sceneEV ?? sceneExposureValue()
+        let wantsTorch = (ev ?? 0) < Self.scannerTorchEVThreshold
+        LLog(String(format: "scanner: torch decision ev=%@ → %@",
+                    ev.map { String(format: "%.2f", $0) } ?? "unknown",
+                    wantsTorch ? "on" : "off"))
+        // An unmeasurable scene lights the page: a document run that cannot read
+        // its own light is likelier to be in the dark under a phone than in
+        // daylight, and an over-lit page beats an unreadable one.
+        guard wantsTorch else { return false }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            try device.setTorchModeOn(
+                level: min(Self.scannerTorchLevel, AVCaptureDevice.maxAvailableTorchLevel))
+            scannerTorchOn = true
+            LLog("scanner: torch on at \(Self.scannerTorchLevel)")
+            return true
+        } catch {
+            // Thermals refuse the torch before the OS will ever dim it for you.
+            // Falling back to `.on` would light it at FULL, which is the one
+            // level this deliberately isn't — so the run simply goes unlit and
+            // says so.
+            LLog("scanner: torch refused — \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    /// sessionQueue-confined. Puts the lamp out. Safe to call when it was never
+    /// lit, and called from every path that ends a run — including the session
+    /// teardown, because a torch left burning after the screen closes is the
+    /// most conspicuous bug this feature could have.
+    private func disableScannerTorch() {
+        guard scannerTorchOn, let device = videoDevice else { return }
+        scannerTorchOn = false
+        guard device.isTorchAvailable else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if device.torchMode != .off { device.torchMode = .off }
+            LLog("scanner: torch off")
+        } catch {
+            LLog("scanner: could not put the torch out — \(error.localizedDescription)")
+        }
     }
 
     /// Whether AE, AF and WB are all held right now — what the capture screen's
@@ -5457,11 +5679,18 @@ final class CameraController: NSObject, ObservableObject {
             // end: the corner threshold is as unmeasured today as the motion
             // one was, and this is what a field run has to read to move it.
             let rectangle = quad.map {
-                String(format: " rect=%.2f cornerThreshold=%.4f",
-                       $0.confidence, engine.cornerStabilityThreshold)
+                String(format: " rect=%.2f cornerThreshold=%.4f documentThreshold=%.4f",
+                       $0.confidence, engine.cornerStabilityThreshold,
+                       engine.documentStabilityThreshold)
             } ?? " rect=none"
-            LLog(String(format: "scanner: mag=%.5f threshold=%.5f state=%@",
-                        magnitude, engine.motionThreshold, engine.state.rawValue) + rectangle)
+            let hold = engine.settleProgress(at: time)
+                .map { String(format: " hold=%.0f%%", $0 * 100) } ?? ""
+            // A refused move is the machine catching an ordering bug in itself,
+            // and the log is where a field run reports one.
+            let rejected = engine.lastRejectedTransition.map { " REJECTED=\($0)" } ?? ""
+            LLog(String(format: "scanner: trigger=%@ mag=%.5f threshold=%.5f state=%@",
+                        engine.trigger.rawValue, magnitude, engine.motionThreshold,
+                        engine.state.rawValue) + rectangle + hold + rejected)
         }
         #endif
         let previousPhase = engine.state
@@ -5475,30 +5704,56 @@ final class CameraController: NSObject, ObservableObject {
         }
         if shouldFire {
             // The scene says yes. The device still has a veto — see
-            // `scannerDeviceIsSteady`. A vetoed pose isn't lost: the scene is
-            // still disturbed as far as the operator is concerned, so the next
-            // settle window comes round on its own.
+            // `scannerDeviceIsSteady`. A vetoed pose isn't lost either way: the
+            // motion machine's next settle window comes round on its own, and
+            // the rectangle machine is told nothing, so it keeps its window
+            // satisfied and takes the same page as soon as the phone is still.
             let steady = scannerDeviceIsSteady?() ?? true
             if steady {
-                fireScannerCapture()
+                if fireScannerCapture() {
+                    engine.didCapture(at: time)
+                }
             } else {
                 scannerWaitingForSteady = true
-                LLog("scanner: scene settled but the device is not steady — pose skipped")
+                LLog("scanner: ready to fire but the device is not steady — pose held")
             }
         }
         if shouldFire || engine.state != previousPhase {
             publishScannerState()
-        } else if engine.state == .disturbed {
-            // Settle progress moves every tick while disturbed; the HUD's ring
-            // is drawn from it, so republish at the tap's own rate.
+        } else if engine.settleProgress(at: time) != nil {
+            // A window is running, and the HUD draws its progress — so republish
+            // at the tap's own rate rather than only on a state change.
             publishScannerState()
         }
     }
 
-    /// sessionQueue-confined. Asks the photo output for this pose.
-    private func fireScannerCapture() {
-        guard scannerActive, !scannerCapturePending else { return }
-        if let cap = scannerFrameCap, scannerFrames.count >= cap { return }
+    /// The prioritization to actually ask for: what we want, or the output's
+    /// ceiling if that is lower.
+    ///
+    /// The ceiling is raised to `.quality` once, in `configureIfNeeded` — but it
+    /// is read back here rather than assumed, because the property answers for
+    /// the output *as currently configured* and a preset or format change can
+    /// lower what it will accept. Asking for more than it allows is not a
+    /// refusal but an `NSInvalidArgumentException`, and a raised exception
+    /// halfway through a 36-pose set costs the whole set. One `min` makes the
+    /// crash unreachable no matter what the session does to itself.
+    private func allowedQualityPrioritization(
+        _ requested: AVCapturePhotoOutput.QualityPrioritization
+    ) -> AVCapturePhotoOutput.QualityPrioritization {
+        let ceiling = photoOutput.maxPhotoQualityPrioritization
+        guard requested.rawValue > ceiling.rawValue else { return requested }
+        LLog("photo: quality prioritization capped to \(ceiling.rawValue)"
+             + " (asked for \(requested.rawValue))")
+        return ceiling
+    }
+
+    /// sessionQueue-confined. Asks the photo output for this pose. Returns
+    /// whether a request actually went out — the engine only commits a page as
+    /// banked when one did.
+    @discardableResult
+    private func fireScannerCapture() -> Bool {
+        guard scannerActive, !scannerCapturePending else { return false }
+        if let cap = scannerFrameCap, scannerFrames.count >= cap { return false }
         scannerCapturePending = true
         scannerWaitingForSteady = false
 
@@ -5515,27 +5770,38 @@ final class CameraController: NSObject, ObservableObject {
         } else {
             settings = AVCapturePhotoSettings()
         }
+        // The processed path only. `photoQualityPrioritization` is illegal on a
+        // RAW request — `NSInvalidArgumentException: Unsupported when capturing
+        // RAW`, which took an iPad to find out, because nothing in the
+        // simulator captures RAW and the first real Scanner start on device
+        // died on it (2026-08-16).
+        //
+        // **This branch is a minefield of raised exceptions, and it went two
+        // days without ever being executed**: until the format dial started
+        // being honoured (2026-08-17) it was reachable only on a device with no
+        // Bayer RAW at all, so on the phone it was dead code that read as
+        // working code. The first JPEG Scanner shoot hit the second mine below
+        // within a second of starting.
+        //
+        // What is deliberately NOT here: `settings.maxPhotoDimensions`. The
+        // value to hand it would be `selectedPhotoDimensions`, which describes
+        // the *video* format — but a Scanner run has switched the session to
+        // `.photo`, so that size is one the active format need not list (a
+        // third exception), and asking for it would shoot pages at a fraction
+        // of the sensor. The output-level value `startScanner` sets from the
+        // active format's own largest supported size governs instead, exactly
+        // as it always has for RAW.
+        //
+        // What is: the quality preference, which is worth stating here — there
+        // is no window to starve, since the next frame waits on a human moving
+        // an object, and every frame is a measurement. It goes through the
+        // output's ceiling because asking above it is the mine that went off:
+        // `photoQualityPrioritization must not be higher than
+        // self.maxPhotoQualityPrioritization`. `configureIfNeeded` lifts that
+        // ceiling to `.quality`; the clamp keeps the ask legal even if a later
+        // reconfiguration lowers it.
         if scannerRawPixelFormat == nil {
-            // Both of these are illegal on a RAW request and only the second
-            // says so politely.
-            //
-            // `maxPhotoDimensions` here would carry the *video* preset's frame
-            // into a run that switched to `.photo`, which is the wrong size to
-            // be asking for; the output-level value set in `startScanner` is
-            // the sensor's own and already governs.
-            //
-            // `photoQualityPrioritization` **throws** on a RAW request —
-            // `NSInvalidArgumentException: Unsupported when capturing RAW` —
-            // and it took an iPad to find out. Nothing in the simulator
-            // captures RAW, so the simulator never reaches this line at all;
-            // the first real Scanner start on device died on it (2026-08-16).
-            // On the processed fallback the preference is still worth stating:
-            // there is no window to starve here, since the next frame waits on
-            // a human moving an object, and every frame is a measurement.
-            if let dimensions = selectedPhotoDimensions {
-                settings.maxPhotoDimensions = dimensions
-            }
-            settings.photoQualityPrioritization = .quality
+            settings.photoQualityPrioritization = allowedQualityPrioritization(.quality)
         }
         scannerPoseIndexByRequest[settings.uniqueID] = scannerFrames.count
         // The geometry this pose is being shot on, frozen with the request. It
@@ -5545,6 +5811,7 @@ final class CameraController: NSObject, ObservableObject {
             scannerQuadByRequest[settings.uniqueID] = quad
         }
         photoOutput.capturePhoto(with: settings, delegate: self)
+        return true
     }
 
     /// sessionQueue-confined. Hands the overlay its quad, but only when it has
@@ -5651,9 +5918,12 @@ final class CameraController: NSObject, ObservableObject {
             shutterSeconds: videoDevice?.exposureDuration.seconds ?? 0,
             iso: videoDevice?.iso ?? 0,
             isCapturingRAW: scannerRawPixelFormat != nil,
+            wantedRAW: scannerWantedRAW,
             settleProgress: engine.settleProgress(at: Date()),
             waitingForDeviceSteady: scannerWaitingForSteady,
-            hasRectangle: engine.isTrackingRectangle)
+            hasRectangle: engine.isTrackingRectangle,
+            waitingForRectangle: engine.isWaitingForRectangle,
+            trigger: engine.trigger.rawValue)
         DispatchQueue.main.async {
             if self.scannerState != state { self.scannerState = state }
         }
@@ -5663,6 +5933,10 @@ final class CameraController: NSObject, ObservableObject {
     /// button, the pose cap and the screen teardown all arrive here.
     private func finishScannerOnQueue() {
         guard scannerActive else { return }
+        // The lamp goes out first, before any of the slower teardown: it is the
+        // one part of a run the room can see, so it should stop the moment the
+        // run does rather than a beat later.
+        disableScannerTorch()
         scannerActive = false
         scannerCapturePending = false
         detachScannerTapNow()
@@ -5742,7 +6016,10 @@ final class CameraController: NSObject, ObservableObject {
         get { nil }
         set { _ = newValue }
     }
-    func startScanner(frameCap: Int? = nil) {}
+    func startScanner(
+        frameCap: Int? = nil, preferRAW: Bool = true,
+        trigger: ScannerEngine.Trigger = .motion
+    ) {}
     func stopScanner(source: CaptureSessionLogger.StopSource = .phone) {}
     func deleteLastScannerFrame(completion: ((Int) -> Void)? = nil) {
         DispatchQueue.main.async { completion?(0) }

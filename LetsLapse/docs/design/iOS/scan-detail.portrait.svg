@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Scan session detail · portrait</title>
+  <desc>Mirrors App/ScanDetailView.swift (navigationBar, header, correctionStrip, pageGrid, ScanPageTile). One scan opened: a large title instead of a header card, "8 pages · A4 · 3 min 12 s", and the correction ring whose fill is corrected ÷ DETECTED, so it never claims progress on pages with no corners. Export is a toolbar glyph rather than a pinned button, so the grid scrolls to the bottom edge with nothing over it. The one card is the prompt strip — LL.ink with amber on it, shown only while some page has corners and no correction, and retired for good once the set is done. Pages are 2-up in portrait (177.5×251 at the A4 ratio), 3-up from 600pt and 4-up from 1000pt; each tile carries its number bottom-left and, when corrected, the amber perspective badge top-right — amber is legible there because it sits on imagery. Tab bar from 755, Scans selected.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.mono{font-family:ui-monospace,Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- nav bar -->
+      <g id="nav-bar">
+        <path d="M27 74 l-6 7 6 7" fill="none" stroke="#C36A00" stroke-width="2.6" stroke-linecap="round" data-symbol="chevron.left"/>
+        <text x="34" y="87" font-size="17" fill="#C36A00">Scans</text>
+        <text x="322" y="87" font-size="17" fill="#C36A00" text-anchor="end">Select</text>
+        <g transform="translate(361 81) scale(1.05) translate(-9 -10)" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="square.and.arrow.up"><path d="M4 9 v9 h10 V9"/><path d="M9 14 V1 M5 5 l4 -4 4 4"/></g>
+      </g>
+
+      <!-- header -->
+      <g id="header">
+        <text x="20" y="130" font-size="28" class="b" fill="#000">16 Aug, 21:21</text>
+        <text x="20" y="153" font-size="13.5" class="sec">8 pages · A4 · 3 min 12 s</text>
+        <g data-symbol="progress-ring"><circle cx="26.5" cy="168" r="5.5" fill="none" stroke="#E2E2E6" stroke-width="3.4"/><circle cx="26.5" cy="168" r="5.5" fill="none" stroke="#C36A00" stroke-width="3.4" stroke-dasharray="29.62 4.94" stroke-linecap="round" transform="rotate(-90 26.5 168)"/></g>
+        <text x="39" y="172" font-size="13" class="sec">Rectangle on 7 of 8 · 6 corrected</text>
+      </g>
+
+      <!-- correction prompt: LL.ink card, amber on it -->
+      <g id="correction-strip">
+        <rect x="16" y="206" width="361" height="56" rx="14" fill="#1C1C1E"/>
+        <g transform="translate(40 234) scale(0.9091) translate(-11 -11)" fill="none" stroke="#FFB340" stroke-width="2.09" stroke-linejoin="round" data-symbol="perspective"><polygon points="4,6.5 18,8 18,14 4,15.5"/><path d="M1.5 11 h19 M11 3 v16"/></g>
+        <text x="61" y="229" font-size="13.5" class="sb" fill="#FFF">One page still uncorrected</text>
+        <text x="61" y="246" font-size="11.5" fill="#FFF" fill-opacity="0.55">Originals are kept either way</text>
+        <rect x="285" y="219" width="78" height="30" rx="15" fill="#FFB340"/>
+        <text x="324" y="239" font-size="12.5" class="b" fill="#1C1C1E" text-anchor="middle">Correct</text>
+      </g>
+
+      <!-- pages -->
+      <text x="20" y="290" font-size="13" class="sb sec" letter-spacing="0.5">PAGES · 8</text>
+      <g id="page-grid">
+        <g id="page-1"><g><clipPath id="c16x300"><rect x="16" y="300" width="177.5" height="251" rx="9"/></clipPath><rect x="16" y="300" width="177.5" height="251" rx="9" fill="#F2F0EA"/><rect x="26" y="314.0" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="332.9" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="351.8" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="370.8" width="86.6" height="5.3" fill="#59544E"/><rect x="26" y="389.7" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="408.6" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="427.5" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="446.4" width="86.6" height="5.3" fill="#59544E"/><rect x="26" y="465.3" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="484.2" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="503.2" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="522.1" width="86.6" height="5.3" fill="#59544E"/></g><circle cx="176.5" cy="317" r="11" fill="#FFB340" fill-opacity="0.92"/><g transform="translate(176.5 317) scale(0.5909) translate(-11 -11)" fill="none" stroke="#1C1C1E" stroke-width="3.22" stroke-linejoin="round" data-symbol="perspective"><polygon points="5,6 17,7.5 17,14.5 5,16"/></g><rect x="22" y="527" width="26" height="18" rx="9" fill="#000" fill-opacity="0.5"/><text x="35" y="540" font-size="11" class="b" fill="#FFF" text-anchor="middle">1</text></g>
+        <g id="page-2"><g><clipPath id="c199x300"><rect x="199.5" y="300" width="177.5" height="251" rx="9"/></clipPath><rect x="199.5" y="300" width="177.5" height="251" rx="9" fill="#F2F0EA"/><rect x="209.5" y="314.0" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="332.9" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="351.8" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="370.8" width="86.6" height="5.3" fill="#59544E"/><rect x="209.5" y="389.7" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="408.6" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="427.5" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="446.4" width="86.6" height="5.3" fill="#59544E"/><rect x="209.5" y="465.3" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="484.2" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="503.2" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="522.1" width="86.6" height="5.3" fill="#59544E"/></g><circle cx="360.0" cy="317" r="11" fill="#FFB340" fill-opacity="0.92"/><g transform="translate(360.0 317) scale(0.5909) translate(-11 -11)" fill="none" stroke="#1C1C1E" stroke-width="3.22" stroke-linejoin="round" data-symbol="perspective"><polygon points="5,6 17,7.5 17,14.5 5,16"/></g><rect x="205.5" y="527" width="26" height="18" rx="9" fill="#000" fill-opacity="0.5"/><text x="218.5" y="540" font-size="11" class="b" fill="#FFF" text-anchor="middle">2</text></g>
+        <g id="page-3"><g><clipPath id="c16x557"><rect x="16" y="557" width="177.5" height="251" rx="9"/></clipPath><rect x="16" y="557" width="177.5" height="251" rx="9" fill="#F2F0EA"/><rect x="26" y="571.0" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="589.9" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="608.8" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="627.8" width="86.6" height="5.3" fill="#59544E"/><rect x="26" y="646.7" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="665.6" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="684.5" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="703.4" width="86.6" height="5.3" fill="#59544E"/><rect x="26" y="722.3" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="741.2" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="760.2" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="779.1" width="86.6" height="5.3" fill="#59544E"/></g><circle cx="176.5" cy="574" r="11" fill="#FFB340" fill-opacity="0.92"/><g transform="translate(176.5 574) scale(0.5909) translate(-11 -11)" fill="none" stroke="#1C1C1E" stroke-width="3.22" stroke-linejoin="round" data-symbol="perspective"><polygon points="5,6 17,7.5 17,14.5 5,16"/></g><rect x="22" y="784" width="26" height="18" rx="9" fill="#000" fill-opacity="0.5"/><text x="35" y="797" font-size="11" class="b" fill="#FFF" text-anchor="middle">3</text></g>
+        <g id="page-4"><g><clipPath id="c199x557"><rect x="199.5" y="557" width="177.5" height="251" rx="9"/></clipPath><rect x="199.5" y="557" width="177.5" height="251" rx="9" fill="#2A2724"/><g clip-path="url(#c199x557)"><path d="M224.3 582.1 L359.6 572.1 L352.1 790.4 L219.4 782.9 Z" fill="#F2F0EA"/><rect x="230.3" y="607.2" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="627.9" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="648.6" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="669.3" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="690.0" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="710.7" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="731.4" width="115.8" height="5.0" fill="#59544E"/><rect x="230.3" y="752.2" width="115.8" height="5.0" fill="#59544E"/></g></g><rect x="205.5" y="784" width="26" height="18" rx="9" fill="#000" fill-opacity="0.5"/><text x="218.5" y="797" font-size="11" class="b" fill="#FFF" text-anchor="middle">4</text></g>
+      </g>
+
+      <g id="tab-bar">
+        <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(41.5 776) scale(0.7273) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="41.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <g transform="translate(103.5 776) scale(0.7273) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="103.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <rect x="136.5" y="761" width="58" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-scans" fill="none" stroke="#C36A00">
+          <g transform="translate(165.5 776) scale(0.7273) translate(-11 -11)"><path d="M4 7 V4 h3 M15 4 h3 v3 M18 15 v3 h-3 M7 18 H4 v-3" stroke-width="2.34" stroke-linecap="round" data-symbol="doc.viewfinder"/><rect x="6.5" y="6.5" width="9" height="9" rx="1.6" stroke-width="2.34"/></g>
+          <text x="165.5" y="800" font-size="9.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Scans</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <g transform="translate(227.5 776) scale(0.7273) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="227.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(289.5 776) scale(0.7273) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="289.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <g transform="translate(351.5 776) scale(0.7273) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="351.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Scan session detail · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ScanDetailView.swift — large title · ring · ink prompt strip · 2-up pages</text>
+</svg>

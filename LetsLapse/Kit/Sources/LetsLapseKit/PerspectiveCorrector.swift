@@ -2,6 +2,7 @@ import Foundation
 #if canImport(CoreImage)
 import CoreImage
 import CoreGraphics
+import ImageIO
 
 /// The paper the operator says they are shooting, when they know.
 ///
@@ -64,6 +65,32 @@ public enum PerspectiveCorrector {
     /// The suffix that marks a rectified frame, so a corrected sequence can be
     /// picked out of a directory (and never corrected twice).
     public static let correctedSuffix = "-corrected"
+
+    /// Whether a corrected page on disk was written by the broken geometry that
+    /// preceded the orientation fix, and should therefore be treated as **not
+    /// corrected** — shown as its original, offered to the Correct action
+    /// again, and overwritten when it runs.
+    ///
+    /// The test is exact rather than heuristic. A correction written since the
+    /// fix rectifies pixels that are already upright, so the file it writes
+    /// carries no orientation tag at all (or the identity, 1). The broken path
+    /// rectified the *unrotated* sensor read-out and inherited that image's own
+    /// tag along with it, so every file it produced is stamped 6 (or 8, or 3,
+    /// for the other poses) — a rotation applied on top of an already-wrong
+    /// quarter-turned crop.
+    ///
+    /// So: a corrected page that still asks to be rotated is one of the old
+    /// ones. There is no version to read and none was ever written; this is the
+    /// signature the bug left behind, and it costs one property read on a file
+    /// the caller was about to decode anyway.
+    public static func isSupersededCorrection(at url: URL) -> Bool {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil)
+                as? [CFString: Any],
+              let orientation = properties[kCGImagePropertyOrientation] as? Int
+        else { return false }
+        return orientation != 1
+    }
 
     /// `frame-00001.heic` → `frame-00001-corrected.heic`, alongside the source.
     public static func correctedURL(for source: URL) -> URL {
@@ -156,7 +183,28 @@ public enum PerspectiveCorrector {
         guard source.pathExtension.lowercased() != "dng" else {
             throw PerspectiveCorrectionError.rawIsNotRectifiable(source)
         }
-        guard let image = CIImage(contentsOf: source) else {
+        // **The orientation must be applied before the corners mean anything.**
+        //
+        // A still from `AVCapturePhotoOutput` is written in the sensor's own
+        // landscape with an EXIF orientation tag (6 — rotate 90° CW — for a
+        // portrait shoot), and `CIImage(contentsOf:)` hands back those raw
+        // landscape pixels with the tag left in the metadata. The quad in the
+        // sidecar is in the *upright* space Vision measured it in, so applying
+        // it to the unrotated extent selects a quarter-turned region: on a real
+        // A4 page (iPhone 16 Pro, 2026-08-17) that came out as a near-full-frame
+        // quad — desk included, page still keystoned — which the aspect snap
+        // then squashed to A4 *landscape*. Every corrected page written before
+        // this line was that.
+        //
+        // Applying the orientation first puts the pixels in the same space the
+        // corners are in, and the two agree by construction: the run freezes one
+        // capture orientation, the photo connection tags every still with it and
+        // `RectangleDetector` is handed the same one. The output is then upright
+        // with no tag of its own (verified: a round trip through
+        // `writeHEIFRepresentation` writes orientation 1), so nothing downstream
+        // rotates it a second time.
+        guard let image = CIImage(contentsOf: source, options: [.applyOrientationProperty: true])
+        else {
             throw PerspectiveCorrectionError.unreadable(source)
         }
         guard let corrected = correct(image, quad: quad, aspect: aspect) else {
@@ -185,18 +233,40 @@ public enum PerspectiveCorrector {
     /// Non-throwing per frame on purpose: one unreadable file in a 36-pose set
     /// must not cost the other 35 their correction. The returned list is what
     /// actually landed; `failures` says what didn't and why.
+    /// `progress` is called after each page is attempted — succeeded or failed —
+    /// with how many of the correctable pages are done and how many there are.
+    /// It runs on the **calling** thread, which is a background one by
+    /// construction (this is seconds of GPU work), so a caller driving a UI from
+    /// it has to hop to the main actor itself.
+    ///
+    /// It exists so a set can be watched correcting rather than waiting: a
+    /// 36-pose scan is a minute of work, and the pages land one at a time
+    /// whether or not anyone is told about it.
     @discardableResult
     public static func correctSequence(
         in directory: URL,
-        aspect: PerspectiveAspect = .auto
+        aspect: PerspectiveAspect = .auto,
+        progress: ((_ completed: Int, _ total: Int) -> Void)? = nil
     ) -> (written: [URL], failures: [(frame: Int, error: Error)]) {
         let sidecarURL = directory.appendingPathComponent(FrameTimestamps.fileName)
-        guard let sidecar = try? FrameTimestamps.load(from: sidecarURL) else { return ([], []) }
+        guard let sidecar = try? FrameTimestamps.load(from: sidecarURL) else {
+            progress?(0, 0)
+            return ([], [])
+        }
         let context = CIContext()
         var written: [URL] = []
         var failures: [(frame: Int, error: Error)] = []
+        // Counted before the walk so the caller can say "of N" from the first
+        // moment rather than watching a total climb.
+        let total = sidecar.entries.filter { $0.rectangle != nil }.count
+        progress?(0, total)
+        var completed = 0
         for entry in sidecar.entries {
             guard let quad = entry.rectangle else { continue }
+            defer {
+                completed += 1
+                progress?(completed, total)
+            }
             guard let source = processedFrameURL(in: directory, frame: entry.frame) else {
                 failures.append((entry.frame, PerspectiveCorrectionError.missingFrame(entry.frame)))
                 continue

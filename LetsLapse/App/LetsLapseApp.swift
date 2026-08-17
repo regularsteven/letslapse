@@ -174,14 +174,17 @@ struct LetsLapseApp: App {
     }
 }
 
-/// Five tabs — Create, Gallery, Projects, Collections, Settings — with the
-/// blended-clip flow (Adjust → Processing → Result) laid over them whenever a
-/// job is active. Collections is a placeholder while its UX is designed; it
-/// took the parked Music spike's slot (MusicView stays in the codebase).
+/// Six tabs — Create, Gallery, Scans, Projects, Collections, Settings — with
+/// the blended-clip flow (Adjust → Processing → Result) laid over them whenever
+/// a job is active. Collections is a placeholder while its UX is designed; it
+/// took the parked Music spike's slot (MusicView stays in the codebase). Scans
+/// sits between the two library tabs and is the *only* place a scanner run is
+/// listed: Projects and Gallery exclude them.
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
     @State private var selectedTab: LLTab = .create
     @State private var galleryPath: [UUID] = []
+    @State private var scansPath: [UUID] = []
     @State private var projectsPath: [UUID] = []
     @State private var collectionsPath: [UUID] = []
     @State private var settingsPath: [SettingsDestination] = []
@@ -253,6 +256,13 @@ struct ContentView: View {
         .onChange(of: model.requestedProjectDetailID) { requested in
             guard requested != nil else { return }
             selectedTab = .projects
+        }
+        // A finished scan asking for its own tab. `ScansView` takes it from
+        // there and pushes the session; this only moves the selection, the same
+        // division of labour the Projects request above uses.
+        .onChange(of: model.requestedScanDetailID) { requested in
+            guard requested != nil else { return }
+            selectedTab = .scans
         }
         // A screen layered over the tabs (the camera's recent-capture tile)
         // asking for a different tab. It dismisses itself; this moves the
@@ -431,7 +441,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_PROJECT_SCANNER"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_PROJECT_SCANNER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -461,10 +471,78 @@ struct ContentView: View {
         switch environment["LL_TAB"] {
         case "projects": selectedTab = .projects
         case "gallery": selectedTab = .gallery
+        case "scans": selectedTab = .scans
         case "settings": selectedTab = .settings
         case "create": selectedTab = .create
         case "collections": selectedTab = .collections
         default: break
+        }
+        // LL_SCANS / LL_SCANS_EMPTY / LL_SCANS_DETAIL / LL_SCANS_CORRECTED —
+        // the Scans tab in each of its states. Same reason as every other
+        // Scanner hook: no simulator can shoot a scan (no camera to difference
+        // frames from, nothing flat to detect), so without these the whole tab
+        // is unreachable off-device and cannot be checked against its SVGs.
+        if environment["LL_SCANS_EMPTY"] != nil {
+            selectedTab = .scans
+        } else if let hook = environment["LL_SCANS"] {
+            selectedTab = .scans
+            // Bare `LL_SCANS=1` opens whatever is really there; `seed` stages
+            // the three sessions the list design is drawn from.
+            if hook == "seed" || hook == "list" { model.debugSeedScanLibrary() }
+        }
+        // A single session, opened: eight A4 pages, rectangles on seven, all
+        // but one of those corrected — the mixed state the detail screen's
+        // ring, its prompt strip and its per-tile badges all describe.
+        // `LL_SCANS_AUTOCORRECT` stages what a shoot's own last moment looks
+        // like: a session that has just landed, uncorrected, with the automatic
+        // pass running over it — the header counting pages and the tiles
+        // rectifying one at a time. It is the state a real scan opens in and
+        // the only one no static seed can show.
+        if let hook = environment["LL_SCANS_AUTOCORRECT"] {
+            // `=<n>` sets the page count: eight synthetic pages rectify almost
+            // instantly, so a screenshot of the *progress* needs a set big
+            // enough to still be working when the shutter clicks.
+            let poses = Int(hook) ?? 8
+            if let id = model.debugSeedScannerProject(
+                poses: max(1, min(poses, 72)), paper: .a4, spacingSeconds: 27) {
+                // Drives the SAME route a finished shoot takes — the model
+                // asks, ContentView switches tabs, ScansView pushes — rather
+                // than setting the path here. A hook that took a short cut
+                // would be a hook that couldn't catch the routing breaking.
+                if let capture = model.captures.first(where: { $0.id == id }) {
+                    model.requestedScanDetailID = id
+                    model.autoCorrectScan(capture)
+                }
+            }
+        }
+        // `LL_SCANS_DELETED=<page>` — a corrected set with one page thrown
+        // away, which is the state the numbering rule exists for: the pages
+        // that remain KEEP their numbers, so a set of eight missing its third
+        // reads 1, 2, 4…8 rather than closing up. Nothing else in the app can
+        // produce it without a long-press and a confirmation.
+        if let hook = environment["LL_SCANS_DELETED"] {
+            if let id = model.debugSeedScannerProject(
+                poses: 8, corrected: true, paper: .a4, spacingSeconds: 27) {
+                if let capture = model.captures.first(where: { $0.id == id }) {
+                    model.deleteScanPage(Int(hook) ?? 3, from: capture)
+                }
+                selectedTab = .scans
+                scansPath = [id]
+            }
+        }
+        if environment["LL_SCANS_DETAIL"] != nil || environment["LL_SCANS_CORRECTED"] != nil {
+            let fully = environment["LL_SCANS_CORRECTED"] != nil
+            if let id = model.debugSeedScannerProject(
+                poses: 8,
+                corrected: true,
+                paper: .a4,
+                spacingSeconds: 27,
+                // Leaves the last page uncorrected, which is the mixed state
+                // the prompt strip and the header's partial ring describe.
+                correctedLimit: fully ? nil : 7) {
+                selectedTab = .scans
+                scansPath = [id]
+            }
         }
         if environment["LL_OPEN"] == "latest", let capture = model.captures.first {
             model.openCapture(capture)
@@ -675,6 +753,8 @@ struct ContentView: View {
                     createContent
                 case .gallery:
                     GalleryView(path: $galleryPath)
+                case .scans:
+                    ScansView(path: $scansPath)
                 case .projects:
                     ProjectsView(path: $projectsPath)
                 case .collections:
@@ -733,6 +813,11 @@ struct ContentView: View {
                 .tabItem { Label(LLTab.gallery.title, systemImage: LLTab.gallery.systemImage) }
                 .tag(LLTab.gallery)
 
+            ScansView(path: $scansPath)
+                .hiddenSystemTabBar()
+                .tabItem { Label(LLTab.scans.title, systemImage: LLTab.scans.systemImage) }
+                .tag(LLTab.scans)
+
             ProjectsView(path: $projectsPath)
                 .hiddenSystemTabBar()
                 .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
@@ -772,6 +857,8 @@ struct ContentView: View {
             }
         case .gallery:
             galleryPath = []
+        case .scans:
+            scansPath = []
         case .projects:
             projectsPath = []
         case .collections:

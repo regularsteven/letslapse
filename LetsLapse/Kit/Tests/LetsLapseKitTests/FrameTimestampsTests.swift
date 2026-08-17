@@ -154,4 +154,52 @@ final class FrameTimestampsTests: XCTestCase {
         XCTAssertNil(FrameTimeMapping.presentationSeconds(frameTimes: [0, 0, 0], outputFPS: 30))
         XCTAssertNil(FrameTimeMapping.presentationSeconds(frameTimes: [0, 10], outputFPS: 0))
     }
+
+    // MARK: - Deleting a page
+
+    /// A page thrown away takes its line with it and **nothing renumbers** —
+    /// the files, the sidecar and every reference already taken name a pose by
+    /// its index, so closing the gap would re-point them at other photographs.
+    func testDeletingAFrameLeavesTheOthersAloneAndKeepsTheirNumbers() throws {
+        let writer = try XCTUnwrap(FrameTimestampWriter(directory: directory))
+        let start = Date(timeIntervalSince1970: 1_700_000_000)
+        for index in 0..<5 {
+            writer.append(.init(
+                frame: index,
+                captureTime: start.addingTimeInterval(Double(index) * 2),
+                shutter: 0.008, iso: 54,
+                rectangle: index == 3 ? nil : NormalizedQuad(
+                    topLeft: .init(x: 0.2, y: 0.8), topRight: .init(x: 0.8, y: 0.8),
+                    bottomLeft: .init(x: 0.2, y: 0.2), bottomRight: .init(x: 0.8, y: 0.2),
+                    confidence: 0.9)))
+        }
+        writer.close()
+
+        try FrameTimestamps.deleteEntry(frame: 2, in: directory)
+
+        let reloaded = try FrameTimestamps.load(
+            from: directory.appendingPathComponent(FrameTimestamps.fileName))
+        XCTAssertEqual(reloaded.entries.map(\.frame), [0, 1, 3, 4], "a gap, not a renumbering")
+        // Everything else survives byte-for-byte in meaning: times, exposure,
+        // and which pages had corners.
+        XCTAssertEqual(reloaded.entries[2].captureTime, start.addingTimeInterval(6))
+        XCTAssertNil(reloaded.entries[2].rectangle)
+        XCTAssertNotNil(reloaded.entries[3].rectangle)
+        XCTAssertEqual(reloaded.entries[0].iso, 54)
+
+        // Idempotent, and the staging directory it rewrites through is gone.
+        try FrameTimestamps.deleteEntry(frame: 2, in: directory)
+        XCTAssertEqual(
+            try FrameTimestamps.load(
+                from: directory.appendingPathComponent(FrameTimestamps.fileName)).entries.count, 4)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: directory.appendingPathComponent("\(FrameTimestamps.fileName).rewrite").path))
+    }
+
+    /// No sidecar is not an error — an interval shoot from before they existed
+    /// has none, and deleting one of its frames must not throw.
+    func testDeletingFromAMissingSidecarIsHarmless() throws {
+        XCTAssertNoThrow(try FrameTimestamps.deleteEntry(frame: 0, in: directory))
+    }
+
 }

@@ -261,6 +261,10 @@ struct LLRow<Trailing: View>: View {
 enum LLTab: String, CaseIterable, Identifiable {
     case create
     case gallery
+    /// Scanner sessions. Third, between the two library tabs, so Gallery and
+    /// Projects stay adjacent — a scan is a document, not a timelapse, and it
+    /// is excluded from both of them.
+    case scans
     case projects
     case collections
     case settings
@@ -271,6 +275,7 @@ enum LLTab: String, CaseIterable, Identifiable {
         switch self {
         case .create: return "Create"
         case .gallery: return "Gallery"
+        case .scans: return "Scans"
         case .projects: return "Projects"
         case .collections: return "Collections"
         case .settings: return "Settings"
@@ -281,6 +286,7 @@ enum LLTab: String, CaseIterable, Identifiable {
         switch self {
         case .create: return "record.circle"
         case .gallery: return "photo.on.rectangle.angled"
+        case .scans: return "doc.viewfinder"
         case .projects: return "square.stack"
         case .collections: return "film.stack"
         case .settings: return "line.3.horizontal"
@@ -302,9 +308,21 @@ struct FloatingTabBar: View {
     /// Derived from the tab count rather than fixed: five tabs at the original
     /// 92pt would make a 488pt pill, wider than a 393pt iPhone. 66pt keeps the
     /// bar at 358pt with room either side, and still fits "Projects" at 10.5pt.
+    /// Six tabs need 58pt (a 380pt pill inside 393pt) — and at 58pt
+    /// "Collections" no longer fits at 10.5pt, which is the whole cost of the
+    /// sixth tab: the label drops to 9.5pt and the icon with it.
     private var tabWidth: CGFloat {
-        LLTab.allCases.count > 4 ? 66 : 92
+        switch LLTab.allCases.count {
+        case 6...: return 58
+        case 5: return 66
+        default: return 92
+        }
     }
+
+    /// The label and icon follow the width, so the longest title still fits on
+    /// one line at every tab count.
+    private var labelSize: CGFloat { tabWidth < 66 ? 9.5 : 10.5 }
+    private var iconSize: CGFloat { tabWidth < 66 ? 16 : 17 }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -319,9 +337,9 @@ struct FloatingTabBar: View {
                 } label: {
                     VStack(spacing: 2) {
                         Image(systemName: tab.systemImage)
-                            .font(.system(size: 17))
+                            .font(.system(size: iconSize))
                         Text(tab.title)
-                            .font(.system(size: 10.5, weight: .semibold))
+                            .font(.system(size: labelSize, weight: .semibold))
                     }
                     .foregroundStyle(isSelected ? LL.accent : Color.secondary)
                     .frame(width: tabWidth)

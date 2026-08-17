@@ -96,6 +96,36 @@ public struct FrameTimestamps: Equatable, Sendable {
         return FrameTimestamps(entries: entries)
     }
 
+    /// Drops one frame's line from the sidecar beside `directory`, leaving
+    /// every other line byte-for-byte as it was.
+    ///
+    /// **The remaining frames keep their numbers.** A scan's files, its sidecar
+    /// and anything that has already read either all refer to a pose by its
+    /// index, so renumbering after a deletion would silently re-point every one
+    /// of those references at a different photograph. A gap is the honest
+    /// record of a page that was thrown away.
+    ///
+    /// Written through a temporary file and swapped in, because the alternative
+    /// — truncating the real one and re-appending — loses the whole shoot's
+    /// timing if anything interrupts it between the two.
+    public static func deleteEntry(frame: Int, in directory: URL) throws {
+        let url = directory.appendingPathComponent(fileName)
+        guard let existing = try? load(from: url) else { return }
+        let kept = existing.entries.filter { $0.frame != frame }
+        guard kept.count != existing.entries.count else { return }
+
+        let staging = directory.appendingPathComponent("\(fileName).rewrite", isDirectory: true)
+        try? FileManager.default.removeItem(at: staging)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: staging) }
+        guard let writer = FrameTimestampWriter(directory: staging) else {
+            throw SidecarError.unwritable(staging)
+        }
+        for entry in kept { writer.append(entry) }
+        writer.close()
+        _ = try FileManager.default.replaceItemAt(url, withItemAt: writer.url)
+    }
+
     /// Finds the sidecar beside a set of frames — the same directory the
     /// stills live in. Returns nil when there isn't one, which is the normal
     /// case for every shoot that isn't a ramp.
@@ -158,6 +188,12 @@ public struct FrameTimestamps: Equatable, Sendable {
     public static func string(from date: Date) -> String {
         iso8601.string(from: date)
     }
+}
+
+/// What can go wrong rewriting a sidecar. Its own type rather than the
+/// corrector's, so this file stays free of the CoreImage-gated half of the Kit.
+public enum SidecarError: Error {
+    case unwritable(URL)
 }
 
 /// Appends `FrameTimestamps.Entry` lines to a sidecar as a shoot runs.

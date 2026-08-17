@@ -77,6 +77,13 @@ struct CaptureView: View {
     /// Poses banked as of the last time the count was observed — so the fire
     /// haptic can tell a capture from a "Delete last".
     @State private var lastScannerFrameCount = 0
+    /// True for a moment after a pose lands, so the state line can confirm it.
+    /// View-local rather than engine state: it is about what the operator was
+    /// just told, not about what the camera is waiting for.
+    @State private var scannerJustCaptured = false
+    /// Cancels the previous flash, so two quick captures don't leave the
+    /// confirmation on screen after the second one's window has passed.
+    @State private var scannerFlashToken = 0
     /// True while Interval's MODE dial is on Holy Grail on a platform that
     /// can ramp — the state in which exposure belongs to the ramp and the
     /// lock button, the readout and the ±EV control all change meaning.
@@ -390,6 +397,19 @@ struct CaptureView: View {
             guard let frames, frames > previous else { return }
             announceScannerFrame()
             checkScannerTarget(frames: frames)
+        }
+        // The confirmation comes from the **state**, not from the file landing.
+        //
+        // Those are hundreds of milliseconds apart — the shutter is asked for
+        // and the machine banks the page immediately, while `frames` only moves
+        // once the photo has been processed and written — so driving the
+        // "✓ Captured" flash off the count put it *after* the "Swap in the next
+        // page" prompt that the same capture had already raised. The operator
+        // saw Settling → Swap → Captured and reasonably read it as the machine
+        // running its states out of order.
+        .onChange(of: camera.scannerState?.phase) { phase in
+            guard phase == ScannerEngine.State.captured.rawValue else { return }
+            flashScannerCaptured()
         }
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
@@ -710,12 +730,15 @@ struct CaptureView: View {
             let tail = Self.trailingNoisyCount(
                 from: steadiness.captureLog, threshold: steadiness.stillThreshold)
             dismiss()
-            model.setSource(
-                .photos(urls), mode: intervalSourceModeName,
-                // Scanner output is a set of individually-composed frames for
-                // export, not material for a blend, and the Projects tab has to
-                // be able to tell the two apart long after the shoot.
-                captureMode: scannerArmed ? .scanner : nil)
+            // A scan does not go to the blend flow. It is registered, opened in
+            // the Scans tab and corrected on its own — see
+            // `AppModel.finishScannerCapture`. Every other still shoot takes
+            // the unchanged `setSource` path into Adjust.
+            if scannerArmed {
+                model.finishScannerCapture(urls: urls, mode: intervalSourceModeName)
+                return
+            }
+            model.setSource(.photos(urls), mode: intervalSourceModeName)
             // A minimum run of 2 filters a lone bad frame (a passing cloud, a
             // single bump); the half-session ceiling keeps a shaky handheld
             // shoot from reading as a tail event.
@@ -1557,13 +1580,19 @@ struct CaptureView: View {
         return camera.selectedResolution.stillLabel
     }
 
-    /// Whether a Scanner run on this device will really write DNG. RAW is
-    /// Scanner's default because the frames are destined for solvers and
-    /// compositing pipelines — but the claim is only made where the hardware
-    /// backs it, and `startScanner` falls back to processed stills (and logs
-    /// it) on a source that can't deliver Bayer RAW.
+    /// Whether a Scanner run on this device will really write DNG: the format
+    /// dial asks for it **and** the hardware backs it.
+    ///
+    /// RAW is what the dial defaults to, because Scanner's frames are destined
+    /// for solvers and compositing pipelines — but it is the dial's answer, not
+    /// the mode's. Scanner used to take RAW whatever the format sheet said,
+    /// which made that control silently inoperative in this one mode (found on
+    /// device, 2026-08-17: a shoot set to JPEG wrote a folder of DNGs). The
+    /// claim is still only made where the hardware backs it — `startScanner`
+    /// falls back to processed stills, and logs it, on a source that can't
+    /// deliver Bayer RAW.
     private var scannerCapturesRAW: Bool {
-        scannerArmed && camera.liveBlendDNGSupport.isSupported
+        scannerArmed && model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
     }
 
     // MARK: - Remote link chip
@@ -1847,7 +1876,9 @@ struct CaptureView: View {
     @ViewBuilder
     private var scannerOutputNote: some View {
         if scannerArmed, !isIntervalCapturing {
-            Text("DNG + corrected HEIC when rectangle detected")
+            // Names what a pose will really write, which is the format dial's
+            // answer — not "DNG" on a shoot the dial has set to JPEG.
+            Text("\(scannerCapturesRAW ? "DNG" : "JPEG") + corrected HEIC when rectangle detected")
                 .font(.system(size: 11))
                 .foregroundStyle(.white.opacity(0.55))
                 .padding(.horizontal, 10)
@@ -1937,15 +1968,21 @@ struct CaptureView: View {
         updateAspectPreview()
     }
 
-    /// `LL_SCANNER=settled|disturbed` arms the MODE dial on Scanner and freezes
-    /// a running shoot in that state — the HUD the simulator can never reach
-    /// for itself, having no camera to difference frames from and no scene to
-    /// disturb. Implies Interval mode. Pair with `LL_CAPTURE=1`.
+    /// `LL_SCANNER=<state>` arms the MODE dial on Scanner and freezes a running
+    /// shoot in that state — the HUD the simulator can never reach for itself,
+    /// having no camera to difference frames from, no scene to disturb and
+    /// nothing flat to detect. Implies Interval mode. Pair with `LL_CAPTURE=1`.
     ///
-    /// `settled` is the resting state ("Waiting for you to move"); `disturbed`
-    /// is mid-settle, with the ring part-filled. Both draw 12 of a 36-pose
-    /// target, which is what makes the count and the ring legible in a mirror
-    /// screenshot.
+    /// The **motion** trigger (PAPER = Auto): `settled` is the resting state
+    /// ("Waiting for you to move"), `disturbed` is mid-settle.
+    ///
+    /// The **rectangle** trigger (PAPER = A4 here, since the stock is what
+    /// selects it): `waitingpage` has nothing flat in view, `holding` is a page
+    /// found and its hold window part-filled — the amber bar — and `captured`
+    /// is a page banked, waiting to be swapped.
+    ///
+    /// All of them draw 12 of a 36-pose target, which is what makes the count
+    /// and the shutter ring legible in a mirror screenshot.
     private func applyScannerPreviewHook() {
         let environment = ProcessInfo.processInfo.environment
         let rectangleHook = environment["LL_SCANNER_RECT"]
@@ -1968,21 +2005,39 @@ struct CaptureView: View {
                 bottomRight: .init(x: 0.884, y: 0.181),
                 confidence: 0.94)
         }
-        guard raw == "settled" || raw == "disturbed" else { return }
+        // The motion trigger's two states, and the rectangle trigger's three.
+        // The second set needs staging for the same reason as the first, twice
+        // over: those states are only reachable with a real page in front of a
+        // real camera, and they are the ones a document shoot actually shows.
+        let documentPhase: ScannerEngine.State?
+        switch raw {
+        case "waitingpage": documentPhase = .waitingForPage
+        case "holding": documentPhase = .holding
+        case "captured": documentPhase = .captured
+        default: documentPhase = nil
+        }
+        guard raw == "settled" || raw == "disturbed" || documentPhase != nil else { return }
         let disturbed = raw == "disturbed"
+        if documentPhase != nil {
+            // A staged document run is on a stock, because that is what selects
+            // the trigger — Auto could never produce these states.
+            scannerAspectToken = PerspectiveAspect.a4.rawValue
+        }
         activeTarget = CaptureTargetPlan(
             clipSeconds: 0, speed: 1, recordSeconds: 0, autoStop: true, poseTarget: 36)
         camera.scannerState = CameraController.ScannerState(
-            phase: disturbed
-                ? ScannerEngine.State.disturbed.rawValue
-                : ScannerEngine.State.settled.rawValue,
+            phase: (documentPhase ?? (disturbed ? .disturbed : .settled)).rawValue,
             frames: 12,
             shutterSeconds: 1.0 / 120,
             iso: 200,
             isCapturingRAW: true,
-            settleProgress: disturbed ? 0.55 : nil,
+            settleProgress: documentPhase == .holding ? 0.62 : (disturbed ? 0.55 : nil),
             waitingForDeviceSteady: false,
-            hasRectangle: rectangleHook == "detected")
+            hasRectangle: documentPhase == nil
+                ? rectangleHook == "detected"
+                : documentPhase != .waitingForPage,
+            trigger: (documentPhase == nil
+                ? ScannerEngine.Trigger.motion : .rectangle).rawValue)
         camera.isIntervalRunning = true
         framingStartedAt = Date().addingTimeInterval(-96)
     }
@@ -2294,6 +2349,7 @@ struct CaptureView: View {
                             .accessibilityLabel("Rectangle detected — settling on its corners")
                     }
                 }
+                scannerHoldBar(state)
                 Text(scannerExposureText(state))
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.6))
@@ -2308,23 +2364,95 @@ struct CaptureView: View {
     /// Imperative, not descriptive: the settled state's job is to tell the
     /// operator it is their turn, which "Waiting for you to move" does and
     /// "Idle" does not.
+    /// The one line the operator reads without looking properly, so it says what
+    /// the camera is waiting for in the vocabulary of the machine that is
+    /// actually running.
+    ///
+    /// The two triggers ask for different things and must never borrow each
+    /// other's words: "Waiting for you to move" is a *request* — the turntable
+    /// loop cannot continue until the operator does something — while a document
+    /// shoot asks for nothing but a page that stays put, and telling someone to
+    /// move the page they just placed is the opposite of the instruction.
     private func scannerStateText(_ state: CameraController.ScannerState) -> String {
         if state.waitingForDeviceSteady { return "Hold the phone still" }
-        return state.phase == ScannerEngine.State.disturbed.rawValue
-            ? "Settling…" : "Waiting for you to move"
+        // The shutter has just gone. Said for a moment over everything else,
+        // because the click and the haptic are easy to miss with a hand still
+        // over the page.
+        if scannerJustCaptured { return "✓ Captured" }
+        guard state.trigger == ScannerEngine.Trigger.rectangle.rawValue else {
+            return state.phase == ScannerEngine.State.disturbed.rawValue
+                ? "Settling…" : "Waiting for you to move"
+        }
+        switch state.phase {
+        case ScannerEngine.State.holding.rawValue:
+            // The bar beneath it carries the rest of the sentence.
+            return "Settling…"
+        case ScannerEngine.State.captured.rawValue:
+            // This page is banked and nothing more will be taken of it until it
+            // is physically lifted — so the line asks for the lift rather than
+            // announcing readiness. "Ready for the next page" was true and
+            // useless: it doesn't say that leaving this one there is what keeps
+            // the camera waiting.
+            return "Swap in the next page"
+        default:
+            return "Waiting for a page"
+        }
     }
 
     private func scannerStateTint(_ state: CameraController.ScannerState) -> Color {
         if state.waitingForDeviceSteady { return .red }
-        return state.phase == ScannerEngine.State.disturbed.rawValue
-            ? LL.amber : Color(red: 0.2, green: 0.78, blue: 0.35)
+        if scannerJustCaptured { return Color(red: 0.2, green: 0.78, blue: 0.35) }
+        guard state.trigger == ScannerEngine.Trigger.rectangle.rawValue else {
+            return state.phase == ScannerEngine.State.disturbed.rawValue
+                ? LL.amber : Color(red: 0.2, green: 0.78, blue: 0.35)
+        }
+        // Amber while the camera is working towards a shot (waiting for a page,
+        // or holding on one); green once a page is banked and the operator is
+        // free to swap it.
+        return state.phase == ScannerEngine.State.captured.rawValue
+            ? Color(red: 0.2, green: 0.78, blue: 0.35) : LL.amber
+    }
+
+    /// The hold window's progress bar — the rectangle trigger's own clock, drawn
+    /// only while it is running.
+    ///
+    /// It exists because "Settling…" without it is the sentence that made a
+    /// working shoot look broken: the operator has no way to tell a window that
+    /// is filling from one that keeps restarting, and on a handheld phone the
+    /// old engine restarted it on every single tick. A bar that visibly fills
+    /// says "wait", and one that visibly resets says "you are moving".
+    @ViewBuilder
+    private func scannerHoldBar(_ state: CameraController.ScannerState) -> some View {
+        if state.trigger == ScannerEngine.Trigger.rectangle.rawValue,
+           let progress = state.settleProgress,
+           state.phase == ScannerEngine.State.holding.rawValue {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule()
+                        .fill(Color.white.opacity(0.18))
+                    Capsule()
+                        .fill(LL.amber)
+                        .frame(width: max(3, proxy.size.width * CGFloat(progress)))
+                }
+            }
+            .frame(height: 3)
+            .animation(.linear(duration: 0.1), value: progress)
+            .accessibilityHidden(true)
+        }
     }
 
     /// The locked pair every frame of the set was taken at — the number that
     /// makes a set trustable without inspecting it afterwards.
     private func scannerExposureText(_ state: CameraController.ScannerState) -> String {
         var text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso)) · locked"
-        text += state.isCapturingRAW ? " · RAW" : " · no RAW on this device"
+        // Three answers, not two. "no RAW on this device" is a report of a
+        // fallback, and printing it at someone who chose JPEG accuses the phone
+        // of a limitation it doesn't have.
+        if state.isCapturingRAW {
+            text += " · RAW"
+        } else {
+            text += state.wantedRAW ? " · no RAW on this device" : " · JPEG"
+        }
         return text
     }
 
@@ -2367,6 +2495,23 @@ struct CaptureView: View {
         #if os(iOS)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
+    }
+
+    /// Confirms a banked pose in the state line for a beat.
+    ///
+    /// The shutter's click and the haptic are the primary confirmation, and both
+    /// are easy to miss with a hand still over the page and a room with any
+    /// noise in it — so the line the operator is already watching says it too,
+    /// then hands itself back to whatever the camera is waiting for next.
+    private func flashScannerCaptured() {
+        scannerFlashToken += 1
+        let token = scannerFlashToken
+        scannerJustCaptured = true
+        Task {
+            try? await Task.sleep(nanoseconds: 1_100_000_000)
+            guard scannerFlashToken == token else { return }
+            scannerJustCaptured = false
+        }
     }
 
     /// The pre-flight warning, shown in place of the dial row while Scanner is
@@ -2859,8 +3004,17 @@ struct CaptureView: View {
                 guard let steadiness else { return true }
                 return steadiness.magnitude < steadiness.stillThreshold
             }
-            camera.startScanner(frameCap: activeTarget?.autoStop == true
-                ? activeTarget?.poseTarget : nil)
+            camera.startScanner(
+                frameCap: activeTarget?.autoStop == true ? activeTarget?.poseTarget : nil,
+                // The format dial governs Scanner like every other still mode.
+                // It used to be ignored here, so a shoot set to JPEG wrote DNGs.
+                preferRAW: model.intervalOutputFormat == .dng,
+                // A named stock is a declaration that these are pages, and a
+                // document shoot has no disturb/settle cycle to wait for — the
+                // page is put down and stays put. So the stock picks the whole
+                // trigger, not a filter on one: Auto keeps the turntable
+                // machine, a stock switches to "a page, holding still".
+                trigger: scannerAspect == .auto ? .motion : .rectangle)
             return
         }
         if holyGrailArmed {

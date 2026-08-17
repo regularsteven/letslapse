@@ -27,8 +27,13 @@ struct ProjectsView: View {
                     .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 0, trailing: 16))
 
                 Group {
-                    let visible = model.captures.filtered(by: filter).matching(query)
-                    if model.captures.isEmpty {
+                    // Scans are excluded outright — a scanner run is a document
+                    // and lives in its own tab. The exclusion IS the design;
+                    // there is no scanner card variant here. The project itself
+                    // is still reachable, from that tab's "View as timelapse".
+                    let library = model.libraryCaptures
+                    let visible = library.filtered(by: filter).matching(query)
+                    if library.isEmpty {
                         emptyState
                     } else if visible.isEmpty {
                         filteredEmptyState
@@ -111,7 +116,7 @@ struct ProjectsView: View {
 
             // Same segmented filter the Gallery grid uses, so the two tabs
             // narrow a library the same way.
-            if model.captures.isEmpty {
+            if model.libraryCaptures.isEmpty {
                 // Nothing to filter — stand in for the bar's bottom padding so
                 // the empty-state card doesn't butt against the title.
                 Color.clear.frame(height: 8)
@@ -121,7 +126,7 @@ struct ProjectsView: View {
 
                 CaptureFilterBar(selection: $filter)
 
-                let tags = model.captures.presentSceneTags
+                let tags = model.libraryCaptures.presentSceneTags
                 if !tags.isEmpty {
                     // Bleeds past the row's trailing inset so a long chip row
                     // scrolls out to the screen edge rather than stopping short.

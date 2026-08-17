@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Scan export sheet · PDF · portrait</title>
+  <desc>Mirrors App/ScanExport.swift (ScanExportSheet — header, rows, ScanExportFormat). The format segment sits in the header because it changes what every row below it means, which is what lets the rows name real file names and a real size. PDF lays each page on its own sheet at the session's stock (Auto sessions take each page's own aspect), as one document or as one file per page. The size is measured — one page is encoded and weighed — rather than guessed from the source bytes, which was out by 3.5×. iOS 26 draws sheets on glass and ignores presentationBackground(.clear), so the sheet's own surface is the card rather than an action-sheet stack floated inside one.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.mono{font-family:ui-monospace,Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the detail screen behind, dimmed -->
+      <rect x="0" y="0" width="393" height="852" fill="#F2F2F7"/>
+      <g opacity="0.5">
+        <text x="20" y="130" font-size="28" class="b" fill="#000">16 Aug, 21:21</text>
+        <text x="20" y="153" font-size="13.5" class="sec">8 pages · A4 · 3 min 12 s</text>
+        <g><clipPath id="c16x300"><rect x="16" y="300" width="177.5" height="251" rx="9"/></clipPath><rect x="16" y="300" width="177.5" height="251" rx="9" fill="#F2F0EA"/><rect x="26" y="314.0" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="332.9" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="351.8" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="370.8" width="86.6" height="5.3" fill="#59544E"/><rect x="26" y="389.7" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="408.6" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="427.5" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="446.4" width="86.6" height="5.3" fill="#59544E"/><rect x="26" y="465.3" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="484.2" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="503.2" width="141.8" height="5.3" fill="#59544E"/><rect x="26" y="522.1" width="86.6" height="5.3" fill="#59544E"/></g>
+        <g><clipPath id="c199x300"><rect x="199.5" y="300" width="177.5" height="251" rx="9"/></clipPath><rect x="199.5" y="300" width="177.5" height="251" rx="9" fill="#F2F0EA"/><rect x="209.5" y="314.0" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="332.9" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="351.8" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="370.8" width="86.6" height="5.3" fill="#59544E"/><rect x="209.5" y="389.7" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="408.6" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="427.5" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="446.4" width="86.6" height="5.3" fill="#59544E"/><rect x="209.5" y="465.3" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="484.2" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="503.2" width="141.8" height="5.3" fill="#59544E"/><rect x="209.5" y="522.1" width="86.6" height="5.3" fill="#59544E"/></g>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.32"/>
+
+      <!-- the sheet: format first, because it changes what the rows mean -->
+      <g id="export-sheet">
+        <rect x="0" y="374" width="393" height="478" rx="18" fill="#F7F7F9"/>
+        <text x="196.5" y="404" font-size="13" class="sb" fill="#1C1C1E" text-anchor="middle">Export 8 pages</text>
+        <text x="196.5" y="424" font-size="12" class="sec" text-anchor="middle">Corrected page where there is one, the photograph where there</text>
+        <text x="196.5" y="440" font-size="12" class="sec" text-anchor="middle">isn't. Originals stay on the device.</text>
+        <rect x="16" y="452" width="361" height="32" rx="9" fill="#000" fill-opacity="0.06"/>
+        <text x="78.0" y="473" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="middle">HEIC</text>
+        <text x="196.3" y="473" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="middle">JPEG</text>
+        <rect x="255.6" y="455" width="118.3" height="26" rx="7" fill="#FFF"/>
+        <text x="314.6" y="473" font-size="12.5" class="sb" fill="#1C1C1E" text-anchor="middle">PDF</text>
+        <text x="196.5" y="502" font-size="11.5" fill="#8A8A90" text-anchor="middle">One page per sheet at A4, in capture order</text>
+        <path d="M0 516 h393" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="196.5" y="549" font-size="19" class="sb" fill="#C36A00" text-anchor="middle">One PDF, 8 pages</text>
+        <text x="196.5" y="571" font-size="12" class="mono sec" text-anchor="middle">Scan 16 Aug at 21.21.pdf · ≈ 6.4 MB</text>
+        <path d="M0 589 h393" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="196.5" y="622" font-size="19" class="" fill="#C36A00" text-anchor="middle">One PDF per page</text>
+        <text x="196.5" y="644" font-size="12" class="mono sec" text-anchor="middle">page-001.pdf … page-008.pdf</text>
+        <path d="M0 662 h393" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="196.5" y="696" font-size="19" class="" fill="#C36A00" text-anchor="middle">Export selected pages…</text>
+        <path d="M0 717 h393" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+        <text x="196.5" y="751" font-size="19" class="" fill="#6D6D72" text-anchor="middle">View as timelapse</text>
+        <rect x="0" y="772" width="393" height="8" fill="#000" fill-opacity="0.07"/>
+        <text x="196.5" y="808" font-size="19" class="sb" fill="#C36A00" text-anchor="middle">Cancel</text>
+      </g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Scan export sheet · PDF · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ScanExport.swift — format first, then what the rows mean</text>
+</svg>

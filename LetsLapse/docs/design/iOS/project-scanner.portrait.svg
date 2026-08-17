@@ -153,32 +153,32 @@
 
       <!-- floating tab bar (Projects selected) over content -->
       <g id="tab-bar" opacity="0.98">
-        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
-        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
         <g id="tab-create" fill="none" stroke="#8E8E93">
-          <circle cx="56.5" cy="776" r="8" stroke-width="1.6" data-symbol="record.circle"/><circle cx="56.5" cy="776" r="3.4" fill="#8E8E93" stroke="none"/>
-          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+          <g transform="translate(41.5 776) scale(0.7273) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="41.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
         </g>
         <g id="tab-gallery" fill="none" stroke="#8E8E93">
-          <rect x="119.5" y="769" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(-6 126.5 775)" data-symbol="photo.on.rectangle.angled"/>
-          <rect x="123.5" y="772" width="15" height="11" rx="2" stroke-width="1.6" transform="rotate(4 130.5 778)"/>
-          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+          <g transform="translate(103.5 776) scale(0.7273) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="103.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
         </g>
+        <g id="tab-scans" fill="none" stroke="#8E8E93">
+          <g transform="translate(165.5 776) scale(0.7273) translate(-11 -11)"><path d="M4 7 V4 h3 M15 4 h3 v3 M18 15 v3 h-3 M7 18 H4 v-3" stroke-width="2.34" stroke-linecap="round" data-symbol="doc.viewfinder"/><rect x="6.5" y="6.5" width="9" height="9" rx="1.6" stroke-width="2.34"/></g>
+          <text x="165.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Scans</text>
+        </g>
+        <rect x="198.5" y="761" width="58" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
         <g id="tab-projects" fill="none" stroke="#C36A00">
-          <circle cx="196.5" cy="783" r="26" fill="#C36A00" opacity="0.12" stroke="none"/>
-          <rect x="189.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="square.stack"/>
-          <path d="M191 781 h11 M193 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
-          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
+          <g transform="translate(227.5 776) scale(0.7273) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="227.5" y="800" font-size="9.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
         </g>
         <g id="tab-collections" fill="none" stroke="#8E8E93">
-          <rect x="259.5" y="768" width="14" height="10" rx="2" stroke-width="1.6" data-symbol="film.stack"/>
-          <path d="M262.5 769.5 v7 M270.5 769.5 v7" stroke-width="1" opacity="0.7"/>
-          <path d="M261 781 h11 M263 784.5 h7" stroke-width="1.6" stroke-linecap="round"/>
-          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+          <g transform="translate(289.5 776) scale(0.7273) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="289.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
         </g>
         <g id="tab-settings" fill="none" stroke="#8E8E93">
-          <path d="M328.5 771 h16 M328.5 776.5 h16 M328.5 782 h16" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
-          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+          <g transform="translate(351.5 776) scale(0.7273) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="351.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
         </g>
       </g>
 

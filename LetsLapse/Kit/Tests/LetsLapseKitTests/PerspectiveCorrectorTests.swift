@@ -145,6 +145,93 @@ final class PerspectiveCorrectorTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
     }
 
+    /// **A still's EXIF orientation has to be applied before its corners mean
+    /// anything.**
+    ///
+    /// The numbers here are the ones that exposed it: an iPhone 16 Pro pose
+    /// (2026-08-17) written 4032×3024 with orientation 6, and the quad its own
+    /// sidecar recorded — measured, like every Scanner quad, in the *upright*
+    /// space Vision was handed. Applied to the unrotated pixels those corners
+    /// select a quarter-turned, near-full-frame region, and the A4 hint then
+    /// squashes it to A4 **landscape** (1.41): a page still keystoned, desk and
+    /// all, which is exactly what came off the device.
+    ///
+    /// So the assertion is the orientation of the result, not its prettiness: a
+    /// portrait page must rectify to a portrait page.
+    func testAppliesTheSourcesOrientationBeforeRectifying() throws {
+        // Landscape pixels, portrait once the tag is honoured — the shape every
+        // portrait Scanner pose lands in. Written through `CGImageDestination`
+        // rather than `writeHEIFRepresentation`, which silently drops an
+        // orientation passed as a representation option (the first version of
+        // this test produced an untagged file and therefore proved nothing).
+        let source = directory.appendingPathComponent("frame-00001.heic")
+        let context = CIContext()
+        let rendered = try XCTUnwrap(
+            context.createCGImage(
+                testImage(width: 4032, height: 3024),
+                from: CGRect(x: 0, y: 0, width: 4032, height: 3024)))
+        let destination = try XCTUnwrap(
+            CGImageDestinationCreateWithURL(source as CFURL, "public.heic" as CFString, 1, nil))
+        CGImageDestinationAddImage(
+            destination, rendered, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        let properties = try XCTUnwrap(
+            CGImageSourceCreateWithURL(source as CFURL, nil)
+                .flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] })
+        XCTAssertEqual(properties[kCGImagePropertyOrientation] as? Int, 6, "fixture lost its tag")
+
+        let page = quad(
+            topLeft: (0.122, 0.882), topRight: (0.832, 0.839),
+            bottomLeft: (0.137, 0.034), bottomRight: (0.875, 0.113),
+            confidence: 1)
+        let written = try PerspectiveCorrector.writeCorrected(
+            from: source, quad: page, aspect: .a4)
+        let readBack = try XCTUnwrap(CIImage(contentsOf: written))
+        let ratio = Double(readBack.extent.width / readBack.extent.height)
+        XCTAssertEqual(ratio, 1 / 2.0.squareRoot(), accuracy: 0.02,
+                       "a portrait page must rectify to portrait A4, not to its transpose")
+
+        // And the output must carry no orientation of its own: its pixels are
+        // already upright, so a tag would rotate the page a second time on
+        // screen — which is what the broken files on the device also did.
+        let writtenProperties = try XCTUnwrap(
+            CGImageSourceCreateWithURL(written as CFURL, nil)
+                .flatMap { CGImageSourceCopyPropertiesAtIndex($0, 0, nil) as? [CFString: Any] })
+        let orientation = writtenProperties[kCGImagePropertyOrientation] as? Int ?? 1
+        XCTAssertEqual(orientation, 1)
+    }
+
+    /// The self-heal signature: a corrected page that still carries a rotating
+    /// orientation tag was written by the pre-fix geometry, and the app treats
+    /// it as uncorrected so it gets redone.
+    func testRecognisesACorrectionWrittenByTheOldGeometry() throws {
+        let context = CIContext()
+        let good = directory.appendingPathComponent("frame-00001-corrected.heic")
+        try context.writeHEIFRepresentation(
+            of: testImage(width: 600, height: 800), to: good, format: .RGBA8,
+            colorSpace: CGColorSpace(name: CGColorSpace.sRGB)!)
+        XCTAssertFalse(PerspectiveCorrector.isSupersededCorrection(at: good))
+
+        // The same bytes, stamped the way the old path's inherited metadata
+        // stamped them.
+        let stale = directory.appendingPathComponent("frame-00002-corrected.heic")
+        let rendered = try XCTUnwrap(
+            context.createCGImage(
+                testImage(width: 800, height: 600),
+                from: CGRect(x: 0, y: 0, width: 800, height: 600)))
+        let destination = try XCTUnwrap(
+            CGImageDestinationCreateWithURL(stale as CFURL, "public.heic" as CFString, 1, nil))
+        CGImageDestinationAddImage(
+            destination, rendered, [kCGImagePropertyOrientation: 6] as CFDictionary)
+        XCTAssertTrue(CGImageDestinationFinalize(destination))
+        XCTAssertTrue(PerspectiveCorrector.isSupersededCorrection(at: stale))
+
+        // A file that isn't there is not a stale correction — it is no
+        // correction, which the caller's `fileExists` has already decided.
+        XCTAssertFalse(PerspectiveCorrector.isSupersededCorrection(
+            at: directory.appendingPathComponent("nothing-here.heic")))
+    }
+
     /// Bayer RAW cannot be rectified — resampling a colour-filter mosaic mixes
     /// the sites it exists to keep apart — so the DNG is refused rather than
     /// silently mangled.

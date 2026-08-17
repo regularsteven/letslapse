@@ -346,9 +346,10 @@ struct ScannerProjectSections: View {
                 PerspectiveCorrector.correctSequence(in: folder, aspect: aspect)
             }.value
             isCorrecting = false
-            // No thumbnail invalidation needed: a correction writes NEW files,
-            // so the grid's tiles change URL rather than content — and a tile
-            // keyed on a URL nobody has decoded yet has nothing stale to drop.
+            // A first correction writes a file nobody has decoded, but a page
+            // whose correction predates the orientation fix is overwritten in
+            // place and would otherwise keep its old thumbnail.
+            ProjectThumbnailCache.shared.invalidate(urls: result.written)
             reloadToken += 1
             if result.written.isEmpty {
                 correctionNote = result.failures.isEmpty

@@ -30,7 +30,10 @@ struct GalleryView: View {
                     .padding(.horizontal)
 
                 CaptureAssetGrid(
-                    items: model.captures.filtered(by: filter),
+                    // Scanner runs are excluded here as they are in Projects:
+                    // the Gallery shows the assets of the timelapse library,
+                    // and a scan's pages belong to their document.
+                    items: model.libraryCaptures.filtered(by: filter),
                     asset: { model.heroAsset(for: $0) },
                     onTap: { path.append($0.id) }
                 )

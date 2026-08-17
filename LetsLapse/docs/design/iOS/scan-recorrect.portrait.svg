@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Re-correct page (sheet) · portrait</title>
+  <desc>Mirrors App/ScanRecorrectSheet.swift (header, canvas, cornerHandles, controls). Drag the corners on the ORIGINAL, pick the stock, replace the page. Corners open where the detector left them — or at the page's own inset, with the chip reading "No rectangle found · place the corners", when it never found any. Paper is per-page here, so one badly-shot sheet in an A4 set can go through as Auto without changing what the session claims. Handles are 18pt dots with a 44pt target. Below the fold (not drawn, shown only on an already-corrected page): "Discard correction, keep original only" in #FF6B6B, which deletes the derived file and leaves the photograph. The primary reads "Correct this page" on a page that has never been corrected.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.mono{font-family:ui-monospace,Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#0B0B0C"/>
+    <g transform="translate(24,24)">
+      <!-- status bar -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#0B0B0C"/>
+      <text x="20" y="72" font-size="15.5" fill="#FFF" fill-opacity="0.8">Cancel</text>
+      <text x="196.5" y="72" font-size="16" class="sb" fill="#FFF" text-anchor="middle">Re-correct page 3</text>
+
+      <!-- the ORIGINAL photograph, with the detector's corners on it -->
+      <g id="canvas">
+        <rect x="0" y="104" width="393" height="524" fill="#000"/>
+        <rect x="20" y="104" width="353" height="524" fill="#2A2724"/>
+        <path d="M90 158 L315 151 L321 468 L80 470 Z" fill="#F2F0EA"/>
+        <path d="M90 158 L315 151 L321 468 L80 470 Z" fill="#FFB340" fill-opacity="0.14" stroke="#FFB340" stroke-width="2"/>
+        <path d="M90 158 L315 151 M80 470 L321 468" stroke="#FFB340" stroke-width="1" stroke-dasharray="4 5" opacity="0.5"/>
+        <circle cx="90" cy="158" r="9" fill="#FFB340" stroke="#1C1C1E" stroke-width="1.5"/>
+        <circle cx="315" cy="151" r="9" fill="#FFB340" stroke="#1C1C1E" stroke-width="1.5"/>
+        <circle cx="321" cy="468" r="9" fill="#FFB340" stroke="#1C1C1E" stroke-width="1.5"/>
+        <circle cx="80" cy="470" r="9" fill="#FFB340" stroke="#1C1C1E" stroke-width="1.5"/>
+        <rect x="16" y="120" width="228" height="26" rx="13" fill="#000" fill-opacity="0.55"/>
+        <circle cx="30" cy="133" r="3.5" fill="#FFB340"/>
+        <text x="41" y="137" font-size="11.5" class="sb" fill="#FFF">Detected at capture · drag to adjust</text>
+        <rect x="264" y="582" width="113" height="30" rx="15" fill="#FFF" fill-opacity="0.16"/>
+        <text x="320.5" y="602" font-size="12" class="sb" fill="#FFF" text-anchor="middle">Reset corners</text>
+      </g>
+
+      <!-- paper, per page -->
+      <text x="20" y="656" font-size="11" class="sb" fill="#FFF" fill-opacity="0.45" letter-spacing="0.5">PAPER</text>
+      <g id="paper-chips">
+        <rect x="20" y="670" width="66" height="32" rx="16" fill="#FFF" fill-opacity="0.14"/><text x="53" y="691" font-size="12.5" class="sb" fill="#FFF" fill-opacity="0.85" text-anchor="middle">Auto</text>
+        <rect x="93" y="670" width="50" height="32" rx="16" fill="#FFB340"/><text x="118" y="691" font-size="12.5" class="b" fill="#1C1C1E" text-anchor="middle">A4</text>
+        <rect x="150" y="670" width="70" height="32" rx="16" fill="#FFF" fill-opacity="0.14"/><text x="185" y="691" font-size="12.5" class="sb" fill="#FFF" fill-opacity="0.85" text-anchor="middle">Letter</text>
+        <rect x="227" y="670" width="60" height="32" rx="16" fill="#FFF" fill-opacity="0.14"/><text x="257" y="691" font-size="12.5" class="sb" fill="#FFF" fill-opacity="0.85" text-anchor="middle">4×6</text>
+        <rect x="294" y="670" width="79" height="32" rx="16" fill="#FFF" fill-opacity="0.14"/><text x="333.5" y="691" font-size="12.5" class="sb" fill="#FFF" fill-opacity="0.85" text-anchor="middle">Square</text>
+      </g>
+
+      <rect x="20" y="718" width="353" height="58" rx="12" fill="#FFF" fill-opacity="0.08"/>
+      <text x="32" y="738" font-size="12" fill="#FFF" fill-opacity="0.62">Writes a new corrected page beside the original and</text>
+      <text x="32" y="754" font-size="12" fill="#FFF" fill-opacity="0.62">replaces the old one. <tspan class="sb" fill="#FFF">The original photograph is</tspan></text>
+      <text x="32" y="770" font-size="12" class="sb" fill="#FFF">never modified or deleted.</text>
+
+      <rect x="20" y="790" width="353" height="50" rx="14" fill="#C36A00"/>
+      <text x="196.5" y="821" font-size="16" class="b" fill="#FFF" text-anchor="middle">Replace corrected page</text>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Re-correct page · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ScanRecorrectSheet.swift — draggable corners on the original · per-page stock</text>
+</svg>

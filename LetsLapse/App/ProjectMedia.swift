@@ -39,6 +39,10 @@ struct MediaPreviewItem: Identifiable, Hashable {
 struct ProjectThumbnailView: View {
     var url: URL?
     var kind: AppModel.MediaKind
+    /// The tile's own rounding. Parameterised rather than clipped by the
+    /// caller: an outer clip tighter than this radius cuts through the
+    /// already-rounded corner and leaves a notch of card showing through.
+    var cornerRadius: CGFloat = 9
     @State private var thumbnail: Image?
     /// Which asset `thumbnail` belongs to, so a reload for the *same* asset can
     /// keep the current image on screen while it runs.
@@ -63,7 +67,7 @@ struct ProjectThumbnailView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+            .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
             .task(id: "\(url?.path ?? "-")|\(cache.generation)") {
                 // Only blank for a *different* asset. Re-requesting the same one
                 // (cache invalidated, or the row was rebuilt) used to clear here
