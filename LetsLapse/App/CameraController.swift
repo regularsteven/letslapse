@@ -551,9 +551,18 @@ final class CameraController: NSObject, ObservableObject {
     /// pixels are worth spending; 4K bursts off a 1080p base buy 2× of punch
     /// that costs no upscale at 1080p delivery.
     @Published var availableBurstOptions: [BurstOption] = []
-    /// The rates of `availableBurstOptions`, deduplicated. Kept as its own
-    /// published value because the watch link and the remote-command guards
-    /// speak in rates alone.
+    /// The rates of `availableBurstOptions` **at the selected burst
+    /// resolution**, deduplicated. Kept as its own published value because the
+    /// watch link and the remote-command guards speak in rates alone.
+    ///
+    /// The resolution filter is the load-bearing part. A bare rate list is a
+    /// list a remote cannot sanity-check: the Watch has no burst-resolution
+    /// key, so every rate it is handed reads as a rate the *current* burst can
+    /// reach. Publishing the union across resolutions put 1080p-only rungs on
+    /// the wrist next to a 4K selection — on the 5x tele that is a 120 rung
+    /// over a burst whose ceiling is 60 (reported 2026-08-17). Anything that
+    /// needs the rates of another resolution wants `availableBurstOptions`,
+    /// which carries the pairing.
     @Published var availableBurstFrameRates: [Int] = []
     @Published var selectedRampFrameRate = 120 {
         didSet {
@@ -2302,18 +2311,35 @@ final class CameraController: NSObject, ObservableObject {
             self.availableFrameRates = frameRates
             self.selectedFrameRate = frameRate
             self.availableBurstOptions = burstOptions
-            // Options are already in picker order, so a rate's first
-            // appearance is the order the ladder wants; `Set` would scramble it.
-            var seenRates = Set<Int>()
-            self.availableBurstFrameRates = burstOptions
-                .map(\.fps)
-                .filter { seenRates.insert($0).inserted }
+            self.availableBurstFrameRates =
+                Self.burstFrameRates(from: burstOptions, at: burstResolution)
             self.selectedRampFrameRate = rampFrameRate
             self.selectedBurstResolution = burstResolution
             if self.appleLogAvailableForSelection != logAvailable {
                 self.appleLogAvailableForSelection = logAvailable
             }
         }
+    }
+
+    /// The bare rate ladder for the remote: the rates `options` offers at ONE
+    /// resolution, in picker order, deduplicated.
+    ///
+    /// Every publisher of `availableBurstFrameRates` goes through here, so the
+    /// list can never be built from a resolution other than the one selected.
+    /// Order matters — the options arrive in picker order, so a rate's first
+    /// appearance is the order the wrist's ladder wants, and `Set` would
+    /// scramble it.
+    private static func burstFrameRates(
+        from options: [BurstOption],
+        at resolution: CaptureResolution
+    ) -> [Int] {
+        var seenRates = Set<Int>()
+        return options
+            .filter {
+                $0.pixelWidth == resolution.width && $0.pixelHeight == resolution.height
+            }
+            .map(\.fps)
+            .filter { seenRates.insert($0).inserted }
     }
 
     /// The resolution → base-frame-rate map the pickers list, from the
@@ -2513,32 +2539,30 @@ final class CameraController: NSObject, ObservableObject {
             // Only a composition-safe rate can be selected: anything else
             // would swap the optic (or the codec) mid-clip.
             //
-            // Resolution is held where it is. A rate change is a frame-duration
-            // decision the run can absorb between bursts; a resolution change
-            // is a heavier reconfiguration and is idle-only (see
-            // `selectBurstOption`). So this prefers the option that keeps the
-            // current burst resolution, and only crosses resolutions when the
-            // rate is unreachable without it — which cannot happen mid-run,
-            // because the candidate list is filtered first.
+            // This changes the RATE ONLY. Resolution is a heavier
+            // reconfiguration, is idle-only, and belongs to `selectBurstOption`
+            // — so a rate this burst resolution cannot reach is refused rather
+            // than served by quietly moving to a resolution that can.
+            //
+            // The old fallback chain did move: asking for a rate that only
+            // existed at 1080p rewrote a 4K burst to 1080p without saying so,
+            // and mid-run — where the candidates were pre-filtered to the
+            // current resolution — an unreachable rate fell through to
+            // `candidates.first`, the LOWEST rung, so a request for 120
+            // silently set 30 and was still reported accepted. Both were
+            // reachable from the wrist, whose ladder was built from the union
+            // of rates across resolutions (fixed at `burstFrameRates(from:at:)`).
             let current = self.selectedBurstResolution
-            var candidates = self.availableBurstOptions
-            if self.isRecording {
-                candidates = candidates.filter {
-                    $0.pixelWidth == current.width && $0.pixelHeight == current.height
-                }
+            guard let option = self.availableBurstOptions.first(where: {
+                $0.fps == fps
+                    && $0.pixelWidth == current.width
+                    && $0.pixelHeight == current.height
+            }) else {
+                LLog("burst rate: refused \(fps) — not reachable at \(current.label)")
+                return
             }
-            let option = candidates.first {
-                $0.fps == fps && $0.pixelWidth == current.width && $0.pixelHeight == current.height
-            }
-                ?? candidates.first { $0.fps == fps }
-                ?? candidates.first
-            let frameRate = option?.fps ?? self.selectedFrameRate
-            let resolution = option.map {
-                CaptureResolution(
-                    width: $0.pixelWidth,
-                    height: $0.pixelHeight,
-                    isProRes: self.selectedResolution.isProRes)
-            } ?? current
+            let frameRate = option.fps
+            let resolution = current
             RecordingSettingsStore.save(rampFrameRate: frameRate, rampResolution: resolution)
             // A run bakes its ramp rate into the sequence at start, and the
             // burst switch reads it from there — so without this the selection
@@ -2590,6 +2614,13 @@ final class CameraController: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.selectedRampFrameRate = option.fps
                 self.selectedBurstResolution = resolution
+                // The remote's ladder is the rates of THIS resolution, so it
+                // has to be rebuilt whenever the resolution moves — this is the
+                // one path that changes it without going through
+                // `refreshCaptureOptions`, and leaving it alone would strand
+                // the wrist on the previous resolution's rungs.
+                self.availableBurstFrameRates = Self.burstFrameRates(
+                    from: self.availableBurstOptions, at: resolution)
             }
         }
     }
@@ -2634,7 +2665,10 @@ final class CameraController: NSObject, ObservableObject {
             // Ungated by design — a shoot holds focus whether or not the user
             // locked exposure, and this call is the only thing standing between
             // an `activeFormat` write and a hunt at the head of the new file.
-            reassertFocusLock(on: device)
+            // `formatChanged` must be passed: it is what tells the re-assert
+            // that the device's own report of its focus is stale, and so that
+            // the write is mandatory rather than skippable.
+            reassertFocusLock(on: device, formatChanged: formatChanged)
             #if os(iOS)
             if let hold = switchExposureHold, !exposureLocked {
                 applySwitchExposureHold(hold, on: device)
@@ -2798,8 +2832,13 @@ final class CameraController: NSObject, ObservableObject {
     /// its own concern, gated on `focusIsHeld`, and called unconditionally from
     /// both format paths.
     ///
+    /// `formatChanged` says the caller has just written `activeFormat`. It is
+    /// the difference between a device that can be trusted to describe itself
+    /// and one that cannot — see the shortcut below, which is only sound on
+    /// the shared-format fast path it was written for.
+    ///
     /// Runs inside the caller's `lockForConfiguration` block on the sessionQueue.
-    private func reassertFocusLock(on device: AVCaptureDevice) {
+    private func reassertFocusLock(on device: AVCaptureDevice, formatChanged: Bool = false) {
         guard focusIsHeld, device.isFocusModeSupported(.locked) else { return }
         #if os(iOS)
         // `.locked` being supported does NOT imply the device can lock at an
@@ -2816,15 +2855,74 @@ final class CameraController: NSObject, ObservableObject {
         // burst boundary on the shared-format fast path never reset focus in
         // the first place, and a redundant write there is a chance for the
         // motor to twitch inside the one transition that must not move.
-        let alreadyHeld = device.focusMode == .locked
+        //
+        // That reasoning holds ONLY while nothing has just reconfigured the
+        // device. An `activeFormat` write hands focus back to continuous auto
+        // as the configuration commits, and until it does the device still
+        // reports the mode and lens position the run pinned — so the shortcut
+        // reads "already correct" and skips the one write that matters. The
+        // whole segment then records through the hunt that follows. Project
+        // B6D1F167 (2026-08-16) lost its entire 4K60 burst to exactly this:
+        // soft from frame 0, every depth in the frame 8-17x down, and restored
+        // at the *next* boundary only because that one read
+        // `.continuousAutoFocus` and therefore took the write. A burst that
+        // changes resolution can never take the fast path, so with per-segment
+        // burst resolution on, every boundary is this case.
+        let alreadyHeld = !formatChanged
+            && device.focusMode == .locked
             && (!custom || held.map { abs(device.lensPosition - $0) < 0.001 } ?? true)
         guard !alreadyHeld else { return }
         device.setFocusModeLocked(
             lensPosition: (custom ? held : nil) ?? AVCaptureDevice.currentLensPosition,
             completionHandler: nil)
         #else
-        guard device.focusMode != .locked else { return }
+        guard formatChanged || device.focusMode != .locked else { return }
         device.focusMode = .locked
+        #endif
+    }
+
+    /// sessionQueue-confined. Confirm the lens is still where the run pinned it
+    /// once a configuration change has COMMITTED, and put it back if it moved.
+    ///
+    /// `reassertFocusLock` writes from inside `lockForConfiguration`, which is
+    /// the right place to write — the lens must not be handed to auto even
+    /// briefly — but the wrong place to verify, because the device still
+    /// reports its pre-commit state there. This is the only check that can see
+    /// the focus the next segment will actually record through, and it runs
+    /// before that segment's first frame.
+    ///
+    /// Read-only on every healthy switch. When it does find a drift it says so
+    /// in the session log, so a shoot that loses focus again leaves evidence
+    /// instead of just a soft file.
+    private func verifyFocusHold(on device: AVCaptureDevice?) {
+        #if os(iOS)
+        guard let device, focusIsHeld, device.isFocusModeSupported(.locked) else { return }
+        let custom = device.isLockingFocusWithCustomLensPositionSupported
+        let held = custom ? heldLensPosition(for: device) : nil
+        let lensDrifted = held.map { abs(device.lensPosition - $0) >= 0.001 } ?? false
+        let modeLost = device.focusMode != .locked
+        guard modeLost || lensDrifted else { return }
+        LLog(String(
+            format: "focus: hold did not survive the switch (mode=%@ lens=%.3f want=%.3f) — re-pinning",
+            modeLost ? "auto" : "locked", device.lensPosition, held ?? -1))
+        CaptureSessionLogger.shared.log("focus_switch_repair", [
+            "modeLost": modeLost,
+            "lensPosition": device.lensPosition,
+            "wanted": held ?? -1,
+        ])
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            // Same expression `reassertFocusLock` uses, so a repair can never
+            // land somewhere the ordinary path wouldn't have.
+            device.setFocusModeLocked(
+                lensPosition: (custom ? held : nil) ?? AVCaptureDevice.currentLensPosition,
+                completionHandler: nil)
+        } catch {
+            LLog("focus: switch repair could not lock — \(error.localizedDescription)")
+        }
+        #else
+        _ = device
         #endif
     }
 
@@ -4574,6 +4672,12 @@ final class CameraController: NSObject, ObservableObject {
         // hand-off that hasn't landed yet.
         awaitConstituentSettle()
         #endif
+
+        // Last look at the lens before the segment opens. The re-assert above
+        // ran inside the format's configuration block, where the device cannot
+        // yet report what the commit did to it; here it can. A segment that
+        // would have opened on a hunting lens is repaired instead of recorded.
+        verifyFocusHold(on: videoDevice)
 
         let index = segmentURLs.count
         let url = directory.appendingPathComponent(String(format: "segment-%03d.mov", index))
