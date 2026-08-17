@@ -39,6 +39,35 @@ enum ScanExportFormat: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Scope
+
+/// What leaves: everything, some documents, or a hand-picked set of pages.
+///
+/// Only offered on a session that has more than one document — a flat scan has
+/// one honest answer and a picker with one option is a question that isn't.
+enum ScanExportScope: String, CaseIterable, Identifiable {
+    case allDocuments
+    case selectedDocuments
+    case selectedPages
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .allDocuments: return "All"
+        case .selectedDocuments: return "Documents"
+        case .selectedPages: return "Pages"
+        }
+    }
+}
+
+/// One document's worth of an export: the name its folder or PDF takes, and the
+/// files, already resolved to "the corrected page where there is one".
+struct ScanExportGroup: Sendable {
+    var name: String
+    var pages: [URL]
+}
+
 // MARK: - Builders
 
 /// Copies or re-encodes a set of pages into something shareable.
@@ -85,6 +114,163 @@ enum ScanExport {
         let file = folder.appendingPathComponent("\(safeName(name)).pdf")
         try writePDF(pages: pages, paper: paper, to: file)
         return file
+    }
+
+    // MARK: Grouped
+
+    /// `<name>/Document 1/page-001.heic …` — a subfolder per document.
+    ///
+    /// A single group stays **flat** (`<name>/page-001.heic`), because a folder
+    /// containing one folder is a step nobody wanted; this is the same output
+    /// `buildFolder` always produced, which is what keeps the ungrouped scan's
+    /// export byte-for-byte what it was.
+    ///
+    /// Page numbering restarts inside each document, for the reason the flat
+    /// export renumbers at all: what a folder promises is "these, in this
+    /// order", and a receipt that is page 7 of a sitting is page 1 of itself.
+    static func buildGroupedFolder(
+        named name: String, groups: [ScanExportGroup], format: ScanExportFormat
+    ) throws -> URL {
+        guard groups.count > 1 else {
+            return try buildFolder(
+                named: name,
+                pages: (groups.first?.pages ?? []).enumerated()
+                    .map { (number: $0.offset + 1, url: $0.element) },
+                format: format)
+        }
+        let root = try makeFolder(named: name)
+        for group in uniquelyNamed(groups) {
+            let folder = root.appendingPathComponent(safeName(group.name), isDirectory: true)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            for (index, page) in group.pages.enumerated() {
+                try writePage(page, to: folder, number: index + 1, format: format)
+            }
+        }
+        return root
+    }
+
+    /// One PDF per document. A single group produces the one file
+    /// `buildDocument` would have.
+    static func buildDocumentsPerGroup(
+        named name: String, groups: [ScanExportGroup], paper: PerspectiveAspect
+    ) throws -> URL {
+        guard groups.count > 1 else {
+            return try buildDocument(
+                named: groups.first?.name ?? name,
+                pages: groups.first?.pages ?? [],
+                paper: paper)
+        }
+        let root = try makeFolder(named: name)
+        for group in uniquelyNamed(groups) {
+            try writePDF(
+                pages: group.pages,
+                paper: paper,
+                to: root.appendingPathComponent("\(safeName(group.name)).pdf"))
+        }
+        return root
+    }
+
+    /// Every page of every document in one PDF, documents in order — for the
+    /// person filing the whole sitting as a single thing.
+    static func buildCombinedDocument(
+        named name: String, groups: [ScanExportGroup], paper: PerspectiveAspect
+    ) throws -> URL {
+        try buildDocument(named: name, pages: groups.flatMap(\.pages), paper: paper)
+    }
+
+    private static func writePage(
+        _ source: URL, to folder: URL, number: Int, format: ScanExportFormat
+    ) throws {
+        switch format {
+        case .heic:
+            let ext = source.pathExtension.isEmpty ? "heic" : source.pathExtension
+            try FileManager.default.copyItem(
+                at: source,
+                to: folder.appendingPathComponent(String(format: "page-%03d.%@", number, ext)))
+        case .jpeg:
+            try writeJPEG(
+                from: source,
+                to: folder.appendingPathComponent(String(format: "page-%03d.jpg", number)))
+        case .pdf:
+            try writePDF(
+                pages: [source],
+                paper: .auto,
+                to: folder.appendingPathComponent(String(format: "page-%03d.pdf", number)))
+        }
+    }
+
+    /// Two documents both called "Invoices" are two folders with one name, and
+    /// the second write would land inside the first. Renaming is a display
+    /// concern the file system doesn't share, so it is settled here rather than
+    /// forbidden in the rename field.
+    private static func uniquelyNamed(_ groups: [ScanExportGroup]) -> [ScanExportGroup] {
+        var seen: [String: Int] = [:]
+        return groups.map { group in
+            let key = safeName(group.name).lowercased()
+            let count = (seen[key] ?? 0) + 1
+            seen[key] = count
+            var copy = group
+            if count > 1 { copy.name = "\(group.name) (\(count))" }
+            return copy
+        }
+    }
+
+    // MARK: Bundling
+
+    /// Zips a folder so an export arrives as one thing.
+    ///
+    /// A folder handed to the share sheet is a folder: some destinations take
+    /// it, some take the first file in it, and some silently take nothing. A
+    /// `.zip` is the one shape every one of them understands.
+    ///
+    /// `NSFileCoordinator`'s `.forUploading` is the zip writer both platforms
+    /// already ship — no dependency, no `Process` (which doesn't exist on iOS),
+    /// and it is the same call the system uses when you share a folder from
+    /// Files.
+    static func zip(_ folder: URL) throws -> URL {
+        var coordinatorError: NSError?
+        var result: Result<URL, Error>?
+        NSFileCoordinator().coordinate(
+            readingItemAt: folder, options: [.forUploading], error: &coordinatorError
+        ) { temporary in
+            let destination = folder.deletingLastPathComponent()
+                .appendingPathComponent("\(folder.lastPathComponent).zip")
+            do {
+                try? FileManager.default.removeItem(at: destination)
+                // Moved, not copied: the coordinator's file lives only for the
+                // duration of this block.
+                try FileManager.default.moveItem(at: temporary, to: destination)
+                result = .success(destination)
+            } catch {
+                result = .failure(error)
+            }
+        }
+        if let coordinatorError { throw coordinatorError }
+        switch result {
+        case .success(let url): return url
+        case .failure(let error): throw error
+        case nil: throw ScanExportError.writeFailed(folder)
+        }
+    }
+
+    /// What actually goes to the share sheet: a lone file as itself, anything
+    /// with structure as a zip. A one-page PDF should not arrive as an archive
+    /// someone has to unpack to read it.
+    static func package(_ url: URL) throws -> URL {
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return url }
+        let contents = (try? FileManager.default.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: nil)) ?? []
+        // A folder holding exactly one file and nothing else is that file —
+        // this is what a single-document PDF export lands as.
+        if contents.count == 1 {
+            var childIsDirectory: ObjCBool = false
+            FileManager.default.fileExists(
+                atPath: contents[0].path, isDirectory: &childIsDirectory)
+            if !childIsDirectory.boolValue { return contents[0] }
+        }
+        return try zip(url)
     }
 
     /// What the export will weigh — **measured**, not guessed: one page is
@@ -250,7 +436,15 @@ enum ScanExportError: LocalizedError {
 
 // MARK: - Sheet
 
-/// The export sheet: format first, then what to do with it.
+/// The export sheet: what leaves, in what format, and — implicitly — as one
+/// package.
+///
+/// Three decisions in the order they change each other. Scope first, because a
+/// sitting of eleven receipts and a sitting of one contract want different
+/// things and the rows below say different things for each. Format second,
+/// because it decides whether the output is a folder of pages or a document.
+/// Bundling is not a decision at all: anything with structure arrives as a zip,
+/// anything that is one file arrives as that file (see `ScanExport.package`).
 ///
 /// "Corrected page where there is one, the photograph where there isn't" is
 /// the promise the whole tab rests on — a set shot half against a page and
@@ -266,6 +460,12 @@ struct ScanExportSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var format: ScanExportFormat = .heic
+    @State private var scope: ScanExportScope = .allDocuments
+    /// Which documents the `.selectedDocuments` scope means. Seeded with all of
+    /// them the first time that scope is chosen, so the row that appears is a
+    /// list to *narrow* rather than an empty one to build — an export sheet
+    /// that starts by exporting nothing has the wrong default.
+    @State private var selectedDocuments: Set<UUID> = []
     @State private var isWorking = false
     @State private var result: ScanShareItem?
     @State private var failure: String?
@@ -273,30 +473,58 @@ struct ScanExportSheet: View {
     /// first measurement lands, and the row simply omits the size until then.
     @State private var estimate: Int64?
 
-    private var pages: [ScanPage] {
-        guard let selection else { return session.pages }
-        return session.pages.filter { selection.contains($0.number) }
+    /// Whether the scope picker is worth showing: a session with one document
+    /// has one answer, and a screen that arrived here with pages already picked
+    /// has made the choice already.
+    private var offersScope: Bool { session.hasDocumentGroups && selection == nil }
+
+    /// What will actually be written, as documents.
+    ///
+    /// One group is the flat export this sheet has always produced; several
+    /// give per-document subfolders or a PDF each. A hand-picked page selection
+    /// is deliberately **one** group whatever it spans: the operator picked
+    /// those pages as a thing, and re-imposing the sitting's grouping on it
+    /// would be answering a question they didn't ask.
+    private var groups: [ScanExportGroup] {
+        if let selection {
+            let pages = session.pages.filter { selection.contains($0.number) }
+            return [ScanExportGroup(name: documentName, pages: pages.map(\.viewable))]
+        }
+        guard session.hasDocumentGroups else {
+            return [ScanExportGroup(name: documentName, pages: session.pages.map(\.viewable))]
+        }
+        let sections = session.documentSections.filter { section in
+            scope == .selectedDocuments ? selectedDocuments.contains(section.id) : true
+        }
+        return sections.map {
+            ScanExportGroup(name: $0.document.name, pages: $0.pages.map(\.viewable))
+        }
     }
 
+    private var files: [URL] { groups.flatMap(\.pages) }
+
+    private var pageCount: Int { files.count }
+
     private var title: String {
-        pages.count == 1 ? "Export 1 page" : "Export \(pages.count) pages"
+        pageCount == 1 ? "Export 1 page" : "Export \(pageCount) pages"
     }
 
     private var documentName: String {
-        "Scan " + session.createdAt.formatted(
-            .dateTime.day().month(.abbreviated).hour().minute())
-            .replacingOccurrences(of: ":", with: ".")
+        session.name.map(ScanExport.safeName)
+            ?? ("Scan " + session.createdAt.formatted(
+                .dateTime.day().month(.abbreviated).hour().minute())
+                .replacingOccurrences(of: ":", with: "."))
     }
 
     var body: some View {
         content
-            .task(id: "\(format.rawValue)|\(pages.count)") {
+            .task(id: "\(format.rawValue)|\(pageCount)") {
                 guard format == .pdf else { return }
-                let files = pages.map(\.viewable)
-                let format = format
+                let sources = files
+                let chosen = format
                 let paper = session.paper
                 estimate = await Task.detached(priority: .utility) {
-                    ScanExport.estimatedBytes(pages: files, format: format, paper: paper)
+                    ScanExport.estimatedBytes(pages: sources, format: chosen, paper: paper)
                 }.value
             }
             #if os(iOS)
@@ -356,6 +584,10 @@ struct ScanExportSheet: View {
     private var card: some View {
         VStack(spacing: 0) {
             header
+            if offersScope, scope == .selectedDocuments {
+                Divider()
+                documentList
+            }
             Divider()
             ForEach(Array(rows.enumerated()), id: \.offset) { index, row in
                 Button {
@@ -369,6 +601,7 @@ struct ScanExportSheet: View {
                             Text(detail)
                                 .font(.system(size: 12).monospaced())
                                 .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.center)
                         }
                     }
                     .frame(maxWidth: .infinity)
@@ -376,7 +609,8 @@ struct ScanExportSheet: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .disabled(isWorking)
+                .disabled(isWorking || (row.needsPages && pageCount == 0))
+                .opacity(row.needsPages && pageCount == 0 ? 0.45 : 1)
                 if index < rows.count - 1 { Divider() }
             }
         }
@@ -392,14 +626,40 @@ struct ScanExportSheet: View {
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
                 .padding(.top, 3)
+            if offersScope {
+                Picker("Scope", selection: $scope) {
+                    ForEach(ScanExportScope.allCases) { option in
+                        Text(option.label).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.top, 9)
+                .onChange(of: scope) { newValue in
+                    switch newValue {
+                    case .selectedDocuments:
+                        if selectedDocuments.isEmpty {
+                            selectedDocuments = Set(session.documents.map(\.id))
+                        }
+                    case .selectedPages:
+                        // Page picking happens in the grid, not in a sheet
+                        // covering it — so this scope is a door rather than a
+                        // state, and it hands the screen back.
+                        scope = .allDocuments
+                        dismiss()
+                        onSelectPages()
+                    case .allDocuments:
+                        break
+                    }
+                }
+            }
             Picker("Format", selection: $format) {
                 ForEach(ScanExportFormat.allCases) { option in
                     Text(option.label).tag(option)
                 }
             }
             .pickerStyle(.segmented)
-            .padding(.top, 11)
-            Text(format.caption(paper: session.paper))
+            .padding(.top, 9)
+            Text(formatCaption)
                 .font(.system(size: 11.5))
                 .foregroundStyle(.tertiary)
                 .multilineTextAlignment(.center)
@@ -409,6 +669,58 @@ struct ScanExportSheet: View {
         .padding(.vertical, 14)
     }
 
+    /// The format's own line, plus the one thing bundling needs to say: that
+    /// what arrives is a single `.zip`. Said here rather than as a toggle,
+    /// because there is no useful other answer — a share sheet handed a folder
+    /// behaves differently in every destination.
+    private var formatCaption: String {
+        let base = format.caption(paper: session.paper)
+        guard groups.count > 1 else { return base }
+        return base + " · one folder per document, zipped"
+    }
+
+    /// The documents to include, when the scope is narrowing. Scrolls rather
+    /// than growing the sheet without limit — a sitting can carry twenty
+    /// receipts.
+    private var documentList: some View {
+        ScrollView {
+            VStack(spacing: 0) {
+                ForEach(session.documentSections) { section in
+                    Button {
+                        if selectedDocuments.contains(section.id) {
+                            selectedDocuments.remove(section.id)
+                        } else {
+                            selectedDocuments.insert(section.id)
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            Image(systemName: selectedDocuments.contains(section.id)
+                                  ? "checkmark.circle.fill" : "circle")
+                                .font(.system(size: 16))
+                                .foregroundStyle(selectedDocuments.contains(section.id)
+                                                 ? LL.accent : Color.secondary)
+                            Text(section.document.name)
+                                .font(.system(size: 15))
+                            Spacer(minLength: 6)
+                            Text(section.document.pageCountLine)
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.horizontal, 16)
+                        .frame(height: 38)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .frame(height: documentListHeight)
+    }
+
+    private var documentListHeight: CGFloat {
+        min(CGFloat(session.documents.count), 4) * 38
+    }
+
     // MARK: Rows
 
     private struct Row {
@@ -416,38 +728,63 @@ struct ScanExportSheet: View {
         var detail: String?
         var isPrimary = true
         var isMuted = false
+        /// Rows that write something, and are therefore meaningless with an
+        /// empty scope (every document unticked).
+        var needsPages = true
         var action: () -> Void
     }
 
     private var rows: [Row] {
         var rows: [Row] = []
         let ext = format == .pdf ? "pdf" : (format == .jpeg ? "jpg" : "heic")
-        let range = pages.count == 1
+        let grouped = groups.count > 1
+        let range = pageCount == 1
             ? String(format: "page-001.%@", ext)
-            : String(format: "page-001.%@ … page-%03d.%@", ext, pages.count, ext)
+            : String(format: "page-001.%@ … page-%03d.%@", ext, pageCount, ext)
+        // With subfolders the numbering restarts in each, so a flat "page-001 …
+        // page-011" would be describing a file layout that isn't there.
+        let folderDetail = grouped
+            ? "\(groups.count) folders · \(ScanExport.safeName(groups[0].name))/page-001.\(ext) …"
+            : range
 
         if format == .pdf {
-            rows.append(Row(
-                title: pages.count == 1 ? "One PDF, 1 page" : "One PDF, \(pages.count) pages",
-                detail: "\(documentName).pdf"
-                    + (estimate.map { " · ≈ \(LLFormat.bytes($0))" } ?? ""),
-                action: { exportDocument() }))
+            if grouped {
+                rows.append(Row(
+                    title: "One PDF per document",
+                    detail: "\(groups.count) PDFs"
+                        + (estimate.map { " · ≈ \(LLFormat.bytes($0))" } ?? ""),
+                    action: { exportPDFPerDocument() }))
+                rows.append(Row(
+                    title: "Combined PDF",
+                    detail: "\(documentName).pdf · \(pageCount) pages",
+                    isPrimary: false,
+                    action: { exportCombinedPDF() }))
+            } else {
+                rows.append(Row(
+                    title: pageCount == 1 ? "One PDF, 1 page" : "One PDF, \(pageCount) pages",
+                    detail: "\(documentName).pdf"
+                        + (estimate.map { " · ≈ \(LLFormat.bytes($0))" } ?? ""),
+                    action: { exportCombinedPDF() }))
+            }
             rows.append(Row(
                 title: "One PDF per page",
-                detail: range,
+                detail: folderDetail,
                 isPrimary: false,
                 action: { exportFolder() }))
         } else {
             rows.append(Row(
-                title: selection == nil ? "Export all pages" : "Export selected pages",
-                detail: range,
+                title: exportRowTitle,
+                detail: folderDetail,
                 action: { exportFolder() }))
         }
 
-        if selection == nil {
+        // The route into page picking. Kept for the flat session, where there
+        // is no scope picker to carry it.
+        if selection == nil, !offersScope {
             rows.append(Row(
                 title: "Export selected pages…",
                 isPrimary: false,
+                needsPages: false,
                 action: {
                     dismiss()
                     onSelectPages()
@@ -458,6 +795,7 @@ struct ScanExportSheet: View {
             title: "View as timelapse",
             isPrimary: false,
             isMuted: true,
+            needsPages: false,
             action: {
                 dismiss()
                 onViewAsTimelapse()
@@ -465,40 +803,61 @@ struct ScanExportSheet: View {
         return rows
     }
 
+    private var exportRowTitle: String {
+        if selection != nil { return "Export selected pages" }
+        if groups.count > 1 { return "Export \(groups.count) documents" }
+        return "Export all pages"
+    }
+
     /// Header, the rows as they will actually be laid out, and the Cancel card
     /// — so the sheet is exactly as tall as what is in it whichever format is
     /// chosen.
     private var sheetHeight: CGFloat {
         let rowHeight = rows.reduce(CGFloat(0)) { $0 + ($1.detail == nil ? 55 : 73) }
-        return 152 + rowHeight + 70
+        let scopeHeight: CGFloat = offersScope ? 41 : 0
+        let listHeight: CGFloat = offersScope && scope == .selectedDocuments
+            ? documentListHeight + 1
+            : 0
+        return 152 + scopeHeight + listHeight + rowHeight + 70
     }
 
     // MARK: Work
 
     private func exportFolder() {
-        run { name, files in
-            try ScanExport.buildFolder(
-                named: name,
-                pages: files.enumerated().map { (number: $0.offset + 1, url: $0.element) },
-                format: format)
+        let chosen = format
+        run { name, groups in
+            try ScanExport.buildGroupedFolder(named: name, groups: groups, format: chosen)
         }
     }
 
-    private func exportDocument() {
+    private func exportPDFPerDocument() {
         let paper = session.paper
-        run { name, files in
-            try ScanExport.buildDocument(named: name, pages: files, paper: paper)
+        run { name, groups in
+            try ScanExport.buildDocumentsPerGroup(named: name, groups: groups, paper: paper)
         }
     }
 
-    private func run(_ build: @escaping (String, [URL]) throws -> URL) {
-        guard !isWorking else { return }
+    private func exportCombinedPDF() {
+        let paper = session.paper
+        run { name, groups in
+            try ScanExport.buildCombinedDocument(named: name, groups: groups, paper: paper)
+        }
+    }
+
+    /// Builds off the main actor, then packages: one file goes as itself,
+    /// anything else goes as a zip.
+    private func run(_ build: @escaping (String, [ScanExportGroup]) throws -> URL) {
+        guard !isWorking, pageCount > 0 else { return }
         isWorking = true
         let name = documentName
-        let files = pages.map(\.viewable)
+        let payload = groups
         Task {
             let outcome = await Task.detached(priority: .userInitiated) { () -> Result<URL, Error> in
-                do { return .success(try build(name, files)) } catch { return .failure(error) }
+                do {
+                    return .success(try ScanExport.package(try build(name, payload)))
+                } catch {
+                    return .failure(error)
+                }
             }.value
             isWorking = false
             switch outcome {
@@ -508,3 +867,55 @@ struct ScanExportSheet: View {
         }
     }
 }
+
+#if DEBUG
+// MARK: - Export harness
+
+extension ScanExport {
+    /// `LL_SCANS_EXPORT=run` — builds every shape the sheet can produce and
+    /// reports the tree each one landed as.
+    ///
+    /// The sheet's rows are behind taps no headless run can make, and the two
+    /// things most worth checking are exactly the two a screenshot cannot show:
+    /// that a grouped export really lands as a subfolder per document with its
+    /// numbering restarted, and that the zip step produces a readable archive
+    /// on the device rather than on the Mac the writer was reasoned about.
+    static func debugRun(
+        named name: String, groups: [ScanExportGroup], paper: PerspectiveAspect
+    ) -> String {
+        var report = "🖼️LL export harness · \(groups.count) group(s), "
+            + "\(groups.reduce(0) { $0 + $1.pages.count }) page(s)\n"
+        let builds: [(String, () throws -> URL)] = [
+            ("HEIC folders", { try buildGroupedFolder(named: name, groups: groups, format: .heic) }),
+            ("JPEG folders", { try buildGroupedFolder(named: name, groups: groups, format: .jpeg) }),
+            ("PDF per document", { try buildDocumentsPerGroup(named: name, groups: groups, paper: paper) }),
+            ("Combined PDF", { try buildCombinedDocument(named: name, groups: groups, paper: paper) }),
+        ]
+        for (label, build) in builds {
+            do {
+                let built = try build()
+                let packaged = try package(built)
+                report += "  ▸ \(label): \(tree(built))\n"
+                report += "      → shared as \(packaged.lastPathComponent)"
+                    + " (\(LLFormat.bytes(fileSize(packaged))))\n"
+            } catch {
+                report += "  ▸ \(label): ❌ \(error.localizedDescription)\n"
+            }
+        }
+        return report
+    }
+
+    private static func tree(_ url: URL) -> String {
+        var isDirectory: ObjCBool = false
+        FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+        guard isDirectory.boolValue else { return url.lastPathComponent }
+        let children = ((try? FileManager.default.contentsOfDirectory(
+            at: url, includingPropertiesForKeys: nil)) ?? []).sorted { $0.path < $1.path }
+        return url.lastPathComponent + "/{" + children.map(tree).joined(separator: ", ") + "}"
+    }
+
+    private static func fileSize(_ url: URL) -> Int64 {
+        ((try? FileManager.default.attributesOfItem(atPath: url.path)[.size]) as? Int64) ?? 0
+    }
+}
+#endif

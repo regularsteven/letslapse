@@ -441,7 +441,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_PROJECT_SCANNER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_PROJECT_SCANNER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -526,6 +526,25 @@ struct ContentView: View {
                 if let capture = model.captures.first(where: { $0.id == id }) {
                     model.deleteScanPage(Int(hook) ?? 3, from: capture)
                 }
+                selectedTab = .scans
+                scansPath = [id]
+            }
+        }
+        // `LL_SCANS_DOCS=<pages-per-doc>` — a grouped session, opened. Document
+        // grouping is decided with a phone over a desk and stored in a sidecar,
+        // so like every other Scanner state it cannot be reached on a simulator
+        // at all: this stages the sections, their headers and the export
+        // sheet's scope picker. `=1` is what "new scan = new doc" produces (a
+        // document per page); anything higher is the toggle off with the New
+        // Document button pressed every N pages.
+        if let hook = environment["LL_SCANS_DOCS"] {
+            let perDocument = max(1, Int(hook) ?? 1)
+            if let id = model.debugSeedScannerProject(
+                poses: 9, corrected: true, paper: .a4, spacingSeconds: 27) {
+                let pages = model.captures.first { $0.id == id }
+                    .map(model.scanPageNumbers(for:)) ?? []
+                model.debugSeedScanDocuments(
+                    for: id, starts: stride(from: 1, through: pages.count, by: perDocument).map { $0 })
                 selectedTab = .scans
                 scansPath = [id]
             }

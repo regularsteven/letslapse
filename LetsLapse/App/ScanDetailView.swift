@@ -25,6 +25,9 @@ struct ScanDetailView: View {
     @State private var isRenaming = false
     @State private var renameText = ""
     @State private var pagePendingDelete: ScanPage?
+    /// The document whose header's pencil was tapped, and the field behind it.
+    @State private var renamingDocument: ScanDocument?
+    @State private var documentNameText = ""
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == sessionID }
@@ -44,11 +47,38 @@ struct ScanDetailView: View {
         #else
         .navigationTitle(session?.detailTitle ?? "Scan")
         #endif
-        .task(id: "\(sessionID)|\(reloadToken)") { await reload() }
+        .task(id: "\(sessionID)|\(reloadToken)") {
+            await reload()
+            #if DEBUG
+            // `LL_SCANS_EXPORT` opens the export sheet, which no headless run
+            // can otherwise reach — it is behind a tap on a toolbar button.
+            // Raised after the load rather than on appear, because the sheet
+            // draws nothing until the session it describes has resolved.
+            // `=run` goes one further and presses every row, reporting the file
+            // tree each one produced (`ScanExport.debugRun`).
+            if let hook = ProcessInfo.processInfo.environment["LL_SCANS_EXPORT"],
+               let session {
+                if hook == "run" {
+                    let groups = session.documentSections.map {
+                        ScanExportGroup(name: $0.document.name, pages: $0.pages.map(\.viewable))
+                    }
+                    let paper = session.paper
+                    Task.detached(priority: .utility) {
+                        LLog(ScanExport.debugRun(named: "Scan", groups: groups, paper: paper))
+                    }
+                } else {
+                    isExporting = true
+                }
+            }
+            #endif
+        }
         // Each corrected page is a new file for a tile that is already on
         // screen, so the set is re-walked per page rather than once at the
         // end — the grid rectifies itself in front of the operator.
         .onChange(of: model.scanCorrections[sessionID]) { _ in reloadToken += 1 }
+        // Grouping lives in a sidecar rather than in the model, so the only
+        // thing to observe is that it moved.
+        .onChange(of: model.scanDocumentsToken) { _ in reloadToken += 1 }
         #if os(iOS)
         .fullScreenCover(item: $viewingPage) { page in
             pageViewer(startingAt: page)
@@ -73,6 +103,24 @@ struct ScanDetailView: View {
             Button("Cancel", role: .cancel) {}
         } message: {
             Text("Leave it empty to go back to the date.")
+        }
+        .alert(
+            "Rename document",
+            isPresented: Binding(
+                get: { renamingDocument != nil },
+                set: { if !$0 { renamingDocument = nil } })
+        ) {
+            TextField("Name", text: $documentNameText)
+            Button("Save") {
+                if let document = renamingDocument {
+                    model.renameDocument(
+                        document.id, in: sessionID, name: documentNameText)
+                }
+                renamingDocument = nil
+            }
+            Button("Cancel", role: .cancel) { renamingDocument = nil }
+        } message: {
+            Text("Leave it empty to go back to the numbered name.")
         }
         .alert(item: $pagePendingDelete) { page in
             Alert(
@@ -136,11 +184,21 @@ struct ScanDetailView: View {
                                 .foregroundStyle(.secondary)
                                 .padding(.top, 12)
                         }
-                        LLSectionHeader("Pages · \(session.pageCount)")
-                            .padding(.top, 22)
-                            .padding(.bottom, 6)
+                        // One document is drawn as the flat grid it has always
+                        // been: a lone "Document 1" header over every page of a
+                        // session that was never grouped is a distinction the
+                        // operator did not make.
+                        if !session.hasDocumentGroups {
+                            LLSectionHeader("Pages · \(session.pageCount)")
+                                .padding(.top, 22)
+                                .padding(.bottom, 6)
+                        }
                     }
-                    pageGrid(session)
+                    if session.hasDocumentGroups {
+                        documentSections(session)
+                    } else {
+                        pageGrid(session, pages: session.pages)
+                    }
                     Color.clear.frame(height: isSelecting ? 190 : 82)
                 }
                 .padding(.horizontal, 16)
@@ -324,14 +382,73 @@ struct ScanDetailView: View {
 
     // MARK: - Pages
 
-    private func pageGrid(_ session: ScanSession) -> some View {
+    /// The grouped layout: one titled section per document, each holding the
+    /// same tiles the flat grid draws.
+    ///
+    /// Sections are drawn even while selecting — a selection that crosses two
+    /// documents is a legitimate thing to export, and hiding the boundaries
+    /// while choosing would be hiding exactly the fact that makes the choice
+    /// mean something.
+    private func documentSections(_ session: ScanSession) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(session.documentSections.enumerated()), id: \.element.id) { index, section in
+                documentHeader(section)
+                    .padding(.top, index == 0 && isSelecting ? 4 : 18)
+                    .padding(.bottom, 6)
+                pageGrid(session, pages: section.pages)
+            }
+        }
+    }
+
+    private func documentHeader(_ section: ScanDocumentSection) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(section.document.name)
+                .font(.system(size: 17, weight: .semibold))
+            Text(section.document.pageCountLine)
+                .font(.system(size: 13))
+                .foregroundStyle(.secondary)
+            Button {
+                documentNameText = section.document.name
+                renamingDocument = section.document
+            } label: {
+                Image(systemName: "pencil")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Rename \(section.document.name)")
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+        .contentShape(Rectangle())
+        // The undo for a grouping nobody meant — a sitting shot with "new scan
+        // = new doc" left on when it should have been off comes out as N
+        // one-page documents, and re-filing them one page at a time would be
+        // absurd. It only takes the sections away; no page moves and no file
+        // is touched.
+        .contextMenu {
+            Button {
+                documentNameText = section.document.name
+                renamingDocument = section.document
+            } label: {
+                Label("Rename \(section.document.name)", systemImage: "pencil")
+            }
+            Button {
+                model.flattenDocuments(in: sessionID)
+            } label: {
+                Label("Merge into one document", systemImage: "arrow.triangle.merge")
+            }
+        }
+    }
+
+    private func pageGrid(_ session: ScanSession, pages: [ScanPage]) -> some View {
         GeometryReader { proxy in
             let columns = Self.columnCount(for: proxy.size.width)
             LazyVGrid(
                 columns: Array(repeating: GridItem(.flexible(), spacing: 6), count: columns),
                 spacing: 6
             ) {
-                ForEach(session.pages) { page in
+                ForEach(pages) { page in
                     Button {
                         if isSelecting {
                             toggle(page)
@@ -352,6 +469,7 @@ struct ScanDetailView: View {
                     // would be acting on the wrong thing.
                     .contextMenu {
                         if !isSelecting {
+                            movePageMenu(session, page: page)
                             Button(role: .destructive) {
                                 pagePendingDelete = page
                             } label: {
@@ -364,7 +482,38 @@ struct ScanDetailView: View {
         }
         // GeometryReader has no intrinsic height, so the grid's own height is
         // computed from the same numbers the layout uses.
-        .frame(height: gridHeight(session))
+        .frame(height: gridHeight(session, pageCount: pages.count))
+    }
+
+    /// Re-files one page. The capture screen's grouping is a guess made with
+    /// hands full of paper, so the correction has to be available where the
+    /// mistake is visible — on the page, in the section it landed in.
+    @ViewBuilder
+    private func movePageMenu(_ session: ScanSession, page: ScanPage) -> some View {
+        let current = session.document(containing: page.number)
+        Menu {
+            ForEach(session.documents) { document in
+                Button {
+                    model.assignPage(page.number, toDocument: document.id, inSession: sessionID)
+                } label: {
+                    if document.id == current?.id {
+                        Label(document.name, systemImage: "checkmark")
+                    } else {
+                        Text(document.name)
+                    }
+                }
+                .disabled(document.id == current?.id)
+            }
+            Divider()
+            Button {
+                let document = model.addDocument(to: sessionID)
+                model.assignPage(page.number, toDocument: document.id, inSession: sessionID)
+            } label: {
+                Label("New document", systemImage: "plus")
+            }
+        } label: {
+            Label("Move page \(page.number) to…", systemImage: "doc.on.doc")
+        }
     }
 
     /// 2-up on a phone, 3-up in landscape and on an iPad, 4 across a wide Mac
@@ -378,7 +527,8 @@ struct ScanDetailView: View {
         }
     }
 
-    private func gridHeight(_ session: ScanSession) -> CGFloat {
+    private func gridHeight(_ session: ScanSession, pageCount: Int) -> CGFloat {
+        guard pageCount > 0 else { return 0 }
         #if os(iOS)
         let width = UIScreen.main.bounds.width - 32
         #else
@@ -387,7 +537,7 @@ struct ScanDetailView: View {
         let columns = Self.columnCount(for: width)
         let tileWidth = (width - CGFloat(columns - 1) * 6) / CGFloat(columns)
         let tileHeight = tileWidth / max(session.pageAspectRatio, 0.05)
-        let rows = Int(ceil(Double(session.pageCount) / Double(columns)))
+        let rows = Int(ceil(Double(pageCount) / Double(columns)))
         return CGFloat(rows) * tileHeight + CGFloat(max(rows - 1, 0)) * 6
     }
 

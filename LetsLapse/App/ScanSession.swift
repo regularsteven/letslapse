@@ -46,6 +46,34 @@ struct ScanSession: Identifiable, Equatable, Sendable {
     /// First shutter to last, or nil when the shoot wrote no sidecar to
     /// measure it with.
     let durationSeconds: Double?
+    /// The document groups this sitting produced, already resolved against the
+    /// pages that are really here (`ScanDocumentStore.resolve`) — so it is
+    /// never empty for a session with pages, and a session that predates
+    /// grouping has exactly one entry holding all of them.
+    let documents: [ScanDocument]
+
+    // MARK: - Documents
+
+    /// Whether this session is more than one document, and therefore whether
+    /// the detail screen shows section headers at all. One group is drawn as
+    /// the flat grid it has always been.
+    var hasDocumentGroups: Bool { documents.count > 1 }
+
+    /// Each group with its pages resolved, in document order.
+    var documentSections: [ScanDocumentSection] {
+        let byNumber = Dictionary(uniqueKeysWithValues: pages.map { ($0.number, $0) })
+        return documents.map { document in
+            ScanDocumentSection(
+                document: document,
+                pages: document.pageIndices.compactMap { byNumber[$0] })
+        }
+    }
+
+    /// The group a page belongs to — what the "move to…" menu greys out, and
+    /// what an export scope resolves a loose selection through.
+    func document(containing pageNumber: Int) -> ScanDocument? {
+        documents.first { $0.pageIndices.contains(pageNumber) }
+    }
 
     // MARK: - Counts
 
@@ -114,9 +142,17 @@ struct ScanSession: Identifiable, Equatable, Sendable {
         return String(format: "%d min %02d s", whole / 60, whole % 60)
     }
 
-    /// "8 pages · A4 · 3 min 12 s" — the detail subtitle.
+    /// "3 documents" — only said where there is more than one, because "1
+    /// document" on a session that never grouped anything is a distinction
+    /// nobody asked for.
+    var documentCountLine: String? {
+        guard hasDocumentGroups else { return nil }
+        return "\(documents.count) documents"
+    }
+
+    /// "8 pages · 3 documents · A4 · 3 min 12 s" — the detail subtitle.
     var subtitleLine: String {
-        [name == nil ? nil : dateLine, pageCountLine, paper.label, durationLine]
+        [name == nil ? nil : dateLine, pageCountLine, documentCountLine, paper.label, durationLine]
             .compactMap { $0 }.joined(separator: " · ")
     }
 
@@ -239,13 +275,22 @@ struct ScanSession: Identifiable, Equatable, Sendable {
             return last.timeIntervalSince(first)
         }()
 
+        // Read here rather than on the main actor with the rest of the request:
+        // it is one more small file in the same folder the walk is already
+        // stat-ing, and resolving it needs the page numbers this walk just
+        // proved are really on disk.
+        let documents = ScanDocumentStore.resolve(
+            ScanDocumentStore.load(from: request.sourceFolder),
+            pageNumbers: pages.map(\.number))
+
         return ScanSession(
             id: request.id,
             createdAt: request.createdAt,
             paper: request.paper,
             name: request.name,
             pages: pages,
-            durationSeconds: duration)
+            durationSeconds: duration,
+            documents: documents)
     }
 }
 

@@ -403,6 +403,50 @@ struct ScannerAspectRow: View, Equatable {
     }
 }
 
+/// Scanner's grouping dial: whether each page banked is a document of its own.
+///
+/// A chip rather than a `Toggle` because the capture screen has no switches on
+/// it — every setting here is a dial or a capsule, and a platform switch would
+/// read as belonging to Settings. Amber-on means the same thing it means
+/// everywhere else on this screen: this is doing something to the run.
+struct ScannerDocumentModeRow: View, Equatable {
+    let isOn: Bool
+    let onToggle: () -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool { lhs.isOn == rhs.isOn }
+
+    var body: some View {
+        HStack(spacing: 8) {
+            DialCaption(text: "DOCS")
+            Button {
+                onToggle()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: isOn ? "doc.on.doc.fill" : "doc.on.doc")
+                        .font(.system(size: 11, weight: .semibold))
+                    Text("New scan = new doc")
+                        .font(.system(size: 12, weight: .semibold))
+                }
+                .foregroundStyle(isOn ? LL.amber : .white.opacity(0.6))
+                .padding(.horizontal, 9)
+                .padding(.vertical, 5)
+                .background(
+                    Capsule().fill(
+                        isOn
+                            ? LL.amber.opacity(0.18)
+                            : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9))
+                )
+                .overlay(
+                    Capsule().stroke(isOn ? LL.amber.opacity(0.8) : .clear, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Start a new document for every scan")
+            .accessibilityValue(isOn ? "On" : "Off")
+        }
+    }
+}
+
 /// Photo's single dial: Bulb, then the discrete presets down to "Off".
 struct PhotoBlendDial: View, Equatable {
     let isBulb: Bool

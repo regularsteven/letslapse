@@ -77,6 +77,23 @@ struct CaptureView: View {
     /// Poses banked as of the last time the count was observed — so the fire
     /// haptic can tell a capture from a "Delete last".
     @State private var lastScannerFrameCount = 0
+    /// Scanner's grouping rule: every page its own document, or pages piling
+    /// into one until the operator says otherwise.
+    ///
+    /// On by default because the sitting that motivated grouping is a pile of
+    /// single-page things (receipts, letters, forms) — the multi-page document
+    /// is the case worth a deliberate press, not the other way round. Persisted
+    /// like the other Scanner dials: it is how someone scans, not part of a
+    /// remembered format.
+    @AppStorage("scanner.newScanIsNewDocument") private var newScanIsNewDocument = true
+    /// The 1-based page numbers that opened a document during this run — the
+    /// whole record the finished scan's `documents.json` is built from.
+    @State private var scannerDocumentStarts: [Int] = []
+    /// Whether the *next* page to land opens a new document. True at the start
+    /// of a run (page 1 always opens document 1), set again after every capture
+    /// while the toggle is on, and set by the New Document button while it
+    /// isn't.
+    @State private var scannerPendingNewDocument = true
     /// True for a moment after a pose lands, so the state line can confirm it.
     /// View-local rather than engine state: it is about what the operator was
     /// just told, not about what the camera is waiting for.
@@ -394,6 +411,11 @@ struct CaptureView: View {
         .onChange(of: camera.scannerState?.frames) { frames in
             let previous = lastScannerFrameCount
             lastScannerFrameCount = frames ?? 0
+            // Grouping is filed on the way down as well as up: "Delete last"
+            // can take back the page that opened a document, and a boundary
+            // left standing on a page that no longer exists would split the
+            // set at the wrong place.
+            recordScannerDocuments(previous: previous, frames: frames)
             guard let frames, frames > previous else { return }
             announceScannerFrame()
             checkScannerTarget(frames: frames)
@@ -747,7 +769,10 @@ struct CaptureView: View {
             // `AppModel.finishScannerCapture`. Every other still shoot takes
             // the unchanged `setSource` path into Adjust.
             if scannerArmed {
-                model.finishScannerCapture(urls: urls, mode: intervalSourceModeName)
+                model.finishScannerCapture(
+                    urls: urls,
+                    mode: intervalSourceModeName,
+                    documentStarts: scannerDocumentStarts)
                 return
             }
             model.setSource(.photos(urls), mode: intervalSourceModeName)
@@ -1838,6 +1863,7 @@ struct CaptureView: View {
             VStack(spacing: 6) {
                 intervalPickerRow
                 scannerAspectRow
+                scannerDocumentModeRow
             }
         }
     }
@@ -1863,10 +1889,19 @@ struct CaptureView: View {
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
                     .background(Color.black.opacity(0.5), in: Capsule())
-                scannerAspectRow
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 5)
-                    .background(Color.black.opacity(0.5), in: Capsule())
+                // Guarded here as well as inside the rows: a backdrop drawn
+                // around an empty row is a capsule floating over the
+                // viewfinder of every non-Scanner landscape shoot.
+                if scannerArmed {
+                    scannerAspectRow
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.5), in: Capsule())
+                    scannerDocumentModeRow
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(Color.black.opacity(0.5), in: Capsule())
+                }
             }
         }
     }
@@ -1879,6 +1914,26 @@ struct CaptureView: View {
         if scannerArmed {
             ScannerAspectRow(aspect: scannerAspect) { scannerAspectToken = $0.rawValue }
                 .equatable()
+        }
+    }
+
+    /// Scanner's grouping dial, under PAPER: whether the next page starts its
+    /// own document. Set before the run because it is a decision about the pile
+    /// on the desk — a stack of receipts or a contract — and both answers stay
+    /// changeable mid-run, which is what the HUD's New Document button is for
+    /// when this is off.
+    @ViewBuilder
+    private var scannerDocumentModeRow: some View {
+        if scannerArmed {
+            ScannerDocumentModeRow(isOn: newScanIsNewDocument) {
+                newScanIsNewDocument.toggle()
+                // Turning it on mid-run means "the next page begins a
+                // document"; turning it off means "keep filling this one".
+                // Both are stated by the pending flag rather than left until
+                // the next capture to work out.
+                if newScanIsNewDocument { scannerPendingNewDocument = true }
+            }
+            .equatable()
         }
     }
 
@@ -2044,6 +2099,18 @@ struct CaptureView: View {
             isStacking: raw == "stacking")
         camera.isIntervalRunning = true
         framingStartedAt = Date().addingTimeInterval(-96)
+        // `LL_SCANNER_DOCPRESS=1` presses New Document once the staged run's
+        // pages have been filed. It goes through the button's own action, so
+        // what it proves is the real thing: that a press mid-run closes the
+        // open document and the HUD says so. The delay is because the pages
+        // are filed by the `frames` observer, which cannot have run yet — this
+        // hook is setting the state that observer reacts to.
+        if ProcessInfo.processInfo.environment["LL_SCANNER_DOCPRESS"] != nil {
+            Task {
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                beginScannerDocument()
+            }
+        }
     }
 
     /// `LL_HOLYGRAIL=armed` arms the MODE dial on Holy Grail;
@@ -2358,6 +2425,7 @@ struct CaptureView: View {
                 Text(scannerExposureText(state))
                     .font(.system(size: 10.5, weight: .medium, design: .monospaced))
                     .foregroundStyle(.white.opacity(0.6))
+                scannerDocumentRow
                 scannerDeleteLastButton(frames: state.frames)
             }
             .padding(.horizontal, 12)
@@ -2405,6 +2473,14 @@ struct CaptureView: View {
             // announcing readiness. "Ready for the next page" was true and
             // useless: it doesn't say that leaving this one there is what keeps
             // the camera waiting.
+            //
+            // With every page its own document, the swap is also a document
+            // boundary, and the operator is usually mid-pile: naming the
+            // document the next sheet lands in is how they know the machine
+            // agrees with the pile in their hand.
+            if newScanIsNewDocument {
+                return "Swap in next page — Doc \(scannerUpcomingDocument)"
+            }
             return "Swap in the next page"
         default:
             // "Waiting for a page" over a desk with a page on it is the reading
@@ -2485,6 +2561,55 @@ struct CaptureView: View {
         return text
     }
 
+    /// Where the pages are going, and — when the operator owns the boundary —
+    /// the control that moves it on.
+    ///
+    /// **The line is shown in every state of every run**, including with a
+    /// document per scan. It is the only confirmation that the grouping is
+    /// working at all: a set is filed while it is being shot and read hours
+    /// later, so a run that silently grouped the wrong way is discovered long
+    /// after the paper has been put away.
+    ///
+    /// The button is 44 pt and carries its own name because of where it is
+    /// used: one hand on the stack, the phone in the other, and a press due
+    /// between two sheets. An icon at HUD scale is a thing you have to look at
+    /// to be sure of, and looking at the phone is the one thing this screen is
+    /// designed around not requiring.
+    private var scannerDocumentRow: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Label(scannerDocumentLine, systemImage: "doc.on.doc")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.white)
+                .labelStyle(.titleAndIcon)
+            if !newScanIsNewDocument {
+                Button {
+                    beginScannerDocument()
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "doc.badge.plus")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text("New Document")
+                            .font(.system(size: 15, weight: .bold))
+                    }
+                    .foregroundStyle(LL.ink)
+                    .padding(.horizontal, 18)
+                    .frame(height: 44)
+                    .background(LL.amber, in: Capsule())
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                // Never disabled, and never greyed. A second press with nothing
+                // banked since the first is already a no-op inside
+                // `beginScannerDocument`, and a control that dims itself at the
+                // start of every run — when no page has landed yet — is a
+                // control the operator reads as broken at exactly the moment
+                // they are learning what it does.
+                .accessibilityLabel("Start a new document")
+                .accessibilityHint("Closes \(scannerDocumentLine) and starts the next document")
+            }
+        }
+    }
+
     /// Discards the pose just taken without ending the shoot.
     ///
     /// This control earns its place here more than anywhere else in the app: a
@@ -2524,6 +2649,98 @@ struct CaptureView: View {
         #if os(iOS)
         UIImpactFeedbackGenerator(style: .medium).impactOccurred()
         #endif
+    }
+
+    // MARK: - Scanner documents
+
+    /// Files each page that lands into a document, and un-files one that is
+    /// taken back.
+    ///
+    /// Boundaries are page *numbers*, not counts, because that is what the
+    /// finished scan stores and what survives a page being deleted later. The
+    /// rule itself is two lines: a page opens a document when one is pending,
+    /// and the toggle decides whether the next page is pending again.
+    ///
+    /// `frames` is nil when the run has **ended**, and that case returns
+    /// without touching anything. The camera clears `scannerState` and calls
+    /// `onFinishPhotos` in one main-queue block, so a nil read as "every page
+    /// was deleted" would wipe the grouping the finish is about to file —
+    /// today only because SwiftUI happens to deliver this change after the
+    /// finish handler, which is not a thing to depend on.
+    private func recordScannerDocuments(previous: Int, frames: Int?) {
+        guard scannerArmed, let frames else { return }
+        if frames > previous {
+            for page in (previous + 1)...frames {
+                if scannerPendingNewDocument || scannerDocumentStarts.isEmpty {
+                    scannerDocumentStarts.append(page)
+                }
+                scannerPendingNewDocument = newScanIsNewDocument
+            }
+        } else if frames < previous {
+            let lostABoundary = scannerDocumentStarts.contains { $0 > frames }
+            scannerDocumentStarts.removeAll { $0 > frames }
+            // The deleted page had opened a document, so the document is gone
+            // with it and the next page opens a fresh one. Under the toggle
+            // that is true anyway.
+            if lostABoundary || newScanIsNewDocument || scannerDocumentStarts.isEmpty {
+                scannerPendingNewDocument = true
+            }
+        }
+    }
+
+    /// The New Document button: closes the current group and opens the next,
+    /// with no capture in between. Only reachable while the toggle is off — with
+    /// it on, every page does this by itself.
+    private func beginScannerDocument() {
+        guard !scannerPendingNewDocument else { return }
+        scannerPendingNewDocument = true
+        #if os(iOS)
+        UIImpactFeedbackGenerator(style: .rigid).impactOccurred()
+        #endif
+    }
+
+    /// How many documents this run has opened so far — 0 before the first page.
+    private var scannerDocumentCount: Int { scannerDocumentStarts.count }
+
+    /// The document the next page will land in, 1-based.
+    private var scannerUpcomingDocument: Int {
+        scannerPendingNewDocument || scannerDocumentStarts.isEmpty
+            ? scannerDocumentCount + 1
+            : scannerDocumentCount
+    }
+
+    /// Pages banked into the document currently open.
+    private var scannerPagesInCurrentDocument: Int {
+        guard let start = scannerDocumentStarts.last else { return 0 }
+        return max(0, lastScannerFrameCount - start + 1)
+    }
+
+    /// The line the HUD carries about grouping, in every state of the run:
+    /// which document the last page went into, and which page of *that
+    /// document* it was.
+    ///
+    /// It describes the page just banked rather than the one coming, because
+    /// that is the fact the operator is checking — "did that sheet land where I
+    /// meant it to?". So with a document per scan it counts documents up and
+    /// pages stay at 1 (Doc 1 · Page 1, Doc 2 · Page 1…), and with the toggle
+    /// off the document holds still while the pages climb (Doc 1 · Page 3).
+    /// Either way the line moving after a capture is the confirmation that the
+    /// grouping is doing what the dial says.
+    ///
+    /// Page numbering restarts per document on purpose: that is the number the
+    /// operator is holding in their head — sheet 3 of the contract, not frame
+    /// 17 of the sitting.
+    private var scannerDocumentLine: String {
+        guard scannerDocumentCount > 0 else { return "Doc 1 · no pages yet" }
+        // A New Document press with no capture behind it yet. Said in the
+        // future tense because nothing has moved on disk — this is the one
+        // state where the line has to confirm a *press* rather than a page,
+        // and "Doc 1 · Page 3" after tapping New Document would read as the
+        // tap having done nothing.
+        if scannerPendingNewDocument && !newScanIsNewDocument {
+            return "Doc \(scannerUpcomingDocument) · next page"
+        }
+        return "Doc \(scannerDocumentCount) · Page \(scannerPagesInCurrentDocument)"
     }
 
     /// Confirms a banked pose in the state line for a beat.
@@ -3006,6 +3223,12 @@ struct CaptureView: View {
         if scannerArmed {
             steadiness.resetLog()
             steadiness.start()
+            // A run's grouping starts empty with document 1 pending, whatever
+            // the last run left behind — the camera screen isn't torn down
+            // between two scans in the same sitting.
+            lastScannerFrameCount = 0
+            scannerDocumentStarts = []
+            scannerPendingNewDocument = true
             camera.scannerDeviceIsSteady = { [weak steadiness] in
                 guard let steadiness else { return true }
                 return steadiness.magnitude < steadiness.stillThreshold

@@ -843,6 +843,12 @@ final class AppModel: ObservableObject {
         var line: String { "Correcting \(completed + 1) of \(total) pages…" }
     }
 
+    /// Bumped whenever a session's `documents.json` is rewritten, so an open
+    /// detail screen re-walks itself. The groups live on disk rather than in
+    /// the model (they belong to the scan, not to this launch), so there is
+    /// nothing here for a view to observe except the fact that they changed.
+    @Published private(set) var scanDocumentsToken = 0
+
     /// Set by screens that want a specific tab brought front — the camera's
     /// recent-capture tile asking for the Gallery. ContentView consumes and
     /// clears it. Screens presented over the tabs (the camera is a full-screen
@@ -1069,6 +1075,93 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
         captures[index].scannerPaper = paper.rawValue
         try? persistLibrary()
+    }
+
+    // MARK: - Scan documents
+
+    /// Where a scan's sidecars live: its frames, `frames.timestamps` and
+    /// `documents.json` are all one folder.
+    func scanSourceFolder(for sessionID: UUID) -> URL {
+        captureFolderURL(for: sessionID).appendingPathComponent("source")
+    }
+
+    /// The groups a session holds, resolved against the pages really on disk —
+    /// never empty for a session with pages, and exactly one entry for a scan
+    /// made before grouping existed.
+    func scanDocuments(for sessionID: UUID) -> [ScanDocument] {
+        guard let capture = captures.first(where: { $0.id == sessionID }) else { return [] }
+        return ScanDocumentStore.resolve(
+            ScanDocumentStore.load(from: scanSourceFolder(for: sessionID)),
+            pageNumbers: scanPageNumbers(for: capture))
+    }
+
+    /// Opens the next document on a session, empty, and returns it.
+    ///
+    /// Empty on purpose: this is the "New Document" the capture screen presses
+    /// *before* the page that belongs in it exists, and the resolver drops a
+    /// group with no pages — so a document opened and never filled costs
+    /// nothing and leaves no trace.
+    @discardableResult
+    func addDocument(to sessionID: UUID) -> ScanDocument {
+        let folder = scanSourceFolder(for: sessionID)
+        var documents = ScanDocumentStore.load(from: folder)
+        if documents.isEmpty {
+            // The first explicit group on a session that had none: everything
+            // shot so far is document 1, and the new one follows it. Written
+            // out rather than implied, because from here on the file is the
+            // record and an unwritten first group would swallow every page.
+            documents = scanDocuments(for: sessionID)
+        }
+        let document = ScanDocument(
+            name: ScanDocumentStore.nextName(after: documents), pageIndices: [])
+        documents.append(document)
+        write(documents, for: sessionID)
+        return document
+    }
+
+    /// Moves one page into a group, taking it out of whichever group had it.
+    ///
+    /// A page belongs to exactly one document, so this is a move and never a
+    /// copy: the same page appearing in two sections would export twice and
+    /// read as a duplicate that isn't on disk.
+    func assignPage(_ pageIndex: Int, toDocument docID: UUID, inSession sessionID: UUID) {
+        var documents = scanDocuments(for: sessionID)
+        guard let target = documents.firstIndex(where: { $0.id == docID }) else { return }
+        for index in documents.indices where index != target {
+            documents[index].pageIndices.removeAll { $0 == pageIndex }
+        }
+        if !documents[target].pageIndices.contains(pageIndex) {
+            documents[target].pageIndices.append(pageIndex)
+            // Page order inside a document is capture order — the pages of a
+            // contract are the pages of a contract, and a page moved in later
+            // still belongs where it was shot.
+            documents[target].pageIndices.sort()
+        }
+        write(documents.filter { !$0.pageIndices.isEmpty }, for: sessionID)
+    }
+
+    func renameDocument(_ docID: UUID, in sessionID: UUID, name: String) {
+        var documents = scanDocuments(for: sessionID)
+        guard let index = documents.firstIndex(where: { $0.id == docID }) else { return }
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty name goes back to the numbered default rather than leaving a
+        // section with no header text at all.
+        documents[index].name = trimmed.isEmpty
+            ? ScanDocumentStore.defaultName(index: index)
+            : trimmed
+        write(documents, for: sessionID)
+    }
+
+    /// Folds a session back into one document — the undo for a grouping the
+    /// operator didn't mean, and what "New scan = new doc" left on by accident
+    /// needs an escape from.
+    func flattenDocuments(in sessionID: UUID) {
+        write([], for: sessionID)
+    }
+
+    private func write(_ documents: [ScanDocument], for sessionID: UUID) {
+        try? ScanDocumentStore.save(documents, to: scanSourceFolder(for: sessionID))
+        scanDocumentsToken &+= 1
     }
 
     /// The photograph a pose was shot as — never the rectified page.
@@ -1663,6 +1756,20 @@ final class AppModel: ObservableObject {
         debugSeedScannerProject(poses: 8, corrected: true, paper: .a4, spacingSeconds: 27)
     }
 
+    /// `LL_SCANS_DOCS` screenshot hook: files a seeded session's pages into
+    /// documents, as if the run had opened one at each of `starts`.
+    ///
+    /// Goes through `ScanDocumentStore.build` rather than writing groups of its
+    /// own, so the staged screen is built by the same code a real run's
+    /// boundaries go through.
+    func debugSeedScanDocuments(for sessionID: UUID, starts: [Int]) {
+        guard let capture = captures.first(where: { $0.id == sessionID }) else { return }
+        let documents = ScanDocumentStore.build(
+            starts: starts, pageNumbers: scanPageNumbers(for: capture))
+        try? ScanDocumentStore.save(documents, to: scanSourceFolder(for: sessionID))
+        scanDocumentsToken &+= 1
+    }
+
     /// - Parameters:
     ///   - paper: stamped on the session, so the list badges it and the pages
     ///     are drawn at that stock's proportions.
@@ -1869,9 +1976,18 @@ final class AppModel: ObservableObject {
     /// Projects and Gallery for the same reason (`libraryCaptures`), so sending
     /// one to the blend screen would also have been sending it to the one place
     /// the library no longer lists it.
-    func finishScannerCapture(urls: [URL], mode: String) {
+    /// `documentStarts` is the capture screen's record of where each document
+    /// began: the 1-based page number that opened it. Empty (or one entry) is a
+    /// sitting that produced a single document, which writes no sidecar at all
+    /// — see `ScanDocumentStore.save`.
+    func finishScannerCapture(urls: [URL], mode: String, documentStarts: [Int] = []) {
         do {
             let capture = try registerCapture(from: .photos(urls), mode: mode, captureMode: .scanner)
+            let documents = ScanDocumentStore.build(
+                starts: documentStarts, pageNumbers: scanPageNumbers(for: capture))
+            if documents.count > 1 {
+                try? ScanDocumentStore.save(documents, to: scanSourceFolder(for: capture.id))
+            }
             requestedScanDetailID = capture.id
             autoCorrectScan(capture)
         } catch {
