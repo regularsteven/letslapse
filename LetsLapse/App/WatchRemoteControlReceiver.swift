@@ -42,7 +42,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     private var isBulbMode = false
     private var captureCount = 0
     /// Interval's MODE dial, and whether EVERY is pacing itself.
-    private var intervalMode: IntervalCaptureMode = .off
+    private var intervalMode: IntervalCaptureMode = .basic
     private var intervalAuto = false
     /// Each mode's live readout, nil outside a run of that mode. Nil rather
     /// than zeroed: a remote drawing "ISO 0" would state something false about
@@ -235,7 +235,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         blendDepth: BlendDepth,
         isBulbMode: Bool,
         captureCount: Int,
-        intervalMode: IntervalCaptureMode = .off,
+        intervalMode: IntervalCaptureMode = .basic,
         intervalAuto: Bool = false
     ) {
         let framesPerBlend = blendDepth.fixedFrames ?? 0

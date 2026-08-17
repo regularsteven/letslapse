@@ -1578,7 +1578,7 @@ struct WatchControlView: View {
                 Spacer(minLength: 4)
                 Text(remote.intervalMode.chipLabel)
                     .font(RemoteType.control)
-                    .foregroundStyle(remote.intervalMode == .off ? .secondary : RemoteTint.burst)
+                    .foregroundStyle(remote.intervalMode == .basic ? .secondary : RemoteTint.burst)
             }
             .lineLimit(1)
             .minimumScaleFactor(0.7)

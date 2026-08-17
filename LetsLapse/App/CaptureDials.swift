@@ -63,15 +63,22 @@ private struct DialCaption: View {
     }
 }
 
-/// Interval's dials — spacing, mode and blend depth — plus the
+/// Interval's dials — mode, spacing and blend depth — plus the
 /// trailing caption. One line where it fits (Mac, landscape phones/iPads);
 /// portrait iPhones fall back to two stacked lines.
 ///
 /// ```
+/// MODE:   Basic · Holy Grail · Scanner
 /// EVERY:  0.5s · 1s · 3s · 5s · 10s … Auto
-/// MODE:   Off · Holy Grail · Scanner
 /// BLEND:  Off · 3 · 5 · 10 … Safe · Psycho
 /// ```
+///
+/// **MODE comes first because it decides what the dials under it mean.** It
+/// used to sit second, which put the reader in the odd position of setting a
+/// spacing before knowing whether the shoot had one: under Scanner it doesn't.
+/// Read top to bottom the row is now a sentence — *what kind of shoot, then how
+/// often, then how deep* — and the one dial that can remove another is the one
+/// you meet first.
 ///
 /// BLEND is how many frames are averaged into each output image (the motion
 /// blur is made as the shoot runs). A Holy Grail shoot with BLEND on is the
@@ -86,11 +93,12 @@ private struct DialCaption: View {
 /// **EVERY and MODE are not independent, and the dial says so rather than
 /// letting the pair go invalid:**
 ///
-/// - **Auto appears only when MODE isn't Off** (see `everyPicker`).
-/// - **Scanner requires Auto**, because the scene sets the spacing. The fixed
-///   values stay visible but disabled under a header saying why: a greyed row
-///   that explains itself teaches the model, where a missing row just looks
-///   broken.
+/// - **Auto appears only when MODE isn't Basic** (see `everyPicker`).
+/// - **Scanner has no EVERY at all** — the scene fires the shutter, so there is
+///   no spacing to set and the dial isn't drawn. It used to stay visible with
+///   its values greyed under a header explaining why; that taught the model
+///   once and then wasted a third of the row forever after, on the mode whose
+///   screen has the most to say (PAPER, the overlay, the pose count).
 /// - **Holy Grail works either way.** On Auto the ramp paces itself; on a fixed
 ///   value the user has pinned the floor and the ramp manages exposure above
 ///   it. Both are deliberate, so neither is disabled.
@@ -124,21 +132,21 @@ struct IntervalDialsRow: View, Equatable {
             && lhs.intervalOptions == rhs.intervalOptions
     }
 
-    /// Scanner owns the spacing outright; the fixed pills grey out under it.
-    private var fixedIntervalsDisabled: Bool { intervalMode.requiresAutoInterval }
+    /// Scanner fires from the scene, so the shoot has no spacing to show.
+    private var showsEveryPicker: Bool { !intervalMode.ownsInterval }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
-                everyPicker
                 if modeAvailable { modePicker }
+                if showsEveryPicker { everyPicker }
                 blendPicker
                 caption
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
-                    everyPicker
                     if modeAvailable { modePicker }
+                    if showsEveryPicker { everyPicker }
                 }
                 HStack(spacing: 8) {
                     blendPicker
@@ -148,7 +156,7 @@ struct IntervalDialsRow: View, Equatable {
         }
     }
 
-    /// The MODE dial. "Off" is the plain timer shoot; "Holy Grail" hands
+    /// The MODE dial. "Basic" is the plain timer shoot; "Holy Grail" hands
     /// shutter and ISO to the ramp so a shoot can run from daylight into night
     /// in one take; "Scanner" hands the shutter itself to the scene.
     private var modePicker: some View {
@@ -178,18 +186,9 @@ struct IntervalDialsRow: View, Equatable {
         HStack(spacing: 8) {
             DialCaption(text: "EVERY")
             Menu {
-                // The inline reason, at the point of interaction: a header
-                // above the disabled rows, so the greying explains itself
-                // where it is met and not only in the caption below.
-                if fixedIntervalsDisabled {
-                    Section("Interval set by the scene") {
-                        fixedIntervalButtons
-                    }
-                } else {
-                    fixedIntervalButtons
-                }
+                fixedIntervalButtons
                 // Auto is offered only by a mode that can pace itself. With
-                // MODE Off there is nothing for it to mean, so rather than
+                // MODE Basic there is nothing for it to mean, so rather than
                 // showing a choice that then has to be rejected — or silently
                 // changing MODE under the user's hand, which is worse — the
                 // row simply isn't there.
@@ -214,13 +213,10 @@ struct IntervalDialsRow: View, Equatable {
     }
 
     /// What Auto means depends on who is doing the pacing, so the row says
-    /// which rather than leaving the user to guess.
+    /// which rather than leaving the user to guess. Scanner has no case here
+    /// because it has no EVERY dial to put one in.
     private var autoMenuLabel: String {
-        switch intervalMode {
-        case .scanner: return "Auto · when the scene stills"
-        case .holyGrail: return "Auto · the ramp paces itself"
-        case .off: return "Auto"
-        }
+        intervalMode == .holyGrail ? "Auto · the ramp paces itself" : "Auto"
     }
 
     @ViewBuilder
@@ -235,27 +231,33 @@ struct IntervalDialsRow: View, Equatable {
                     Text(Self.intervalLabel(seconds))
                 }
             }
-            .disabled(fixedIntervalsDisabled)
         }
     }
 
-    /// Every fixed count and both adaptive depths — except under Scanner,
-    /// where Phase 1 captures exactly one frame per pose and there is no
-    /// window to average over. Greyed with a header saying so, the same
-    /// treatment the fixed intervals get: a shoot whose dial claims a 10-frame
-    /// blend and then writes single frames would be lying, and hiding the dial
-    /// would just make Scanner look like a different screen.
+    /// Every fixed count, plus the two adaptive depths — the latter everywhere
+    /// but Scanner.
+    ///
+    /// **The fixed counts mean something different under Scanner, and both
+    /// meanings are the dial doing its job.** In a timelapse a blend averages a
+    /// window the scene moves through, and the average *is* the motion blur.
+    /// A Scanner pose holds still under a locked exposure, so averaging its
+    /// frames moves nothing and removes noise — about √N of it. Same dial, same
+    /// arithmetic, different reason to reach for it: blur outdoors, a cleaner
+    /// page indoors.
+    ///
+    /// **Psycho and Safe stay out of it.** Both size themselves against a timed
+    /// window — "as many frames as fit in the interval", "as many as this device
+    /// has been taught it can sustain per interval" — and a pose has no
+    /// interval; it has a person holding a page. They are greyed under a header
+    /// saying so rather than hidden, for the reason the greyed rows here always
+    /// win: a missing row looks broken, an explained one teaches the model.
     private var blendPicker: some View {
         HStack(spacing: 8) {
             DialCaption(text: "BLEND")
             Menu {
-                if intervalMode == .scanner {
-                    Section("One frame per pose in Scanner") { blendOptionButtons }
-                } else {
-                    blendOptionButtons
-                }
+                blendOptionButtons
             } label: {
-                PickerMenuLabel(text: intervalMode == .scanner ? "Off" : menuLabel)
+                PickerMenuLabel(text: menuLabel)
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
@@ -264,19 +266,28 @@ struct IntervalDialsRow: View, Equatable {
 
     @ViewBuilder
     private var blendOptionButtons: some View {
-        Group {
-            ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
-                Button {
-                    onSelectFixedBlend(option.frames)
-                } label: {
-                    if blendDepth == .fixed(option.frames) {
-                        Label(Self.blendOptionLabel(option), systemImage: "checkmark")
-                    } else {
-                        Text(Self.blendOptionLabel(option))
-                    }
+        ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
+            Button {
+                onSelectFixedBlend(option.frames)
+            } label: {
+                if blendDepth == .fixed(option.frames) {
+                    Label(Self.blendOptionLabel(option), systemImage: "checkmark")
+                } else {
+                    Text(Self.blendOptionLabel(option))
                 }
             }
-            Divider()
+        }
+        Divider()
+        if intervalMode == .scanner {
+            Section("Adaptive depths need a timed window") { adaptiveDepthButtons }
+        } else {
+            adaptiveDepthButtons
+        }
+    }
+
+    @ViewBuilder
+    private var adaptiveDepthButtons: some View {
+        Group {
             Button {
                 onSelectPsycho()
             } label: {
@@ -300,8 +311,6 @@ struct IntervalDialsRow: View, Equatable {
             }
             .disabled(!safeDepthAvailable)
         }
-        // Scanner takes one frame per pose, so none of the above is a choice
-        // it can honour.
         .disabled(intervalMode == .scanner)
     }
 
@@ -317,6 +326,9 @@ struct IntervalDialsRow: View, Equatable {
     }
 
     private var menuLabel: String {
+        // A depth carried in from another mode that Scanner can't honour reads
+        // as what the run will actually do, not as what the dial remembers.
+        if intervalMode == .scanner, blendDepth.fixedFrames == nil { return "Off" }
         switch blendDepth {
         case .fixed(1): return "Off"
         case .fixed(let frames): return "\(frames) frames"

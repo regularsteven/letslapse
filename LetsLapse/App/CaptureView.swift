@@ -45,18 +45,18 @@ struct CaptureView: View {
     /// format change, learning reset) — the last deliberate fixed choice.
     @State private var lastFixedBlendFrames = 10
     /// Interval's MODE dial — which decision this shoot takes away from the
-    /// timer. Off is the plain timer shoot, Holy Grail takes exposure, Scanner
+    /// timer. Basic is the plain timer shoot, Holy Grail takes exposure, Scanner
     /// takes the firing itself. Persisted on its own key rather than through
     /// `RecordingSettingsStore` — it is a shooting *intent* the user sets for
     /// a specific evening (or a specific object), not part of the remembered
     /// format snapshot. The key is the one the Bool it replaced used, and
     /// `IntervalCaptureMode(token:)` decodes the two values that Bool wrote.
-    @AppStorage("letslapse.capture.holyGrail") private var intervalModeToken = IntervalCaptureMode.off.rawValue
+    @AppStorage("letslapse.capture.holyGrail") private var intervalModeToken = IntervalCaptureMode.basic.rawValue
     private var intervalMode: IntervalCaptureMode {
         let decoded = IntervalCaptureMode(token: intervalModeToken)
         // A Mac that inherited an iCloud-synced "on" shoots the plain interval
         // rather than silently shooting something the platform can't do.
-        return Self.intervalModesAvailable ? decoded : .off
+        return Self.intervalModesAvailable ? decoded : .basic
     }
     /// EVERY is on Auto: the mode paces the shoot. Only meaningful with a MODE
     /// that can pace — see `IntervalCaptureMode.supportsAutoInterval`.
@@ -71,7 +71,7 @@ struct CaptureView: View {
         PerspectiveAspect(rawValue: scannerAspectToken) ?? .auto
     }
     /// The spacing to fall back to when Auto stops being available (MODE went
-    /// back to Off), so turning a mode off doesn't lose the number the user
+    /// back to Basic), so leaving a mode doesn't lose the number the user
     /// last chose.
     @State private var lastFixedInterval: Double = 2
     /// Poses banked as of the last time the count was observed — so the fire
@@ -410,6 +410,18 @@ struct CaptureView: View {
         .onChange(of: camera.scannerState?.phase) { phase in
             guard phase == ScannerEngine.State.captured.rawValue else { return }
             flashScannerCaptured()
+        }
+        // A pose taken by hand. Under the document trigger the phase change
+        // above already covers it; under the motion trigger the machine stays
+        // in `settled` and nothing would confirm the shot at all — so the
+        // confirmation hangs off the request count, which only moves when a
+        // frame really went out (a refused tap is silent, which is the honest
+        // feedback for "that press did nothing").
+        .onChange(of: camera.scannerManualCaptures) { _ in
+            flashScannerCaptured()
+            #if os(iOS)
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+            #endif
         }
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
@@ -1107,7 +1119,13 @@ struct CaptureView: View {
                 shutterButton
                 Spacer()
 
-                if camera.isRecording {
+                if scannerRunInProgress {
+                    // The rail's one accessory slot, given to the manual pose
+                    // shutter for the same reason the portrait row's is (see
+                    // `leadingControl`): during a scan the exposure control
+                    // below the shutter would toggle a lock the run holds.
+                    scannerManualCaptureButton
+                } else if camera.isRecording {
                     leadingControl
                 } else {
                     landscapeExposureControl
@@ -1811,12 +1829,13 @@ struct CaptureView: View {
             }
         } else {
             // The output format lives in the format pill and its sheet — no
-            // duplicate copy line here. Scanner is the exception, and only
-            // because it writes a file the dial never named (see
-            // `scannerOutputNote`).
+            // duplicate copy line here, Scanner included. It used to carry two
+            // extra lines (an AE/AF/WB lock warning and a "+ corrected HEIC"
+            // note) and a caption under the dials; all three stated things the
+            // run does for you anyway, above a viewfinder whose whole job is to
+            // be looked at. The dials say what is settable; the HUD says what
+            // the run is doing; nothing in between.
             VStack(spacing: 6) {
-                scannerLockWarning
-                scannerOutputNote
                 intervalPickerRow
                 scannerAspectRow
             }
@@ -1840,8 +1859,6 @@ struct CaptureView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                scannerLockWarning
-                scannerOutputNote
                 intervalPickerRow
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
@@ -1862,28 +1879,6 @@ struct CaptureView: View {
         if scannerArmed {
             ScannerAspectRow(aspect: scannerAspect) { scannerAspectToken = $0.rawValue }
                 .equatable()
-        }
-    }
-
-    /// What a Scanner run really writes, said under the format pill.
-    ///
-    /// The pill can only name one format, and a Scanner pose that sees a page
-    /// lands as *two* files: the DNG the pill names, and a rectified HEIC beside
-    /// it. Poses shot with no rectangle in view land as one. Rather than have
-    /// the pill flicker between claims — or, worse, quietly under-report what
-    /// fills the operator's storage — the pill keeps saying DNG and this line
-    /// states the rest of the deal, once, where the dials are read.
-    @ViewBuilder
-    private var scannerOutputNote: some View {
-        if scannerArmed, !isIntervalCapturing {
-            // Names what a pose will really write, which is the format dial's
-            // answer — not "DNG" on a shoot the dial has set to JPEG.
-            Text("\(scannerCapturesRAW ? "DNG" : "JPEG") + corrected HEIC when rectangle detected")
-                .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.55))
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(Color.black.opacity(0.5), in: Capsule())
         }
     }
 
@@ -1978,8 +1973,10 @@ struct CaptureView: View {
     ///
     /// The **rectangle** trigger (PAPER = A4 here, since the stock is what
     /// selects it): `waitingpage` has nothing flat in view, `holding` is a page
-    /// found and its hold window part-filled — the amber bar — and `captured`
-    /// is a page banked, waiting to be swapped.
+    /// found and its hold window part-filled — the amber bar — `captured` is a
+    /// page banked, waiting to be swapped, `shaperefused` is something flat in
+    /// view that cannot be the named stock, and `stacking` is a 5-frame pose
+    /// being averaged.
     ///
     /// All of them draw 12 of a 36-pose target, which is what makes the count
     /// and the shutter ring legible in a mirror screenshot.
@@ -2011,8 +2008,8 @@ struct CaptureView: View {
         // real camera, and they are the ones a document shoot actually shows.
         let documentPhase: ScannerEngine.State?
         switch raw {
-        case "waitingpage": documentPhase = .waitingForPage
-        case "holding": documentPhase = .holding
+        case "waitingpage", "shaperefused": documentPhase = .waitingForPage
+        case "holding", "stacking": documentPhase = .holding
         case "captured": documentPhase = .captured
         default: documentPhase = nil
         }
@@ -2037,7 +2034,14 @@ struct CaptureView: View {
                 ? rectangleHook == "detected"
                 : documentPhase != .waitingForPage,
             trigger: (documentPhase == nil
-                ? ScannerEngine.Trigger.motion : .rectangle).rawValue)
+                ? ScannerEngine.Trigger.motion : .rectangle).rawValue,
+            // Two states a simulator could never reach on its own, for the same
+            // reason as the rest of this hook: `shaperefused` needs a real quad
+            // that a real stock has refused, and `stacking` needs a pose's
+            // frames to actually be averaging.
+            refusingOnShape: raw == "shaperefused",
+            framesPerPose: raw == "stacking" ? 5 : 1,
+            isStacking: raw == "stacking")
         camera.isIntervalRunning = true
         framingStartedAt = Date().addingTimeInterval(-96)
     }
@@ -2208,7 +2212,11 @@ struct CaptureView: View {
         switch intervalMode {
         case .scanner: return "Interval · Scanner"
         case .holyGrail: return "Interval · Holy Grail"
-        case .off: return "Interval · JPEG"
+        // Deliberately not renamed alongside the dial: this string is stamped
+        // into projects on disk and read back by the rest of the app, so it is
+        // data, not a label. The dial says "Basic"; the file keeps saying what
+        // every shoot before it said.
+        case .basic: return "Interval · JPEG"
         }
     }
 
@@ -2225,13 +2233,10 @@ struct CaptureView: View {
     /// depths say what drives their count instead. A Holy Grail shoot has no
     /// live blend at all — its caption says what the ramp will do.
     private var blendCaptionText: String? {
-        if scannerArmed {
-            // Scanner's caption carries both consequences of the mode at once:
-            // where the spacing comes from, and that there is no blend window
-            // to set a depth over. It is the inline reason for two greyed
-            // dials, so it says both things rather than the prettier one.
-            return "fires when the scene stills · one frame per pose"
-        }
+        // Scanner has no caption. It used to explain two greyed dials; EVERY
+        // is now simply absent under it and BLEND does what it says, so there
+        // is nothing left to apologise for.
+        if scannerArmed { return nil }
         if holyGrailArmed {
             // The ramp's caption has to name what BLEND is doing to it: with
             // a depth the frames are averaged as the shoot runs, without one
@@ -2379,6 +2384,13 @@ struct CaptureView: View {
         // because the click and the haptic are easy to miss with a hand still
         // over the page.
         if scannerJustCaptured { return "✓ Captured" }
+        // A deep pose is seconds of averaging after the last frame lands, and
+        // the pose count cannot move until it is written — so the wait says
+        // what it is. Without this the screen goes quiet at exactly the moment
+        // the operator is deciding whether it worked.
+        if state.isStacking {
+            return "Stacking \(state.framesPerPose) frames…"
+        }
         guard state.trigger == ScannerEngine.Trigger.rectangle.rawValue else {
             return state.phase == ScannerEngine.State.disturbed.rawValue
                 ? "Settling…" : "Waiting for you to move"
@@ -2395,6 +2407,17 @@ struct CaptureView: View {
             // the camera waiting.
             return "Swap in the next page"
         default:
+            // "Waiting for a page" over a desk with a page on it is the reading
+            // that makes a working gate look like a broken detector. When the
+            // stock is what is refusing, the line names the stock — the two
+            // fixes it points at (reframe, or pick the right PAPER) are both
+            // the operator's, and neither is "put a page down".
+            if state.refusingOnShape {
+                // Short enough to stay on the HUD's one line. The stock's name
+                // is the whole message: it says which test is failing, and
+                // anyone who meant a different stock knows where that dial is.
+                return "Not \(scannerAspect.label)-shaped"
+            }
             return "Waiting for a page"
         }
     }
@@ -2445,6 +2468,12 @@ struct CaptureView: View {
     /// makes a set trustable without inspecting it afterwards.
     private func scannerExposureText(_ state: CameraController.ScannerState) -> String {
         var text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso)) · locked"
+        // What BLEND is doing to this run, in the line that already answers
+        // "what is every frame of this set?" — a stacked pose is a different
+        // file from an unstacked one and the set should say which it holds.
+        if state.framesPerPose > 1 {
+            text += " · ×\(state.framesPerPose) stack"
+        }
         // Three answers, not two. "no RAW on this device" is a report of a
         // fallback, and printing it at someone who chose JPEG accuses the phone
         // of a limitation it doesn't have.
@@ -2511,29 +2540,6 @@ struct CaptureView: View {
             try? await Task.sleep(nanoseconds: 1_100_000_000)
             guard scannerFlashToken == token else { return }
             scannerJustCaptured = false
-        }
-    }
-
-    /// The pre-flight warning, shown in place of the dial row while Scanner is
-    /// armed and the camera is not fully held.
-    ///
-    /// Inline and non-blocking on purpose: the operator is about to press the
-    /// shutter, and a modal in front of that would be answered by dismissing it
-    /// rather than by reading it. It is also mostly advisory — `startScanner`
-    /// locks AE, AF and WB for itself either way — so its real job is to say
-    /// *that the run will take the exposure it can currently see*, which is
-    /// worth knowing before you press rather than after.
-    @ViewBuilder
-    private var scannerLockWarning: some View {
-        if scannerArmed, !isIntervalCapturing, !camera.scannerCameraIsLocked {
-            Label(
-                "Exposure, focus and white balance lock when the scan starts — frame and meter first.",
-                systemImage: "exclamationmark.triangle.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(LL.amber)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 5)
-                .background(Color.black.opacity(0.5), in: Capsule())
         }
     }
 
@@ -3009,12 +3015,17 @@ struct CaptureView: View {
                 // The format dial governs Scanner like every other still mode.
                 // It used to be ignored here, so a shoot set to JPEG wrote DNGs.
                 preferRAW: model.intervalOutputFormat == .dng,
-                // A named stock is a declaration that these are pages, and a
-                // document shoot has no disturb/settle cycle to wait for — the
-                // page is put down and stays put. So the stock picks the whole
-                // trigger, not a filter on one: Auto keeps the turntable
-                // machine, a stock switches to "a page, holding still".
-                trigger: scannerAspect == .auto ? .motion : .rectangle)
+                // The stock itself, not a trigger derived from it: the run picks
+                // its machine from this (Auto = the turntable's motion, a named
+                // stock = "a page, holding still") *and* tests every candidate
+                // rectangle against its proportions, so a quad that cannot be an
+                // A4 never becomes one.
+                aspect: scannerAspect,
+                // BLEND, in the only form a pose can honour: frames averaged
+                // into this pose. The adaptive depths are disabled under Scanner
+                // (they size themselves against a timed window, and a pose has
+                // none), so a non-fixed value here means a plain pose.
+                framesPerPose: blendDepth.fixedFrames ?? 1)
             return
         }
         if holyGrailArmed {
@@ -3045,11 +3056,25 @@ struct CaptureView: View {
             options: liveBlendDNGOptions)
     }
 
+    /// A Scanner run is under way — the shutter row's accessories step aside
+    /// for it (see `leadingControl`).
+    private var scannerRunInProgress: Bool { camera.scannerState != nil }
+
     /// Left of the shutter: the burst/marker trigger while recording,
     /// the exposure lock otherwise.
     @ViewBuilder
     private var leadingControl: some View {
-        if camera.isRecording {
+        if scannerRunInProgress {
+            // **Nothing, on purpose.** All four accessories answer questions a
+            // running scan has already settled: `startScanner` locks exposure,
+            // focus and white balance for the whole set (so the AE/AF lock would
+            // toggle a lock that is already held), the steadiness gate is wired
+            // into the fire path itself, and a 2 s self-timer means nothing to a
+            // shutter the scene is pressing. The grid goes with them: it belongs
+            // to framing, which happens before the run. What is left is a stop
+            // button and one manual shutter — see `trailingControl`.
+            Color.clear.frame(width: 44, height: 44)
+        } else if camera.isRecording {
             Button {
                 camera.triggerLiveMoment()
             } label: {
@@ -3133,11 +3158,14 @@ struct CaptureView: View {
             : (isLocked ? "Unlock exposure and focus" : "Lock exposure and focus"))
     }
 
-    /// Right of the shutter: delay + capture-when-steady toggles idle, the
-    /// interval/marker count while recording.
+    /// Right of the shutter: the manual pose shutter during a scan, delay +
+    /// capture-when-steady toggles idle, the interval/marker count while
+    /// recording.
     @ViewBuilder
     private var trailingControl: some View {
-        if camera.isRecording {
+        if scannerRunInProgress {
+            scannerManualCaptureButton
+        } else if camera.isRecording {
             let count = camera.rampIntervalCount
             Text("\(count)")
                 .font(.system(size: 14, weight: .bold).monospacedDigit())
@@ -3188,6 +3216,30 @@ struct CaptureView: View {
         }
         .buttonStyle(.plain)
         .accessibilityLabel(photoCaptureWhenSteady ? "Turn off capture when steady" : "Turn on capture when steady")
+    }
+
+    /// The manual pose shutter, right of the stop button while a scan runs.
+    ///
+    /// It sits in the trailing accessory slot the timer and steadiness toggles
+    /// vacate, at the same 44 pt as every other control on this row — one tap
+    /// from the thumb already on the stop button, and unmistakably not the stop
+    /// button, which is the confusion worth avoiding in the middle of a set.
+    ///
+    /// Amber rather than the row's usual white-on-graphite: this is the only
+    /// control on screen that adds to the set, and a scan is exactly the shoot
+    /// where the operator is looking at the page rather than at the phone.
+    private var scannerManualCaptureButton: some View {
+        Button {
+            camera.captureScannerPoseNow()
+        } label: {
+            Image(systemName: "camera.fill")
+                .font(.system(size: 17, weight: .semibold))
+                .foregroundStyle(.black)
+                .frame(width: 44, height: 44)
+                .background(LL.amber, in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Capture this pose now")
     }
 
     // MARK: - Target capture

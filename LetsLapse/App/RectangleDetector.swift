@@ -63,6 +63,10 @@ final class RectangleDetector {
     private(set) var latestQuad: NormalizedQuad?
     private var latestAt = Date.distantPast
     private var lastDetectionAt = Date.distantPast
+    /// The last frame's buffer dimensions — see `detect`. Tap-queue confined,
+    /// like everything else in this block.
+    private var lastBufferWidth = 0
+    private var lastBufferHeight = 0
 
     /// How the preview buffer has to be turned to be upright.
     ///
@@ -108,6 +112,89 @@ final class RectangleDetector {
         }
     }
 
+    // MARK: - The shape gate
+
+    /// The stock the operator named on the PAPER dial, and the lens the frames
+    /// are coming through — together, "could this quad be the thing you said you
+    /// were shooting?".
+    ///
+    /// **This is where a named stock stops being an export-time hint.** The dial
+    /// used to change nothing about the capture: it picked the trigger and was
+    /// then spent later, turning the corners in the sidecar into a rectified
+    /// sibling. So a run set to A4 would happily hold, settle and fire on a quad
+    /// that could not possibly be a sheet of A4 — the desk's edge, a laptop, the
+    /// bounding box of page-plus-shadow — and the operator watched a scanner
+    /// take a confident photograph of the wrong rectangle.
+    ///
+    /// Telling the detector instead of the engine is deliberate, and it buys
+    /// three things from one test: a refused quad is never *drawn*, so the
+    /// overlay stops claiming a page it hasn't found; it never starts a hold
+    /// window, so the HUD stops counting down to a shot that shouldn't happen;
+    /// and when several rectangles qualify at once, the stock breaks the tie
+    /// before "outermost" does — the A4-shaped candidate beats the bigger quad
+    /// that swallowed the desk with it.
+    ///
+    /// Set from the session queue at run start; read on the tap's queue.
+    func setShapeGate(aspect: PerspectiveAspect, horizontalFieldOfView: Float) {
+        lock.withLock {
+            storedAspect = aspect
+            storedFieldOfView = Double(horizontalFieldOfView)
+        }
+    }
+
+    private var storedAspect: PerspectiveAspect = .auto
+    private var storedFieldOfView: Double = 0
+
+    /// Whether the last detection found candidates and refused **all** of them
+    /// on shape — the difference between "nothing flat in view" and "that isn't
+    /// the stock you named", which the HUD says out loud so a scanner that is
+    /// deliberately not firing doesn't read as one that has hung.
+    ///
+    /// Ages out on the same clock as a quad does: a refusal from a second ago
+    /// describes a frame the camera is no longer looking at.
+    func isRefusingOnShape(at time: Date) -> Bool {
+        guard let refusedAt else { return false }
+        return time.timeIntervalSince(refusedAt) <= Self.staleAfter
+    }
+
+    private var refusedAt: Date?
+
+    /// The gate as the Kit states it: the stock, plus the geometry needed to
+    /// undo perspective — both derived from this frame, so a rotation or a
+    /// format change cannot leave a stale aspect behind.
+    ///
+    /// The field of view describes the sensor's own landscape read-out, so the
+    /// focal length in pixels comes from the buffer's width and is then restated
+    /// against whichever side is the *oriented* image's width.
+    private func shapeGate(forBufferWidth width: Int, height: Int) -> (
+        aspect: PerspectiveAspect, frameAspect: Double, focal: Double
+    )? {
+        let (aspect, fieldOfView) = lock.withLock { (storedAspect, storedFieldOfView) }
+        guard aspect != .auto, fieldOfView > 0, fieldOfView < 180, width > 0, height > 0 else {
+            return nil
+        }
+        let focalInPixels = (Double(width) / 2) / tan(fieldOfView * .pi / 360)
+        let quarterTurned = quadOrientation == .right || quadOrientation == .left
+        let orientedWidth = Double(quarterTurned ? height : width)
+        let orientedHeight = Double(quarterTurned ? width : height)
+        guard orientedWidth > 0, orientedHeight > 0 else { return nil }
+        return (aspect, orientedWidth / orientedHeight, focalInPixels / orientedWidth)
+    }
+
+    #if DEBUG
+    /// Field lever for the shape band, in the same spirit as the Scanner's other
+    /// thresholds: `-scanner.aspectTolerance 0.12`. The shipped 0.2 is a
+    /// starting value (see `PerspectiveAspect.defaultShapeTolerance`) and the
+    /// only way to move it honestly is to sit in front of a real desk.
+    private static func overriddenTolerance() -> Double? {
+        guard UserDefaults.standard.object(forKey: "scanner.aspectTolerance") != nil else {
+            return nil
+        }
+        let value = UserDefaults.standard.double(forKey: "scanner.aspectTolerance")
+        return value > 0 ? value : nil
+    }
+    #endif
+
     // Note for anyone reaching for `imageCropAndScaleOption` here: it does not
     // exist on this request. It is a `VNCoreMLRequest` property — the knob that
     // decides how an image is fitted to a *model's* input size — and the built-in
@@ -128,6 +215,7 @@ final class RectangleDetector {
         latestQuad = nil
         latestAt = .distantPast
         lastDetectionAt = .distantPast
+        refusedAt = nil
     }
 
     // MARK: - Detection
@@ -142,6 +230,11 @@ final class RectangleDetector {
     func detect(in buffer: CVPixelBuffer, at time: Date) {
         guard time.timeIntervalSince(lastDetectionAt) >= Self.minimumDetectionInterval else { return }
         lastDetectionAt = time
+        // The buffer's own (unoriented) size, kept for the shape gate: it is the
+        // only place the frame's real proportions and the sensor's read-out
+        // width are both in hand.
+        lastBufferWidth = CVPixelBufferGetWidth(buffer)
+        lastBufferHeight = CVPixelBufferGetHeight(buffer)
         let handler = VNImageRequestHandler(
             cvPixelBuffer: buffer, orientation: imageOrientation, options: [:])
         do {
@@ -151,9 +244,38 @@ final class RectangleDetector {
             // and the previous quad ages out on its own.
             return
         }
-        guard let observation = Self.select(from: request.results ?? []) else { return }
+        let candidates = request.results ?? []
+        // The stock's own test, before anything else looks at these corners.
+        // Note what is *not* done on an all-refused frame: `latestQuad` is left
+        // alone rather than cleared, so a page that blinks out for one detection
+        // ages out on the usual `staleAfter` clock instead of vanishing from the
+        // overlay the instant one frame is refused.
+        let admitted = admissible(candidates)
+        refusedAt = (admitted.isEmpty && !candidates.isEmpty) ? time : nil
+        guard let observation = Self.select(from: admitted) else { return }
         latestQuad = Self.quad(from: observation)
         latestAt = time
+    }
+
+    /// The candidates that could be the named stock. Everything, when the dial
+    /// says Auto or the lens geometry isn't known — the gate only ever *removes*
+    /// possibilities the operator has ruled out themselves.
+    private func admissible(
+        _ observations: [VNRectangleObservation]
+    ) -> [VNRectangleObservation] {
+        guard let gate = shapeGate(
+            forBufferWidth: lastBufferWidth, height: lastBufferHeight) else { return observations }
+        var tolerance = PerspectiveAspect.defaultShapeTolerance
+        #if DEBUG
+        tolerance = Self.overriddenTolerance() ?? tolerance
+        #endif
+        return observations.filter {
+            gate.aspect.admits(
+                Self.quad(from: $0),
+                frameAspect: gate.frameAspect,
+                focalInFrameWidths: gate.focal,
+                tolerance: tolerance)
+        }
     }
 
     /// The quad in force at `time`, or nil when the last detection is too old

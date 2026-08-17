@@ -41,7 +41,7 @@ enum ScheduledStopUnit: String, CaseIterable {
 /// doing. What they share is that each takes a decision away from the timer,
 /// which is what the dial actually selects.
 ///
-/// Both non-`off` values need manual exposure, a numeric ISO/shutter envelope
+/// Both non-`basic` values need manual exposure, a numeric ISO/shutter envelope
 /// and (for Scanner) a preview tap — iOS/iPadOS only. The dial isn't drawn on
 /// macOS and a remembered value is ignored there rather than silently shooting
 /// something else.
@@ -50,7 +50,17 @@ enum ScheduledStopUnit: String, CaseIterable {
 /// vocabulary, and the persisted token is the thing that has to stay stable.
 enum IntervalCaptureMode: String, CaseIterable, Identifiable {
     /// The plain timer shoot — spacing and blend depth are the whole story.
-    case off
+    ///
+    /// **Called "Basic", not "Off".** The name is the fix for a dial that
+    /// described itself by what it wasn't: this value is a locked interval —
+    /// a frame every N seconds, exactly as asked — which is the mode most
+    /// shoots use and the one the app is named after. "Off" read as a feature
+    /// switched off, and a first-time user reasonably wondered what they were
+    /// missing.
+    ///
+    /// The raw value stays `off`: it is the persisted `@AppStorage` token and
+    /// the Watch wire format, and neither cares what the dial calls it.
+    case basic = "off"
     /// Shutter and ISO follow the light, so one shoot runs daylight → night.
     case holyGrail
     /// The camera fires when the scene stops moving: reposition, let go, click.
@@ -64,15 +74,15 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
     init(token: String) {
         switch token {
         case "true", "1": self = .holyGrail
-        case "false", "0": self = .off
-        default: self = IntervalCaptureMode(rawValue: token) ?? .off
+        case "false", "0": self = .basic
+        default: self = IntervalCaptureMode(rawValue: token) ?? .basic
         }
     }
 
     /// What the dial's chip reads.
     var chipLabel: String {
         switch self {
-        case .off: return "Off"
+        case .basic: return "Basic"
         case .holyGrail: return "Holy Grail"
         case .scanner: return "Scanner"
         }
@@ -81,20 +91,24 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
     /// The menu row — the label plus what the mode is for.
     var menuLabel: String {
         switch self {
-        case .off: return "Off"
+        case .basic: return "Basic · a frame on the timer"
         case .holyGrail: return "Holy Grail · day to night"
         case .scanner: return "Scanner · fires when the scene stills"
         }
     }
 
     /// Whether this mode can pace itself, i.e. whether EVERY may be Auto.
-    /// Off cannot: with nothing deciding the spacing, "Auto" would name no
+    /// Basic cannot: with nothing deciding the spacing, "Auto" would name no
     /// behaviour at all, so the dial simply doesn't offer it.
-    var supportsAutoInterval: Bool { self != .off }
+    var supportsAutoInterval: Bool { self != .basic }
 
-    /// Whether this mode *requires* Auto — Scanner's spacing is the scene's,
-    /// so a fixed interval is not a choice it can honour.
-    var requiresAutoInterval: Bool { self == .scanner }
+    /// Whether this mode takes the spacing over entirely — Scanner's shutter is
+    /// the scene's, so there is no interval to set and EVERY isn't drawn at all.
+    var ownsInterval: Bool { self == .scanner }
+
+    /// Whether this mode *requires* Auto — the same fact as `ownsInterval`,
+    /// named for the reconciliation that reads it (`reconcileIntervalAuto`).
+    var requiresAutoInterval: Bool { ownsInterval }
 }
 
 /// Output format for Interval shooting. DNG blends Bayer RAW captures into

@@ -300,6 +300,40 @@ final class CameraController: NSObject, ObservableObject {
     /// "no RAW on this device" are not the same sentence, and the HUD used to
     /// print the second one at anybody who picked the first.
     private var scannerWantedRAW = true
+    /// The stock this run declared — what the rectangle detector's shape gate
+    /// tests every candidate against, and (via `startScanner`) what chose the
+    /// trigger in the first place.
+    private var scannerPaperAspect: PerspectiveAspect = .auto
+    /// Frames per pose — the BLEND dial, inside a Scanner run. 1 writes the
+    /// camera's own file untouched; more builds a `ScannerPoseStack`.
+    private var scannerPoseDepth = 1
+    /// How many frames of the pose in flight are still to be requested. A pose
+    /// deeper than one frame is captured **sequentially**, not as a burst: the
+    /// run has all the time in the world (a human is holding a page still) and
+    /// asking for ten 48-megapixel frames at once would put ten of them in
+    /// memory at once. One in flight, one being folded into the average.
+    private var scannerPoseFramesRemaining = 0
+    /// The pose index the frames in flight belong to, frozen when the pose
+    /// opened — `scannerFrames.count` moves when the pose lands, which is after.
+    private var scannerPoseIndex = 0
+    /// The corners in view when the pose was asked for, held for the whole pose
+    /// so every frame of a stack is stamped with the geometry of the moment the
+    /// shutter was pressed rather than of whichever frame landed last.
+    private var scannerPoseQuad: NormalizedQuad?
+    private var scannerPoseStack: ScannerPoseStack?
+    /// Where the averaging runs. Off the session queue on purpose: a ten-frame
+    /// stack is seconds of decode and GPU work, and the session queue is what
+    /// keeps the preview, the tap and the shutter alive.
+    private let scannerStackQueue = DispatchQueue(
+        label: "letslapse.scanner.stack", qos: .userInitiated)
+    /// True while a pose is being averaged and written. The HUD says so — the
+    /// pose count cannot move until it finishes, and a count that sits still
+    /// for three seconds after a shutter click reads as a shoot that has hung.
+    private var scannerStacking = false
+    /// The last sample said the detector is seeing flat things and refusing them
+    /// all on shape. Carried in from the tap with the sample it describes (see
+    /// `ScannerMotionAnalyzer.Sample`), never read across queues.
+    private var scannerRefusingOnShape = false
     /// Preset and photo-aspect state to undo when the run ends.
     private var scannerPreviousPreset: AVCaptureSession.Preset?
     private var scannerArmedPhotoAspect = false
@@ -695,9 +729,29 @@ final class CameraController: NSObject, ObservableObject {
         /// HUD's whole vocabulary changes with it: under the document trigger
         /// there is no "move something" to ask for.
         var trigger: String = ScannerEngine.Trigger.motion.rawValue
+        /// The detector can see something flat and the named stock has refused
+        /// it (see `RectangleDetector.isRefusingOnShape`). Told apart from
+        /// "nothing in view" in the HUD because the fix is a different one:
+        /// this is "you are pointed at the wrong thing, or the wrong stock is
+        /// selected", not "put a page down".
+        var refusingOnShape: Bool = false
+        /// Frames averaged into each pose — the BLEND dial. 1 is a plain pose.
+        var framesPerPose: Int = 1
+        /// A pose's frames are all in and are being averaged and written. The
+        /// pose count cannot move until this finishes, so the HUD says what the
+        /// wait is rather than looking stalled.
+        var isStacking: Bool = false
     }
 
     @Published var scannerState: ScannerState?
+
+    /// Bumped each time a pose is actually asked for by hand (see
+    /// `captureScannerPoseNow`). The capture screen's confirmation — the
+    /// "✓ Captured" flash and the haptic — hangs off this rather than off the
+    /// button's own action, so the feedback fires when a frame really went out
+    /// and stays silent when the request was refused (a pose already in flight,
+    /// or the run's frame cap reached).
+    @Published private(set) var scannerManualCaptures = 0
 
     /// The flat object the Scanner can currently see, normalised bottom-left
     /// origin, or nil when there is none. Drawn as the viewfinder's quad
@@ -5267,9 +5321,18 @@ final class CameraController: NSObject, ObservableObject {
     /// questions, not one with a filter on it — see `ScannerEngine`.
     func startScanner(
         frameCap: Int? = nil, preferRAW: Bool = true,
-        trigger: ScannerEngine.Trigger = .motion
+        aspect: PerspectiveAspect = .auto,
+        framesPerPose: Int = 1
     ) {
+        // **The stock picks the whole trigger, not a filter on one.** A named
+        // stock is a declaration that these are pages, and a document shoot has
+        // no disturb/settle cycle to wait for — the page is put down and stays
+        // put. Auto keeps the turntable machine; a stock switches to "a page,
+        // holding still". Derived here rather than passed in, so the trigger and
+        // the shape gate below can never be told two different stories.
+        let trigger: ScannerEngine.Trigger = aspect == .auto ? .motion : .rectangle
         sessionQueue.async {
+            self.scannerPaperAspect = aspect
             guard !self.movieOutput.isRecording, self.intervalTimer == nil,
                   !self.isLiveBlendActive, !self.scannerActive else { return }
             // Same ordering rule as every other capture start: the other
@@ -5332,6 +5395,10 @@ final class CameraController: NSObject, ObservableObject {
             self.scannerActive = true
             self.scannerWriter = FrameTimestampWriter(directory: directory)
             self.scannerPoseIndexByRequest = [:]
+            self.scannerPoseDepth = max(1, framesPerPose)
+            self.scannerPoseFramesRemaining = 0
+            self.scannerPoseStack = nil
+            self.scannerStacking = false
 
             // Light first, meter second, freeze third. A document run lights
             // the page (see `enableScannerTorch`), and the lamp changes the
@@ -5394,6 +5461,42 @@ final class CameraController: NSObject, ObservableObject {
         cancelScheduledStop()
         sessionQueue.async {
             self.finishScannerOnQueue()
+        }
+    }
+
+    /// Takes a pose **now**, on the operator's say-so, into the run already in
+    /// progress.
+    ///
+    /// The Scanner's whole proposition is that the scene fires the shutter, and
+    /// that proposition fails in ways no threshold fixes: a matte page on a
+    /// matte desk the detector never finds, a stock whose ratio gate is refusing
+    /// the quad it does find, a pose the operator wants held rather than
+    /// re-placed. Without a manual shutter the answer to any of those is to stop
+    /// the run and start another — which splits one set of pages across two
+    /// projects, and a set is the unit a solver and an export both consume.
+    ///
+    /// So the frame lands in the *same* project, indexed and sidecar-stamped
+    /// exactly like an automatic one, with whatever corners were in view at the
+    /// moment it was asked for (possibly none — see `handleScannerPhoto`). The
+    /// engine is then told, so the run's re-arm rules pick up from here rather
+    /// than immediately taking the same page again.
+    func captureScannerPoseNow() {
+        sessionQueue.async {
+            guard self.scannerActive, let engine = self.scannerEngine else { return }
+            let now = Date()
+            guard self.fireScannerCapture() else {
+                // Refused, and the reason is worth a line: a pose already in
+                // flight, or the pose target already met.
+                LLog("scanner: manual capture ignored — capture pending or cap reached")
+                return
+            }
+            engine.didCaptureManually(at: now)
+            CaptureSessionLogger.shared.log("scanner_manual_capture", [
+                "pose": self.scannerFrames.count + 1,
+                "hadRectangle": self.scannerLatestQuad != nil,
+            ])
+            DispatchQueue.main.async { self.scannerManualCaptures += 1 }
+            self.publishScannerState()
         }
     }
 
@@ -5588,17 +5691,6 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// Whether AE, AF and WB are all held right now — what the capture screen's
-    /// pre-flight warning reads. Answered on the main thread from the device's
-    /// own modes, so it describes the camera rather than an app-side flag.
-    var scannerCameraIsLocked: Bool {
-        guard let device = videoDevice else { return false }
-        let exposureHeld = device.exposureMode == .locked || device.exposureMode == .custom
-        let focusHeld = device.focusMode == .locked
-        let balanceHeld = device.whiteBalanceMode == .locked
-        return exposureHeld && focusHeld && balanceHeld
-    }
-
     /// sessionQueue-confined. Adds the differencing tap, the same way the
     /// test-card and Watch framing taps are added.
     private func attachScannerTapOnQueue() {
@@ -5613,14 +5705,21 @@ final class CameraController: NSObject, ObservableObject {
         // corners it is about to draw were measured.
         let runOrientation = captureOrientation()
         detector.setCaptureOrientation(runOrientation)
+        // The stock's shape test, armed with this format's own field of view.
+        // Read here rather than stored at start: a run's format is settled by
+        // the time the tap goes on, and the number has to describe the frames
+        // the detector will actually see.
+        detector.setShapeGate(
+            aspect: scannerPaperAspect,
+            horizontalFieldOfView: videoDevice?.activeFormat.videoFieldOfView ?? 0)
         let quadOrientation = detector.quadOrientation
         DispatchQueue.main.async { self.scannerRectangleOrientation = quadOrientation }
         analyzer.rectangleDetector = detector
         analyzer.reset()
-        analyzer.onSample = { [weak self] magnitude, quad, time in
+        analyzer.onSample = { [weak self] sample in
             guard let self else { return }
             self.sessionQueue.async {
-                self.ingestScannerSample(magnitude: magnitude, quad: quad, at: time)
+                self.ingestScannerSample(sample)
             }
         }
         let output: AVCaptureVideoDataOutput
@@ -5664,8 +5763,12 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     /// sessionQueue-confined. One measurement in; a capture out, or not.
-    private func ingestScannerSample(magnitude: Float, quad: NormalizedQuad?, at time: Date) {
+    private func ingestScannerSample(_ sample: ScannerMotionAnalyzer.Sample) {
+        let magnitude = sample.magnitude
+        let quad = sample.quad
+        let time = sample.time
         guard scannerActive, let engine = scannerEngine else { return }
+        scannerRefusingOnShape = sample.refusedOnShape
         publishScannerRectangle(quad, at: time)
         #if DEBUG
         // The measurement `defaultMotionThreshold`'s TODO is waiting on. The
@@ -5747,15 +5850,39 @@ final class CameraController: NSObject, ObservableObject {
         return ceiling
     }
 
-    /// sessionQueue-confined. Asks the photo output for this pose. Returns
-    /// whether a request actually went out — the engine only commits a page as
-    /// banked when one did.
+    /// sessionQueue-confined. Opens a pose and asks the photo output for its
+    /// first frame. Returns whether a request actually went out — the engine
+    /// only commits a page as banked when one did.
+    ///
+    /// A pose is one frame at BLEND Off and `scannerPoseDepth` frames otherwise,
+    /// requested one at a time from `finishScannerCapture` and averaged into a
+    /// single image by `ScannerPoseStack`. Either way it is **one pose**: one
+    /// index, one sidecar entry, one file on disk per format, so nothing
+    /// downstream — the count, the target ring, the export, a solver — can tell
+    /// a stacked pose from a plain one except by looking less noisy.
     @discardableResult
     private func fireScannerCapture() -> Bool {
         guard scannerActive, !scannerCapturePending else { return false }
         if let cap = scannerFrameCap, scannerFrames.count >= cap { return false }
         scannerCapturePending = true
         scannerWaitingForSteady = false
+        scannerPoseIndex = scannerFrames.count
+        scannerPoseQuad = scannerLatestQuad
+        scannerPoseFramesRemaining = scannerPoseDepth
+        scannerPoseStack = scannerPoseDepth > 1
+            ? ScannerPoseStack(
+                depth: scannerPoseDepth,
+                scratch: (photoDirectory ?? FileManager.default.temporaryDirectory)
+                    .appendingPathComponent(String(format: "pose-%05d-parts", scannerPoseIndex + 1)))
+            : nil
+        return requestScannerFrame()
+    }
+
+    /// sessionQueue-confined. Asks for one frame of the pose in flight.
+    @discardableResult
+    private func requestScannerFrame() -> Bool {
+        guard scannerActive, scannerPoseFramesRemaining > 0 else { return false }
+        scannerPoseFramesRemaining -= 1
 
         let settings: AVCapturePhotoSettings
         if let rawFormat = scannerRawPixelFormat {
@@ -5803,11 +5930,11 @@ final class CameraController: NSObject, ObservableObject {
         if scannerRawPixelFormat == nil {
             settings.photoQualityPrioritization = allowedQualityPrioritization(.quality)
         }
-        scannerPoseIndexByRequest[settings.uniqueID] = scannerFrames.count
-        // The geometry this pose is being shot on, frozen with the request. It
-        // rides to the sidecar in `handleScannerPhoto` and no further: nothing
-        // here touches the frame itself.
-        if let quad = scannerLatestQuad {
+        scannerPoseIndexByRequest[settings.uniqueID] = scannerPoseIndex
+        // The geometry this pose is being shot on, frozen when the pose opened.
+        // It rides to the sidecar in `handleScannerPhoto` and no further:
+        // nothing here touches the frame itself.
+        if let quad = scannerPoseQuad {
             scannerQuadByRequest[settings.uniqueID] = quad
         }
         photoOutput.capturePhoto(with: settings, delegate: self)
@@ -5850,6 +5977,27 @@ final class CameraController: NSObject, ObservableObject {
     fileprivate func handleScannerPhoto(_ photo: AVCapturePhoto) {
         guard scannerActive, let directory = photoDirectory else { return }
         guard let index = scannerPoseIndexByRequest[photo.resolvedSettings.uniqueID] else { return }
+
+        // A stacked pose's parts never reach the disk under their own name:
+        // they are folded into the running average and the pose is written once,
+        // when its last frame has landed (see `finishScannerPose`).
+        if let stack = scannerPoseStack {
+            let isFirstFrame = scannerPoseFramesRemaining == scannerPoseDepth - 1
+            if photo.isRawPhoto {
+                // The Bayer buffer is what gets averaged; the whole DNG is
+                // pulled only for the pose's first frame, whose tags describe
+                // the stack (one locked exposure, one sensor). Asking for tens
+                // of megabytes of file data per frame would be pure waste.
+                let buffer = photo.pixelBuffer
+                let reference = isFirstFrame ? photo.fileDataRepresentation() : nil
+                scannerStackQueue.async { stack.addRaw(buffer, dngData: reference) }
+            } else if let data = photo.fileDataRepresentation() {
+                let ext = scannerRawPixelFormat != nil ? "heic" : "jpg"
+                scannerStackQueue.async { stack.addProcessed(data, fileExtension: ext) }
+            }
+            return
+        }
+
         guard let data = photo.fileDataRepresentation() else { return }
 
         // Sequential and deterministic, assigned at request time — never read
@@ -5891,12 +6039,82 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
-    /// sessionQueue-confined. The whole pose is done — release the gate and
-    /// check the cap.
+    /// sessionQueue-confined. One capture request has finished, RAW and
+    /// processed sibling included.
+    ///
+    /// At BLEND Off that is the whole pose. Deeper than that, it is one frame of
+    /// it: the next is asked for here, so a pose's frames go out one at a time
+    /// and only one full-sensor capture is ever in flight.
     fileprivate func finishScannerCapture(uniqueID: Int64) {
         scannerPoseIndexByRequest.removeValue(forKey: uniqueID)
         scannerQuadByRequest.removeValue(forKey: uniqueID)
+        if scannerPoseFramesRemaining > 0 {
+            requestScannerFrame()
+            return
+        }
+        guard scannerPoseStack != nil else {
+            releaseScannerPose()
+            return
+        }
+        finishScannerPose()
+    }
+
+    /// sessionQueue-confined. The pose's frames are all in; average them and
+    /// write the one image the pose is.
+    ///
+    /// The gate stays closed across the whole of this — `scannerCapturePending`
+    /// is only released on the far side — so a scene that re-settles while a
+    /// stack is still being written cannot open a second pose on top of it.
+    private func finishScannerPose() {
+        guard let stack = scannerPoseStack, let directory = photoDirectory else {
+            releaseScannerPose()
+            return
+        }
+        scannerPoseStack = nil
+        scannerStacking = true
+        publishScannerState()
+        let index = scannerPoseIndex
+        let quad = scannerPoseQuad
+        let wantsRAW = scannerRawPixelFormat != nil
+        let shutter = videoDevice?.exposureDuration.seconds ?? 0
+        let iso = Double(videoDevice?.iso ?? 0)
+        scannerStackQueue.async {
+            let result = stack.finalize(directory: directory, index: index, wantsRAW: wantsRAW)
+            self.sessionQueue.async {
+                self.scannerStacking = false
+                guard self.scannerActive else { return }
+                // Same bookkeeping an unstacked pose does, in the same order:
+                // the primary file is the project frame, the sibling hangs off
+                // it, and the sidecar entry carries the corners the shutter was
+                // pressed on.
+                if let primary = result.raw ?? result.processed {
+                    var frame = ScannerFrame(raw: primary, processed: nil)
+                    if result.raw != nil { frame.processed = result.processed }
+                    if index < self.scannerFrames.count {
+                        self.scannerFrames[index] = frame
+                    } else {
+                        self.scannerFrames.append(frame)
+                    }
+                    self.photoURLs.append(primary)
+                    self.scannerWriter?.append(FrameTimestamps.Entry(
+                        frame: index,
+                        captureTime: Date(),
+                        shutter: shutter,
+                        iso: iso,
+                        ev: 0,
+                        rectangle: quad))
+                }
+                self.releaseScannerPose()
+            }
+        }
+    }
+
+    /// sessionQueue-confined. The pose is done: open the gate, republish, and
+    /// stop the run if it has met its target.
+    private func releaseScannerPose() {
         scannerCapturePending = false
+        scannerPoseFramesRemaining = 0
+        scannerPoseStack = nil
         let count = scannerFrames.count
         DispatchQueue.main.async { self.photoCount = count }
         publishScannerState()
@@ -5923,7 +6141,10 @@ final class CameraController: NSObject, ObservableObject {
             waitingForDeviceSteady: scannerWaitingForSteady,
             hasRectangle: engine.isTrackingRectangle,
             waitingForRectangle: engine.isWaitingForRectangle,
-            trigger: engine.trigger.rawValue)
+            trigger: engine.trigger.rawValue,
+            refusingOnShape: scannerRefusingOnShape,
+            framesPerPose: scannerPoseDepth,
+            isStacking: scannerStacking)
         DispatchQueue.main.async {
             if self.scannerState != state { self.scannerState = state }
         }
@@ -5948,6 +6169,14 @@ final class CameraController: NSObject, ObservableObject {
         scannerQuadByRequest = [:]
         scannerLatestQuad = nil
         scannerWaitingForSteady = false
+        scannerRefusingOnShape = false
+        // A pose caught mid-stack is abandoned rather than finished: its frames
+        // exist only in an accumulator and a scratch directory that goes with
+        // it, and a set gains nothing from one more page written after the
+        // operator has stopped the run.
+        scannerPoseFramesRemaining = 0
+        scannerPoseStack = nil
+        scannerStacking = false
         let urls = photoURLs
         // TODO (Phase 2, export): offer the perspective correction here, or
         // wherever the finished set is presented. Everything it needs is
@@ -6011,16 +6240,17 @@ final class CameraController: NSObject, ObservableObject {
     /// shared teardown paths still compile.
     private func endHolyGrailIfActive() {}
     var isScannerActive: Bool { false }
-    var scannerCameraIsLocked: Bool { false }
     var scannerDeviceIsSteady: (() -> Bool)? {
         get { nil }
         set { _ = newValue }
     }
     func startScanner(
         frameCap: Int? = nil, preferRAW: Bool = true,
-        trigger: ScannerEngine.Trigger = .motion
+        aspect: PerspectiveAspect = .auto,
+        framesPerPose: Int = 1
     ) {}
     func stopScanner(source: CaptureSessionLogger.StopSource = .phone) {}
+    func captureScannerPoseNow() {}
     func deleteLastScannerFrame(completion: ((Int) -> Void)? = nil) {
         DispatchQueue.main.async { completion?(0) }
     }

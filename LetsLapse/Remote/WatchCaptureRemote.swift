@@ -85,7 +85,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     @Published private(set) var isBulbMode = false
     @Published private(set) var captureCount = 0
     /// Interval's MODE dial as the camera has it — Off · Holy Grail · Scanner.
-    @Published private(set) var intervalMode: IntervalCaptureMode = .off
+    @Published private(set) var intervalMode: IntervalCaptureMode = .basic
     /// EVERY is pacing itself. `intervalSeconds` then reports what the pacing
     /// has *arrived at*, not what anyone chose, so the remote labels it "Auto".
     @Published private(set) var intervalAuto = false

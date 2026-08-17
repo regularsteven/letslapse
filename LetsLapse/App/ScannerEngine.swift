@@ -703,6 +703,43 @@ final class ScannerEngine {
         transition(to: .captured)
     }
 
+    /// The operator pressed the shutter themselves, and a frame went out.
+    ///
+    /// **The one door through the state machine that the scene doesn't open.**
+    /// Every automatic fire has to come out of a completed window — that is what
+    /// `legalPageTransitions` and `didCapture`'s guard exist to guarantee — but
+    /// a manual capture is precisely the case where the machine was *wrong*: the
+    /// detector can't find a page it is pointed straight at, or the operator
+    /// wants this pose whatever the hold window thinks. Refusing it because
+    /// `waitingForPage → captured` isn't in the table would make the button
+    /// useless exactly when it is needed.
+    ///
+    /// So the move is allowed and named rather than smuggled through: the pose
+    /// is banked, and the run continues under the ordinary re-arm rule (the page
+    /// has to be seen leaving before the next one is taken). A manual shot of a
+    /// page the detector never saw leaves the machine in `captured` with no
+    /// corners — the next pose arrives when the scene visibly changes, which is
+    /// the operator swapping the page.
+    func didCaptureManually(at time: Date) {
+        switch trigger {
+        case .rectangle:
+            capturedAt = time
+            absentSince = nil
+            sceneChangedSinceCapture = false
+            holdStartedAt = nil
+            holdReference = nil
+            state = .captured
+            isWaitingForRectangle = false
+        case .motion:
+            // Same landing the automatic path takes: the frame just taken *is*
+            // this pose, so the engine goes back to waiting for the operator's
+            // next move rather than holding a settle window open over it.
+            state = .settled
+            lastMotionAt = nil
+            cornerSamples = []
+        }
+    }
+
     /// How far through the current window the run is, 0…1 — the progress the HUD
     /// draws. Nil when nothing is running towards a shot.
     ///
@@ -772,15 +809,26 @@ final class ScannerMotionAnalyzer: NSObject, AVCaptureVideoDataOutputSampleBuffe
     /// `CameraController` (test card, Watch framing).
     let queue = DispatchQueue(label: "letslapse.scanner.motion")
 
-    /// Called on `queue` with each new magnitude, the flat object in frame (if
-    /// any) and the wall-clock moment both describe. The camera hops to its
-    /// session queue from here.
+    /// One frame's worth of everything the camera can say about the scene.
     ///
-    /// The pair travels together rather than as two callbacks because the
-    /// engine folds them into one decision: they must describe the same
+    /// It travels as one value rather than as separate callbacks because the
+    /// engine folds it into one decision: the parts must describe the same
     /// instant, or a settle could be judged against a rectangle seen half a
-    /// second ago.
-    var onSample: ((Float, NormalizedQuad?, Date) -> Void)?
+    /// second ago. It is also how the shape refusal crosses queues safely — the
+    /// detector's own state belongs to the tap's queue, so the answer is read
+    /// where it is written and carried out by value.
+    struct Sample {
+        let magnitude: Float
+        let quad: NormalizedQuad?
+        /// The detector found flat candidates and the named stock refused every
+        /// one of them (see `RectangleDetector.isRefusingOnShape`).
+        let refusedOnShape: Bool
+        let time: Date
+    }
+
+    /// Called on `queue` with each new sample. The camera hops to its session
+    /// queue from here.
+    var onSample: ((Sample) -> Void)?
 
     /// Finds the page/document/print, when there is one. Owned by the camera
     /// (which keeps its orientation current) and driven from here, off the same
@@ -832,7 +880,11 @@ final class ScannerMotionAnalyzer: NSObject, AVCaptureVideoDataOutputSampleBuffe
             sum += abs(grid[index] - previous[index])
         }
         let magnitude = sum / Float(grid.count)
-        onSample?(magnitude, rectangleDetector?.quad(at: now), now)
+        onSample?(Sample(
+            magnitude: magnitude,
+            quad: rectangleDetector?.quad(at: now),
+            refusedOnShape: rectangleDetector?.isRefusingOnShape(at: now) ?? false,
+            time: now))
     }
 
     /// Point-samples a BGRA pixel buffer down to the fixed grid, returning

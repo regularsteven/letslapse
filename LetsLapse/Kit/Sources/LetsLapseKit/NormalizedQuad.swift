@@ -107,6 +107,116 @@ public struct NormalizedQuad: Codable, Equatable, Sendable {
         return width / height
     }
 
+    /// The proportions of the **flat object itself**, recovered from its
+    /// projection — width ÷ height of the rectangle this quad is a photograph
+    /// of, not of the quad on screen.
+    ///
+    /// This is what makes the PAPER dial a capture-time test rather than only an
+    /// export-time hint. A page seen from anywhere but straight on is
+    /// foreshortened, so `apparentAspectRatio` of a real A4 wanders anywhere
+    /// from 0.71 down to 0.4 as the camera tilts — useless as a "is this an A4?"
+    /// question. The rectified ratio holds still under that tilt, because it
+    /// undoes it.
+    ///
+    /// **The method** is the standard one for recovering a rectangle's aspect
+    /// from one perspective view with a known focal length (Zhang & He, 2006).
+    /// The two vanishing-point scalars `k2`/`k3` say how much perspective the
+    /// quad carries; the rectangle's proportions then fall out of the two edge
+    /// directions measured in camera coordinates. Where a quad carries no
+    /// perspective at all — a page shot square-on from a copy stand, which is
+    /// most document scans — the estimate degenerates, and there the apparent
+    /// ratio *is* the answer, so that is what comes back.
+    ///
+    /// - Parameters:
+    ///   - frameAspect: width ÷ height of the image the corners were measured
+    ///     in (0.75 for a portrait 4:3 frame). The corner space is normalised
+    ///     per axis, so nothing here is a real angle until this un-squashes it.
+    ///   - focalInFrameWidths: the lens's focal length divided by that image's
+    ///     width — `0.5 / tan(horizontalFieldOfView / 2)`.
+    /// - Returns: width ÷ height of the physical rectangle, or nil for a
+    ///   degenerate quad (no area, collinear corners) — the shape a spurious
+    ///   detection at the edge of a frame has.
+    public func rectifiedAspectRatio(frameAspect: Double, focalInFrameWidths: Double) -> Double? {
+        guard frameAspect > 0, focalInFrameWidths > 0 else { return nil }
+
+        // Corner space → centred square units of frame width. Both axes end up
+        // in the same units, which is the whole point: a normalised y is a
+        // different physical distance from a normalised x on any frame that
+        // isn't square.
+        func homogeneous(_ point: Point) -> (x: Double, y: Double, z: Double) {
+            (x: point.x - 0.5, y: (point.y - 0.5) / frameAspect, z: 1)
+        }
+        let m1 = homogeneous(topLeft)
+        let m2 = homogeneous(topRight)
+        let m3 = homogeneous(bottomLeft)
+        let m4 = homogeneous(bottomRight)
+
+        func cross(
+            _ a: (x: Double, y: Double, z: Double), _ b: (x: Double, y: Double, z: Double)
+        ) -> (x: Double, y: Double, z: Double) {
+            (x: a.y * b.z - a.z * b.y, y: a.z * b.x - a.x * b.z, z: a.x * b.y - a.y * b.x)
+        }
+        func dot(
+            _ a: (x: Double, y: Double, z: Double), _ b: (x: Double, y: Double, z: Double)
+        ) -> Double {
+            a.x * b.x + a.y * b.y + a.z * b.z
+        }
+
+        let diagonal = cross(m1, m4)
+        let k2Denominator = dot(cross(m2, m4), m3)
+        let k3Denominator = dot(cross(m3, m4), m2)
+        // A vanishing point at infinity in either direction: the quad is a
+        // parallelogram, so there is no perspective to undo.
+        guard abs(k2Denominator) > 1e-9, abs(k3Denominator) > 1e-9 else {
+            return apparentRatioInFrame(frameAspect: frameAspect)
+        }
+        let k2 = dot(diagonal, m3) / k2Denominator
+        let k3 = dot(diagonal, m2) / k3Denominator
+
+        // Near-affine — a page shot square-on. The formula below divides by the
+        // perspective this quad hasn't got, so the honest answer is the one on
+        // screen. The bound is loose on purpose: the arithmetic goes unstable
+        // well before k reaches exactly 1.
+        guard abs(k2 - 1) > 1e-4 || abs(k3 - 1) > 1e-4 else {
+            return apparentRatioInFrame(frameAspect: frameAspect)
+        }
+
+        let n2 = (x: k2 * m2.x - m1.x, y: k2 * m2.y - m1.y, z: k2 * m2.z - m1.z)
+        let n3 = (x: k3 * m3.x - m1.x, y: k3 * m3.y - m1.y, z: k3 * m3.z - m1.z)
+
+        // nᵀ·(A⁻ᵀA⁻¹)·n with the principal point at the origin, i.e. the two
+        // in-plane components scaled by the focal length.
+        let squaredFocal = focalInFrameWidths * focalInFrameWidths
+        func weighted(_ n: (x: Double, y: Double, z: Double)) -> Double {
+            (n.x * n.x + n.y * n.y) / squaredFocal + n.z * n.z
+        }
+        let vertical = weighted(n3)
+        guard vertical > 1e-12 else { return apparentRatioInFrame(frameAspect: frameAspect) }
+        let ratio = (weighted(n2) / vertical).squareRoot()
+        guard ratio.isFinite, ratio > 0 else { return nil }
+        return ratio
+    }
+
+    /// The same rectangle expressed the way a stock is named: the short side
+    /// over the long one, so an A4 reads 0.707 whichever way up it was lying.
+    public func rectifiedPortraitRatio(frameAspect: Double, focalInFrameWidths: Double) -> Double? {
+        guard let ratio = rectifiedAspectRatio(
+            frameAspect: frameAspect, focalInFrameWidths: focalInFrameWidths) else { return nil }
+        return min(ratio, 1 / ratio)
+    }
+
+    /// `apparentAspectRatio`, corrected for a non-square frame — the fallback
+    /// when there is no perspective to undo.
+    private func apparentRatioInFrame(frameAspect: Double) -> Double? {
+        func scaled(_ point: Point) -> Point { Point(x: point.x, y: point.y / frameAspect) }
+        let width = (scaled(topLeft).distance(to: scaled(topRight))
+            + scaled(bottomLeft).distance(to: scaled(bottomRight))) / 2
+        let height = (scaled(topLeft).distance(to: scaled(bottomLeft))
+            + scaled(topRight).distance(to: scaled(bottomRight))) / 2
+        guard height > 1e-9, width > 1e-9 else { return nil }
+        return width / height
+    }
+
     /// The area of the quad's bounding box, 0…1 — the selection rule's primary
     /// key when several rectangles qualify at once (see `RectangleDetector`).
     public var boundingArea: Double {

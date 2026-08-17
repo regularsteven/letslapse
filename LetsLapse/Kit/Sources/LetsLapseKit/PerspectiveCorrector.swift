@@ -48,6 +48,54 @@ public enum PerspectiveAspect: String, CaseIterable, Codable, Sendable {
         case .square: return 1
         }
     }
+
+    /// How far a measured shape may sit from the named stock, as a fraction of
+    /// the stock's own ratio, and still be taken for it.
+    ///
+    /// **Deliberately generous, because of what this test is for.** It is not
+    /// policing which paper is on the desk — A4 (0.707) and Letter (0.773) are
+    /// 9% apart and this will never tell them apart, nor should it, since both
+    /// are "a page" and the operator has already said which. It is throwing out
+    /// the detections that are not the object at all: the sliver along a frame
+    /// edge, the desk-and-page bounding box, the keyboard behind the sheet. Those
+    /// miss by tens of percent.
+    ///
+    /// 20% takes an A4 as anything from 0.57 to 0.85 — a band that still rejects
+    /// a square (41% away) and a 16:9 laptop screen. Tightening it buys nothing
+    /// against real junk and starts refusing real pages measured through a
+    /// preview-resolution detector.
+    ///
+    /// **TODO (calibration): a starting value, not a measured one** — the same
+    /// note the Scanner's other thresholds carry. What it wants is a run over a
+    /// real desk logging the recovered ratio of pages that were accepted and of
+    /// the quads that were not. Override in the field with
+    /// `-scanner.aspectTolerance 0.12`.
+    public static let defaultShapeTolerance: Double = 0.2
+
+    /// Whether a detected quad could be this stock, seen from wherever the
+    /// camera is.
+    ///
+    /// `auto` admits everything, which is what "I haven't told you what this is"
+    /// has to mean — the shape test only exists because the operator named
+    /// something.
+    ///
+    /// An unmeasurable quad is **admitted**, not refused. Failing closed here
+    /// would turn every degenerate detection into a scanner that quietly stops
+    /// firing, and a run that won't take a photograph is a worse outcome than a
+    /// frame the operator can delete.
+    public func admits(
+        _ quad: NormalizedQuad,
+        frameAspect: Double,
+        focalInFrameWidths: Double,
+        tolerance: Double = PerspectiveAspect.defaultShapeTolerance
+    ) -> Bool {
+        guard let expected = portraitRatio else { return true }
+        guard let measured = quad.rectifiedPortraitRatio(
+            frameAspect: frameAspect, focalInFrameWidths: focalInFrameWidths) else { return true }
+        // Relative to the stock, so the band is the same *proportional* width
+        // for a square and for a receipt.
+        return abs(measured - expected) <= expected * max(0, tolerance)
+    }
 }
 
 /// Rectifies a photographed flat object from the four corners the Scanner saw,
