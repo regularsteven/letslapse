@@ -23,6 +23,21 @@ struct PhotoAdjustmentsPanel: View {
     /// always-dark iOS editors pass `LL.amber` instead, per the design system's
     /// "highlights over dark" rule.
     var accent: Color = LL.accent
+    /// The properties that travel over the shoot — marked with a diamond beside
+    /// their label and an accent readout, per design treatment `1e-A`. Empty
+    /// for a still, and for every clip graded with one look end to end.
+    var keyframedFields: Set<PhotoAdjustmentField> = []
+    /// True when the grade holds keyframes at all, so "Reset adjustments" stays
+    /// live even where the moment on screen happens to read neutral.
+    var hasKeyframes: Bool = false
+    /// Where a double-tapped label's reset goes when the owner has a timeline
+    /// to consider — zeroing the binding would write the zero into the moment
+    /// under the playhead rather than taking the property back out of it.
+    /// Unset (a still, or a clip with no keyframes) keeps the plain behaviour.
+    var onResetField: ((PhotoAdjustmentField) -> Void)?
+    /// Same, for "Reset adjustments": with keyframes there is a timeline to
+    /// clear as well as values to neutralise.
+    var onResetAll: (() -> Void)?
 
     enum PanelSection: String, CaseIterable, Identifiable {
         case whiteBalance = "White Balance"
@@ -109,44 +124,38 @@ struct PhotoAdjustmentsPanel: View {
         switch section {
         case .whiteBalance:
             whiteBalanceMenu
-            slider("Temp", value: $adjustments.temperature,
-                   range: PhotoAdjustments.temperatureRange, readout: kelvinReadout)
-            slider("Tint", value: $adjustments.tint,
-                   range: PhotoAdjustments.tintRange)
+            slider("Temp", field: .temperature, readout: kelvinReadout)
+            slider("Tint", field: .tint)
         case .light:
-            slider("Exposure", value: $adjustments.exposure,
-                   range: PhotoAdjustments.exposureRange, readout: exposureReadout)
-            slider("Contrast", value: $adjustments.contrast,
-                   range: PhotoAdjustments.contrastRange)
-            slider("Highlights", value: $adjustments.highlights,
-                   range: PhotoAdjustments.highlightsRange)
-            slider("Shadows", value: $adjustments.shadows,
-                   range: PhotoAdjustments.shadowsRange)
-            slider("Whites", value: $adjustments.whites,
-                   range: PhotoAdjustments.whitesRange)
-            slider("Blacks", value: $adjustments.blacks,
-                   range: PhotoAdjustments.blacksRange)
+            slider("Exposure", field: .exposure, readout: exposureReadout)
+            slider("Contrast", field: .contrast)
+            slider("Highlights", field: .highlights)
+            slider("Shadows", field: .shadows)
+            slider("Whites", field: .whites)
+            slider("Blacks", field: .blacks)
         case .color:
-            slider("Vibrance", value: $adjustments.vibrance,
-                   range: PhotoAdjustments.vibranceRange)
-            slider("Saturation", value: $adjustments.saturation,
-                   range: PhotoAdjustments.saturationRange)
+            slider("Vibrance", field: .vibrance)
+            slider("Saturation", field: .saturation)
         case .effects:
-            slider("Clarity", value: $adjustments.clarity,
-                   range: PhotoAdjustments.clarityRange)
-            slider("Vignette", value: $adjustments.vignetteIntensity,
-                   range: PhotoAdjustments.vignetteRange)
+            slider("Clarity", field: .clarity)
+            slider("Vignette", field: .vignetteIntensity)
         }
     }
 
+    private var canReset: Bool { !adjustments.isNeutral || hasKeyframes }
+
     private var resetAllButton: some View {
         Button("Reset adjustments") {
-            adjustments = .neutral
+            if let onResetAll {
+                onResetAll()
+            } else {
+                adjustments = .neutral
+            }
         }
         .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(adjustments.isNeutral ? .secondary : accent)
+        .foregroundStyle(canReset ? accent : .secondary)
         .buttonStyle(.plain)
-        .disabled(adjustments.isNeutral)
+        .disabled(!canReset)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(.top, 2)
     }
@@ -209,29 +218,61 @@ struct PhotoAdjustmentsPanel: View {
 
     private func slider(
         _ label: String,
-        value: Binding<Float>,
-        range: ClosedRange<Float>,
+        field: PhotoAdjustmentField,
         readout: ((Float) -> String)? = nil
     ) -> some View {
-        VStack(spacing: 2) {
-            HStack {
+        let value = $adjustments[dynamicMember: field.keyPath]
+        let isKeyframed = keyframedFields.contains(field)
+        return VStack(spacing: 2) {
+            HStack(spacing: 6) {
                 Text(label)
                     .font(.system(size: 13.5))
                     .foregroundStyle(.secondary)
+                if isKeyframed { keyframeDiamond }
                 Spacer()
                 Text((readout ?? defaultReadout)(value.wrappedValue))
                     .font(.system(size: 12.5, weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(value.wrappedValue == 0 ? .secondary : .primary)
+                    .foregroundStyle(readoutStyle(value.wrappedValue, isKeyframed: isKeyframed))
             }
             .contentShape(Rectangle())
             // Double-tap (double-click on the Mac) a label to reset just that
-            // slider — the idiom every editor teaches.
-            .onTapGesture(count: 2) { value.wrappedValue = 0 }
-            Slider(value: value, in: range)
+            // slider — the idiom every editor teaches. With a timeline in play
+            // it is the owner's business: the value here belongs to a moment,
+            // and taking a property out of that moment can retire it entirely.
+            .onTapGesture(count: 2) {
+                if let onResetField {
+                    onResetField(field)
+                } else {
+                    value.wrappedValue = 0
+                }
+            }
+            Slider(value: value, in: field.range)
                 .tint(accent)
-                .accessibilityLabel(label)
+                .accessibilityLabel(isKeyframed ? "\(label), keyframed" : label)
         }
+    }
+
+    private func readoutStyle(_ value: Float, isKeyframed: Bool) -> Color {
+        // Accent whenever the property travels — the readout is then a value at
+        // *this moment*, not a value for the clip, and that is worth saying
+        // even when the number under the playhead happens to be neutral.
+        if isKeyframed { return accent }
+        return value == 0 ? Color.secondary : Color.primary
+    }
+
+    /// Treatment `1e-A`: the smallest new mark that could carry the idea, and
+    /// the one that composes with the accent dots the section headers already
+    /// use. A dot means "non-neutral"; a diamond means "varies over time".
+    private var keyframeDiamond: some View {
+        RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+            .fill(LL.amber)
+            .overlay(
+                RoundedRectangle(cornerRadius: 1.5, style: .continuous)
+                    .strokeBorder(LL.accent, lineWidth: 1))
+            .frame(width: 7, height: 7)
+            .rotationEffect(.degrees(45))
+            .accessibilityHidden(true)
     }
 
     /// Slider values read as -100…100, which is the vocabulary people know
@@ -253,6 +294,9 @@ struct PhotoAdjustmentsPanel: View {
     // MARK: - Section state
 
     private func isNeutral(_ section: PanelSection) -> Bool {
+        // A section holding a property that travels is never neutral, whatever
+        // the moment under the playhead reads.
+        guard keyframedFields.isDisjoint(with: Self.fields(of: section)) else { return false }
         switch section {
         case .whiteBalance:
             return adjustments.temperature == 0 && adjustments.tint == 0
@@ -267,7 +311,22 @@ struct PhotoAdjustmentsPanel: View {
         }
     }
 
+    /// Which controls live in which section — the one list both the header dot
+    /// and the header's Reset work from.
+    private static func fields(of section: PanelSection) -> Set<PhotoAdjustmentField> {
+        switch section {
+        case .whiteBalance: return [.temperature, .tint]
+        case .light: return [.exposure, .contrast, .highlights, .shadows, .whites, .blacks]
+        case .color: return [.vibrance, .saturation]
+        case .effects: return [.clarity, .vignetteIntensity]
+        }
+    }
+
     private func reset(_ section: PanelSection) {
+        if let onResetField {
+            for field in Self.fields(of: section) { onResetField(field) }
+            return
+        }
         switch section {
         case .whiteBalance:
             adjustments.temperature = 0

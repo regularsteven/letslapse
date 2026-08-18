@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Interval grading viewer · keyframed · portrait</title>
+  <desc>Mirrors App/PhotoViewerView.swift with App/GradeTimelineView.swift between the media and the controls, and App/PhotoAdjustmentsPanel.swift showing keyframed-slider treatment A. The strip is drawn ONLY for a capture with length to grade across — an interval shoot with more than one frame (`hasTimeline`). A Photo-mode capture is one still, has no second moment to grade, and gets exactly the screen project-photo.viewer.portrait.svg draws. Staged by LL_KEYFRAMES=sunset over LL_VIEWER=1, which writes the three moments this file shows. STRIP GEOMETRY (GradeTimelineView's metrics table): 30pt play control, 12pt gap, then the track — a 3pt rail at 18% primary, an 11pt amber moment with a 2pt #C36A00 ring, a 3×22pt playhead in primary UNDER the moments (so a moment the playhead stands on reads as one mark), and the travelling elapsed-time bubble held between 7% and 93% of the track so it never hangs off the end. Head and tail labels are elapsed CAPTURE time, from the frames.timestamps sidecar; the format is chosen from the whole span, so a 2 h 14 min shoot reads h:mm:ss at both ends rather than 0:00 beside 2:14:00. Total strip height is fixed at 45pt (30 + 2 + 13), so the media above it never moves when a moment is added, selected or long-pressed. STATES NOT DRAWN HERE, all from the same component: SNAPPED — tapping a moment lands the playhead exactly on it and the dot swells to 15pt, swapping its ring for white inside a 1.5pt #C36A00 halo; that is the only “selected” state the screen has, and while it holds, the sliders edit THAT moment rather than making a new one. LONG-PRESS — 550ms on a moment raises a #2B2B2E bubble with “Delete Keyframe” in #FF6B5E and a caret pointing at it; a press that starts on a moment never scrubs, so the moment being aimed at cannot slide out from under the finger. SPARSE vs DENSE — keyframe density is the only speed control there is (ease-in-out is fixed, and there is no curve editor anywhere): a pair an hour apart is a sunset drifting, a pair a few frames apart is a tram going past. PANEL: a property that travels carries the amber diamond (7pt, rotated 45°, #FFB340 on a #C36A00 hairline) beside its label and an accent readout — the readout is then a value at THIS moment, not a value for the clip, which is worth saying even when the number happens to be neutral. Contrast has no diamond here because no moment moves it. A section holding a travelling property is never neutral, so its header keeps its accent dot and its Reset. MODEL: the moments are positions in the SOURCE, 0…1 (GradeTimeline) — never in the output, so the speed and warp layers move no keyframe. Between two moments the grade is their smoothstep blend; outside them the nearest one holds. The project's stored PhotoAdjustments stop grading anything and become a mirror of the opening moment, so the card, the thumbnail and a single-still export keep showing the look the clip opens on. A keyframed grade is always Edited: one preset cannot stand for a look that changes, and a chip tapped here writes its values at the playhead rather than flattening the shoot back to one look (Original is the exception — it clears the timeline with everything else).</desc>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <defs><clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath></defs>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000000"/>
+    <defs>
+      <linearGradient id="skykf" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#6280AC"/><stop offset="1" stop-color="#E6C19E"/>
+      </linearGradient>
+      <clipPath id="framekf"><rect x="24" y="83" width="393" height="295"/></clipPath>
+    </defs>
+    <g clip-path="url(#framekf)">
+      <rect x="24" y="83" width="393" height="295" fill="url(#skykf)"/>
+      <circle cx="267.7" cy="228.1" r="26.6" fill="#FFCE7E" opacity="0.95"/>
+      <path d="M24 378 L24 295.4 L79.0 295.4 L79.0 265.9 L110.5 265.9 L110.5 301.3 L157.6 301.3 L157.6 257.1 L196.9 257.1 L196.9 307.2 L259.8 307.2 L259.8 271.8 L314.8 271.8 L314.8 298.4 L417.0 298.4 L417 378 Z" fill="#30394E"/>
+    </g>
+    <circle cx="58" cy="113" r="18" fill="#000" opacity="0.4"/>
+    <path d="M61 107 L55 113 L61 119" fill="none"
+      stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="36" y="348" width="236" height="20" rx="10" fill="#000" opacity="0.5"/>
+    <text x="47" y="361.5" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 60 frames</text>
+    <circle cx="55.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
+    <path d="M51.5 398.5 L61.0 405.0 L51.5 411.5 Z" fill="#FFB340"/>
+    <rect x="82" y="403.5" width="319.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
+    <rect x="176.2" y="394.0" width="3" height="22" rx="1.5" fill="#FFFFFF"/>
+    <circle cx="113.9" cy="405.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <circle cx="247.9" cy="405.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <circle cx="356.3" cy="405.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <rect x="148.3" y="374.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
+    <text x="177.7" y="385.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">0:40:12</text>
+    <text x="82.0" y="432.0" font-size="10.5" fill="#8E8E93">0:00:00</text>
+    <text x="401.0" y="432.0" text-anchor="end" font-size="10.5" fill="#8E8E93">2:14:00</text>
+    <rect x="202.5" y="448.5" width="36" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+    <text x="40" y="491" font-size="13" class="sb" fill="#8E8E93">Preset</text>
+    <rect x="92" y="479" width="68" height="23" rx="11.5" fill="#FFFFFF" opacity="0.08"/>
+    <text x="126.0" y="494.5" text-anchor="middle" font-size="12.5" class="sb" fill="#8E8E93">Edited</text>
+    <rect x="40.0" y="517" width="86.6" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="83.3" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Natural</text>
+    <rect x="134.6" y="517" width="78.2" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="173.7" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Cinema</text>
+    <rect x="220.8" y="517" width="69.8" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="255.7" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Matte</text>
+    <rect x="298.7" y="517" width="69.8" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="333.6" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Vivid</text>
+    <rect x="376.5" y="517" width="95.0" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="424.0" y="538.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Original</text>
+    <rect x="40" y="564" width="361" height="46" rx="12" fill="#1C1C1E"/>
+    <text x="52" y="592" font-size="13.5" class="sb" fill="#8E8E93">White Balance</text>
+    <circle cx="158.8" cy="587.5" r="3" fill="#FFB340"/>
+    <text x="367.0" y="592" text-anchor="end" font-size="12" class="sb" fill="#FFB340">Reset</text>
+    <path d="M378.0 585.0 L383.0 590.0 L378.0 595.0" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="40" y="620" width="361" height="214" rx="12" fill="#1C1C1E"/>
+    <text x="52" y="646" font-size="13.5" class="sb" fill="#8E8E93">Light</text>
+    <circle cx="98.0" cy="641.5" r="3" fill="#FFB340"/>
+    <text x="367.0" y="646" text-anchor="end" font-size="12" class="sb" fill="#FFB340">Reset</text>
+    <path d="M376.0 640.0 L381.0 645.0 L386.0 640.0" fill="none" stroke="#8E8E93" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="52" y="676" font-size="13.5" fill="#8E8E93">Exposure</text>
+    <rect x="121.9" y="668.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 125.4 671.5)"/>
+    <text x="389.0" y="676" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">-0.09</text>
+    <rect x="52" y="696" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="52" y="696" width="165.5" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="217.7" cy="698" r="13" fill="#FFF"/>
+    <text x="52" y="720" font-size="13.5" fill="#8E8E93">Contrast</text>
+    <text x="389.0" y="720" text-anchor="end" font-size="12.5" class="sb" fill="#8E8E93">0</text>
+    <rect x="52" y="740" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="52" y="740" width="168.5" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="220.5" cy="742" r="13" fill="#FFF"/>
+    <text x="52" y="764" font-size="13.5" fill="#8E8E93">Highlights</text>
+    <rect x="137.0" y="756.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 140.5 759.5)"/>
+    <text x="389.0" y="764" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">-27</text>
+    <rect x="52" y="784" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="52" y="784" width="123.0" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="178.5" cy="786" r="13" fill="#FFF"/>
+    <text x="52" y="808" font-size="13.5" fill="#8E8E93">Shadows</text>
+    <rect x="114.3" y="800.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 117.8 803.5)"/>
+    <text x="389.0" y="808" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">+14</text>
+    <rect x="52" y="828" width="337.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="52" y="828" width="192.1" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="242.3" cy="830" r="13" fill="#FFF"/>
+  </g>
+  <g transform="translate(24,24)">
+    <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+    <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Interval grading viewer · keyframed · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift + App/GradeTimelineView.swift — three moments, playhead between the first two · LL_KEYFRAMES=sunset</text>
+</svg>

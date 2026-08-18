@@ -52,6 +52,7 @@ enum VideoCanvasCropper {
         offset: Double = 0.5,
         shortEdge: Int? = nil,
         grade: PhotoGrade = .identity,
+        gradeMap: GradeSourceMap = .direct,
         /// Forces the output size. Set when this pass is normalising one
         /// segment of a mixed-resolution ramp shoot to the size every other
         /// segment lands at, so the stitch can lay them end to end — see
@@ -105,9 +106,14 @@ enum VideoCanvasCropper {
 
         // The grade's chain, built once — the movie carries no as-shot
         // temperature tag, so white balance anchors at D65 like every video
-        // grade (see `VideoGrader`).
-        let chain: ((CIImage) -> CIImage)? = grade.isIdentity
+        // grade (see `VideoGrader`). A grade that travels can't be built once:
+        // it is rebuilt per frame, at the SOURCE moment `gradeMap` says that
+        // frame came from, because this pass runs over a clip whose clock the
+        // warp has already rewritten.
+        let chain: ((CIImage) -> CIImage)? = grade.isIdentity || grade.isKeyframed
             ? nil : PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
+        let keyframedGrade: PhotoGrade? = grade.isKeyframed ? grade : nil
+        let gradedDuration = (try? await asset.load(.duration))?.seconds ?? 0
         let composition = AVMutableVideoComposition(asset: asset) { request in
             let extent = request.sourceImage.extent
             // The box is authored top-left on the display-oriented picture;
@@ -128,7 +134,16 @@ enum VideoCanvasCropper {
             let framed = scaled.cropped(to: CGRect(origin: .zero, size: renderSize))
             // Filters like the unsharp mask and the vignette grow the extent;
             // the frame has to come back the size the writer expects.
-            let graded = chain.map { $0(framed).cropped(to: framed.extent) } ?? framed
+            var graded = chain.map { $0(framed).cropped(to: framed.extent) } ?? framed
+            if let keyframedGrade {
+                let position = gradeMap.position(
+                    outputSeconds: request.compositionTime.seconds,
+                    outputDuration: gradedDuration)
+                let moment = PhotoGrader.filterChain(
+                    keyframedGrade.frozen(at: position),
+                    asShotKelvin: PhotoGrader.neutralKelvin)
+                graded = moment(graded).cropped(to: framed.extent)
+            }
             request.finish(with: graded, context: context)
         }
         composition.renderSize = renderSize

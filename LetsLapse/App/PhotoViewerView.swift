@@ -1,3 +1,4 @@
+import LetsLapseKit
 import SwiftUI
 
 #if os(macOS)
@@ -50,11 +51,36 @@ struct PhotoViewerView: View {
     @State private var presetState: PresetState = .original
     @State private var loaded = false
 
+    // MARK: Keyframes
+    //
+    // An interval shoot is a clip, not a still, so its grade can travel across
+    // it. Everything below is inert for a Photo-mode capture: `frames` stays
+    // empty, `hasTimeline` is false, and the screen is exactly the editor it
+    // has always been.
+
+    /// How the grade moves across this shoot. Empty until somebody grades a
+    /// second moment of it — see `GradeTimeline`.
+    @State private var timeline: GradeTimeline = .empty
+    /// The playhead, 0…1 of the source capture.
+    @State private var position: Double = 0
+    @State private var isScrubbing = false
+    @State private var isPlaying = false
+    @State private var playback: Task<Void, Never>?
+    /// The shoot's stills in capture order, and the elapsed capture seconds of
+    /// each where the shoot recorded a clock. Empty for a Photo capture.
+    @State private var frames: [URL] = []
+    @State private var frameSeconds: [Double] = []
+
     @State private var rendered: CGImage?
     @State private var isRendering = false
     /// Bumped by every control change; the render task keys off it so a burst
     /// of slider ticks collapses into one render.
     @State private var renderToken = 0
+    /// The playhead the preview is rendered at. Quantised while scrubbing or
+    /// playing (see `renderPosition(for:)`) so a drag across two hours of
+    /// capture asks for a few dozen frames rather than one per pixel, and set
+    /// exactly when the drag lets go.
+    @State private var renderedPosition: Double = 0
 
     @State private var asShotKelvin: Double = 6500
     @State private var isNamingPreset = false
@@ -134,6 +160,84 @@ struct PhotoViewerView: View {
         model.captures.first { $0.id == captureID }
     }
 
+    // MARK: - Keyframe surface
+
+    /// True when this capture has length to grade across — an interval shoot
+    /// with frames to scrub. A Photo-mode capture is one still: there is no
+    /// second moment to grade, so there is no strip.
+    private var hasTimeline: Bool { frames.count > 1 }
+
+    /// The grade at the playhead. With no keyframes this is the stored grade at
+    /// every position, which is what keeps an ungraded-over-time project
+    /// behaving exactly as it did before.
+    private var displayedAdjustments: PhotoAdjustments {
+        timeline.adjustments(at: position, baseline: adjustments)
+    }
+
+    /// The still under the playhead. The editor opens on the first frame and
+    /// stays there until somebody scrubs.
+    private var displayedURL: URL {
+        guard hasTimeline else { return url }
+        return frames[frameIndex(at: position)]
+    }
+
+    private func frameIndex(at position: Double) -> Int {
+        guard frames.count > 1 else { return 0 }
+        let index = Int((Double(frames.count - 1) * min(max(position, 0), 1)).rounded())
+        return min(max(index, 0), frames.count - 1)
+    }
+
+    /// The axis: elapsed capture time when the shoot wrote a clock, and frame
+    /// numbers when it didn't — a count is honest where invented seconds
+    /// wouldn't be.
+    private var timelineLabel: (Double) -> String {
+        if let span = frameSeconds.last, span > 0 {
+            return { position in
+                let index = frameIndex(at: position)
+                let seconds = frameSeconds.indices.contains(index)
+                    ? frameSeconds[index] : span * min(max(position, 0), 1)
+                return GradeTimelineClock.label(seconds: seconds, span: span)
+            }
+        }
+        if let duration = capture?.sourceDurationSeconds, duration > 0 {
+            return GradeTimelineClock.labeller(duration: duration)
+        }
+        return GradeTimelineClock.frameLabeller(count: frames.count)
+    }
+
+    /// The strip itself, in the one place both layouts pull it from.
+    @ViewBuilder private func timelineStrip(compact: Bool) -> some View {
+        GradeTimelineView(
+            position: $position,
+            isScrubbing: $isScrubbing,
+            keyframes: timeline.keyframes,
+            label: timelineLabel,
+            isPlaying: isPlaying,
+            compact: compact,
+            accent: accentColor,
+            onPlayToggle: togglePlayback,
+            onScrub: { next in
+                stopPlayback()
+                renderedPosition = renderPosition(for: next)
+                renderToken += 1
+            },
+            onScrubEnd: {
+                renderedPosition = position
+                renderToken += 1
+            },
+            onDelete: deleteKeyframe)
+    }
+
+    /// While a scrub or a playback sweep is running the preview renders on a
+    /// coarse ladder of positions instead of at every one — a full-resolution
+    /// still per pixel of travel is a render the machine can't finish before
+    /// the next one cancels it, so the picture would simply stop moving.
+    private func renderPosition(for position: Double) -> Double {
+        guard frames.count > 1 else { return position }
+        let steps = Double(min(frames.count - 1, 60))
+        return (position * steps).rounded() / steps
+    }
+
     /// True when this editor owns the way out — the iOS back button it draws
     /// itself. When it doesn't (the Mac window's own close button, the
     /// fullscreen sheet's chrome) there is no exit to intercept, so the
@@ -152,9 +256,22 @@ struct PhotoViewerView: View {
             Group {
                 if isWide {
                     HStack(spacing: 0) {
-                        imagePane
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .overlay(alignment: .top) { chrome }
+                        VStack(spacing: 0) {
+                            imagePane
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .overlay(alignment: .top) { chrome }
+                            // The scrubber belongs to the media, so it takes the
+                            // media pane's width rather than the rail's — which
+                            // keeps the rail identical to the photo editor's and
+                            // the whole photo/interval difference to exactly one
+                            // component.
+                            if hasTimeline {
+                                timelineStrip(compact: true)
+                                    .padding(.horizontal, 18)
+                                    .padding(.top, 9)
+                                    .padding(.bottom, 4)
+                            }
+                        }
                         Divider()
                         controlRail
                             .frame(width: railWidth(in: proxy.size.width))
@@ -181,6 +298,22 @@ struct PhotoViewerView: View {
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
             presetState = model.presetState(for: capture)
+            timeline = model.gradeTimeline(for: capture)
+            // An interval shoot's frames — and, where the shoot wrote one, the
+            // capture clock they sit on, which is what turns the strip's axis
+            // from "frame 812" into "1:09:41 into the shoot".
+            if capture.kind == .photos, !capture.isPhotoCapture {
+                let sources = model.sourceFrameURLs(for: capture)
+                frames = sources
+                // A sidecar that doesn't describe this shoot frame for frame is
+                // ignored rather than guessed at — the axis falls back to frame
+                // numbers, which are at least true.
+                frameSeconds = await Task.detached(priority: .utility) {
+                    FrameTimestamps.load(besideFrames: sources)
+                        .flatMap { $0.entries.count == sources.count ? $0.elapsedSeconds : nil }
+                        ?? []
+                }.value
+            }
             loaded = true
             let viewedURL = url
             // First, because it sizes the layout: a metadata-only read, well
@@ -202,19 +335,26 @@ struct PhotoViewerView: View {
                 // design spec draws.
                 mediaScale = 0
             }
+            applyKeyframeHook()
             #endif
             renderToken += 1
         }
-        .task(id: renderToken) {
+        .task(id: RenderRequest(
+            token: renderToken,
+            frame: frameIndex(at: renderedPosition),
+            live: isScrubbing || isPlaying)) {
             guard loaded else { return }
             // Debounce: a newer change cancels this task before it gets here, so
             // a slider drag collapses into one render and one manifest write
-            // instead of one of each per tick.
-            try? await Task.sleep(for: renderDebounce)
+            // instead of one of each per tick. A live scrub or a playback sweep
+            // wants the frame it asked for as fast as it can have it, so it
+            // waits a beat rather than a tenth of a second.
+            try? await Task.sleep(for: isScrubbing || isPlaying ? .milliseconds(16) : renderDebounce)
             guard !Task.isCancelled else { return }
             persist()
             await render()
         }
+        .onDisappear { stopPlayback() }
         .overlay(alignment: .bottom) {
             if isOfferingPresetSave {
                 presetSaveOffer
@@ -271,6 +411,15 @@ struct PhotoViewerView: View {
                 .frame(width: media.width, height: media.height)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .top) { chrome }
+            // Between the media and the controls, and on the media's side of
+            // the handle: the strip says which frame is on screen, so it moves
+            // with the picture rather than with the panel.
+            if hasTimeline {
+                timelineStrip(compact: false)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 2)
+            }
             if span > 0 {
                 dragHandle(span: span)
             }
@@ -396,7 +545,7 @@ struct PhotoViewerView: View {
                     .resizable()
                     .scaledToFit()
             } else {
-                ProjectPreviewImage(url: url, background: AnyShapeStyle(Color.black))
+                ProjectPreviewImage(url: displayedURL, background: AnyShapeStyle(Color.black))
             }
             if isRendering {
                 ProgressView()
@@ -572,16 +721,120 @@ struct PhotoViewerView: View {
 
     private func sliderPanel(expanded: Bool) -> some View {
         PhotoAdjustmentsPanel(
-            adjustments: $adjustments,
+            adjustments: editedAdjustments,
             alwaysExpanded: expanded,
             asShotKelvin: asShotKelvin,
-            accent: accentColor)
-            // Every tick: the state has to be true of the values *now*, not of
-            // the values the debounced write eventually persists.
-            .onChange(of: adjustments) { _ in
+            accent: accentColor,
+            keyframedFields: timeline.keyframedFields,
+            hasKeyframes: !timeline.isEmpty,
+            onResetField: hasTimeline ? resetField : nil,
+            onResetAll: hasTimeline ? resetEverything : nil)
+    }
+
+    /// What the panel reads and writes: the grade *at the playhead*.
+    ///
+    /// The get is the whole reason the sliders travel while you scrub. The set
+    /// is where the concept lives — `GradeTimeline.write` decides, from where
+    /// the playhead is standing, whether an edit grades the shoot or grades a
+    /// moment of it, and materialises the first two moments when it has to.
+    private var editedAdjustments: Binding<PhotoAdjustments> {
+        Binding(
+            get: { displayedAdjustments },
+            set: { values in
+                guard hasTimeline else {
+                    adjustments = values
+                    refreshState()
+                    scheduleUpdate()
+                    return
+                }
+                stopPlayback()
+                var baseline = adjustments
+                var updated = timeline
+                let outcome = updated.write(values, at: position, baseline: &baseline)
+                adjustments = baseline
+                if case .created = outcome {
+                    // The dots arriving IS the announcement that this shoot now
+                    // has a grade over time, so they are worth animating.
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) {
+                        timeline = updated
+                    }
+                } else {
+                    timeline = updated
+                }
                 refreshState()
                 scheduleUpdate()
+            })
+    }
+
+    /// A double-tapped label, with a timeline in play: take this property back
+    /// out of the moment under the playhead rather than writing a zero into it.
+    /// A moment left saying nothing at all removes itself.
+    private func resetField(_ field: PhotoAdjustmentField) {
+        var baseline = adjustments
+        var updated = timeline
+        updated.resetField(field, at: position, baseline: &baseline)
+        adjustments = baseline
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
+        refreshState()
+        scheduleUpdate()
+    }
+
+    private func resetEverything() {
+        stopPlayback()
+        adjustments = .neutral
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
+        refreshState()
+        scheduleUpdate()
+    }
+
+    private func deleteKeyframe(_ keyframe: GradeKeyframe) {
+        var baseline = adjustments
+        var updated = timeline
+        updated.remove(keyframe.id, baseline: &baseline)
+        adjustments = baseline
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
+        refreshState()
+        scheduleUpdate()
+    }
+
+    // MARK: - Playback
+
+    /// Source-rate preview: a constant sweep across the whole shoot, so the
+    /// ease between two moments can be watched landing without leaving the
+    /// screen. Deliberately not the output's speed — that belongs to the speed
+    /// and blend layer, and claiming it here would be a lie about the render.
+    private func togglePlayback() {
+        guard !isPlaying else { stopPlayback(); return }
+        let from = position >= 0.999 ? 0 : position
+        position = from
+        isPlaying = true
+        playback = Task { @MainActor in
+            let started = Date()
+            let sweep = 14.0
+            while !Task.isCancelled {
+                let elapsed = Date().timeIntervalSince(started)
+                let next = from + elapsed / sweep
+                guard next < 1 else { break }
+                position = next
+                let quantised = renderPosition(for: next)
+                if quantised != renderedPosition {
+                    renderedPosition = quantised
+                    renderToken += 1
+                }
+                try? await Task.sleep(for: .milliseconds(33))
             }
+            guard !Task.isCancelled else { return }
+            position = 1
+            isPlaying = false
+            renderedPosition = 1
+            renderToken += 1
+        }
+    }
+
+    private func stopPlayback() {
+        playback?.cancel()
+        playback = nil
+        isPlaying = false
     }
 
     // MARK: - Actions
@@ -589,7 +842,12 @@ struct PhotoViewerView: View {
     /// A chip tap. From Edited it discards work the user did by hand, so it
     /// asks first; from Original or another preset it applies immediately.
     private func request(_ target: PresetApplyRequest.Target) {
-        let request = PresetApplyRequest(target: target)
+        // Original clears the whole grade, keyframes included; every other chip
+        // writes where the playhead is standing and leaves the rest alone.
+        let request = PresetApplyRequest(
+            target: target,
+            discardsMoments: timeline.keyframes.count,
+            writesAtPlayhead: !timeline.isEmpty && !PresetApplyRequest(target: target).isOriginal)
         guard presetState.isEdited else {
             apply(request)
             return
@@ -601,18 +859,48 @@ struct PhotoViewerView: View {
         switch request.target {
         case .builtIn(let candidate):
             preset = candidate
-            // Original is "no filter": the sliders go with the preset.
-            adjustments = .neutral
-            presetState = candidate == .original
-                ? .original
-                : .named(id: candidate.presetID, snapshot: candidate.snapshot)
+            // Original is "no filter" — the whole grade goes, keyframes with
+            // it, because there is no moment of an unfiltered clip to keep.
+            guard candidate != .original else {
+                adjustments = .neutral
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
+                presetState = .original
+                declinedPresetSave = false
+                scheduleUpdate()
+                return
+            }
+            applyPresetValues(.neutral)
+            presetState = timeline.isEmpty
+                ? .named(id: candidate.presetID, snapshot: candidate.snapshot)
+                : .edited
         case .custom(let custom):
             preset = custom.basePreset
-            adjustments = custom.adjustments
-            presetState = .named(id: custom.id, snapshot: custom.snapshot)
+            applyPresetValues(custom.adjustments)
+            presetState = timeline.isEmpty
+                ? .named(id: custom.id, snapshot: custom.snapshot)
+                : .edited
         }
         declinedPresetSave = false
         scheduleUpdate()
+    }
+
+    /// A chip's values, written where the playhead is standing.
+    ///
+    /// With no keyframes that is the whole clip, which is what it has always
+    /// been. With keyframes it is one moment: the alternative — silently
+    /// flattening a graded shoot back to one look because a chip was tapped —
+    /// throws away work that took scrubbing to make. Clearing the timeline is
+    /// still one tap away, on Original.
+    private func applyPresetValues(_ values: PhotoAdjustments) {
+        guard hasTimeline, !timeline.isEmpty else {
+            adjustments = values
+            return
+        }
+        var baseline = adjustments
+        var updated = timeline
+        updated.write(values, at: position, baseline: &baseline)
+        adjustments = baseline
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
     }
 
     /// Re-derives the state from the live values, anchored on the state they
@@ -621,6 +909,7 @@ struct PhotoViewerView: View {
         presetState = PresetStateResolver.resolve(
             preset: preset,
             adjustments: adjustments,
+            timeline: timeline,
             anchor: presetState,
             customPresets: presetStore.presets)
     }
@@ -636,15 +925,22 @@ struct PhotoViewerView: View {
     private func persist() {
         guard let capture else { return }
         model.setPhotoGrade(
-            preset: preset, adjustments: adjustments, state: presetState, for: capture)
+            preset: preset, adjustments: adjustments, state: presetState,
+            timeline: timeline, for: capture)
     }
 
     private func saveCurrentAsPreset() {
+        // A preset is a look, and the look on screen is the one at the
+        // playhead — which is the whole grade when nothing is keyframed.
         if let saved = presetStore.save(
-            name: newPresetName, basePreset: preset, adjustments: adjustments) {
+            name: newPresetName, basePreset: preset, adjustments: displayedAdjustments) {
             // Naming a look is what takes a project out of Edited: the values
-            // haven't moved, but they now have a preset behind them.
-            presetState = .named(id: saved.id, snapshot: saved.snapshot)
+            // haven't moved, but they now have a preset behind them. A grade
+            // that travels stays Edited whatever gets named — one preset can't
+            // stand for a look that changes.
+            if timeline.isEmpty {
+                presetState = .named(id: saved.id, snapshot: saved.snapshot)
+            }
         }
         newPresetName = ""
         guard exitsAfterPresetSave else {
@@ -675,11 +971,17 @@ struct PhotoViewerView: View {
 
     private func render() async {
         let preset = preset
-        let adjustments = adjustments
+        // The moment on screen, not the project's stored grade: with keyframes
+        // those are only the same thing at the head of the clip.
+        let adjustments = timeline.adjustments(at: renderedPosition, baseline: adjustments)
+        let url = hasTimeline ? frames[frameIndex(at: renderedPosition)] : url
+        // A sweep renders smaller: a 2000px still per step is a render the
+        // machine can't finish before the next one cancels it.
+        let longEdge: CGFloat = isScrubbing || isPlaying ? 1100 : 2000
         isRendering = true
         let image = await MediaWorkQueue.shared.run {
             PhotoGrader.render(
-                url: url, preset: preset, adjustments: adjustments, maxDimension: 2000)
+                url: url, preset: preset, adjustments: adjustments, maxDimension: longEdge)
         }
         isRendering = false
         // A nil render (cancelled, or a missing file) leaves whatever is on
@@ -702,4 +1004,66 @@ struct PhotoViewerView: View {
         if let aspect, abs(measured - aspect) / aspect <= 0.01 { return }
         aspect = measured
     }
+
+    /// What the preview render is keyed on: the grade, the frame it is being
+    /// asked for, and whether the request is part of a live sweep. Frame rather
+    /// than position, so the ladder of positions a scrub walks collapses into
+    /// one render per frame instead of one per pixel of travel.
+    private struct RenderRequest: Equatable {
+        var token: Int
+        var frame: Int
+        var live: Bool
+    }
+
+    #if DEBUG
+    /// `LL_KEYFRAMES=sunset` stages the design's own scenario on an interval
+    /// project — three moments across the shoot, playhead between the first
+    /// two — and `LL_KEYFRAMES=empty` the first-run state the empty spec draws.
+    /// Neither is reachable by automation: making them for real means scrubbing
+    /// a two-hour shoot and dragging sliders at three separate moments.
+    private func applyKeyframeHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_KEYFRAMES"],
+              frames.count > 1 else { return }
+        guard hook != "empty" else {
+            adjustments = .neutral
+            timeline = .empty
+            position = 0
+            renderedPosition = 0
+            refreshState()
+            return
+        }
+        func moment(
+            temperature: Float, exposure: Float, highlights: Float,
+            shadows: Float, vibrance: Float
+        ) -> PhotoAdjustments {
+            var values = PhotoAdjustments.neutral
+            values.temperature = temperature
+            values.exposure = exposure
+            values.highlights = highlights
+            values.shadows = shadows
+            values.vibrance = vibrance
+            return values
+        }
+        preset = .natural
+        var baseline = PhotoAdjustments.neutral
+        var staged = GradeTimeline.empty
+        staged.write(
+            moment(temperature: -42, exposure: 0, highlights: -0.20,
+                   shadows: 0.10, vibrance: 0.12),
+            at: 0.10, baseline: &baseline)
+        staged.write(
+            moment(temperature: 63, exposure: -0.20, highlights: -0.35,
+                   shadows: 0.18, vibrance: 0.38),
+            at: 0.52, baseline: &baseline)
+        staged.write(
+            moment(temperature: 9, exposure: -0.50, highlights: -0.10,
+                   shadows: 0.30, vibrance: 0.10),
+            at: 0.86, baseline: &baseline)
+        timeline = staged
+        adjustments = baseline
+        position = 0.30
+        renderedPosition = 0.30
+        refreshState()
+    }
+    #endif
 }

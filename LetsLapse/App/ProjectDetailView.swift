@@ -1419,7 +1419,11 @@ private struct GradingCard: View {
         for capture: AppModel.CaptureProject,
         state: PresetState
     ) {
-        let request = PresetApplyRequest(target: target)
+        // From the card there is no playhead to aim at, so a chip really does
+        // flatten a keyframed grade — say how much of one.
+        let request = PresetApplyRequest(
+            target: target,
+            discardsMoments: model.gradeTimeline(for: capture).keyframes.count)
         guard state.isEdited else {
             apply(request, to: capture)
             return

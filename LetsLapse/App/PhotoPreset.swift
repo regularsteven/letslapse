@@ -537,29 +537,52 @@ enum PhotoGrader {
     /// frame's as-shot metadata, which is uniform across a shoot.
     static func blendSupport(grade: PhotoGrade) throws
         -> (decode: (URL) throws -> MTLTexture,
-            hook: (MTLTexture, MTLCommandBuffer) throws -> MTLTexture) {
+            hook: (MTLTexture, MTLCommandBuffer, Double) throws -> MTLTexture) {
         guard let decoder = linearDecoder, let engine = gradeEngine else {
             throw GradeError.renderFailed
         }
-        final class RendererBox { var renderer: GradeRenderer? }
+        final class RendererBox {
+            var renderer: GradeRenderer?
+            /// The step of the position ladder the renderer is currently
+            /// staged on, so a keyframed blend recomputes its tone LUT a few
+            /// hundred times across a shoot rather than once per output frame.
+            var step = -1
+        }
         let box = RendererBox()
-        let recipe = grade.recipe
         let decode: (URL) throws -> MTLTexture = { url in
             let frame = try decoder.decode(url: url)
             if box.renderer == nil {
-                box.renderer = engine.makeRenderer(recipe, reference: GradeReference(
+                box.renderer = engine.makeRenderer(grade.recipe, reference: GradeReference(
                     asShotTemperatureK: frame.asShotTemperatureK,
                     asShotTint: frame.asShotTint,
                     longEdge: Double(max(frame.texture.width, frame.texture.height))))
+                box.step = 0
             }
             return frame.texture
         }
-        let hook: (MTLTexture, MTLCommandBuffer) throws -> MTLTexture = { texture, commandBuffer in
+        let hook: (MTLTexture, MTLCommandBuffer, Double) throws
+            -> MTLTexture = { texture, commandBuffer, position in
             guard let renderer = box.renderer else { return texture }
+            if grade.isKeyframed {
+                let step = Int((min(max(position, 0), 1) * Double(gradeLadderSteps)).rounded())
+                if step != box.step {
+                    box.step = step
+                    renderer.restage(grade.recipe(at: Double(step) / Double(gradeLadderSteps)))
+                }
+            }
             return try renderer.encode(from: texture, commandBuffer: commandBuffer)
         }
         return (decode, hook)
     }
+
+    /// How finely a keyframed grade is sampled across a clip when it is baked.
+    ///
+    /// A grade that moves has to be re-staged as the render walks the source,
+    /// and every re-stage recomputes a tone LUT. 512 steps is finer than any
+    /// ease is visible at — a two-hour shoot changes look every 15 seconds of
+    /// capture — and bounds the CPU cost of a bake at 512 LUTs however many
+    /// thousand frames the shoot has.
+    static let gradeLadderSteps = 512
 
     /// Renders `url` through `preset` and `adjustments` at full resolution and
     /// writes it to a temporary JPEG, returning that file's URL for a Photos

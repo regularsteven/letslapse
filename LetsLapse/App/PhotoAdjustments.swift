@@ -211,28 +211,61 @@ struct PhotoAdjustments: Codable, Equatable {
     }
 }
 
-/// A project's whole grade in one value: the preset and the manual adjustments
-/// layered on it. Photo, Interval and Video captures all carry one — a still is
-/// graded frame by frame, a movie through a video composition — so the paths
-/// that render or export take this rather than the two halves separately.
+/// A project's whole grade in one value: the preset, the manual adjustments
+/// layered on it, and — for a shoot with length — how those adjustments travel
+/// over the capture. Photo, Interval and Video captures all carry one — a still
+/// is graded frame by frame, a movie through a video composition — so the paths
+/// that render or export take this rather than the halves separately.
 struct PhotoGrade: Equatable, Sendable {
     var preset: PhotoPreset
     var adjustments: PhotoAdjustments
+    /// The keyframes, when the grade changes across the shoot. Empty for a
+    /// still, and for every clip graded with one look end to end — which is
+    /// every clip until somebody edits at a second moment.
+    var timeline: GradeTimeline = .empty
 
     /// The grade that changes nothing: the file exactly as captured.
     static let identity = PhotoGrade(preset: .original, adjustments: .neutral)
 
     /// True when no filter in the chain would move a pixel, so every render can
     /// be skipped and every export can hand over the original bytes.
-    var isIdentity: Bool { preset == .original && adjustments.isNeutral }
+    var isIdentity: Bool { preset == .original && adjustments.isNeutral && timeline.isEmpty }
 
-    /// The engine recipe for this grade: the preset's base recipe with the
-    /// manual adjustments layered on top.
-    var recipe: GradeRecipe { adjustments.recipe(over: preset.recipe) }
+    /// True when the grade is a function of time, so a caller that can only
+    /// apply one set of values has to say *when*.
+    var isKeyframed: Bool { !timeline.isEmpty }
+
+    /// The manual grade at one moment of the source, 0…1. Without keyframes
+    /// this is the stored grade at every moment, which is what keeps every
+    /// caller that never asks the question right by default.
+    func adjustments(at position: Double) -> PhotoAdjustments {
+        timeline.adjustments(at: position, baseline: adjustments)
+    }
+
+    /// This grade frozen at one moment — a plain, timeless `PhotoGrade` for the
+    /// paths that render a single frame.
+    func frozen(at position: Double) -> PhotoGrade {
+        guard isKeyframed else { return self }
+        return PhotoGrade(preset: preset, adjustments: adjustments(at: position))
+    }
+
+    /// The engine recipe at one moment: the preset's base recipe with that
+    /// moment's manual adjustments layered on top.
+    func recipe(at position: Double) -> GradeRecipe {
+        adjustments(at: position).recipe(over: preset.recipe)
+    }
+
+    /// The engine recipe for this grade. A keyframed grade answers for its
+    /// opening moment, which is the frame every single-image surface — card,
+    /// thumbnail, hero — is showing.
+    var recipe: GradeRecipe { recipe(at: 0) }
 
     /// A short, stable string identifying this grade — for render cache keys and
     /// for the `task(id:)` that re-renders a preview when the grade changes.
     /// Prefixed with the engine version so caches self-invalidate when the
     /// engine's math changes.
-    var cacheToken: String { "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)" }
+    var cacheToken: String {
+        "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)"
+            + (timeline.isEmpty ? "" : "|kf\(timeline.cacheToken)")
+    }
 }

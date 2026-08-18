@@ -377,7 +377,12 @@ public final class ImageStacker {
         frameTimes: [Double]? = nil,
         profile: VideoEncodePolicy.Profile = .h264High8Bit,
         decodeLinear: (URL) throws -> MTLTexture,
-        outputGrade: ((MTLTexture, MTLCommandBuffer) throws -> MTLTexture)? = nil,
+        /// The grade, applied once per OUTPUT frame after the average. The
+        /// third argument is where that frame sits in the SOURCE, 0…1 — the
+        /// centre of the window it was averaged from — so a grade that changes
+        /// across the shoot knows which moment it is grading. A grade that
+        /// doesn't change can ignore it.
+        outputGrade: ((MTLTexture, MTLCommandBuffer, Double) throws -> MTLTexture)? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
@@ -478,7 +483,12 @@ public final class ImageStacker {
                 throw LapseError.gpuSetupFailed("could not create a command buffer")
             }
             try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
-            let graded = try outputGrade?(meanTexture, commandBuffer) ?? meanTexture
+            // The middle of the window this frame averaged, as a fraction of
+            // the whole sequence: the moment the output frame actually shows.
+            let sourcePosition = imageURLs.count > 1
+                ? min(max(Double(inputIndex - window / 2) / Double(imageURLs.count - 1), 0), 1)
+                : 0
+            let graded = try outputGrade?(meanTexture, commandBuffer, sourcePosition) ?? meanTexture
             try core.encodeGamma(
                 from: graded, to: destination,
                 ditherLSB: ditherLSB, frameIndex: outputFrames, applySRGB: true,

@@ -447,8 +447,14 @@ private struct FullscreenVideoPage: View {
         guard let grade, !grade.isIdentity else {
             return PreparedTimeline(asset: asset, videoComposition: nil)
         }
+        // A grade that travels needs the take's length to know where it is —
+        // and the player IS the source here, so output time is source time and
+        // the default direct map is the right one.
+        let duration = grade.isKeyframed ? (try? await asset.load(.duration))?.seconds : nil
         return PreparedTimeline(
-            asset: asset, videoComposition: VideoGrader.composition(for: asset, grade: grade))
+            asset: asset,
+            videoComposition: VideoGrader.composition(
+                for: asset, grade: grade, durationSeconds: duration))
     }
 
     /// One file plays as itself; several play as one timeline.

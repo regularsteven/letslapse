@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Interval grading viewer · keyframed · landscape</title>
+  <desc>Mirrors App/PhotoViewerView.swift's wide branch (available width ≥ 500pt: iPhone landscape, the iPad sheet, a widened Mac window) with App/GradeTimelineView.swift in it. The scrubber belongs to the MEDIA, so it takes the media pane's width rather than the rail's — which keeps the rail identical to the photo editor's (same chips, same panel, same Save as Preset) and the whole photo/interval difference to exactly one component. The media gives up the strip's 54pt of height; the rail is unchanged. There is still no preview-size handle here — the handle belongs to the stacked layout, where media height and control room compete for the same axis; the rail gives up width instead. The strip runs on its compact metrics (26pt control and track, 20pt playhead, 10pt end labels), so it is the same component at a tighter size rather than a second drawing of it. Drawn in the SNAPPED state: the playhead is standing exactly on the middle moment at 1:09:41, which swells to 15pt and takes a white ring inside a #C36A00 halo. While it holds, the sliders in the rail edit THAT moment — the readouts and the diamonds beside Temp, Exposure and Highlights are that moment's values, not the clip's. See project-photo.viewer.keyframes.portrait.svg for the model, the states and the panel treatment; this file specifies placement only.</desc>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <defs><clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath></defs>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="852" height="393" fill="#000000"/>
+    <defs>
+      <linearGradient id="skyl" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#6280AC"/><stop offset="1" stop-color="#E6C19E"/>
+      </linearGradient>
+      <clipPath id="framel"><rect x="83" y="24" width="452" height="318"/></clipPath>
+    </defs>
+    <g clip-path="url(#framel)">
+      <rect x="83" y="24" width="452" height="318" fill="url(#skyl)"/>
+      <circle cx="363.2" cy="180.5" r="28.6" fill="#FFCE7E" opacity="0.95"/>
+      <path d="M83 342 L83 253.0 L146.3 253.0 L146.3 221.2 L182.4 221.2 L182.4 259.3 L236.7 259.3 L236.7 211.6 L281.9 211.6 L281.9 265.7 L354.2 265.7 L354.2 227.5 L417.5 227.5 L417.5 256.1 L535.0 256.1 L535 342 Z" fill="#30394E"/>
+    </g>
+    <circle cx="117" cy="54" r="18" fill="#000" opacity="0.4"/>
+    <path d="M120 48 L114 54 L120 60" fill="none"
+      stroke="#FFF" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <rect x="95" y="312" width="236" height="20" rx="10" fill="#000" opacity="0.5"/>
+    <text x="106" y="325.5" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 60 frames</text>
+    <circle cx="114.0" cy="364.0" r="13.0" fill="#1C1C1E"/>
+    <path d="M110.5 357.5 L120.0 364.0 L110.5 370.5 Z" fill="#FFB340"/>
+    <rect x="139" y="362.5" width="378.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
+    <rect x="334.1" y="354.0" width="3" height="20" rx="1.5" fill="#FFFFFF"/>
+    <circle cx="176.8" cy="364.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <circle cx="335.6" cy="364.0" r="8.75" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+    <circle cx="335.6" cy="364.0" r="6.5" fill="#FFB340" stroke="#FFF" stroke-width="2"/>
+    <circle cx="464.1" cy="364.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <rect x="306.2" y="335.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
+    <text x="335.6" y="346.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">1:09:41</text>
+    <text x="139.0" y="389.0" font-size="10" fill="#8E8E93">0:00:00</text>
+    <text x="517.0" y="389.0" text-anchor="end" font-size="10" fill="#8E8E93">2:14:00</text>
+    <rect x="535" y="24" width="1" height="393" fill="#FFF" opacity="0.15"/>
+    <text x="552" y="50" font-size="13" class="sb" fill="#8E8E93">Preset</text>
+    <rect x="604" y="38" width="68" height="23" rx="11.5" fill="#FFF" opacity="0.08"/>
+    <text x="638" y="53.5" text-anchor="middle" font-size="12.5" class="sb" fill="#8E8E93">Edited</text>
+    <rect x="552.0" y="76" width="86.6" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="595.3" y="97.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Natural</text>
+    <rect x="646.6" y="76" width="78.2" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="685.7" y="97.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Cinema</text>
+    <rect x="732.8" y="76" width="69.8" height="33" rx="16.5" fill="#1C1C1E"/>
+    <text x="767.7" y="97.3" text-anchor="middle" font-size="13.5" class="sb" fill="#FFFFFF">Matte</text>
+    <rect x="552" y="123" width="308" height="124" rx="12" fill="#1C1C1E"/>
+    <text x="564" y="147" font-size="13.5" class="sb" fill="#8E8E93">White Balance</text>
+    <circle cx="670.8" cy="142.5" r="3" fill="#FFB340"/>
+    <text x="826.0" y="147" text-anchor="end" font-size="12" class="sb" fill="#FFB340">Reset</text>
+    <text x="564" y="173" font-size="13.5" fill="#8E8E93">Temp</text>
+    <rect x="603.7" y="165.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 607.2 168.5)"/>
+    <text x="848.0" y="173" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">6798 K</text>
+    <rect x="564" y="193" width="284.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="564" y="193" width="201.6" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="761.4" cy="195" r="10" fill="#FFF"/>
+    <text x="564" y="213" font-size="13.5" fill="#8E8E93">Tint</text>
+    <text x="848.0" y="213" text-anchor="end" font-size="12.5" class="sb" fill="#8E8E93">0</text>
+    <rect x="564" y="233" width="284.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="564" y="233" width="142.0" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="706.0" cy="235" r="10" fill="#FFF"/>
+    <rect x="552" y="257" width="308" height="164" rx="12" fill="#1C1C1E"/>
+    <text x="564" y="281" font-size="13.5" class="sb" fill="#8E8E93">Light</text>
+    <circle cx="610.0" cy="276.5" r="3" fill="#FFB340"/>
+    <text x="826.0" y="281" text-anchor="end" font-size="12" class="sb" fill="#FFB340">Reset</text>
+    <text x="564" y="307" font-size="13.5" fill="#8E8E93">Exposure</text>
+    <rect x="633.9" y="299.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 637.4 302.5)"/>
+    <text x="848.0" y="307" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">-0.09</text>
+    <rect x="564" y="327" width="284.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="564" y="327" width="139.4" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="703.6" cy="329" r="10" fill="#FFF"/>
+    <text x="564" y="347" font-size="13.5" fill="#8E8E93">Contrast</text>
+    <text x="848.0" y="347" text-anchor="end" font-size="12.5" class="sb" fill="#8E8E93">0</text>
+    <rect x="564" y="367" width="284.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="564" y="367" width="142.0" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="706.0" cy="369" r="10" fill="#FFF"/>
+    <text x="564" y="387" font-size="13.5" fill="#8E8E93">Highlights</text>
+    <rect x="649.0" y="379.0" width="7" height="7" rx="1.5" fill="#FFB340" stroke="#C36A00" stroke-width="1" transform="rotate(45 652.5 382.5)"/>
+    <text x="848.0" y="387" text-anchor="end" font-size="12.5" class="sb" fill="#FFB340">-27</text>
+    <rect x="564" y="407" width="284.0" height="4" rx="2" fill="#FFF" opacity="0.16"/>
+    <rect x="564" y="407" width="103.7" height="4" rx="2" fill="#FFB340"/>
+    <circle cx="670.4" cy="409" r="10" fill="#FFF"/>
+  </g>
+  <rect x="383" y="404" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+
+  <text x="450" y="446" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Interval grading viewer · keyframed · landscape · 852×393 pt</text>
+  <text x="450" y="464" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift wide branch — the strip takes the media pane's width, the rail is unchanged · LL_KEYFRAMES=sunset</text>
+</svg>

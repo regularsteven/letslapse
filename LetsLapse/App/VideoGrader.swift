@@ -52,7 +52,9 @@ enum VideoGrader {
         }
         guard !grade.isIdentity else { return frame }
         let source = CIImage(cgImage: frame)
-        let output = filterChain(grade)(source)
+        // A card's one frame is the clip's opening moment, which is the moment
+        // a keyframed grade answers for when it is only asked once.
+        let output = filterChain(grade.frozen(at: 0))(source)
         guard output.extent.width > 0, output.extent.height > 0 else { return frame }
         // A failed render leaves the ungraded frame on screen rather than an
         // empty card.
@@ -62,12 +64,34 @@ enum VideoGrader {
     /// The composition that bakes `grade` into every frame of `asset`, or nil
     /// when the grade is a no-op — callers then export (or skip exporting)
     /// without one rather than paying for an identity pass.
-    static func composition(for asset: AVAsset, grade: PhotoGrade) -> AVMutableVideoComposition? {
+    ///
+    /// A **keyframed** grade needs two things this one doesn't: how long the
+    /// clip runs, so a frame's time can be turned into a position, and — when
+    /// the clip's clock is no longer the source's — the `map` that says which
+    /// source moment each frame came from. Without a duration there is no
+    /// position to grade at, so the grade freezes at the opening moment rather
+    /// than guessing; that is a visible flattening, never a silent smear across
+    /// the wrong frames.
+    static func composition(
+        for asset: AVAsset,
+        grade: PhotoGrade,
+        durationSeconds: Double? = nil,
+        map: GradeSourceMap = .direct
+    ) -> AVMutableVideoComposition? {
         guard !grade.isIdentity else { return nil }
-        let chain = filterChain(grade)
+        guard grade.isKeyframed, let duration = durationSeconds, duration > 0 else {
+            let chain = filterChain(grade.frozen(at: 0))
+            return AVMutableVideoComposition(asset: asset) { request in
+                // Filters like the unsharp mask and the vignette grow the extent;
+                // the frame has to come back the size the writer expects.
+                let graded = chain(request.sourceImage).cropped(to: request.sourceImage.extent)
+                request.finish(with: graded, context: context)
+            }
+        }
         return AVMutableVideoComposition(asset: asset) { request in
-            // Filters like the unsharp mask and the vignette grow the extent;
-            // the frame has to come back the size the writer expects.
+            let position = map.position(
+                outputSeconds: request.compositionTime.seconds, outputDuration: duration)
+            let chain = filterChain(grade.frozen(at: position))
             let graded = chain(request.sourceImage).cropped(to: request.sourceImage.extent)
             request.finish(with: graded, context: context)
         }
@@ -83,10 +107,16 @@ enum VideoGrader {
     static func bakedCopy(
         of sourceURL: URL,
         grade: PhotoGrade,
+        map: GradeSourceMap = .direct,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
-        guard let composition = composition(for: asset, grade: grade) else { return sourceURL }
+        // Only a keyframed grade needs the clip's length, and only that read is
+        // worth the probe.
+        let duration = grade.isKeyframed
+            ? (try? await asset.load(.duration))?.seconds : nil
+        guard let composition = composition(
+            for: asset, grade: grade, durationSeconds: duration, map: map) else { return sourceURL }
         guard let assetTrack = try await asset.loadTracks(withMediaType: .video).first else {
             throw GradeError.exportFailed("the clip has no video track")
         }

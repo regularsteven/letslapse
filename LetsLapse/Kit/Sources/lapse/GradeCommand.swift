@@ -107,7 +107,7 @@ func runStackSequence(
         outputURL: URL(fileURLWithPath: outputPath),
         profile: profile,
         decodeLinear: decode,
-        outputGrade: { texture, commandBuffer in
+        outputGrade: { texture, commandBuffer, _ in
             guard let renderer else { return texture }
             return try renderer.encode(from: texture, commandBuffer: commandBuffer)
         },

@@ -98,11 +98,11 @@ public final class GradeRenderer {
 
     private let core: GradeCore
     private let commandQueue: MTLCommandQueue
-    public let recipe: GradeRecipe
+    public private(set) var recipe: GradeRecipe
     public let reference: GradeReference
 
     private var params: GPUGradeParams
-    private let lut: [Float]
+    private var lut: [Float]
 
     // Scratch, reused across frames; reallocated when the size changes.
     private var scratchA: MTLTexture?
@@ -120,10 +120,32 @@ public final class GradeRenderer {
 
         let lut = ToneMath.toneLUT(for: recipe)
         self.lut = lut
+        self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)
+    }
+
+    /// Points this renderer at a different recipe, keeping its scratch
+    /// textures.
+    ///
+    /// For a grade that changes across a clip: a keyframed blend needs a new
+    /// recipe every few output frames, and building a fresh renderer for each
+    /// would throw away — and immediately reallocate — every scratch texture
+    /// the pass owns. Only the LUT and the coefficients actually depend on the
+    /// recipe, and both are cheap CPU work.
+    public func restage(_ recipe: GradeRecipe) {
+        guard recipe != self.recipe else { return }
+        self.recipe = recipe
+        let lut = ToneMath.toneLUT(for: recipe)
+        self.lut = lut
+        self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)
+    }
+
+    private static func gpuParams(
+        recipe: GradeRecipe, reference: GradeReference, lut: [Float]
+    ) -> GPUGradeParams {
         let recovery = max(-recipe.highlights, 0)
         let strength = max(recovery, 0.15)
         let endSlope = (lut[lut.count - 1] - lut[lut.count - 2]) * Float(lut.count - 1)
-        self.params = GPUGradeParams(
+        return GPUGradeParams(
             wb: ToneMath.whiteBalanceMatrix(recipe: recipe, reference: reference),
             exposureGain: exp2(recipe.exposure),
             kneeK: 0.95 - 0.6 * recovery,

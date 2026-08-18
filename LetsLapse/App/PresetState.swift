@@ -139,9 +139,17 @@ enum PresetStateResolver {
     static func resolve(
         preset: PhotoPreset,
         adjustments: PhotoAdjustments,
+        timeline: GradeTimeline = .empty,
         anchor: PresetState,
         customPresets: [CustomPreset]
     ) -> PresetState {
+        // A grade that moves over time is nobody's preset. Presets are one
+        // look; keyframes are a look that changes, which is project-specific by
+        // construction — exactly what Edited means. It also has to outrank the
+        // two clauses below, or a shoot whose opening frame happens to sit at
+        // neutral would report Original and have its whole timeline discarded
+        // as "no filter" on the next render.
+        if !timeline.isEmpty { return .edited }
         // Original is "no filter": no preset, no sliders, nothing to bake.
         if preset == .original, adjustments.isNeutral { return .original }
         // Still exactly what the applied preset gave us — including when that
@@ -227,6 +235,14 @@ struct PresetApplyRequest: Identifiable {
     }
 
     var target: Target
+    /// How many graded moments this apply would throw away — a keyframed
+    /// grade's dots. 0 whenever the project has one look end to end, which is
+    /// the case the wording below has always described.
+    var discardsMoments: Int = 0
+    /// True where the apply writes at the playhead instead of replacing the
+    /// whole grade: inside an editor, where there IS a playhead to aim at, a
+    /// chip grades one moment of a keyframed clip rather than flattening it.
+    var writesAtPlayhead: Bool = false
 
     var id: String {
         switch target {
@@ -251,16 +267,39 @@ struct PresetApplyRequest: Identifiable {
     }
 
     var confirmationTitle: String {
-        isOriginal ? "Discard your edits?" : "Replace your edits with \(name)?"
+        if isOriginal { return "Discard your edits?" }
+        return writesAtPlayhead ? "Apply \(name) at this moment?" : "Replace your edits with \(name)?"
     }
 
     var confirmationMessage: String {
-        isOriginal
-            ? "This clears every adjustment and returns the project to the original, unfiltered file."
-            : "Your manual adjustments will be replaced by the \(name) preset. There's no undo."
+        // A grade that travels is worth naming in the warning: "your
+        // adjustments" undersells a timeline somebody scrubbed a two-hour shoot
+        // to build, and the count is the only honest measure of it.
+        let moments = discardsMoments == 1
+            ? "the 1 graded moment on its timeline"
+            : "all \(discardsMoments) graded moments on its timeline"
+        if isOriginal {
+            guard discardsMoments > 0 else {
+                return "This clears every adjustment and returns the project to the original, unfiltered file."
+            }
+            return "This clears every adjustment — including \(moments) — and returns the project "
+                + "to the original, unfiltered file."
+        }
+        if writesAtPlayhead {
+            return "The \(name) preset's values are written at the playhead, so the rest of the "
+                + "timeline keeps its own grade. There's no undo."
+        }
+        guard discardsMoments > 0 else {
+            return "Your manual adjustments will be replaced by the \(name) preset. There's no undo."
+        }
+        return "The \(name) preset replaces your manual adjustments and \(moments), leaving the "
+            + "project on one look end to end. There's no undo."
     }
 
-    var confirmationButton: String { isOriginal ? "Discard Edits" : "Replace" }
+    var confirmationButton: String {
+        if isOriginal { return "Discard Edits" }
+        return writesAtPlayhead ? "Apply Here" : "Replace"
+    }
 }
 
 // MARK: - The pill

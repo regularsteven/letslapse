@@ -43,6 +43,22 @@ struct VideoEditorView: View {
 
     @State private var player = AVPlayer()
     @State private var asset: AVURLAsset?
+
+    // MARK: Keyframes
+    //
+    // A movie has length, so its grade can travel across it. See
+    // `GradeTimeline`; the strip below the player is the same component the
+    // interval editor shows, over the movie's own clock instead of the capture
+    // clock an interval shoot was shot on.
+
+    @State private var timeline: GradeTimeline = .empty
+    /// The playhead, 0…1 of the movie. Followed from the player while it plays
+    /// and pushed back into it when the strip is scrubbed.
+    @State private var position: Double = 0
+    @State private var isScrubbing = false
+    @State private var isPlaying = false
+    @State private var duration: Double = 0
+    @State private var timeObserver: Any?
     /// Bumped by every control change; the debounce task keys off it so a
     /// slider drag collapses into one manifest write and one composition swap.
     @State private var renderToken = 0
@@ -108,9 +124,19 @@ struct VideoEditorView: View {
             Group {
                 if isWide {
                     HStack(spacing: 0) {
-                        playerPane
-                            .frame(maxWidth: .infinity, maxHeight: .infinity)
-                            .overlay(alignment: .top) { chrome }
+                        VStack(spacing: 0) {
+                            playerPane
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                .overlay(alignment: .top) { chrome }
+                            // The scrubber belongs to the media, so it takes
+                            // the player pane's width rather than the rail's.
+                            if hasTimeline {
+                                timelineStrip(compact: true)
+                                    .padding(.horizontal, 18)
+                                    .padding(.top, 9)
+                                    .padding(.bottom, 4)
+                            }
+                        }
                         Divider()
                         controlRail
                             .frame(width: railWidth(in: proxy.size.width))
@@ -141,12 +167,17 @@ struct VideoEditorView: View {
                width > 0, height > 0 {
                 aspect = Double(width) / Double(height)
             }
+            timeline = model.gradeTimeline(for: capture)
             let asset = AVURLAsset(url: url)
             self.asset = asset
+            // The clip's length, before the first composition: a keyframed
+            // grade has no position to render at without it.
+            duration = (try? await asset.load(.duration))?.seconds ?? 0
             let item = AVPlayerItem(asset: asset)
             item.videoComposition = VideoGrader.composition(
-                for: asset, grade: PhotoGrade(preset: preset, adjustments: adjustments))
+                for: asset, grade: liveGrade, durationSeconds: duration)
             player.replaceCurrentItem(with: item)
+            observePlayerTime()
             player.play()
             // Then correct from the file itself: the project's stored size
             // latches on the first segment, and a metadata-only rotate swaps it.
@@ -157,6 +188,7 @@ struct VideoEditorView: View {
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 mediaScale = 0
             }
+            applyKeyframeHook()
             #endif
         }
         .task(id: renderToken) {
@@ -166,7 +198,11 @@ struct VideoEditorView: View {
             persist()
             applyGradeToPlayer()
         }
-        .onDisappear { player.pause() }
+        .onDisappear {
+            player.pause()
+            if let timeObserver { player.removeTimeObserver(timeObserver) }
+            timeObserver = nil
+        }
         .overlay(alignment: .bottom) {
             if isOfferingPresetSave {
                 presetSaveOffer
@@ -227,6 +263,15 @@ struct VideoEditorView: View {
                 .frame(width: media.width, height: media.height)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .top) { chrome }
+            // Between the player and the controls, and on the player's side of
+            // the handle: the strip says which moment is on screen, so it moves
+            // with the picture rather than with the panel.
+            if hasTimeline {
+                timelineStrip(compact: false)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 12)
+                    .padding(.bottom, 2)
+            }
             if span > 0 {
                 dragHandle(span: span)
             }
@@ -473,13 +518,136 @@ struct VideoEditorView: View {
 
     private func sliderPanel(expanded: Bool) -> some View {
         PhotoAdjustmentsPanel(
-            adjustments: $adjustments, alwaysExpanded: expanded, accent: accentColor)
-            // Every tick: the state has to be true of the values on screen, not
-            // of the values the debounced write eventually persists.
-            .onChange(of: adjustments) { _ in
+            adjustments: editedAdjustments,
+            alwaysExpanded: expanded,
+            accent: accentColor,
+            keyframedFields: timeline.keyframedFields,
+            hasKeyframes: !timeline.isEmpty,
+            onResetField: hasTimeline ? resetField : nil,
+            onResetAll: hasTimeline ? resetEverything : nil)
+    }
+
+    // MARK: - Keyframe surface
+
+    /// Every movie has length, so every movie can carry a grade that travels —
+    /// unlike the photo editor, where a Photo-mode capture is one still and the
+    /// strip has nothing to scrub.
+    private var hasTimeline: Bool { duration > 0 }
+
+    private var liveGrade: PhotoGrade {
+        PhotoGrade(preset: preset, adjustments: adjustments, timeline: timeline)
+    }
+
+    private var displayedAdjustments: PhotoAdjustments {
+        timeline.adjustments(at: position, baseline: adjustments)
+    }
+
+    /// The strip, in the one place both layouts pull it from.
+    @ViewBuilder private func timelineStrip(compact: Bool) -> some View {
+        GradeTimelineView(
+            position: $position,
+            isScrubbing: $isScrubbing,
+            keyframes: timeline.keyframes,
+            label: GradeTimelineClock.labeller(duration: duration),
+            isPlaying: isPlaying,
+            compact: compact,
+            accent: accentColor,
+            onPlayToggle: {
+                if isPlaying { player.pause() } else { player.play() }
+                isPlaying = player.rate > 0
+            },
+            onScrub: seek,
+            onScrubEnd: {},
+            onDelete: deleteKeyframe)
+    }
+
+    /// The player is the preview, so a scrub of the strip is a seek. Zero
+    /// tolerance: the whole point is standing on an exact moment, and a
+    /// keyframe-accurate seek is what makes the grade under the playhead the
+    /// grade on screen.
+    private func seek(to next: Double) {
+        guard duration > 0 else { return }
+        player.pause()
+        isPlaying = false
+        player.seek(
+            to: CMTime(seconds: duration * min(max(next, 0), 1), preferredTimescale: 600),
+            toleranceBefore: .zero, toleranceAfter: .zero)
+    }
+
+    /// Follows the player while it plays, so the playhead and the sliders both
+    /// travel with the picture. Skipped while a scrub is live — the strip is
+    /// driving then, and letting the player answer back would fight the finger.
+    private func observePlayerTime() {
+        guard timeObserver == nil else { return }
+        timeObserver = player.addPeriodicTimeObserver(
+            forInterval: CMTime(seconds: 1.0 / 30, preferredTimescale: 600), queue: .main
+        ) { time in
+            isPlaying = player.rate > 0
+            guard !isScrubbing, duration > 0 else { return }
+            position = min(max(time.seconds / duration, 0), 1)
+        }
+    }
+
+    /// What the panel reads and writes: the grade at the playhead. See
+    /// `PhotoViewerView.editedAdjustments` — the rule is the same one, and it
+    /// lives in `GradeTimeline.write`.
+    private var editedAdjustments: Binding<PhotoAdjustments> {
+        Binding(
+            get: { displayedAdjustments },
+            set: { values in
+                guard hasTimeline else {
+                    adjustments = values
+                    refreshState()
+                    renderToken += 1
+                    return
+                }
+                // A moment can't be graded while it is moving: dragging a
+                // slider through a playing clip would spray keyframes along it.
+                if isPlaying {
+                    player.pause()
+                    isPlaying = false
+                }
+                var baseline = adjustments
+                var updated = timeline
+                let outcome = updated.write(values, at: position, baseline: &baseline)
+                adjustments = baseline
+                if case .created = outcome {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) {
+                        timeline = updated
+                    }
+                } else {
+                    timeline = updated
+                }
                 refreshState()
                 renderToken += 1
-            }
+            })
+    }
+
+    private func resetField(_ field: PhotoAdjustmentField) {
+        var baseline = adjustments
+        var updated = timeline
+        updated.resetField(field, at: position, baseline: &baseline)
+        adjustments = baseline
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
+        refreshState()
+        renderToken += 1
+    }
+
+    private func resetEverything() {
+        adjustments = .neutral
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
+        refreshState()
+        renderToken += 1
+    }
+
+    private func deleteKeyframe(_ keyframe: GradeKeyframe) {
+        var baseline = adjustments
+        var updated = timeline
+        updated.remove(keyframe.id, baseline: &baseline)
+        adjustments = baseline
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
+        refreshState()
+        renderToken += 1
     }
 
     private var saveAsPresetButton: some View {
@@ -502,7 +670,12 @@ struct VideoEditorView: View {
     /// A chip tap. From Edited it discards work the user did by hand, so it
     /// asks first; from Original or another preset it applies immediately.
     private func request(_ target: PresetApplyRequest.Target) {
-        let request = PresetApplyRequest(target: target)
+        // Original clears the whole grade, keyframes included; every other chip
+        // writes where the playhead is standing and leaves the rest alone.
+        let request = PresetApplyRequest(
+            target: target,
+            discardsMoments: timeline.keyframes.count,
+            writesAtPlayhead: !timeline.isEmpty && !PresetApplyRequest(target: target).isOriginal)
         guard presetState.isEdited else {
             apply(request)
             return
@@ -514,18 +687,44 @@ struct VideoEditorView: View {
         switch request.target {
         case .builtIn(let candidate):
             preset = candidate
-            // Original is "no filter": the sliders go with the preset.
-            adjustments = .neutral
-            presetState = candidate == .original
-                ? .original
-                : .named(id: candidate.presetID, snapshot: candidate.snapshot)
+            // Original is "no filter" — the whole grade goes, keyframes with
+            // it, because there is no moment of an unfiltered clip to keep.
+            guard candidate != .original else {
+                adjustments = .neutral
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
+                presetState = .original
+                declinedPresetSave = false
+                renderToken += 1
+                return
+            }
+            applyPresetValues(.neutral)
+            presetState = timeline.isEmpty
+                ? .named(id: candidate.presetID, snapshot: candidate.snapshot)
+                : .edited
         case .custom(let custom):
             preset = custom.basePreset
-            adjustments = custom.adjustments
-            presetState = .named(id: custom.id, snapshot: custom.snapshot)
+            applyPresetValues(custom.adjustments)
+            presetState = timeline.isEmpty
+                ? .named(id: custom.id, snapshot: custom.snapshot)
+                : .edited
         }
         declinedPresetSave = false
         renderToken += 1
+    }
+
+    /// A chip's values, written where the playhead is standing — see
+    /// `PhotoViewerView.applyPresetValues` for why a chip doesn't flatten a
+    /// graded clip back to one look.
+    private func applyPresetValues(_ values: PhotoAdjustments) {
+        guard hasTimeline, !timeline.isEmpty else {
+            adjustments = values
+            return
+        }
+        var baseline = adjustments
+        var updated = timeline
+        updated.write(values, at: position, baseline: &baseline)
+        adjustments = baseline
+        withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
     }
 
     /// Re-derives the state from the live values, anchored on the state they
@@ -534,14 +733,19 @@ struct VideoEditorView: View {
         presetState = PresetStateResolver.resolve(
             preset: preset,
             adjustments: adjustments,
+            timeline: timeline,
             anchor: presetState,
             customPresets: presetStore.presets)
     }
 
     private func saveCurrentAsPreset() {
+        // A preset is a look, and the look on screen is the one at the
+        // playhead — which is the whole grade when nothing is keyframed.
         if let saved = presetStore.save(
-            name: newPresetName, basePreset: preset, adjustments: adjustments) {
-            presetState = .named(id: saved.id, snapshot: saved.snapshot)
+            name: newPresetName, basePreset: preset, adjustments: displayedAdjustments) {
+            if timeline.isEmpty {
+                presetState = .named(id: saved.id, snapshot: saved.snapshot)
+            }
         }
         newPresetName = ""
         guard exitsAfterPresetSave else {
@@ -572,15 +776,53 @@ struct VideoEditorView: View {
     private func persist() {
         guard let capture else { return }
         model.setPhotoGrade(
-            preset: preset, adjustments: adjustments, state: presetState, for: capture)
+            preset: preset, adjustments: adjustments, state: presetState,
+            timeline: timeline, for: capture)
     }
 
     /// Swaps the player item's composition for the current grade. Playback
     /// position and rate carry across the swap, so the frame on screen simply
     /// re-renders through the new look.
+    #if DEBUG
+    /// `LL_KEYFRAMES=sunset` stages three graded moments across the movie, and
+    /// `=empty` the first-run state — the video twin of the photo editor's hook,
+    /// and unreachable by automation for the same reason: making them for real
+    /// means scrubbing and grading at three separate moments.
+    private func applyKeyframeHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_KEYFRAMES"],
+              duration > 0 else { return }
+        guard hook != "empty" else {
+            adjustments = .neutral
+            timeline = .empty
+            position = 0
+            refreshState()
+            return
+        }
+        func moment(_ temperature: Float, _ exposure: Float, _ vibrance: Float)
+            -> PhotoAdjustments {
+            var values = PhotoAdjustments.neutral
+            values.temperature = temperature
+            values.exposure = exposure
+            values.vibrance = vibrance
+            return values
+        }
+        preset = .natural
+        var baseline = PhotoAdjustments.neutral
+        var staged = GradeTimeline.empty
+        staged.write(moment(-42, 0, 0.12), at: 0.10, baseline: &baseline)
+        staged.write(moment(63, -0.20, 0.38), at: 0.52, baseline: &baseline)
+        staged.write(moment(9, -0.50, 0.10), at: 0.86, baseline: &baseline)
+        timeline = staged
+        adjustments = baseline
+        position = 0.30
+        refreshState()
+        applyGradeToPlayer()
+    }
+    #endif
+
     private func applyGradeToPlayer() {
         guard let asset, let item = player.currentItem else { return }
         item.videoComposition = VideoGrader.composition(
-            for: asset, grade: PhotoGrade(preset: preset, adjustments: adjustments))
+            for: asset, grade: liveGrade, durationSeconds: duration)
     }
 }

@@ -139,6 +139,13 @@ final class AppModel: ObservableObject {
         /// model existed still decode — nil is derived from the values by
         /// `AppModel.presetState(for:)`, and stamped by the v2 migration.
         var presetState: PresetState?
+        /// How the grade above travels across the shoot, for the captures that
+        /// have length — an interval sequence or a movie. Optional and normally
+        /// absent: a project only grows one the first time somebody grades a
+        /// *second* moment of it, and nil means what it has always meant — that
+        /// `adjustments` grade every frame of the shoot equally.
+        /// Read it through `AppModel.gradeTimeline(for:)`.
+        var gradeTimeline: GradeTimeline?
         /// How long this project's burst clips ease into and out of slow
         /// motion, in seconds. Optional in both directions: nil means "follow
         /// the app default" (resolved at render time), 0 means "this project
@@ -3387,6 +3394,19 @@ final class AppModel: ObservableObject {
         // Resolved with the other job inputs — the pass must use the fps the
         // schedules were compiled at, not whatever the user opens mid-render.
         let reframeOutputFPS = outputFPS
+        // Which source moment each output frame shows, for a grade that
+        // travels. The warp already computes exactly this map (mid-window, on
+        // the global concatenated source axis) for the reframe crop; without a
+        // warp the two clocks agree and `.direct` is the truth. Nothing but a
+        // keyframed grade reads it.
+        let gradeMap: GradeSourceMap = {
+            guard grade.isKeyframed, !reframeFrameTimes.isEmpty else { return .direct }
+            let span = max(
+                currentCapture?.sourceDurationSeconds ?? 0, reframeFrameTimes.last ?? 0)
+            return GradeSourceMap.from(
+                frameSourceSeconds: reframeFrameTimes,
+                outputFPS: Double(outputFPS), sourceDuration: span)
+        }()
         // The reframe, the crop and the grade are all tail passes over the
         // finished clip; the plan reserves its tail band when any will run.
         let hasTailPass = willBakeGrade || cropCanvas != nil || reframeTrack != nil
@@ -3480,6 +3500,7 @@ final class AppModel: ObservableObject {
                         frameSourceTimes: reframeFrameTimes,
                         outputFPS: reframeOutputFPS,
                         grade: grade,
+                        gradeMap: gradeMap,
                         exportShortEdge: exportEdge
                     ) { fraction in
                         Task { @MainActor [weak self] in
@@ -3527,7 +3548,7 @@ final class AppModel: ObservableObject {
                     let uncropped = output.url
                     let cropped = try await VideoCanvasCropper.croppedCopy(
                         of: uncropped, canvas: cropCanvas, offset: cropOffset,
-                        shortEdge: exportEdge, grade: grade
+                        shortEdge: exportEdge, grade: grade, gradeMap: gradeMap
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let cropBand else { return }
@@ -3570,7 +3591,8 @@ final class AppModel: ObservableObject {
                     self.processingETADate = nil
                     let gradeBand = tailBand
                     let ungraded = output.url
-                    output.url = try await VideoGrader.bakedCopy(of: ungraded, grade: grade) { fraction in
+                    output.url = try await VideoGrader.bakedCopy(
+                        of: ungraded, grade: grade, map: gradeMap) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let gradeBand else { return }
                             self.reportTailProgress(band: gradeBand, fraction: fraction)
@@ -4599,7 +4621,7 @@ final class AppModel: ObservableObject {
                     linearLight: false,
                     outputURL: output,
                     frameTimes: frameTimes,
-                    loadFrame: Self.gradedFrameLoader(grade),
+                    loadFrame: Self.gradedFrameLoader(grade, over: urls),
                     progress: progress)
             }
             // The engine path: linear half-float decode straight to the
@@ -4627,6 +4649,10 @@ final class AppModel: ObservableObject {
         if !grade.isIdentity {
             summary += " · \(grade.preset.displayName) grade baked in"
         }
+        if grade.isKeyframed {
+            let moments = grade.timeline.keyframes.count
+            summary += " · \(moments) keyframe\(moments == 1 ? "" : "s")"
+        }
         return ProcessingOutput(
             kind: .video,
             url: output,
@@ -4644,9 +4670,26 @@ final class AppModel: ObservableObject {
     ///
     /// Built inside the detached blend task from the grade value alone, so no
     /// closure crosses the concurrency boundary with it.
-    nonisolated private static func gradedFrameLoader(_ grade: PhotoGrade) -> ((URL) throws -> CGImage)? {
+    nonisolated private static func gradedFrameLoader(
+        _ grade: PhotoGrade, over urls: [URL]
+    ) -> ((URL) throws -> CGImage)? {
         guard !grade.isIdentity else { return nil }
-        return { url in try PhotoGrader.renderForBlend(url: url, grade: grade) }
+        guard grade.isKeyframed, urls.count > 1 else {
+            return { url in try PhotoGrader.renderForBlend(url: url, grade: grade) }
+        }
+        // This path grades each INPUT frame on its way in (the gamma-domain
+        // legacy stacker has no post-average hook), so the moment is the
+        // frame's own position in the sequence. Keyed by URL rather than by a
+        // running counter: the loader is called once per frame, but nothing in
+        // its contract promises the order.
+        var positions: [URL: Double] = [:]
+        for (index, url) in urls.enumerated() {
+            positions[url] = Double(index) / Double(urls.count - 1)
+        }
+        return { url in
+            try PhotoGrader.renderForBlend(
+                url: url, grade: grade.frozen(at: positions[url] ?? 0))
+        }
     }
 
     /// Legacy single-image stack: averages every still into one synthetic long
@@ -4692,7 +4735,7 @@ final class AppModel: ObservableObject {
             return try stacker.stack(
                 imageURLs: urls,
                 linearLight: linear,
-                loadFrame: Self.gradedFrameLoader(grade),
+                loadFrame: Self.gradedFrameLoader(grade, over: urls),
                 progress: { fraction in
                     Task { @MainActor in
                         self?.reportClipProgress(0, fraction: fraction)
@@ -6022,13 +6065,26 @@ final class AppModel: ObservableObject {
     func photoGrade(for capture: CaptureProject) -> PhotoGrade {
         guard !presetState(for: capture).isOriginal else { return .identity }
         return PhotoGrade(
-            preset: photoPreset(for: capture), adjustments: photoAdjustments(for: capture))
+            preset: photoPreset(for: capture),
+            adjustments: photoAdjustments(for: capture),
+            timeline: gradeTimeline(for: capture))
     }
 
     /// The manual slider grade layered on the preset. Projects saved before the
     /// sliders existed have none, which means "the preset on its own".
+    ///
+    /// For a keyframed project this is the grade at the *opening* moment — the
+    /// timeline keeps it mirrored there — so a caller that can only hold one set
+    /// of values shows the look the clip starts on rather than an average of it.
     func photoAdjustments(for capture: CaptureProject) -> PhotoAdjustments {
         capture.adjustments ?? .neutral
+    }
+
+    /// How the grade travels across this shoot. Empty for every project that
+    /// has one look end to end, which is every project until somebody grades a
+    /// second moment of it.
+    func gradeTimeline(for capture: CaptureProject) -> GradeTimeline {
+        capture.gradeTimeline ?? .empty
     }
 
     // MARK: Preset state
@@ -6040,11 +6096,18 @@ final class AppModel: ObservableObject {
     /// from the values themselves, which is exactly what the resolver does with
     /// no anchor to go on.
     func presetState(for capture: CaptureProject) -> PresetState {
-        if let stored = capture.presetState { return stored }
+        // Keyframes outrank a stored state: a project whose grade moves over
+        // time is Edited whatever a sidecar written before the keyframes says,
+        // and an Original stamp would otherwise make `photoGrade` throw the
+        // whole timeline away as "no filter".
+        if let stored = capture.presetState, capture.gradeTimeline?.isEmpty ?? true {
+            return stored
+        }
         return PresetStateResolver.resolve(
             preset: PhotoPreset.resolve(capture.selectedPreset),
             adjustments: capture.adjustments ?? .neutral,
-            anchor: .edited,
+            timeline: gradeTimeline(for: capture),
+            anchor: capture.presetState ?? .edited,
             customPresets: CustomPresetStore.shared.presets)
     }
 
@@ -6056,8 +6119,12 @@ final class AppModel: ObservableObject {
         let state: PresetState = preset == .original
             ? .original
             : .named(id: preset.presetID, snapshot: preset.snapshot)
+        // A preset is one look, so applying it wholesale from outside the editor
+        // takes the shoot back to one look — the keyframes go with the manual
+        // adjustments they were made of. (Inside the editor, where there is a
+        // playhead to aim at, a chip writes at the playhead instead.)
         write(
-            preset: preset, adjustments: .neutral, state: state,
+            preset: preset, adjustments: .neutral, state: state, timeline: .empty,
             at: index)
     }
 
@@ -6067,7 +6134,7 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         write(
             preset: preset.basePreset, adjustments: preset.adjustments,
-            state: .named(id: preset.id, snapshot: preset.snapshot),
+            state: .named(id: preset.id, snapshot: preset.snapshot), timeline: .empty,
             at: index)
     }
 
@@ -6078,10 +6145,13 @@ final class AppModel: ObservableObject {
         preset: PhotoPreset,
         adjustments: PhotoAdjustments,
         state: PresetState,
+        timeline: GradeTimeline = .empty,
         for capture: CaptureProject
     ) {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
-        write(preset: preset, adjustments: adjustments, state: state, at: index)
+        write(
+            preset: preset, adjustments: adjustments, state: state, timeline: timeline,
+            at: index)
     }
 
     /// The one place a project's grade changes, so no path can leave the state
@@ -6090,14 +6160,20 @@ final class AppModel: ObservableObject {
         preset: PhotoPreset,
         adjustments: PhotoAdjustments,
         state: PresetState,
+        timeline: GradeTimeline,
         at index: Int
     ) {
+        // An empty timeline is stored as nil, so a project that never grew one
+        // reads and writes exactly the sidecar it always did.
+        let stored: GradeTimeline? = timeline.isEmpty ? nil : timeline
         guard captures[index].selectedPreset != preset.rawValue
                 || captures[index].adjustments != adjustments
-                || captures[index].presetState != state else { return }
+                || captures[index].presetState != state
+                || captures[index].gradeTimeline != stored else { return }
         captures[index].selectedPreset = preset.rawValue
         captures[index].adjustments = adjustments
         captures[index].presetState = state
+        captures[index].gradeTimeline = stored
         try? persistLibrary()
     }
 
