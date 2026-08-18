@@ -1,0 +1,461 @@
+/**
+ * Rig hero — front-end styles.
+ *
+ * Two things live here: the hero shell (stage, wordmark, copy, replay) and the
+ * rig animation itself. The rig is deliberately independent of the shell — it
+ * needs nothing but a `.ll-rig` element around the mark — so the same motion
+ * can be dropped anywhere later without dragging the hero layout with it.
+ *
+ * Timing is the design's, to the millisecond (LetsLapse Loading Animation.
+ * dc.html). Every duration is multiplied by --ll-rig-sp, which the block sets
+ * to 1 / speed, so one number slows or quickens the whole rig without changing
+ * the relative beats.
+ */
+
+/* --- Hero shell -------------------------------------------------------- */
+
+.ll-rig-hero {
+	--ll-rig-copy-delay: 1.78s;
+
+	position: relative;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: clamp(24px, 3vw, 34px);
+	box-sizing: border-box;
+	width: 100%;
+	text-align: center;
+}
+
+.ll-rig-hero.has-stage {
+	padding: clamp(34px, 5vw, 68px) clamp(20px, 4vw, 52px);
+	border: 1px solid var(--ll-rule-firm, rgba(36, 90, 133, 0.4));
+	border-radius: 22px;
+	background: radial-gradient(120% 100% at 50% 34%, #101A2C 0%, #06090F 70%);
+	overflow: hidden;
+}
+
+/* Mark on the left, copy on the right — the homepage arrangement. */
+.ll-rig-hero--inline {
+	flex-direction: row;
+	align-items: center;
+	gap: clamp(28px, 4vw, 56px);
+	text-align: left;
+}
+
+.ll-rig-hero--inline.has-stage {
+	background: radial-gradient(90% 140% at 22% 50%, #101A2C 0%, #06090F 72%);
+}
+
+.ll-rig-hero--inline .ll-rig-hero__mark {
+	flex: none;
+}
+
+.ll-rig-hero--inline .ll-rig-hero__copy {
+	flex: 1 1 320px;
+}
+
+@media (max-width: 700px) {
+	.ll-rig-hero--inline {
+		flex-direction: column;
+		text-align: center;
+	}
+
+	.ll-rig-hero--inline.has-stage {
+		background: radial-gradient(120% 100% at 50% 30%, #101A2C 0%, #06090F 70%);
+	}
+
+	.ll-rig-hero--inline .ll-rig-hero__copy p.is-style-ll-standfirst {
+		margin-left: auto !important;
+		margin-right: auto !important;
+	}
+}
+
+.ll-rig-hero__mark {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 18px;
+}
+
+.ll-rig-hero__wordmark {
+	margin: 0;
+	font-size: clamp(11px, 1.1vw, 13px);
+	font-weight: 600;
+	line-height: 1;
+	letter-spacing: 0.26em;
+	text-transform: uppercase;
+	color: var(--ll-body, #C6D2E4);
+	animation: llRigRise calc(0.5s * var(--ll-rig-sp, 1)) var(--ll-rig-copy-delay) cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+
+.ll-rig-hero__replay {
+	background: transparent;
+	border: 1px solid var(--ll-rule-firm, rgba(36, 90, 133, 0.4));
+	border-radius: 999px;
+	color: var(--ll-muted, #8FA1BC);
+	font-family: inherit;
+	font-size: 12.5px;
+	font-weight: 600;
+	line-height: 1;
+	padding: 9px 18px;
+	cursor: pointer;
+	transition: color 120ms ease-out, border-color 120ms ease-out;
+	animation: llRigRise calc(0.5s * var(--ll-rig-sp, 1)) var(--ll-rig-copy-delay) cubic-bezier(0.2, 1, 0.3, 1) both;
+}
+
+.ll-rig-hero__replay:hover {
+	color: var(--ll-accent, #F0A32C);
+	border-color: var(--ll-accent, #F0A32C);
+}
+
+.ll-rig-hero__copy {
+	max-width: 62ch;
+}
+
+.ll-rig-hero--stack .ll-rig-hero__copy {
+	margin-inline: auto;
+}
+
+/* Copy arrives after the rig lands, one line behind the next. */
+.ll-rig-hero__copy > * {
+	animation: llRigRise calc(0.54s * var(--ll-rig-sp, 1)) cubic-bezier(0.2, 1, 0.3, 1) both;
+	animation-delay: calc(var(--ll-rig-copy-delay) + 0.09s);
+}
+
+.ll-rig-hero__copy > :nth-child(2) {
+	animation-delay: calc(var(--ll-rig-copy-delay) + 0.18s);
+}
+
+.ll-rig-hero__copy > :nth-child(3) {
+	animation-delay: calc(var(--ll-rig-copy-delay) + 0.27s);
+}
+
+.ll-rig-hero__copy > :nth-child(n+4) {
+	animation-delay: calc(var(--ll-rig-copy-delay) + 0.36s);
+}
+
+/* The standfirst style pins itself hard left; centred layouts say otherwise. */
+.ll-rig-hero--stack .ll-rig-hero__copy p.is-style-ll-standfirst {
+	margin-left: auto !important;
+	margin-right: auto !important;
+}
+
+.ll-rig-hero__copy > :first-child {
+	margin-block-start: 0;
+}
+
+/* --- The rig ----------------------------------------------------------- */
+
+.ll-rig {
+	/* Seconds multiplier (1 / speed) and the loop's single beat. */
+	--ll-rig-scale: var(--ll-rig-sp, 1);
+	--ll-rig-beat: calc(1.7s * var(--ll-rig-scale));
+	--ll-rig-accent: var(--ll-accent, #F0A32C);
+
+	display: flex;
+	line-height: 0;
+}
+
+.ll-rig__svg {
+	display: block;
+	width: min(var(--ll-rig-size, 216px), 62vw);
+	aspect-ratio: 1 / 1;
+	height: auto;
+}
+
+/* Brand colour, stated as CSS so it beats the SVG's hard-coded fallback. */
+.ll-rig__foot,
+.ll-rig__pad {
+	fill: var(--ll-rig-accent, #F0A32C);
+}
+
+.ll-rig__arc,
+.ll-rig__lens-ring {
+	stroke: var(--ll-rig-accent, #F0A32C);
+}
+
+.ll-rig__glow-stop {
+	stop-color: var(--ll-rig-accent, #F0A32C);
+}
+
+/* Transforms are authored in the 1024 grid, not in element boxes. */
+.ll-rig__root,
+.ll-rig__glow,
+.ll-rig__leg,
+.ll-rig__pipe,
+.ll-rig__sweep,
+.ll-rig__board,
+.ll-rig__board-fill,
+.ll-rig__pad,
+.ll-rig__iris {
+	transform-box: view-box;
+}
+
+.ll-rig__root,
+.ll-rig__glow,
+.ll-rig__pipe,
+.ll-rig__sweep,
+.ll-rig__board {
+	transform-origin: 512px 486px;
+}
+
+.ll-rig__board-fill { transform-origin: 512px 462px; }
+.ll-rig__iris       { transform-origin: 478px 452px; }
+
+.ll-rig__leg--rear-l  { transform-origin: 298px 792px; }
+.ll-rig__leg--rear-r  { transform-origin: 726px 792px; }
+.ll-rig__leg--front-l { transform-origin: 364px 642px; }
+.ll-rig__leg--front-r { transform-origin: 660px 642px; }
+
+.ll-rig__pad--1 { transform-origin: 290px 282px; }
+.ll-rig__pad--2 { transform-origin: 734px 282px; }
+.ll-rig__pad--3 { transform-origin: 734px 642px; }
+.ll-rig__pad--4 { transform-origin: 290px 642px; }
+
+/* --- Build: line art first, colour floods in behind it ----------------- */
+
+.ll-rig--build .ll-rig__sweep {
+	display: none;
+}
+
+.ll-rig--build .ll-rig__root {
+	animation: llRigRootIn calc(2.006s * var(--ll-rig-scale)) cubic-bezier(0.22, 1.1, 0.32, 1) both;
+}
+
+.ll-rig--build .ll-rig__glow {
+	animation:
+		llRigGlowIn calc(1.224s * var(--ll-rig-scale)) ease-out both,
+		llRigGlowPulse calc(4.42s * var(--ll-rig-scale)) calc(2.04s * var(--ll-rig-scale)) ease-in-out infinite;
+}
+
+.ll-rig--build .ll-rig__leg {
+	animation: llRigLegDrop calc(0.884s * var(--ll-rig-scale)) cubic-bezier(0.3, 1.4, 0.5, 1) both;
+}
+
+.ll-rig--build .ll-rig__leg--rear-l  { animation-delay: calc(0.442s * var(--ll-rig-scale)); }
+.ll-rig--build .ll-rig__leg--rear-r  { animation-delay: calc(0.527s * var(--ll-rig-scale)); }
+
+.ll-rig--build .ll-rig__leg--front-l {
+	animation-delay: calc(0.714s * var(--ll-rig-scale));
+	animation-timing-function: cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+.ll-rig--build .ll-rig__leg--front-r {
+	animation-delay: calc(0.799s * var(--ll-rig-scale));
+	animation-timing-function: cubic-bezier(0.3, 1.45, 0.5, 1);
+}
+
+.ll-rig--build .ll-rig__pipe {
+	animation: llRigFillIn calc(0.782s * var(--ll-rig-scale)) calc(0.51s * var(--ll-rig-scale)) cubic-bezier(0.34, 1.4, 0.5, 1) both;
+}
+
+.ll-rig--build .ll-rig__rim {
+	animation:
+		llRigDraw calc(0.816s * var(--ll-rig-scale)) calc(0.102s * var(--ll-rig-scale)) cubic-bezier(0.5, 0, 0.15, 1) both,
+		llRigCoolRim calc(0.578s * var(--ll-rig-scale)) calc(1.122s * var(--ll-rig-scale)) ease-out both;
+}
+
+.ll-rig--build .ll-rig__board-fill {
+	animation: llRigFillIn calc(0.714s * var(--ll-rig-scale)) calc(0.952s * var(--ll-rig-scale)) cubic-bezier(0.34, 1.45, 0.5, 1) both;
+}
+
+.ll-rig--build .ll-rig__board-line {
+	animation:
+		llRigDraw calc(0.782s * var(--ll-rig-scale)) calc(0.578s * var(--ll-rig-scale)) cubic-bezier(0.5, 0, 0.15, 1) both,
+		llRigCoolBoard calc(0.51s * var(--ll-rig-scale)) calc(1.462s * var(--ll-rig-scale)) ease-out both;
+}
+
+.ll-rig--build .ll-rig__pad {
+	animation: llRigPopIn calc(0.544s * var(--ll-rig-scale)) cubic-bezier(0.3, 1.6, 0.5, 1) both;
+}
+
+.ll-rig--build .ll-rig__pad--1 { animation-delay: calc(1.258s * var(--ll-rig-scale)); }
+.ll-rig--build .ll-rig__pad--2 { animation-delay: calc(1.343s * var(--ll-rig-scale)); }
+.ll-rig--build .ll-rig__pad--3 { animation-delay: calc(1.428s * var(--ll-rig-scale)); }
+.ll-rig--build .ll-rig__pad--4 { animation-delay: calc(1.513s * var(--ll-rig-scale)); }
+
+.ll-rig--build .ll-rig__lens-ring {
+	animation: llRigDraw calc(0.748s * var(--ll-rig-scale)) calc(0.85s * var(--ll-rig-scale)) cubic-bezier(0.45, 0, 0.15, 1) both;
+}
+
+.ll-rig--build .ll-rig__iris {
+	animation: llRigIris calc(0.748s * var(--ll-rig-scale)) calc(1.224s * var(--ll-rig-scale)) cubic-bezier(0.3, 1.5, 0.5, 1) both;
+}
+
+.ll-rig--build .ll-rig__glint {
+	animation: llRigGlint calc(0.578s * var(--ll-rig-scale)) calc(1.666s * var(--ll-rig-scale)) ease-out both;
+}
+
+/* --- Loop: the rig is already built, so nothing rebuilds --------------- */
+
+.ll-rig--loop .ll-rig__root {
+	animation: llRigLoopIn calc(0.5s * var(--ll-rig-scale)) cubic-bezier(0.22, 1.1, 0.32, 1) both;
+}
+
+.ll-rig--loop .ll-rig__glow {
+	animation: llRigGlowPulse var(--ll-rig-beat) ease-in-out infinite;
+}
+
+.ll-rig--loop .ll-rig__leg {
+	animation: llRigBob var(--ll-rig-beat) ease-in-out infinite;
+}
+
+.ll-rig--loop .ll-rig__leg--front-l { animation-delay: calc(0.06s * var(--ll-rig-scale)); }
+.ll-rig--loop .ll-rig__leg--rear-r  { animation-delay: calc(0.12s * var(--ll-rig-scale)); }
+.ll-rig--loop .ll-rig__leg--front-r { animation-delay: calc(0.18s * var(--ll-rig-scale)); }
+
+.ll-rig--loop .ll-rig__sweep {
+	animation: llRigSpin var(--ll-rig-beat) cubic-bezier(0.62, 0, 0.38, 1) infinite;
+}
+
+.ll-rig--loop .ll-rig__arc {
+	animation: llRigArcBreathe var(--ll-rig-beat) ease-in-out infinite;
+}
+
+.ll-rig--loop .ll-rig__arc--trail {
+	animation-delay: calc(-0.16s * var(--ll-rig-scale));
+}
+
+.ll-rig--loop .ll-rig__board {
+	animation: llRigTilt var(--ll-rig-beat) ease-in-out infinite;
+}
+
+.ll-rig--loop .ll-rig__pad {
+	animation: llRigDotChase var(--ll-rig-beat) ease-in-out infinite;
+}
+
+.ll-rig--loop .ll-rig__pad--2 { animation-delay: calc(0.42s * var(--ll-rig-scale)); }
+.ll-rig--loop .ll-rig__pad--3 { animation-delay: calc(0.85s * var(--ll-rig-scale)); }
+.ll-rig--loop .ll-rig__pad--4 { animation-delay: calc(1.27s * var(--ll-rig-scale)); }
+
+.ll-rig--loop .ll-rig__iris {
+	animation: llRigIrisBreathe var(--ll-rig-beat) ease-in-out infinite;
+}
+
+/* --- Keyframes --------------------------------------------------------- */
+
+@keyframes llRigRootIn {
+	0%   { transform: scale(0.80) rotate(-9deg); opacity: 0; }
+	18%  { opacity: 1; }
+	56%  { transform: scale(1.055) rotate(2.5deg); }
+	78%  { transform: scale(0.982) rotate(-1deg); }
+	100% { transform: scale(1) rotate(0deg); }
+}
+
+@keyframes llRigLoopIn {
+	0%   { transform: scale(0.90); opacity: 0; }
+	60%  { transform: scale(1.02); }
+	100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes llRigDraw {
+	from { stroke-dashoffset: 100; }
+	to   { stroke-dashoffset: 0; }
+}
+
+@keyframes llRigGlowIn {
+	0%   { opacity: 0; transform: scale(0.42); }
+	55%  { opacity: 0.58; }
+	100% { opacity: 0.34; transform: scale(1); }
+}
+
+@keyframes llRigGlowPulse {
+	0%, 100% { opacity: 0.24; transform: scale(0.95); }
+	50%      { opacity: 0.48; transform: scale(1.06); }
+}
+
+@keyframes llRigFillIn {
+	0%   { opacity: 0; transform: scale(0.86); }
+	62%  { opacity: 1; transform: scale(1.045); }
+	100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes llRigPopIn {
+	0%   { opacity: 0; transform: scale(0); }
+	55%  { opacity: 1; transform: scale(1.38); }
+	78%  { transform: scale(0.90); }
+	100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes llRigIris {
+	0%   { opacity: 0; transform: scale(0); }
+	55%  { opacity: 1; transform: scale(1.16); }
+	80%  { transform: scale(0.95); }
+	100% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes llRigLegDrop {
+	0%   { opacity: 0; transform: translateY(-72px) scaleY(0.42); }
+	50%  { opacity: 1; transform: translateY(16px) scaleY(1.14); }
+	76%  { transform: translateY(-6px) scaleY(0.94); }
+	100% { transform: translateY(0) scaleY(1); }
+}
+
+@keyframes llRigCoolRim {
+	from { stroke: var(--ll-rig-accent, #F0A32C); }
+	to   { stroke: #6E7F99; }
+}
+
+@keyframes llRigCoolBoard {
+	from { stroke: var(--ll-rig-accent, #F0A32C); }
+	to   { stroke: #245A85; }
+}
+
+@keyframes llRigGlint {
+	from { opacity: 0; }
+	to   { opacity: 0.16; }
+}
+
+@keyframes llRigRise {
+	0%   { opacity: 0; transform: translateY(9px); }
+	100% { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes llRigSpin {
+	to { transform: rotate(360deg); }
+}
+
+@keyframes llRigArcBreathe {
+	0%, 100% { stroke-dasharray: 9 91; }
+	50%      { stroke-dasharray: 27 73; }
+}
+
+@keyframes llRigIrisBreathe {
+	0%, 100% { transform: scale(1); }
+	40%      { transform: scale(0.87); }
+	68%      { transform: scale(1.04); }
+}
+
+@keyframes llRigTilt {
+	0%, 100% { transform: rotate(0deg); }
+	50%      { transform: rotate(-2.4deg); }
+}
+
+@keyframes llRigBob {
+	0%, 100% { transform: translateY(0); }
+	50%      { transform: translateY(7px); }
+}
+
+/* --- Reduced motion ---------------------------------------------------- *
+ * Nothing moves and nothing hides: the rig's resting attributes are the
+ * settled ones, so the mark reads as the finished logo and the copy is simply
+ * there. The sweep is the one part with no still form worth showing.
+ * ---------------------------------------------------------------------- */
+
+@media (prefers-reduced-motion: reduce) {
+	.ll-rig *,
+	.ll-rig-hero__wordmark,
+	.ll-rig-hero__replay,
+	.ll-rig-hero__copy > * {
+		animation: none !important;
+	}
+
+	.ll-rig__sweep {
+		display: none;
+	}
+
+	.ll-rig-hero__replay {
+		display: none;
+	}
+}

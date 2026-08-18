@@ -1,0 +1,42 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "letslapse/brand-mark",
+	"version": "0.3.0",
+	"title": "Brand mark",
+	"category": "design",
+	"icon": "format-image",
+	"description": "The LetsLapse app icon, shipped with the theme. Use it wherever the brand needs to appear at a fixed size — the header, the footer, a sign-off.",
+	"keywords": [ "logo", "icon", "brand", "letslapse" ],
+	"textdomain": "letslapse",
+	"supports": {
+		"html": false,
+		"anchor": true,
+		"multiple": true,
+		"spacing": {
+			"margin": [ "top", "bottom" ]
+		},
+		"interactivity": { "clientNavigation": true }
+	},
+	"attributes": {
+		"variant": {
+			"type": "string",
+			"default": "dark"
+		},
+		"size": {
+			"type": "number",
+			"default": 32
+		},
+		"rounded": {
+			"type": "boolean",
+			"default": true
+		},
+		"label": {
+			"type": "string",
+			"default": ""
+		}
+	},
+	"editorScript": "file:./index.js",
+	"style": "file:./style.css",
+	"render": "file:./render.php"
+}

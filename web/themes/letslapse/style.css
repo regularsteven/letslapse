@@ -3,11 +3,11 @@ Theme Name: LetsLapse
 Theme URI: https://letslapse.com/
 Author: LetsLapse
 Author URI: https://letslapse.com/
-Description: Dark, precision-instrument block theme for LetsLapse. Ships the blend machine as a Gutenberg block (letslapse/hero-machine) that renders the real 1/N incremental-average maths on a canvas, live.
+Description: Dark, precision-instrument block theme for LetsLapse. Ships the blend machine as a Gutenberg block (letslapse/hero-machine) that renders the real 1/N incremental-average maths on a canvas, live, and the rig hero (letslapse/rig-hero), which builds the app mark out of its own parts on page load.
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Version: 0.2.0
+Version: 0.3.0
 License: GNU General Public License v2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: letslapse
@@ -71,15 +71,6 @@ body {
 	color: var(--ll-muted);
 }
 
-.ll-mark {
-	display: flex;
-	line-height: 0;
-}
-
-.ll-mark svg {
-	display: block;
-}
-
 /* --- Page scaffolding -------------------------------------------------- */
 
 /* Template parts sit outside the constrained main, so they carry their own
@@ -125,14 +116,6 @@ body {
 
 .ll-footer__line {
 	margin: 0;
-}
-
-.ll-mark {
-	color: var(--ll-body);
-}
-
-.ll-mark--quiet {
-	color: var(--ll-faint);
 }
 
 /* --- Extracted hero copy ---------------------------------------------- *

@@ -35,26 +35,47 @@ function get_theme_file_path( $p = '' ) { global $theme_dir; return $theme_dir .
 function get_theme_file_uri( $p = '' ) { global $theme_uri; return $theme_uri . '/' . ltrim( $p, '/' ); }
 
 function get_block_wrapper_attributes( $extra = array() ) {
-	$class = 'wp-block-letslapse-hero-machine';
+	global $preview_block, $preview_block_attributes;
+
+	$class = 'wp-block-' . str_replace( '/', '-', $preview_block ? $preview_block : 'letslapse/hero-machine' );
 
 	if ( ! empty( $extra['class'] ) ) {
 		$class .= ' ' . $extra['class'];
 	}
 
-	return 'class="' . esc_attr( $class ) . '"';
+	// WordPress folds the block's own className in through block supports.
+	if ( ! empty( $preview_block_attributes['className'] ) ) {
+		$class .= ' ' . $preview_block_attributes['className'];
+	}
+
+	$out = 'class="' . esc_attr( $class ) . '"';
+
+	if ( ! empty( $extra['style'] ) ) {
+		$out .= ' style="' . esc_attr( $extra['style'] ) . '"';
+	}
+
+	return $out;
 }
 
 require_once $theme_dir . '/inc/config.php';
+require_once $theme_dir . '/inc/blocks/rig-hero/rig.php';
+
+$preview_block            = '';
+$preview_block_attributes = array();
 
 // --- Minimal block-markup renderer ---------------------------------------
 
 /**
- * Render one hero block.
+ * Render one theme block through its own render.php.
  *
- * @param string $json Raw attribute JSON from the block comment.
+ * @param string $slug    Directory under inc/blocks/.
+ * @param string $json    Raw attribute JSON from the block comment.
+ * @param string $content Rendered inner blocks, for blocks that take them.
  * @return string
  */
-function preview_hero( $json ) {
+function preview_block( $slug, $json, $content = '' ) {
+	global $preview_block, $preview_block_attributes;
+
 	$attributes = $json ? json_decode( $json, true ) : array();
 
 	if ( ! is_array( $attributes ) ) {
@@ -62,7 +83,7 @@ function preview_hero( $json ) {
 	}
 
 	// block.json defaults, applied the way WordPress would.
-	$defaults = json_decode( file_get_contents( get_theme_file_path( 'inc/blocks/hero-machine/block.json' ) ), true );
+	$defaults = json_decode( file_get_contents( get_theme_file_path( 'inc/blocks/' . $slug . '/block.json' ) ), true );
 
 	foreach ( $defaults['attributes'] as $key => $spec ) {
 		if ( array_key_exists( 'default', $spec ) && ! isset( $attributes[ $key ] ) ) {
@@ -70,12 +91,18 @@ function preview_hero( $json ) {
 		}
 	}
 
-	$content = '';
-	$block   = null;
+	$preview_block            = $defaults['name'];
+	$preview_block_attributes = $attributes;
+	$block                    = null;
 
 	ob_start();
-	include get_theme_file_path( 'inc/blocks/hero-machine/render.php' );
-	return ob_get_clean();
+	include get_theme_file_path( 'inc/blocks/' . $slug . '/render.php' );
+	$out = ob_get_clean();
+
+	$preview_block            = '';
+	$preview_block_attributes = array();
+
+	return $out;
 }
 
 /**
@@ -154,7 +181,29 @@ function preview_render_blocks( $markup ) {
 	$markup = preg_replace_callback(
 		'#<!--\s*wp:letslapse/hero-machine\s*(\{[^\n]*\})?\s*/-->#',
 		function ( $m ) {
-			return preview_hero( isset( $m[1] ) ? $m[1] : '' );
+			return preview_block( 'hero-machine', isset( $m[1] ) ? $m[1] : '' );
+		},
+		$markup
+	);
+
+	// The rig hero, which wraps its copy.
+	$markup = preg_replace_callback(
+		'#<!--\s*wp:letslapse/rig-hero\s*(\{[^\n]*\})?\s*-->(.*?)<!--\s*/wp:letslapse/rig-hero\s*-->#s',
+		function ( $m ) {
+			return preview_block(
+				'rig-hero',
+				isset( $m[1] ) ? $m[1] : '',
+				preview_render_blocks( $m[2] )
+			);
+		},
+		$markup
+	);
+
+	// The brand mark.
+	$markup = preg_replace_callback(
+		'#<!--\s*wp:letslapse/brand-mark\s*(\{[^\n]*\})?\s*/-->#',
+		function ( $m ) {
+			return preview_block( 'brand-mark', isset( $m[1] ) ? $m[1] : '' );
 		},
 		$markup
 	);
@@ -276,9 +325,12 @@ $body = preg_replace(
 <link rel="stylesheet" href="/preview/wp-approx.css">
 <link rel="stylesheet" href="<?php echo esc_url( get_theme_file_uri( 'style.css' ) ); ?>">
 <link rel="stylesheet" href="<?php echo esc_url( get_theme_file_uri( 'inc/blocks/hero-machine/style.css' ) ); ?>">
+<link rel="stylesheet" href="<?php echo esc_url( get_theme_file_uri( 'inc/blocks/rig-hero/style.css' ) ); ?>">
+<link rel="stylesheet" href="<?php echo esc_url( get_theme_file_uri( 'inc/blocks/brand-mark/style.css' ) ); ?>">
 </head>
 <body class="wp-site-blocks">
 <?php echo $body; // phpcs:ignore ?>
 <script src="<?php echo esc_url( get_theme_file_uri( 'inc/blocks/hero-machine/view.js' ) ); ?>"></script>
+<script src="<?php echo esc_url( get_theme_file_uri( 'inc/blocks/rig-hero/view.js' ) ); ?>"></script>
 </body>
 </html>

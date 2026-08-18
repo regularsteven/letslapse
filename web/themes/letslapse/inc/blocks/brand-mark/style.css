@@ -1,0 +1,23 @@
+/**
+ * Brand mark — front-end styles.
+ *
+ * An <img>, not an inline SVG: the mark is a fixed piece of artwork, it needs
+ * no theming from the outside, and two of them on one page would otherwise
+ * collide over gradient ids.
+ */
+
+.ll-brand-mark {
+	display: block;
+	height: auto;
+	max-width: 100%;
+}
+
+/* The icon ships as a full square plate; on the page it wants its corners. */
+.ll-brand-mark.is-rounded {
+	border-radius: 22.5%;
+}
+
+/* Sign-off marks sit back a little. */
+.ll-brand-mark.is-quiet {
+	opacity: 0.65;
+}

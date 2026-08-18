@@ -1,0 +1,99 @@
+<!--
+	The LetsLapse rig, drawn once and animated entirely from CSS.
+
+	Geometry is the app icon's, part for part (img/letslapse-icon-dark.svg): the
+	same pipe, board, legs, pads and lens on the same 1024 grid, so the mark the
+	build animation lands on IS the logo. Ported from the Claude Design source
+	"LetsLapse Loading Animation.dc.html".
+
+	Every animated part carries a class; inc/blocks/rig-hero/style.css owns the
+	timing and decides which of the two variants (build / loop) each part plays.
+	Resting attribute values are the SETTLED ones — rim and board cooled to
+	slate, lens open, glint on — so a reduced-motion visitor, or anyone whose
+	animations never run, sees the finished rig rather than a half-built one.
+
+	Brand colour is stated twice on purpose: as a hard-coded presentation
+	attribute (so the file is right on its own, and right in browsers that treat
+	var() in attributes badly) and again as a CSS `fill` / `stroke` / `stop-color`
+	rule, which wins over the attribute and follows the theme accent.
+
+	{{uid}} is substituted per block instance: gradient ids have to be unique
+	when two rigs share a page.
+-->
+<svg class="ll-rig__svg" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+	<defs>
+		<linearGradient id="llRigPipe{{uid}}" x1="0.1" y1="0" x2="0.9" y2="1">
+			<stop offset="0" stop-color="#E9EEF6"/>
+			<stop offset="0.45" stop-color="#BAC6D8"/>
+			<stop offset="1" stop-color="#7C8CA5"/>
+		</linearGradient>
+		<linearGradient id="llRigBoard{{uid}}" x1="0" y1="0" x2="0.4" y2="1">
+			<stop offset="0" stop-color="#0E2E4E"/>
+			<stop offset="1" stop-color="#04101F"/>
+		</linearGradient>
+		<linearGradient id="llRigLens{{uid}}" x1="0" y1="0" x2="0" y2="1">
+			<stop offset="0" stop-color="#1E1C48"/>
+			<stop offset="0.26" stop-color="#4A4A93"/>
+			<stop offset="0.42" stop-color="#150332"/>
+			<stop offset="0.72" stop-color="#0C0322"/>
+			<stop offset="1" stop-color="#001C4C"/>
+		</linearGradient>
+		<radialGradient id="llRigGlow{{uid}}" cx="0.5" cy="0.5" r="0.5">
+			<stop class="ll-rig__glow-stop" offset="0" stop-color="#F0A32C" stop-opacity="0.55"/>
+			<stop class="ll-rig__glow-stop" offset="1" stop-color="#F0A32C" stop-opacity="0"/>
+		</radialGradient>
+	</defs>
+
+	<g class="ll-rig__root">
+		<circle class="ll-rig__glow" cx="512" cy="486" r="440" fill="url(#llRigGlow{{uid}})"/>
+
+		<!-- Rear legs sit behind the pipe. -->
+		<g transform="rotate(-5 512 486)">
+			<g class="ll-rig__leg ll-rig__leg--rear-l">
+				<rect x="281" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+				<rect class="ll-rig__foot" x="269" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+			</g>
+			<g class="ll-rig__leg ll-rig__leg--rear-r">
+				<rect x="709" y="790" width="34" height="112" rx="9" fill="#1E4368"/>
+				<rect class="ll-rig__foot" x="697" y="884" width="58" height="20" rx="10" fill="#F0A32C"/>
+			</g>
+		</g>
+
+		<circle class="ll-rig__pipe" cx="512" cy="486" r="402" fill="url(#llRigPipe{{uid}})"/>
+		<circle class="ll-rig__rim" cx="512" cy="486" r="402" fill="none" stroke="#6E7F99" stroke-width="9" pathLength="100" stroke-dasharray="100" transform="rotate(-90 512 486)"/>
+
+		<!-- Loop variant only: an amber head running the pipe, with its trail. -->
+		<g class="ll-rig__sweep">
+			<circle class="ll-rig__arc ll-rig__arc--trail" cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="9 91" opacity="0.28"/>
+			<circle class="ll-rig__arc" cx="512" cy="486" r="402" fill="none" stroke="#F0A32C" stroke-width="17" stroke-linecap="round" pathLength="100" stroke-dasharray="9 91"/>
+		</g>
+
+		<g transform="rotate(-5 512 486)">
+			<g class="ll-rig__leg ll-rig__leg--front-l">
+				<rect x="340" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+				<rect class="ll-rig__foot" x="325" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+			</g>
+			<g class="ll-rig__leg ll-rig__leg--front-r">
+				<rect x="636" y="640" width="48" height="134" rx="12" fill="#12324F"/>
+				<rect class="ll-rig__foot" x="621" y="752" width="78" height="24" rx="12" fill="#F0A32C"/>
+			</g>
+
+			<g class="ll-rig__board">
+				<rect class="ll-rig__board-fill" x="242" y="234" width="540" height="456" rx="18" fill="url(#llRigBoard{{uid}})"/>
+				<rect class="ll-rig__board-line" x="242" y="234" width="540" height="456" rx="18" fill="none" stroke="#245A85" stroke-width="7" pathLength="100" stroke-dasharray="100"/>
+				<rect class="ll-rig__pad ll-rig__pad--1" x="274" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+				<rect class="ll-rig__pad ll-rig__pad--2" x="718" y="266" width="32" height="32" rx="8" fill="#F0A32C"/>
+				<rect class="ll-rig__pad ll-rig__pad--3" x="718" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+				<rect class="ll-rig__pad ll-rig__pad--4" x="274" y="626" width="32" height="32" rx="8" fill="#F0A32C"/>
+			</g>
+		</g>
+
+		<circle class="ll-rig__lens-ring" cx="478" cy="452" r="196" fill="none" stroke="#F0A32C" stroke-width="14" pathLength="100" stroke-dasharray="100" transform="rotate(-90 478 452)"/>
+
+		<g class="ll-rig__iris">
+			<circle cx="478" cy="452" r="173" fill="#02040C"/>
+			<circle cx="478" cy="452" r="173" fill="url(#llRigLens{{uid}})" opacity="0.85"/>
+			<ellipse class="ll-rig__glint" cx="422" cy="392" rx="66" ry="38" fill="#FFFFFF" opacity="0.16" transform="rotate(-38 422 392)"/>
+		</g>
+	</g>
+</svg>

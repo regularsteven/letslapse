@@ -1,0 +1,61 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "letslapse/rig-hero",
+	"version": "0.3.0",
+	"title": "Rig hero",
+	"category": "media",
+	"icon": "camera-alt",
+	"description": "The LetsLapse rig builds itself on page load — legs, body, board, lens — and hands over to your copy. The same loading animation the app plays at launch.",
+	"keywords": [ "hero", "logo", "animation", "loading", "letslapse" ],
+	"textdomain": "letslapse",
+	"supports": {
+		"html": false,
+		"anchor": true,
+		"align": [ "wide", "full" ],
+		"multiple": true,
+		"spacing": {
+			"padding": true,
+			"margin": [ "top", "bottom" ]
+		},
+		"interactivity": { "clientNavigation": false }
+	},
+	"attributes": {
+		"variant": {
+			"type": "string",
+			"default": "build"
+		},
+		"arrangement": {
+			"type": "string",
+			"default": "stack"
+		},
+		"showStage": {
+			"type": "boolean",
+			"default": true
+		},
+		"showWordmark": {
+			"type": "boolean",
+			"default": true
+		},
+		"wordmarkText": {
+			"type": "string",
+			"default": "LETSLAPSE"
+		},
+		"showReplay": {
+			"type": "boolean",
+			"default": false
+		},
+		"replayLabel": {
+			"type": "string",
+			"default": "Replay"
+		},
+		"markLabel": { "type": "string" },
+		"markSize": { "type": "number" },
+		"speed": { "type": "number" }
+	},
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./editor.css",
+	"style": "file:./style.css",
+	"viewScript": "file:./view.js",
+	"render": "file:./render.php"
+}

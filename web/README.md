@@ -1,7 +1,9 @@
 # LetsLapse web
 
-The WordPress front for letslapse.com, built from the Claude Design source
-`LetsLapse Homepage.dc.html` (project `8c667d54-8244-4ac4-a5bb-c91d55f1df4d`).
+The WordPress front for letslapse.com, built from two Claude Design sources:
+`LetsLapse Homepage.dc.html` (project `8c667d54-8244-4ac4-a5bb-c91d55f1df4d`)
+for the blend machine, and `LetsLapse Loading Animation.dc.html` (project
+`7d8fda74-dede-42c1-a8cd-5c73f43e5a64`) for the rig hero.
 
 ```
 web/
@@ -104,6 +106,84 @@ Filters: `letslapse_hero_schema`, `letslapse_hero_config`,
   canvas follows the theme rather than hardcoding hexes.
 - **No atlas**: a text description replaces the canvas.
 
+## The rig hero
+
+`letslapse/rig-hero`, **Rig hero**. The mark builds itself out of its own parts
+on load — legs punch down, the body floods in behind its own outline, the board
+draws, the lens opens — and hands over to the copy once it has settled. Roughly
+2 s door to door. It is the app's launch animation, ported beat for beat from
+`LetsLapse Loading Animation.dc.html`, and the geometry is the app icon's, so
+what it lands on *is* the logo (`img/letslapse-icon-dark.svg`, minus the plate).
+
+Copy is **nested blocks**, not attributes: put a heading, a standfirst and a
+button row inside the block and they rise in after the build, one line behind
+the next. Everything the block needs lives in `inc/blocks/rig-hero/`:
+
+| File | What it is |
+| --- | --- |
+| `mark.svg` | The rig — one drawing, every moving part classed. `{{uid}}` is swapped per instance so two rigs on a page can't collide over gradient ids. |
+| `style.css` | Which parts move, when, in both variants — plus the hero shell. |
+| `rig.php` | Bounds, copy defaults, the SVG loader. |
+| `render.php` | Server render. |
+| `view.js` | The two things CSS can't decide (below). |
+| `index.js`, `editor.css` | Editor. |
+
+### Settings
+
+| Panel | Settings |
+| --- | --- |
+| Animation | what the rig does (build once / keep running), speed, mark size |
+| Layout | arrangement (mark above the copy, or beside it), stage panel on/off |
+| Copy | wordmark and its text, replay control and its label, mark description |
+
+**Build once** is the launch animation. **Keep running** is the design's loop
+state — for work with no known end time: nothing rebuilds, an amber head runs
+the body, the board rocks and the legs bob. Speed is the design's own Motion
+tweak: 1 is as authored, lower is slower, and the beats keep their proportions
+because every duration is `× (1 / speed)`.
+
+Mark size is a cap, not a fixed width — the rig shrinks with the viewport, and
+`inline` becomes stacked below 700px. Clear the mark description when the copy
+beside it already says the same thing; the mark then goes decorative and screen
+readers skip it.
+
+Numbers and copy defaults live in `letslapse_rig_schema()` and
+`letslapse_rig_label_defaults()` (`inc/blocks/rig-hero/rig.php`) and are handed
+to the editor at runtime, so the preview cannot drift from the front end.
+Filters: `letslapse_rig_schema`, `letslapse_rig_config`, `letslapse_rig_labels`.
+
+### Motion, JavaScript and reduced motion
+
+The animation is CSS and runs on load, so it is not waiting on a script: with
+JavaScript off, a visitor still sees the rig build and the copy arrive.
+`view.js` only adds what a stylesheet cannot decide —
+
+- a rig **below the fold** shouldn't have built itself before anyone scrolled to
+  it, so it is paused at frame zero and released when it comes into view;
+- **replay**, on demand. The control ships hidden and is revealed only where the
+  browser can actually drive it (`document.getAnimations`), so it never offers
+  something it can't do.
+
+`prefers-reduced-motion: reduce` stops all of it, and hides nothing: the SVG's
+resting values are the *settled* ones — rim and board cooled, lens open, glint
+on — so the mark reads as the finished logo and the copy is simply there.
+
+## The brand mark
+
+`letslapse/brand-mark` puts the app icon on the page as an `<img>` from
+`assets/img/letslapse-icon-dark.svg` (or `-light.svg` for light backgrounds), at
+a size you choose, with the corners rounded the way the App Store shows it.
+The header and footer template parts use it.
+
+An `<img>` rather than inline SVG on purpose: the artwork needs no theming from
+outside, it stays cacheable, and two inline copies on one page would collide
+over gradient ids. Alt text is empty by default — beside the site title the mark
+says nothing the title hasn't.
+
+If no site icon is set under Settings → General, the theme also points the
+browser tab at the same file (`letslapse_favicon_fallback()`); setting a real
+site icon always wins.
+
 ## Copy around the machine
 
 The heading and standfirst that used to be baked into the block are core
@@ -169,6 +249,10 @@ ES5 against the `wp.*` globals, so the checked-in files are the shipped files.
   developer-facing copy about the animation's internals. It is ordinary blocks
   in the homepage page (and in `patterns/homepage.php` for new installs) —
   delete that group if the public site should not carry it.
+- The header and footer marks were placeholder line art until 0.3.0. They are
+  the real icon now, through the brand mark block. If you have already edited
+  those template parts in Appearance → Editor, your database copy wins — reset
+  them there to pick the change up.
 - The caption line and the "coming soon" chip under the machine were drawn by
   the block before 0.2.0. The design dropped them, so they are page blocks now —
   the words survive, but the caption's numbers no longer follow the block's

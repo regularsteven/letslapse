@@ -2,9 +2,10 @@
 /**
  * Block + shortcode registration.
  *
- * The hero is one self-contained unit: everything it needs lives in
- * inc/blocks/hero-machine/. Nothing outside that directory renders it, so it
- * can be reworked without touching the header, the navigation or any template.
+ * Every block is one self-contained unit: everything it needs lives in its own
+ * directory under inc/blocks/. Nothing outside that directory renders it, so
+ * any of them can be reworked without touching the header, the navigation or
+ * any template.
  *
  * @package LetsLapse
  */
@@ -13,11 +14,15 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+require_once get_theme_file_path( 'inc/blocks/rig-hero/rig.php' );
+
 /**
  * Register theme blocks.
  */
 function letslapse_register_blocks() {
 	register_block_type( get_theme_file_path( 'inc/blocks/hero-machine' ) );
+	register_block_type( get_theme_file_path( 'inc/blocks/rig-hero' ) );
+	register_block_type( get_theme_file_path( 'inc/blocks/brand-mark' ) );
 }
 add_action( 'init', 'letslapse_register_blocks' );
 
@@ -118,27 +123,62 @@ function letslapse_hero_shortcode( $atts ) {
 add_shortcode( 'letslapse_hero', 'letslapse_hero_shortcode' );
 
 /**
- * Hand the editor the same schema and copy the server renders from, so the
- * editor preview cannot drift from the front end.
+ * Hand one block's editor script the same data the server renders from.
+ *
+ * @param string $block_name Registered block name.
+ * @param string $global     Window property the editor script reads.
+ * @param array  $data       Payload.
  */
-function letslapse_block_editor_data() {
-	$type = WP_Block_Type_Registry::get_instance()->get_registered( 'letslapse/hero-machine' );
+function letslapse_inline_editor_data( $block_name, $global, $data ) {
+	$type = WP_Block_Type_Registry::get_instance()->get_registered( $block_name );
 
 	if ( ! $type ) {
 		return;
 	}
 
-	$data = wp_json_encode(
+	$json = wp_json_encode( $data );
+
+	foreach ( (array) $type->editor_script_handles as $handle ) {
+		wp_add_inline_script( $handle, 'window.' . $global . ' = ' . $json . ';', 'before' );
+	}
+}
+
+/**
+ * Hand the editor the same schema, copy and artwork the server renders from,
+ * so the editor preview cannot drift from the front end.
+ */
+function letslapse_block_editor_data() {
+	letslapse_inline_editor_data(
+		'letslapse/hero-machine',
+		'letsLapseHero',
 		array(
-			'schema'          => letslapse_hero_schema(),
-			'labelDefaults'   => letslapse_hero_label_defaults(),
-			'defaultAtlas'    => letslapse_hero_atlas_url( array() ),
+			'schema'        => letslapse_hero_schema(),
+			'labelDefaults' => letslapse_hero_label_defaults(),
+			'defaultAtlas'  => letslapse_hero_atlas_url( array() ),
 		)
 	);
 
-	foreach ( (array) $type->editor_script_handles as $handle ) {
-		wp_add_inline_script( $handle, 'window.letsLapseHero = ' . $data . ';', 'before' );
-	}
+	letslapse_inline_editor_data(
+		'letslapse/rig-hero',
+		'letsLapseRig',
+		array(
+			'schema'        => letslapse_rig_schema(),
+			'labelDefaults' => letslapse_rig_label_defaults(),
+			// The editor draws the same SVG render.php inlines.
+			'mark'          => letslapse_rig_mark( 'editor' ),
+		)
+	);
+
+	letslapse_inline_editor_data(
+		'letslapse/brand-mark',
+		'letsLapseBrandMark',
+		array(
+			'sources' => array(
+				'dark'  => get_theme_file_uri( 'assets/img/letslapse-icon-dark.svg' ),
+				'light' => get_theme_file_uri( 'assets/img/letslapse-icon-light.svg' ),
+			),
+		)
+	);
 }
 add_action( 'enqueue_block_editor_assets', 'letslapse_block_editor_data' );
 
