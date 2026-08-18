@@ -123,34 +123,74 @@ function letslapse_hero_atlas_url( $attributes = array() ) {
 }
 
 /**
- * Tokenised caption template. Shared with the editor so the preview and the
- * front end can never disagree.
+ * Default copy for everything the canvas draws in words.
  *
- * @return string
+ * Every string is a block attribute, so all of it is editable per instance.
+ * Braced tokens are substituted client-side as the machine runs.
+ *
+ * @return array<string, string>
  */
-function letslapse_hero_caption_template() {
-	return __(
-		'{frames} source frames · {srcFps} fps · {ratio} → 1 · {outputs} blended frames · frame N lands at 1/N opacity — an exact running average',
-		'letslapse'
+function letslapse_hero_label_defaults() {
+	return array(
+		'source'    => __( 'SOURCE INPUT', 'letslapse' ),
+		'output'    => __( 'BLENDED OUTPUT', 'letslapse' ),
+		'timeline'  => __( 'TIMELINE · 1 BLEND = {seconds} S OF SOURCE', 'letslapse' ),
+		'replay'    => __( 'Replay the machine', 'letslapse' ),
+		'stacking'  => __( '{stacked} / {ratio} · blend {blend} of {outputs}', 'letslapse' ),
+		'playing'   => __( 'playing · blend', 'letslapse' ),
+		'resetting' => __( 'loop restarting…', 'letslapse' ),
+		'reduced'   => __( 'Reduced motion — showing the finished stack', 'letslapse' ),
 	);
 }
 
 /**
- * Default caption line beneath the machine, derived from the config.
+ * Map block attributes onto the canvas label set.
  *
- * @param array $config Resolved config from letslapse_hero_config().
- * @return string
+ * Tokens that depend only on config ({seconds}) are resolved here; the ones
+ * that change frame to frame are left for the view script.
+ *
+ * @param array $attributes Raw block attributes.
+ * @param array $config     Resolved config from letslapse_hero_config().
+ * @return array<string, string>
  */
-function letslapse_hero_default_caption( $config ) {
-	return strtr(
-		letslapse_hero_caption_template(),
+function letslapse_hero_labels( $attributes, $config ) {
+	$attribute_names = array(
+		'source'    => 'sourceLabel',
+		'output'    => 'outputLabel',
+		'timeline'  => 'timelineLabel',
+		'replay'    => 'replayLabel',
+		'stacking'  => 'stackingLabel',
+		'playing'   => 'playingLabel',
+		'resetting' => 'resettingLabel',
+		'reduced'   => 'reducedMotionLabel',
+	);
+
+	$labels = array();
+
+	foreach ( letslapse_hero_label_defaults() as $key => $default ) {
+		$name = $attribute_names[ $key ];
+
+		// An empty string is meaningful: it hides that label.
+		$labels[ $key ] = isset( $attributes[ $name ] ) ? (string) $attributes[ $name ] : $default;
+	}
+
+	$labels['timeline'] = strtr(
+		$labels['timeline'],
 		array(
-			'{frames}'  => number_format_i18n( $config['frameCount'] ),
-			'{srcFps}'  => number_format_i18n( $config['sourceFps'] ),
+			'{seconds}' => $config['blendSeconds'],
 			'{ratio}'   => number_format_i18n( $config['blendRatio'] ),
-			'{outputs}' => number_format_i18n( $config['outputCount'] ),
+			'{srcFps}'  => number_format_i18n( $config['sourceFps'] ),
 		)
 	);
+
+	/**
+	 * Filters the resolved canvas labels.
+	 *
+	 * @param array $labels     Resolved labels.
+	 * @param array $attributes Raw attributes.
+	 * @param array $config     Resolved config.
+	 */
+	return apply_filters( 'letslapse_hero_labels', $labels, $attributes, $config );
 }
 
 /**

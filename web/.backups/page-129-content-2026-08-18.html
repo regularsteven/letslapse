@@ -1,41 +1,15 @@
-<?php
-/**
- * Title: LetsLapse homepage
- * Slug: letslapse/homepage
- * Categories: letslapse, featured
- * Block Types: core/post-content
- * Description: The full homepage — heading, standfirst, the blend machine, how it works, implementation notes and the download call to action.
- *
- * This pattern is the homepage body. templates/front-page.html renders whatever
- * page is set as the front page, so the copy lives in the page and stays
- * editable without touching the theme.
- *
- * @package LetsLapse
- */
-
-?>
-<!-- wp:heading {"level":1,"className":"is-style-ll-display"} -->
-<h1 class="wp-block-heading is-style-ll-display">Many frames in. One frame out.</h1>
+<!-- wp:heading {"level":1,"className":"ll-eyebrow","fontSize":"x-large"} -->
+<h1 class="wp-block-heading ll-eyebrow has-x-large-font-size">Many frames in. One frame out.</h1>
 <!-- /wp:heading -->
 
-<!-- wp:paragraph {"className":"is-style-ll-standfirst"} -->
-<p class="is-style-ll-standfirst">LetsLapse synthesizes real motion blur by averaging every frame it captures. This is not a mock — the machine below is running the actual math on real footage, live.</p>
+<!-- wp:paragraph -->
+<p>LetsLapse synthesizes real motion blur by averaging every frame it captures. This is not a mock — the machine below is running the actual math on real footage, live.</p>
 <!-- /wp:paragraph -->
 
 <!-- wp:letslapse/hero-machine /-->
 
-<!-- wp:group {"className":"ll-machine-meta","layout":{"type":"flex","flexWrap":"wrap","justifyContent":"space-between"}} -->
-<div class="wp-block-group ll-machine-meta"><!-- wp:paragraph {"className":"is-style-ll-caption"} -->
-<p class="is-style-ll-caption">120 source frames · 15 fps · 15 → 1 · 8 blended frames · frame N lands at 1/N opacity — an exact running average</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph {"className":"is-style-ll-chip"} -->
-<p class="is-style-ll-chip">Try it with your own camera — coming soon</p>
-<!-- /wp:paragraph --></div>
-<!-- /wp:group -->
-
-<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"how","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section" id="how"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
+<!-- wp:group {"tagName":"section","className":"ll-section","layout":{"type":"constrained"},"anchor":"how"} -->
+<section id="how" class="wp-block-group ll-section"><!-- wp:heading {"className":"ll-eyebrow"} -->
 <h2 class="wp-block-heading ll-eyebrow">How it works</h2>
 <!-- /wp:heading -->
 
@@ -100,8 +74,8 @@
 <!-- /wp:group --></section>
 <!-- /wp:group -->
 
-<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"spec","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section" id="spec"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
+<!-- wp:group {"tagName":"section","className":"ll-section","layout":{"type":"constrained"},"anchor":"spec"} -->
+<section id="spec" class="wp-block-group ll-section"><!-- wp:heading {"className":"ll-eyebrow"} -->
 <h2 class="wp-block-heading ll-eyebrow">For implementation</h2>
 <!-- /wp:heading -->
 
@@ -136,12 +110,12 @@
 <!-- /wp:columns --></section>
 <!-- /wp:group -->
 
-<!-- wp:group {"tagName":"section","className":"ll-section ll-cta","anchor":"get","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section ll-cta" id="get"><!-- wp:heading {"level":2,"textAlign":"center"} -->
+<!-- wp:group {"tagName":"section","className":"ll-section ll-cta","layout":{"type":"constrained"},"anchor":"get"} -->
+<section id="get" class="wp-block-group ll-section ll-cta"><!-- wp:heading {"style":{"typography":{"textAlign":"center"}}} -->
 <h2 class="wp-block-heading has-text-align-center">Get LetsLapse</h2>
 <!-- /wp:heading -->
 
-<!-- wp:paragraph {"align":"center"} -->
+<!-- wp:paragraph {"style":{"typography":{"textAlign":"center"}}} -->
 <p class="has-text-align-center">Precision timelapse for iPhone, iPad and Mac. In beta now.</p>
 <!-- /wp:paragraph -->
 

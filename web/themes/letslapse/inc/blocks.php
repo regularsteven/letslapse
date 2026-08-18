@@ -49,7 +49,7 @@ function letslapse_enqueue_block_assets( $block_name ) {
  * [letslapse_hero] — the same hero for classic editors and page builders.
  *
  * Accepts snake_case versions of every block attribute, e.g.
- * [letslapse_hero blend_ratio="20" output_count="6" heading="Many frames in."]
+ * [letslapse_hero blend_ratio="20" output_count="6" show_timeline="false"]
  *
  * @param array|string $atts Shortcode attributes.
  * @return string
@@ -57,28 +57,30 @@ function letslapse_enqueue_block_assets( $block_name ) {
 function letslapse_hero_shortcode( $atts ) {
 	$atts = shortcode_atts(
 		array(
-			'heading'          => null,
-			'heading_level'    => null,
-			'subheading'       => null,
-			'caption'          => null,
-			'note'             => null,
-			'replay_label'     => null,
-			'show_caption'     => null,
-			'show_note'        => null,
-			'blend_ratio'      => null,
-			'output_count'     => null,
-			'frame_count'      => null,
-			'atlas_cols'       => null,
-			'atlas_frame_size' => null,
-			'source_fps'       => null,
-			'start_rate'       => null,
-			'accel'            => null,
-			'max_rate'         => null,
-			'play_fps'         => null,
-			'atlas_url'        => null,
-			'atlas_id'         => null,
-			'align'            => null,
-			'anchor'           => null,
+			'show_timeline'        => null,
+			'show_playing_count'   => null,
+			'source_label'         => null,
+			'output_label'         => null,
+			'timeline_label'       => null,
+			'replay_label'         => null,
+			'stacking_label'       => null,
+			'playing_label'        => null,
+			'resetting_label'      => null,
+			'reduced_motion_label' => null,
+			'blend_ratio'          => null,
+			'output_count'         => null,
+			'frame_count'          => null,
+			'atlas_cols'           => null,
+			'atlas_frame_size'     => null,
+			'source_fps'           => null,
+			'start_rate'           => null,
+			'accel'                => null,
+			'max_rate'             => null,
+			'play_fps'             => null,
+			'atlas_url'            => null,
+			'atlas_id'             => null,
+			'align'                => null,
+			'anchor'               => null,
 		),
 		$atts,
 		'letslapse_hero'
@@ -94,7 +96,7 @@ function letslapse_hero_shortcode( $atts ) {
 		// blend_ratio -> blendRatio.
 		$camel = lcfirst( str_replace( ' ', '', ucwords( str_replace( '_', ' ', $key ) ) ) );
 
-		if ( 'showCaption' === $camel || 'showNote' === $camel ) {
+		if ( 'showTimeline' === $camel || 'showPlayingCount' === $camel ) {
 			$value = filter_var( $value, FILTER_VALIDATE_BOOLEAN );
 		}
 
@@ -129,7 +131,7 @@ function letslapse_block_editor_data() {
 	$data = wp_json_encode(
 		array(
 			'schema'          => letslapse_hero_schema(),
-			'captionTemplate' => letslapse_hero_caption_template(),
+			'labelDefaults'   => letslapse_hero_label_defaults(),
 			'defaultAtlas'    => letslapse_hero_atlas_url( array() ),
 		)
 	);
@@ -154,3 +156,45 @@ function letslapse_register_pattern_category() {
 	);
 }
 add_action( 'init', 'letslapse_register_pattern_category', 9 );
+
+/**
+ * Block style variations for the copy the machine block used to own.
+ *
+ * Registering them as styles (rather than baking classes into a pattern) means
+ * they show up in the editor's Styles panel, so the copy stays formattable
+ * without anyone hand-editing class names.
+ */
+function letslapse_register_block_styles() {
+	register_block_style(
+		'core/heading',
+		array(
+			'name'  => 'll-display',
+			'label' => __( 'Display', 'letslapse' ),
+		)
+	);
+
+	register_block_style(
+		'core/paragraph',
+		array(
+			'name'  => 'll-standfirst',
+			'label' => __( 'Standfirst', 'letslapse' ),
+		)
+	);
+
+	register_block_style(
+		'core/paragraph',
+		array(
+			'name'  => 'll-caption',
+			'label' => __( 'Caption', 'letslapse' ),
+		)
+	);
+
+	register_block_style(
+		'core/paragraph',
+		array(
+			'name'  => 'll-chip',
+			'label' => __( 'Chip', 'letslapse' ),
+		)
+	);
+}
+add_action( 'init', 'letslapse_register_block_styles' );

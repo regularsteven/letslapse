@@ -5,13 +5,16 @@
  * is unchanged: every frame is composited at 1/N opacity, which is an exact
  * running mean of the stack — the same computation the app performs.
  *
- * Config arrives as JSON on [data-ll-config]; colours and the label font are
- * read back out of CSS custom properties, so the canvas follows the theme.
+ * Layout is two-up on desktop (source strip and output row on the left, big
+ * stage on the right, their heights solved to match) and stacked on mobile.
+ * Config and copy arrive as JSON on [data-ll-config]; colours and the label
+ * font are read from CSS custom properties, so the canvas follows the theme.
  */
 ( function () {
 	'use strict';
 
 	var SELECTOR = '[data-ll-machine]';
+	var MOBILE_MAX = 600;
 
 	var BOUNDS = {
 		cols: [ 1, 50 ],
@@ -92,6 +95,10 @@
 		} );
 	}
 
+	function hasCountToken( template ) {
+		return /\{(index|total)\}/.test( String( template ) );
+	}
+
 	/**
 	 * @param {HTMLElement} root Element carrying [data-ll-machine].
 	 */
@@ -109,6 +116,7 @@
 		this.labels = this.c.labels;
 		this.raf = 0;
 		this.visible = true;
+		this.playIdx = 0;
 
 		this.readPalette();
 		this.relayout();
@@ -146,6 +154,8 @@
 
 		config.atlas = raw.atlas || '';
 		config.labels = raw.labels || {};
+		config.showTimeline = false !== raw.showTimeline;
+		config.showCount = false !== raw.showCount;
 
 		return config;
 	};
@@ -169,6 +179,8 @@
 			font: prop( '--ll-machine-font', '' ) || styles.fontFamily ||
 				'-apple-system, BlinkMacSystemFont, sans-serif'
 		};
+
+		this.pal.accentRgb = toTriplet( this.pal.accent ) || '240, 163, 44';
 	};
 
 	Machine.prototype.ink = function ( alpha ) {
@@ -177,6 +189,10 @@
 
 	Machine.prototype.line = function ( alpha ) {
 		return 'rgba(' + this.pal.lineRgb + ', ' + alpha + ')';
+	};
+
+	Machine.prototype.amber = function ( alpha ) {
+		return 'rgba(' + this.pal.accentRgb + ', ' + alpha + ')';
 	};
 
 	Machine.prototype.loadAtlas = function () {
@@ -328,6 +344,13 @@
 		}
 	};
 
+	/**
+	 * Solve the layout for the current width.
+	 *
+	 * Desktop is two columns: the source strip and the output row stack in the
+	 * left column, and the square stage fills the right one. The stage size and
+	 * the column width depend on each other, so four passes settle them.
+	 */
 	Machine.prototype.relayout = function () {
 		var c = this.c;
 		var w = this.root.clientWidth;
@@ -336,27 +359,58 @@
 			return;
 		}
 
-		var F = Math.floor( w / ( w > 700 ? 11.6 : 4.8 ) );
-		var g = Math.round( F * 0.1 );
-		var dropX = Math.round( F * 0.7 );
-		var S = Math.round( F * 2.3 );
-		var stageX = Math.max( 4, dropX + F / 2 - S / 2 );
+		var mobile = w <= MOBILE_MAX;
 		var stripY = 26;
-		var stageY = stripY + F + 40;
-		var slotX0 = stageX + S + Math.round( F * 0.45 );
-		var avail = w - slotX0 - 2;
-		var g2 = avail / c.outputs > 46 ? g : 4;
-		var Fo = Math.max( 16, Math.min( Math.floor( ( avail - ( c.outputs - 1 ) * g2 ) / c.outputs ), Math.round( F * 1.15 ) ) );
-		var slotY = Math.round( stageY + ( S - Fo ) / 2 );
-		var tlX = stageX;
-		var tlW = w - stageX - 2;
+		var S, colW, F, g, g2, Fo, stageX, stageY, outY;
+
+		if ( mobile ) {
+			// Single column: strip → stage → output row → timeline.
+			colW = w;
+			F = Math.floor( w / 3.4 );
+			g = Math.round( F * 0.08 );
+			g2 = 3;
+			Fo = Math.max( 16, Math.floor( ( w - ( c.outputs - 1 ) * g2 ) / c.outputs ) );
+			S = Math.min( w, 340 );
+			stageX = Math.round( ( w - S ) / 2 );
+			stageY = stripY + F + 30;
+			outY = stageY + S + 30;
+		} else {
+			var gap12 = Math.round( Math.max( 14, w * 0.03 ) );
+			var midGap = 26;
+
+			S = Math.round( w * 0.28 );
+
+			for ( var it = 0; it < 4; it++ ) {
+				colW = w - S - gap12;
+				F = Math.min( 200, Math.floor( colW / ( w > 700 ? 4.4 : 2.4 ) ) );
+				g = Math.round( F * 0.08 );
+				g2 = colW / c.outputs > 46 ? Math.round( F * 0.06 ) : 3;
+				Fo = Math.max( 16, Math.min( F, Math.floor( ( colW - ( c.outputs - 1 ) * g2 ) / c.outputs ) ) );
+				S = Math.max( 140, Math.min( 360, F + midGap + Fo ) );
+			}
+
+			stageX = colW + gap12;
+			stageY = stripY;
+			outY = stripY + S - Fo;
+		}
+
+		var dropX = Math.round( F * 0.7 );
+		var gateX = colW - F;
+		var rowsBottom = mobile ? outY + Fo : stripY + S;
+		var tlX = 0;
+		var tlW = w - 2;
 		var Th = 16;
-		var tlY = stageY + S + 38;
-		var H = tlY + Th + 10;
+		var tlY = rowsBottom + 38;
+
+		// With the timeline row off, the status line closes the gap up.
+		var statusY = c.showTimeline ? tlY - 8 : rowsBottom + 24;
+		var H = c.showTimeline ? tlY + Th + 10 : rowsBottom + 32;
 
 		this.L = {
-			w: w, F: F, g: g, dropX: dropX, S: S, stageX: stageX, stripY: stripY, stageY: stageY,
-			slotX0: slotX0, slotY: slotY, Fo: Fo, g2: g2, tlX: tlX, tlW: tlW, tlY: tlY, Th: Th, H: H
+			w: w, colW: colW, F: F, g: g, dropX: dropX, gateX: gateX, S: S,
+			stageX: stageX, stageY: stageY, stripY: stripY, outY: outY, Fo: Fo, g2: g2,
+			tlX: tlX, tlW: tlW, tlY: tlY, Th: Th, statusY: statusY, rowsBottom: rowsBottom,
+			H: H, mobile: mobile
 		};
 
 		var dpr = window.devicePixelRatio || 1;
@@ -368,6 +422,7 @@
 		this.staticDone = false;
 
 		if ( this.replayButton ) {
+			this.replayButton.style.left = Math.round( colW / 2 ) + 'px';
 			this.replayButton.style.top = Math.round( stripY + F / 2 - 21 ) + 'px';
 		}
 
@@ -593,7 +648,7 @@
 
 	Machine.prototype.slotRect = function ( i ) {
 		var L = this.L;
-		return [ L.slotX0 + i * ( L.Fo + L.g2 ), L.slotY, L.Fo, L.Fo ];
+		return [ i * ( L.Fo + L.g2 ), L.outY, L.Fo, L.Fo ];
 	};
 
 	Machine.prototype.drawBrackets = function ( ctx, x, y, s, color, lineWidth ) {
@@ -610,6 +665,50 @@
 		ctx.stroke();
 	};
 
+	/**
+	 * Compose the status line for the current phase.
+	 *
+	 * @return {string} Status text, or '' when its label is blank.
+	 */
+	Machine.prototype.statusText = function () {
+		var c = this.c;
+		var S = this.S;
+		var labels = this.labels;
+
+		if ( S.phase === 'run' ) {
+			if ( ! labels.stacking ) {
+				return '';
+			}
+
+			return fill( labels.stacking, {
+				stacked: S.stackN,
+				ratio: c.ratio,
+				blend: Math.min( S.batch + 1, c.outputs ),
+				outputs: c.outputs
+			} );
+		}
+
+		if ( S.phase === 'play' ) {
+			if ( ! labels.playing ) {
+				return '';
+			}
+
+			var tokens = { index: this.playIdx + 1, total: S.outs.length };
+
+			// Tokens placed in the label win; otherwise the counter toggle
+			// appends the default "n / x".
+			if ( hasCountToken( labels.playing ) ) {
+				return fill( labels.playing, tokens );
+			}
+
+			return c.showCount
+				? labels.playing + ' ' + tokens.index + ' / ' + tokens.total
+				: labels.playing;
+		}
+
+		return labels.resetting || '';
+	};
+
 	Machine.prototype.draw = function () {
 		var c = this.c;
 		var L = this.L;
@@ -617,11 +716,16 @@
 		var ctx = this.canvas.getContext( '2d' );
 		var self = this;
 		var FR = c.frameSize;
+		var i;
 
 		ctx.setTransform( this.dpr, 0, 0, this.dpr, 0, 0 );
 		ctx.clearRect( 0, 0, L.w, L.H );
 
 		var label = function ( text, x, y, align ) {
+			if ( ! text ) {
+				return;
+			}
+
 			ctx.font = '600 11px ' + self.pal.font;
 			ctx.fillStyle = self.ink( 0.5 );
 			ctx.textAlign = align || 'left';
@@ -629,97 +733,104 @@
 			ctx.textAlign = 'left';
 		};
 
-		label( this.labels.output || 'READY FOR OUTPUT →', L.slotX0, L.slotY - 10 );
-		label( this.labels.timeline || 'TIMELINE', L.tlX, L.tlY - 8 );
+		label( this.labels.output, 0, L.outY - 8 );
+
+		if ( c.showTimeline ) {
+			label( this.labels.timeline, L.tlX, L.tlY - 8 );
+		}
 
 		var playing = S.phase === 'play' || S.phase === 'reset';
-		var playIdx = 0;
+
+		this.playIdx = 0;
 
 		if ( playing && S.outs.length ) {
-			playIdx = Math.floor( S.playT * c.playFps ) % S.outs.length;
+			this.playIdx = Math.floor( S.playT * c.playFps ) % S.outs.length;
 		}
 
-		ctx.font = '600 12px ' + this.pal.font;
-		ctx.fillStyle = this.ink( 0.65 );
+		var playIdx = this.playIdx;
+		var status = this.statusText();
 
-		var status;
-
-		if ( S.phase === 'run' ) {
-			status = fill( this.labels.stacking || '{stacked} / {ratio} · blend {blend} of {outputs}', {
-				stacked: S.stackN,
-				ratio: c.ratio,
-				blend: Math.min( S.batch + 1, c.outputs ),
-				outputs: c.outputs
-			} );
-		} else if ( S.phase === 'play' ) {
-			status = fill( this.labels.playing || 'playing · blend {index} / {total}', {
-				index: playIdx + 1,
-				total: S.outs.length
-			} );
-		} else {
-			status = this.labels.resetting || 'loop restarting…';
+		if ( status ) {
+			ctx.font = '600 12px ' + this.pal.font;
+			ctx.fillStyle = this.ink( 0.65 );
+			ctx.textAlign = 'right';
+			ctx.fillText( status, L.w - 2, L.statusY );
+			ctx.textAlign = 'left';
 		}
-
-		ctx.textAlign = 'right';
-		ctx.fillText( status, L.w - 2, L.tlY - 8 );
-		ctx.textAlign = 'left';
 
 		var fade = S.phase === 'reset' ? Math.max( 0, 1 - S.resetT / 0.7 ) : 1;
-		var segG = 3;
-		var segW = ( L.tlW - ( c.outputs - 1 ) * segG ) / c.outputs;
-		var i;
-		var x;
 
-		for ( i = 0; i < c.outputs; i++ ) {
-			x = L.tlX + i * ( segW + segG );
+		if ( c.showTimeline ) {
+			var segG = 3;
+			var segW = ( L.tlW - ( c.outputs - 1 ) * segG ) / c.outputs;
+			var x;
 
-			if ( i < S.outs.length ) {
-				ctx.globalAlpha = fade;
-				ctx.fillStyle = S.phase === 'play' && i === playIdx ? 'rgba(240, 163, 44, 0.75)' : 'rgba(240, 163, 44, 0.35)';
-				ctx.fillRect( x, L.tlY, segW, L.Th );
-				ctx.globalAlpha = 1;
+			for ( i = 0; i < c.outputs; i++ ) {
+				x = L.tlX + i * ( segW + segG );
+
+				if ( i < S.outs.length ) {
+					ctx.globalAlpha = fade;
+					ctx.fillStyle = S.phase === 'play' && i === playIdx ? this.amber( 0.75 ) : this.amber( 0.35 );
+					ctx.fillRect( x, L.tlY, segW, L.Th );
+					ctx.globalAlpha = 1;
+				} else if ( i === S.batch && S.stackN > 0 ) {
+					// The segment being built grows with every frame that stacks.
+					ctx.fillStyle = this.amber( 0.35 );
+					ctx.fillRect( x, L.tlY, segW * ( S.stackN / c.ratio ), L.Th );
+				}
+
+				ctx.strokeStyle = this.ink( 0.16 );
+				ctx.lineWidth = 1;
+				ctx.strokeRect( x + 0.5, L.tlY + 0.5, segW - 1, L.Th - 1 );
 			}
 
-			ctx.strokeStyle = this.ink( 0.16 );
-			ctx.lineWidth = 1;
-			ctx.strokeRect( x + 0.5, L.tlY + 0.5, segW - 1, L.Th - 1 );
+			if ( S.phase === 'play' && S.outs.length ) {
+				var progress = ( S.playT * c.playFps % S.outs.length ) / c.outputs;
+				var px = L.tlX + progress * L.tlW;
+
+				ctx.strokeStyle = this.pal.accent;
+				ctx.lineWidth = 2;
+				ctx.beginPath();
+				ctx.moveTo( px, L.tlY - 4 );
+				ctx.lineTo( px, L.tlY + L.Th + 4 );
+				ctx.stroke();
+			}
 		}
 
-		if ( S.phase === 'play' && S.outs.length ) {
-			var progress = ( S.playT * c.playFps % S.outs.length ) / c.outputs;
-			var px = L.tlX + progress * L.tlW;
-
-			ctx.strokeStyle = this.pal.accent;
-			ctx.lineWidth = 2;
-			ctx.beginPath();
-			ctx.moveTo( px, L.tlY - 4 );
-			ctx.lineTo( px, L.tlY + L.Th + 4 );
-			ctx.stroke();
-		}
+		// Empty slots, so the run has a visible destination from the first frame.
+		ctx.setLineDash( [ 4, 4 ] );
+		ctx.strokeStyle = this.ink( 0.14 );
+		ctx.lineWidth = 1;
 
 		for ( i = 0; i < c.outputs; i++ ) {
-			var slot = this.slotRect( i );
+			var empty = this.slotRect( i );
+			ctx.strokeRect( empty[ 0 ] + 0.5, empty[ 1 ] + 0.5, empty[ 2 ] - 1, empty[ 2 ] - 1 );
+		}
 
-			if ( i < S.outs.length ) {
-				ctx.globalAlpha = fade;
-				ctx.drawImage( S.outs[ i ], slot[ 0 ], slot[ 1 ], slot[ 2 ], slot[ 2 ] );
-				ctx.globalAlpha = 1;
+		ctx.setLineDash( [] );
 
-				if ( S.phase === 'play' && i === playIdx ) {
-					ctx.strokeStyle = this.pal.accent;
-					ctx.lineWidth = 2;
-					ctx.strokeRect( slot[ 0 ] - 1.5, slot[ 1 ] - 1.5, slot[ 2 ] + 3, slot[ 2 ] + 3 );
-				} else {
-					ctx.strokeStyle = this.line( 0.1 );
-					ctx.lineWidth = 1;
-					ctx.strokeRect( slot[ 0 ] + 0.5, slot[ 1 ] + 0.5, slot[ 2 ] - 1, slot[ 2 ] - 1 );
-				}
+		// Desktop fills the row from the right, so finished blends slide left as
+		// the next one is ejected. Mobile fills from the left instead.
+		var mShift = ! L.mobile && S.eject
+			? ( 1 - Math.pow( 1 - Math.min( 1, S.eject.t ), 3 ) ) * ( L.Fo + L.g2 )
+			: 0;
+
+		for ( i = 0; i < S.outs.length; i++ ) {
+			var slot = this.slotRect( L.mobile ? i : c.outputs - S.outs.length + i );
+			var sx = slot[ 0 ] - mShift;
+
+			ctx.globalAlpha = fade;
+			ctx.drawImage( S.outs[ i ], sx, slot[ 1 ], slot[ 2 ], slot[ 2 ] );
+			ctx.globalAlpha = 1;
+
+			if ( S.phase === 'play' && i === playIdx ) {
+				ctx.strokeStyle = this.pal.accent;
+				ctx.lineWidth = 2;
+				ctx.strokeRect( sx - 1.5, slot[ 1 ] - 1.5, slot[ 2 ] + 3, slot[ 2 ] + 3 );
 			} else {
-				ctx.setLineDash( [ 4, 4 ] );
-				ctx.strokeStyle = this.ink( 0.14 );
+				ctx.strokeStyle = this.line( 0.1 );
 				ctx.lineWidth = 1;
-				ctx.strokeRect( slot[ 0 ] + 0.5, slot[ 1 ] + 0.5, slot[ 2 ] - 1, slot[ 2 ] - 1 );
-				ctx.setLineDash( [] );
+				ctx.strokeRect( sx + 0.5, slot[ 1 ] + 0.5, slot[ 2 ] - 1, slot[ 2 ] - 1 );
 			}
 		}
 
@@ -748,45 +859,53 @@
 		if ( S.eject ) {
 			var t = Math.min( 1, S.eject.t );
 			var e = 1 - Math.pow( 1 - t, 3 );
-			var target = this.slotRect( S.outs.length );
+			var target = this.slotRect( L.mobile ? Math.min( S.outs.length, c.outputs - 1 ) : c.outputs - 1 );
 			var ex = L.stageX + ( target[ 0 ] - L.stageX ) * e;
 			var ey = L.stageY + ( target[ 1 ] - L.stageY ) * e;
 			var size = L.S + ( target[ 2 ] - L.S ) * e;
 
 			ctx.drawImage( S.eject.c, ex, ey, size, size );
-			ctx.strokeStyle = 'rgba(240, 163, 44, 0.7)';
+			ctx.strokeStyle = this.amber( 0.7 );
 			ctx.lineWidth = 1;
 			ctx.strokeRect( ex + 0.5, ey + 0.5, size - 1, size - 1 );
 		}
 
 		if ( S.stripFade > 0.01 ) {
 			ctx.globalAlpha = S.stripFade;
-			label( this.labels.source || '← SOURCE', L.dropX, L.stripY - 10 );
+
+			// On mobile the reduced-motion note takes this baseline instead:
+			// there is not enough width for both.
+			if ( ! ( this.staticPass && L.mobile ) ) {
+				label( this.labels.source, 0, L.stripY - 10 );
+			}
+
 			ctx.strokeStyle = this.line( 0.1 );
 			ctx.lineWidth = 1;
 
 			for ( i = 0; i < S.strip.length; i++ ) {
 				var frame = S.strip[ i ];
+				// The strip runs left to right into the gate at the column edge.
+				var vx = L.gateX - ( frame.x - L.dropX );
 
-				if ( frame.x > L.w ) {
+				if ( vx + L.F < -2 ) {
 					break;
 				}
 
 				var fxy = this.frXY( frame.fi );
 
-				ctx.drawImage( this.atlas, fxy[ 0 ], fxy[ 1 ], FR, FR, frame.x, L.stripY, L.F, L.F );
-				ctx.strokeRect( frame.x + 0.5, L.stripY + 0.5, L.F - 1, L.F - 1 );
+				ctx.drawImage( this.atlas, fxy[ 0 ], fxy[ 1 ], FR, FR, vx, L.stripY, L.F, L.F );
+				ctx.strokeRect( vx + 0.5, L.stripY + 0.5, L.F - 1, L.F - 1 );
 			}
 
-			var fadeW = L.F * 1.5;
-			var grad = ctx.createLinearGradient( L.w - fadeW, 0, L.w, 0 );
+			var fadeW = L.F * 1.2;
+			var grad = ctx.createLinearGradient( fadeW, 0, 0, 0 );
 
 			grad.addColorStop( 0, 'rgba(' + this.pal.bgRgb + ', 0)' );
 			grad.addColorStop( 1, 'rgba(' + this.pal.bgRgb + ', 1)' );
 			ctx.fillStyle = grad;
-			ctx.fillRect( L.w - fadeW, L.stripY - 2, fadeW, L.F + 4 );
+			ctx.fillRect( 0, L.stripY - 2, fadeW, L.F + 4 );
 
-			this.drawBrackets( ctx, L.dropX - 6, L.stripY - 6, L.F + 12, this.pal.accent, 3 );
+			this.drawBrackets( ctx, L.gateX - 6, L.stripY - 6, L.F + 12, this.pal.accent, 3 );
 			ctx.globalAlpha = 1;
 		}
 
@@ -794,8 +913,8 @@
 			var drop = S.drops[ i ];
 			var dt2 = Math.min( 1, drop.t );
 			var de = dt2 * dt2;
-			var dsize = L.F + ( L.S - L.F ) * dt2;
-			var dx2 = L.dropX + ( L.stageX - L.dropX ) * dt2;
+			var dsize = L.F + ( L.S - L.F ) * de;
+			var dx2 = L.gateX + ( L.stageX - L.gateX ) * de;
 			var dy2 = L.stripY + ( L.stageY - L.stripY ) * de;
 			var dxy = this.frXY( drop.fi );
 
@@ -853,15 +972,20 @@
 
 		S.batch = c.outputs;
 		S.phase = 'run';
+		this.staticPass = true;
 		this.draw();
+		this.staticPass = false;
 
-		var ctx = this.canvas.getContext( '2d' );
+		if ( this.labels.reduced ) {
+			var ctx = this.canvas.getContext( '2d' );
+			var mobile = this.L.mobile;
 
-		ctx.font = '600 11px ' + this.pal.font;
-		ctx.fillStyle = this.ink( 0.5 );
-		ctx.textAlign = 'right';
-		ctx.fillText( this.labels.reduced || 'Reduced motion', this.L.w - 2, this.L.stripY - 10 );
-		ctx.textAlign = 'left';
+			ctx.font = '600 11px ' + this.pal.font;
+			ctx.fillStyle = this.ink( 0.5 );
+			ctx.textAlign = mobile ? 'left' : 'right';
+			ctx.fillText( this.labels.reduced, mobile ? 0 : this.L.w - 2, this.L.stripY - 10 );
+			ctx.textAlign = 'left';
+		}
 
 		this.staticDone = true;
 		S.batch = 0;

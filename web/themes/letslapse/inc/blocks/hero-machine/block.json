@@ -2,11 +2,11 @@
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
 	"name": "letslapse/hero-machine",
-	"version": "0.1.0",
-	"title": "Blend machine hero",
+	"version": "0.2.0",
+	"title": "Blend machine",
 	"category": "media",
 	"icon": "images-alt2",
-	"description": "The homepage hero: heading, standfirst, and a live canvas that averages real source frames at 1/N opacity into blended timelapse frames.",
+	"description": "A live canvas that averages real source frames at 1/N opacity into blended timelapse frames, with a timeline that grows as each frame stacks.",
 	"keywords": [ "hero", "timelapse", "blend", "canvas", "letslapse" ],
 	"textdomain": "letslapse",
 	"supports": {
@@ -21,37 +21,45 @@
 		"interactivity": { "clientNavigation": false }
 	},
 	"attributes": {
-		"heading": {
-			"type": "string",
-			"default": "Many frames in. One frame out."
+		"showTimeline": {
+			"type": "boolean",
+			"default": true
 		},
-		"headingLevel": {
-			"type": "number",
-			"default": 1
+		"showPlayingCount": {
+			"type": "boolean",
+			"default": true
 		},
-		"subheading": {
+		"sourceLabel": {
 			"type": "string",
-			"default": "LetsLapse synthesizes real motion blur by averaging every frame it captures. This is not a mock — the machine below is running the actual math on real footage, live."
+			"default": "SOURCE INPUT"
 		},
-		"caption": {
+		"outputLabel": {
 			"type": "string",
-			"default": ""
+			"default": "BLENDED OUTPUT"
 		},
-		"note": {
+		"timelineLabel": {
 			"type": "string",
-			"default": "Try it with your own camera — coming soon"
+			"default": "TIMELINE · 1 BLEND = {seconds} S OF SOURCE"
 		},
 		"replayLabel": {
 			"type": "string",
 			"default": "Replay the machine"
 		},
-		"showCaption": {
-			"type": "boolean",
-			"default": true
+		"stackingLabel": {
+			"type": "string",
+			"default": "{stacked} / {ratio} · blend {blend} of {outputs}"
 		},
-		"showNote": {
-			"type": "boolean",
-			"default": true
+		"playingLabel": {
+			"type": "string",
+			"default": "playing · blend"
+		},
+		"resettingLabel": {
+			"type": "string",
+			"default": "loop restarting…"
+		},
+		"reducedMotionLabel": {
+			"type": "string",
+			"default": "Reduced motion — showing the finished stack"
 		},
 		"blendRatio": { "type": "number" },
 		"outputCount": { "type": "number" },

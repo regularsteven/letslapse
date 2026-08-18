@@ -135,7 +135,22 @@ function preview_render_blocks( $markup ) {
 		$markup
 	);
 
-	// The hero.
+	// post-content: the homepage body now lives in the page, and the pattern is
+	// the canonical copy of it.
+	$markup = preg_replace_callback(
+		'#<!--\s*wp:post-content\s*(\{[^\n]*\})?\s*/-->#',
+		function () {
+			$pattern = file_get_contents( get_theme_file_path( 'patterns/homepage.php' ) );
+			$body = preg_replace( '#^.*?\?>\s*#s', '', $pattern, 1 );
+
+			return '<div class="entry-content wp-block-post-content is-layout-constrained">' .
+				preview_render_blocks( $body ) .
+				'</div>';
+		},
+		$markup
+	);
+
+	// The machine.
 	$markup = preg_replace_callback(
 		'#<!--\s*wp:letslapse/hero-machine\s*(\{[^\n]*\})?\s*/-->#',
 		function ( $m ) {
@@ -245,9 +260,9 @@ function preview_theme_json_vars() {
 $body = preview_render_blocks( file_get_contents( get_theme_file_path( 'templates/front-page.html' ) ) );
 
 // The main group carries global padding in a real block theme.
-$body = str_replace(
-	'<main class="wp-block-group">',
-	'<main class="wp-block-group is-layout-constrained has-global-padding">',
+$body = preg_replace(
+	'#<main class="([^"]*)">#',
+	'<main class="$1 is-layout-constrained has-global-padding">',
 	$body
 );
 ?>

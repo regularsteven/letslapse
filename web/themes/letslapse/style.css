@@ -3,11 +3,11 @@ Theme Name: LetsLapse
 Theme URI: https://letslapse.com/
 Author: LetsLapse
 Author URI: https://letslapse.com/
-Description: Dark, precision-instrument block theme for LetsLapse. Ships the "blend machine" hero as a Gutenberg block (letslapse/hero-machine) that renders the real 1/N incremental-average maths on a canvas, live.
+Description: Dark, precision-instrument block theme for LetsLapse. Ships the blend machine as a Gutenberg block (letslapse/hero-machine) that renders the real 1/N incremental-average maths on a canvas, live.
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Version: 0.1.0
+Version: 0.2.0
 License: GNU General Public License v2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: letslapse
@@ -111,7 +111,8 @@ body {
 
 /* Sections carry their own vertical rhythm; the layout block gap between them
    would double it up. */
-.ll-hero + .ll-section,
+.ll-machine + .ll-section,
+.ll-machine-meta + .ll-section,
 .ll-section + .ll-section {
 	margin-block-start: 0;
 }
@@ -132,6 +133,50 @@ body {
 
 .ll-mark--quiet {
 	color: var(--ll-faint);
+}
+
+/* --- Extracted hero copy ---------------------------------------------- *
+ * These used to live inside the machine block. They are core Heading and
+ * Paragraph blocks now, picked from the block style variations registered in
+ * inc/blocks.php, so an editor can apply them anywhere.
+ * ---------------------------------------------------------------------- */
+
+.wp-block-heading.is-style-ll-display {
+	font-size: clamp(30px, 4.4vw, 52px);
+	font-weight: 700;
+	line-height: 1.08;
+	letter-spacing: -0.01em;
+	color: var(--ll-bright);
+	text-wrap: pretty;
+	margin: 0;
+}
+
+p.is-style-ll-standfirst {
+	font-size: clamp(15px, 1.6vw, 18px);
+	line-height: 1.55;
+	color: var(--ll-muted);
+	max-width: 62ch;
+
+	/* Core's constrained layout centres anything narrower than the content
+	   width, using !important — a measure-limited paragraph has to say so. */
+	margin-left: 0 !important;
+	margin-right: auto !important;
+}
+
+p.is-style-ll-caption {
+	font-size: 12.5px;
+	line-height: 1.5;
+	color: var(--ll-faint);
+}
+
+p.is-style-ll-chip {
+	display: inline-block;
+	font-size: 12.5px;
+	line-height: 1;
+	color: var(--ll-faint);
+	border: 1px dashed rgba(110, 127, 153, 0.5);
+	border-radius: 20px;
+	padding: 7px 16px;
 }
 
 /* --- Section furniture ------------------------------------------------ */
@@ -310,4 +355,14 @@ body {
 
 .ll-cta > * + * {
 	margin-block-start: 16px;
+}
+
+/* Caption and chip sit either side of one row under the machine. */
+.wp-block-group.ll-machine-meta {
+	gap: 16px;
+	align-items: center;
+}
+
+.ll-machine-meta p {
+	margin: 0;
 }

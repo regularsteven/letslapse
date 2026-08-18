@@ -35,8 +35,8 @@ a:hover { color: var(--wp--preset--color--accent); }
 
 .is-layout-constrained > * {
 	max-width: var(--wp--style--global--content-size);
-	margin-left: auto;
-	margin-right: auto;
+	margin-left: auto !important;
+	margin-right: auto !important;
 }
 
 .is-layout-constrained > * + * {

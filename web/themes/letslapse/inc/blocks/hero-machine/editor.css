@@ -1,76 +1,124 @@
 /**
- * Blend machine hero — editor styles.
+ * Blend machine — editor styles.
  *
- * The editor shows the real heading and standfirst (both editable in place)
- * and a static schematic of the machine. The live canvas runs on the front
- * end only, so editing copy never fights an animation.
+ * A schematic of the real layout: source strip and output row stacked in the
+ * left column, square stage on the right, timeline underneath. It carries the
+ * copy that is actually set, so labels can be edited and checked in place.
  */
 
-.ll-hero-editor__machine {
+.ll-machine-editor {
 	position: relative;
-	display: grid;
-	grid-template-columns: auto auto 1fr;
-	align-items: center;
-	gap: 14px;
-	margin-top: 16px;
 	padding: 20px;
 	background: var(--ll-well, #060B16);
 	border: 1px solid rgba(36, 90, 133, 0.5);
 	border-radius: 10px;
-	min-height: 120px;
 }
 
-.ll-hero-editor__strip,
-.ll-hero-editor__outputs {
+.ll-machine-editor__cols {
+	display: flex;
+	align-items: stretch;
+	gap: 20px;
+}
+
+.ll-machine-editor__col {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+	gap: 6px;
+}
+
+.ll-machine-editor__row {
 	display: flex;
 	gap: 4px;
 	align-items: center;
 }
 
-.ll-hero-editor__cell {
-	width: 22px;
-	height: 22px;
+.ll-machine-editor__frame {
+	flex: 0 1 26px;
+	aspect-ratio: 1;
 	border: 1px solid rgba(233, 238, 246, 0.16);
 	border-radius: 2px;
 	background: rgba(198, 210, 228, 0.06);
 }
 
-.ll-hero-editor__cell.is-output {
+.ll-machine-editor__frame.is-output {
+	flex-basis: 20px;
 	background: rgba(240, 163, 44, 0.28);
 	border-color: rgba(240, 163, 44, 0.5);
 }
 
-.ll-hero-editor__stage {
-	width: 56px;
-	height: 56px;
+.ll-machine-editor__stage {
+	flex: 0 0 104px;
+	aspect-ratio: 1;
 	border: 1.5px solid rgba(36, 90, 133, 0.9);
 	border-radius: 3px;
 	background: rgba(240, 163, 44, 0.12);
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 700;
 	color: var(--ll-accent, #F0A32C);
 }
 
-.ll-hero-editor__legend {
-	position: absolute;
-	right: 12px;
-	bottom: 8px;
+.ll-machine-editor__timeline {
+	margin-top: 18px;
+}
+
+.ll-machine-editor__labels {
+	display: flex;
+	align-items: baseline;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 6px;
+}
+
+.ll-machine-editor__labels.is-alone {
+	margin-top: 18px;
+	justify-content: flex-end;
+}
+
+.ll-machine-editor__label {
 	font-size: 11px;
 	font-weight: 600;
 	letter-spacing: 0.04em;
 	color: rgba(198, 210, 228, 0.5);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
 }
 
-.ll-hero-editor__meta {
+.ll-machine-editor__label.is-status {
+	color: rgba(198, 210, 228, 0.65);
+	flex: none;
+}
+
+.ll-machine-editor__bar {
 	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 16px;
-	flex-wrap: wrap;
-	margin-top: 16px;
-	font-size: 12.5px;
-	color: var(--ll-faint, #6E7F99);
+	gap: 3px;
+}
+
+.ll-machine-editor__segment {
+	flex: 1;
+	height: 16px;
+	border: 1px solid rgba(198, 210, 228, 0.16);
+	border-radius: 1px;
+}
+
+.ll-machine-editor__hint {
+	display: block;
+	margin-top: 14px;
+	text-align: right;
+	font-size: 11px;
+	font-weight: 600;
+	color: rgba(198, 210, 228, 0.35);
+}
+
+.ll-machine-editor__note {
+	margin: 4px 0 0;
+	font-size: 12px;
+	font-style: normal;
+	color: #757575;
 }
