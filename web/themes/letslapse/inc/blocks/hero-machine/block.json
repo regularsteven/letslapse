@@ -1,0 +1,80 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "letslapse/hero-machine",
+	"version": "0.1.0",
+	"title": "Blend machine hero",
+	"category": "media",
+	"icon": "images-alt2",
+	"description": "The homepage hero: heading, standfirst, and a live canvas that averages real source frames at 1/N opacity into blended timelapse frames.",
+	"keywords": [ "hero", "timelapse", "blend", "canvas", "letslapse" ],
+	"textdomain": "letslapse",
+	"supports": {
+		"html": false,
+		"anchor": true,
+		"align": [ "wide", "full" ],
+		"multiple": true,
+		"spacing": {
+			"padding": true,
+			"margin": [ "top", "bottom" ]
+		},
+		"interactivity": { "clientNavigation": false }
+	},
+	"attributes": {
+		"heading": {
+			"type": "string",
+			"default": "Many frames in. One frame out."
+		},
+		"headingLevel": {
+			"type": "number",
+			"default": 1
+		},
+		"subheading": {
+			"type": "string",
+			"default": "LetsLapse synthesizes real motion blur by averaging every frame it captures. This is not a mock — the machine below is running the actual math on real footage, live."
+		},
+		"caption": {
+			"type": "string",
+			"default": ""
+		},
+		"note": {
+			"type": "string",
+			"default": "Try it with your own camera — coming soon"
+		},
+		"replayLabel": {
+			"type": "string",
+			"default": "Replay the machine"
+		},
+		"showCaption": {
+			"type": "boolean",
+			"default": true
+		},
+		"showNote": {
+			"type": "boolean",
+			"default": true
+		},
+		"blendRatio": { "type": "number" },
+		"outputCount": { "type": "number" },
+		"frameCount": { "type": "number" },
+		"atlasCols": { "type": "number" },
+		"atlasFrameSize": { "type": "number" },
+		"sourceFps": { "type": "number" },
+		"startRate": { "type": "number" },
+		"accel": { "type": "number" },
+		"maxRate": { "type": "number" },
+		"playFps": { "type": "number" },
+		"atlasUrl": {
+			"type": "string",
+			"default": ""
+		},
+		"atlasId": {
+			"type": "number",
+			"default": 0
+		}
+	},
+	"editorScript": "file:./index.js",
+	"editorStyle": "file:./editor.css",
+	"style": "file:./style.css",
+	"viewScript": "file:./view.js",
+	"render": "file:./render.php"
+}

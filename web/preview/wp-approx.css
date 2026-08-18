@@ -1,0 +1,107 @@
+/**
+ * Preview only — a rough stand-in for the block styles WordPress ships.
+ * Not part of the theme; do not deploy.
+ */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+	margin: 0;
+	background: var(--wp--preset--color--base);
+	color: var(--wp--preset--color--contrast);
+	font-family: var(--wp--preset--font-family--system);
+	font-size: var(--wp--preset--font-size--medium);
+	line-height: 1.55;
+	-webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4 {
+	color: var(--wp--preset--color--bright);
+	font-weight: 700;
+	line-height: 1.15;
+	letter-spacing: -0.01em;
+	margin: 0;
+}
+
+p { margin: 0; }
+
+a { color: var(--wp--preset--color--amber); text-decoration: none; }
+a:hover { color: var(--wp--preset--color--accent); }
+
+.has-global-padding {
+	padding-left: var(--wp--style--root--padding-left);
+	padding-right: var(--wp--style--root--padding-right);
+}
+
+.is-layout-constrained > * {
+	max-width: var(--wp--style--global--content-size);
+	margin-left: auto;
+	margin-right: auto;
+}
+
+.is-layout-constrained > * + * {
+	margin-block-start: var(--wp--style--block-gap);
+}
+
+.wp-block-columns {
+	display: flex;
+	gap: var(--wp--style--block-gap);
+	align-items: stretch;
+}
+
+.wp-block-column {
+	flex: 1 1 0;
+	min-width: 0;
+}
+
+@media (max-width: 781px) {
+	.wp-block-columns { flex-wrap: wrap; }
+	.wp-block-column { flex-basis: 100% !important; }
+}
+
+.wp-block-site-title {
+	font-size: 14px;
+	font-weight: 600;
+	letter-spacing: 0.26em;
+	text-transform: uppercase;
+	margin: 0;
+}
+
+.wp-block-site-title a {
+	color: var(--wp--preset--color--contrast);
+}
+
+.wp-block-navigation ul {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 28px;
+	list-style: none;
+	margin: 0;
+	padding: 0;
+	font-size: 13.5px;
+}
+
+.wp-block-navigation a {
+	color: var(--wp--preset--color--muted);
+}
+
+.wp-block-navigation a:hover {
+	color: var(--wp--preset--color--bright);
+}
+
+.wp-element-button {
+	display: inline-block;
+	background: var(--wp--preset--color--accent);
+	color: var(--wp--preset--color--well);
+	font-size: var(--wp--preset--font-size--medium);
+	font-weight: 700;
+	padding: 13px 32px;
+	border-radius: 12px;
+}
+
+.wp-element-button:hover {
+	background: var(--wp--preset--color--amber);
+	color: var(--wp--preset--color--well);
+}
+
+.wp-block-template-part { display: block; }

@@ -1,0 +1,313 @@
+/*
+Theme Name: LetsLapse
+Theme URI: https://letslapse.com/
+Author: LetsLapse
+Author URI: https://letslapse.com/
+Description: Dark, precision-instrument block theme for LetsLapse. Ships the "blend machine" hero as a Gutenberg block (letslapse/hero-machine) that renders the real 1/N incremental-average maths on a canvas, live.
+Requires at least: 6.5
+Tested up to: 6.8
+Requires PHP: 7.4
+Version: 0.1.0
+License: GNU General Public License v2 or later
+License URI: http://www.gnu.org/licenses/gpl-2.0.html
+Text Domain: letslapse
+Tags: full-site-editing, block-patterns, one-column, dark, custom-colors, wide-blocks
+*/
+
+/* -------------------------------------------------------------------------
+   Design tokens. theme.json owns the palette; these mirror the ones the
+   canvas machine reads back out of CSS (see inc/blocks/hero-machine/view.js).
+   ---------------------------------------------------------------------- */
+
+:root {
+	--ll-page:      var(--wp--preset--color--base, #0A0F1C);
+	--ll-surface:   var(--wp--preset--color--surface, #0D1526);
+	--ll-well:      var(--wp--preset--color--well, #060B16);
+	--ll-accent:    var(--wp--preset--color--accent, #F0A32C);
+	--ll-amber:     var(--wp--preset--color--amber, #FFB340);
+	--ll-bright:    var(--wp--preset--color--bright, #E9EEF6);
+	--ll-body:      var(--wp--preset--color--contrast, #C6D2E4);
+	--ll-muted:     var(--wp--preset--color--muted, #8FA1BC);
+	--ll-faint:     var(--wp--preset--color--faint, #6E7F99);
+	--ll-rule:      rgba(36, 90, 133, 0.3);
+	--ll-rule-firm: rgba(36, 90, 133, 0.4);
+}
+
+html {
+	scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	html { scroll-behavior: auto; }
+}
+
+body {
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+/* Sections sit on a shared 1200px measure; anchors clear the header. */
+[id] {
+	scroll-margin-top: 24px;
+}
+
+/* --- Header / footer rules ------------------------------------------- */
+
+.ll-header {
+	border-bottom: 1px solid var(--ll-rule);
+	padding-top: 20px;
+	padding-bottom: 20px;
+}
+
+.ll-footer {
+	border-top: 1px solid var(--ll-rule);
+	padding-top: 24px;
+	padding-bottom: 24px;
+	font-size: var(--wp--preset--font-size--tiny, 12.5px);
+	color: var(--ll-faint);
+}
+
+.ll-footer a {
+	color: var(--ll-muted);
+}
+
+.ll-mark {
+	display: flex;
+	line-height: 0;
+}
+
+.ll-mark svg {
+	display: block;
+}
+
+/* --- Page scaffolding -------------------------------------------------- */
+
+/* Template parts sit outside the constrained main, so they carry their own
+   horizontal padding. */
+.ll-header,
+.ll-footer {
+	padding-inline: clamp(20px, 5vw, 56px);
+}
+
+.wp-block-group.ll-brand {
+	gap: 12px;
+}
+
+.ll-main {
+	padding-block: clamp(36px, 5vw, 64px);
+}
+
+.ll-main--tall {
+	padding-block: clamp(48px, 6vw, 80px);
+}
+
+.ll-section {
+	padding-block: clamp(36px, 5vw, 64px);
+}
+
+.ll-section > * + * {
+	margin-block-start: 28px;
+}
+
+/* Sections carry their own vertical rhythm; the layout block gap between them
+   would double it up. */
+.ll-hero + .ll-section,
+.ll-section + .ll-section {
+	margin-block-start: 0;
+}
+
+.ll-nav-cta a,
+.ll-nav-cta .wp-block-navigation-item__content {
+	color: var(--ll-amber);
+	font-weight: 600;
+}
+
+.ll-footer__line {
+	margin: 0;
+}
+
+.ll-mark {
+	color: var(--ll-body);
+}
+
+.ll-mark--quiet {
+	color: var(--ll-faint);
+}
+
+/* --- Section furniture ------------------------------------------------ */
+
+.ll-eyebrow {
+	font-size: 13px;
+	font-weight: 600;
+	letter-spacing: 0.2em;
+	text-transform: uppercase;
+	color: var(--ll-faint);
+	margin: 0;
+}
+
+.wp-block-group.ll-card,
+.ll-card {
+	background: var(--ll-surface);
+	border: 1px solid var(--ll-rule-firm);
+	border-radius: 14px;
+	padding: 24px;
+}
+
+.ll-card .ll-step {
+	font-size: 12px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	color: var(--ll-accent);
+	margin: 0;
+}
+
+.ll-card h3 {
+	font-size: 16px;
+	font-weight: 600;
+	line-height: 1.3;
+	letter-spacing: 0;
+	color: var(--ll-bright);
+	margin: 0;
+}
+
+.ll-card p {
+	font-size: var(--wp--preset--font-size--small, 13.5px);
+	line-height: 1.55;
+	color: var(--ll-muted);
+	margin: 0;
+}
+
+.ll-note {
+	background: var(--ll-surface);
+	border: 1px solid rgba(240, 163, 44, 0.35);
+	border-radius: 14px;
+	padding: 20px 24px;
+}
+
+.ll-note .ll-note-label {
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--ll-accent);
+	margin: 0;
+	white-space: nowrap;
+}
+
+.ll-note p {
+	font-size: var(--wp--preset--font-size--small, 13.5px);
+	line-height: 1.55;
+	color: var(--ll-muted);
+	margin: 0;
+	flex: 1;
+	min-width: 280px;
+}
+
+.ll-spec {
+	font-size: var(--wp--preset--font-size--small, 13.5px);
+	line-height: 1.6;
+	color: var(--ll-muted);
+}
+
+.ll-spec h3 {
+	font-size: var(--wp--preset--font-size--small, 13.5px);
+	font-weight: 600;
+	letter-spacing: 0;
+	color: var(--ll-bright);
+	margin: 0;
+}
+
+.ll-spec p {
+	margin: 0;
+}
+
+.ll-spec strong {
+	color: var(--ll-body);
+	font-weight: 600;
+}
+
+.ll-formula {
+	font-family: var(--wp--preset--font-family--mono, ui-monospace, SFMono-Regular, Menlo, monospace);
+	font-size: 12.5px;
+	color: var(--ll-body);
+	background: var(--ll-well);
+	border: 1px solid var(--ll-rule-firm);
+	border-radius: 8px;
+	padding: 12px 14px;
+	margin: 0;
+	overflow-x: auto;
+}
+
+/* --- Utility ---------------------------------------------------------- */
+
+.ll-cta {
+	border-top: 1px solid var(--ll-rule);
+}
+
+.screen-reader-text {
+	border: 0;
+	clip-path: inset(50%);
+	height: 1px;
+	margin: -1px;
+	overflow: hidden;
+	padding: 0;
+	position: absolute;
+	width: 1px;
+	word-wrap: normal !important;
+}
+
+/* Keyboard focus is never removed — the machine's Replay control relies on it. */
+:where(a, button, input, textarea, select, summary):focus-visible {
+	outline: 2px solid var(--ll-accent);
+	outline-offset: 2px;
+	border-radius: 4px;
+}
+
+/* --- Section layout ---------------------------------------------------- */
+
+.wp-block-columns.ll-cards {
+	gap: 20px;
+}
+
+.wp-block-columns.ll-cards .wp-block-column {
+	display: flex;
+}
+
+.wp-block-columns.ll-cards .ll-card {
+	flex: 1;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+/* Our cards are flex columns. Core's constrained-layout rule puts
+   margin-inline:auto on group children, which would shrink-wrap and centre
+   them — neutralise it whatever layout the block ends up with. */
+.ll-card > * {
+	margin-inline: 0;
+	max-width: none;
+}
+
+.ll-card > * + * {
+	margin-block-start: 0;
+}
+
+.wp-block-group.ll-note {
+	gap: 16px;
+	align-items: baseline;
+}
+
+.wp-block-columns.ll-spec {
+	gap: 20px;
+}
+
+.ll-spec .wp-block-column > * + * {
+	margin-block-start: 8px;
+}
+
+.ll-cta {
+	padding-block: clamp(48px, 6vw, 80px);
+	text-align: center;
+}
+
+.ll-cta > * + * {
+	margin-block-start: 16px;
+}

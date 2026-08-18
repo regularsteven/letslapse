@@ -1,0 +1,135 @@
+<?php
+/**
+ * Title: LetsLapse homepage
+ * Slug: letslapse/homepage
+ * Categories: letslapse, featured
+ * Block Types: core/post-content
+ * Description: The full homepage — blend machine hero, how it works, implementation notes and the download call to action.
+ *
+ * This pattern is the homepage body. templates/front-page.html renders whatever
+ * page is set as the front page, so the copy lives in the page and stays
+ * editable without touching the theme.
+ *
+ * @package LetsLapse
+ */
+
+?>
+<!-- wp:letslapse/hero-machine /-->
+
+<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"how","layout":{"type":"constrained"}} -->
+<section class="wp-block-group ll-section" id="how"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
+<h2 class="wp-block-heading ll-eyebrow">How it works</h2>
+<!-- /wp:heading -->
+
+<!-- wp:columns {"className":"ll-cards"} -->
+<div class="wp-block-columns ll-cards"><!-- wp:column -->
+<div class="wp-block-column"><!-- wp:group {"className":"ll-card"} -->
+<div class="wp-block-group ll-card"><!-- wp:paragraph {"className":"ll-step"} -->
+<p class="ll-step">01 — CAPTURE</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Steady frames, steady clock</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>The camera records stills at a fixed rate — 15 per second here. No shutter tricks, no ND filters. Time itself is the exposure.</p>
+<!-- /wp:paragraph --></div>
+<!-- /wp:group --></div>
+<!-- /wp:column -->
+
+<!-- wp:column -->
+<div class="wp-block-column"><!-- wp:group {"className":"ll-card"} -->
+<div class="wp-block-group ll-card"><!-- wp:paragraph {"className":"ll-step"} -->
+<p class="ll-step">02 — STACK</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Each frame at 1/N opacity</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Frame 2 lands at 50%, frame 3 at 33%, frame 15 at 6.7%. That is mathematically an equal-weight mean of the whole stack — the same computation the app performs, not an approximation of it.</p>
+<!-- /wp:paragraph --></div>
+<!-- /wp:group --></div>
+<!-- /wp:column -->
+
+<!-- wp:column -->
+<div class="wp-block-column"><!-- wp:group {"className":"ll-card"} -->
+<div class="wp-block-group ll-card"><!-- wp:paragraph {"className":"ll-step"} -->
+<p class="ll-step">03 — PLAY</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Blends become the timelapse</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p>Every 15 source frames collapse into one. Played back to back, the blended frames are a timelapse with true motion blur — blur as a result of time, not an effect applied to it.</p>
+<!-- /wp:paragraph --></div>
+<!-- /wp:group --></div>
+<!-- /wp:column --></div>
+<!-- /wp:columns -->
+
+<!-- wp:group {"className":"ll-note","layout":{"type":"flex","flexWrap":"wrap"}} -->
+<div class="wp-block-group ll-note"><!-- wp:paragraph {"className":"ll-note-label"} -->
+<p class="ll-note-label">Why 1/N, not 50%?</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>A fixed 50% per layer would look similar but weights the newest frames exponentially — a lie about what the app does. Incremental averaging at 1/N is exact: every frame contributes equally to the final image.</p>
+<!-- /wp:paragraph --></div>
+<!-- /wp:group --></section>
+<!-- /wp:group -->
+
+<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"spec","layout":{"type":"constrained"}} -->
+<section class="wp-block-group ll-section" id="spec"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
+<h2 class="wp-block-heading ll-eyebrow">For implementation</h2>
+<!-- /wp:heading -->
+
+<!-- wp:columns {"className":"ll-spec"} -->
+<div class="wp-block-columns ll-spec"><!-- wp:column -->
+<div class="wp-block-column"><!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">Acceleration curve</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph {"className":"ll-formula"} -->
+<p class="ll-formula">rate(n) = min(maxRate, startRate × accel<sup>n</sup>)</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>n = completed blends this loop. Defaults startRate 1.6, accel 1.5, maxRate 16 → drop rates of 1.6 · 2.4 · 3.6 · 5.4 · 8.1 · 12.2 · 16.0 · 16.0 frames/s across the loop. Drop animation runs 0.85/rate s (clamped 0.2–0.75), eject 0.9/rate s (0.25–0.8) — every motion derives from one rate, so the whole machine accelerates together. Strip travel is a ratchet, not a belt: each frame dwells then snaps one pitch into the gate, with the dwell fraction 0.45 × k where k = max(0, 1 − n/3) — full indexing on blend 1, gone by blend 4, where travel is linear.</p>
+<!-- /wp:paragraph --></div>
+<!-- /wp:column -->
+
+<!-- wp:column -->
+<div class="wp-block-column"><!-- wp:heading {"level":3} -->
+<h3 class="wp-block-heading">States &amp; config</h3>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph -->
+<p><strong>First load:</strong> strip pre-seeded, empty stage, first drop within ~1 s. <strong>Mid-cycle:</strong> stack counter + tick row show N/15. <strong>Feed exhausted:</strong> once outputs × ratio frames have entered the gate the source strip stops, then fades out over 0.8 s — the factory's job is done; the final blend ejects itself. <strong>Playback:</strong> the stage loops the 8 blends at 5 fps indefinitely, active output ringed amber, playhead sweeping the timeline; a Replay control appears where the source row was. <strong>Replay:</strong> outputs fade over 0.7 s, feed rewinds to frame 0, the strip fades back in over 0.6 s and pacing resets to deliberate.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:paragraph -->
+<p>Blend ratio, output count, atlas geometry, all rates and playback speed are block settings — nothing hardcoded. Reduced-motion preference renders the finished stack as a still diagram, no animation.</p>
+<!-- /wp:paragraph --></div>
+<!-- /wp:column --></div>
+<!-- /wp:columns --></section>
+<!-- /wp:group -->
+
+<!-- wp:group {"tagName":"section","className":"ll-section ll-cta","anchor":"get","layout":{"type":"constrained"}} -->
+<section class="wp-block-group ll-section ll-cta" id="get"><!-- wp:heading {"level":2,"textAlign":"center"} -->
+<h2 class="wp-block-heading has-text-align-center">Get LetsLapse</h2>
+<!-- /wp:heading -->
+
+<!-- wp:paragraph {"align":"center"} -->
+<p class="has-text-align-center">Precision timelapse for iPhone, iPad and Mac. In beta now.</p>
+<!-- /wp:paragraph -->
+
+<!-- wp:buttons {"layout":{"type":"flex","justifyContent":"center"}} -->
+<div class="wp-block-buttons"><!-- wp:button -->
+<div class="wp-block-button"><a class="wp-block-button__link wp-element-button" href="#">Join the TestFlight</a></div>
+<!-- /wp:button --></div>
+<!-- /wp:buttons --></section>
+<!-- /wp:group -->
