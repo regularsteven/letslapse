@@ -35,6 +35,10 @@ struct VideoEditorView: View {
     /// debounced — as the controls move, exactly like the photo editor.
     @State private var preset: PhotoPreset = .default
     @State private var adjustments: PhotoAdjustments = .neutral
+    /// Which of the three states the live values are in — re-resolved on every
+    /// change, so the pill flips to Edited the instant a slider leaves the
+    /// applied preset. See `PhotoViewerView` for the same pattern on stills.
+    @State private var presetState: PresetState = .original
     @State private var loaded = false
 
     @State private var player = AVPlayer()
@@ -46,6 +50,15 @@ struct VideoEditorView: View {
     @State private var isNamingPreset = false
     @State private var newPresetName = ""
     @State private var presetPendingDelete: CustomPreset?
+    /// A chip tap held back for confirmation: applying it from Edited would
+    /// discard the manual adjustments on screen.
+    @State private var pendingApply: PresetApplyRequest?
+    /// The "Save as preset?" offer raised on the way out of an Edited grade.
+    @State private var isOfferingPresetSave = false
+    /// Set while that offer is what sent the user into the naming alert.
+    @State private var exitsAfterPresetSave = false
+    /// "Not now" on the inline offer, where there is no exit to leave through.
+    @State private var declinedPresetSave = false
 
     /// The movie's display aspect (w ÷ h). Unlike the photo editor this is
     /// normally known before the first frame: a video capture already carries
@@ -69,9 +82,15 @@ struct VideoEditorView: View {
         model.captures.first { $0.id == captureID }
     }
 
-    /// The saved grade the current selection exactly matches, if any.
-    private var activeCustomPreset: CustomPreset? {
-        presetStore.matching(basePreset: preset, adjustments: adjustments)
+    /// True when this editor owns the way out — the back button it draws on
+    /// iOS. The Mac window's close button isn't ours to intercept, so there the
+    /// "Save as preset?" offer sits inline in the rail instead.
+    private var ownsExit: Bool {
+        #if os(iOS)
+        return true
+        #else
+        return false
+        #endif
     }
 
     /// Amber over the dark editor; the light Mac window keeps the app accent.
@@ -114,6 +133,7 @@ struct VideoEditorView: View {
             guard !loaded, let capture else { return }
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
+            presetState = model.presetState(for: capture)
             loaded = true
             // The project already knows the oriented size for a video capture,
             // so the player is laid out correctly on the very first frame.
@@ -147,15 +167,26 @@ struct VideoEditorView: View {
             applyGradeToPlayer()
         }
         .onDisappear { player.pause() }
+        .overlay(alignment: .bottom) {
+            if isOfferingPresetSave {
+                presetSaveOffer
+                    .padding(16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .alert("Save as preset", isPresented: $isNamingPreset) {
             TextField("Preset name", text: $newPresetName)
-            Button("Save") {
-                presetStore.save(name: newPresetName, basePreset: preset, adjustments: adjustments)
-                newPresetName = ""
-            }
-            Button("Cancel", role: .cancel) {}
+            Button("Save") { saveCurrentAsPreset() }
+            Button("Cancel", role: .cancel) { exitsAfterPresetSave = false }
         } message: {
             Text("Saves the \(preset.displayName) grade and these adjustments so you can apply them to another project.")
+        }
+        .alert(item: $pendingApply) { request in
+            Alert(
+                title: Text(request.confirmationTitle),
+                message: Text(request.confirmationMessage),
+                primaryButton: .destructive(Text(request.confirmationButton)) { apply(request) },
+                secondaryButton: .cancel())
         }
         .alert(item: $presetPendingDelete) { target in
             Alert(
@@ -279,7 +310,7 @@ struct VideoEditorView: View {
     @ViewBuilder private var chrome: some View {
         #if os(iOS)
         HStack {
-            Button { dismiss() } label: {
+            Button { requestExit() } label: {
                 Image(systemName: "chevron.left")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
@@ -325,32 +356,53 @@ struct VideoEditorView: View {
 
     private func controlStack(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            stateRow
             presetStrip
             // No disclosure to open: with the player pinned and the controls
             // scrolling, hiding the sliders behind an accordion only adds a tap.
             sliderPanel(expanded: isWide)
+            if presetState.isEdited, !ownsExit, !declinedPresetSave {
+                presetSaveOffer
+            }
             saveAsPresetButton
         }
     }
 
+    /// The live state readout — the only thing on screen that can say "Edited".
+    private var stateRow: some View {
+        HStack(spacing: 8) {
+            Text("Preset")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            PresetStatePill(state: presetState, accent: accentColor, onAccent: pillTextColor)
+            Spacer(minLength: 0)
+        }
+    }
+
+    private var pillTextColor: Color {
+        #if os(iOS)
+        return .black
+        #else
+        return .white
+        #endif
+    }
+
     private var presetStrip: some View {
-        let activeCustom = activeCustomPreset
-        return ScrollView(.horizontal, showsIndicators: false) {
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(PhotoPreset.strip) { candidate in
                     chip(
                         label: candidate.displayName,
-                        isActive: candidate == preset && activeCustom == nil
+                        isActive: candidate == .original
+                            ? presetState.isOriginal
+                            : presetState.isNamed(candidate.presetID)
                     ) {
-                        preset = candidate
-                        renderToken += 1
+                        request(.builtIn(candidate))
                     }
                 }
                 ForEach(presetStore.presets) { custom in
-                    chip(label: custom.name, isActive: activeCustom?.id == custom.id) {
-                        preset = custom.basePreset
-                        adjustments = custom.adjustments
-                        renderToken += 1
+                    chip(label: custom.name, isActive: presetState.isNamed(custom.id)) {
+                        request(.custom(custom))
                     }
                     .contextMenu {
                         Button(role: .destructive) {
@@ -364,6 +416,45 @@ struct VideoEditorView: View {
             .padding(.horizontal, 2)
             .padding(.vertical, 2)
         }
+    }
+
+    /// "Save as preset?" — the offer made when an Edited grade is about to be
+    /// left behind. The photo editor draws the same card; see it for why this
+    /// is an inline invitation rather than a blocking alert.
+    private var presetSaveOffer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Save these edits as a preset?")
+                .font(.system(size: 14.5, weight: .semibold))
+            Text("Your adjustments stay on this project either way. Saving them makes the look reusable.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                Button("Not now") {
+                    if ownsExit {
+                        finishExit()
+                    } else {
+                        withAnimation(.easeOut(duration: 0.2)) { declinedPresetSave = true }
+                    }
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                Spacer(minLength: 0)
+                Button("Save as Preset") {
+                    isOfferingPresetSave = false
+                    exitsAfterPresetSave = ownsExit
+                    newPresetName = ""
+                    isNamingPreset = true
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func chip(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -383,12 +474,17 @@ struct VideoEditorView: View {
     private func sliderPanel(expanded: Bool) -> some View {
         PhotoAdjustmentsPanel(
             adjustments: $adjustments, alwaysExpanded: expanded, accent: accentColor)
-            .onChange(of: adjustments) { _ in renderToken += 1 }
+            // Every tick: the state has to be true of the values on screen, not
+            // of the values the debounced write eventually persists.
+            .onChange(of: adjustments) { _ in
+                refreshState()
+                renderToken += 1
+            }
     }
 
     private var saveAsPresetButton: some View {
         Button {
-            newPresetName = activeCustomPreset?.name ?? ""
+            newPresetName = presetState.snapshot.map { $0.isBuiltIn ? "" : $0.name } ?? ""
             isNamingPreset = true
         } label: {
             Label("Save as Preset", systemImage: "square.and.arrow.down")
@@ -403,10 +499,80 @@ struct VideoEditorView: View {
 
     // MARK: - Actions
 
+    /// A chip tap. From Edited it discards work the user did by hand, so it
+    /// asks first; from Original or another preset it applies immediately.
+    private func request(_ target: PresetApplyRequest.Target) {
+        let request = PresetApplyRequest(target: target)
+        guard presetState.isEdited else {
+            apply(request)
+            return
+        }
+        pendingApply = request
+    }
+
+    private func apply(_ request: PresetApplyRequest) {
+        switch request.target {
+        case .builtIn(let candidate):
+            preset = candidate
+            // Original is "no filter": the sliders go with the preset.
+            adjustments = .neutral
+            presetState = candidate == .original
+                ? .original
+                : .named(id: candidate.presetID, snapshot: candidate.snapshot)
+        case .custom(let custom):
+            preset = custom.basePreset
+            adjustments = custom.adjustments
+            presetState = .named(id: custom.id, snapshot: custom.snapshot)
+        }
+        declinedPresetSave = false
+        renderToken += 1
+    }
+
+    /// Re-derives the state from the live values, anchored on the state they
+    /// came from — the whole divergence rule, in one call.
+    private func refreshState() {
+        presetState = PresetStateResolver.resolve(
+            preset: preset,
+            adjustments: adjustments,
+            anchor: presetState,
+            customPresets: presetStore.presets)
+    }
+
+    private func saveCurrentAsPreset() {
+        if let saved = presetStore.save(
+            name: newPresetName, basePreset: preset, adjustments: adjustments) {
+            presetState = .named(id: saved.id, snapshot: saved.snapshot)
+        }
+        newPresetName = ""
+        guard exitsAfterPresetSave else {
+            renderToken += 1
+            return
+        }
+        exitsAfterPresetSave = false
+        finishExit()
+    }
+
+    /// Back, with the exit-time offer in the way when there is one to make.
+    private func requestExit() {
+        guard presetState.isEdited else {
+            finishExit()
+            return
+        }
+        withAnimation(.easeOut(duration: 0.2)) { isOfferingPresetSave = true }
+    }
+
+    /// Leaves the editor, persisting first — the debounced write may not have
+    /// run yet, and its task dies with the view.
+    private func finishExit() {
+        isOfferingPresetSave = false
+        persist()
+        dismiss()
+    }
+
     private func persist() {
         guard let capture else { return }
-        model.setPhotoPreset(preset, for: capture)
-        model.setPhotoAdjustments(adjustments, for: capture)
+        model.setPhotoGrade(
+            preset: preset, adjustments: adjustments, state: presetState, for: capture)
     }
 
     /// Swaps the player item's composition for the current grade. Playback

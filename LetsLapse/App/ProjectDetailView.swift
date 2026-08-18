@@ -36,13 +36,10 @@ struct ProjectDetailView: View {
     @State private var versionPendingDelete: AppModel.BlendProject?
     @State private var deletionFailure: String?
     @State private var isExportingArchive = false
+    /// See `App/ProjectArchiveShare.swift` — the produced `.lapse` and its sheet
+    /// are shared with `ScanDetailView`.
     @State private var exportedArchive: ExportedArchive?
     @State private var exportFailure: String?
-
-    private struct ExportedArchive: Identifiable {
-        let url: URL
-        var id: String { url.path }
-    }
     @State private var storageBytes: Int64?
     @State private var confirmingPurge = false
     @State private var isPurging = false
@@ -113,7 +110,12 @@ struct ProjectDetailView: View {
         } message: {
             Text(autoName.failure ?? "")
         }
-        .alert("Rename project", isPresented: $isRenaming) {
+        // No noun on the menu items or these dialogs — a menu opened inside a
+        // project is already saying which project it acts on. The *destructive*
+        // confirmation keeps its noun, because "Delete project?" and "Delete
+        // blended clip 2?" are the two alerts this screen can raise and the
+        // difference between them is the whole point of asking.
+        .alert("Rename", isPresented: $isRenaming) {
             TextField("Project name", text: $renameText)
             Button("Save") {
                 if let capture {
@@ -169,34 +171,7 @@ struct ProjectDetailView: View {
         } message: {
             Text("\(rotateFailure ?? "") Some files may already be rotated — tapping Rotate again completes the pass once the problem is fixed.")
         }
-        .sheet(item: $exportedArchive) { archive in
-            VStack(spacing: 14) {
-                Image(systemName: "shippingbox")
-                    .font(.system(size: 30))
-                    .foregroundStyle(.secondary)
-                Text(archive.url.lastPathComponent)
-                    .font(.headline)
-                    .multilineTextAlignment(.center)
-                if let size = archiveSizeLabel(archive.url) {
-                    Text(size)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                }
-                ShareLink(item: archive.url) {
-                    Label("Share archive", systemImage: "square.and.arrow.up")
-                        .font(.system(size: 15, weight: .semibold))
-                        .frame(maxWidth: .infinity, minHeight: 44)
-                }
-                .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                Button("Done") { exportedArchive = nil }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.secondary)
-            }
-            .padding(24)
-            #if os(macOS)
-            .frame(minWidth: 340)
-            #endif
-        }
+        .exportedArchiveSheet($exportedArchive)
         .alert("Convert all ProRes to H.264?", isPresented: $confirmingPurge) {
             Button("Convert & delete originals", role: .destructive) { purgeProRes() }
             Button("Cancel", role: .cancel) {}
@@ -386,7 +361,7 @@ struct ProjectDetailView: View {
             .padding(.horizontal, 16)
             .padding(.top, 8)
             #if os(iOS)
-            // Clearance for the floating tab bar, so Delete project stays
+            // Clearance for the floating tab bar, so the Delete row stays
             // visible and tappable at the end of the scroll.
             .padding(.bottom, 96)
             #else
@@ -404,7 +379,7 @@ struct ProjectDetailView: View {
                     Button {
                         startRename(capture)
                     } label: {
-                        Label("Rename project", systemImage: "pencil")
+                        Label("Rename", systemImage: "pencil")
                     }
                     Button {
                         startAutoName(capture)
@@ -444,7 +419,7 @@ struct ProjectDetailView: View {
                     Button(role: .destructive) {
                         confirmingProjectDelete = true
                     } label: {
-                        Label("Delete project…", systemImage: "trash")
+                        Label("Delete…", systemImage: "trash")
                     }
                 } label: {
                     if isPurging || isExportingArchive || isRotating {
@@ -701,7 +676,7 @@ struct ProjectDetailView: View {
             Button {
                 startRename(capture)
             } label: {
-                LLRow(title: "Rename project") {
+                LLRow(title: "Rename") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.tertiary)
@@ -742,7 +717,7 @@ struct ProjectDetailView: View {
             Button {
                 confirmingProjectDelete = true
             } label: {
-                LLRow(title: "Delete project…", titleColor: .red, showsDivider: false) {
+                LLRow(title: "Delete…", titleColor: .red, showsDivider: false) {
                     EmptyView()
                 }
                 .contentShape(Rectangle())
@@ -1076,12 +1051,6 @@ struct ProjectDetailView: View {
         }
     }
 
-    private func archiveSizeLabel(_ url: URL) -> String? {
-        let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
-        guard let bytes = (attributes?[.size] as? NSNumber)?.int64Value else { return nil }
-        return ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
-    }
-
     private func deleteProject() {
         guard let capture else { return }
         do {
@@ -1192,13 +1161,16 @@ private struct GradingCard: View {
     /// grading controls, the video sibling of `onOpenViewer`.
     var onEditVideo: (URL) -> Void
     /// Interval: play the shoot as motion from its frames. When this is set the
-    /// card shows two affordances — Play in the middle, Edit photo below it —
+    /// card shows two affordances — Play in the middle, Edit below it —
     /// because an interval project has both a sequence to watch and a frame to
     /// grade. nil leaves the single-button card every other mode has.
     var onPlaySequence: (() -> Void)?
 
     /// The graded preview, downscaled for speed; nil until the first render.
     @State private var rendered: CGImage?
+    /// A chip tap held back for confirmation, because applying it from Edited
+    /// would throw the project's manual adjustments away.
+    @State private var pendingApply: PresetApplyRequest?
     /// Re-renders after a rotate rewrites the original in place (same URL, so
     /// the path/preset id alone can't retrigger; PhotoGrader's own cache is
     /// mtime-keyed and self-heals).
@@ -1234,12 +1206,12 @@ private struct GradingCard: View {
             // the card still draws, with the placeholder hero and no button, so
             // the screen doesn't lose its top card.
             let preview = preview(for: capture)
-            let grade = PhotoGrade(
-                preset: model.photoPreset(for: capture),
-                adjustments: adjustments(for: capture))
+            let grade = model.photoGrade(for: capture)
+            let state = model.presetState(for: capture)
             VStack(spacing: 10) {
                 imageCard(preview: preview)
-                presetStrip(capture: capture, active: grade.preset, adjustments: grade.adjustments)
+                stateRow(state: state)
+                presetStrip(capture: capture, state: state)
             }
             .task(id: "\(preview?.url.path ?? "-")|\(grade.cacheToken)|\(thumbnailCache.generation)") {
                 // Debounce: chip taps and editor writes re-key this task, so a
@@ -1249,6 +1221,15 @@ private struct GradingCard: View {
                 if let preview {
                     await render(preview, grade: grade)
                 }
+            }
+            .alert(item: $pendingApply) { request in
+                Alert(
+                    title: Text(request.confirmationTitle),
+                    message: Text(request.confirmationMessage),
+                    primaryButton: .destructive(Text(request.confirmationButton)) {
+                        apply(request, to: capture)
+                    },
+                    secondaryButton: .cancel())
             }
         }
     }
@@ -1269,13 +1250,6 @@ private struct GradingCard: View {
             }
             return model.sourceFrameURLs(for: capture).first.map(Preview.still)
         }
-    }
-
-    /// The adjustments on screen: always the project's stored values — every
-    /// mode's sliders live in an editor now (photo viewer or video editor),
-    /// and this card follows whatever those wrote.
-    private func adjustments(for capture: AppModel.CaptureProject) -> PhotoAdjustments {
-        model.photoAdjustments(for: capture)
     }
 
     private func imageCard(preview: Preview?) -> some View {
@@ -1306,13 +1280,15 @@ private struct GradingCard: View {
         }
         .frame(maxWidth: .infinity)
         .overlay(alignment: .bottomLeading) {
-            // Every project edits from its hero: the still modes get Edit
-            // photo, a movie gets Edit video — same pill, same place.
+            // Every project edits from its hero, and the pill says the same
+            // thing on all of them: the hero underneath it is already showing
+            // what is about to be edited, so naming the noun only made the
+            // three modes read as three different affordances.
             switch preview {
             case .still(let url):
-                editPill(title: "Edit photo") { onOpenViewer(url) }
+                editPill { onOpenViewer(url) }
             case .movie(let url):
-                editPill(title: "Edit video") { onEditVideo(url) }
+                editPill { onEditVideo(url) }
             case nil:
                 EmptyView()
             }
@@ -1363,11 +1339,12 @@ private struct GradingCard: View {
         .accessibilityLabel(label)
     }
 
-    /// The bottom-left edit affordance every hero carries — Edit photo on the
-    /// still modes, Edit video on a movie.
-    private func editPill(title: String, action: @escaping () -> Void) -> some View {
+    /// The bottom-left edit affordance every hero carries. One label for every
+    /// mode — the title is not a parameter, so Photo, Interval and Video cannot
+    /// drift apart again.
+    private func editPill(action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Label(title, systemImage: "slider.horizontal.3")
+            Label("Edit", systemImage: "slider.horizontal.3")
                 .font(.system(size: 12.5, weight: .semibold))
                 .foregroundStyle(.white)
                 .padding(.horizontal, 12)
@@ -1378,32 +1355,47 @@ private struct GradingCard: View {
         .padding(12)
     }
 
+    /// The state readout above the strip: which preset is applied, or that the
+    /// project has been edited past all of them. It follows the project live —
+    /// an editor session that diverges from its preset flips this to Edited the
+    /// moment it is written back.
+    private func stateRow(state: PresetState) -> some View {
+        HStack(spacing: 8) {
+            Text("Preset")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            PresetStatePill(state: state)
+            Spacer(minLength: 0)
+        }
+    }
+
     private func presetStrip(
         capture: AppModel.CaptureProject,
-        active: PhotoPreset,
-        adjustments: PhotoAdjustments
+        state: PresetState
     ) -> some View {
-        // A saved grade owns the highlight when the project matches it exactly,
-        // so its base preset's chip doesn't light up alongside it.
-        let activeCustom = presetStore.matching(basePreset: active, adjustments: adjustments)
-        return ScrollView(.horizontal, showsIndicators: false) {
+        // The chips follow the state, not the numbers: a preset is only ever
+        // shown as active when the project is actually on it, so an Edited
+        // project lights nothing up.
+        ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(PhotoPreset.strip) { preset in
                     chip(
                         label: preset.displayName,
-                        isActive: preset == active && activeCustom == nil,
+                        isActive: preset == .original
+                            ? state.isOriginal
+                            : state.isNamed(preset.presetID),
                         accessibilityLabel: "\(preset.displayName) grade"
                     ) {
-                        model.setPhotoPreset(preset, for: capture)
+                        request(.builtIn(preset), for: capture, state: state)
                     }
                 }
                 ForEach(presetStore.presets) { custom in
                     chip(
                         label: custom.name,
-                        isActive: activeCustom?.id == custom.id,
+                        isActive: state.isNamed(custom.id),
                         accessibilityLabel: "\(custom.name) saved grade"
                     ) {
-                        model.applyCustomPreset(custom, for: capture)
+                        request(.custom(custom), for: capture, state: state)
                     }
                     .contextMenu {
                         Button(role: .destructive) {
@@ -1416,6 +1408,31 @@ private struct GradingCard: View {
             }
             .padding(.horizontal, 2)
             .padding(.vertical, 2)
+        }
+    }
+
+    /// A chip tap. From Edited it is destructive — manual adjustments the user
+    /// made deliberately would be thrown away — so it goes through a
+    /// confirmation first; from anywhere else it applies straight away.
+    private func request(
+        _ target: PresetApplyRequest.Target,
+        for capture: AppModel.CaptureProject,
+        state: PresetState
+    ) {
+        let request = PresetApplyRequest(target: target)
+        guard state.isEdited else {
+            apply(request, to: capture)
+            return
+        }
+        pendingApply = request
+    }
+
+    private func apply(_ request: PresetApplyRequest, to capture: AppModel.CaptureProject) {
+        switch request.target {
+        case .builtIn(let preset):
+            model.applyPreset(preset, for: capture)
+        case .custom(let preset):
+            model.applyCustomPreset(preset, for: capture)
         }
     }
 

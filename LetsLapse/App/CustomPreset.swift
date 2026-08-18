@@ -49,12 +49,10 @@ final class CustomPresetStore: ObservableObject {
         presets.first { $0.id == id }
     }
 
-    /// The saved grade matching a project's current selection exactly, if any —
-    /// how the chip strip knows which custom chip to light up. Editing a slider
-    /// moves away from the match, which deselects the chip on its own.
-    func matching(basePreset: PhotoPreset, adjustments: PhotoAdjustments) -> CustomPreset? {
-        presets.first { $0.basePreset == basePreset && $0.adjustments == adjustments }
-    }
+    // Which chip is lit is no longer a values lookup: a project carries its
+    // `PresetState`, and a preset is shown as active only when the project is
+    // actually on it. `PresetStateResolver` owns the matching now, snapshot
+    // first, so a preset reworked after the fact doesn't reassign old projects.
 
     // MARK: - Writing
 

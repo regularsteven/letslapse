@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Photo grading viewer · side rail · landscape</title>
-  <desc>Mirrors App/PhotoViewerView.swift in its wide layout — the branch taken whenever the available width reaches 500pt: iPhone landscape (852pt), the iPad sheet (~578pt), or a widened Mac window. The threshold is 500 rather than 600 because the iPad sheet presents at ~578pt and a 600pt cutover left it stacked; the widest iPhone portrait is 440pt, so both stay firmly on the right side. The controls move into a side rail beside the image instead of stacking under it, and the sliders are shown outright with no Customise disclosure, because a rail has the height for them. Rail width is min(340, width × 0.42): 340pt at the 852pt iPhone-landscape width drawn here, and ~243pt on the iPad sheet. The rail scrolls on its own. Sliders, readouts, White Bal. picker and Save as Preset are identical to the portrait expanded state (see project-photo.viewer.expanded.portrait.svg) — only the arrangement changes. Shown at the neutral grade with Natural selected.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift in its wide layout — the branch taken whenever the available width reaches 500pt: iPhone landscape (852pt), the iPad sheet (~578pt), or a widened Mac window. The threshold is 500 rather than 600 because the iPad sheet presents at ~578pt and a 600pt cutover left it stacked; the widest iPhone portrait is 440pt, so both stay firmly on the right side. The controls move into a side rail beside the image instead of stacking under it, and the sliders are shown outright — as they now are in the stacked layout too, which lost its Customise disclosure for the same reason: with the picture pinned, an accordion over the sliders only added a tap. Rail width is min(340, width × 0.42): 340pt at the 852pt iPhone-landscape width drawn here, and ~243pt on the iPad sheet. The rail scrolls on its own. There is deliberately NO preview-size drag handle here: the handle belongs to `stackedBody`, where media height and control room compete for the same axis. In the rail they do not — the image already has the whole height and gives up width, not height, to the controls — so the wide branch never draws one. Sliders, readouts, White Bal. picker and Save as Preset are identical to the portrait states (see project-photo.viewer.expanded.portrait.svg) — only the arrangement changes. Shown at the neutral grade with Natural selected. NOT YET RESTAGED (2026-08-18): the editor is a black fullScreenCover with a floating back chevron over the image rather than the light title bar with Done drawn here, and a "Preset" state row with its PresetStatePill heads the rail above the chips.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
     <clipPath id="photo"><rect x="151" y="72" width="258" height="345"/></clipPath>
@@ -46,7 +46,8 @@
 
   <g clip-path="url(#screen)">
     <g transform="translate(24,24)">
-      <!-- side rail: 340pt, controls shown outright (no Customise disclosure) -->
+      <!-- side rail: 340pt, controls shown outright; no preview-size handle in
+           the wide branch — the rail trades width for the image, not height -->
       <g id="control-rail">
         <rect x="512" y="48" width="340" height="345" fill="#F2F2F7"/>
 
@@ -116,5 +117,5 @@
   </g>
 
   <text x="450" y="447" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Photo grading viewer · side rail · landscape · 852×393 pt</text>
-  <text x="450" y="465" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift — wide branch at ≥500pt · rail min(340, width×0.42) · sliders always visible</text>
+  <text x="450" y="465" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/PhotoViewerView.swift — wide branch at ≥500pt · rail min(340, width×0.42) · sliders always visible · no preview-size handle</text>
 </svg>

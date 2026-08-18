@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Project detail (photo) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, photoActions, originalsSection in its burst wording): a photo capture is ONE asset — graded preview with the preset strip (Natural · Cinema · Matte · Vivid · Original), Save to Photos + Share, then the Burst frames card, then the management card. No clip list, no blended clips, no New blended clip button. The Burst frames card is drawn only for a BLENDED shot (sourceMediaCount &gt; 1), where the frames that stacked into the photo are still on disk: "Frames behind this photo" carries the batched, ungraded Save all to Photos, and "View all frames" opens CapturePhotoGrid over them, each tile through the project's grade, each frame savable on its own. With Blend Off the shot is a single frame — that frame IS the photo above — so the whole card is absent and the management card sits at y=449 as it did before. The preview renders the project's preset AND its PhotoAdjustments sliders, so it matches what the grading viewer shows. Any saved CustomPreset appears as a further chip after Original (none saved in this drawing, which is the default state); a built-in chip is highlighted only when no saved preset matches the current preset+adjustments exactly, and long-pressing a custom chip offers Delete preset. The expand button on the preview opens App/PhotoViewerView.swift — see project-photo.viewer.portrait.svg — not the plain media preview sheet. `GradingCard` is shared by all three modes: the interval and video variants show the same strip over their own preview (project-detail.interval.portrait.svg, project-detail.video.portrait.svg). A photo capture's card carries the one PHOTO pill and no format badge, unlike those two.</desc>
+  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, photoActions, originalsSection in its burst wording): a photo capture is ONE asset — graded preview with the preset strip (Natural · Cinema · Matte · Vivid · Original), Save to Photos + Share, then the Burst frames card, then the management card. No clip list, no blended clips, no New blended clip button. The Burst frames card is drawn only for a BLENDED shot (sourceMediaCount &gt; 1), where the frames that stacked into the photo are still on disk: "Frames behind this photo" carries the batched, ungraded Save all to Photos, and "View all frames" opens CapturePhotoGrid over them, each tile through the project's grade, each frame savable on its own. With Blend Off the shot is a single frame — that frame IS the photo above — so the whole card is absent and the management card sits at y=449 as it did before. The preview renders the project's preset AND its PhotoAdjustments sliders, so it matches what the grading viewer shows. Any saved CustomPreset appears as a further chip after Original (none saved in this drawing, which is the default state); a built-in chip is highlighted only when no saved preset matches the current preset+adjustments exactly, and long-pressing a custom chip offers Delete preset. Two affordances open the grading viewer (App/PhotoViewerView.swift — see project-photo.viewer.portrait.svg, not the plain media preview sheet): the expand button in the middle of the preview, and the "Edit" pill (slider.horizontal.3) bottom-left over it. The pill carries the same one-word label in every mode (GradingCard.editPill takes no title): the hero underneath it already shows what is about to be edited, and naming the noun only made Photo, Interval and Video read as three different affordances. `GradingCard` is shared by all three modes: the interval and video variants show the same strip over their own preview (project-detail.interval.portrait.svg, project-detail.video.portrait.svg). A photo capture's card carries the one PHOTO pill and no format badge, unlike those two.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -46,6 +46,17 @@
         </g>
         <rect x="28" y="124" width="66" height="22" rx="11" fill="#000" opacity="0.5"/>
         <text x="61" y="139" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">PHOTO</text>
+        <!-- the edit affordance every hero carries, one label for every mode -->
+        <g id="edit-pill">
+          <rect x="28" y="284" width="68" height="26" rx="13" fill="#000" opacity="0.45"/>
+          <g data-symbol="slider.horizontal.3" stroke="#FFF" stroke-width="1.7" stroke-linecap="round">
+            <path d="M40 292 h14 M40 297 h14 M40 302 h14"/>
+            <circle cx="50" cy="292" r="2.1" fill="#FFF" stroke="none"/>
+            <circle cx="45" cy="297" r="2.1" fill="#FFF" stroke="none"/>
+            <circle cx="52" cy="302" r="2.1" fill="#FFF" stroke="none"/>
+          </g>
+          <text x="61" y="301" font-size="12.5" class="sb" fill="#FFF">Edit</text>
+        </g>
       </g>
 
       <!-- preset strip -->
@@ -89,14 +100,14 @@
       <!-- management card -->
       <g id="management-card">
         <rect x="16" y="581" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="609" font-size="16" fill="#000">Rename project</text>
+        <text x="32" y="609" font-size="16" fill="#000">Rename</text>
         <path d="M363 597 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         <line x1="32" y1="625" x2="377" y2="625" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="650" font-size="16" fill="#000">Storage</text>
         <text x="32" y="665" font-size="11.5" fill="#6D6D72">photo + burst frames</text>
         <text x="361" y="654" font-size="14" fill="#6D6D72" text-anchor="end">48 MB</text>
         <line x1="32" y1="677" x2="377" y2="677" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="703" font-size="16" fill="#FF3B30">Delete project…</text>
+        <text x="32" y="703" font-size="16" fill="#FF3B30">Delete…</text>
       </g>
 
       <!-- floating tab bar (Projects selected) -->

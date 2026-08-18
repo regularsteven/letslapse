@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Project detail (interval) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, originalsSection, versionRow, managementCard) for an interval capture — kind == .photos and NOT isPhotoCapture. The card previews the shoot's FIRST SOURCE FRAME rendered through the project's preset + PhotoAdjustments (not its hero: once a stacked image blended clip exists that clip is the hero, and it is a finished render that already carries the grade that made it). An interval project's card carries TWO affordances, because it has both a sequence to watch and a frame to grade. The circular button in the middle is play: it opens FullscreenMediaSheet on `.intervalMotion`, which plays the shoot's own frames as motion at the frame rate of its newest rendered blended clip (12 fps until one exists) — the preview that used to cost a full render to see (see player.portrait.svg). Bottom-left, over the image, an "Edit photo" pill opens App/PhotoViewerView.swift on that frame — presets, sliders, white balance — so an interval project still customises its grade there rather than in the card; see project-photo.viewer.portrait.svg. Beneath the preset strip the results lead: the Blended clips rows (the whole section hides while the shoot has none — the button below is the empty state), then New blended clip, then — where the video variant shows its Source Clips card — the Originals card: a "Source photos" row carrying the batched Save all to Photos export (deliberately ungraded — it hands over the captured files byte for byte), and a "View all photos" row that presents CapturePhotoGrid over the individual frames, every tile rendered through the same grade. Save-all states replace the trailing control in place: Save all to Photos → spinner → "Saved" (checkmark, secondary) → "Retry" with the error as the row subtitle. A blended-clip row swipes left to reveal a 72pt red trash action (SwipeToDelete.swift) that raises the same delete-confirm alert as its context menu. The scroll content ends with 96pt bottom clearance so the management card's Delete project row comes to rest fully above the floating tab bar (this canvas draws the at-rest scroll top, where the card still sits behind the bar). The grade is baked into the timelapse the blend writes, frame by frame; the stills on disk are never rewritten.</desc>
+  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, originalsSection, versionRow, managementCard) for an interval capture — kind == .photos and NOT isPhotoCapture. The card previews the shoot's FIRST SOURCE FRAME rendered through the project's preset + PhotoAdjustments (not its hero: once a stacked image blended clip exists that clip is the hero, and it is a finished render that already carries the grade that made it). An interval project's card carries TWO affordances, because it has both a sequence to watch and a frame to grade. The circular button in the middle is play: it opens FullscreenMediaSheet on `.intervalMotion`, which plays the shoot's own frames as motion at the frame rate of its newest rendered blended clip (12 fps until one exists) — the preview that used to cost a full render to see (see player.portrait.svg). Bottom-left, over the image, an "Edit" pill (slider.horizontal.3) opens App/PhotoViewerView.swift on that frame — presets, sliders, white balance — so an interval project grades there rather than in the card; see project-photo.viewer.portrait.svg. The pill carries the same one-word label in every mode (GradingCard.editPill takes no title): the hero underneath it already shows what is about to be edited, and naming the noun only made Photo, Interval and Video read as three different affordances. Beneath the preset strip the results lead: the Blended clips rows (the whole section hides while the shoot has none — the button below is the empty state), then New blended clip, then — where the video variant shows its Source Clips card — the Originals card: a "Source photos" row carrying the batched Save all to Photos export (deliberately ungraded — it hands over the captured files byte for byte), and a "View all photos" row that presents CapturePhotoGrid over the individual frames, every tile rendered through the same grade. Save-all states replace the trailing control in place: Save all to Photos → spinner → "Saved" (checkmark, secondary) → "Retry" with the error as the row subtitle. A blended-clip row swipes left to reveal a 72pt red trash action (SwipeToDelete.swift) that raises the same delete-confirm alert as its context menu. The scroll content ends with 96pt bottom clearance so the management card's Delete row comes to rest fully above the floating tab bar (this canvas draws the at-rest scroll top, where the card still sits behind the bar). The grade is baked into the timelapse the blend writes, frame by frame; the stills on disk are never rewritten.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -42,16 +42,17 @@
         <path d="M190 206 l19 11 -19 11 z" fill="#FFF" data-symbol="play.fill"/>
         <rect x="28" y="124" width="150" height="22" rx="11" fill="#000" opacity="0.5"/>
         <text x="103" y="139" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">ORIGINAL · 184 photos</text>
-        <!-- second affordance: the frame editor, under the play button -->
-        <g id="edit-photo-pill">
-          <rect x="28" y="284" width="106" height="26" rx="13" fill="#000" opacity="0.45"/>
+        <!-- second affordance: the frame editor, under the play button. One label
+             for every mode — the hero already says what is about to be edited -->
+        <g id="edit-pill">
+          <rect x="28" y="284" width="68" height="26" rx="13" fill="#000" opacity="0.45"/>
           <g data-symbol="slider.horizontal.3" stroke="#FFF" stroke-width="1.7" stroke-linecap="round">
             <path d="M40 292 h14 M40 297 h14 M40 302 h14"/>
             <circle cx="50" cy="292" r="2.1" fill="#FFF" stroke="none"/>
             <circle cx="45" cy="297" r="2.1" fill="#FFF" stroke="none"/>
             <circle cx="52" cy="302" r="2.1" fill="#FFF" stroke="none"/>
           </g>
-          <text x="61" y="301" font-size="12.5" class="sb" fill="#FFF">Edit photo</text>
+          <text x="61" y="301" font-size="12.5" class="sb" fill="#FFF">Edit</text>
         </g>
         <rect x="263" y="288" width="102" height="22" rx="11" fill="#000" opacity="0.5"/>
         <text x="314" y="303" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">4032×3024</text>
@@ -106,17 +107,17 @@
         </g>
       </g>
 
-      <!-- management card: at-rest scroll top — the scroll ends with 96pt clearance so Delete project clears the tab bar -->
+      <!-- management card: at-rest scroll top — the scroll ends with 96pt clearance so the Delete row clears the tab bar -->
       <g id="management-card">
         <rect x="16" y="679" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="707" font-size="16" fill="#000">Rename project</text>
+        <text x="32" y="707" font-size="16" fill="#000">Rename</text>
         <path d="M363 695 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
         <line x1="32" y1="723" x2="377" y2="723" stroke="#000" stroke-opacity="0.08"/>
         <text x="32" y="748" font-size="16" fill="#000">Storage</text>
         <text x="32" y="763" font-size="11.5" fill="#6D6D72">original + blended clips</text>
         <text x="361" y="752" font-size="14" fill="#6D6D72" text-anchor="end">3.1 GB</text>
         <line x1="32" y1="775" x2="377" y2="775" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="801" font-size="16" fill="#FF3B30">Delete project…</text>
+        <text x="32" y="801" font-size="16" fill="#FF3B30">Delete…</text>
       </g>
 
       <!-- floating tab bar (Projects selected) over content -->

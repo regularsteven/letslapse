@@ -28,6 +28,14 @@ struct ScanDetailView: View {
     /// The document whose header's pencil was tapped, and the field behind it.
     @State private var renamingDocument: ScanDocument?
     @State private var documentNameText = ""
+    /// "Share project": the whole capture folder as one importable `.lapse`.
+    /// A scan archives through exactly the same path a shoot does — see
+    /// `AppModel.exportProject` and `App/ProjectArchiveShare.swift`.
+    @State private var isExportingArchive = false
+    @State private var exportedArchive: ExportedArchive?
+    @State private var exportFailure: String?
+    @State private var confirmingDelete = false
+    @State private var deletionFailure: String?
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == sessionID }
@@ -94,7 +102,11 @@ struct ScanDetailView: View {
                 apply(outcome)
             }
         }
-        .alert("Rename scan", isPresented: $isRenaming) {
+        // No noun, here or on the menu item that raises it: a dialog opened from
+        // inside one scan is already saying which one it renames. The delete
+        // confirmation below keeps its noun, because that one is destructive and
+        // this screen can also ask about a single *page*.
+        .alert("Rename", isPresented: $isRenaming) {
             TextField("Name", text: $renameText)
             Button("Save") {
                 if let capture { model.renameProject(capture, to: renameText) }
@@ -130,6 +142,33 @@ struct ScanDetailView: View {
                 primaryButton: .destructive(Text("Delete")) { deletePage(page) },
                 secondaryButton: .cancel())
         }
+        .alert("Delete scan?", isPresented: $confirmingDelete) {
+            Button("Delete", role: .destructive) { deleteSession() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deleteSessionMessage)
+        }
+        .alert(
+            "Couldn't delete",
+            isPresented: Binding(
+                get: { deletionFailure != nil },
+                set: { if !$0 { deletionFailure = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(deletionFailure ?? "")
+        }
+        .alert(
+            "Couldn't share project",
+            isPresented: Binding(
+                get: { exportFailure != nil },
+                set: { if !$0 { exportFailure = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(exportFailure ?? "")
+        }
+        .exportedArchiveSheet($exportedArchive)
         .sheet(isPresented: $isExporting) {
             if let session {
                 ScanExportSheet(
@@ -211,6 +250,12 @@ struct ScanDetailView: View {
 
     /// Drawn rather than native, because the selecting state replaces the whole
     /// bar (Done · "3 selected" · All) and the two have to be the same shape.
+    ///
+    /// The same three parts a shoot's bar has — back, the name centred, one
+    /// `ellipsis.circle` — so that opening a scan and opening a video, photo or
+    /// interval project are the same screen with different contents. That is
+    /// also why the name is *here* rather than 28pt inside the scroll: the title
+    /// of the thing you opened belongs in one place across the app.
     private var navigationBar: some View {
         HStack(spacing: 0) {
             Button {
@@ -225,31 +270,82 @@ struct ScanDetailView: View {
                 .foregroundStyle(LL.accent)
             }
             .buttonStyle(.plain)
-            Spacer(minLength: 0)
-            HStack(spacing: 18) {
-                Button("Select") {
-                    selection = []
-                    isSelecting = true
-                }
-                .font(.system(size: 17))
-                .foregroundStyle(LL.accent)
-                .buttonStyle(.plain)
-                .disabled(session?.pages.isEmpty ?? true)
-
-                Button {
-                    isExporting = true
-                } label: {
-                    Image(systemName: "square.and.arrow.up")
-                        .font(.system(size: 17))
-                        .foregroundStyle(LL.accent)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Export")
-                .disabled(session?.pages.isEmpty ?? true)
-            }
+            Spacer(minLength: 8)
+            sessionMenu
+        }
+        // Centred on the bar, not between the controls: an overlay so a long
+        // name is centred the way a native title is, and inset past both sides
+        // so it truncates rather than running under them.
+        .overlay {
+            Text(session?.detailTitle ?? "")
+                .font(.system(size: 17, weight: .semibold))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .padding(.horizontal, 78)
         }
         .padding(.horizontal, 16)
         .frame(height: 44)
+    }
+
+    /// Everything that acts on the whole scan, in one menu — the two controls
+    /// that used to sit in this bar included.
+    ///
+    /// Export and Share project are genuinely different exports and are drawn as
+    /// such: Export is the *pages* (PDF, images, a selection), Share project is
+    /// the whole capture folder as one `.lapse` — photographs, rectified copies,
+    /// grouping and paper stock — for importing into another LetsLapse.
+    private var sessionMenu: some View {
+        Menu {
+            Button {
+                renameText = session?.name ?? ""
+                isRenaming = true
+            } label: {
+                Label("Rename", systemImage: "pencil")
+            }
+            Button {
+                selection = []
+                isSelecting = true
+            } label: {
+                Label("Select", systemImage: "checkmark.circle")
+            }
+            .disabled(hasNoPages)
+            Button {
+                isExporting = true
+            } label: {
+                Label("Export", systemImage: "square.and.arrow.up")
+            }
+            .disabled(hasNoPages)
+            Button {
+                exportArchive()
+            } label: {
+                Label("Share project", systemImage: "shippingbox")
+            }
+            .disabled(isExportingArchive)
+            Button(role: .destructive) {
+                confirmingDelete = true
+            } label: {
+                Label("Delete…", systemImage: "trash")
+            }
+        } label: {
+            if isExportingArchive {
+                ProgressView()
+                    #if os(macOS)
+                    .controlSize(.small)
+                    #endif
+            } else {
+                Image(systemName: "ellipsis.circle")
+                    .font(.system(size: 17))
+                    .foregroundStyle(LL.accent)
+                    .contentShape(Rectangle().inset(by: -10))
+            }
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("Scan options")
+    }
+
+    private var hasNoPages: Bool {
+        session?.pages.isEmpty ?? true
     }
 
     private func selectionBar(_ session: ScanSession) -> some View {
@@ -278,32 +374,19 @@ struct ScanDetailView: View {
         .frame(height: 44)
     }
 
-    /// A large title instead of a header card: it buys 40pt and reads more
-    /// like a document.
+    /// What the scan *is*, with no title of its own: the name went to the bar
+    /// when this screen picked up a shoot's shape, so the header opens on the
+    /// facts — pages, stock, duration — and the correction state under them.
+    ///
+    /// Nothing was lost with the 28pt line. `subtitleLine` already carries the
+    /// date whenever a name has taken the title, precisely so the date survives
+    /// being replaced, and renaming moved to the menu the bar now holds.
     private func header(_ session: ScanSession) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(session.detailTitle)
-                    .font(.system(size: 28, weight: .bold))
-                // A scan is a document, and the one thing a document needs that
-                // a capture doesn't is a name someone chose. The date stays in
-                // the subtitle once it has been replaced here.
-                Button {
-                    renameText = session.name ?? ""
-                    isRenaming = true
-                } label: {
-                    Image(systemName: "pencil")
-                        .font(.system(size: 15, weight: .semibold))
-                        .foregroundStyle(LL.accent)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("Rename scan")
-            }
-            .padding(.top, 7)
             Text(session.subtitleLine)
                 .font(.system(size: 13.5))
                 .foregroundStyle(.secondary)
-                .padding(.top, 6)
+                .padding(.top, 10)
             HStack(spacing: 7) {
                 // While the automatic pass is running the header IS the
                 // progress: a scan lands here the instant its run ends, with a
@@ -618,6 +701,53 @@ struct ScanDetailView: View {
         model.deleteScanPage(page.number, from: capture)
         selection.remove(page.number)
         reloadToken += 1
+    }
+
+    /// Bundles the session into a portable `.lapse` and puts the share sheet up.
+    ///
+    /// Nothing scan-specific here on purpose: a scan's pages, its
+    /// `frames.timestamps`, its `documents.json` grouping and its rectified
+    /// copies all live inside the capture folder, and its paper stock rides in
+    /// the manifest with the rest of the project — so the archive a shoot writes
+    /// is already the archive a scan needs, and the import side puts it back in
+    /// this tab from `captureMode`.
+    private func exportArchive() {
+        guard let capture else { return }
+        isExportingArchive = true
+        Task { @MainActor in
+            defer { isExportingArchive = false }
+            do {
+                exportedArchive = ExportedArchive(url: try await model.exportProject(capture))
+            } catch {
+                exportFailure = error.localizedDescription
+            }
+        }
+    }
+
+    /// Throws the whole session away — every photograph, every rectified page.
+    /// Dismisses on success, because the screen it leaves behind describes a
+    /// project that no longer exists.
+    private func deleteSession() {
+        guard let capture else { return }
+        do {
+            try model.deleteCapture(capture)
+            dismiss()
+        } catch {
+            deletionFailure = error.localizedDescription
+        }
+    }
+
+    /// Counts what is actually at stake, corrected copies included — "8 pages"
+    /// understates a set where six of them were also rectified.
+    private var deleteSessionMessage: String {
+        guard let session else {
+            return "This permanently deletes the whole scan. There's no undo."
+        }
+        let pages = session.pageCount == 1 ? "1 page" : "\(session.pageCount) pages"
+        let corrected = session.correctedCount > 0
+            ? " and \(session.correctedCount == 1 ? "its corrected copy" : "their \(session.correctedCount) corrected copies")"
+            : ""
+        return "This permanently deletes all \(pages)\(corrected). There's no undo."
     }
 
     /// The manual re-run. Same pass the shoot already ran on its own — this is

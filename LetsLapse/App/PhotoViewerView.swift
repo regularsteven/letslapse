@@ -43,6 +43,11 @@ struct PhotoViewerView: View {
     /// agree with what is on screen here.
     @State private var preset: PhotoPreset = .default
     @State private var adjustments: PhotoAdjustments = .neutral
+    /// Which of the three states the live values are in. Re-resolved on every
+    /// change (see `refreshState`), so a slider that moves off the applied
+    /// preset flips the pill to Edited on the same frame it moves — not on
+    /// save, and not on the next screen.
+    @State private var presetState: PresetState = .original
     @State private var loaded = false
 
     @State private var rendered: CGImage?
@@ -55,6 +60,18 @@ struct PhotoViewerView: View {
     @State private var isNamingPreset = false
     @State private var newPresetName = ""
     @State private var presetPendingDelete: CustomPreset?
+    /// A chip tap held back for confirmation: applying it from Edited would
+    /// discard the manual adjustments on screen.
+    @State private var pendingApply: PresetApplyRequest?
+    /// The "Save as preset?" offer raised on the way out of an Edited grade.
+    @State private var isOfferingPresetSave = false
+    /// Set while that offer is what sent the user into the naming alert, so a
+    /// completed save leaves the editor rather than dropping them back into it.
+    @State private var exitsAfterPresetSave = false
+    /// "Not now" on the inline offer, where there is no exit to leave through.
+    /// Cleared whenever a preset is applied, so a fresh round of edits is
+    /// offered again rather than silently never asking twice.
+    @State private var declinedPresetSave = false
 
     /// The still's display aspect (w ÷ h). nil until the metadata probe lands —
     /// see `mediaFrame(in:)` for what the layout does in the meantime.
@@ -117,9 +134,16 @@ struct PhotoViewerView: View {
         model.captures.first { $0.id == captureID }
     }
 
-    /// The saved grade the current selection exactly matches, if any.
-    private var activeCustomPreset: CustomPreset? {
-        presetStore.matching(basePreset: preset, adjustments: adjustments)
+    /// True when this editor owns the way out — the iOS back button it draws
+    /// itself. When it doesn't (the Mac window's own close button, the
+    /// fullscreen sheet's chrome) there is no exit to intercept, so the
+    /// "Save as preset?" offer sits inline in the controls instead.
+    private var ownsExit: Bool {
+        #if os(iOS)
+        return showsBackButton
+        #else
+        return false
+        #endif
     }
 
     var body: some View {
@@ -156,6 +180,7 @@ struct PhotoViewerView: View {
             guard !loaded, let capture else { return }
             preset = model.photoPreset(for: capture)
             adjustments = model.photoAdjustments(for: capture)
+            presetState = model.presetState(for: capture)
             loaded = true
             let viewedURL = url
             // First, because it sizes the layout: a metadata-only read, well
@@ -190,12 +215,26 @@ struct PhotoViewerView: View {
             persist()
             await render()
         }
+        .overlay(alignment: .bottom) {
+            if isOfferingPresetSave {
+                presetSaveOffer
+                    .padding(16)
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+        }
         .alert("Save as preset", isPresented: $isNamingPreset) {
             TextField("Preset name", text: $newPresetName)
             Button("Save") { saveCurrentAsPreset() }
-            Button("Cancel", role: .cancel) {}
+            Button("Cancel", role: .cancel) { exitsAfterPresetSave = false }
         } message: {
             Text("Saves the \(preset.displayName) grade and these adjustments so you can apply them to another photo.")
+        }
+        .alert(item: $pendingApply) { request in
+            Alert(
+                title: Text(request.confirmationTitle),
+                message: Text(request.confirmationMessage),
+                primaryButton: .destructive(Text(request.confirmationButton)) { apply(request) },
+                secondaryButton: .cancel())
         }
         .alert(item: $presetPendingDelete) { target in
             Alert(
@@ -327,7 +366,7 @@ struct PhotoViewerView: View {
         #if os(iOS)
         if showsBackButton {
             HStack {
-                Button { dismiss() } label: {
+                Button { requestExit() } label: {
                     Image(systemName: "chevron.left")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundStyle(.white)
@@ -385,11 +424,18 @@ struct PhotoViewerView: View {
 
     private func controlStack(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
+            stateRow
             presetStrip
 
             // No disclosure to open: with the picture pinned and the controls
             // scrolling, hiding the sliders behind an accordion only adds a tap.
             sliderPanel(expanded: isWide)
+
+            // Where there is no exit of ours to intercept, the offer lives
+            // here instead — see `ownsExit`.
+            if presetState.isEdited, !ownsExit, !declinedPresetSave {
+                presetSaveOffer
+            }
 
             Button {
                 newPresetName = ""
@@ -411,23 +457,47 @@ struct PhotoViewerView: View {
         }
     }
 
+    /// The live state readout. It is the only thing on screen that can say
+    /// "Edited", which is a state no chip stands for.
+    private var stateRow: some View {
+        HStack(spacing: 8) {
+            Text("Preset")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(.secondary)
+            PresetStatePill(state: presetState, accent: accentColor, onAccent: pillTextColor)
+            Spacer(minLength: 0)
+        }
+    }
+
+    /// Black on the editors' amber, white on the Mac's accent — the same pair
+    /// the chips use.
+    private var pillTextColor: Color {
+        #if os(iOS)
+        return .black
+        #else
+        return .white
+        #endif
+    }
+
     private var presetStrip: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(PhotoPreset.strip) { candidate in
-                    // A built-in chip is active only when it is the selected
-                    // base *and* no saved preset claims the current values.
+                    // The chips follow the state: a preset lights up only when
+                    // the values on screen are still exactly what it gave us.
                     chip(
                         label: candidate.displayName,
-                        isActive: candidate == preset && activeCustomPreset == nil
+                        isActive: candidate == .original
+                            ? presetState.isOriginal
+                            : presetState.isNamed(candidate.presetID)
                     ) {
-                        select(preset: candidate)
+                        request(.builtIn(candidate))
                     }
                     .accessibilityLabel("\(candidate.displayName) grade")
                 }
                 ForEach(presetStore.presets) { custom in
-                    chip(label: custom.name, isActive: activeCustomPreset?.id == custom.id) {
-                        apply(custom)
+                    chip(label: custom.name, isActive: presetState.isNamed(custom.id)) {
+                        request(.custom(custom))
                     }
                     .contextMenu {
                         Button(role: .destructive) {
@@ -442,6 +512,48 @@ struct PhotoViewerView: View {
             .padding(.horizontal, 2)
             .padding(.vertical, 2)
         }
+    }
+
+    /// "Save as preset?" — the offer made when an Edited grade is about to be
+    /// left behind. Inline rather than a blocking alert: the edits are already
+    /// safe on the project, so this is an invitation to name a look, not a
+    /// warning about losing one.
+    private var presetSaveOffer: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Save these edits as a preset?")
+                .font(.system(size: 14.5, weight: .semibold))
+            Text("Your adjustments stay on this project either way. Saving them makes the look reusable.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 10) {
+                // Where the offer is standing in for an exit we don't own,
+                // declining dismisses the offer — not the editor.
+                Button("Not now") {
+                    if ownsExit {
+                        finishExit()
+                    } else {
+                        withAnimation(.easeOut(duration: 0.2)) { declinedPresetSave = true }
+                    }
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .buttonStyle(.plain)
+                Spacer(minLength: 0)
+                Button("Save as Preset") {
+                    isOfferingPresetSave = false
+                    exitsAfterPresetSave = ownsExit
+                    newPresetName = ""
+                    isNamingPreset = true
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
     }
 
     private func chip(label: String, isActive: Bool, action: @escaping () -> Void) -> some View {
@@ -464,20 +576,53 @@ struct PhotoViewerView: View {
             alwaysExpanded: expanded,
             asShotKelvin: asShotKelvin,
             accent: accentColor)
-            .onChange(of: adjustments) { _ in scheduleUpdate() }
+            // Every tick: the state has to be true of the values *now*, not of
+            // the values the debounced write eventually persists.
+            .onChange(of: adjustments) { _ in
+                refreshState()
+                scheduleUpdate()
+            }
     }
 
     // MARK: - Actions
 
-    private func select(preset newPreset: PhotoPreset) {
-        preset = newPreset
+    /// A chip tap. From Edited it discards work the user did by hand, so it
+    /// asks first; from Original or another preset it applies immediately.
+    private func request(_ target: PresetApplyRequest.Target) {
+        let request = PresetApplyRequest(target: target)
+        guard presetState.isEdited else {
+            apply(request)
+            return
+        }
+        pendingApply = request
+    }
+
+    private func apply(_ request: PresetApplyRequest) {
+        switch request.target {
+        case .builtIn(let candidate):
+            preset = candidate
+            // Original is "no filter": the sliders go with the preset.
+            adjustments = .neutral
+            presetState = candidate == .original
+                ? .original
+                : .named(id: candidate.presetID, snapshot: candidate.snapshot)
+        case .custom(let custom):
+            preset = custom.basePreset
+            adjustments = custom.adjustments
+            presetState = .named(id: custom.id, snapshot: custom.snapshot)
+        }
+        declinedPresetSave = false
         scheduleUpdate()
     }
 
-    private func apply(_ custom: CustomPreset) {
-        preset = custom.basePreset
-        adjustments = custom.adjustments
-        scheduleUpdate()
+    /// Re-derives the state from the live values, anchored on the state they
+    /// came from — the whole divergence rule, in one call.
+    private func refreshState() {
+        presetState = PresetStateResolver.resolve(
+            preset: preset,
+            adjustments: adjustments,
+            anchor: presetState,
+            customPresets: presetStore.presets)
     }
 
     /// Restarts the debounce window. Both the manifest write and the re-render
@@ -487,16 +632,45 @@ struct PhotoViewerView: View {
     }
 
     /// Writes the current grade onto the project. Cheap enough after debouncing
-    /// — `setPhotoPreset`/`setPhotoAdjustments` both no-op when nothing changed.
+    /// — `setPhotoGrade` no-ops when nothing changed.
     private func persist() {
         guard let capture else { return }
-        model.setPhotoPreset(preset, for: capture)
-        model.setPhotoAdjustments(adjustments, for: capture)
+        model.setPhotoGrade(
+            preset: preset, adjustments: adjustments, state: presetState, for: capture)
     }
 
     private func saveCurrentAsPreset() {
-        presetStore.save(name: newPresetName, basePreset: preset, adjustments: adjustments)
+        if let saved = presetStore.save(
+            name: newPresetName, basePreset: preset, adjustments: adjustments) {
+            // Naming a look is what takes a project out of Edited: the values
+            // haven't moved, but they now have a preset behind them.
+            presetState = .named(id: saved.id, snapshot: saved.snapshot)
+        }
         newPresetName = ""
+        guard exitsAfterPresetSave else {
+            scheduleUpdate()
+            return
+        }
+        exitsAfterPresetSave = false
+        finishExit()
+    }
+
+    /// Back, with the exit-time offer in the way when there is one to make.
+    private func requestExit() {
+        guard presetState.isEdited else {
+            finishExit()
+            return
+        }
+        withAnimation(.easeOut(duration: 0.2)) { isOfferingPresetSave = true }
+    }
+
+    /// Leaves the editor. The debounced write may not have run yet, so the
+    /// grade is persisted here rather than trusted to a task that is about to
+    /// be torn down with the view.
+    private func finishExit() {
+        isOfferingPresetSave = false
+        persist()
+        dismiss()
     }
 
     private func render() async {

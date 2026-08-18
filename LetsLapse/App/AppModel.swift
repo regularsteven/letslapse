@@ -131,6 +131,14 @@ final class AppModel: ObservableObject {
         /// existed have no value, and nil resolves to `.neutral` (the preset
         /// on its own). Read it through `AppModel.photoAdjustments(for:)`.
         var adjustments: PhotoAdjustments?
+        /// Which of the three preset states the two fields above are in:
+        /// Original (no edits at all), a named preset with the snapshot it was
+        /// applied from, or Edited. The values say what to render; this says
+        /// where the look came from, which is what the pill shows and what the
+        /// export path branches on. Optional so projects saved before the state
+        /// model existed still decode — nil is derived from the values by
+        /// `AppModel.presetState(for:)`, and stamped by the v2 migration.
+        var presetState: PresetState?
         /// How long this project's burst clips ease into and out of slow
         /// motion, in seconds. Optional in both directions: nil means "follow
         /// the app default" (resolved at render time), 0 means "this project
@@ -827,6 +835,19 @@ final class AppModel: ObservableObject {
     /// run finishes, because a finished scan is a document to look at rather
     /// than footage to configure a blend from — see `finishScannerCapture`.
     @Published var requestedScanDetailID: UUID?
+
+    /// "Open this project, wherever it lives." A scan is listed in exactly one
+    /// place — its own tab — so asking for the Projects tab would land on a
+    /// screen its own list doesn't show it in. Used by archive import, which is
+    /// handed whatever someone shared and cannot know which kind it is until it
+    /// has read the manifest.
+    func show(_ capture: CaptureProject) {
+        if isScannerProject(capture) {
+            requestedScanDetailID = capture.id
+        } else {
+            requestedProjectDetailID = capture.id
+        }
+    }
 
     /// How far the automatic perspective pass has got, per scan.
     ///
@@ -5000,6 +5021,7 @@ final class AppModel: ObservableObject {
             collections = (manifest.collections ?? []).sorted { $0.createdAt < $1.createdAt }
             gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
             stampLegacyDefaultPresetsIfNeeded()
+            stampPresetStatesIfNeeded()
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
@@ -5028,17 +5050,57 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
+    /// One-time stamp for the preset-state model: every project that predates
+    /// it gets the state its own values describe, written into the sidecar so
+    /// the state is a stored fact from here on rather than a derivation.
+    ///
+    /// No look changes — the resolver reads the numbers already on the project.
+    /// A project sitting on a saved preset's exact values comes out `.named`
+    /// with that preset's current definition as its snapshot, which is the best
+    /// available answer for a project that never recorded one.
+    private func stampPresetStatesIfNeeded() {
+        guard gradingSchemaVersion < 2 else { return }
+        gradingSchemaVersion = 2
+        let customPresets = CustomPresetStore.shared.presets
+        for index in captures.indices where captures[index].presetState == nil {
+            captures[index].presetState = PresetStateResolver.resolve(
+                preset: PhotoPreset.resolve(captures[index].selectedPreset),
+                adjustments: captures[index].adjustments ?? .neutral,
+                anchor: .edited,
+                customPresets: customPresets)
+        }
+        try? persistLibrary()
+    }
+
     private func persistLibrary() throws {
         // Every path that adds, converts, rotates or deletes a project's files
         // ends here, so this is the one place that has to drop the size cache.
         projectStorageBytes.removeAll()
         try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
-        var manifest = LibraryManifest(captures: captures, blends: blends, collections: collections)
+        var manifest = LibraryManifest(
+            captures: captures.map(stampingPresetState), blends: blends, collections: collections)
         manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(manifest)
         try data.write(to: manifestURL, options: .atomic)
+    }
+
+    /// A capture with its preset state written out explicitly.
+    ///
+    /// A freshly registered project has no state yet — every registration path
+    /// would otherwise have to remember to set one — and `presetState(for:)`
+    /// derives the right answer for it (`.original`: no preset, no sliders).
+    /// This makes that answer a stored fact rather than a derivation, so the
+    /// sidecar says what state the project is in even years from now, when the
+    /// derivation rules may have moved on. Copies rather than mutating
+    /// `captures`: persisting is not a model change, and the in-memory value
+    /// derives identically.
+    private func stampingPresetState(_ capture: CaptureProject) -> CaptureProject {
+        guard capture.presetState == nil else { return capture }
+        var stamped = capture
+        stamped.presetState = presetState(for: capture)
+        return stamped
     }
 
     private var applicationSupportURL: URL {
@@ -5883,7 +5945,7 @@ final class AppModel: ObservableObject {
                 }
                 guard importAgain else {
                     finishArchiveImport()
-                    requestedProjectDetailID = existing.id
+                    show(existing)
                     return
                 }
                 archiveImport?.phase = .installing
@@ -5927,7 +5989,7 @@ final class AppModel: ObservableObject {
             finishArchiveImport()
             // Land on the project itself rather than opening a blend flow over
             // it: importing is "here is the thing", not "start editing it".
-            requestedProjectDetailID = capture.id
+            show(capture)
         } catch is CancellationError {
             finishArchiveImport()
         } catch DirectoryArchiveError.cancelled {
@@ -5953,17 +6015,14 @@ final class AppModel: ObservableObject {
 
     /// The project's whole grade — preset plus sliders — as one value, for the
     /// render and export paths that take both together.
+    ///
+    /// An Original project grades to the identity no matter what numbers are
+    /// stored beside it: Original *is* "no filter", and every render and bake
+    /// in the app comes through here, so that rule is enforced once.
     func photoGrade(for capture: CaptureProject) -> PhotoGrade {
-        PhotoGrade(preset: photoPreset(for: capture), adjustments: photoAdjustments(for: capture))
-    }
-
-    /// Selects a colour grade for a capture and persists it. The stored original
-    /// files are never touched — only the preset name changes.
-    func setPhotoPreset(_ preset: PhotoPreset, for capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
-        guard captures[index].selectedPreset != preset.rawValue else { return }
-        captures[index].selectedPreset = preset.rawValue
-        try? persistLibrary()
+        guard !presetState(for: capture).isOriginal else { return .identity }
+        return PhotoGrade(
+            preset: photoPreset(for: capture), adjustments: photoAdjustments(for: capture))
     }
 
     /// The manual slider grade layered on the preset. Projects saved before the
@@ -5972,24 +6031,73 @@ final class AppModel: ObservableObject {
         capture.adjustments ?? .neutral
     }
 
-    /// Stores the manual grade for a photo capture. Like the preset, this only
-    /// records numbers — the file on disk is untouched until an export bakes
-    /// them in.
-    func setPhotoAdjustments(_ adjustments: PhotoAdjustments, for capture: CaptureProject) {
-        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
-        guard captures[index].adjustments != adjustments else { return }
-        captures[index].adjustments = adjustments
-        try? persistLibrary()
+    // MARK: Preset state
+
+    /// Which of the three states this project's grade is in.
+    ///
+    /// Stored on the project since the state model shipped. Anything older —
+    /// and anything imported from an archive written before it — is derived
+    /// from the values themselves, which is exactly what the resolver does with
+    /// no anchor to go on.
+    func presetState(for capture: CaptureProject) -> PresetState {
+        if let stored = capture.presetState { return stored }
+        return PresetStateResolver.resolve(
+            preset: PhotoPreset.resolve(capture.selectedPreset),
+            adjustments: capture.adjustments ?? .neutral,
+            anchor: .edited,
+            customPresets: CustomPresetStore.shared.presets)
     }
 
-    /// Applies a saved grade wholesale: its base preset and its slider values,
-    /// in one persisted change.
+    /// Applies a built-in preset. Original is the destructive one: it clears
+    /// every adjustment as well as the preset, because Original means the file
+    /// exactly as captured.
+    func applyPreset(_ preset: PhotoPreset, for capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        let state: PresetState = preset == .original
+            ? .original
+            : .named(id: preset.presetID, snapshot: preset.snapshot)
+        write(
+            preset: preset, adjustments: .neutral, state: state,
+            at: index)
+    }
+
+    /// Applies a saved preset wholesale: its base preset and its slider values,
+    /// plus the snapshot that pins what "this preset" meant at this moment.
     func applyCustomPreset(_ preset: CustomPreset, for capture: CaptureProject) {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
-        guard captures[index].selectedPreset != preset.basePreset.rawValue
-                || captures[index].adjustments != preset.adjustments else { return }
-        captures[index].selectedPreset = preset.basePreset.rawValue
-        captures[index].adjustments = preset.adjustments
+        write(
+            preset: preset.basePreset, adjustments: preset.adjustments,
+            state: .named(id: preset.id, snapshot: preset.snapshot),
+            at: index)
+    }
+
+    /// The editors' write-back: the live values and the state they resolved to,
+    /// in one persisted change. The stored original files are never touched —
+    /// this only records numbers, which an export bakes in later.
+    func setPhotoGrade(
+        preset: PhotoPreset,
+        adjustments: PhotoAdjustments,
+        state: PresetState,
+        for capture: CaptureProject
+    ) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        write(preset: preset, adjustments: adjustments, state: state, at: index)
+    }
+
+    /// The one place a project's grade changes, so no path can leave the state
+    /// disagreeing with the values it describes.
+    private func write(
+        preset: PhotoPreset,
+        adjustments: PhotoAdjustments,
+        state: PresetState,
+        at index: Int
+    ) {
+        guard captures[index].selectedPreset != preset.rawValue
+                || captures[index].adjustments != adjustments
+                || captures[index].presetState != state else { return }
+        captures[index].selectedPreset = preset.rawValue
+        captures[index].adjustments = adjustments
+        captures[index].presetState = state
         try? persistLibrary()
     }
 
@@ -5999,14 +6107,20 @@ final class AppModel: ObservableObject {
     /// as I'm looking at it" export starts here; the platform tails (Photos on
     /// iOS, a save panel on macOS) decide where the file goes.
     ///
-    /// When the grade is `Original` *and* the sliders are neutral the original
-    /// URL comes back with `isTemporary` false, so an ungraded project still
-    /// hands over its DNG as a DNG and its ProRes as ProRes. Anything else is
-    /// rendered (a still becomes a JPEG, a clip is re-encoded) into a temp file
-    /// the caller owns and must delete, leaving the on-disk original alone.
+    /// An **Original** project hands back its source URL with `isTemporary`
+    /// false: no resize, no re-encode, no filter, no format change — the file
+    /// on disk, byte for byte, so a DNG stays a DNG and a ProRes stays ProRes.
+    /// (For a blended output that file *is* the app's blended result; Original
+    /// means "before any preset", not "back to the raw frames".) Anything else
+    /// is rendered — a still becomes a JPEG, a clip is re-encoded — into a temp
+    /// file the caller owns and must delete, leaving the on-disk original alone.
     func gradedExportCopy(
         of url: URL, for capture: CaptureProject
     ) async throws -> (url: URL, isTemporary: Bool) {
+        // The state first, and the values only as a second net: Original is a
+        // promise about the bytes that leave the app, not a fact derived from
+        // whatever numbers happen to be sitting on the project.
+        guard !presetState(for: capture).isOriginal else { return (url, false) }
         let grade = photoGrade(for: capture)
         guard !grade.isIdentity else { return (url, false) }
         let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
