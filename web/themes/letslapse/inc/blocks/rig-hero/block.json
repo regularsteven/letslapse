@@ -2,7 +2,7 @@
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
 	"name": "letslapse/rig-hero",
-	"version": "0.3.0",
+	"version": "0.4.0",
 	"title": "Rig hero",
 	"category": "media",
 	"icon": "camera-alt",
@@ -51,7 +51,17 @@
 		},
 		"markLabel": { "type": "string" },
 		"markSize": { "type": "number" },
-		"speed": { "type": "number" }
+		"speed": { "type": "number" },
+		"backgroundId": {
+			"type": "number",
+			"default": 0
+		},
+		"backgroundUrl": {
+			"type": "string",
+			"default": ""
+		},
+		"focalPoint": { "type": "object" },
+		"scrim": { "type": "number" }
 	},
 	"editorScript": "file:./index.js",
 	"editorStyle": "file:./editor.css",

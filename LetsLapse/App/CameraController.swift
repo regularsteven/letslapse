@@ -656,6 +656,28 @@ final class CameraController: NSObject, ObservableObject {
         didSet { checkScheduledStopCount() }
     }
 
+    /// What a second of recording will weigh, from the encoder rather than
+    /// from a table — the number the capture screen's headroom chip is only as
+    /// honest as.
+    ///
+    /// `AVCaptureMovieFileOutput` will state the settings it is actually about
+    /// to write with, and for the compressed codecs that includes the average
+    /// bitrate it has picked for this format, this rate and this device. A
+    /// per-pixel constant cannot know that a 100 fps burst format is encoded
+    /// far harder than a 30 fps one on the same sensor.
+    ///
+    /// nil when there is no connection yet, or when the codec has no bitrate
+    /// to state — ProRes is intra-frame and sized by its own arithmetic, which
+    /// `CaptureCostKey.modelledCost` does honestly.
+    var movieBytesPerSecond: Double? {
+        guard let connection = movieOutput.connection(with: .video) else { return nil }
+        let settings = movieOutput.outputSettings(for: connection)
+        guard let compression = settings[AVVideoCompressionPropertiesKey] as? [String: Any],
+              let bitsPerSecond = compression[AVVideoAverageBitRateKey] as? NSNumber,
+              bitsPerSecond.doubleValue > 0 else { return nil }
+        return bitsPerSecond.doubleValue / 8
+    }
+
     /// Mirrors "a shoot is running" onto the shared camera roster, so the Mac's
     /// Camera menu greys out instead of offering a switch the session would
     /// silently refuse. All three flags are written on the main thread.

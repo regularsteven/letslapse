@@ -7,7 +7,7 @@ Description: Dark, precision-instrument block theme for LetsLapse. Ships the ble
 Requires at least: 6.5
 Tested up to: 6.8
 Requires PHP: 7.4
-Version: 0.3.0
+Version: 0.4.0
 License: GNU General Public License v2 or later
 License URI: http://www.gnu.org/licenses/gpl-2.0.html
 Text Domain: letslapse
@@ -348,4 +348,110 @@ p.is-style-ll-chip {
 
 .ll-machine-meta p {
 	margin: 0;
+}
+
+/* --- Photographs ------------------------------------------------------- *
+ * Two shapes, both from the block style variations registered in
+ * inc/blocks.php: a framed shot that sits in a column, and a band that runs
+ * the full width and gives the page somewhere to breathe between sections.
+ * ---------------------------------------------------------------------- */
+
+.wp-block-image.is-style-ll-shot img {
+	display: block;
+	width: 100%;
+	border: 1px solid var(--ll-rule-firm);
+	border-radius: 12px;
+}
+
+.wp-block-image.is-style-ll-shot figcaption {
+	margin-top: 10px;
+	margin-bottom: 0;
+	text-align: left;
+}
+
+.wp-block-columns.ll-shots {
+	gap: 20px;
+}
+
+.wp-block-columns.ll-shots .wp-block-image {
+	margin: 0;
+}
+
+.wp-block-image.is-style-ll-band,
+.wp-block-cover.is-style-ll-band {
+	position: relative;
+	margin-block: 0;
+}
+
+/* Core cancels the full-width breakout for anything inside a padded container
+   that sits inside another one — sound, except ours adds no padding of its
+   own: the main group holds all of it. Hand the breakout back, or a band ends
+   up boxed in at content width. */
+.ll-main > .wp-block-post-content > .alignfull,
+.ll-main > .entry-content > .alignfull {
+	margin-left: calc(-1 * var(--wp--style--root--padding-left, clamp(20px, 5vw, 56px)));
+	margin-right: calc(-1 * var(--wp--style--root--padding-right, clamp(20px, 5vw, 56px)));
+	max-width: none;
+	width: auto;
+}
+
+.wp-block-image.is-style-ll-band img {
+	display: block;
+	width: 100%;
+	max-height: min(46vh, 420px);
+	object-fit: cover;
+}
+
+/* The page is dark and the photograph is not — fade its ends into the page
+   rather than butting a lit edge against the background. */
+.wp-block-image.is-style-ll-band::after {
+	content: "";
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+	background: linear-gradient(
+		180deg,
+		var(--ll-page) 0%,
+		rgba(10, 15, 28, 0) 24%,
+		rgba(10, 15, 28, 0) 76%,
+		var(--ll-page) 100%
+	);
+}
+
+/* --- Picture beside prose ---------------------------------------------- */
+
+.wp-block-media-text.ll-media {
+	gap: clamp(24px, 4vw, 48px);
+	align-items: center;
+}
+
+.wp-block-media-text.ll-media .wp-block-media-text__media img {
+	border: 1px solid var(--ll-rule-firm);
+	border-radius: 14px;
+}
+
+.wp-block-media-text.ll-media .wp-block-media-text__content {
+	padding: 0;
+}
+
+.ll-media .wp-block-media-text__content > * + * {
+	margin-block-start: 14px;
+}
+
+.ll-media h3 {
+	font-size: clamp(20px, 2.4vw, 28px);
+	line-height: 1.2;
+	margin: 0;
+}
+
+.ll-media p {
+	font-size: var(--wp--preset--font-size--small, 13.5px);
+	line-height: 1.6;
+	color: var(--ll-muted);
+	margin: 0;
+}
+
+.ll-media strong {
+	color: var(--ll-body);
+	font-weight: 600;
 }

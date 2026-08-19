@@ -26,12 +26,16 @@
 	var useInnerBlocksProps = blockEditor.useInnerBlocksProps || blockEditor.__experimentalUseInnerBlocksProps;
 	var InnerBlocks = blockEditor.InnerBlocks;
 	var InspectorControls = blockEditor.InspectorControls;
+	var MediaUpload = blockEditor.MediaUpload;
+	var MediaUploadCheck = blockEditor.MediaUploadCheck;
 
 	var PanelBody = components.PanelBody;
 	var RangeControl = components.RangeControl;
 	var SelectControl = components.SelectControl;
 	var ToggleControl = components.ToggleControl;
 	var TextControl = components.TextControl;
+	var Button = components.Button;
+	var FocalPointPicker = components.FocalPointPicker;
 
 	var data = window.letsLapseRig || {};
 	var schema = data.schema || {};
@@ -49,6 +53,15 @@
 
 	function effective( attributes, key ) {
 		return typeof attributes[ key ] === 'number' ? attributes[ key ] : rule( key )[ 'default' ];
+	}
+
+	/** Where the photo is cropped around, as a CSS object-position. */
+	function objectPosition( attributes ) {
+		var focal = attributes.focalPoint || {};
+		var x = typeof focal.x === 'number' ? focal.x : 0.5;
+		var y = typeof focal.y === 'number' ? focal.y : 0.5;
+
+		return Math.round( x * 10000 ) / 100 + '% ' + Math.round( y * 10000 ) / 100 + '%';
 	}
 
 	/** The mark's default alt text follows the variant until someone sets one. */
@@ -78,6 +91,55 @@
 				setAttributes( update );
 			}
 		} );
+	}
+
+	function photoPanel( attributes, setAttributes ) {
+		var url = attributes.backgroundUrl || '';
+
+		return el(
+			PanelBody,
+			{ title: __( 'Photograph', 'letslapse' ), initialOpen: !! url },
+			el(
+				MediaUploadCheck,
+				null,
+				el( MediaUpload, {
+					allowedTypes: [ 'image' ],
+					value: attributes.backgroundId || 0,
+					onSelect: function ( media ) {
+						setAttributes( { backgroundId: media.id, backgroundUrl: media.url } );
+					},
+					render: function ( picker ) {
+						return el( Button, {
+							variant: 'secondary',
+							onClick: picker.open
+						}, url ? __( 'Replace photograph', 'letslapse' ) : __( 'Choose a photograph', 'letslapse' ) );
+					}
+				} )
+			),
+			url
+				? el( Button, {
+					variant: 'tertiary',
+					isDestructive: true,
+					onClick: function () {
+						setAttributes( { backgroundId: 0, backgroundUrl: '', focalPoint: undefined } );
+					}
+				}, __( 'Remove photograph', 'letslapse' ) )
+				: el( 'p', { className: 'll-rig-editor__note' }, __( 'Optional. Without one the stage keeps its plain glow.', 'letslapse' ) ),
+			url && FocalPointPicker
+				? el( FocalPointPicker, {
+					label: __( 'Focal point', 'letslapse' ),
+					help: __( 'What stays in frame as the hero is cropped.', 'letslapse' ),
+					url: url,
+					value: attributes.focalPoint || { x: 0.5, y: 0.5 },
+					onChange: function ( next ) {
+						setAttributes( { focalPoint: next } );
+					}
+				} )
+				: null,
+			url
+				? numberControl( attributes, setAttributes, 'scrim', __( 'Scrim', 'letslapse' ), __( 'How far the photograph is dimmed under the copy. The rig and the words have to stay legible — that is what this is for.', 'letslapse' ), 0.01 )
+				: null
+		);
 	}
 
 	function inspector( attributes, setAttributes ) {
@@ -127,6 +189,7 @@
 					}
 				} )
 			),
+			photoPanel( attributes, setAttributes ),
 			el(
 				PanelBody,
 				{ title: __( 'Copy', 'letslapse' ), initialOpen: false },
@@ -193,9 +256,16 @@
 			classes.push( 'has-stage' );
 		}
 
+		var photo = attributes.backgroundUrl || '';
+
+		if ( photo ) {
+			classes.push( 'has-photo' );
+		}
+
 		var style = {
 			'--ll-rig-sp': String( Math.round( ( 1 / speed ) * 1000 ) / 1000 ),
-			'--ll-rig-size': size + 'px'
+			'--ll-rig-size': size + 'px',
+			'--ll-rig-scrim': String( effective( attributes, 'scrim' ) )
 		};
 
 		var blockProps = useBlockProps( { className: classes.join( ' ' ), style: style } );
@@ -213,6 +283,13 @@
 			el(
 				'div',
 				blockProps,
+				photo ? el( 'img', {
+					className: 'll-rig-hero__photo',
+					src: photo,
+					alt: '',
+					style: { objectPosition: objectPosition( attributes ) }
+				} ) : null,
+				photo ? el( 'div', { className: 'll-rig-hero__scrim', 'aria-hidden': 'true' } ) : null,
 				el(
 					'div',
 					{ className: 'll-rig-hero__mark' },

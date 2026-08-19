@@ -233,6 +233,18 @@ struct CaptureView: View {
     @State private var recentHeroURL: URL?
     private let tick = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
+    /// How much shoot is left on the device in the armed configuration, and
+    /// when it was last worked out. See `CaptureHeadroom.swift` for why the
+    /// capture screen carries this at all.
+    @State private var headroom: CaptureHeadroom.Reading?
+    @State private var headroomSampledAt: Date?
+    /// Free space when the run in progress started, and the shape it is
+    /// shooting — the pair a finished run is measured from, and the only
+    /// reason this screen knows what a frame of anything really weighs.
+    @State private var runStartFreeBytes: Int64?
+    @State private var runCostKey: CaptureCostKey?
+    @State private var runStartedAt: Date?
+
     init(intent: CaptureIntent = CaptureIntent()) {
         self.intent = intent
         // An explicit intent (effect cards) wins; otherwise open in the
@@ -340,9 +352,24 @@ struct CaptureView: View {
         .onReceive(tick) { date in
             now = date
             checkTarget()
+            // Cheap on every tick — it re-prices the space it already knows
+            // about, and only goes to the disk every `headroomSampleSeconds`.
+            refreshHeadroom()
             if let deadline = delayedStartAt, date >= deadline {
                 delayedStartAt = nil
                 shutterAction()
+            }
+        }
+        // A run's own consumption is the only honest source for what this
+        // device's frames really weigh, so every run is weighed. See
+        // `CaptureCostStore`.
+        .onChange(of: isCapturing) { running in
+            if running {
+                beginHeadroomRunSample()
+            } else {
+                endHeadroomRunSample(
+                    frames: finishedRunFrameCount,
+                    seconds: runStartedAt.map { Date().timeIntervalSince($0) } ?? 0)
             }
         }
     }
@@ -640,6 +667,10 @@ struct CaptureView: View {
         // anyway, so re-saving is a no-op there.
         RecordingSettingsStore.save(captureMode: mode)
         refreshRecentCapture()
+        // Before the first tick: the headroom chip is a thing you read while
+        // deciding whether to start, so it should not arrive half a second
+        // after the screen it is on.
+        refreshHeadroom(force: true)
         testRig.camera = camera
         if ProcessInfo.processInfo.environment["LL_TESTRIG"] == "chip" {
             testRig.seedDemoChip()
@@ -1008,9 +1039,40 @@ struct CaptureView: View {
                 .accessibilityLabel("Close capture")
             }
 
-            Spacer()
+            Spacer(minLength: 8)
 
-            formatPill
+            // The two chips are sized as a pair so the headroom readout gives
+            // ground rather than the format pill. A ramp shoot's pill can carry
+            // four tokens ("1080p · 25 · ↑4K · Stab") and a Scanner shoot's
+            // sensor frame is long too; with the close button and a full
+            // headroom chip that is more than a 393 pt screen holds. The order
+            // of surrender is deliberate — the free-space half first, since the
+            // shot count is the part you act on, and the whole chip only if
+            // even that doesn't fit. The pill never gives ground: it is a
+            // control, and the thing beside it is a readout.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    headroomChip(compact: false)
+                    formatPill
+                }
+                HStack(spacing: 8) {
+                    headroomChip(compact: true)
+                    formatPill
+                }
+                formatPill
+            }
+        }
+    }
+
+    /// The storage-headroom readout, immediately ahead of the format pill that
+    /// governs it. Drawn during a run as well as before one — a long interval
+    /// shoot is exactly the case where watching the number come down is worth
+    /// more than knowing where it started.
+    @ViewBuilder
+    private func headroomChip(compact: Bool = false) -> some View {
+        if let headroom {
+            CaptureHeadroomChip(reading: headroom, showsFreeSpace: !compact)
+                .equatable()
         }
     }
 
@@ -1090,7 +1152,10 @@ struct CaptureView: View {
                     }
                 }
                 Spacer()
-                formatPill
+                VStack(spacing: 8) {
+                    formatPill
+                    headroomChip(compact: true)
+                }
                 Spacer()
                 if !isCapturing {
                     zoomChips
@@ -1621,6 +1686,123 @@ struct CaptureView: View {
             return sensorSummaryLabel(sensor)
         }
         return camera.selectedResolution.stillLabel
+    }
+
+    // MARK: - Storage headroom
+
+    /// How often free space is re-read while this screen is up. A `statfs` is
+    /// cheap but not free, and the answer moves at the pace of a shoot rather
+    /// than the pace of the 0.5 s tick that asks for it.
+    private static let headroomSampleSeconds: TimeInterval = 5
+
+    /// The armed configuration, reduced to what decides its weight on disk.
+    ///
+    /// Deliberately built from the same facts `formatSummary` puts on the pill
+    /// beside it — the sensor frame under DNG, the video format otherwise —
+    /// so the chip is always costing the frame the pill is naming. Two
+    /// readouts in one corner disagreeing about which format is armed would be
+    /// worse than either of them alone.
+    private var headroomCostKey: CaptureCostKey {
+        if mode == .video {
+            let resolution = camera.activeSegmentResolution ?? camera.selectedResolution
+            return CaptureCostKey(
+                family: resolution.isProRes ? .proRes : .movie,
+                width: Int(resolution.width),
+                height: Int(resolution.height),
+                frameRate: camera.selectedFrameRate)
+        }
+        if scannerCapturesRAW || (model.intervalOutputFormat == .dng
+                                  && camera.liveBlendDNGSupport.isSupported) {
+            let sensor = camera.liveBlendDNGSupport.sensorDimensions ?? camera.selectedResolution
+            return CaptureCostKey(
+                family: .raw,
+                width: Int(sensor.width), height: Int(sensor.height), frameRate: 0)
+        }
+        return CaptureCostKey(
+            family: .still,
+            width: Int(camera.selectedResolution.width),
+            height: Int(camera.selectedResolution.height),
+            frameRate: 0)
+    }
+
+    /// Re-derives the headroom reading, re-reading free space at most every
+    /// `headroomSampleSeconds`.
+    ///
+    /// The two halves are throttled separately on purpose. Free space is a
+    /// disk call and moves slowly; the *cost* is pure arithmetic and moves the
+    /// instant a dial does, so a format change re-prices the space we already
+    /// know about without waiting for the next sample. Turning DNG on should
+    /// change this number under your thumb.
+    private func refreshHeadroom(force: Bool = false) {
+        let key = headroomCostKey
+        let encoderRate = mode == .video ? camera.movieBytesPerSecond : nil
+        let cost = CaptureHeadroom.cost(for: key, encoderBytesPerSecond: encoderRate)
+        let sampledAt = headroomSampledAt
+        let due = force || sampledAt.map { Date().timeIntervalSince($0) >= Self.headroomSampleSeconds } ?? true
+        guard due else {
+            if let known = headroom?.freeBytes {
+                headroom = CaptureHeadroom.Reading(freeBytes: known, cost: cost)
+            }
+            return
+        }
+        headroomSampledAt = Date()
+        let root = model.projectsFolderURL
+        Task {
+            guard let free = await CaptureHeadroom.freeBytes(near: root) else { return }
+            headroom = CaptureHeadroom.Reading(freeBytes: free, cost: cost)
+        }
+    }
+
+    /// Notes what the disk looked like as a run began, so the run can be
+    /// weighed when it ends. Both halves are snapshotted here rather than read
+    /// back later: the format dials are live controls, and a run that ended in
+    /// a different configuration from the one it started in would otherwise
+    /// teach the store a cost under the wrong key.
+    private func beginHeadroomRunSample() {
+        runCostKey = headroomCostKey
+        runStartFreeBytes = headroom?.freeBytes
+        runStartedAt = Date()
+        let root = model.projectsFolderURL
+        Task {
+            guard let free = await CaptureHeadroom.freeBytes(near: root) else { return }
+            // Only if the run is still going: a very short shoot can finish
+            // before this lands, and overwriting the start figure then would
+            // measure the run against its own end.
+            if isCapturing { runStartFreeBytes = free }
+        }
+    }
+
+    /// Weighs the run that just ended and folds it into the cost store.
+    ///
+    /// Called with the output counters still holding their final values —
+    /// `CameraController` clears them at the *start* of the next run, not the
+    /// end of this one — so the count read here is the whole run's.
+    private func endHeadroomRunSample(frames: Int, seconds: Double) {
+        defer {
+            runStartFreeBytes = nil
+            runCostKey = nil
+            runStartedAt = nil
+            refreshHeadroom(force: true)
+        }
+        guard let key = runCostKey, let startFree = runStartFreeBytes else { return }
+        let root = model.projectsFolderURL
+        Task {
+            guard let endFree = await CaptureHeadroom.freeBytes(near: root) else { return }
+            let consumed = startFree - endFree
+            let units: Double
+            switch key.family {
+            case .still, .raw: units = Double(frames)
+            case .movie, .proRes: units = seconds
+            }
+            CaptureCostStore.shared.record(key: key, consumedBytes: consumed, units: units)
+        }
+    }
+
+    /// What the run that just ended produced, in the units its shape is costed
+    /// in. Read at the transition, from whichever counter was doing the
+    /// counting.
+    private var finishedRunFrameCount: Int {
+        max(camera.liveBlendOutputCount, camera.photoCount)
     }
 
     /// Whether a Scanner run on this device will really write DNG: the format
@@ -2296,35 +2478,33 @@ struct CaptureView: View {
         }
     }
 
-    /// The trailing caption only makes sense while blending; the adaptive
-    /// depths say what drives their count instead. A Holy Grail shoot has no
-    /// live blend at all — its caption says what the ramp will do.
+    /// The trailing caption, and it is now only drawn for the two depths whose
+    /// chip cannot state their own count.
+    ///
+    /// **Everything it used to say for the other cases has gone, on purpose.**
+    /// A fixed depth read "BLEND 5 · into one image", which is the dial saying
+    /// what the dial says; the ramp read "ramping exposure · blended as it
+    /// shoots", which is MODE saying what MODE says. Both were true, both were
+    /// redundant, and between them they cost the row the width that pushed
+    /// MODE, EVERY and BLEND onto two lines on a portrait iPhone. What is left
+    /// is the one thing no chip on the row can tell you: how many frames
+    /// Psycho and Safe are actually going to take.
     private var blendCaptionText: String? {
         // Scanner has no caption. It used to explain two greyed dials; EVERY
         // is now simply absent under it and BLEND does what it says, so there
         // is nothing left to apologise for.
         if scannerArmed { return nil }
-        if holyGrailArmed {
-            // The ramp's caption has to name what BLEND is doing to it: with
-            // a depth the frames are averaged as the shoot runs, without one
-            // they are single sharp stills kept as a RAW pair.
-            switch blendDepth {
-            case .fixed(1): return "ramping exposure"
-            case .fixed: return "ramping exposure · blended as it shoots"
-            case .unthrottled, .throttled: return "ramping exposure · max frames per image"
-            }
-        }
         switch blendDepth {
-        case .fixed(let frames):
-            return frames > 1 ? "into one image" : nil
+        case .fixed:
+            return nil
         case .unthrottled:
-            return "max frames into one image"
+            return "max frames"
         case .throttled:
             let learned = BlendProfileStore.shared.safeFrameCount(
                 pipeline: activeBlendPipeline,
                 bucket: ThermalBucket(thermalState: ProcessInfo.processInfo.thermalState),
                 intervalSeconds: interval)
-            return learned.map { "≈\($0) frames into one image" } ?? "learned limit"
+            return learned.map { "≈\($0) frames" } ?? "learned limit"
         }
     }
 
@@ -3574,7 +3754,7 @@ struct CaptureView: View {
 
             // The rail carries whichever readout is true of this mode: the
             // frozen pair under a lock, the ramp's live pair under Holy Grail.
-            if holyGrailArmed {
+            if holyGrailArmed, !holyGrailExposureReadout.isEmpty {
                 Text(holyGrailExposureReadout)
                     .font(.system(size: 10, design: .monospaced))
                     .foregroundStyle(LL.amber)
@@ -3617,19 +3797,25 @@ struct CaptureView: View {
         return "1/\(Int((1 / seconds).rounded()))"
     }
 
-    /// What the ramp is doing right now, or — before it starts — what it is
-    /// set to do. Deliberately not called a "lock": nothing here is frozen.
+    /// What the ramp is doing right now — the pair it will take the next frame
+    /// at. Deliberately not called a "lock": nothing here is frozen.
+    ///
+    /// **Empty before the ramp has a state to report**, which is the honest
+    /// answer: there is no exposure yet. It used to fill the slot with
+    /// "ramping · exposure follows the light", a sentence that never changed
+    /// and told the operator only what the MODE chip beside it already said.
+    /// The bias survives that emptiness — a ramp deliberately pushed ±EV is a
+    /// setting the operator made and needs to see confirmed, even before there
+    /// is a shutter and an ISO to attach it to.
     private var holyGrailExposureReadout: String {
-        var text: String
+        var parts: [String] = []
         if let state = camera.holyGrailState {
-            text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))"
-        } else {
-            text = "ramping · exposure follows the light"
+            parts.append("\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))")
         }
         if abs(camera.holyGrailBias) >= 0.05 {
-            text += String(format: " · %+.1f EV", camera.holyGrailBias)
+            parts.append(String(format: "%+.1f EV", camera.holyGrailBias))
         }
-        return text
+        return parts.joined(separator: " · ")
     }
 
     /// Over/under exposure for the ramp. Unlike the locked-exposure slider
@@ -3654,13 +3840,15 @@ struct CaptureView: View {
             // relative to the camera's own metering — over or under — plus
             // the focus slider once focus is held.
             VStack(spacing: 10) {
-                HStack {
-                    Text(holyGrailExposureReadout)
-                        .font(.system(size: 12, design: .monospaced))
-                        .foregroundStyle(LL.amber)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.7)
-                    Spacer()
+                if !holyGrailExposureReadout.isEmpty {
+                    HStack {
+                        Text(holyGrailExposureReadout)
+                            .font(.system(size: 12, design: .monospaced))
+                            .foregroundStyle(LL.amber)
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        Spacer()
+                    }
                 }
                 exposureSlider(
                     icon: "plusminus.circle",

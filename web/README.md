@@ -134,6 +134,7 @@ the next. Everything the block needs lives in `inc/blocks/rig-hero/`:
 | --- | --- |
 | Animation | what the rig does (build once / keep running), speed, mark size |
 | Layout | arrangement (mark above the copy, or beside it), stage panel on/off |
+| Photograph | background image, focal point, scrim |
 | Copy | wordmark and its text, replay control and its label, mark description |
 
 **Build once** is the launch animation. **Keep running** is the design's loop
@@ -151,6 +152,19 @@ Numbers and copy defaults live in `letslapse_rig_schema()` and
 `letslapse_rig_label_defaults()` (`inc/blocks/rig-hero/rig.php`) and are handed
 to the editor at runtime, so the preview cannot drift from the front end.
 Filters: `letslapse_rig_schema`, `letslapse_rig_config`, `letslapse_rig_labels`.
+
+### The photograph behind it
+
+The hero takes an optional background image — the **Photograph** panel: pick
+one, drag its focal point, and set the **scrim**, which is how far the picture
+is dimmed under the copy. That number is the whole job: a photograph behind a
+headline is only worth having if the headline still reads. It ships at 0.82,
+which suits the sunset shots; a darker picture wants less.
+
+The image goes through `wp_get_attachment_image()`, so it arrives with srcset
+and sizes, and it loads eagerly at high priority because a hero photograph is
+the page's largest paint. It is marked decorative (`alt=""`) — the copy beside
+it and the mark's own description already say what is there.
 
 ### Motion, JavaScript and reduced motion
 
@@ -183,6 +197,36 @@ says nothing the title hasn't.
 If no site icon is set under Settings → General, the theme also points the
 browser tab at the same file (`letslapse_favicon_fallback()`); setting a real
 site icon always wins.
+
+## Photography
+
+The homepage carries six photographs from the media library — the rig in the
+field, shot in 2021 for the original letslapse.com. They arrive as ordinary
+core blocks wearing two theme block styles:
+
+| Style | Block | What it is |
+| --- | --- | --- |
+| **Field shot** (`is-style-ll-shot`) | Image | A framed picture in a column: hairline border, 12px radius, caption underneath. Used three-up in **In the field**. |
+| **Band** (`is-style-ll-band`) | Image, Cover | A full-width photograph with no copy on it, capped at `min(46vh, 420px)` and faded top and bottom into the page. |
+
+Two things worth knowing if you move them around:
+
+- **Full-width blocks need the theme's breakout rule.** Core cancels the
+  `alignfull` negative margins for a padded container nested inside another one
+  — which is exactly our shape, except the inner one adds no padding. `style.css`
+  hands the breakout back for `.alignfull` inside the post content. Without it a
+  band sits at content width and looks like a mistake.
+- **Patterns must resolve image URLs at render time.** Core saves absolute URLs
+  into block markup, so a URL typed into a pattern still points at the machine
+  it was written on. `patterns/homepage.php` calls
+  `letslapse_pattern_image_url( $id, $size )` (`inc/blocks.php`) instead, which
+  keeps the pattern right on any install sharing this media library and
+  harmlessly empty on one that does not.
+
+The standalone preview has no database, so `preview/index.php` carries a small
+table of the attachments the pattern asks for and stubs
+`wp_get_attachment_image()` around it. Add to that table if a pattern starts
+using another image, or point `LETSLAPSE_UPLOADS_BASE` at another host.
 
 ## Copy around the machine
 
@@ -245,6 +289,9 @@ ES5 against the `wp.*` globals, so the checked-in files are the shipped files.
 
 ## Notes
 
+- **"Tricky stuff made simple"** on the homepage is the old letslapse.com's
+  copy, carried over word for word — the multi-day shooting problem the system
+  was built for. It is ordinary blocks in the page, next to the lens close-up.
 - The **For implementation** section on the homepage is the design's own
   developer-facing copy about the animation's internals. It is ordinary blocks
   in the homepage page (and in `patterns/homepage.php` for new installs) —

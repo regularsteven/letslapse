@@ -79,20 +79,31 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
         }
     }
 
-    /// What the dial's chip reads.
+    /// What the dial's chip reads — the shortest true name for each mode, so
+    /// MODE, EVERY and BLEND share one line on a portrait iPhone. "Scanner"
+    /// and "Holy Grail" are the names in the open menu, where there is room to
+    /// say them in full and room to say what they do; on the chip they are
+    /// "Scan" and "Dynamic", which is what the shoot is rather than what the
+    /// feature is called.
     var chipLabel: String {
         switch self {
         case .basic: return "Basic"
-        case .holyGrail: return "Holy Grail"
-        case .scanner: return "Scanner"
+        case .holyGrail: return "Dynamic"
+        case .scanner: return "Scan"
         }
     }
 
     /// The menu row — the label plus what the mode is for.
+    ///
+    /// Holy Grail leads with **Dynamic Light** because that is the plain
+    /// description and "Holy Grail" is the craft's nickname for it: a reader
+    /// who has never shot a day-to-night sequence learns nothing from the
+    /// nickname, and one who has would miss it if it went. The row carries
+    /// both, in that order, and the chip carries the half that explains itself.
     var menuLabel: String {
         switch self {
         case .basic: return "Basic · a frame on the timer"
-        case .holyGrail: return "Holy Grail · day to night"
+        case .holyGrail: return "Dynamic Light · Holy Grail"
         case .scanner: return "Scanner · fires when the scene stills"
         }
     }

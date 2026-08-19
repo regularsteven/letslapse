@@ -48,6 +48,36 @@ struct PickerMenuLabel: View {
     }
 }
 
+/// Which end of a blend menu's *declaration* ends up at the top of the screen.
+///
+/// **UIKit reverses a `UIMenu` that opens upward**, so that the first element
+/// declared lands nearest the button that opened it — and every dial on this
+/// screen opens upward, because they all sit in the bottom third of it. AppKit
+/// does not do this: an `NSMenu` reads top-to-bottom in declaration order.
+///
+/// The result is that one dial, written once, comes out in *opposite* orders on
+/// the two platforms. Found the way these things are found — a Photo menu
+/// written "Bulb, then the presets down to Off" that put Bulb at the bottom on
+/// the phone, and had done since the dial was written.
+///
+/// So the app keeps one canonical **reading** order (`BlendDepth.fixedOptions`,
+/// deepest first) and this decides how to write it out. `topFirst` is true
+/// exactly where declaration order already is reading order.
+enum BlendMenuOrder {
+    static var topFirst: Bool {
+        #if os(macOS)
+        true
+        #else
+        false
+        #endif
+    }
+
+    /// The fixed counts, declared so they *display* deepest-first.
+    static var options: [(frames: Int, label: String)] {
+        topFirst ? BlendDepth.fixedOptions : BlendDepth.fixedOptions.reversed()
+    }
+}
+
 /// The small caps label ahead of each dial ("EVERY", "BLEND").
 private struct DialCaption: View {
     let text: String
@@ -68,10 +98,18 @@ private struct DialCaption: View {
 /// portrait iPhones fall back to two stacked lines.
 ///
 /// ```
-/// MODE:   Basic · Holy Grail · Scanner
+/// MODE:   Basic · Dynamic · Scan
 /// EVERY:  0.5s · 1s · 3s · 5s · 10s … Auto
-/// BLEND:  Off · 3 · 5 · 10 … Safe · Psycho
+/// BLEND:  Psycho · Safe … 20 · 10 · 5 · 3 · Off
 /// ```
+///
+/// **All three fit one line on a portrait iPhone, and that is a constraint,
+/// not an accident.** The chips read as bare values — `Dynamic`, `3 s`, `5` —
+/// because the caption ahead of each already names the thing being set; a chip
+/// saying "5 frames" under a caption saying BLEND said "frames" twice and cost
+/// the row the width that pushed it onto two lines. The `ViewThatFits` fallback
+/// below is still there for the narrow cases (a long lens name, Dynamic Light
+/// plus an adaptive depth's caption), but it is now the exception.
 ///
 /// **MODE comes first because it decides what the dials under it mean.** It
 /// used to sit second, which put the reader in the odd position of setting a
@@ -264,20 +302,38 @@ struct IntervalDialsRow: View, Equatable {
         }
     }
 
+    /// Displayed top to bottom: Safe, Psycho, then 20 … 3, then Off. The
+    /// adaptive depths sit where Photo puts Bulb — above the counts — so both
+    /// blend menus descend from "as much as it can take" to "off", and a reader
+    /// who has used one already knows the shape of the other.
+    ///
+    /// Written in two halves because the platforms disagree about which end of
+    /// the declaration the reader sees first; see `BlendMenuOrder`.
     @ViewBuilder
     private var blendOptionButtons: some View {
-        ForEach(BlendDepth.fixedOptions, id: \.frames) { option in
+        if BlendMenuOrder.topFirst {
+            adaptiveDepthSection
+            Divider()
+        }
+        ForEach(BlendMenuOrder.options, id: \.frames) { option in
             Button {
                 onSelectFixedBlend(option.frames)
             } label: {
                 if blendDepth == .fixed(option.frames) {
-                    Label(Self.blendOptionLabel(option), systemImage: "checkmark")
+                    Label(option.label, systemImage: "checkmark")
                 } else {
-                    Text(Self.blendOptionLabel(option))
+                    Text(option.label)
                 }
             }
         }
-        Divider()
+        if !BlendMenuOrder.topFirst {
+            Divider()
+            adaptiveDepthSection
+        }
+    }
+
+    @ViewBuilder
+    private var adaptiveDepthSection: some View {
         if intervalMode == .scanner {
             Section("Adaptive depths need a timed window") { adaptiveDepthButtons }
         } else {
@@ -285,33 +341,48 @@ struct IntervalDialsRow: View, Equatable {
         }
     }
 
+    /// Displayed Safe above Psycho — the pair reversed with the rest of the
+    /// menu where the platform reverses it (`BlendMenuOrder`).
     @ViewBuilder
     private var adaptiveDepthButtons: some View {
         Group {
-            Button {
-                onSelectPsycho()
-            } label: {
-                if blendDepth == .unthrottled {
-                    Label("Psycho · as many as it can", systemImage: "checkmark")
-                } else {
-                    Text("Psycho · as many as it can")
-                }
+            if BlendMenuOrder.topFirst {
+                safeDepthButton
+                psychoDepthButton
+            } else {
+                psychoDepthButton
+                safeDepthButton
             }
-            // Safe without a matching profile would be a guess; it stays
-            // disabled until Psycho runs have taught one for this
-            // pipeline, interval and thermal state.
-            Button {
-                onSelectSafe()
-            } label: {
-                if blendDepth == .throttled {
-                    Label("Safe · learned limit", systemImage: "checkmark")
-                } else {
-                    Text("Safe · learned limit")
-                }
-            }
-            .disabled(!safeDepthAvailable)
         }
         .disabled(intervalMode == .scanner)
+    }
+
+    private var psychoDepthButton: some View {
+        Button {
+            onSelectPsycho()
+        } label: {
+            if blendDepth == .unthrottled {
+                Label("Psycho · as many as it can", systemImage: "checkmark")
+            } else {
+                Text("Psycho · as many as it can")
+            }
+        }
+    }
+
+    /// Safe without a matching profile would be a guess; it stays disabled
+    /// until Psycho runs have taught one for this pipeline, interval and
+    /// thermal state.
+    private var safeDepthButton: some View {
+        Button {
+            onSelectSafe()
+        } label: {
+            if blendDepth == .throttled {
+                Label("Safe · learned limit", systemImage: "checkmark")
+            } else {
+                Text("Safe · learned limit")
+            }
+        }
+        .disabled(!safeDepthAvailable)
     }
 
     /// The trailing caption only makes sense while blending; the adaptive
@@ -329,16 +400,7 @@ struct IntervalDialsRow: View, Equatable {
         // A depth carried in from another mode that Scanner can't honour reads
         // as what the run will actually do, not as what the dial remembers.
         if intervalMode == .scanner, blendDepth.fixedFrames == nil { return "Off" }
-        switch blendDepth {
-        case .fixed(1): return "Off"
-        case .fixed(let frames): return "\(frames) frames"
-        case .unthrottled: return "Psycho"
-        case .throttled: return "Safe"
-        }
-    }
-
-    private static func blendOptionLabel(_ option: (frames: Int, label: String)) -> String {
-        option.frames == 1 ? option.label : "\(option.frames) frames · \(option.label)"
+        return blendDepth.chipLabel
     }
 
     private static func intervalLabel(_ seconds: Double) -> String {
@@ -448,17 +510,18 @@ struct ScannerDocumentModeRow: View, Equatable {
 }
 
 /// Photo's single dial: Bulb, then the discrete presets down to "Off".
+///
+/// Photo and Interval now share one blend vocabulary, down to the list itself
+/// (`BlendDepth.fixedOptions`) — the same five rows in the same order under the
+/// same names, with each mode's unbounded option above them: Bulb here,
+/// Psycho and Safe there. The two dials had drifted into offering identical
+/// values under different words ("3 frames" against "3 frames · Light"), which
+/// made them look like different controls doing different things.
 struct PhotoBlendDial: View, Equatable {
     let isBulb: Bool
     let frames: Int
     let onSelectBulb: () -> Void
     let onSelectFrames: (Int) -> Void
-
-    /// Photo's discrete blend presets, high→low, ending at "Off" (a single
-    /// un-stacked frame, depth 1) — the same dial vocabulary Interval uses.
-    static let options: [(frames: Int, label: String)] = [
-        (20, "20 frames"), (10, "10 frames"), (5, "5 frames"), (3, "3 frames"), (1, "Off"),
-    ]
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.isBulb == rhs.isBulb && lhs.frames == rhs.frames
@@ -468,16 +531,12 @@ struct PhotoBlendDial: View, Equatable {
         HStack(spacing: 8) {
             DialCaption(text: "BLEND")
             Menu {
-                Button {
-                    onSelectBulb()
-                } label: {
-                    if isBulb {
-                        Label("Bulb", systemImage: "checkmark")
-                    } else {
-                        Text("Bulb")
-                    }
-                }
-                ForEach(Self.options, id: \.frames) { option in
+                // Bulb displays at the top, where Interval shows Psycho and
+                // Safe — the open-ended option above the counted ones. Which
+                // end of the declaration that is depends on the platform; see
+                // `BlendMenuOrder`.
+                if BlendMenuOrder.topFirst { bulbButton }
+                ForEach(BlendMenuOrder.options, id: \.frames) { option in
                     Button {
                         onSelectFrames(option.frames)
                     } label: {
@@ -488,6 +547,7 @@ struct PhotoBlendDial: View, Equatable {
                         }
                     }
                 }
+                if !BlendMenuOrder.topFirst { bulbButton }
             } label: {
                 PickerMenuLabel(text: menuLabel)
             }
@@ -496,9 +556,21 @@ struct PhotoBlendDial: View, Equatable {
         }
     }
 
-    /// "Bulb" when armed, "Off" for a single frame, else the count.
+    private var bulbButton: some View {
+        Button {
+            onSelectBulb()
+        } label: {
+            if isBulb {
+                Label("Bulb", systemImage: "checkmark")
+            } else {
+                Text("Bulb")
+            }
+        }
+    }
+
+    /// "Bulb" when armed, otherwise whatever Interval's chip would say for the
+    /// same depth — "Off" at 1, the bare count above it.
     private var menuLabel: String {
-        if isBulb { return "Bulb" }
-        return frames <= 1 ? "Off" : "\(frames) frames"
+        isBulb ? "Bulb" : BlendDepth.fixed(max(1, frames)).chipLabel
     }
 }

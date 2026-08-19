@@ -40,6 +40,16 @@
           <text x="309" y="92" font-size="13" class="sb" fill="#FFB340">· Stab</text>
           <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
+        <!-- storage headroom: what is left of the disk in the armed format -->
+        <g id="headroom-chip">
+          <rect x="65" y="72" width="154" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="76" y="82.5" width="12" height="10" rx="2.5"/>
+            <path d="M78.5 89.5 h7 M78.5 91.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="93" y="92.0" font-size="12.5" class="sb" fill="#FFF">≈12h 3m</text>
+          <text x="150" y="92.0" font-size="12.5" fill="#FFF" opacity="0.45">· 32.4 GB</text>
+        </g>
       </g>
 
       <!-- speed row (Target… only) — pushed up by the panel's height -->

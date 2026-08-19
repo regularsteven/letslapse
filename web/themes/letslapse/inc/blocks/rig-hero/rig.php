@@ -22,8 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  */
 function letslapse_rig_schema() {
 	$schema = array(
-		'markSize' => array( 'default' => 216, 'min' => 64,  'max' => 480, 'int' => true ),
-		'speed'    => array( 'default' => 1,   'min' => 0.4, 'max' => 1.4, 'int' => false ),
+		'markSize' => array( 'default' => 216,  'min' => 64,  'max' => 480,  'int' => true ),
+		'speed'    => array( 'default' => 1,    'min' => 0.4, 'max' => 1.4,  'int' => false ),
+		'scrim'    => array( 'default' => 0.82, 'min' => 0,   'max' => 0.95, 'int' => false ),
 	);
 
 	/**
@@ -79,6 +80,22 @@ function letslapse_rig_config( $attributes = array() ) {
 	// Seconds multiplier: the design's --sp, which is 1 / speed.
 	$config['sp'] = round( 1 / $config['speed'], 3 );
 
+	$config['backgroundId']  = isset( $attributes['backgroundId'] ) ? (int) $attributes['backgroundId'] : 0;
+	$config['backgroundUrl'] = isset( $attributes['backgroundUrl'] ) ? (string) $attributes['backgroundUrl'] : '';
+	$config['hasPhoto']      = $config['backgroundId'] > 0 || '' !== $config['backgroundUrl'];
+
+	/*
+	 * Focal point, as the editor stores it (0–1 on each axis), turned into the
+	 * object-position the photo is cropped around. Centre when unset.
+	 */
+	$focal = isset( $attributes['focalPoint'] ) && is_array( $attributes['focalPoint'] ) ? $attributes['focalPoint'] : array();
+
+	$config['objectPosition'] = sprintf(
+		'%s%% %s%%',
+		round( max( 0, min( 1, isset( $focal['x'] ) ? (float) $focal['x'] : 0.5 ) ) * 100, 2 ),
+		round( max( 0, min( 1, isset( $focal['y'] ) ? (float) $focal['y'] : 0.5 ) ) * 100, 2 )
+	);
+
 	/*
 	 * When the copy arrives. The build hands over at 1.78 s — after the glint,
 	 * as the glow settles to idle. The loop has no such moment, so its copy is
@@ -124,6 +141,52 @@ function letslapse_rig_labels( $attributes, $config ) {
 	 * @param array $config     Resolved config.
 	 */
 	return apply_filters( 'letslapse_rig_labels', $labels, $attributes, $config );
+}
+
+/**
+ * The hero's background photograph, or '' when there isn't one.
+ *
+ * Decorative by definition: whatever is in shot, the copy beside it is what the
+ * section is about, and the mark carries its own description. It is also the
+ * page's largest image above the fold, so it loads eagerly and at priority.
+ *
+ * @param array $config Resolved config from letslapse_rig_config().
+ * @return string
+ */
+function letslapse_rig_photo( $config ) {
+	if ( empty( $config['hasPhoto'] ) ) {
+		return '';
+	}
+
+	$attr = array(
+		'class'         => 'll-rig-hero__photo',
+		'alt'           => '',
+		'loading'       => 'eager',
+		'fetchpriority' => 'high',
+		'decoding'      => 'async',
+		'sizes'         => '100vw',
+		'style'         => 'object-position:' . $config['objectPosition'],
+	);
+
+	// An attachment brings its own srcset; a bare URL is the editor's fallback.
+	if ( $config['backgroundId'] ) {
+		$image = wp_get_attachment_image( $config['backgroundId'], 'full', false, $attr );
+
+		if ( $image ) {
+			return $image;
+		}
+	}
+
+	if ( '' === $config['backgroundUrl'] ) {
+		return '';
+	}
+
+	return sprintf(
+		'<img class="%1$s" src="%2$s" alt="" loading="eager" fetchpriority="high" decoding="async" style="%3$s" />',
+		esc_attr( $attr['class'] ),
+		esc_url( $config['backgroundUrl'] ),
+		esc_attr( $attr['style'] )
+	);
 }
 
 /**

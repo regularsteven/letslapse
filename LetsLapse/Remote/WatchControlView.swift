@@ -1702,7 +1702,10 @@ struct WatchControlView: View {
                     showFramesPicker = false
                 } label: {
                     HStack {
-                        Text(option.frames == 1 ? option.label : "\(option.frames) · \(option.label)")
+                        // The label is the whole row now ("20 Frames" … "Off").
+                        // It used to be a bare adjective, so the count had to be
+                        // prefixed here — prefixing it now would read "3 · 3 Frames".
+                        Text(option.label)
                         Spacer()
                         if remote.blendDepth == .fixed(option.frames) {
                             Image(systemName: "checkmark")
@@ -1975,14 +1978,10 @@ struct WatchControlView: View {
         return "1/\(Int((1 / seconds).rounded()))"
     }
 
-    private var blendDepthLabel: String {
-        switch remote.blendDepth {
-        case .fixed(1): return "Off"
-        case .fixed(let frames): return "\(frames) frames"
-        case .unthrottled: return "Psycho"
-        case .throttled: return "Safe"
-        }
-    }
+    /// The same word the phone's BLEND chip uses, from the same place — the
+    /// remote is a mirror of that dial, so a private copy of the switch here
+    /// could only ever drift out of step with it.
+    private var blendDepthLabel: String { remote.blendDepth.chipLabel }
 
     private var readyDetailLine: String {
         var parts: [String] = []

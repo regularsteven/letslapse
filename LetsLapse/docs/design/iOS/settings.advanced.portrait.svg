@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · scrolled to Advanced · portrait</title>
-  <desc>Mirrors App/SettingsView.swift scrolled to the end of the list: the tail of Location, the On-device AI card (AI Models), the Storage card (library bar + legend, Review large originals, Clear cache) and the full Advanced card — Custom frame rate, Blend learning, Performance, Diagnostics and Incomplete Captures. The last row exists only while orphaned capture logs do: CaptureSessionLogger deletes a session's log when the capture screen closes normally, so a surviving log means the app died with the camera open, and the row's trailing number is CaptureSessionLogger.orphanedLogs.count. With no orphans the row is absent and Diagnostics is the card's last row (no divider under it). Tapping opens the Incomplete Captures sheet — settings.incomplete-captures.portrait.svg. The list's trailing 96pt spacer is what leaves the last row clear of the floating tab bar, which floats over the scroll.</desc>
+  <desc>Mirrors App/SettingsView.swift scrolled to the end of the list: the tail of Location, the On-device AI card (AI Models), the Storage card (free space first, then the library breakdown) (library bar + legend, Review large originals, Clear cache) and the full Advanced card — Custom frame rate, Blend learning, Performance, Diagnostics and Incomplete Captures. The last row exists only while orphaned capture logs do: CaptureSessionLogger deletes a session's log when the capture screen closes normally, so a surviving log means the app died with the camera open, and the row's trailing number is CaptureSessionLogger.orphanedLogs.count. With no orphans the row is absent and Diagnostics is the card's last row (no divider under it). Tapping opens the Incomplete Captures sheet — settings.incomplete-captures.portrait.svg. The list's trailing 96pt spacer is what leaves the last row clear of the floating tab bar, which floats over the scroll.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
@@ -26,26 +26,29 @@
 
         <!-- location card, scrolled half out of view -->
         <g id="location-card">
-          <rect x="16" y="42" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
-          <text x="32" y="68" class="ttl">Geotag captures</text>
-          <text x="32" y="83" class="sub">Save GPS in photo EXIF · GPX track sidecar next to video</text>
-          <rect x="316" y="58" width="51" height="31" rx="15.5" fill="#34C759"/>
-          <circle cx="351" cy="73.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          <rect x="16" y="2" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="28" class="ttl">Geotag captures</text>
+          <text x="32" y="43" class="sub">Save GPS in photo EXIF · GPX track sidecar next to video</text>
+          <rect x="316" y="18" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351" cy="33.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
         </g>
 
         <!-- on-device AI -->
-        <text x="20" y="132" class="hdr">ON-DEVICE AI</text>
+        <text x="20" y="92" class="hdr">ON-DEVICE AI</text>
         <g id="ai-card">
-          <rect x="16" y="140" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
-          <text x="32" y="166" class="ttl">AI Models</text>
-          <text x="32" y="181" class="sub">Apple Vision · automatic naming and tagging is on</text>
-          <path d="M363 170 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <rect x="16" y="100" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="126" class="ttl">AI Models</text>
+          <text x="32" y="141" class="sub">Apple Vision · automatic naming and tagging is on</text>
+          <path d="M363 130 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
         </g>
 
         <!-- storage -->
-        <text x="20" y="230" class="hdr">STORAGE</text>
+        <text x="20" y="190" class="hdr">STORAGE</text>
         <g id="storage-card">
-          <rect x="16" y="238" width="361" height="166" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <rect x="16" y="198" width="361" height="206" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="225" class="ttl">Free on this device</text>
+          <text x="361" y="225" font-size="15" class="sb" fill="#6D6D72" text-anchor="end">32.4 GB</text>
+          <line x1="32" y1="239" x2="361" y2="239" stroke="#000" stroke-opacity="0.08"/>
           <text x="32" y="265" class="ttl">LetsLapse library</text>
           <text x="361" y="265" font-size="15" class="sec" text-anchor="end">12.6 GB</text>
           <g id="storage-bar">

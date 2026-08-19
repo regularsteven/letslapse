@@ -29,3 +29,10 @@
 .editor-styles-wrapper .ll-rig-hero__copy > * {
 	max-width: none;
 }
+
+.ll-rig-editor__note {
+	margin: 0;
+	font-size: 12px;
+	line-height: 1.5;
+	color: #757575;
+}

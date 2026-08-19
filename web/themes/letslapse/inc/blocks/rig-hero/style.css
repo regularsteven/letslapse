@@ -35,6 +35,56 @@
 	overflow: hidden;
 }
 
+/* --- Background photograph --------------------------------------------- *
+ * The photo is the floor, the scrim is what keeps the copy readable on top
+ * of it, and both sit under the mark. Scrim strength is one number the block
+ * sets, so it can be tuned per photograph without touching the gradients.
+ * ---------------------------------------------------------------------- */
+
+.ll-rig-hero.has-photo {
+	background: var(--ll-well, #06090F);
+	overflow: hidden;
+}
+
+.ll-rig-hero__photo {
+	position: absolute;
+	inset: 0;
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	margin: 0;
+}
+
+.ll-rig-hero__scrim {
+	position: absolute;
+	inset: 0;
+	opacity: var(--ll-rig-scrim, 0.82);
+	background:
+		radial-gradient(120% 100% at 50% 30%, rgba(16, 26, 44, 0.45) 0%, rgba(6, 9, 15, 0.98) 74%),
+		linear-gradient(180deg, rgba(6, 9, 15, 0.55), rgba(6, 9, 15, 0.95));
+}
+
+/* Copy sits right of the mark, so the wash is heaviest on that side — the
+   photograph keeps its light where the mark is, and gets out of the way of
+   the words. */
+.ll-rig-hero--inline .ll-rig-hero__scrim {
+	background:
+		radial-gradient(80% 130% at 20% 52%, rgba(16, 26, 44, 0.3) 0%, rgba(6, 9, 15, 0.9) 76%),
+		linear-gradient(90deg, rgba(6, 9, 15, 0.68) 0%, rgba(6, 9, 15, 0.9) 42%, rgba(6, 9, 15, 0.98) 100%);
+}
+
+/* Muted grey is a colour for a flat panel, not for a photograph. */
+.ll-rig-hero.has-photo .ll-rig-hero__copy p {
+	color: var(--ll-body, #C6D2E4);
+}
+
+.ll-rig-hero__mark,
+.ll-rig-hero__copy {
+	position: relative;
+	z-index: 1;
+}
+
 /* Mark on the left, copy on the right — the homepage arrangement. */
 .ll-rig-hero--inline {
 	flex-direction: row;

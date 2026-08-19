@@ -183,6 +183,24 @@ function letslapse_block_editor_data() {
 add_action( 'enqueue_block_editor_assets', 'letslapse_block_editor_data' );
 
 /**
+ * A media-library image URL, for use inside a pattern.
+ *
+ * Core saves absolute URLs into block markup, so a URL typed into a pattern
+ * would still point at the machine the pattern was written on. Resolving from
+ * the attachment id at render time keeps the pattern right on any install that
+ * shares this media library, and harmlessly empty on one that does not.
+ *
+ * @param int    $id   Attachment id.
+ * @param string $size Registered image size.
+ * @return string URL, or '' when there is no such attachment.
+ */
+function letslapse_pattern_image_url( $id, $size = 'full' ) {
+	$url = wp_get_attachment_image_url( (int) $id, $size );
+
+	return $url ? $url : '';
+}
+
+/**
  * Pattern category for anything this theme ships.
  */
 function letslapse_register_pattern_category() {
@@ -236,5 +254,25 @@ function letslapse_register_block_styles() {
 			'label' => __( 'Chip', 'letslapse' ),
 		)
 	);
+
+	// Photography. A shot is a framed picture in a column; a band runs edge to
+	// edge and is there to give the page somewhere to breathe.
+	register_block_style(
+		'core/image',
+		array(
+			'name'  => 'll-shot',
+			'label' => __( 'Field shot', 'letslapse' ),
+		)
+	);
+
+	foreach ( array( 'core/image', 'core/cover' ) as $block ) {
+		register_block_style(
+			$block,
+			array(
+				'name'  => 'll-band',
+				'label' => __( 'Band', 'letslapse' ),
+			)
+		);
+	}
 }
 add_action( 'init', 'letslapse_register_block_styles' );

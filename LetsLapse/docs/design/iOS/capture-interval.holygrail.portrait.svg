@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (idle, Holy Grail armed) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (intervalPickerRow, blendCaptionText, exposurePanel, exposureLockCircle) + App/CaptureDials.swift (IntervalDialsRow.rampPicker). RAMP set to Holy Grail: shutter and ISO follow the light so one shoot can run from daylight into night. BLEND stays available and is the point — each output image is that window's frames averaged at that window's exposure, so the motion blur is made as the shoot runs; BLEND Off instead keeps single sharp stills as a RAW + processed pair. The exposure control changes meaning while the ramp is armed: there is no exposure to lock (locking it would stop the mode doing its job), so the lock button holds FOCUS only and a plus/minus EV slider sets deliberate over/under exposure on top of the ramp's anchor — turning it mid-shoot walks the exposure there at the ramp's own 1/3-stop limit rather than stepping the sequence. The readout above the slider is the ramp's live pair, or "ramping · exposure follows the light" before it starts. A JPEG ramp takes its frames from the video stream, which is what keeps it silent — a per-frame still capture makes the system shutter sound on every frame. the format pill keeps naming the format dial’s own answer (JPEG here, DNG when armed) — the ramp introduces no file format of its own. Positions measured from the running app on an iPhone 17 Pro. iOS/iPadOS only — macOS has no manual exposure API and draws no RAMP dial.</desc>
+  <desc>Mirrors App/CaptureHeadroom.swift (CaptureHeadroomChip, compact form — the sensor-frame pill leaves no room for the free-space half) and App/CaptureView.swift (intervalPickerRow, blendCaptionText, exposurePanel, exposureLockCircle) + App/CaptureDials.swift (IntervalDialsRow.rampPicker). RAMP set to Holy Grail: shutter and ISO follow the light so one shoot can run from daylight into night. BLEND stays available and is the point — each output image is that window's frames averaged at that window's exposure, so the motion blur is made as the shoot runs; BLEND Off instead keeps single sharp stills as a RAW + processed pair. The exposure control changes meaning while the ramp is armed: there is no exposure to lock (locking it would stop the mode doing its job), so the lock button holds FOCUS only and a plus/minus EV slider sets deliberate over/under exposure on top of the ramp's anchor — turning it mid-shoot walks the exposure there at the ramp's own 1/3-stop limit rather than stepping the sequence. The readout above the slider is the ramp's live pair, or "ramping · exposure follows the light" before it starts. A JPEG ramp takes its frames from the video stream, which is what keeps it silent — a per-frame still capture makes the system shutter sound on every frame. the format pill keeps naming the format dial’s own answer (JPEG here, DNG when armed) — the ramp introduces no file format of its own. Positions measured from the running app on an iPhone 17 Pro. iOS/iPadOS only — macOS has no manual exposure API and draws no RAMP dial.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -39,28 +39,35 @@
           <text x="274" y="92" font-size="13" class="sb" fill="#FFF">· JPEG</text>
           <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
+        <!-- storage headroom: what is left of the disk in the armed format -->
+        <g id="headroom-chip">
+          <rect x="106" y="72" width="84" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="117" y="82.5" width="12" height="10" rx="2.5"/>
+            <path d="M119.5 89.5 h7 M119.5 91.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="134" y="92.0" font-size="12.5" class="sb" fill="#FFF">≈10.6k</text>
+        </g>
       </g>
 
-      <!-- interval dials: EVERY + RAMP on line 1, BLEND + caption on
-           line 2 (the portrait ViewThatFits fallback) -->
+      <!-- interval dials: MODE / EVERY / BLEND on ONE line. MODE reads
+           "Dynamic" on the chip and "Dynamic Light · Holy Grail" in the open
+           menu — the chip carries the half that explains itself. No trailing
+           caption: what it used to say ("ramping exposure · blended as it
+           shoots") was MODE and BLEND repeating themselves -->
       <g id="interval-dials">
-        <g id="every-row">
-          <text x="22" y="576" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">EVERY</text>
-          <rect x="66" y="558" width="62" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-          <text x="78" y="576" font-size="12.5" class="sb" fill="#FFF">5 s</text>
-          <path d="M108 569 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
-          <text x="136" y="576" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">RAMP</text>
-          <rect x="174" y="558" width="98" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-          <text x="186" y="576" font-size="12.5" class="sb" fill="#FFF">Holy Grail</text>
-          <path d="M252 569 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
-        </g>
-        <g id="blend-row">
-          <text x="22" y="610" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
-          <rect x="68" y="592" width="96" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-          <text x="80" y="610" font-size="12.5" class="sb" fill="#FFF">10 frames</text>
-          <path d="M144 603 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
-          <text x="172" y="610" font-size="11" fill="#FFF" opacity="0.4">ramping exposure · blended as it shoots</text>
-        </g>
+          <text x="20" y="610" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">MODE</text>
+          <rect x="59" y="592" width="95" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="71" y="610" font-size="12.5" class="sb" fill="#FFF">Dynamic</text>
+          <path d="M134 603 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="162" y="610" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">EVERY</text>
+          <rect x="204" y="592" width="62" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="216" y="610" font-size="12.5" class="sb" fill="#FFF">5 s</text>
+          <path d="M246 603 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="274" y="610" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
+          <rect x="320" y="592" width="53" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="332" y="610" font-size="12.5" class="sb" fill="#FFF">10</text>
+          <path d="M353 603 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
       </g>
 
       <!-- mode row + zoom chips -->
@@ -82,7 +89,6 @@
            No focus slider here — that row appears only once focus is held
            (the lock button below). -->
       <g id="ramp-exposure-panel">
-        <text x="16" y="670" font-size="12" class="m" fill="#FFB340">ramping · exposure follows the light</text>
         <g id="ev-slider">
           <g data-symbol="plusminus.circle">
             <circle cx="26" cy="698" r="7" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.2"/>

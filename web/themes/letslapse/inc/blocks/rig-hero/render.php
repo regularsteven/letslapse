@@ -35,11 +35,18 @@ if ( $ll_config['showStage'] ) {
 	$ll_classes[] = 'has-stage';
 }
 
+$ll_photo = letslapse_rig_photo( $ll_config );
+
+if ( '' !== $ll_photo ) {
+	$ll_classes[] = 'has-photo';
+}
+
 $ll_style = sprintf(
-	'--ll-rig-sp:%s;--ll-rig-size:%dpx;--ll-rig-copy-delay:%ss',
+	'--ll-rig-sp:%s;--ll-rig-size:%dpx;--ll-rig-copy-delay:%ss;--ll-rig-scrim:%s',
 	$ll_config['sp'],
 	$ll_config['markSize'],
-	$ll_config['copyDelay']
+	$ll_config['copyDelay'],
+	$ll_config['scrim']
 );
 
 $ll_wrapper = get_block_wrapper_attributes(
@@ -54,6 +61,12 @@ $ll_replay   = $ll_config['showReplay'] ? trim( (string) $ll_labels['replay'] ) 
 $ll_mark_alt = trim( (string) $ll_labels['mark'] );
 ?>
 <div <?php echo $ll_wrapper; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?> data-ll-rig-hero>
+	<?php if ( '' !== $ll_photo ) : ?>
+		<?php echo $ll_photo; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
+		<?php /* Holds the copy's contrast, and keeps the stage's own glow over the photo. */ ?>
+		<div class="ll-rig-hero__scrim" aria-hidden="true"></div>
+	<?php endif; ?>
+
 	<div class="ll-rig-hero__mark">
 		<?php
 		/*

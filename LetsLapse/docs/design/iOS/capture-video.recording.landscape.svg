@@ -44,6 +44,15 @@
             <path d="M148 167 v-1.5 a3 3 0 0 1 6 0 V167" fill="none" stroke="#FFF" stroke-width="1.6"/>
           </g>
         </g>
+        <!-- storage headroom: what is left of the disk in the armed format -->
+        <g id="headroom-chip">
+          <rect x="64" y="193" width="99" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="75" y="203.5" width="12" height="10" rx="2.5"/>
+            <path d="M77.5 210.5 h7 M77.5 212.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="92" y="213.0" font-size="12.5" class="sb" fill="#FFF">≈11h 47m</text>
+        </g>
         <!-- zoomChips are gone while capturing (`if !isCapturing`) -->
         <g id="recent-tile">
           <g clip-path="url(#tile)">

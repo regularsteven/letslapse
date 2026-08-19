@@ -1,20 +1,4 @@
-<?php
-/**
- * Title: LetsLapse homepage
- * Slug: letslapse/homepage
- * Categories: letslapse, featured
- * Block Types: core/post-content
- * Description: The full homepage — the rig hero, the blend machine, how it works, the field photography and the download call to action.
- *
- * This pattern is the homepage body. templates/front-page.html renders whatever
- * page is set as the front page, so the copy lives in the page and stays
- * editable without touching the theme.
- *
- * @package LetsLapse
- */
-
-?>
-<!-- wp:letslapse/rig-hero {"arrangement":"inline","markSize":184,"showWordmark":false,"backgroundId":80,"backgroundUrl":"<?php echo esc_url( letslapse_pattern_image_url( 80, 'full' ) ); ?>","focalPoint":{"x":0.55,"y":0.52}} -->
+<!-- wp:letslapse/rig-hero {"arrangement":"inline","markSize":184,"showWordmark":false} -->
 <!-- wp:heading {"level":1,"className":"is-style-ll-display"} -->
 <h1 class="wp-block-heading is-style-ll-display">Many frames in. One frame out.</h1>
 <!-- /wp:heading -->
@@ -24,7 +8,7 @@
 <!-- /wp:paragraph -->
 <!-- /wp:letslapse/rig-hero -->
 
-<!-- wp:letslapse/hero-machine /-->
+<!-- wp:letslapse/hero-machine {"showTimeline":false,"showPlayingCount":false,"replayLabel":"Replay"} /-->
 
 <!-- wp:group {"className":"ll-machine-meta","layout":{"type":"flex","flexWrap":"wrap","justifyContent":"space-between"}} -->
 <div class="wp-block-group ll-machine-meta"><!-- wp:paragraph {"className":"is-style-ll-caption"} -->
@@ -36,32 +20,8 @@
 <!-- /wp:paragraph --></div>
 <!-- /wp:group -->
 
-<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"why","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section" id="why"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
-<h2 class="wp-block-heading ll-eyebrow">Why it exists</h2>
-<!-- /wp:heading -->
-
-<!-- wp:media-text {"mediaId":73,"mediaType":"image","mediaSizeSlug":"large","className":"ll-media"} -->
-<div class="wp-block-media-text is-stacked-on-mobile ll-media"><figure class="wp-block-media-text__media"><img src="<?php echo esc_url( letslapse_pattern_image_url( 73, 'large' ) ); ?>" alt="Close-up of the LetsLapse camera lens, wrapped in gaffer tape and clamped to a mount in dry grass." class="wp-image-73 size-large"/></figure><div class="wp-block-media-text__content"><!-- wp:heading {"level":3} -->
-<h3 class="wp-block-heading">Tricky stuff made simple</h3>
-<!-- /wp:heading -->
-
-<!-- wp:paragraph -->
-<p>Shooting time-lapse sequences for extended periods introduces a range of factors to consider. From the power supply to physical camera security, variable conditions can make it difficult to shoot in changing light and evolving weather. Placing a camera in an environment is one thing, but knowing it&rsquo;s going to last for days, in torrential rain? That&rsquo;s a whole new set of problems.</p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p><strong>These are the motivations behind the LetsLapse System.</strong></p>
-<!-- /wp:paragraph -->
-
-<!-- wp:paragraph -->
-<p>It costs less than comparable products on the market, significantly less than a DSLR and it&rsquo;s an end-to-end system for producing multi-day time-lapse video sequences.</p>
-<!-- /wp:paragraph --></div></div>
-<!-- /wp:media-text --></section>
-<!-- /wp:group -->
-
-<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"how","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section" id="how"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
+<!-- wp:group {"tagName":"section","className":"ll-section","layout":{"type":"constrained"},"anchor":"how"} -->
+<section id="how" class="wp-block-group ll-section"><!-- wp:heading {"className":"ll-eyebrow"} -->
 <h2 class="wp-block-heading ll-eyebrow">How it works</h2>
 <!-- /wp:heading -->
 
@@ -126,38 +86,8 @@
 <!-- /wp:group --></section>
 <!-- /wp:group -->
 
-<!-- wp:image {"id":83,"sizeSlug":"full","linkDestination":"none","align":"full","className":"is-style-ll-band"} -->
-<figure class="wp-block-image alignfull size-full is-style-ll-band"><img src="<?php echo esc_url( letslapse_pattern_image_url( 83, 'full' ) ); ?>" alt="The camera on a clifftop mount, looking out over a calm ocean through palm fronds." class="wp-image-83"/></figure>
-<!-- /wp:image -->
-
-<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"field","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section" id="field"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
-<h2 class="wp-block-heading ll-eyebrow">In the field</h2>
-<!-- /wp:heading -->
-
-<!-- wp:columns {"className":"ll-shots"} -->
-<div class="wp-block-columns ll-shots"><!-- wp:column -->
-<div class="wp-block-column"><!-- wp:image {"id":76,"sizeSlug":"large","linkDestination":"none","className":"is-style-ll-shot"} -->
-<figure class="wp-block-image size-large is-style-ll-shot"><img src="<?php echo esc_url( letslapse_pattern_image_url( 76, 'large' ) ); ?>" alt="The camera silhouetted on a rock against a deep orange sunset over the sea." class="wp-image-76"/><figcaption class="wp-element-caption">Pi Zero and HQ Camera facing the sunset</figcaption></figure>
-<!-- /wp:image --></div>
-<!-- /wp:column -->
-
-<!-- wp:column -->
-<div class="wp-block-column"><!-- wp:image {"id":79,"sizeSlug":"large","linkDestination":"none","className":"is-style-ll-shot"} -->
-<figure class="wp-block-image size-large is-style-ll-shot"><img src="<?php echo esc_url( letslapse_pattern_image_url( 79, 'large' ) ); ?>" alt="The camera on a tripod, small against a wide beach sunset with palms along the headland." class="wp-image-79"/><figcaption class="wp-element-caption">Regular tripod mount on the beach</figcaption></figure>
-<!-- /wp:image --></div>
-<!-- /wp:column -->
-
-<!-- wp:column -->
-<div class="wp-block-column"><!-- wp:image {"id":71,"sizeSlug":"large","linkDestination":"none","className":"is-style-ll-shot"} -->
-<figure class="wp-block-image size-large is-style-ll-shot"><img src="<?php echo esc_url( letslapse_pattern_image_url( 71, 'large' ) ); ?>" alt="The LetsLapse camera on a tripod above a tropical shoreline, its USB battery pack strapped to the leg." class="wp-image-71"/><figcaption class="wp-element-caption">LetsLapse and battery pack</figcaption></figure>
-<!-- /wp:image --></div>
-<!-- /wp:column --></div>
-<!-- /wp:columns --></section>
-<!-- /wp:group -->
-
-<!-- wp:group {"tagName":"section","className":"ll-section","anchor":"spec","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section" id="spec"><!-- wp:heading {"level":2,"className":"ll-eyebrow"} -->
+<!-- wp:group {"tagName":"section","className":"ll-section","layout":{"type":"constrained"},"anchor":"spec"} -->
+<section id="spec" class="wp-block-group ll-section"><!-- wp:heading {"className":"ll-eyebrow"} -->
 <h2 class="wp-block-heading ll-eyebrow">For implementation</h2>
 <!-- /wp:heading -->
 
@@ -192,12 +122,12 @@
 <!-- /wp:columns --></section>
 <!-- /wp:group -->
 
-<!-- wp:group {"tagName":"section","className":"ll-section ll-cta","anchor":"get","layout":{"type":"constrained"}} -->
-<section class="wp-block-group ll-section ll-cta" id="get"><!-- wp:heading {"level":2,"textAlign":"center"} -->
+<!-- wp:group {"tagName":"section","className":"ll-section ll-cta","layout":{"type":"constrained"},"anchor":"get"} -->
+<section id="get" class="wp-block-group ll-section ll-cta"><!-- wp:heading {"style":{"typography":{"textAlign":"center"}}} -->
 <h2 class="wp-block-heading has-text-align-center">Get LetsLapse</h2>
 <!-- /wp:heading -->
 
-<!-- wp:paragraph {"align":"center"} -->
+<!-- wp:paragraph {"style":{"typography":{"textAlign":"center"}}} -->
 <p class="has-text-align-center">Precision timelapse for iPhone, iPad and Mac. In beta now.</p>
 <!-- /wp:paragraph -->
 
@@ -207,3 +137,4 @@
 <!-- /wp:button --></div>
 <!-- /wp:buttons --></section>
 <!-- /wp:group -->
+

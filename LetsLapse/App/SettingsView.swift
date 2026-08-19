@@ -33,6 +33,9 @@ struct SettingsView: View {
     /// camera does because the build supports it.
     @AppStorage(CaptureRemoteListener.enabledKey) private var allowRemoteAccess = false
     @State private var storage: AppModel.LibraryStorage?
+    /// Room left on the volume the library lives on — the number that decides
+    /// whether the next shoot fits, which the library's own total never could.
+    @State private var freeBytes: Int64?
     @State private var isClearingCache = false
     @State private var showIncompleteCaptures = false
     @State private var customFrameRateText = RecordingSettingsStore.customFrameRate.map(String.init) ?? ""
@@ -128,6 +131,7 @@ struct SettingsView: View {
                 showIncompleteCaptures = true
             }
             #endif
+            await refreshFreeSpace()
             if let walked = await model.computeLibraryStorage() {
                 storage = walked
             }
@@ -481,6 +485,22 @@ struct SettingsView: View {
     private var storageCard: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 10) {
+                // First, because it is the one figure here that constrains
+                // anything. What the library weighs is a fact about the past;
+                // what is free is the answer to "can I shoot this?", and it is
+                // the same number the capture screen's headroom chip is
+                // costing frames against (see `CaptureHeadroom`).
+                HStack {
+                    Text("Free on this device")
+                        .font(.system(size: 16))
+                    Spacer()
+                    Text(freeBytes.map { LLFormat.bytes($0) } ?? "…")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(freeSpaceIsTight ? LL.accent : .secondary)
+                }
+
+                Divider()
+
                 HStack {
                     Text("LetsLapse library")
                         .font(.system(size: 16))
@@ -534,6 +554,17 @@ struct SettingsView: View {
         .llCard()
     }
 
+    /// Under 2 GB is roughly a minute of 4K or a dozen RAW stills — little
+    /// enough that a shoot started now is a shoot that ends by running out.
+    /// The same threshold the capture chip goes amber at.
+    private var freeSpaceIsTight: Bool {
+        (freeBytes ?? .max) < 2 * 1_000_000_000
+    }
+
+    private func refreshFreeSpace() async {
+        freeBytes = await CaptureHeadroom.freeBytes(near: model.projectsFolderURL)
+    }
+
     private func legendDot(color: Color, label: String) -> some View {
         HStack(spacing: 4) {
             Circle().fill(color).frame(width: 7, height: 7)
@@ -547,6 +578,7 @@ struct SettingsView: View {
         isClearingCache = true
         Task {
             await model.clearCache()
+            await refreshFreeSpace()
             if let walked = await model.computeLibraryStorage() {
                 storage = walked
             }

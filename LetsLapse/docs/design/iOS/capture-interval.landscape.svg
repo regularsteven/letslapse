@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (idle, DNG) · landscape</title>
-  <desc>Mirrors App/CaptureView.swift (landscapeLayout): left rail (close, format pill, zoom chips, recent tile), centered 4:3 viewfinder with the interval dials in the bottom-leading corner on a dark capsule, right rail (stacked mode labels, shutter, steady/delay/grid/lock column). Landscape is a known WIP area — the format pill is wider than the 108pt rail and overlaps the viewfinder edge.</desc>
+  <desc>Mirrors App/CaptureHeadroom.swift (CaptureHeadroomChip, stacked under the format pill in the 108pt rail) and App/CaptureView.swift (landscapeLayout): left rail (close, format pill, zoom chips, recent tile), centered 4:3 viewfinder with the interval dials in the bottom-leading corner on a dark capsule, right rail (stacked mode labels, shutter, steady/delay/grid/lock column). Landscape is a known WIP area — the format pill is wider than the 108pt rail and overlaps the viewfinder edge.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="83" y="296" width="60" height="60" rx="12"/></clipPath>
@@ -36,6 +36,15 @@
           <text x="119" y="155" font-size="13" class="sb" fill="#FFB340">· DNG</text>
           <path d="M162 148 l4.5 5 l4.5 -5" stroke="#FFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
+        <!-- storage headroom: what is left of the disk in the armed format -->
+        <g id="headroom-chip">
+          <rect x="71" y="176" width="84" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="82" y="186.5" width="12" height="10" rx="2.5"/>
+            <path d="M84.5 193.5 h7 M84.5 195.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="99" y="196.0" font-size="12.5" class="sb" fill="#FFF">≈1,771</text>
+        </g>
         <g id="zoom-chips" data-symbol="lens buttons">
           <circle cx="75" cy="242" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
           <text x="75" y="246" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">.5×</text>
@@ -53,18 +62,22 @@
         </g>
       </g>
 
-      <!-- interval dials on a dark capsule, bottom-leading corner of the viewfinder -->
+      <!-- interval dials on a dark capsule, bottom-leading corner of the
+           viewfinder: MODE / EVERY / BLEND, bare values, no caption -->
       <g id="interval-dials">
-        <rect x="177" y="325" width="384" height="37" rx="18.5" fill="#000" opacity="0.5"/>
-        <text x="189" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">EVERY</text>
-        <rect x="228" y="330" width="56" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-        <text x="239" y="348" font-size="12.5" class="sb" fill="#FFF">2 s</text>
-        <path d="M266 342 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-        <text x="294" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
-        <rect x="340" y="330" width="96" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-        <text x="352" y="348" font-size="12.5" class="sb" fill="#FFF">10 frames</text>
-        <path d="M416 342 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-        <text x="448" y="348" font-size="11" fill="#FFF" opacity="0.4">into one image</text>
+        <rect x="177" y="325" width="354" height="37" rx="18.5" fill="#000" opacity="0.5"/>
+          <text x="189" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">MODE</text>
+          <rect x="228" y="330" width="78" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="240" y="348" font-size="12.5" class="sb" fill="#FFF">Basic</text>
+          <path d="M286 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="314" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">EVERY</text>
+          <rect x="356" y="330" width="56" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="368" y="348" font-size="12.5" class="sb" fill="#FFF">2 s</text>
+          <path d="M392 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="420" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
+          <rect x="466" y="330" width="53" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="478" y="348" font-size="12.5" class="sb" fill="#FFF">10</text>
+          <path d="M499 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
       </g>
 
       <!-- right rail -->

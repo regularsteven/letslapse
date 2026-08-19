@@ -33,6 +33,56 @@ function add_filter() {}
 function wp_get_attachment_url() { return false; }
 function get_theme_file_path( $p = '' ) { global $theme_dir; return $theme_dir . '/' . ltrim( $p, '/' ); }
 function get_theme_file_uri( $p = '' ) { global $theme_uri; return $theme_uri . '/' . ltrim( $p, '/' ); }
+function add_shortcode() {}
+function register_block_type() {}
+function register_block_style() {}
+function register_block_pattern_category() {}
+
+/**
+ * Sample media, because the harness has no database.
+ *
+ * Only the attachments the homepage pattern asks for. Set
+ * LETSLAPSE_UPLOADS_BASE if your uploads live somewhere other than the local
+ * WordPress install.
+ */
+$preview_uploads = array(
+	71 => array( 'full' => 'LetsLapse-and-battery-back-_DSC3642.jpg',            'large' => 'LetsLapse-and-battery-back-_DSC3642-1024x683.jpg' ),
+	73 => array( 'full' => 'Mounted-in-the-shrubs-_DSC3647.jpg',                 'large' => 'Mounted-in-the-shrubs-_DSC3647-1024x683.jpg' ),
+	76 => array( 'full' => 'Pi-Zero-and-HQ-Camera-facing-the-sunset-_DSC3423.jpg','large' => 'Pi-Zero-and-HQ-Camera-facing-the-sunset-_DSC3423-1024x683.jpg' ),
+	79 => array( 'full' => 'Regular-tripod-mount-on-the-beach-_DSC3447.jpg',      'large' => 'Regular-tripod-mount-on-the-beach-_DSC3447-1024x683.jpg' ),
+	80 => array( 'full' => 'Resting-on-the-rocks-_DSC3425.jpg',                   'large' => 'Resting-on-the-rocks-_DSC3425-1024x683.jpg' ),
+	83 => array( 'full' => 'Looking-over-the-ocean-_DSC3641.jpg',                 'large' => 'Looking-over-the-ocean-_DSC3641-1024x512.jpg' ),
+);
+
+function wp_get_attachment_image_url( $id, $size = 'full' ) {
+	global $preview_uploads;
+
+	if ( ! isset( $preview_uploads[ (int) $id ] ) ) {
+		return false;
+	}
+
+	$sizes = $preview_uploads[ (int) $id ];
+	$file  = isset( $sizes[ $size ] ) ? $sizes[ $size ] : reset( $sizes );
+	$base  = getenv( 'LETSLAPSE_UPLOADS_BASE' );
+
+	return ( $base ? rtrim( $base, '/' ) . '/' : 'https://letslapse.test/wp-content/uploads/2021/07/' ) . $file;
+}
+
+function wp_get_attachment_image( $id, $size = 'full', $icon = false, $attr = array() ) {
+	$url = wp_get_attachment_image_url( $id, $size );
+
+	if ( ! $url ) {
+		return '';
+	}
+
+	$out = '';
+
+	foreach ( (array) $attr as $key => $value ) {
+		$out .= sprintf( ' %s="%s"', $key, esc_attr( $value ) );
+	}
+
+	return '<img src="' . esc_url( $url ) . '"' . $out . ' />';
+}
 
 function get_block_wrapper_attributes( $extra = array() ) {
 	global $preview_block, $preview_block_attributes;
@@ -59,6 +109,7 @@ function get_block_wrapper_attributes( $extra = array() ) {
 
 require_once $theme_dir . '/inc/config.php';
 require_once $theme_dir . '/inc/blocks/rig-hero/rig.php';
+require_once $theme_dir . '/inc/blocks.php';
 
 $preview_block            = '';
 $preview_block_attributes = array();
@@ -167,10 +218,15 @@ function preview_render_blocks( $markup ) {
 	$markup = preg_replace_callback(
 		'#<!--\s*wp:post-content\s*(\{[^\n]*\})?\s*/-->#',
 		function () {
-			$pattern = file_get_contents( get_theme_file_path( 'patterns/homepage.php' ) );
-			$body = preg_replace( '#^.*?\?>\s*#s', '', $pattern, 1 );
+			/*
+			 * Included, not read: the pattern resolves its image URLs through
+			 * PHP so it stays right on whichever install renders it.
+			 */
+			ob_start();
+			include get_theme_file_path( 'patterns/homepage.php' );
+			$body = ob_get_clean();
 
-			return '<div class="entry-content wp-block-post-content is-layout-constrained">' .
+			return '<div class="entry-content wp-block-post-content is-layout-constrained has-global-padding">' .
 				preview_render_blocks( $body ) .
 				'</div>';
 		},

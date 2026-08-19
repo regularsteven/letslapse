@@ -105,3 +105,34 @@ a:hover { color: var(--wp--preset--color--accent); }
 }
 
 .wp-block-template-part { display: block; }
+
+/* Media & Text: core lays it out as a grid, two-up above 600px. */
+.wp-block-media-text {
+	display: grid;
+	grid-template-columns: 50% 1fr;
+	align-items: center;
+}
+
+.wp-block-media-text__media {
+	margin: 0;
+}
+
+.wp-block-media-text__media img {
+	display: block;
+	width: 100%;
+	height: auto;
+}
+
+@media (max-width: 600px) {
+	.wp-block-media-text { grid-template-columns: 1fr; }
+}
+
+/* Images carry no margin of their own in a block theme. */
+.wp-block-image {
+	margin: 0;
+}
+
+.wp-block-image img {
+	max-width: 100%;
+	height: auto;
+}

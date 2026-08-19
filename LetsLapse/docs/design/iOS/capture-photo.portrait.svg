@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Photo (idle, JPEG) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (photoControlsRow — single BLEND dial with Bulb folded in as the top menu option). Photo mode, JPEG output: still label in the format pill, 16:9 preview. Same shutter row as the other modes; the steady toggle arms the capture-when-steady gate.</desc>
+  <desc>Mirrors App/CaptureView.swift (photoControlsRow) + App/CaptureDials.swift (PhotoBlendDial) + App/CaptureHeadroom.swift (CaptureHeadroomChip). Photo mode, JPEG output: still label in the format pill with the storage-headroom chip ahead of it, 16:9 preview. The single BLEND dial reads a bare count; its menu is Bulb · 20 Frames · 10 Frames · 5 Frames · 3 Frames · Off, the same list Interval uses. Same shutter row as the other modes; the steady toggle arms the capture-when-steady gate.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -37,14 +37,26 @@
           <text x="306" y="92" font-size="13" class="sb" fill="#FFF">· JPEG</text>
           <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
+        <!-- storage headroom: what is left of the disk in the armed format -->
+        <g id="headroom-chip">
+          <rect x="62" y="72" width="147" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="73" y="82.5" width="12" height="10" rx="2.5"/>
+            <path d="M75.5 89.5 h7 M75.5 91.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="90" y="92.0" font-size="12.5" class="sb" fill="#FFF">≈62.5k</text>
+          <text x="140" y="92.0" font-size="12.5" fill="#FFF" opacity="0.45">· 32.4 GB</text>
+        </g>
       </g>
 
-      <!-- photo controls: single BLEND dial (menu: Bulb · 20 · 10 · 5 · 3 · Off) -->
+      <!-- photo controls: single BLEND dial. Menu top-to-bottom
+           Bulb · 20 Frames · 10 Frames · 5 Frames · 3 Frames · Off — the same
+           list, order and wording Interval's dial uses -->
       <g id="photo-controls">
-        <text x="124" y="657" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
-        <rect x="170" y="639" width="96" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-        <text x="182" y="657" font-size="12.5" class="sb" fill="#FFF">10 frames</text>
-        <path d="M246 650 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <text x="147" y="657" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
+          <rect x="193" y="639" width="53" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="205" y="657" font-size="12.5" class="sb" fill="#FFF">10</text>
+          <path d="M226 650 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
       </g>
 
       <!-- mode row + zoom chips -->
