@@ -2,25 +2,81 @@
 	"$schema": "https://schemas.wp.org/trunk/block.json",
 	"apiVersion": 3,
 	"name": "letslapse/hero-machine",
-	"version": "0.2.0",
+	"version": "0.3.0",
 	"title": "Blend machine",
 	"category": "media",
 	"icon": "images-alt2",
-	"description": "A live canvas that averages real source frames at 1/N opacity into blended timelapse frames, with a timeline that grows as each frame stacks.",
-	"keywords": [ "hero", "timelapse", "blend", "canvas", "letslapse" ],
+	"description": "A live canvas that averages real source frames at 1/N opacity into blended timelapse frames. Runs as the stack-and-blend machine, or as a traditional-vs-LetsLapse comparison.",
+	"keywords": [
+		"hero",
+		"timelapse",
+		"blend",
+		"canvas",
+		"letslapse",
+		"compare",
+		"comparison",
+		"traditional"
+	],
 	"textdomain": "letslapse",
 	"supports": {
 		"html": false,
 		"anchor": true,
-		"align": [ "wide", "full" ],
+		"align": [
+			"wide",
+			"full"
+		],
 		"multiple": true,
 		"spacing": {
 			"padding": true,
-			"margin": [ "top", "bottom" ]
+			"margin": [
+				"top",
+				"bottom"
+			]
 		},
-		"interactivity": { "clientNavigation": false }
+		"interactivity": {
+			"clientNavigation": false
+		}
 	},
 	"attributes": {
+		"mode": {
+			"type": "string",
+			"default": "stack"
+		},
+		"compareStage": {
+			"type": "string",
+			"default": "toggle"
+		},
+		"compareLoops": {
+			"type": "number"
+		},
+		"traditionalLabel": {
+			"type": "string",
+			"default": "Traditional timelapse"
+		},
+		"letslapseLabel": {
+			"type": "string",
+			"default": "LetsLapse"
+		},
+		"workflowLabel": {
+			"type": "string",
+			"default": "Show LetsLapse workflow"
+		},
+		"traditionalRowLabel": {
+			"type": "string",
+			"default": "TRADITIONAL · 1 FRAME IN {ratio} KEPT"
+		},
+		"letslapseRowLabel": {
+			"type": "string",
+			"default": "LETSLAPSE · ALL {ratio} FRAMES AVERAGED"
+		},
+		"autoLabel": {
+			"type": "string",
+			"default": "auto"
+		},
+		"compareStatusLabel": {
+			"type": "string",
+			"default": "frame {index} / {total}"
+		},
 		"showTimeline": {
 			"type": "boolean",
 			"default": true
@@ -61,16 +117,36 @@
 			"type": "string",
 			"default": "Reduced motion — showing the finished stack"
 		},
-		"blendRatio": { "type": "number" },
-		"outputCount": { "type": "number" },
-		"frameCount": { "type": "number" },
-		"atlasCols": { "type": "number" },
-		"atlasFrameSize": { "type": "number" },
-		"sourceFps": { "type": "number" },
-		"startRate": { "type": "number" },
-		"accel": { "type": "number" },
-		"maxRate": { "type": "number" },
-		"playFps": { "type": "number" },
+		"blendRatio": {
+			"type": "number"
+		},
+		"outputCount": {
+			"type": "number"
+		},
+		"frameCount": {
+			"type": "number"
+		},
+		"atlasCols": {
+			"type": "number"
+		},
+		"atlasFrameSize": {
+			"type": "number"
+		},
+		"sourceFps": {
+			"type": "number"
+		},
+		"startRate": {
+			"type": "number"
+		},
+		"accel": {
+			"type": "number"
+		},
+		"maxRate": {
+			"type": "number"
+		},
+		"playFps": {
+			"type": "number"
+		},
 		"atlasUrl": {
 			"type": "string",
 			"default": ""

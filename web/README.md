@@ -37,10 +37,18 @@ be edited.
 
 ## The machine
 
-The block is the canvas and its replay control — nothing else. Headings,
-standfirsts and any surrounding prose are ordinary blocks on the page, so copy
-lives where an editor expects to find it. Everything lives in
-`inc/blocks/hero-machine/`; nothing outside that directory renders it.
+The block is the canvas and its controls — nothing else. Headings, standfirsts
+and any surrounding prose are ordinary blocks on the page, so copy lives where
+an editor expects to find it. Everything lives in `inc/blocks/hero-machine/`;
+nothing outside that directory renders it.
+
+It has two **modes**, offered as separate items in the inserter (block
+variations) and switchable afterwards under **Presentation**:
+
+| Mode | What it shows |
+| --- | --- |
+| **Stack & blend** | The machine itself: frames feed in, average, and play back. |
+| **Traditional vs LetsLapse** | The same footage with and without blending, with the machine one click away. |
 
 It is a dynamic block, **and** the same renderer is exposed as a shortcode:
 
@@ -73,11 +81,55 @@ The frames come from a sprite atlas (`assets/img/tram-atlas-11x11.webp`, 11×11
 grid of 320px cells, 121 cells of which 120 are used). Swap it from the block's
 **Footage** panel and set columns / frame count / frame size to match.
 
+### Traditional vs LetsLapse
+
+The left column becomes three bands — a strip of traditional stills, the
+controls, a strip of blends — and the stage on the right plays whichever is in
+focus. Both strips are the same eight moments of the same footage at the same
+playback rate; the only difference is that traditional keeps one frame in
+fifteen and LetsLapse averages all fifteen. Nothing is dimmed or warmed to make
+the point.
+
+Two details carry that honesty:
+
+- The traditional still is the **middle** frame of each window, not the first.
+  A blend's centroid in time is its middle, so this is the still that sits at
+  the same instant as the blur. Take the first frame instead and the subject
+  jumps sideways every time the comparison switches.
+- The switch only ever lands on **frame 0**, so the two are phase-locked and a
+  cut reads as a change of treatment rather than a jump in time.
+
+The comparison drives itself — four loops a side by default — until the reader
+clicks either view or drags the divider, which ends the cycle for good. The
+`AUTO` marker is there to say so, and disappears when they take over.
+
+**Show LetsLapse workflow** dips the canvas to the page colour, runs the real
+stack-and-blend machine, and hands back with LetsLapse in focus and the
+auto-cycle intact. It is a sub-view rather than a second block, so both share
+one canvas — sized to the taller of the two layouts with each centred inside it,
+because otherwise the reveal would reflow the page under the reader.
+
+**Comparison stage** picks how the two are put side by side. Both drive the same
+divider position, so they differ only in how it travels:
+
+| Stage | Transition |
+| --- | --- |
+| **Toggle** | Hard cut on a loop boundary — a blink comparator. |
+| **Wipe** | The divider sweeps across, and the reader can drag it, arrow-key it, or grab anywhere on the stage. |
+
+The three controls are real DOM, not canvas: canvas-drawn buttons would lose
+focus, keyboard and screen readers. The pair are toggle buttons rather than
+radios, because in wipe mode the divider can sit between them. Their height is
+whatever the theme's font makes it, so the layout **measures the row and
+re-solves** rather than assuming.
+
 ### Settings
 
 | Panel | Settings |
 | --- | --- |
-| Copy | source row, output row, timeline row, replay button, and the status line in each phase (stacking, playing, restarting) plus the reduced-motion note |
+| Presentation | mode, and in compare mode the comparison stage and loops before switching |
+| Comparison copy | the two row labels, the three buttons, the auto marker, the status line |
+| Copy / Machine copy | source row, output row, timeline row, replay button, and the status line in each phase (stacking, playing, restarting) plus the reduced-motion note |
 | Display | show the timeline row, show the blend counter |
 | Blend | source frames per blend, blended frames produced, source capture rate |
 | Pacing | start rate, acceleration per blend, maximum rate, playback rate |
@@ -98,13 +150,22 @@ Filters: `letslapse_hero_schema`, `letslapse_hero_config`,
 
 ### Behaviour
 
-- **Reduced motion** renders the finished stack as a still diagram, no animation.
+- **Reduced motion** renders the finished stack as a still diagram, no
+  animation. In compare mode it holds the split down the middle — both
+  treatments at once, whichever stage the block uses, on the frame with the most
+  movement in it. A toggle that cannot toggle would show one treatment and never
+  the other, and the one it happens to hold is the one worth seeing least.
 - **Off-screen or hidden tab**: the loop idles, but one frame is always painted
   so the machine is never a blank rectangle.
 - **Colours and the label font** are read from CSS custom properties on
   `.ll-machine__stage` (`--ll-machine-bg`, `--ll-machine-accent`, …), so the
   canvas follows the theme rather than hardcoding hexes.
 - **No atlas**: a text description replaces the canvas.
+- **Single column** below 600px. Compare mode reorders to stage → controls →
+  the two strips, so the strips stay adjacent and comparable. The stack layout's
+  gate sits 8px in from the column edge there: the brackets overhang their frame
+  by 6px and are stroked 3px wide, and on desktop the gutter through to the
+  stage is what gives them that room.
 
 ## The rig hero
 

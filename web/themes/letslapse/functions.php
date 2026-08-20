@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'LETSLAPSE_VERSION', '0.4.0' );
+define( 'LETSLAPSE_VERSION', '0.5.0' );
 
 require_once get_theme_file_path( 'inc/config.php' );
 require_once get_theme_file_path( 'inc/blocks.php' );

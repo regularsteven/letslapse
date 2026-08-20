@@ -62,6 +62,16 @@ function letslapse_enqueue_block_assets( $block_name ) {
 function letslapse_hero_shortcode( $atts ) {
 	$atts = shortcode_atts(
 		array(
+			'mode'                 => null,
+			'compare_stage'        => null,
+			'compare_loops'        => null,
+			'traditional_label'    => null,
+			'letslapse_label'      => null,
+			'workflow_label'       => null,
+			'traditional_row_label' => null,
+			'letslapse_row_label'  => null,
+			'auto_label'           => null,
+			'compare_status_label' => null,
 			'show_timeline'        => null,
 			'show_playing_count'   => null,
 			'source_label'         => null,
@@ -153,6 +163,7 @@ function letslapse_block_editor_data() {
 		'letsLapseHero',
 		array(
 			'schema'        => letslapse_hero_schema(),
+			'choices'       => letslapse_hero_choices(),
 			'labelDefaults' => letslapse_hero_label_defaults(),
 			'defaultAtlas'  => letslapse_hero_atlas_url( array() ),
 		)

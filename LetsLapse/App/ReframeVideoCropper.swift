@@ -243,6 +243,14 @@ enum ReframeVideoCropper {
             request.finish(with: graded, context: context)
         }
         composition.renderSize = renderSize
+        // The clip's clock, stated rather than inherited. The initializer seeds
+        // `frameDuration` from the incoming asset's nominal rate, so a pass over
+        // an intermediate that had already been retimed upstream would faithfully
+        // re-encode at the WRONG rate — which is how project B0E3269D's 600
+        // blended frames at 50 fps reached disk as 150 frames at 12.5 fps. This
+        // pass knows the rate the job asked for; it is the authority.
+        composition.frameDuration = CMTime(
+            value: 1, timescale: CMTimeScale(max(1, outputFPS)))
 
         // The shared policy encodes the pass — deterministic bitrate and full
         // colour tags, where the export-session preset chose its own and

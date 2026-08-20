@@ -122,3 +122,64 @@
 	font-style: normal;
 	color: #757575;
 }
+
+/* Compare mode's schematic: the same two-up shape, but the left column is
+   three bands and the stage says which treatment it will switch with. */
+.ll-machine-editor__frame.is-still {
+	flex-basis: 20px;
+	background: rgba(198, 210, 228, 0.14);
+	border-color: rgba(198, 210, 228, 0.3);
+}
+
+.ll-machine-editor__controls {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	flex-wrap: wrap;
+	padding: 2px 0;
+}
+
+.ll-machine-editor__pill {
+	font-size: 10px;
+	font-weight: 600;
+	line-height: 1;
+	padding: 5px 9px;
+	border-radius: 999px;
+	border: 1px solid rgba(36, 90, 133, 0.9);
+	color: rgba(198, 210, 228, 0.7);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 45%;
+}
+
+.ll-machine-editor__pill.is-on {
+	background: var(--ll-accent, #F0A32C);
+	border-color: var(--ll-accent, #F0A32C);
+	color: #10131A;
+}
+
+.ll-machine-editor__link {
+	font-size: 10px;
+	font-weight: 600;
+	color: var(--ll-accent, #F0A32C);
+	border-bottom: 1px solid rgba(240, 163, 44, 0.45);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 45%;
+}
+
+.ll-machine-editor__stage.is-compare {
+	flex-basis: 124px;
+	background: linear-gradient(
+		90deg,
+		rgba(198, 210, 228, 0.14) 0 50%,
+		rgba(240, 163, 44, 0.2) 50% 100%
+	);
+}
+
+.ll-machine-editor__stage.is-wipe {
+	border-left: 0;
+	box-shadow: inset 2px 0 0 0 var(--ll-accent, #F0A32C);
+}

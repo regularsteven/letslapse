@@ -3548,7 +3548,8 @@ final class AppModel: ObservableObject {
                     let uncropped = output.url
                     let cropped = try await VideoCanvasCropper.croppedCopy(
                         of: uncropped, canvas: cropCanvas, offset: cropOffset,
-                        shortEdge: exportEdge, grade: grade, gradeMap: gradeMap
+                        shortEdge: exportEdge, grade: grade, gradeMap: gradeMap,
+                        outputFPS: fps
                     ) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let cropBand else { return }
@@ -3592,7 +3593,8 @@ final class AppModel: ObservableObject {
                     let gradeBand = tailBand
                     let ungraded = output.url
                     output.url = try await VideoGrader.bakedCopy(
-                        of: ungraded, grade: grade, map: gradeMap) { fraction in
+                        of: ungraded, grade: grade, map: gradeMap,
+                        outputFPS: fps) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let gradeBand else { return }
                             self.reportTailProgress(band: gradeBand, fraction: fraction)
@@ -3614,6 +3616,25 @@ final class AppModel: ObservableObject {
                 }
                 self.processingPhase = .saving
                 self.processingETADate = nil
+                // The file, not the plan. Everything above this line is
+                // arithmetic — a schedule's frame count carried through the
+                // stitch and the tail passes untouched by any of them. Read the
+                // clip back before it is filed, so a stage that retimed it fails
+                // the render instead of relabelling it (project B0E3269D).
+                if output.kind == .video {
+                    let measured = try await RenderVerifier.verify(
+                        output.url,
+                        expectedFrames: output.outputFrames,
+                        expectedFPS: fps,
+                        stage: "the finishing passes")
+                    // Record what landed rather than what was intended: within
+                    // tolerance the two can still differ by a frame, and the
+                    // manifest is the thing every screen quotes. Only the count
+                    // — the recorded width/height follow their own (natural vs
+                    // display-oriented) convention per path, and `probedBlendSizes`
+                    // already exists to reconcile that.
+                    output.outputFrames = measured.frameCount
+                }
                 let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
                 self.apply(output, from: blend)
                 self.progress = 1
@@ -3855,7 +3876,8 @@ final class AppModel: ObservableObject {
     private func normalizedSegment(
         _ url: URL,
         segmentIndex: Int,
-        normalization: SegmentNormalization
+        normalization: SegmentNormalization,
+        outputFPS: Double
     ) async throws -> URL {
         if let reframe = normalization.reframe {
             // The slice of the frame map belonging to THIS segment. The warp
@@ -3869,7 +3891,8 @@ final class AppModel: ObservableObject {
             guard !frameTimes.isEmpty, frameRects.count == frameTimes.count else {
                 LLog("normalize: segment \(segmentIndex) has no compiled frame map"
                      + " — scaling without the punch")
-                return try await scaledSegment(url, normalization: normalization)
+                return try await scaledSegment(
+                    url, normalization: normalization, outputFPS: outputFPS)
             }
             let reframed = try await ReframeVideoCropper.croppedCopy(
                 of: url,
@@ -3882,19 +3905,22 @@ final class AppModel: ObservableObject {
                 rectsOverride: frameRects)
             return reframed.url
         }
-        return try await scaledSegment(url, normalization: normalization)
+        return try await scaledSegment(
+            url, normalization: normalization, outputFPS: outputFPS)
     }
 
     /// The no-punch path: canvas-crop and/or scale one segment to the common
     /// render size.
     private func scaledSegment(
         _ url: URL,
-        normalization: SegmentNormalization
+        normalization: SegmentNormalization,
+        outputFPS: Double
     ) async throws -> URL {
         let cropped = try await VideoCanvasCropper.croppedCopy(
             of: url,
             canvas: normalization.canvas,
             offset: normalization.canvasOffset,
+            outputFPS: outputFPS,
             renderSizeOverride: normalization.renderSize)
         return cropped.url
     }
@@ -3939,7 +3965,7 @@ final class AppModel: ObservableObject {
             clipFrames: await segmentFrameEstimates(
                 orderedSegments, urlsByName: segmentURLByName,
                 baseFrameRate: source.sequence.baseFrameRate),
-            hasStitch: true, hasGrade: willBakeGrade)
+            hasStitch: orderedSegments.count > 1, hasGrade: willBakeGrade)
         beginProgressPlan(plan)
 
         for (index, segment) in orderedSegments.enumerated() {
@@ -3977,7 +4003,8 @@ final class AppModel: ObservableObject {
                 pieceURL = try await normalizedSegment(
                     segmentOutput.url,
                     segmentIndex: index,
-                    normalization: normalization)
+                    normalization: normalization,
+                    outputFPS: fps)
                 if pieceURL != segmentOutput.url,
                    segmentOutput.url.deletingLastPathComponent().standardizedFileURL
                     == FileManager.default.temporaryDirectory.standardizedFileURL {
@@ -3999,19 +4026,41 @@ final class AppModel: ObservableObject {
             reportClipProgress(index, fraction: 1)
         }
 
-        processingPhase = .combining(clips: processedPieces.count)
-        tailPhaseStartedAt = Date()
-        processingETADate = nil
-        statusMessage = "Stitching \(processedPieces.count) processed segments..."
-        let output = FileManager.default.temporaryDirectory
-            .appendingPathComponent("LetsLapse-sequence-\(UUID().uuidString).mp4")
+        // A one-piece "stitch" has nothing to lay end to end. It used to run
+        // anyway — and a single-segment ramp shoot is an ordinary shoot, not an
+        // edge case — which put every such render through an export session that
+        // silently retimed it (see `stitchVideos`). The piece IS the clip, so
+        // hand it straight to the tail passes.
+        //
+        // The one single-piece case that still needs the stitch is a lone burst
+        // carrying a `slowFactor`: that is a real retime, not a concatenation.
+        let needsStitch = processedPieces.count > 1
+            || processedPieces.contains { $0.slowFactor != nil }
         let stitchBand = plan.stitchBand ?? min(progress, 0.98)...0.98
-        let stitched = try await stitchVideos(
-            processedPieces, to: output, burstRamp: burstRamp
-        ) { [weak self] fraction in
-            Task { @MainActor in
-                self?.reportTailProgress(band: stitchBand, fraction: fraction)
+        let output: URL
+        let stitched: (width: Int, height: Int, duration: Double, rampDropped: Bool)
+        if needsStitch {
+            processingPhase = .combining(clips: processedPieces.count)
+            tailPhaseStartedAt = Date()
+            processingETADate = nil
+            statusMessage = "Stitching \(processedPieces.count) processed segments..."
+            output = FileManager.default.temporaryDirectory
+                .appendingPathComponent("LetsLapse-sequence-\(UUID().uuidString).mp4")
+            stitched = try await stitchVideos(
+                processedPieces, to: output, outputFPS: fps, burstRamp: burstRamp
+            ) { [weak self] fraction in
+                Task { @MainActor in
+                    self?.reportTailProgress(band: stitchBand, fraction: fraction)
+                }
             }
+        } else {
+            output = processedPieces[0].url
+            let measured = try await RenderVerifier.measure(output)
+            stitched = (
+                width: measured.displayWidth,
+                height: measured.displayHeight,
+                duration: measured.duration,
+                rampDropped: false)
         }
         try Task.checkCancellation()
         reportTailProgress(band: stitchBand, fraction: 1)
@@ -4188,7 +4237,7 @@ final class AppModel: ObservableObject {
             .appendingPathComponent("LetsLapse-marker-sequence-\(UUID().uuidString).mp4")
         let stitchBand = plan.stitchBand ?? min(progress, 0.98)...0.98
         let stitched = try await stitchVideos(
-            processedPieces, to: output, burstRamp: burstRamp
+            processedPieces, to: output, outputFPS: fps, burstRamp: burstRamp
         ) { [weak self] fraction in
             Task { @MainActor in
                 self?.reportTailProgress(band: stitchBand, fraction: fraction)
@@ -4367,6 +4416,7 @@ final class AppModel: ObservableObject {
     private func stitchVideos(
         _ pieces: [StitchPiece],
         to outputURL: URL,
+        outputFPS: Double,
         burstRamp: Double = 0,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> (width: Int, height: Int, duration: Double, rampDropped: Bool) {
@@ -4487,21 +4537,75 @@ final class AppModel: ObservableObject {
             }
         }
 
+        let hasRamp = burstRamp > 0 && !burstPlacements.isEmpty
+
+        // The ramp-free stitch — every modern render, since a warp carries its
+        // speeds inside the per-file schedules and never retimes here — is a
+        // pure concatenation, so it goes through the shared reader→writer pump
+        // and lands frame for frame.
+        //
+        // It used to go through `AVAssetExportSession(presetName:
+        // .highestQuality)`. That preset is a device capability budget, not a
+        // passthrough: at large frame sizes it silently caps BOTH resolution and
+        // frame rate, and it drops frames to hit the rate rather than reblending
+        // them. Measured on a 4032×3024 50 fps intermediate: 3840×2880 → 3548×2660
+        // and 50 → 25 fps on an M4 Max, 50 → 12.5 fps on the phone that rendered
+        // project B0E3269D — 450 of 600 blended frames binned, with the manifest
+        // still reporting "600 frames out · 50 fps". At 1920×1080 the same preset
+        // is transparent, which is why this went years without being seen.
+        //
+        // `composition: nil` reads the composition track's samples straight
+        // through with their own timing, so the 600 frames stay 600 frames; the
+        // writer carries the track's `preferredTransform`, so the policy is
+        // sized in NATURAL pixels while the returned size stays display-oriented.
+        if !hasRamp {
+            let natural = firstNaturalSize == .zero ? (outputSize ?? .zero) : firstNaturalSize
+            let policy = VideoEncodePolicy(
+                profile: (blendProfileOverride ?? defaultBlendProfile) == .hevcMain10
+                    ? .hevcMain10 : .h264High8Bit,
+                width: max(2, Int(abs(natural.width).rounded()) & ~1),
+                height: max(2, Int(abs(natural.height).rounded()) & ~1),
+                fps: outputFPS)
+            do {
+                try await CompositionExporter.export(
+                    asset: composition, composition: nil, to: outputURL,
+                    fileType: .mp4, policy: policy, progress: progress)
+            } catch is CancellationError {
+                throw LapseError.cancelled
+            } catch {
+                throw LapseError.writerFailed(error.localizedDescription)
+            }
+            let size = outputSize ?? .zero
+            return (
+                Int(abs(size.width).rounded()),
+                Int(abs(size.height).rounded()),
+                composition.duration.seconds,
+                rampDropped: false
+            )
+        }
+
+        // The burst-ramp path keeps the export session: the ramp is a
+        // `scaleTimeRange` retime, and the reader→writer pump passes scaled
+        // segments through at their original frame count rather than resampling
+        // them to a constant rate (measured — a 1 s → 2 s scale yields the same
+        // 104 frames stretched over 3 s). Changing that is a retiming question,
+        // not a plumbing one, so it is left alone and the post-render check now
+        // guards it. This path is legacy anyway: `slowFactor` is only ever set
+        // when no warp schedule is driving the render.
+        //
         // AVAssetExportPresetHighestQuality attempts to preserve the source
         // codec (HEVC on modern iPhones), but VideoToolbox's HEVC encoder does
         // not support scaleTimeRange — it returns kVTPropertyNotSupportedErr
         // (-16364) wrapped in AVErrorOperationNotSupportedForAsset (-11800).
         // A resolution-locked preset forces an H.264 encode path that handles
-        // speed ramps without complaint. Only switch when ramp is actually on;
-        // HighestQuality is still used for ramp-free stitches.
-        let hasRamp = burstRamp > 0 && !burstPlacements.isEmpty
+        // speed ramps without complaint.
         let stitchPreset: String
-        if hasRamp, let size = outputSize {
+        if let size = outputSize {
             stitchPreset = max(size.width, size.height) > 1920
                 ? AVAssetExportPreset3840x2160
                 : AVAssetExportPreset1920x1080
         } else {
-            stitchPreset = AVAssetExportPresetHighestQuality
+            stitchPreset = AVAssetExportPreset1920x1080
         }
         guard let export = AVAssetExportSession(
             asset: composition,
@@ -4565,6 +4669,7 @@ final class AppModel: ObservableObject {
             LLog("burst-ramp: rebuilding composition without ramp")
             try? FileManager.default.removeItem(at: outputURL)
             let fallback = try await stitchVideos(pieces, to: outputURL,
+                                                  outputFPS: outputFPS,
                                                   burstRamp: 0, progress: progress)
             return (fallback.width, fallback.height, fallback.duration, rampDropped: true)
         }

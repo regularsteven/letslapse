@@ -79,3 +79,194 @@
 .ll-machine__fallback[hidden] {
 	display: none;
 }
+
+/* ---------------------------------------------------------------------------
+   Compare mode
+   ------------------------------------------------------------------------- */
+
+/*
+ * The control row sits in a band the canvas layout reserves for it, between
+ * the two comparison strips. Its height is measured back into that layout, so
+ * these paddings and font sizes are the ones the canvas solves around — change
+ * them and the strips move to suit.
+ */
+.ll-machine__controls {
+	position: absolute;
+	left: 0;
+	top: 0;
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 14px;
+	flex-wrap: wrap;
+	opacity: 1;
+	transition: opacity 320ms ease-out;
+}
+
+.ll-machine__controls.is-hidden {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.ll-machine__seg {
+	position: relative;
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	padding: 4px;
+	border: 1px solid rgba(36, 90, 133, 0.9);
+	border-radius: 999px;
+	background: rgba(6, 11, 22, 0.75);
+}
+
+.ll-machine__view {
+	appearance: none;
+	background: none;
+	border: 0;
+	border-radius: 999px;
+	color: rgba(198, 210, 228, 0.72);
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1;
+	padding: 9px 18px;
+	white-space: nowrap;
+	transition: background-color 140ms ease-out, color 140ms ease-out;
+}
+
+.ll-machine__view:hover {
+	color: rgba(233, 238, 246, 0.95);
+	background: rgba(198, 210, 228, 0.08);
+}
+
+.ll-machine__view[aria-pressed="true"] {
+	background: var(--ll-accent, #F0A32C);
+	color: #10131A;
+}
+
+/* The auto marker only claims space while the machine is still driving
+   itself; once the reader takes over it is gone for good. */
+.ll-machine__auto {
+	font-size: 10px;
+	font-weight: 700;
+	letter-spacing: 0.12em;
+	text-transform: uppercase;
+	color: rgba(240, 163, 44, 0.75);
+	padding-right: 10px;
+	padding-left: 2px;
+	transition: opacity 200ms ease-out;
+}
+
+.ll-machine__auto[hidden] {
+	display: none;
+}
+
+.ll-machine__action {
+	appearance: none;
+	background: none;
+	border: 0;
+	border-bottom: 1px solid rgba(240, 163, 44, 0.45);
+	border-radius: 0;
+	color: var(--ll-accent, #F0A32C);
+	cursor: pointer;
+	font-family: inherit;
+	font-size: 13px;
+	font-weight: 600;
+	line-height: 1.2;
+	padding: 2px 1px;
+	white-space: nowrap;
+	transition: border-color 140ms ease-out, color 140ms ease-out;
+}
+
+.ll-machine__action:hover {
+	color: #FFC978;
+	border-bottom-color: #FFC978;
+}
+
+/* The draggable split. Position and height come from the view script; it
+   tracks the stage rect the canvas draws the two halves into. */
+.ll-machine__wipe {
+	position: absolute;
+	left: 0;
+	top: 0;
+	width: 26px;
+	margin-left: -13px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: ew-resize;
+	touch-action: none;
+	opacity: 1;
+	transition: opacity 320ms ease-out;
+}
+
+.ll-machine__wipe.is-hidden {
+	opacity: 0;
+	pointer-events: none;
+}
+
+.ll-machine__wipe::before {
+	content: "";
+	position: absolute;
+	inset-block: 0;
+	left: 50%;
+	width: 2px;
+	margin-left: -1px;
+	background: var(--ll-accent, #F0A32C);
+}
+
+.ll-machine__wipe-grip {
+	position: relative;
+	width: 26px;
+	height: 26px;
+	border-radius: 50%;
+	background: var(--ll-accent, #F0A32C);
+	box-shadow: 0 2px 10px rgba(0, 0, 0, 0.55);
+}
+
+/* Two chevrons, so it reads as "drag me" without a label. */
+.ll-machine__wipe-grip::before,
+.ll-machine__wipe-grip::after {
+	content: "";
+	position: absolute;
+	top: 50%;
+	width: 5px;
+	height: 5px;
+	margin-top: -3px;
+	border-top: 1.5px solid #10131A;
+	border-right: 1.5px solid #10131A;
+}
+
+.ll-machine__wipe-grip::before {
+	left: 7px;
+	transform: rotate(-135deg);
+}
+
+.ll-machine__wipe-grip::after {
+	right: 7px;
+	transform: rotate(45deg);
+}
+
+.ll-machine__wipe:focus-visible {
+	outline: none;
+}
+
+.ll-machine__wipe:focus-visible .ll-machine__wipe-grip {
+	outline: 2px solid #FFF;
+	outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	.ll-machine__controls,
+	.ll-machine__wipe,
+	.ll-machine__view,
+	.ll-machine__action,
+	.ll-machine__auto {
+		transition: none;
+	}
+}
+
+.ll-machine__controls.is-narrow {
+	justify-content: center;
+}

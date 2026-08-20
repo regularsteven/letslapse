@@ -26,7 +26,8 @@
 		startRate: [ 0.5, 6 ],
 		accel: [ 1, 2.5 ],
 		maxRate: [ 4, 30 ],
-		playFps: [ 1, 15 ]
+		playFps: [ 1, 15 ],
+		loops: [ 1, 12 ]
 	};
 
 	var DEFAULTS = {
@@ -39,10 +40,16 @@
 		startRate: 1.6,
 		accel: 1.5,
 		maxRate: 16,
-		playFps: 5
+		playFps: 5,
+		loops: 4
 	};
 
-	var INTEGER_KEYS = [ 'cols', 'frames', 'frameSize', 'srcFps', 'ratio', 'outputs' ];
+	var INTEGER_KEYS = [ 'cols', 'frames', 'frameSize', 'srcFps', 'ratio', 'outputs', 'loops' ];
+
+	/** Cubic in-out, for the wipe sweep. */
+	function easeInOut( t ) {
+		return t < 0.5 ? 4 * t * t * t : 1 - Math.pow( -2 * t + 2, 3 ) / 2;
+	}
 
 	function clamp( value, min, max ) {
 		return Math.max( min, Math.min( max, value ) );
@@ -106,6 +113,10 @@
 		this.root = root;
 		this.canvas = root.querySelector( 'canvas' );
 		this.replayButton = root.querySelector( '[data-ll-replay]' );
+		this.controls = root.querySelector( '[data-ll-controls]' );
+		this.autoMark = root.querySelector( '[data-ll-auto]' );
+		this.wipeHandle = root.querySelector( '[data-ll-wipe]' );
+		this.viewButtons = root.querySelectorAll( '[data-ll-view]' );
 		this.fallback = root.parentNode ? root.parentNode.querySelector( '[data-ll-fallback]' ) : null;
 
 		if ( ! this.canvas ) {
@@ -118,7 +129,14 @@
 		this.visible = true;
 		this.playIdx = 0;
 
+		// Compare mode's own view state. 'workflow' is a sub-view of compare,
+		// not a sibling of it: it borrows the stack machine wholesale and hands
+		// back when it finishes, which is why the two share one canvas.
+		this.view = 'compare' === this.c.mode ? 'compare' : 'stack';
+		this.btnH = 44;
+
 		this.readPalette();
+		this.resetCompare();
 		this.relayout();
 		this.resetSim();
 		this.bind();
@@ -154,6 +172,8 @@
 
 		config.atlas = raw.atlas || '';
 		config.labels = raw.labels || {};
+		config.mode = 'compare' === raw.mode ? 'compare' : 'stack';
+		config.stage = 'wipe' === raw.stage ? 'wipe' : 'toggle';
 		config.showTimeline = false !== raw.showTimeline;
 		config.showCount = false !== raw.showCount;
 
@@ -204,6 +224,13 @@
 		image.onload = function () {
 			self.atlas = image;
 			self.staticDone = false;
+
+			// Compare mode plays finished blends from its first frame, so it
+			// builds them all now. Same running mean as the machine, ~120
+			// composites of a 320px cell — a few milliseconds, once.
+			if ( 'compare' === self.c.mode ) {
+				self.blends = self.buildBlends();
+			}
 
 			// Paint one frame straight away. A page opened in a background tab
 			// still shows a seeded machine rather than an empty canvas; the
@@ -284,6 +311,146 @@
 				self.replay();
 			} );
 		}
+
+		this.bindCompare();
+	};
+
+	Machine.prototype.bindCompare = function () {
+		if ( 'compare' !== this.c.mode ) {
+			return;
+		}
+
+		var self = this;
+		var i;
+
+		var onView = function ( event ) {
+			var view = event.currentTarget.getAttribute( 'data-ll-view' );
+
+			if ( 'workflow' === view ) {
+				if ( 'compare' === self.view && ! self.cmp.swap ) {
+					self.startSwap( 'workflow' );
+					self.wake();
+				}
+
+				return;
+			}
+
+			self.setFocus( view, true );
+			self.wake();
+		};
+
+		for ( i = 0; i < this.viewButtons.length; i++ ) {
+			this.viewButtons[ i ].addEventListener( 'click', onView );
+		}
+
+		this.setAutoMark( true );
+		this.syncButtons();
+
+		if ( ! this.wipeHandle ) {
+			return;
+		}
+
+		// Canvas x for a pointer, in layout units rather than CSS pixels.
+		var stageFraction = function ( clientX ) {
+			var LC = self.LC;
+			var rect = self.canvas.getBoundingClientRect();
+			var x = ( clientX - rect.left ) * ( LC.w / rect.width );
+
+			return ( x - LC.stageX ) / LC.S;
+		};
+
+		var drag = function ( event ) {
+			if ( ! self.cmp.dragging || ! self.LC ) {
+				return;
+			}
+
+			self.setWipe( stageFraction( event.clientX ) );
+			self.wake();
+			event.preventDefault();
+		};
+
+		var release = function () {
+			self.cmp.dragging = false;
+		};
+
+		var grab = function ( event, node ) {
+			if ( 'compare' !== self.view || ! self.LC ) {
+				return;
+			}
+
+			self.cmp.dragging = true;
+
+			if ( node.setPointerCapture ) {
+				node.setPointerCapture( event.pointerId );
+			}
+
+			self.setWipe( stageFraction( event.clientX ) );
+			self.wake();
+			event.preventDefault();
+		};
+
+		this.wipeHandle.addEventListener( 'pointerdown', function ( event ) {
+			grab( event, self.wipeHandle );
+		} );
+		this.wipeHandle.addEventListener( 'pointermove', drag );
+		this.wipeHandle.addEventListener( 'pointerup', release );
+		this.wipeHandle.addEventListener( 'pointercancel', release );
+
+		// Grabbing anywhere on the stage picks the divider up too, which is how
+		// every before/after slider behaves.
+		this.canvas.addEventListener( 'pointerdown', function ( event ) {
+			var LC = self.LC;
+
+			if ( 'compare' !== self.view || ! LC ) {
+				return;
+			}
+
+			var rect = self.canvas.getBoundingClientRect();
+			var x = ( event.clientX - rect.left ) * ( LC.w / rect.width );
+			var y = ( event.clientY - rect.top ) * ( self.H / rect.height ) - LC.yOff;
+
+			if ( x < LC.stageX || x > LC.stageX + LC.S || y < LC.stageY || y > LC.stageY + LC.S ) {
+				return;
+			}
+
+			grab( event, self.canvas );
+		} );
+		this.canvas.addEventListener( 'pointermove', drag );
+		this.canvas.addEventListener( 'pointerup', release );
+		this.canvas.addEventListener( 'pointercancel', release );
+
+		this.wipeHandle.addEventListener( 'keydown', function ( event ) {
+			var wipe = self.cmp.wipe;
+
+			switch ( event.key ) {
+				case 'ArrowLeft':
+				case 'ArrowDown':
+					wipe -= 0.05;
+					break;
+				case 'ArrowRight':
+				case 'ArrowUp':
+					wipe += 0.05;
+					break;
+				case 'PageDown':
+					wipe -= 0.2;
+					break;
+				case 'PageUp':
+					wipe += 0.2;
+					break;
+				case 'Home':
+					wipe = 0;
+					break;
+				case 'End':
+					wipe = 1;
+					break;
+				default:
+					return;
+			}
+
+			event.preventDefault();
+			self.setWipe( wipe );
+			self.wake();
+		} );
 	};
 
 	/**
@@ -294,10 +461,61 @@
 			return;
 		}
 
-		if ( this.reduced && this.reduced.matches ) {
-			this.drawStatic();
+		if ( this.isReduced() ) {
+			this.drawStaticView();
+		} else {
+			this.drawView();
+		}
+	};
+
+	Machine.prototype.isReduced = function () {
+		return !! ( this.reduced && this.reduced.matches );
+	};
+
+	/** Draw whichever view is on. */
+	Machine.prototype.drawView = function () {
+		if ( 'compare' === this.view && this.LC ) {
+			this.drawCompare();
 		} else {
 			this.draw();
+		}
+	};
+
+	Machine.prototype.drawStaticView = function () {
+		if ( 'compare' === this.view && this.LC ) {
+			this.drawStaticCompare();
+		} else {
+			this.drawStatic();
+		}
+	};
+
+	/** Advance whichever view is on. */
+	Machine.prototype.tickView = function ( dt ) {
+		if ( 'compare' !== this.c.mode ) {
+			this.tick( dt );
+
+			return;
+		}
+
+		if ( this.cmp.swap ) {
+			this.tickSwap( dt );
+		}
+
+		if ( 'compare' === this.view ) {
+			this.tickCompare( dt );
+		} else {
+			this.tick( dt );
+			this.watchWorkflow( dt );
+		}
+	};
+
+	/** Bring a stopped machine back to life after an interaction. */
+	Machine.prototype.wake = function () {
+		this.staticDone = false;
+		this.start();
+
+		if ( ! this.raf ) {
+			this.repaint();
 		}
 	};
 
@@ -320,8 +538,8 @@
 				return;
 			}
 
-			if ( self.reduced && self.reduced.matches ) {
-				self.drawStatic();
+			if ( self.isReduced() ) {
+				self.drawStaticView();
 
 				if ( self.staticDone ) {
 					self.stop();
@@ -330,8 +548,8 @@
 				return;
 			}
 
-			self.tick( dt );
-			self.draw();
+			self.tickView( dt );
+			self.drawView();
 		};
 
 		this.raf = requestAnimationFrame( loop );
@@ -345,14 +563,14 @@
 	};
 
 	/**
-	 * Solve the layout for the current width.
+	 * Re-solve every layout the block can show, and size the canvas to fit.
 	 *
-	 * Desktop is two columns: the source strip and the output row stack in the
-	 * left column, and the square stage fills the right one. The stage size and
-	 * the column width depend on each other, so four passes settle them.
+	 * A compare-mode block can switch to the workflow view mid-scroll, and the
+	 * two views do not naturally come out the same height. Sizing the canvas to
+	 * the taller of them and centring each inside it means the reveal never
+	 * reflows the page under the reader.
 	 */
 	Machine.prototype.relayout = function () {
-		var c = this.c;
 		var w = this.root.clientWidth;
 
 		if ( ! w ) {
@@ -360,6 +578,56 @@
 		}
 
 		var mobile = w <= MOBILE_MAX;
+
+		this.L = this.solveStack( w, mobile );
+		this.LC = 'compare' === this.c.mode ? this.solveCompare( w, mobile ) : null;
+
+		var H = this.LC ? Math.max( this.L.H, this.LC.H ) : this.L.H;
+
+		this.L.yOff = Math.round( ( H - this.L.H ) / 2 );
+
+		if ( this.LC ) {
+			this.LC.yOff = Math.round( ( H - this.LC.H ) / 2 );
+		}
+
+		this.H = H;
+
+		var dpr = window.devicePixelRatio || 1;
+
+		this.canvas.width = Math.round( w * dpr );
+		this.canvas.height = Math.round( H * dpr );
+		this.canvas.style.height = H + 'px';
+		this.dpr = dpr;
+		this.staticDone = false;
+
+		this.placeChrome();
+
+		// The control row's height is whatever the theme's font makes it, so
+		// the canvas cannot know it up front — measure it once and re-solve.
+		if ( ! this.measuring && this.measureControls() ) {
+			this.measuring = true;
+			this.relayout();
+			this.measuring = false;
+
+			return;
+		}
+
+		this.repaint();
+	};
+
+	/**
+	 * Solve the stack-and-blend layout for the current width.
+	 *
+	 * Desktop is two columns: the source strip and the output row stack in the
+	 * left column, and the square stage fills the right one. The stage size and
+	 * the column width depend on each other, so four passes settle them.
+	 *
+	 * @param {number}  w      Available width.
+	 * @param {boolean} mobile Single-column layout.
+	 * @return {Object} Layout.
+	 */
+	Machine.prototype.solveStack = function ( w, mobile ) {
+		var c = this.c;
 		var stripY = 26;
 		var S, colW, F, g, g2, Fo, stageX, stageY, outY;
 
@@ -395,7 +663,13 @@
 		}
 
 		var dropX = Math.round( F * 0.7 );
-		var gateX = colW - F;
+
+		// The gate brackets overhang their frame by 6px on every side and are
+		// stroked 3px wide, so the gate has to stand clear of the column edge
+		// for the right-hand pair to survive. On desktop the gutter through to
+		// the stage already gives them that room; in a single column the canvas
+		// edge is right there, and without the inset they are drawn off it.
+		var gateX = colW - F - ( mobile ? 8 : 0 );
 		var rowsBottom = mobile ? outY + Fo : stripY + S;
 		var tlX = 0;
 		var tlW = w - 2;
@@ -406,27 +680,142 @@
 		var statusY = c.showTimeline ? tlY - 8 : rowsBottom + 24;
 		var H = c.showTimeline ? tlY + Th + 10 : rowsBottom + 32;
 
-		this.L = {
+		return {
 			w: w, colW: colW, F: F, g: g, dropX: dropX, gateX: gateX, S: S,
 			stageX: stageX, stageY: stageY, stripY: stripY, outY: outY, Fo: Fo, g2: g2,
 			tlX: tlX, tlW: tlW, tlY: tlY, Th: Th, statusY: statusY, rowsBottom: rowsBottom,
-			H: H, mobile: mobile
+			H: H, mobile: mobile, yOff: 0
 		};
+	};
 
-		var dpr = window.devicePixelRatio || 1;
+	/**
+	 * Solve the traditional-vs-LetsLapse layout for the current width.
+	 *
+	 * Desktop keeps the two-up shape, but the left column is now three bands —
+	 * traditional strip, controls, blended strip — and the stage on the right
+	 * plays whichever of them is in focus. The stage never drops below its share
+	 * of the width even when the strips are short: the strips are the evidence,
+	 * the stage is the argument.
+	 *
+	 * @param {number}  w      Available width.
+	 * @param {boolean} mobile Single-column layout.
+	 * @return {Object} Layout.
+	 */
+	Machine.prototype.solveCompare = function ( w, mobile ) {
+		var c = this.c;
+		var stripY = 26;
+		var btnH = this.btnH;
+		var gap = mobile ? 16 : 22;
+		var minShare = 0.3;
+		var S, colW, Fo, g2, stageX, stageY, tradY, llY, btnY, rowsBottom;
 
-		this.canvas.width = Math.round( w * dpr );
-		this.canvas.height = Math.round( H * dpr );
-		this.canvas.style.height = H + 'px';
-		this.dpr = dpr;
-		this.staticDone = false;
+		if ( mobile ) {
+			// Stage first, then the controls that drive it, then the two strips
+			// adjacent to each other so they can actually be compared.
+			colW = w;
+			g2 = 3;
+			Fo = Math.max( 16, Math.floor( ( w - ( c.outputs - 1 ) * g2 ) / c.outputs ) );
+			S = Math.min( w, 380 );
+			stageX = Math.round( ( w - S ) / 2 );
+			stageY = stripY;
+			btnY = stageY + S + gap;
+			tradY = btnY + btnH + gap + 14;
+			llY = tradY + Fo + 30;
+			rowsBottom = llY + Fo;
+		} else {
+			var gap12 = Math.round( Math.max( 14, w * 0.03 ) );
 
-		if ( this.replayButton ) {
-			this.replayButton.style.left = Math.round( colW / 2 ) + 'px';
-			this.replayButton.style.top = Math.round( stripY + F / 2 - 21 ) + 'px';
+			S = Math.round( w * minShare );
+			colW = w - S - gap12;
+			g2 = 6;
+			Fo = 16;
+
+			for ( var it = 0; it < 5; it++ ) {
+				colW = w - S - gap12;
+				g2 = colW / c.outputs > 46 ? 6 : 3;
+				Fo = Math.max( 16, Math.floor( ( colW - ( c.outputs - 1 ) * g2 ) / c.outputs ) );
+				S = Math.max( Math.round( w * minShare ), 2 * Fo + 2 * gap + btnH );
+			}
+
+			stageX = colW + gap12;
+			stageY = stripY;
+
+			var colH = 2 * Fo + 2 * gap + btnH;
+			var colTop = stripY + Math.round( Math.max( 0, S - colH ) / 2 );
+
+			tradY = colTop;
+			btnY = colTop + Fo + gap;
+			llY = btnY + btnH + gap;
+			rowsBottom = Math.max( stripY + S, llY + Fo );
 		}
 
-		this.repaint();
+		var tlY = rowsBottom + 38;
+		var Th = 16;
+		var statusY = c.showTimeline ? tlY - 8 : rowsBottom + 24;
+		var H = c.showTimeline ? tlY + Th + 10 : rowsBottom + 32;
+
+		return {
+			w: w, colW: colW, Fo: Fo, g2: g2, S: S, stageX: stageX, stageY: stageY,
+			stripY: stripY, tradY: tradY, llY: llY, btnY: btnY, btnH: btnH,
+			tlX: 0, tlW: w - 2, tlY: tlY, Th: Th, statusY: statusY,
+			rowsBottom: rowsBottom, H: H, mobile: mobile, yOff: 0
+		};
+	};
+
+	/**
+	 * Put the HTML controls where the canvas layout says they go.
+	 */
+	Machine.prototype.placeChrome = function () {
+		var L = this.L;
+		var LC = this.LC;
+
+		if ( this.replayButton && L ) {
+			this.replayButton.style.left = Math.round( L.colW / 2 ) + 'px';
+			this.replayButton.style.top = Math.round( L.yOff + L.stripY + L.F / 2 - 21 ) + 'px';
+		}
+
+		if ( ! LC ) {
+			return;
+		}
+
+		if ( this.controls ) {
+			this.controls.style.width = ( LC.mobile ? LC.w : LC.colW ) + 'px';
+			this.controls.style.top = Math.round( LC.yOff + LC.btnY ) + 'px';
+			this.controls.classList.toggle( 'is-narrow', !! LC.mobile );
+		}
+
+		this.placeWipe();
+	};
+
+	/**
+	 * @return {boolean} True when the measured control row moved the layout.
+	 */
+	Machine.prototype.measureControls = function () {
+		if ( ! this.controls ) {
+			return false;
+		}
+
+		var h = this.controls.offsetHeight;
+
+		if ( ! h || Math.abs( h - this.btnH ) <= 1 ) {
+			return false;
+		}
+
+		this.btnH = h;
+
+		return true;
+	};
+
+	Machine.prototype.placeWipe = function () {
+		var LC = this.LC;
+
+		if ( ! this.wipeHandle || ! LC ) {
+			return;
+		}
+
+		this.wipeHandle.style.left = Math.round( LC.stageX + this.cmp.wipe * LC.S ) + 'px';
+		this.wipeHandle.style.top = Math.round( LC.yOff + LC.stageY ) + 'px';
+		this.wipeHandle.style.height = LC.S + 'px';
 	};
 
 	Machine.prototype.newC = function () {
@@ -466,6 +855,332 @@
 			S.strip.push( { fi: S.nextF % c.frames, x: x } );
 			S.nextF++;
 			x += L.F + L.g;
+		}
+	};
+
+	/**
+	 * Compare mode's state.
+	 *
+	 * `wipe` is the divider as a fraction of the stage: 1 is all traditional,
+	 * 0 is all LetsLapse. Both stage treatments drive that one number — the
+	 * toggle snaps it, the wipe sweeps it — so everything downstream of here is
+	 * identical between them.
+	 */
+	Machine.prototype.resetCompare = function () {
+		this.cmp = {
+			t: 0,
+			lastIdx: 0,
+			loops: 0,
+			auto: true,
+			focus: 'traditional',
+			wipe: 1,
+			wipeFrom: 1,
+			wipeTo: 1,
+			wipeT: 1,
+			dragging: false,
+			ariaPos: -1,
+			swap: null,
+			alpha: 1
+		};
+	};
+
+	/** The frame a traditional interval shot would have caught for blend `o`.
+	 *
+	 * The middle of the window, not the first frame of it: a blend's centroid
+	 * in time is its middle, so this is the still that sits at the same instant
+	 * as the blur. Taking the first frame instead would make the subject jump
+	 * sideways every time the comparison switches.
+	 *
+	 * @param {number} o Blend index.
+	 * @return {number} Source frame index.
+	 */
+	Machine.prototype.midFrame = function ( o ) {
+		var c = this.c;
+
+		return ( o * c.ratio + Math.floor( c.ratio / 2 ) ) % c.frames;
+	};
+
+	/**
+	 * Average one window of source frames — the same running mean the machine
+	 * performs a frame at a time.
+	 *
+	 * @param {number} o Blend index.
+	 * @return {HTMLCanvasElement}
+	 */
+	Machine.prototype.buildBlend = function ( o ) {
+		var c = this.c;
+		var out = this.newC();
+		var ctx = out.getContext( '2d' );
+		var i, xy;
+
+		for ( i = 0; i < c.ratio; i++ ) {
+			ctx.globalAlpha = 1 / ( i + 1 );
+			xy = this.frXY( ( o * c.ratio + i ) % c.frames );
+			ctx.drawImage( this.atlas, xy[ 0 ], xy[ 1 ], c.frameSize, c.frameSize, 0, 0, c.frameSize, c.frameSize );
+		}
+
+		return out;
+	};
+
+	Machine.prototype.buildBlends = function () {
+		var out = [];
+
+		for ( var o = 0; o < this.c.outputs; o++ ) {
+			out.push( this.buildBlend( o ) );
+		}
+
+		return out;
+	};
+
+	/**
+	 * Point the comparison at one treatment.
+	 *
+	 * @param {string}  focus  'traditional' or 'letslapse'.
+	 * @param {boolean} byUser True when a reader asked for it, which ends the
+	 *                         auto-cycle for good — they have made their choice.
+	 */
+	Machine.prototype.setFocus = function ( focus, byUser ) {
+		var C = this.cmp;
+
+		C.focus = focus;
+		C.loops = 0;
+
+		if ( byUser ) {
+			C.auto = false;
+			this.setAutoMark( false );
+		}
+
+		C.wipeFrom = C.wipe;
+		C.wipeTo = 'letslapse' === focus ? 0 : 1;
+		C.wipeT = ( 'wipe' === this.c.stage && ! this.isReduced() ) ? 0 : 1;
+
+		if ( C.wipeT >= 1 ) {
+			C.wipe = C.wipeTo;
+		}
+
+		this.syncButtons();
+		this.placeWipe();
+		this.syncWipeAria();
+	};
+
+	/** Park the divider wherever the reader put it. */
+	Machine.prototype.setWipe = function ( value ) {
+		var C = this.cmp;
+
+		C.wipe = clamp( value, 0, 1 );
+		C.wipeFrom = C.wipe;
+		C.wipeTo = C.wipe;
+		C.wipeT = 1;
+		C.focus = C.wipe > 0.5 ? 'traditional' : 'letslapse';
+		C.auto = false;
+
+		this.setAutoMark( false );
+		this.syncButtons();
+		this.placeWipe();
+		this.syncWipeAria();
+	};
+
+	Machine.prototype.setAutoMark = function ( on ) {
+		if ( this.autoMark ) {
+			this.autoMark.hidden = ! on;
+		}
+	};
+
+	/**
+	 * Reflect the divider on the two view buttons.
+	 *
+	 * They are toggle buttons rather than radios: in wipe mode the divider can
+	 * sit between them, and a radiogroup with nothing chosen — and a roving
+	 * tabindex to maintain — buys nothing a pressed pair does not.
+	 */
+	Machine.prototype.syncButtons = function () {
+		var C = this.cmp;
+		var i, button, view, on;
+
+		for ( i = 0; i < this.viewButtons.length; i++ ) {
+			button = this.viewButtons[ i ];
+			view = button.getAttribute( 'data-ll-view' );
+
+			if ( 'workflow' === view ) {
+				continue;
+			}
+
+			if ( 'wipe' === this.c.stage ) {
+				// Where the divider is heading, not where it currently is: a
+				// button that only lights once its 0.85s sweep lands reads as
+				// an unregistered click. Dragging keeps the two in step, so
+				// this is also correct mid-drag.
+				on = 'traditional' === view ? C.wipeTo > 0.999 : C.wipeTo < 0.001;
+			} else {
+				on = view === C.focus;
+			}
+
+			button.setAttribute( 'aria-pressed', on ? 'true' : 'false' );
+		}
+	};
+
+	Machine.prototype.syncWipeAria = function () {
+		if ( ! this.wipeHandle ) {
+			return;
+		}
+
+		var C = this.cmp;
+		var pos = Math.round( C.wipe * 100 );
+
+		if ( pos === C.ariaPos ) {
+			return;
+		}
+
+		C.ariaPos = pos;
+
+		var text;
+
+		if ( pos >= 100 ) {
+			text = this.labels.traditional;
+		} else if ( pos <= 0 ) {
+			text = this.labels.letslapse;
+		} else {
+			text = pos + '% ' + this.labels.traditional;
+		}
+
+		this.wipeHandle.setAttribute( 'aria-valuenow', String( pos ) );
+		this.wipeHandle.setAttribute( 'aria-valuetext', text );
+	};
+
+	/**
+	 * Advance the comparison.
+	 */
+	Machine.prototype.tickCompare = function ( dt ) {
+		var c = this.c;
+		var C = this.cmp;
+
+		C.t += dt;
+
+		var idx = Math.floor( C.t * c.playFps ) % c.outputs;
+
+		if ( idx < C.lastIdx ) {
+			C.loops++;
+
+			// Switching only ever on frame 0 keeps the two treatments phase
+			// locked, so the cut reads as a change of treatment and not as a
+			// jump in time.
+			if ( C.auto && C.loops >= c.loops ) {
+				this.setFocus( 'traditional' === C.focus ? 'letslapse' : 'traditional', false );
+			}
+		}
+
+		C.lastIdx = idx;
+		this.playIdx = idx;
+
+		if ( ! C.dragging && C.wipeT < 1 ) {
+			C.wipeT = Math.min( 1, C.wipeT + dt / 0.85 );
+			C.wipe = C.wipeFrom + ( C.wipeTo - C.wipeFrom ) * easeInOut( C.wipeT );
+
+			this.placeWipe();
+			this.syncButtons();
+			this.syncWipeAria();
+		}
+	};
+
+	/**
+	 * Cross the canvas from one view to the other.
+	 *
+	 * A dip to the page colour rather than a true crossfade: two quite
+	 * different diagrams dissolved through each other just reads as mud.
+	 *
+	 * @param {string} to 'workflow' or 'compare'.
+	 */
+	Machine.prototype.startSwap = function ( to ) {
+		this.cmp.swap = { t: 0, out: 0.35, into: 0.4, to: to, swapped: false };
+
+		if ( 'workflow' === to ) {
+			this.setControlsHidden( true );
+		}
+	};
+
+	Machine.prototype.tickSwap = function ( dt ) {
+		var C = this.cmp;
+		var sw = C.swap;
+
+		sw.t += dt;
+
+		if ( ! sw.swapped && sw.t >= sw.out ) {
+			sw.swapped = true;
+			this.enterView( sw.to );
+		}
+
+		C.alpha = sw.t < sw.out
+			? Math.max( 0, 1 - sw.t / sw.out )
+			: Math.min( 1, ( sw.t - sw.out ) / sw.into );
+
+		if ( sw.t >= sw.out + sw.into ) {
+			C.alpha = 1;
+			C.swap = null;
+		}
+	};
+
+	Machine.prototype.enterView = function ( to ) {
+		var C = this.cmp;
+
+		this.view = to;
+
+		if ( 'workflow' === to ) {
+			this.resetSim();
+			this.workflowT = 0;
+		} else {
+			// The machine has just built the blends in front of the reader, so
+			// LetsLapse is what they came back to see. The auto-cycle picks up
+			// from there unless they had already taken control.
+			C.t = 0;
+			C.lastIdx = 0;
+			C.loops = 0;
+			C.wipeT = 1;
+			C.wipe = 0;
+			C.wipeFrom = 0;
+			C.wipeTo = 0;
+			C.focus = 'letslapse';
+
+			this.syncButtons();
+			this.syncWipeAria();
+			this.setControlsHidden( false );
+		}
+
+		this.placeChrome();
+	};
+
+	/** Hand back to the comparison once the machine has played its blends. */
+	Machine.prototype.watchWorkflow = function ( dt ) {
+		if ( 'play' !== this.S.phase || this.cmp.swap ) {
+			return;
+		}
+
+		this.workflowT += dt;
+
+		if ( this.workflowT >= this.c.outputs / this.c.playFps ) {
+			this.startSwap( 'compare' );
+		}
+	};
+
+	Machine.prototype.setControlsHidden = function ( hidden ) {
+		var nodes = [ this.controls, this.wipeHandle ];
+		var i;
+
+		for ( i = 0; i < nodes.length; i++ ) {
+			if ( ! nodes[ i ] ) {
+				continue;
+			}
+
+			if ( hidden ) {
+				nodes[ i ].classList.add( 'is-hidden' );
+				nodes[ i ].setAttribute( 'aria-hidden', 'true' );
+			} else {
+				nodes[ i ].classList.remove( 'is-hidden' );
+				nodes[ i ].removeAttribute( 'aria-hidden' );
+			}
+
+			if ( 'inert' in nodes[ i ] ) {
+				nodes[ i ].inert = hidden;
+			}
 		}
 	};
 
@@ -675,6 +1390,17 @@
 		var S = this.S;
 		var labels = this.labels;
 
+		if ( 'compare' === this.view ) {
+			if ( ! c.showCount || ! labels.compareStatus ) {
+				return '';
+			}
+
+			return fill( labels.compareStatus, {
+				index: this.playIdx + 1,
+				total: c.outputs
+			} );
+		}
+
 		if ( S.phase === 'run' ) {
 			if ( ! labels.stacking ) {
 				return '';
@@ -719,7 +1445,8 @@
 		var i;
 
 		ctx.setTransform( this.dpr, 0, 0, this.dpr, 0, 0 );
-		ctx.clearRect( 0, 0, L.w, L.H );
+		ctx.clearRect( 0, 0, L.w, this.H || L.H );
+		ctx.translate( 0, L.yOff || 0 );
 
 		var label = function ( text, x, y, align ) {
 			if ( ! text ) {
@@ -922,6 +1649,273 @@
 			ctx.drawImage( this.atlas, dxy[ 0 ], dxy[ 1 ], FR, FR, dx2, dy2, dsize, dsize );
 			ctx.globalAlpha = 1;
 		}
+
+		this.veil( ctx );
+	};
+
+	/**
+	 * Dip the whole canvas towards the page colour, for the view swap.
+	 *
+	 * Painted over the finished frame rather than threaded through every
+	 * globalAlpha in the draw, so nothing downstream has to know about it.
+	 *
+	 * @param {CanvasRenderingContext2D} ctx Canvas context.
+	 */
+	Machine.prototype.veil = function ( ctx ) {
+		if ( ! this.cmp || this.cmp.alpha >= 1 ) {
+			return;
+		}
+
+		ctx.setTransform( this.dpr, 0, 0, this.dpr, 0, 0 );
+		ctx.globalAlpha = 1 - this.cmp.alpha;
+		ctx.fillStyle = 'rgb(' + this.pal.bgRgb + ')';
+		ctx.fillRect( 0, 0, this.L.w, this.H || this.L.H );
+		ctx.globalAlpha = 1;
+	};
+
+	Machine.prototype.tileRect = function ( row, i ) {
+		var L = this.LC;
+
+		return [ i * ( L.Fo + L.g2 ), 'traditional' === row ? L.tradY : L.llY, L.Fo ];
+	};
+
+	/**
+	 * Draw the traditional-vs-LetsLapse comparison.
+	 *
+	 * Both strips are the same eight moments of the same footage. The only
+	 * difference between them is what happened to the other fourteen frames,
+	 * and nothing here is dimmed, warmed or otherwise weighted to make the
+	 * point — the footage makes it on its own.
+	 */
+	Machine.prototype.drawCompare = function () {
+		var c = this.c;
+		var L = this.LC;
+		var C = this.cmp;
+		var ctx = this.canvas.getContext( '2d' );
+		var self = this;
+		var FR = c.frameSize;
+		var playIdx = this.playIdx;
+		var i;
+
+		ctx.setTransform( this.dpr, 0, 0, this.dpr, 0, 0 );
+		ctx.clearRect( 0, 0, L.w, this.H );
+		ctx.translate( 0, L.yOff || 0 );
+
+		var label = function ( text, x, y, align ) {
+			if ( ! text ) {
+				return;
+			}
+
+			ctx.font = '600 11px ' + self.pal.font;
+			ctx.fillStyle = self.ink( 0.5 );
+			ctx.textAlign = align || 'left';
+			ctx.fillText( text, x, y );
+			ctx.textAlign = 'left';
+		};
+
+		// Whichever half of the stage is on screen is the row worth looking at.
+		var live = {
+			traditional: C.wipe > 0.001,
+			letslapse: C.wipe < 0.999
+		};
+
+		label( this.labels.traditionalRow, 0, L.tradY - 8 );
+		label( this.labels.letslapseRow, 0, L.llY - 8 );
+
+		var drawRow = function ( row, source ) {
+			var rect, xy, k;
+
+			for ( k = 0; k < c.outputs; k++ ) {
+				rect = self.tileRect( row, k );
+				ctx.globalAlpha = live[ row ] ? 1 : 0.6;
+
+				if ( 'traditional' === row ) {
+					xy = self.frXY( self.midFrame( k ) );
+					ctx.drawImage( self.atlas, xy[ 0 ], xy[ 1 ], FR, FR, rect[ 0 ], rect[ 1 ], rect[ 2 ], rect[ 2 ] );
+				} else if ( source && source[ k ] ) {
+					ctx.drawImage( source[ k ], rect[ 0 ], rect[ 1 ], rect[ 2 ], rect[ 2 ] );
+				}
+
+				ctx.globalAlpha = 1;
+
+				if ( k === playIdx && live[ row ] ) {
+					ctx.strokeStyle = self.pal.accent;
+					ctx.lineWidth = 2;
+					ctx.strokeRect( rect[ 0 ] - 1.5, rect[ 1 ] - 1.5, rect[ 2 ] + 3, rect[ 2 ] + 3 );
+				} else {
+					ctx.strokeStyle = self.line( 0.1 );
+					ctx.lineWidth = 1;
+					ctx.strokeRect( rect[ 0 ] + 0.5, rect[ 1 ] + 0.5, rect[ 2 ] - 1, rect[ 2 ] - 1 );
+				}
+			}
+		};
+
+		drawRow( 'traditional', null );
+		drawRow( 'letslapse', this.blends );
+
+		// The stage. Traditional fills the left of the divider, the blend the
+		// right; at either extreme that is simply one image or the other, which
+		// is exactly what the toggle wants. The two treatments differ only in
+		// how the divider gets from one end to the other.
+		var split = L.stageX + C.wipe * L.S;
+
+		ctx.fillStyle = this.pal.stage;
+		ctx.fillRect( L.stageX, L.stageY, L.S, L.S );
+
+		if ( C.wipe > 0.001 ) {
+			var still = this.frXY( this.midFrame( playIdx ) );
+
+			ctx.save();
+			ctx.beginPath();
+			ctx.rect( L.stageX, L.stageY, split - L.stageX, L.S );
+			ctx.clip();
+			ctx.drawImage( this.atlas, still[ 0 ], still[ 1 ], FR, FR, L.stageX, L.stageY, L.S, L.S );
+			ctx.restore();
+		}
+
+		if ( C.wipe < 0.999 && this.blends && this.blends[ playIdx ] ) {
+			ctx.save();
+			ctx.beginPath();
+			ctx.rect( split, L.stageY, L.stageX + L.S - split, L.S );
+			ctx.clip();
+			ctx.drawImage( this.blends[ playIdx ], L.stageX, L.stageY, L.S, L.S );
+			ctx.restore();
+		}
+
+		// A tag per half, but only where the half is wide enough to hold one
+		// whole — a word clipped in the middle just looks broken.
+		var tag = function ( text, from, to, align ) {
+			if ( ! text ) {
+				return;
+			}
+
+			ctx.font = '700 10px ' + self.pal.font;
+
+			var pad = 9;
+			var width = ctx.measureText( text ).width;
+
+			if ( to - from < width + pad * 2 + 8 ) {
+				return;
+			}
+
+			var x = 'right' === align ? to - pad : from + pad;
+			var y = L.stageY + L.S - 11;
+
+			ctx.fillStyle = 'rgba(16, 19, 26, 0.66)';
+			ctx.fillRect(
+				'right' === align ? x - width - 7 : x - 7,
+				y - 13,
+				width + 14,
+				20
+			);
+			ctx.fillStyle = self.line( 0.88 );
+			ctx.textAlign = align || 'left';
+			ctx.fillText( text, x, y );
+			ctx.textAlign = 'left';
+		};
+
+		tag( this.labels.traditional, L.stageX, split, 'left' );
+		tag( this.labels.letslapse, split, L.stageX + L.S, 'right' );
+
+		ctx.strokeStyle = this.pal.accent;
+		ctx.lineWidth = 2;
+		ctx.strokeRect( L.stageX + 1, L.stageY + 1, L.S - 2, L.S - 2 );
+
+		if ( c.showTimeline ) {
+			label( this.labels.timeline, L.tlX, L.tlY - 8 );
+
+			var segG = 3;
+			var segW = ( L.tlW - ( c.outputs - 1 ) * segG ) / c.outputs;
+			var x;
+
+			for ( i = 0; i < c.outputs; i++ ) {
+				x = L.tlX + i * ( segW + segG );
+
+				ctx.fillStyle = i === playIdx ? this.amber( 0.75 ) : this.amber( 0.35 );
+				ctx.fillRect( x, L.tlY, segW, L.Th );
+
+				ctx.strokeStyle = this.ink( 0.16 );
+				ctx.lineWidth = 1;
+				ctx.strokeRect( x + 0.5, L.tlY + 0.5, segW - 1, L.Th - 1 );
+			}
+
+			var progress = ( C.t * c.playFps % c.outputs ) / c.outputs;
+			var px = L.tlX + progress * L.tlW;
+
+			ctx.strokeStyle = this.pal.accent;
+			ctx.lineWidth = 2;
+			ctx.beginPath();
+			ctx.moveTo( px, L.tlY - 4 );
+			ctx.lineTo( px, L.tlY + L.Th + 4 );
+			ctx.stroke();
+		}
+
+		var status = this.statusText();
+
+		if ( status ) {
+			ctx.font = '600 12px ' + this.pal.font;
+			ctx.fillStyle = this.ink( 0.65 );
+			ctx.textAlign = 'right';
+			ctx.fillText( status, L.w - 2, L.statusY );
+			ctx.textAlign = 'left';
+		}
+
+		if ( this.staticPass && this.labels.reduced ) {
+			label( this.labels.reduced, L.w - 2, L.stripY - 10, 'right' );
+		}
+
+		this.veil( ctx );
+	};
+
+	/**
+	 * Reduced-motion rendering of the comparison: the split, held.
+	 *
+	 * Both treatments at once on the frame with the most movement in it, and
+	 * nothing switching by itself. The controls still work — a reader who wants
+	 * a full-size look at either side can still have one, and asking for it is
+	 * an interaction they chose rather than motion imposed on them.
+	 */
+	Machine.prototype.drawStaticCompare = function () {
+		if ( this.staticDone ) {
+			return;
+		}
+
+		var c = this.c;
+		var C = this.cmp;
+
+		if ( ! this.blends ) {
+			this.blends = this.buildBlends();
+		}
+
+		if ( ! this.staticInit ) {
+			this.staticInit = true;
+
+			C.auto = false;
+
+			// Split down the middle whichever stage this block uses. A toggle
+			// that cannot toggle would show one treatment and never the other,
+			// and the one it happens to hold is the one worth seeing least.
+			C.wipe = 0.5;
+			C.wipeFrom = C.wipe;
+			C.wipeTo = C.wipe;
+			C.wipeT = 1;
+			C.focus = C.wipe > 0.5 ? 'traditional' : 'letslapse';
+
+			this.setAutoMark( false );
+			this.syncButtons();
+			this.placeWipe();
+			this.syncWipeAria();
+		}
+
+		// Late in the run the tram is across the frame, so the blur is at its
+		// most legible; opening on blend 0 would sell it short.
+		this.playIdx = Math.min( c.outputs - 1, Math.round( c.outputs * 0.75 ) );
+
+		this.staticPass = true;
+		this.drawCompare();
+		this.staticPass = false;
+
+		this.staticDone = true;
 	};
 
 	/**
@@ -958,16 +1952,7 @@
 		S.outs = [];
 
 		for ( var o = 0; o < c.outputs; o++ ) {
-			var out = this.newC();
-			var outCtx = out.getContext( '2d' );
-
-			for ( i = 0; i < c.ratio; i++ ) {
-				outCtx.globalAlpha = 1 / ( i + 1 );
-				xy = this.frXY( ( o * c.ratio + i ) % c.frames );
-				outCtx.drawImage( this.atlas, xy[ 0 ], xy[ 1 ], c.frameSize, c.frameSize, 0, 0, c.frameSize, c.frameSize );
-			}
-
-			S.outs.push( out );
+			S.outs.push( this.buildBlend( o ) );
 		}
 
 		S.batch = c.outputs;

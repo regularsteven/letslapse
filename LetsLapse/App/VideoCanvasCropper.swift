@@ -53,6 +53,12 @@ enum VideoCanvasCropper {
         shortEdge: Int? = nil,
         grade: PhotoGrade = .identity,
         gradeMap: GradeSourceMap = .direct,
+        /// The rate the job asked for. Stated by the caller rather than probed
+        /// off `sourceURL`: this pass runs over an intermediate, and reading the
+        /// clock back from it propagates whatever an upstream stage did to it
+        /// instead of correcting it. nil falls back to the probe, for callers
+        /// with no intended rate of their own.
+        outputFPS: Double? = nil,
         /// Forces the output size. Set when this pass is normalising one
         /// segment of a mixed-resolution ramp shoot to the size every other
         /// segment lands at, so the stitch can lay them end to end — see
@@ -148,8 +154,20 @@ enum VideoCanvasCropper {
         }
         composition.renderSize = renderSize
 
-        let nominalFPS = (try? await assetTrack.load(.nominalFrameRate)) ?? 30
-        let fps = nominalFPS > 0 ? Double(nominalFPS) : 30
+        let fps: Double
+        if let outputFPS, outputFPS > 0 {
+            fps = outputFPS
+        } else {
+            let nominalFPS = (try? await assetTrack.load(.nominalFrameRate)) ?? 30
+            fps = nominalFPS > 0 ? Double(nominalFPS) : 30
+        }
+        // The clip's clock, stated rather than inherited — see the twin comment
+        // in `ReframeVideoCropper`. Without this the composition initializer
+        // seeds `frameDuration` from the incoming asset, so a pass over an
+        // already-retimed intermediate re-encodes the damage instead of the
+        // rate the job asked for.
+        composition.frameDuration = CMTime(
+            value: 1, timescale: CMTimeScale(max(1, Int(fps.rounded()))))
         // The shared policy encodes the pass — deterministic bitrate and full
         // colour tags, where the export-session preset chose its own and
         // wrote none.

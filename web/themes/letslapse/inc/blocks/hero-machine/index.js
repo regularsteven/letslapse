@@ -28,10 +28,62 @@
 	var ToggleControl = components.ToggleControl;
 	var TextControl = components.TextControl;
 	var Button = components.Button;
+	var SelectControl = components.SelectControl;
 
 	var data = window.letsLapseHero || {};
 	var schema = data.schema || {};
+	var choices = data.choices || {};
 	var labelDefaults = data.labelDefaults || {};
+
+	/** The server's choice set for one attribute, as SelectControl options. */
+	function options( key ) {
+		var set = choices[ key ] || {};
+		var out = [];
+		var value;
+
+		for ( value in set ) {
+			if ( Object.prototype.hasOwnProperty.call( set, value ) ) {
+				out.push( { value: value, label: set[ value ] } );
+			}
+		}
+
+		return out;
+	}
+
+	function choice( attributes, key ) {
+		var set = choices[ key ] || {};
+
+		if ( Object.prototype.hasOwnProperty.call( set, attributes[ key ] ) ) {
+			return attributes[ key ];
+		}
+
+		for ( var first in set ) {
+			if ( Object.prototype.hasOwnProperty.call( set, first ) ) {
+				return first;
+			}
+		}
+
+		return '';
+	}
+
+	function isCompare( attributes ) {
+		return 'compare' === choice( attributes, 'mode' );
+	}
+
+	function selectControl( attributes, setAttributes, key, label, help ) {
+		return el( SelectControl, {
+			key: key,
+			label: label,
+			help: help,
+			value: choice( attributes, key ),
+			options: options( key ),
+			onChange: function ( next ) {
+				var update = {};
+				update[ key ] = next;
+				setAttributes( update );
+			}
+		} );
+	}
 
 	function rule( key ) {
 		return schema[ key ] || { 'default': 0, min: 0, max: 100, 'int': true };
@@ -117,6 +169,59 @@
 		return attributes.showPlayingCount !== false ? playing + ' 1 / ' + total : playing;
 	}
 
+	/** A schematic of compare mode's three-band column and its big stage. */
+	function compareSchematic( attributes ) {
+		var outputs = effective( attributes, 'outputCount' );
+		var wipe = 'wipe' === choice( attributes, 'compareStage' );
+		var trad = [];
+		var outs = [];
+		var i;
+
+		for ( i = 0; i < Math.min( outputs, 10 ); i++ ) {
+			trad.push( el( 'span', { key: 'trad' + i, className: 'll-machine-editor__frame is-still' } ) );
+			outs.push( el( 'span', { key: 'out' + i, className: 'll-machine-editor__frame is-output' } ) );
+		}
+
+		var tradLabel = text( attributes, 'traditionalRowLabel', 'traditionalRow' )
+			.replace( '{ratio}', effective( attributes, 'blendRatio' ) );
+		var llLabel = text( attributes, 'letslapseRowLabel', 'letslapseRow' )
+			.replace( '{ratio}', effective( attributes, 'blendRatio' ) );
+
+		return el(
+			'div',
+			{ className: 'll-machine-editor' },
+			el(
+				'div',
+				{ className: 'll-machine-editor__cols' },
+				el(
+					'div',
+					{ className: 'll-machine-editor__col' },
+					tradLabel ? el( 'span', { className: 'll-machine-editor__label' }, tradLabel ) : null,
+					el( 'span', { className: 'll-machine-editor__row' }, trad ),
+					el(
+						'span',
+						{ className: 'll-machine-editor__controls' },
+						el( 'span', { className: 'll-machine-editor__pill is-on' }, text( attributes, 'traditionalLabel', 'traditional' ) ),
+						el( 'span', { className: 'll-machine-editor__pill' }, text( attributes, 'letslapseLabel', 'letslapse' ) ),
+						el( 'span', { className: 'll-machine-editor__link' }, text( attributes, 'workflowLabel', 'workflow' ) )
+					),
+					llLabel ? el( 'span', { className: 'll-machine-editor__label' }, llLabel ) : null,
+					el( 'span', { className: 'll-machine-editor__row' }, outs )
+				),
+				el(
+					'span',
+					{ className: 'll-machine-editor__stage is-compare' + ( wipe ? ' is-wipe' : '' ) },
+					wipe ? __( 'wipe', 'letslapse' ) : __( 'toggle', 'letslapse' )
+				)
+			),
+			el(
+				'span',
+				{ className: 'll-machine-editor__hint' },
+				__( 'The live comparison runs on the front end', 'letslapse' )
+			)
+		);
+	}
+
 	function schematic( attributes ) {
 		var ratio = effective( attributes, 'blendRatio' );
 		var outputs = effective( attributes, 'outputCount' );
@@ -182,12 +287,50 @@
 	}
 
 	function inspector( attributes, setAttributes ) {
+		var compare = isCompare( attributes );
+
 		return el(
 			InspectorControls,
 			null,
 			el(
 				PanelBody,
-				{ title: __( 'Copy', 'letslapse' ), initialOpen: true },
+				{ title: __( 'Presentation', 'letslapse' ), initialOpen: true },
+				selectControl(
+					attributes,
+					setAttributes,
+					'mode',
+					__( 'Mode', 'letslapse' ),
+					__( 'Stack & blend is the machine itself. Traditional vs LetsLapse compares the same footage with and without blending, and can reveal the machine on demand.', 'letslapse' )
+				),
+				compare ? selectControl(
+					attributes,
+					setAttributes,
+					'compareStage',
+					__( 'Comparison stage', 'letslapse' ),
+					__( 'Toggle cuts between the two on a loop boundary. Wipe sweeps a divider across, and the reader can drag it.', 'letslapse' )
+				) : null,
+				compare ? numberControl(
+					attributes,
+					setAttributes,
+					'compareLoops',
+					__( 'Loops before switching', 'letslapse' ),
+					__( 'How many times each side plays before the comparison switches by itself. Clicking either button ends the cycle for good.', 'letslapse' )
+				) : null
+			),
+			compare ? el(
+				PanelBody,
+				{ title: __( 'Comparison copy', 'letslapse' ), initialOpen: false },
+				labelControl( attributes, setAttributes, 'traditionalRowLabel', 'traditionalRow', __( 'Traditional row', 'letslapse' ), __( 'Tokens: {ratio}, {seconds}, {srcFps}.', 'letslapse' ) ),
+				labelControl( attributes, setAttributes, 'letslapseRowLabel', 'letslapseRow', __( 'LetsLapse row', 'letslapse' ), __( 'Tokens: {ratio}, {seconds}, {srcFps}.', 'letslapse' ) ),
+				labelControl( attributes, setAttributes, 'traditionalLabel', 'traditional', __( 'Traditional button', 'letslapse' ) ),
+				labelControl( attributes, setAttributes, 'letslapseLabel', 'letslapse', __( 'LetsLapse button', 'letslapse' ) ),
+				labelControl( attributes, setAttributes, 'workflowLabel', 'workflow', __( 'Workflow button', 'letslapse' ) ),
+				labelControl( attributes, setAttributes, 'autoLabel', 'auto', __( 'Auto-cycle marker', 'letslapse' ), __( 'Shown until the reader picks a side. Clear it to hide the marker.', 'letslapse' ) ),
+				labelControl( attributes, setAttributes, 'compareStatusLabel', 'compareStatus', __( 'Status line', 'letslapse' ), __( 'Tokens: {index}, {total}. Governed by the blend counter toggle below.', 'letslapse' ) )
+			) : null,
+			el(
+				PanelBody,
+				{ title: compare ? __( 'Machine copy', 'letslapse' ) : __( 'Copy', 'letslapse' ), initialOpen: ! compare },
 				labelControl( attributes, setAttributes, 'sourceLabel', 'source', __( 'Source row', 'letslapse' ) ),
 				labelControl( attributes, setAttributes, 'outputLabel', 'output', __( 'Output row', 'letslapse' ) ),
 				labelControl( attributes, setAttributes, 'timelineLabel', 'timeline', __( 'Timeline row', 'letslapse' ), __( 'Tokens: {seconds}, {ratio}, {srcFps}.', 'letslapse' ) ),
@@ -273,13 +416,20 @@
 	}
 
 	function Edit( props ) {
-		var blockProps = useBlockProps( { className: 'll-machine' } );
+		var compare = isCompare( props.attributes );
+		var blockProps = useBlockProps( {
+			className: 'll-machine' + ( compare ? ' is-compare' : '' )
+		} );
 
 		return el(
 			Fragment,
 			null,
 			inspector( props.attributes, props.setAttributes ),
-			el( 'div', blockProps, schematic( props.attributes ) )
+			el(
+				'div',
+				blockProps,
+				compare ? compareSchematic( props.attributes ) : schematic( props.attributes )
+			)
 		);
 	}
 
@@ -289,4 +439,36 @@
 			return null;
 		}
 	} );
+
+	/*
+	 * The two modes are different enough to be worth finding separately, so the
+	 * inserter offers each by name rather than making an editor set an attribute
+	 * to discover the second one exists.
+	 */
+	if ( wp.blocks.registerBlockVariation ) {
+		wp.blocks.registerBlockVariation( 'letslapse/hero-machine', {
+			name: 'stack',
+			title: __( 'Blend machine — stack & blend', 'letslapse' ),
+			description: __( 'Source frames feed in, average into blended frames, and play back.', 'letslapse' ),
+			icon: 'images-alt2',
+			attributes: { mode: 'stack' },
+			isDefault: true,
+			scope: [ 'inserter', 'transform' ],
+			isActive: function ( attributes ) {
+				return 'compare' !== attributes.mode;
+			}
+		} );
+
+		wp.blocks.registerBlockVariation( 'letslapse/hero-machine', {
+			name: 'compare',
+			title: __( 'Blend machine — traditional vs LetsLapse', 'letslapse' ),
+			description: __( 'The same footage with and without blending, side by side, with the machine one click away.', 'letslapse' ),
+			icon: 'controls-repeat',
+			attributes: { mode: 'compare' },
+			scope: [ 'inserter', 'transform' ],
+			isActive: function ( attributes ) {
+				return 'compare' === attributes.mode;
+			}
+		} );
+	}
 }( window.wp ) );

@@ -26,8 +26,15 @@ enum CompositionExporter {
     /// Writes `asset` to `outputURL` through `policy`. `progress` (0…1) is by
     /// decoded frame against the clip's estimated frame count, reported from
     /// the pump's queue.
+    ///
+    /// Any `AVAsset` — the tail passes hand over a file, the stitch hands over
+    /// the `AVMutableComposition` it just laid its pieces into. That second
+    /// caller is why this is not `AVURLAsset`: the stitch used to run through
+    /// `AVAssetExportSession(presetName: .highestQuality)`, which is a device
+    /// capability budget rather than a passthrough and silently retimes what it
+    /// cannot afford (see `stitchVideos`).
     static func export(
-        asset: AVURLAsset,
+        asset: AVAsset,
         composition: AVVideoComposition?,
         to outputURL: URL,
         fileType: AVFileType,
@@ -83,7 +90,7 @@ enum CompositionExporter {
     /// media pumps run on their own queues, so the `DispatchGroup.wait()` here
     /// is safe — this only ever runs on `queue`.
     private static func run(
-        asset: AVURLAsset,
+        asset: AVAsset,
         videoTrack: AVAssetTrack,
         audioTrack: AVAssetTrack?,
         composition: AVVideoComposition?,

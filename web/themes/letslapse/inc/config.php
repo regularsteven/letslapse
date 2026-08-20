@@ -32,6 +32,7 @@ function letslapse_hero_schema() {
 		'accel'          => array( 'default' => 1.5, 'min' => 1,   'max' => 2.5, 'int' => false ),
 		'maxRate'        => array( 'default' => 16,  'min' => 4,   'max' => 30,  'int' => false ),
 		'playFps'        => array( 'default' => 5,   'min' => 1,   'max' => 15,  'int' => false ),
+		'compareLoops'   => array( 'default' => 4,   'min' => 1,   'max' => 12,  'int' => true ),
 	);
 
 	/**
@@ -40,6 +41,51 @@ function letslapse_hero_schema() {
 	 * @param array $schema Parameter schema.
 	 */
 	return apply_filters( 'letslapse_hero_schema', $schema );
+}
+
+/**
+ * The machine's presentation choices, as the editor and the server both see them.
+ *
+ * `mode` is what the block is showing; `compareStage` is only how compare mode
+ * renders its big stage, so the two comparisons share one state machine and
+ * differ purely in the transition between them.
+ *
+ * @return array<string, array<string, string>>
+ */
+function letslapse_hero_choices() {
+	$choices = array(
+		'mode'         => array(
+			'stack'   => __( 'Stack & blend', 'letslapse' ),
+			'compare' => __( 'Traditional vs LetsLapse', 'letslapse' ),
+		),
+		'compareStage' => array(
+			'toggle' => __( 'Toggle (hard cut)', 'letslapse' ),
+			'wipe'   => __( 'Wipe (draggable split)', 'letslapse' ),
+		),
+	);
+
+	/**
+	 * Filters the blend-machine presentation choices.
+	 *
+	 * @param array $choices Choice sets keyed by attribute name.
+	 */
+	return apply_filters( 'letslapse_hero_choices', $choices );
+}
+
+/**
+ * Pick a valid value out of one choice set, falling back to its first entry.
+ *
+ * @param array  $attributes Raw attributes.
+ * @param string $key        Attribute name, also the choice-set name.
+ * @return string
+ */
+function letslapse_hero_choice( $attributes, $key ) {
+	$choices = letslapse_hero_choices();
+	$set     = isset( $choices[ $key ] ) ? $choices[ $key ] : array();
+	$keys    = array_keys( $set );
+	$value   = isset( $attributes[ $key ] ) ? (string) $attributes[ $key ] : '';
+
+	return in_array( $value, $keys, true ) ? $value : ( isset( $keys[0] ) ? $keys[0] : '' );
 }
 
 /**
@@ -77,6 +123,9 @@ function letslapse_hero_config( $attributes = array() ) {
 		);
 	}
 	$config['rateSequence'] = implode( ' · ', $rates );
+
+	$config['mode']         = letslapse_hero_choice( $attributes, 'mode' );
+	$config['compareStage'] = letslapse_hero_choice( $attributes, 'compareStage' );
 
 	$config['atlasUrl'] = letslapse_hero_atlas_url( $attributes );
 
@@ -140,6 +189,17 @@ function letslapse_hero_label_defaults() {
 		'playing'   => __( 'playing · blend', 'letslapse' ),
 		'resetting' => __( 'loop restarting…', 'letslapse' ),
 		'reduced'   => __( 'Reduced motion — showing the finished stack', 'letslapse' ),
+
+		// Compare mode. The two row labels are deliberately symmetrical: the
+		// only difference between the rows is what happens to the other 14
+		// frames, and the copy should say so.
+		'traditional'    => __( 'Traditional timelapse', 'letslapse' ),
+		'letslapse'      => __( 'LetsLapse', 'letslapse' ),
+		'workflow'       => __( 'Show LetsLapse workflow', 'letslapse' ),
+		'traditionalRow' => __( 'TRADITIONAL · 1 FRAME IN {ratio} KEPT', 'letslapse' ),
+		'letslapseRow'   => __( 'LETSLAPSE · ALL {ratio} FRAMES AVERAGED', 'letslapse' ),
+		'auto'           => __( 'auto', 'letslapse' ),
+		'compareStatus'  => __( 'frame {index} / {total}', 'letslapse' ),
 	);
 }
 
@@ -163,6 +223,14 @@ function letslapse_hero_labels( $attributes, $config ) {
 		'playing'   => 'playingLabel',
 		'resetting' => 'resettingLabel',
 		'reduced'   => 'reducedMotionLabel',
+
+		'traditional'    => 'traditionalLabel',
+		'letslapse'      => 'letslapseLabel',
+		'workflow'       => 'workflowLabel',
+		'traditionalRow' => 'traditionalRowLabel',
+		'letslapseRow'   => 'letslapseRowLabel',
+		'auto'           => 'autoLabel',
+		'compareStatus'  => 'compareStatusLabel',
 	);
 
 	$labels = array();
@@ -174,14 +242,15 @@ function letslapse_hero_labels( $attributes, $config ) {
 		$labels[ $key ] = isset( $attributes[ $name ] ) ? (string) $attributes[ $name ] : $default;
 	}
 
-	$labels['timeline'] = strtr(
-		$labels['timeline'],
-		array(
-			'{seconds}' => $config['blendSeconds'],
-			'{ratio}'   => number_format_i18n( $config['blendRatio'] ),
-			'{srcFps}'  => number_format_i18n( $config['sourceFps'] ),
-		)
+	$tokens = array(
+		'{seconds}' => $config['blendSeconds'],
+		'{ratio}'   => number_format_i18n( $config['blendRatio'] ),
+		'{srcFps}'  => number_format_i18n( $config['sourceFps'] ),
 	);
+
+	foreach ( array( 'timeline', 'traditionalRow', 'letslapseRow' ) as $key ) {
+		$labels[ $key ] = strtr( $labels[ $key ], $tokens );
+	}
 
 	/**
 	 * Filters the resolved canvas labels.

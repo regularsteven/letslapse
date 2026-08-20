@@ -108,6 +108,13 @@ enum VideoGrader {
         of sourceURL: URL,
         grade: PhotoGrade,
         map: GradeSourceMap = .direct,
+        /// The rate the job asked for, when the caller has one. This is the
+        /// render pipeline's third tail pass and carried the same defect as the
+        /// two croppers: probing the clock off the incoming intermediate re-
+        /// encodes whatever an upstream stage did to it. Export paths that are
+        /// simply re-grading a file the user already has (Save to Photos) pass
+        /// nil and keep the probe — there the source's own rate IS the intent.
+        outputFPS: Double? = nil,
         progress: (@Sendable (Double) -> Void)? = nil
     ) async throws -> URL {
         let asset = AVURLAsset(url: sourceURL)
@@ -133,8 +140,17 @@ enum VideoGrader {
             throw GradeError.exportFailed("the clip's size couldn't be read")
         }
         composition.renderSize = CGSize(width: width, height: height)
-        let nominalFPS = (try? await assetTrack.load(.nominalFrameRate)) ?? 30
-        let fps = nominalFPS > 0 ? Double(nominalFPS) : 30
+        let fps: Double
+        if let outputFPS, outputFPS > 0 {
+            fps = outputFPS
+        } else {
+            let nominalFPS = (try? await assetTrack.load(.nominalFrameRate)) ?? 30
+            fps = nominalFPS > 0 ? Double(nominalFPS) : 30
+        }
+        // Stated, not inherited — the composition initializer would otherwise
+        // seed the clock from the incoming asset.
+        composition.frameDuration = CMTime(
+            value: 1, timescale: CMTimeScale(max(1, Int(fps.rounded()))))
         // The shared policy encodes the pass — deterministic bitrate and full
         // colour tags, where the export-session preset chose its own and
         // wrote none. Video sources are 8-bit, so H.264 High is the profile.
