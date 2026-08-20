@@ -45,6 +45,17 @@ final class ProjectThumbnailCache: ObservableObject {
     /// so a same-URL content change still re-requests the thumbnail; the disk
     /// tier needs nothing — its keys carry the file's modification date.
     @Published private(set) var generation = 0
+    /// Display aspect (w ÷ h) per source path, learned for free: every
+    /// thumbnail this cache hands out is already orientation-corrected and
+    /// aspect-preserving, so its own pixel dimensions answer "what shape is
+    /// this asset?" without a second file read.
+    ///
+    /// It is kept beside the `NSCache` rather than derived from it because the
+    /// images are evictable and a Double is not worth evicting — and because
+    /// the answer is what stops a hero laying itself out twice (see
+    /// `MediaPaneMetrics`). A grid tile therefore pays the probe that the
+    /// detail screen would otherwise pay on open.
+    private var aspects: [String: Double] = [:]
 
     private init() {
         cache.countLimit = 300
@@ -114,6 +125,24 @@ final class ProjectThumbnailCache: ObservableObject {
 
     private func remember(_ image: CGImage, forKey key: NSURL) {
         cache.setObject(image, forKey: key, cost: image.bytesPerRow * image.height)
+        if image.height > 0 {
+            aspects[(key as URL).path] = Double(image.width) / Double(image.height)
+        }
+    }
+
+    /// What shape this asset is, if anything has already looked at it — a
+    /// synchronous answer, so a view can size its slot correctly on its first
+    /// paint instead of resizing when a probe lands.
+    func aspect(for url: URL?) -> Double? {
+        guard let url else { return nil }
+        return aspects[url.path]
+    }
+
+    /// Record a shape learned somewhere else (a metadata probe, or a size the
+    /// project already stored), so the next screen to ask gets it for free.
+    func recordAspect(_ aspect: Double, for url: URL) {
+        guard aspect.isFinite, aspect > 0 else { return }
+        aspects[url.path] = aspect
     }
 
     /// Drop in-memory thumbnails for files rewritten in place. The disk tier
@@ -122,6 +151,9 @@ final class ProjectThumbnailCache: ObservableObject {
     func invalidate(urls: [URL]) {
         for url in urls {
             cache.removeObject(forKey: url as NSURL)
+            // A rotate swaps the asset's width and height, so the remembered
+            // shape is as stale as the picture.
+            aspects.removeValue(forKey: url.path)
         }
         failedKeys.removeAll()
         generation += 1

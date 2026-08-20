@@ -100,18 +100,11 @@ struct PhotoViewerView: View {
     @State private var declinedPresetSave = false
 
     /// The still's display aspect (w ÷ h). nil until the metadata probe lands —
-    /// see `mediaFrame(in:)` for what the layout does in the meantime.
+    /// see `MediaPaneMetrics` for what the layout does in the meantime.
     @State private var aspect: Double?
     /// Where the drag handle sits, as a fraction between the floor and the
     /// ceiling. 1 = the ceiling, which is where every presentation starts.
     @State private var mediaScale: CGFloat = 1
-    /// The scale at the start of the current drag, so cumulative translations
-    /// apply once instead of compounding.
-    @State private var dragBase: CGFloat?
-    /// Recognition liveness: @GestureState flips false on cancel as well as end,
-    /// so the healer below can clear `dragBase` when a gesture dies without
-    /// `onEnded` ever running.
-    @GestureState private var handleLive = false
 
     /// Below this width the image is pinned above the controls instead of
     /// sitting beside them.
@@ -123,12 +116,9 @@ struct PhotoViewerView: View {
     /// is the right outcome.
     private let wideLayoutThreshold: CGFloat = 500
 
-    /// The most of the available height the media may take. It is a ceiling and
-    /// the starting position, not a fixed size — the drag handle trades media
-    /// height for control room below it.
-    private let mediaCeilingFraction: CGFloat = 0.8
-    /// The least the handle can shrink the media to.
-    private let mediaFloorFraction: CGFloat = 0.25
+    /// How the image is sized and how far the handle may shrink it — the same
+    /// component the video editor and the project hero lay out with.
+    private var metrics: MediaPaneMetrics { MediaPaneMetrics(aspect: aspect) }
 
     /// Side-rail width. Fixed on macOS — resizing the window grows the photo,
     /// never the controls. Capped-proportional on iOS/iPadOS.
@@ -286,11 +276,6 @@ struct PhotoViewerView: View {
         #if os(iOS)
         .preferredColorScheme(.dark)
         #endif
-        // @GestureState flips false on end AND cancel, so the anchor can't stay
-        // stuck when a drag dies without onEnded.
-        .onChange(of: handleLive) { live in
-            if !live { dragBase = nil }
-        }
         .task {
             // Seed once from the project, then let this view own the values —
             // re-seeding on every model change would fight the sliders.
@@ -404,8 +389,8 @@ struct PhotoViewerView: View {
     /// left over — the ordering that keeps a greedy `ScrollView` from claiming
     /// the screen and squeezing the picture to a sliver.
     private func stackedBody(in container: CGSize) -> some View {
-        let media = mediaFrame(in: container)
-        let span = dragSpan(in: container)
+        let media = metrics.frame(in: container, scale: mediaScale)
+        let span = metrics.dragSpan(in: container)
         return VStack(spacing: 0) {
             imagePane
                 .frame(width: media.width, height: media.height)
@@ -421,7 +406,7 @@ struct PhotoViewerView: View {
                     .padding(.bottom, 2)
             }
             if span > 0 {
-                dragHandle(span: span)
+                MediaResizeHandle(scale: $mediaScale, span: span)
             }
             ScrollView(.vertical) {
                 controlStack(isWide: false)
@@ -430,75 +415,6 @@ struct PhotoViewerView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-    }
-
-    /// The media's exact frame: full width at its true aspect, capped at
-    /// `mediaCeilingFraction` of the height and then wherever the handle has
-    /// been dragged to. Always centred, always anchored to the top.
-    private func mediaFrame(in container: CGSize) -> CGSize {
-        guard container.width > 0, container.height > 0 else { return .zero }
-        // A nil aspect — the probe hasn't landed — makes `fit` hand back the
-        // whole box, which is the largest the media could ever be. The first
-        // paint therefore reserves the slot and the resolve shrinks it once,
-        // rather than the picture growing into place.
-        let ceiling = CollectionMath.fit(
-            aspect: aspect ?? 0,
-            maxWidth: container.width,
-            maxHeight: (container.height * mediaCeilingFraction).rounded())
-        guard let aspect, ceiling.height > mediaFloor(in: container) else { return ceiling }
-        let floor = mediaFloor(in: container)
-        let height = (floor + (ceiling.height - floor) * mediaScale).rounded()
-        return CGSize(
-            width: min(container.width, (height * aspect).rounded()),
-            height: height)
-    }
-
-    private func mediaFloor(in container: CGSize) -> CGFloat {
-        (container.height * mediaFloorFraction).rounded()
-    }
-
-    /// How much height the handle has to give away. Zero — no handle — when the
-    /// media is already shorter than the floor, which is where a very wide clip
-    /// lands: there is no width left for it to grow into.
-    private func dragSpan(in container: CGSize) -> CGFloat {
-        guard let aspect, container.width > 0, container.height > 0 else { return 0 }
-        let ceiling = CollectionMath.fit(
-            aspect: aspect,
-            maxWidth: container.width,
-            maxHeight: (container.height * mediaCeilingFraction).rounded())
-        return max(0, ceiling.height - mediaFloor(in: container))
-    }
-
-    private func dragHandle(span: CGFloat) -> some View {
-        Capsule()
-            .fill(.white.opacity(0.35))
-            .frame(width: 36, height: 5)
-            .frame(maxWidth: .infinity, minHeight: 28)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .updating($handleLive) { _, live, _ in live = true }
-                    .onChanged { value in
-                        let base = dragBase ?? mediaScale
-                        if dragBase == nil { dragBase = base }
-                        mediaScale = min(1, max(0, base + value.translation.height / span))
-                    }
-                    .onEnded { _ in dragBase = nil }
-            )
-            // Double-tap to reset, the same idiom the sliders teach.
-            .onTapGesture(count: 2) {
-                withAnimation(.easeOut(duration: 0.2)) { mediaScale = 1 }
-            }
-            .accessibilityElement()
-            .accessibilityLabel("Preview size")
-            .accessibilityValue("\(Int((mediaScale * 100).rounded()))%")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: mediaScale = min(1, mediaScale + 0.1)
-                case .decrement: mediaScale = max(0, mediaScale - 0.1)
-                @unknown default: break
-                }
-            }
     }
 
     // MARK: - Chrome

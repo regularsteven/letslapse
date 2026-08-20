@@ -1,3 +1,4 @@
+import AVFoundation
 import SwiftUI
 import LetsLapseKit
 
@@ -55,6 +56,9 @@ struct ProjectDetailView: View {
     @State private var originalsSaveState: AssetSaveState = .idle
     /// Collection confirmations ("Added to City set", refusals, creations).
     @State private var collectionToast: String?
+    /// True while the hero's resize handle is being dragged, so the scroll
+    /// view under it holds still (see `content(for:)`).
+    @State private var isResizingHero = false
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
@@ -235,138 +239,98 @@ struct ProjectDetailView: View {
 
     // MARK: - Content
 
+    /// The screen's two shapes, chosen by the width the window actually has
+    /// rather than by which device it is — the same rule the editors use, and
+    /// the same one a responsive web page would.
+    ///
+    /// Past `twoColumnWidth` the hero takes a column of its own with the
+    /// presets, the blended clips and the actions beside it, and the source
+    /// material sits beside the management card underneath. Below it — every
+    /// iPhone, an iPad in portrait or Split View, a narrowed Mac window — the
+    /// same sections stack in one column, in the same order.
+    private struct DetailLayout {
+        var container: CGSize
+
+        /// Two columns have to leave a hero worth looking at *and* a readable
+        /// list beside it. The number sits between the two widths that matter:
+        /// iPad portrait (834pt) stays single-column deliberately — split
+        /// there, neither column earns its width — while the Mac window's own
+        /// default (900pt) opens in two.
+        private let twoColumnWidth: CGFloat = 860
+        let horizontalPadding: CGFloat = 16
+        let columnSpacing: CGFloat = 18
+
+        var isWide: Bool { container.width >= twoColumnWidth }
+
+        var contentWidth: CGFloat { max(0, container.width - horizontalPadding * 2) }
+
+        /// The hero's column: a little over half the page, capped so a very
+        /// wide Mac window grows the list rather than the picture.
+        var heroColumnWidth: CGFloat {
+            guard isWide else { return contentWidth }
+            return min(((contentWidth - columnSpacing) * 0.54).rounded(), 620)
+        }
+
+        /// The box the hero may fill — its column's width by the tallest it may
+        /// ever be.
+        ///
+        /// The share of the height is lower than the editors' 0.8: this screen
+        /// leads with the picture but is not *about* the picture, and the clips
+        /// and actions under it have to be reachable without a scroll. Two
+        /// columns take a hard ceiling on top of the share, because the only
+        /// asset that can reach it is a portrait one — 60% of a 13-inch iPad in
+        /// portrait is a 766pt-tall hero with an empty column beside it.
+        var heroBox: CGSize {
+            let share = (container.height * (isWide ? 0.60 : 0.46)).rounded()
+            return CGSize(
+                width: heroColumnWidth,
+                height: isWide ? min(share, 560) : share)
+        }
+
+        /// How far the handle may shrink the hero, as a share of that box. The
+        /// travel is worth having — a third of the screen back for the list —
+        /// without letting a portrait asset become a postage stamp.
+        var heroFloorFraction: CGFloat { 0.45 }
+    }
+
     private func content(for capture: AppModel.CaptureProject) -> some View {
-        let versions = model.blends(for: capture)
-        let clipNames = model.sourceClipNames(for: capture)
-
-        return ScrollView {
-            VStack(spacing: 14) {
-                // A Scanner shoot is a set of frames for export, not material
-                // for a blend, so it gets its own body — leading with the
-                // frames and with Export, and keeping the blend path as one
-                // secondary button. Everything around it (title, the toolbar's
-                // rename/share/delete, the management card) is the same screen,
-                // because a Scanner set is still a project.
-                if model.isScannerProject(capture) {
-                    ScannerProjectSections(capture: capture) {
-                        model.openCapture(capture)
-                    }
-                } else {
-                    // Every mode leads with its graded preview and preset strip —
-                    // the grade is non-destructive and applies to photo, interval
-                    // and video alike, and every hero carries the same edit pill:
-                    // stills open the grading viewer, a movie opens the video
-                    // editor with the player beside the same controls.
-                    GradingCard(
-                        captureID: capture.id,
-                        badge: originalBadge(for: capture),
-                        // A Photo capture's card carries the one PHOTO pill and
-                        // nothing else — its pixel size is a property of the stack,
-                        // not of the asset the card is showing.
-                        formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
-                        onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
-                        onPlay: { playOriginal(capture) },
-                        onEditVideo: { url in editVideo(capture, url: url) },
-                        // Interval only: the shoot has frames to play as motion, so
-                        // its card leads with Play and keeps the editor as a second
-                        // affordance. Photo has one still and video has a movie —
-                        // neither has a sequence to preview.
-                        onPlaySequence: capture.kind == .photos && !capture.isPhotoCapture
-                            ? { previewSequence(capture) } : nil
-                    )
-
-                    // A Photo-mode capture is ONE photo — no clip list, no
-                    // versions, no re-processing. Just save, share, manage.
-                    if capture.isPhotoCapture {
-                        photoActions(for: capture)
-                        // A blended Photo shot stacks a burst into its one asset and
-                        // keeps the frames on disk. They stay stacking material —
-                        // no versions, no re-processing — but they are reachable
-                        // now, one frame at a time. An unblended shot captured a
-                        // single frame, which *is* the photo above: nothing to open.
-                        if capture.sourceMediaCount > 1 {
-                            originalsSection(for: capture)
-                        }
-                    } else {
-                        // Results lead: the blended clips already made, then the
-                        // button that makes the next one, then the source material
-                        // they're made from. No clips yet hides the section — the
-                        // button right under the hero is the empty state.
-                        if !versions.isEmpty {
-                            VStack(alignment: .leading, spacing: 8) {
-                                LLSectionHeader("Blended clips · \(versions.count)")
-
-                                VStack(spacing: 0) {
-                                    ForEach(versions) { blend in
-                                        versionRow(blend, in: capture)
-                                        if blend.id != versions.last?.id {
-                                            Divider().padding(.leading, 84)
-                                        }
-                                    }
-                                }
-                                .llCard()
-                            }
-                        }
-
-                        Button {
+        GeometryReader { proxy in
+            let layout = DetailLayout(container: proxy.size)
+            ScrollView {
+                VStack(spacing: 14) {
+                    // A Scanner shoot is a set of frames for export, not
+                    // material for a blend, so it gets its own body — leading
+                    // with the frames and with Export, and keeping the blend
+                    // path as one secondary button. Everything around it
+                    // (title, the toolbar's rename/share/delete, the management
+                    // card) is the same screen, because a Scanner set is still
+                    // a project.
+                    if model.isScannerProject(capture) {
+                        ScannerProjectSections(capture: capture) {
                             model.openCapture(capture)
-                        } label: {
-                            Label("New blended clip", systemImage: "plus")
                         }
-                        .buttonStyle(LLPrimaryButtonStyle())
-
-                        // An experimental side-step into the SAME flow: a survey
-                        // that authors the warp + reframe as states and
-                        // transitions instead of a timeline. It must never
-                        // displace the primary button above.
-                        if capture.kind == .video {
-                            Button {
-                                model.openCapture(capture)
-                                model.guidedBuilderFocused = true
-                            } label: {
-                                Label("Guided clip (experimental)", systemImage: "wand.and.stars")
-                            }
-                            .buttonStyle(LLSecondaryButtonStyle())
-                        }
-
-                        // The other door into the SAME flow: a punch-in move on
-                        // top of the speed warp. It opens the blended-clip editor
-                        // with the reframe lane already expanded — one process,
-                        // two entry points. Video only — a photo stack has no
-                        // frame to crop into over time.
-                        if capture.kind == .video {
-                            Button {
-                                model.openCapture(capture)
-                                model.reframeLaneFocused = true
-                            } label: {
-                                Label("Punch-in reframe", systemImage: "viewfinder")
-                            }
-                            .buttonStyle(LLSecondaryButtonStyle())
-                        }
-
-                        if capture.kind == .video, !clipNames.isEmpty {
-                            sourceClipsSection(for: capture, clipNames: clipNames)
-                        }
-                        // Interval frames are stacking material, not clips — one
-                        // compact row stands in for the whole set, with the export
-                        // path to Photos the originals never had.
-                        if capture.kind == .photos {
-                            originalsSection(for: capture)
-                        }
+                        managementCard(for: capture)
+                    } else if layout.isWide {
+                        wideBody(for: capture, layout: layout)
+                    } else {
+                        narrowBody(for: capture, layout: layout)
                     }
                 }
-
-                managementCard(for: capture)
+                .padding(.horizontal, layout.horizontalPadding)
+                .padding(.top, 8)
+                #if os(iOS)
+                // Clearance for the floating tab bar, so the Delete row stays
+                // visible and tappable at the end of the scroll.
+                .padding(.bottom, 96)
+                #else
+                .padding(.bottom, 24)
+                #endif
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 8)
-            #if os(iOS)
-            // Clearance for the floating tab bar, so the Delete row stays
-            // visible and tappable at the end of the scroll.
-            .padding(.bottom, 96)
-            #else
-            .padding(.bottom, 24)
-            #endif
+            // Resizing the hero is a vertical drag inside a vertical scroll
+            // view. The handle wins the gesture on touch-down, and the scroll
+            // then holds still for the length of it rather than racing it for
+            // the same pixels.
+            .scrollDisabled(isResizingHero)
         }
         .background(LL.screenBackground)
         .navigationTitle(capture.displayTitle)
@@ -429,6 +393,173 @@ struct ProjectDetailView: View {
                     }
                 }
             }
+        }
+    }
+
+    // MARK: - Bodies
+
+    /// One column: hero, what it is graded with, what has been made from it,
+    /// what it was made of, and what can be done to the project.
+    @ViewBuilder
+    private func narrowBody(for capture: AppModel.CaptureProject, layout: DetailLayout) -> some View {
+        heroPane(for: capture, layout: layout)
+        PresetStripSection(captureID: capture.id)
+        // A Photo-mode capture is ONE photo — no clip list, no blended clips,
+        // no re-processing. Just save, share, manage.
+        if capture.isPhotoCapture {
+            photoActions(for: capture)
+        } else {
+            blendedClipsSection(for: capture)
+            makeSection(for: capture)
+        }
+        sourceMaterialSection(for: capture)
+        managementCard(for: capture)
+    }
+
+    /// Two columns, twice: the picture beside what is made from it, then the
+    /// material beside the management of it.
+    @ViewBuilder
+    private func wideBody(for capture: AppModel.CaptureProject, layout: DetailLayout) -> some View {
+        HStack(alignment: .top, spacing: layout.columnSpacing) {
+            heroPane(for: capture, layout: layout)
+                .frame(width: layout.heroColumnWidth)
+
+            VStack(alignment: .leading, spacing: 14) {
+                PresetStripSection(captureID: capture.id)
+                if capture.isPhotoCapture {
+                    photoActions(for: capture)
+                } else {
+                    blendedClipsSection(for: capture)
+                    makeSection(for: capture)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+
+        HStack(alignment: .top, spacing: layout.columnSpacing) {
+            // With no material to list — a single-frame Photo shot — the
+            // management card takes the whole width rather than sitting in half
+            // of one beside a hole.
+            if hasSourceMaterial(for: capture) {
+                sourceMaterialSection(for: capture)
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            managementCard(for: capture)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+    }
+
+    // MARK: - Sections
+
+    /// Every mode leads with its graded preview — the grade is non-destructive
+    /// and applies to photo, interval and video alike, and every hero carries
+    /// the same edit pill: stills open the grading viewer, a movie opens the
+    /// video editor with the player beside the same controls.
+    private func heroPane(for capture: AppModel.CaptureProject, layout: DetailLayout) -> some View {
+        ProjectHeroPane(
+            captureID: capture.id,
+            box: layout.heroBox,
+            floorFraction: layout.heroFloorFraction,
+            // In one column the picture is the whole row and centres in it. In
+            // two it is the head of the left column, so it lines up with the
+            // source-clip card beneath it rather than floating between them.
+            alignment: layout.isWide ? .leading : .center,
+            isResizing: $isResizingHero,
+            badge: originalBadge(for: capture),
+            // A Photo capture's card carries the one PHOTO pill and nothing
+            // else — its pixel size is a property of the stack, not of the
+            // asset the card is showing.
+            formatBadge: capture.isPhotoCapture ? nil : formatBadge(for: capture),
+            onOpenViewer: { url in previewGradedPhoto(capture, url: url) },
+            onPlay: { playOriginal(capture) },
+            onEditVideo: { url in editVideo(capture, url: url) },
+            // Interval only: the shoot has frames to play as motion, so its
+            // hero leads with Play and keeps the editor as a second affordance.
+            // Photo has one still and video has a movie — neither has a
+            // sequence to preview.
+            onPlaySequence: capture.kind == .photos && !capture.isPhotoCapture
+                ? { previewSequence(capture) } : nil)
+    }
+
+    /// The blended clips already made. No clips yet hides the section — the
+    /// button under it is the empty state.
+    @ViewBuilder
+    private func blendedClipsSection(for capture: AppModel.CaptureProject) -> some View {
+        let versions = model.blends(for: capture)
+        if !versions.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                LLSectionHeader("Blended clips · \(versions.count)")
+
+                VStack(spacing: 0) {
+                    ForEach(versions) { blend in
+                        versionRow(blend, in: capture)
+                        if blend.id != versions.last?.id {
+                            Divider().padding(.leading, 84)
+                        }
+                    }
+                }
+                .llCard()
+            }
+        }
+    }
+
+    /// The buttons that make the next clip.
+    @ViewBuilder
+    private func makeSection(for capture: AppModel.CaptureProject) -> some View {
+        VStack(spacing: 8) {
+            Button {
+                model.openCapture(capture)
+            } label: {
+                Label("New blended clip", systemImage: "plus")
+            }
+            .buttonStyle(LLPrimaryButtonStyle())
+
+            // A side-step into the SAME flow: a survey that authors the warp +
+            // reframe as states and transitions instead of a timeline. It must
+            // never displace the primary button above.
+            if capture.kind == .video {
+                Button {
+                    model.openCapture(capture)
+                    model.guidedBuilderFocused = true
+                } label: {
+                    Label("Guided clip", systemImage: "wand.and.stars")
+                }
+                .buttonStyle(LLSecondaryButtonStyle())
+            }
+        }
+    }
+
+    /// Whether this project has material to list at all — the question the wide
+    /// layout's bottom row asks before it splits itself in two.
+    private func hasSourceMaterial(for capture: AppModel.CaptureProject) -> Bool {
+        if capture.isPhotoCapture { return capture.sourceMediaCount > 1 }
+        if capture.kind == .video { return !model.sourceClipNames(for: capture).isEmpty }
+        return true
+    }
+
+    /// What the project was made of: clips for a video shoot, frames for an
+    /// interval one, and the burst behind a blended Photo shot.
+    @ViewBuilder
+    private func sourceMaterialSection(for capture: AppModel.CaptureProject) -> some View {
+        if capture.isPhotoCapture {
+            // A blended Photo shot stacks a burst into its one asset and keeps
+            // the frames on disk. They stay stacking material — no blended
+            // clips, no re-processing — but they are reachable, one frame at a
+            // time. An unblended shot captured a single frame, which *is* the
+            // photo above: nothing to open.
+            if capture.sourceMediaCount > 1 {
+                originalsSection(for: capture)
+            }
+        } else if capture.kind == .video {
+            let clipNames = model.sourceClipNames(for: capture)
+            if !clipNames.isEmpty {
+                sourceClipsSection(for: capture, clipNames: clipNames)
+            }
+        } else {
+            // Interval frames are stacking material, not clips — one compact
+            // row stands in for the whole set, with the export path to Photos
+            // the originals never had.
+            originalsSection(for: capture)
         }
     }
 
@@ -1128,27 +1259,45 @@ struct ProjectDetailView: View {
     }
 }
 
-// MARK: - Grading card
+// MARK: - Hero pane
 
-/// A capture's graded preview with the preset strip beneath it, for every mode.
+/// A capture's graded preview, at the size and shape the asset actually is.
 ///
 /// The preview renders the project's `PhotoPreset` and `PhotoAdjustments` live —
 /// off the photo for a Photo capture, off the first source frame for an interval
-/// shoot, and off a frame pulled out of the movie for a video capture. Tapping a
-/// chip re-grades in place and persists the choice. Nothing on disk is modified:
-/// the grade is re-derived each time and baked in only where a new file is
-/// written (a rendered version, or an export).
+/// shoot, and off a frame pulled out of the movie for a video capture. Nothing
+/// on disk is modified: the grade is re-derived each time and baked in only
+/// where a new file is written (a blended clip, or an export).
 ///
-/// Photo and interval captures have frame files, so their preview opens the
-/// grading viewer — presets, sliders and white balance at size. A video project
-/// has no such viewer (its preview button plays the movie), so it carries the
-/// Customise controls in the card itself: inline below the strip in a narrow
-/// layout, and in a sheet once the card is wide enough that an inline panel
-/// would push the preview off a short screen.
-private struct GradingCard: View {
+/// It lays out with `MediaPaneMetrics`, the same component the photo and video
+/// editors use, which is what removed this screen's opening flinch. The slot
+/// used to be a fixed 210pt-tall, full-width, *cropped* thumbnail that the real
+/// image then replaced at its true aspect and a different height — a visible
+/// re-layout on every open. Now the shape is known before the first paint (the
+/// grid tile that got you here has already taught the thumbnail cache what it
+/// is; a video capture carries its own oriented size), the thumbnail fills that
+/// exact slot, and the graded render cross-fades into it without moving
+/// anything. Where the shape genuinely isn't known yet the slot opens at the
+/// ceiling and resolves *down* once, which reads as settling rather than
+/// growing.
+private struct ProjectHeroPane: View {
     @EnvironmentObject var model: AppModel
-    @ObservedObject private var presetStore = CustomPresetStore.shared
+    /// Re-renders after a rotate rewrites the original in place (same URL, so
+    /// the path/preset id alone can't retrigger; PhotoGrader's own cache is
+    /// mtime-keyed and self-heals). Also republishes the learned aspect, which
+    /// a rotate invalidates.
+    @ObservedObject private var thumbnailCache = ProjectThumbnailCache.shared
     let captureID: UUID
+    /// The largest the picture may be drawn: its column's width by the tallest
+    /// this screen allows.
+    var box: CGSize
+    /// How far the handle may shrink it, as a share of `box`.
+    var floorFraction: CGFloat
+    /// Where the picture sits in its column.
+    var alignment: HorizontalAlignment = .center
+    /// Raised for the length of a resize drag — the host scroll view stands
+    /// down while it is true.
+    @Binding var isResizing: Bool
     /// The ORIGINAL/PHOTO pill over the top-left of the preview.
     var badge: String
     /// The resolution/fps pill over the bottom-right, when there is one.
@@ -1161,20 +1310,19 @@ private struct GradingCard: View {
     /// grading controls, the video sibling of `onOpenViewer`.
     var onEditVideo: (URL) -> Void
     /// Interval: play the shoot as motion from its frames. When this is set the
-    /// card shows two affordances — Play in the middle, Edit below it —
-    /// because an interval project has both a sequence to watch and a frame to
-    /// grade. nil leaves the single-button card every other mode has.
+    /// hero shows two affordances — Play in the middle, Edit below it — because
+    /// an interval project has both a sequence to watch and a frame to grade.
+    /// nil leaves the single-button hero every other mode has.
     var onPlaySequence: (() -> Void)?
 
     /// The graded preview, downscaled for speed; nil until the first render.
     @State private var rendered: CGImage?
-    /// A chip tap held back for confirmation, because applying it from Edited
-    /// would throw the project's manual adjustments away.
-    @State private var pendingApply: PresetApplyRequest?
-    /// Re-renders after a rotate rewrites the original in place (same URL, so
-    /// the path/preset id alone can't retrigger; PhotoGrader's own cache is
-    /// mtime-keyed and self-heals).
-    @ObservedObject private var thumbnailCache = ProjectThumbnailCache.shared
+    /// The asset's display aspect once probed from the file itself. Until then
+    /// the layout uses whatever is already known — see `knownAspect`.
+    @State private var probedAspect: Double?
+    /// Where the resize handle sits, 1 = the ceiling, which is where every
+    /// presentation starts.
+    @State private var mediaScale: CGFloat = 1
 
     /// How long a preset change has to be still before the preview re-renders.
     private let renderDebounce: Duration = .milliseconds(100)
@@ -1183,7 +1331,7 @@ private struct GradingCard: View {
         model.captures.first { $0.id == captureID }
     }
 
-    /// What the card previews, and how it has to be decoded.
+    /// What the pane previews, and how it has to be decoded.
     private enum Preview: Equatable {
         case still(URL)
         case movie(URL)
@@ -1203,15 +1351,37 @@ private struct GradingCard: View {
     var body: some View {
         if let capture {
             // A project whose files have gone missing has no frame to grade;
-            // the card still draws, with the placeholder hero and no button, so
+            // the pane still draws, with the placeholder hero and no button, so
             // the screen doesn't lose its top card.
             let preview = preview(for: capture)
             let grade = model.photoGrade(for: capture)
-            let state = model.presetState(for: capture)
-            VStack(spacing: 10) {
-                imageCard(preview: preview)
-                stateRow(state: state)
-                presetStrip(capture: capture, state: state)
+            let metrics = MediaPaneMetrics(
+                aspect: probedAspect ?? knownAspect(for: capture, preview: preview),
+                ceilingFraction: 1,
+                floorFraction: floorFraction)
+            let size = metrics.frame(in: box, scale: mediaScale)
+            // A very wide asset is already shorter than the floor, so there is
+            // nothing to trade: below a useful travel the grabber is a control
+            // that does nothing, and it stays off.
+            let span = metrics.dragSpan(in: box)
+            VStack(spacing: 0) {
+                imageCard(preview: preview, size: size)
+                if span >= 40 {
+                    MediaResizeHandle(
+                        scale: $mediaScale,
+                        span: span,
+                        tint: Color.secondary.opacity(0.35),
+                        isDragging: $isResizing)
+                }
+            }
+            // The block is exactly the picture's width, so the grabber sits
+            // under the picture rather than under the column.
+            .frame(width: size.width)
+            .frame(maxWidth: .infinity, alignment: alignment == .leading ? .leading : .center)
+            .task(id: "\(preview?.url.path ?? "-")|\(thumbnailCache.generation)") {
+                // Metadata only — no decode — so the shape lands in a
+                // millisecond or two even for a DNG, which has no preview IFD.
+                await resolveAspect(preview)
             }
             .task(id: "\(preview?.url.path ?? "-")|\(grade.cacheToken)|\(thumbnailCache.generation)") {
                 // Debounce: chip taps and editor writes re-key this task, so a
@@ -1221,15 +1391,6 @@ private struct GradingCard: View {
                 if let preview {
                     await render(preview, grade: grade)
                 }
-            }
-            .alert(item: $pendingApply) { request in
-                Alert(
-                    title: Text(request.confirmationTitle),
-                    message: Text(request.confirmationMessage),
-                    primaryButton: .destructive(Text(request.confirmationButton)) {
-                        apply(request, to: capture)
-                    },
-                    secondaryButton: .cancel())
             }
         }
     }
@@ -1252,33 +1413,78 @@ private struct GradingCard: View {
         }
     }
 
-    private func imageCard(preview: Preview?) -> some View {
-        ZStack {
-            Group {
-                if let rendered {
-                    // True aspect ratio, never cropped: the hero presents the
-                    // asset as it actually is, capped in height so a portrait
-                    // frame doesn't swallow the screen.
-                    Image(decorative: rendered, scale: 1)
-                        .resizable()
-                        .scaledToFit()
-                        .frame(maxHeight: 340)
-                } else {
-                    // Falls back to the ungraded thumbnail while the first
-                    // grade renders.
-                    ProjectThumbnailView(
-                        url: preview?.url, kind: preview?.isMovie == true ? .video : .image)
-                        .frame(height: 210)
-                        .frame(maxWidth: .infinity)
-                }
-            }
-            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+    /// The asset's shape without touching the file: what a grid tile has
+    /// already taught the thumbnail cache, then what the project itself
+    /// recorded. Both are synchronous, which is the point — this answer is
+    /// needed for the first paint, and the probe cannot be.
+    private func knownAspect(for capture: AppModel.CaptureProject, preview: Preview?) -> Double? {
+        if let cached = thumbnailCache.aspect(for: preview?.url) { return cached }
+        // A video capture carries its oriented source size (a metadata-only
+        // Rotate 90° swaps it), so a movie is laid out right on frame one.
+        if let width = capture.sourceWidth, let height = capture.sourceHeight,
+           width > 0, height > 0 {
+            return Double(width) / Double(height)
+        }
+        // A Photo capture's hero is its stacked image, whose size the blend
+        // recorded even when the capture didn't.
+        if capture.isPhotoCapture,
+           let blend = model.blends(for: capture).first(where: { $0.kind == .image }),
+           let width = blend.width, let height = blend.height, width > 0, height > 0 {
+            return Double(width) / Double(height)
+        }
+        return nil
+    }
 
-            if let preview {
+    /// Reads the true display size off the file and remembers it, so this
+    /// screen is exact even for an asset nothing has drawn yet — and so the
+    /// next screen to ask gets it for nothing.
+    private func resolveAspect(_ preview: Preview?) async {
+        guard let preview else { return }
+        let url = preview.url
+        let resolved: Double?
+        if preview.isMovie {
+            let size = await MediaGeometry.videoDisplaySize(asset: AVURLAsset(url: url))
+            resolved = (size?.height ?? 0) > 0 ? size.map { $0.width / $0.height } : nil
+        } else {
+            let size = await MediaWorkQueue.shared.run { MediaGeometry.stillDisplaySize(url: url) }
+            // Outer nil is a cancelled read, inner nil a file that wouldn't
+            // answer; neither is a reason to move a slot that is already right.
+            resolved = ((size ?? nil)?.height ?? 0) > 0
+                ? (size ?? nil).map { $0.width / $0.height } : nil
+        }
+        guard let resolved, resolved.isFinite, resolved > 0 else { return }
+        thumbnailCache.recordAspect(resolved, for: url)
+        probedAspect = resolved
+    }
+
+    private func imageCard(preview: Preview?, size: CGSize) -> some View {
+        ZStack {
+            // The ungraded thumbnail stays underneath for the life of the pane:
+            // it fills the slot before the first grade lands, and it is what
+            // remains if a render fails — so the picture never blanks and never
+            // changes size.
+            ProjectThumbnailView(
+                url: preview?.url,
+                kind: preview?.isMovie == true ? .video : .image,
+                cornerRadius: 18)
+
+            if let rendered {
+                // Fit, not fill: the slot is already the asset's own shape, so
+                // these agree — except in the moment before the shape is known,
+                // where fitting shows the whole picture instead of cropping it.
+                Image(decorative: rendered, scale: 1)
+                    .resizable()
+                    .scaledToFit()
+                    .transition(.opacity)
+            }
+
+            if let preview, size.width >= 120, size.height >= 120 {
                 heroButton(preview: preview)
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(width: size.width, height: size.height)
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .animation(.easeOut(duration: 0.18), value: rendered != nil)
         .overlay(alignment: .bottomLeading) {
             // Every project edits from its hero, and the pill says the same
             // thing on all of them: the hero underneath it is already showing
@@ -1294,13 +1500,37 @@ private struct GradingCard: View {
             }
         }
         .overlay(alignment: .topLeading) {
-            MediaBadge(text: badge)
+            badges(width: size.width)
                 .padding(12)
         }
         .overlay(alignment: .bottomTrailing) {
-            if let formatBadge {
+            if let formatBadge, size.width >= wideBadgeWidth {
                 MediaBadge(text: formatBadge)
                     .padding(12)
+            }
+        }
+    }
+
+    /// A pill is only worth drawing while it fits the picture it labels.
+    ///
+    /// Three states, because the pane's width is the asset's own: a wide hero
+    /// carries the identity pill top-left and the format pill bottom-right, as
+    /// the design draws it. A portrait hero — and any hero dragged down toward
+    /// the floor — is narrower than the two bottom pills laid side by side, so
+    /// the format pill moves up under the identity one rather than colliding
+    /// with the Edit pill. Narrower still and both go: a badge wider than its
+    /// own picture reads as a layout bug, and the same facts are in the title
+    /// and on the management card.
+    private var wideBadgeWidth: CGFloat { 330 }
+    private var narrowBadgeWidth: CGFloat { 170 }
+
+    @ViewBuilder private func badges(width: CGFloat) -> some View {
+        if width >= narrowBadgeWidth {
+            VStack(alignment: .leading, spacing: 6) {
+                MediaBadge(text: badge)
+                if let formatBadge, width < wideBadgeWidth {
+                    MediaBadge(text: formatBadge)
+                }
             }
         }
     }
@@ -1355,6 +1585,66 @@ private struct GradingCard: View {
         .padding(12)
     }
 
+    /// Renders the preview: a still through the image grader, a movie through one
+    /// graded frame pulled out with `AVAssetImageGenerator`.
+    private func render(_ preview: Preview, grade: PhotoGrade) async {
+        let cgImage = await MediaWorkQueue.shared.run { () -> CGImage? in
+            switch preview {
+            case .still(let url):
+                return PhotoGrader.render(
+                    url: url, preset: grade.preset, adjustments: grade.adjustments,
+                    maxDimension: 1400)
+            case .movie(let url):
+                return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
+            }
+        }
+        // Ignore a nil render (missing file, or the view went away mid-decode)
+        // so the thumbnail fallback stays visible rather than blanking out.
+        if let cgImage, let image = cgImage { rendered = image }
+    }
+}
+
+// MARK: - Preset strip
+
+/// Which grade the project is on, and the chips that change it.
+///
+/// Split out of the hero it used to sit under: in a wide window the picture
+/// takes a column of its own and this belongs beside it, not below it. The
+/// chips follow the *state*, not the numbers — a preset is only ever shown as
+/// active when the project is actually on it, so an Edited project lights
+/// nothing up.
+private struct PresetStripSection: View {
+    @EnvironmentObject var model: AppModel
+    @ObservedObject private var presetStore = CustomPresetStore.shared
+    let captureID: UUID
+
+    /// A chip tap held back for confirmation, because applying it from Edited
+    /// would throw the project's manual adjustments away.
+    @State private var pendingApply: PresetApplyRequest?
+
+    private var capture: AppModel.CaptureProject? {
+        model.captures.first { $0.id == captureID }
+    }
+
+    var body: some View {
+        if let capture {
+            let state = model.presetState(for: capture)
+            VStack(alignment: .leading, spacing: 10) {
+                stateRow(state: state)
+                presetStrip(capture: capture, state: state)
+            }
+            .alert(item: $pendingApply) { request in
+                Alert(
+                    title: Text(request.confirmationTitle),
+                    message: Text(request.confirmationMessage),
+                    primaryButton: .destructive(Text(request.confirmationButton)) {
+                        apply(request, to: capture)
+                    },
+                    secondaryButton: .cancel())
+            }
+        }
+    }
+
     /// The state readout above the strip: which preset is applied, or that the
     /// project has been edited past all of them. It follows the project live —
     /// an editor session that diverges from its preset flips this to Edited the
@@ -1373,9 +1663,6 @@ private struct GradingCard: View {
         capture: AppModel.CaptureProject,
         state: PresetState
     ) -> some View {
-        // The chips follow the state, not the numbers: a preset is only ever
-        // shown as active when the project is actually on it, so an Edited
-        // project lights nothing up.
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(PhotoPreset.strip) { preset in
@@ -1419,7 +1706,7 @@ private struct GradingCard: View {
         for capture: AppModel.CaptureProject,
         state: PresetState
     ) {
-        // From the card there is no playhead to aim at, so a chip really does
+        // From here there is no playhead to aim at, so a chip really does
         // flatten a keyframed grade — say how much of one.
         let request = PresetApplyRequest(
             target: target,
@@ -1458,24 +1745,6 @@ private struct GradingCard: View {
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityLabel)
         .accessibilityAddTraits(isActive ? [.isSelected] : [])
-    }
-
-    /// Renders the preview: a still through the image grader, a movie through one
-    /// graded frame pulled out with `AVAssetImageGenerator`.
-    private func render(_ preview: Preview, grade: PhotoGrade) async {
-        let cgImage = await MediaWorkQueue.shared.run { () -> CGImage? in
-            switch preview {
-            case .still(let url):
-                return PhotoGrader.render(
-                    url: url, preset: grade.preset, adjustments: grade.adjustments,
-                    maxDimension: 1400)
-            case .movie(let url):
-                return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
-            }
-        }
-        // Ignore a nil render (missing file, or the view went away mid-decode)
-        // so the thumbnail fallback stays visible rather than blanking out.
-        if let cgImage, let image = cgImage { rendered = image }
     }
 }
 

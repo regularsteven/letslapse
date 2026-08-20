@@ -87,8 +87,9 @@ struct AdjustView: View {
         .background(LL.screenBackground.ignoresSafeArea())
         .onAppear {
             model.warpUndoManager = undoManager
-            // The Punch-in reframe button lands here with the lane open; so
-            // does re-editing a clip that has a track.
+            // Re-editing a clip that already has a track lands here with the
+            // lane open, as does the LL_REFRAME hook; otherwise the lane is
+            // opened from its own row (`reframeToggleRow`).
             if model.reframeLaneFocused || !(model.reframe?.isEmpty ?? true) {
                 reframeLaneOpen = true
             }

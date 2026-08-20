@@ -83,12 +83,11 @@ struct VideoEditorView: View {
     /// Where the drag handle sits, as a fraction between the floor and the
     /// ceiling. 1 = the ceiling, which is where every presentation starts.
     @State private var mediaScale: CGFloat = 1
-    @State private var dragBase: CGFloat?
-    @GestureState private var handleLive = false
 
     private let wideLayoutThreshold: CGFloat = 500
-    private let mediaCeilingFraction: CGFloat = 0.8
-    private let mediaFloorFraction: CGFloat = 0.25
+    /// How the player is sized and how far the handle may shrink it — the same
+    /// component the photo editor and the project hero lay out with.
+    private var metrics: MediaPaneMetrics { MediaPaneMetrics(aspect: aspect) }
     /// A touch longer than the photo editor's 100ms: swapping the video
     /// composition restarts the item's render pipeline, so a drag shouldn't
     /// thrash it.
@@ -151,9 +150,6 @@ struct VideoEditorView: View {
         #if os(iOS)
         .preferredColorScheme(.dark)
         #endif
-        .onChange(of: handleLive) { live in
-            if !live { dragBase = nil }
-        }
         .task {
             // Seed once from the project, then let this view own the values.
             guard !loaded, let capture else { return }
@@ -256,8 +252,8 @@ struct VideoEditorView: View {
     /// player gets an exact frame so the scroll view can only take the room left
     /// over — the ordering that stops a greedy `ScrollView` claiming the screen.
     private func stackedBody(in container: CGSize) -> some View {
-        let media = mediaFrame(in: container)
-        let span = dragSpan(in: container)
+        let media = metrics.frame(in: container, scale: mediaScale)
+        let span = metrics.dragSpan(in: container)
         return VStack(spacing: 0) {
             playerPane
                 .frame(width: media.width, height: media.height)
@@ -273,7 +269,7 @@ struct VideoEditorView: View {
                     .padding(.bottom, 2)
             }
             if span > 0 {
-                dragHandle(span: span)
+                MediaResizeHandle(scale: $mediaScale, span: span)
             }
             ScrollView(.vertical) {
                 controlStack(isWide: false)
@@ -281,68 +277,6 @@ struct VideoEditorView: View {
             }
             .scrollBounceBehavior(.basedOnSize)
         }
-    }
-
-    /// The player's exact frame: full width at the movie's true aspect, capped
-    /// at `mediaCeilingFraction` of the height and then wherever the handle sits.
-    private func mediaFrame(in container: CGSize) -> CGSize {
-        guard container.width > 0, container.height > 0 else { return .zero }
-        let ceiling = CollectionMath.fit(
-            aspect: aspect ?? 0,
-            maxWidth: container.width,
-            maxHeight: (container.height * mediaCeilingFraction).rounded())
-        guard let aspect, ceiling.height > mediaFloor(in: container) else { return ceiling }
-        let floor = mediaFloor(in: container)
-        let height = (floor + (ceiling.height - floor) * mediaScale).rounded()
-        return CGSize(
-            width: min(container.width, (height * aspect).rounded()),
-            height: height)
-    }
-
-    private func mediaFloor(in container: CGSize) -> CGFloat {
-        (container.height * mediaFloorFraction).rounded()
-    }
-
-    /// How much height the handle has to give away — zero, and no handle, when
-    /// a very wide clip is already shorter than the floor.
-    private func dragSpan(in container: CGSize) -> CGFloat {
-        guard let aspect, container.width > 0, container.height > 0 else { return 0 }
-        let ceiling = CollectionMath.fit(
-            aspect: aspect,
-            maxWidth: container.width,
-            maxHeight: (container.height * mediaCeilingFraction).rounded())
-        return max(0, ceiling.height - mediaFloor(in: container))
-    }
-
-    private func dragHandle(span: CGFloat) -> some View {
-        Capsule()
-            .fill(.white.opacity(0.35))
-            .frame(width: 36, height: 5)
-            .frame(maxWidth: .infinity, minHeight: 28)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .updating($handleLive) { _, live, _ in live = true }
-                    .onChanged { value in
-                        let base = dragBase ?? mediaScale
-                        if dragBase == nil { dragBase = base }
-                        mediaScale = min(1, max(0, base + value.translation.height / span))
-                    }
-                    .onEnded { _ in dragBase = nil }
-            )
-            .onTapGesture(count: 2) {
-                withAnimation(.easeOut(duration: 0.2)) { mediaScale = 1 }
-            }
-            .accessibilityElement()
-            .accessibilityLabel("Preview size")
-            .accessibilityValue("\(Int((mediaScale * 100).rounded()))%")
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment: mediaScale = min(1, mediaScale + 0.1)
-                case .decrement: mediaScale = max(0, mediaScale - 0.1)
-                @unknown default: break
-                }
-            }
     }
 
     // MARK: - Chrome

@@ -625,8 +625,8 @@ struct ContentView: View {
             }
         }
         // LL_REFRAME=latest — open the newest video capture in the blended-
-        // clip flow with the reframe lane expanded, exactly what the
-        // project's "Punch-in reframe" button (which simctl can't tap) does.
+        // clip flow with the reframe lane expanded, exactly what the Adjust
+        // screen's own "Punch-in reframe" row (which simctl can't tap) does.
         // LL_REFRAME_RATIO=9:16 pins the canvas for variant screenshots.
         if environment["LL_REFRAME"] == "latest",
            let capture = model.captures.first(where: { $0.kind == .video }) {
