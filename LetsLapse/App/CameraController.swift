@@ -1049,6 +1049,18 @@ final class CameraController: NSObject, ObservableObject {
     private var liveBlendRawController: LiveBlendRawController?
     #endif
 
+    /// Auto blend's device ceiling for the run in flight, measured at start and
+    /// re-measured when the thermal state moves. Held rather than passed by
+    /// value because a re-profile has to reach a controller that is already
+    /// running — the closure the controller was handed reads through this.
+    private let capabilityProfileHolder = CapabilityProfileHolder()
+    private var thermalObserver: NSObjectProtocol?
+    #if os(iOS)
+    /// Held for the probe's lifetime — it owns the capture delegate the photo
+    /// output is talking to, and AVFoundation keeps only a weak reference.
+    private var capabilityProfiler: DeviceCapabilityProfiler?
+    #endif
+
     /// True while a Live Blend run is collecting or draining. Guards the
     /// format/lens setters the same way recording and interval capture do.
     private var isLiveBlendActive: Bool {
@@ -6532,6 +6544,94 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// What the camera's own AE has settled on right now, read off the live
+    /// device rather than off a captured frame.
+    ///
+    /// Two callers, one reading. Auto needs it because a window's depth has to
+    /// be chosen *before* that window's first capture exists. The video-tap
+    /// pipeline needs it because its frames come off the preview stream and
+    /// carry no EXIF of their own — the device is the only place its exposure
+    /// record can come from.
+    ///
+    /// On macOS this always returns nil: `lensAperture`, `exposureDuration` and
+    /// `iso` are unavailable there — a Mac camera exposes no exposure readings
+    /// at all — so Auto falls back to its middle band rather than pretending to
+    /// have metered anything.
+    private func sceneExposureProvider() -> () -> DNGAuthor.DNGExposure? {
+        #if os(iOS)
+        return { [weak self] in
+            guard let device = self?.videoDevice else { return nil }
+            let iso = Double(device.iso)
+            let shutter = device.exposureDuration.seconds
+            let aperture = Double(device.lensAperture)
+            // A session still coming up reports zeros; that is an absence of a
+            // reading, not a reading of zero.
+            guard iso > 0, shutter > 0, aperture > 0 else { return nil }
+            return DNGAuthor.DNGExposure(
+                iso: iso, exposureDuration: shutter, aperture: aperture,
+                capturedAt: Date())
+        }
+        #else
+        return { nil }
+        #endif
+    }
+
+    /// Keeps the run's capability profile honest as the phone heats up.
+    /// Sustained RAW capture moves the thermal state within minutes, and a
+    /// ceiling measured cool is exactly how Auto would keep asking a throttled
+    /// device for frames it can no longer deliver.
+    private func startCapabilityReprofiling(rawPixelFormat: OSType, interval: Double) {
+        #if os(iOS)
+        stopCapabilityReprofiling()
+        thermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification,
+            object: nil, queue: nil
+        ) { [weak self] _ in
+            guard let self else { return }
+            let state = ProcessInfo.processInfo.thermalState
+            guard self.capabilityProfileHolder.isStale(for: state) else { return }
+            self.sessionQueue.async {
+                // Only while the run that asked for it is still going: a probe
+                // fired into a torn-down session is ten wasted captures.
+                guard self.liveBlendRawController?.isActive == true else { return }
+                LLog("capability: thermal state moved — re-profiling")
+                self.runCapabilityProbe(rawPixelFormat: rawPixelFormat, interval: interval) { _ in }
+            }
+        }
+        #endif
+    }
+
+    private func stopCapabilityReprofiling() {
+        if let thermalObserver {
+            NotificationCenter.default.removeObserver(thermalObserver)
+        }
+        thermalObserver = nil
+    }
+
+    #if os(iOS)
+    /// One capability measurement, stored in the holder and handed on. The
+    /// completion fires whatever the outcome — a probe that measures nothing
+    /// leaves the holder empty, and Auto then runs on the EV table alone, which
+    /// is what every other depth has always done.
+    private func runCapabilityProbe(
+        rawPixelFormat: OSType,
+        interval: Double,
+        completion: @escaping (DeviceCapabilityProfile?) -> Void
+    ) {
+        let profiler = DeviceCapabilityProfiler(
+            photoOutput: photoOutput,
+            captureExecutor: { [weak self] block in self?.sessionQueue.async(execute: block) })
+        capabilityProfiler = profiler
+        profiler.profile(rawPixelFormat: rawPixelFormat, intervalSeconds: interval) { [weak self] profile in
+            guard let self else { return }
+            if let profile {
+                self.capabilityProfileHolder.set(profile)
+            }
+            completion(profile)
+        }
+    }
+    #endif
+
     /// Routes a controller's unthrottled-window lessons into the profile
     /// store under the pipeline that produced them.
     private static func learningRecorder(pipeline: String, interval: Double) -> (ThermalBucket, BlendLearningSample) -> Void {
@@ -6587,6 +6687,10 @@ final class CameraController: NSObject, ObservableObject {
                 configuredFrameRate: self.selectedFrameRate,
                 requestedOutputFormat: requestedOutputFormat,
                 throttledFrameTarget: Self.throttledFrameTarget(pipeline: "standard", interval: interval),
+                capabilityProfile: { [weak self] in self?.capabilityProfileHolder.profile },
+                sceneExposure: sceneExposureProvider(),
+                sessionID: UUID().uuidString,
+                deviceModel: LiveBlendController.deviceModelIdentifier(),
                 gpsMetadata: { [weak self] in
                     guard let self, self.gpsTaggingEnabled,
                           let location = LocationService.shared.latestLocation else { return nil }
@@ -6782,6 +6886,10 @@ final class CameraController: NSObject, ObservableObject {
             responsiveCapture: responsiveApplied,
             maxBracketFrames: bracketMax,
             throttledFrameTarget: Self.throttledFrameTarget(pipeline: "dng", interval: interval),
+            capabilityProfile: { [weak self] in self?.capabilityProfileHolder.profile },
+            sceneExposure: sceneExposureProvider(),
+            sessionID: UUID().uuidString,
+            deviceModel: LiveBlendController.deviceModelIdentifier(),
             gpsProvider: { [weak self] in
                 guard let self, self.gpsTaggingEnabled,
                       let location = LocationService.shared.latestLocation else { return nil }
@@ -6819,6 +6927,9 @@ final class CameraController: NSObject, ObservableObject {
             guard let self else { return }
             self.isLiveBlendRunning = false
             self.sessionQueue.async {
+                self.stopCapabilityReprofiling()
+                self.capabilityProfiler = nil
+                self.capabilityProfileHolder.set(nil)
                 self.endHolyGrailIfActive()
                 self.restoreAfterDNGRun()
                 self.releaseRunFocusLock()
@@ -6832,7 +6943,27 @@ final class CameraController: NSObject, ObservableObject {
         // the constituent swap above and the photo-preset switch — either would
         // have handed focus back to auto under the pin.
         lockFocusForRun(deviceChanged: videoDevice !== deviceBeforeSwap)
-        controller.start()
+        if depth == .auto {
+            // Auto is the one depth whose first window needs a number before it
+            // opens, so the capability probe runs ahead of the shoot rather than
+            // alongside it. It is bounded (ten frames, hard timeout), it only
+            // costs Auto runs, and the alternative — starting blind and
+            // correcting from window two — bakes a wrong depth into the first
+            // frame of every shoot.
+            let started = ProcessInfo.processInfo.systemUptime
+            runCapabilityProbe(rawPixelFormat: rawFormat, interval: interval) { [weak self] _ in
+                guard let self else { return }
+                self.sessionQueue.async {
+                    guard self.liveBlendRawController === controller else { return }
+                    LLog(String(format: "liveblend-dng: auto profiling took %.2fs",
+                                ProcessInfo.processInfo.systemUptime - started))
+                    self.startCapabilityReprofiling(rawPixelFormat: rawFormat, interval: interval)
+                    controller.start()
+                }
+            }
+        } else {
+            controller.start()
+        }
         DispatchQueue.main.async {
             self.captureRunStartedAt = Date()
             self.isLiveBlendRunning = true

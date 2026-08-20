@@ -845,6 +845,8 @@ struct CaptureView: View {
                 blend = " · Psycho blend"
             case .throttled:
                 blend = " · Safe blend"
+            case .auto:
+                blend = " · Auto blend"
             }
             model.setSource(
                 .photos(result.frameURLs + [result.logURL]),
@@ -2424,6 +2426,7 @@ struct CaptureView: View {
             },
             onSelectPsycho: selectPsychoDepth,
             onSelectSafe: { blendDepth = .throttled },
+            onSelectAuto: { blendDepth = .auto },
             onSelectMode: { intervalModeToken = $0.rawValue }
         )
         .equatable()
@@ -2499,6 +2502,10 @@ struct CaptureView: View {
             return nil
         case .unthrottled:
             return "max frames"
+        case .auto:
+            // The count is the light's to choose, so the caption names what it
+            // follows rather than a number that changes every interval.
+            return "from the light"
         case .throttled:
             let learned = BlendProfileStore.shared.safeFrameCount(
                 pipeline: activeBlendPipeline,

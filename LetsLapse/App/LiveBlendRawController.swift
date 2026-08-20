@@ -45,6 +45,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         /// Safe mode's frame target, consulted once at each window open;
         /// nil for the other depths.
         var throttledFrameTarget: (() -> Int)? = nil
+        /// Auto's device ceiling, re-read at each window open so a re-profile
+        /// after a thermal change takes effect from the next window.
+        var capabilityProfile: (() -> DeviceCapabilityProfile?)? = nil
+        /// Auto's scene reading: what the camera's AE has settled on right
+        /// now, from the live device rather than from a captured frame — the
+        /// count has to be chosen *before* the window's first capture.
+        var sceneExposure: (() -> DNGAuthor.DNGExposure?)? = nil
+        /// Identity and vocabulary for `capture_log.json`.
+        var sessionID: String = UUID().uuidString
+        var deviceModel: String = ""
         /// Geotag source: returns the current fix (or nil when GPS tagging is
         /// off / no fix). Read once per window on the processing queue and
         /// baked into every DNG that window writes. Primitives, not a
@@ -126,6 +136,18 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private var windowFailures = 0
     private var windowPartial = false
     private var windowFrameDNGs: [Data] = []
+    /// What each of this window's frames was exposed at, in capture order. The
+    /// first one describes the blend: a window is one AE decision, and it is
+    /// the only frame whose tags can honestly stand for the output.
+    private var windowFrameExposures: [DNGAuthor.DNGExposure] = []
+    /// Auto's rolling EV average and last resolved count.
+    private var autoBlend = DynamicBlendState()
+    /// Every capture this run has landed, for the per-capture sidecar.
+    private var captureIndex = 0
+    private var exposureWriter: CaptureExposureWriter?
+    /// One entry per written output frame, for `capture_log.json`.
+    private var sessionFrameLog: [CaptureExposureLog.Entry] = []
+    private var runStartedAt = Date()
     /// Resolved at window open; nil = unthrottled (fire until the window
     /// closes or the byte budget fills).
     private var windowFrameTarget: Int?
@@ -202,6 +224,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             self.selecting = true
             self.startUptime = ProcessInfo.processInfo.systemUptime
             self.windowStartUptime = self.startUptime
+            self.runStartedAt = Date()
+            self.exposureWriter = CaptureExposureWriter(
+                directory: self.configuration.outputDirectory)
             self.openWindowState()
             LLog("liveblend-dng: start interval=\(self.configuration.intervalSeconds)s depth=\(self.configuration.blendDepth.token) raw=\(self.configuration.rawPixelFormat) log=\(self.configuration.logURL.path)")
             self.rewriteLog()
@@ -288,6 +313,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         case .fixed(let frames): windowFrameTarget = frames
         case .unthrottled: windowFrameTarget = nil
         case .throttled: windowFrameTarget = max(1, configuration.throttledFrameTarget?() ?? 2)
+        case .auto: windowFrameTarget = resolveAutoFrameTarget()
         }
         windowThermalAtStart = LiveBlendController.thermalStateName()
         if onWindowOpened != nil {
@@ -304,6 +330,32 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             $0.currentWindowSelectedFrames = 0
             $0.requestedFramesPerBlend = target ?? 0
         }
+    }
+
+    /// Auto's per-window count: the scene's EV, smoothed over the last three
+    /// windows, mapped through `DynamicBlendPolicy` and capped by what the
+    /// device measured itself doing. workQueue.
+    ///
+    /// The EV is read from the live AE rather than from the previous window's
+    /// frames because the count has to exist before the first capture of the
+    /// window it governs. When the meter says nothing usable, the last resolved
+    /// count is held — a scene doesn't get brighter because a read failed.
+    private func resolveAutoFrameTarget() -> Int {
+        let profile = configuration.capabilityProfile?()
+        guard let ev = configuration.sceneExposure?()?.exposureValue else {
+            let held = autoBlend.resolveWithoutMeasurement(profile: profile)
+            LLog("liveblend-dng: auto window \(windowIndex) — no EV reading, holding \(held) frames")
+            return held
+        }
+        let count = autoBlend.resolve(ev: ev, profile: profile)
+        let smoothed = autoBlend.lastSmoothedEV ?? ev
+        LLog("""
+            liveblend-dng: auto window \(windowIndex) — EV \(String(format: "%.2f", ev)) \
+            (smoothed \(String(format: "%.2f", smoothed)), \
+            \(DynamicBlendPolicy.band(forEV: smoothed).name)) → \(count) frames\
+            \(profile.map { ", device ceiling \($0.maxBurstFramesPerCycle)" } ?? "")
+            """)
+        return count
     }
 
     /// Brackets stay in play only while the device honours them.
@@ -466,16 +518,21 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     return
                 }
                 if photo.isRawPhoto {
+                    // The camera's own account of this frame: ISO, shutter,
+                    // f-number and metered brightness. It is read here, at the
+                    // one moment it exists — an authored blend is built from
+                    // decoded samples and carries nothing of the capture unless
+                    // it is taken from the photo object first.
+                    let exposure = DNGAuthor.DNGExposure(
+                        photoMetadata: photo.metadata, capturedAt: Date())
                     // Scene brightness for the Holy Grail ramp, straight off
                     // the meter. Scene-referred by construction: it describes
                     // the light, not the exposure we chose to record it with.
-                    if self.onWindowOpened != nil,
-                       let exif = photo.metadata[kCGImagePropertyExifDictionary as String] as? [String: Any],
-                       let brightness = exif[kCGImagePropertyExifBrightnessValue as String] as? Double {
+                    if self.onWindowOpened != nil, let brightness = exposure.brightness {
                         self.windowBrightnessSum += brightness
                         self.windowBrightnessCount += 1
                     }
-                    self.handleRawPhoto(photo)
+                    self.handleRawPhoto(photo, exposure: exposure)
                 }
             }
         }
@@ -500,7 +557,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
 
     private var loggedBufferAttachments = false
 
-    private func handleRawPhoto(_ photo: AVCapturePhoto) {
+    private func handleRawPhoto(_ photo: AVCapturePhoto, exposure: DNGAuthor.DNGExposure) {
         guard selecting else { return }
         guard let pixelBuffer = photo.pixelBuffer else {
             windowFailures += 1
@@ -525,8 +582,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             return
         }
         windowFrameDNGs.append(dngData)
+        windowFrameExposures.append(exposure)
         windowFrameBytes += dngData.count
         windowFrameTimes.append(ProcessInfo.processInfo.systemUptime - startUptime)
+        // One NDJSON line per capture, flushed now: a shoot killed mid-run
+        // keeps every finished line, and the file describes what the camera
+        // did rather than what was eventually written out.
+        exposureWriter?.append(CaptureExposureLog.Entry(
+            frameIndex: captureIndex, exposure: exposure))
+        captureIndex += 1
         let selected = windowFrameDNGs.count
         pushDiagnostics { $0.currentWindowSelectedFrames = selected }
         pumpCaptures()
@@ -539,6 +603,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// `processingQueue`; `commitOutput` lands the result back here.
     private func closeWindow() {
         let frames = windowFrameDNGs
+        // The window's own AE decision — the first frame's, because the
+        // remaining ones are the same exposure repeated (and on a ramping shoot
+        // the first is the one the window was opened on).
+        let exposure = windowFrameExposures.first ?? DNGAuthor.DNGExposure()
         let times = windowFrameTimes
         let spacings = zip(times.dropFirst(), times).map(-)
         var entry = LiveBlendSessionLog.OutputEntry(
@@ -571,6 +639,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         windowFailures = 0
         windowPartial = false
         windowFrameDNGs = []
+        windowFrameExposures = []
         openWindowState()
 
         pendingProcessingWindows += 1
@@ -584,16 +653,23 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     // produce (a discarded run's log already says so).
                     processed.failed = true
                 } else {
-                    url = self.processWindow(frames: frames, entry: &processed)
+                    url = self.processWindow(
+                        frames: frames, exposure: exposure, entry: &processed)
                 }
                 processed.totalMillis = (ProcessInfo.processInfo.systemUptime - processStart) * 1000
-                self.workQueue.async { self.commitOutput(processed, url: url) }
+                self.workQueue.async {
+                    self.commitOutput(processed, url: url, exposure: exposure)
+                }
             }
         }
     }
 
     /// workQueue: fold a processed window back into run state and the log.
-    private func commitOutput(_ processed: LiveBlendSessionLog.OutputEntry, url: URL?) {
+    private func commitOutput(
+        _ processed: LiveBlendSessionLog.OutputEntry,
+        url: URL?,
+        exposure: DNGAuthor.DNGExposure
+    ) {
         pendingProcessingWindows = max(0, pendingProcessingWindows - 1)
         var entry = processed
         let done = ProcessInfo.processInfo.systemUptime
@@ -606,6 +682,14 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         }
         if let url {
             frameURLs.append(url)
+            // One session-log line per file that actually exists, numbered by
+            // its place in the finished sequence, carrying the exposure the
+            // blend was made at and how many captures went into it.
+            sessionFrameLog.append(CaptureExposureLog.Entry(
+                frameIndex: frameURLs.count,
+                exposure: exposure,
+                capturedAt: exposure.capturedAt ?? Date(),
+                blendCount: entry.capturedFrames))
         }
         if entry.failed {
             failedOutputs += 1
@@ -657,8 +741,17 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// first frame is saved as Apple's own unblended DNG; with nothing
     /// decodable the window fails. Runs on `processingQueue`; mutates only
     /// the entry and `processingFileIndex`, returning the written file.
-    private func processWindow(frames: [Data], entry: inout LiveBlendSessionLog.OutputEntry) -> URL? {
+    private func processWindow(
+        frames: [Data],
+        exposure: DNGAuthor.DNGExposure,
+        entry: inout LiveBlendSessionLog.OutputEntry
+    ) -> URL? {
         let referenceData = frames.first
+        // The exposure tags the authored output will carry. An authored DNG has
+        // no EXIF IFD unless one is built for it, which is why every blended
+        // interval frame used to land with no ISO, shutter, f-number or
+        // brightness at all.
+        let exifTags = exposure.isEmpty ? nil : DNGAuthor.exifTags(exposure)
 
         // One location fix for the whole window: baked into whichever DNG this
         // window writes (authored blend or pass-through original).
@@ -676,13 +769,36 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 altitude: fix.altitude, timestamp: fix.timestamp)
         }
 
+        /// A pass-through original is Apple's file byte-for-byte, and Apple's
+        /// file already carries the shot's EXIF — so this is a repair, not a
+        /// step: it only rewrites the container when the exposure block is
+        /// genuinely missing, and falls back to the untouched bytes if ImageIO
+        /// declines. The untouched original is the ground truth the blend paths
+        /// are compared against; a routine re-encode would cost that.
+        func withExposure(_ original: Data) -> Data {
+            guard !exposure.isEmpty,
+                  !DNGAuthor.hasExposureMetadata(in: original) else { return original }
+            guard let repaired = DNGAuthor.dngDataByInjectingEXIF(
+                into: original, exposure: exposure) else {
+                LLog("liveblend-dng: pass-through frame has no EXIF and ImageIO refused the repair")
+                return original
+            }
+            return repaired
+        }
+
         // Blending off: one RAW per interval, saved as Apple's original
         // DNG byte-for-byte — untouched originals, the ground truth for
         // comparing against blended output (and a legitimate holy-grail
         // baseline). GPS tagging, when on, appends a GPS IFD without touching
         // the raw image.
-        if configuration.blendDepth == .fixed(1), let referenceData {
-            let output = geotagged(referenceData)
+        //
+        // Auto joins it when the light was bright enough to want a single
+        // frame: one capture blended with nothing is the same picture, and
+        // passing it through skips a decode/re-author round trip while keeping
+        // Apple's own tags.
+        let singleCapture = configuration.blendDepth == .auto && frames.count == 1
+        if configuration.blendDepth == .fixed(1) || singleCapture, let referenceData {
+            let output = withExposure(geotagged(referenceData))
             let url = configuration.outputDirectory
                 .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
             do {
@@ -811,6 +927,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     cameraColor: cameraModel.tags,
                     headroomStops: LiveBlendRawController.headroomStops,
                     gps: gpsTags,
+                    exif: exifTags,
                     preview: preview,
                     to: url)
             } else {
@@ -831,6 +948,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     headroomStops: LiveBlendRawController.headroomStops,
                     cameraColor: nil,
                     gps: gpsTags,
+                    exif: exifTags,
                     preview: preview,
                     to: url)
             }
@@ -846,7 +964,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         } catch {
             LLog("liveblend-dng: output \(entry.index) failed: \(error)")
             if let referenceData {
-                let output = geotagged(referenceData)
+                let output = withExposure(geotagged(referenceData))
                 let url = configuration.outputDirectory
                     .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
                 if (try? output.write(to: url, options: .atomic)) != nil {
@@ -909,12 +1027,33 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             finalThermalState: LiveBlendController.thermalStateName(),
             discarded: discard)
         rewriteLog()
+        exposureWriter?.close()
+        exposureWriter = nil
 
         let result: LiveBlendCaptureResult?
         if discard || frameURLs.isEmpty {
             try? FileManager.default.removeItem(at: configuration.outputDirectory)
             result = nil
         } else {
+            // The session's own exposure record, written into the directory the
+            // frames live in so it travels with the project. Written once, at
+            // the end, because it describes the finished sequence; the
+            // crash-safe per-capture story is the NDJSON sidecar's job.
+            let session = CaptureExposureLog.Session(
+                sessionID: configuration.sessionID,
+                deviceModel: configuration.deviceModel,
+                captureMode: "interval",
+                blendMode: configuration.blendDepth.token,
+                startedAt: runStartedAt,
+                endedAt: Date(),
+                frames: sessionFrameLog)
+            // Written into the staging directory, which is where project
+            // registration looks for named sidecars — so it lands in the
+            // project's `source/` folder under its own name.
+            if CaptureExposureLog.write(
+                session, toDirectory: configuration.outputDirectory) == nil {
+                LLog("liveblend-dng: could not write \(CaptureExposureLog.sessionFileName)")
+            }
             result = LiveBlendCaptureResult(
                 frameURLs: frameURLs,
                 logURL: configuration.logURL,

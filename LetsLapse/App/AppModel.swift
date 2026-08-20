@@ -4992,12 +4992,24 @@ final class AppModel: ObservableObject {
             // lays the finished clip out on the real capture clock instead of
             // assuming even spacing. Deliberately NOT in `sourceFileNames` —
             // that list is the project's frames, and this isn't one.
+            //
+            // The exposure record travels the same way and for the same
+            // reason: `capture_log.json` and `frames.exposure` say what each
+            // frame was shot at, which is the one thing a finished DNG
+            // sequence can't be re-measured for afterwards. They keep their own
+            // names — a sidecar renamed `frame-000NN.json` is a sidecar nobody
+            // can find.
             if let staging = urls.first?.deletingLastPathComponent() {
-                let sidecar = staging.appendingPathComponent(FrameTimestamps.fileName)
-                if FileManager.default.fileExists(atPath: sidecar.path) {
+                for name in [
+                    FrameTimestamps.fileName,
+                    CaptureExposureLog.sessionFileName,
+                    CaptureExposureLog.sidecarFileName,
+                ] {
+                    let sidecar = staging.appendingPathComponent(name)
+                    guard FileManager.default.fileExists(atPath: sidecar.path) else { continue }
                     try? copyReplacingItem(
                         at: sidecar,
-                        to: root.appendingPathComponent("source/\(FrameTimestamps.fileName)"))
+                        to: root.appendingPathComponent("source/\(name)"))
                 }
             }
             capture = CaptureProject(

@@ -203,6 +203,18 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// Safe mode's frame target, consulted once at each window open;
         /// nil for the other depths.
         var throttledFrameTarget: (() -> Int)? = nil
+        /// Auto's device ceiling and scene reading — see the twins in
+        /// `LiveBlendRawController.Configuration`. The video-tap path is a
+        /// cheaper way to spend an interval than RAW stills, so the profiled
+        /// ceiling is rarely what binds here; the EV band still is.
+        var capabilityProfile: (() -> DeviceCapabilityProfile?)? = nil
+        /// Doubles as this pipeline's only exposure record: frames tapped off
+        /// the preview stream carry no EXIF, so the device's own reading is
+        /// what `capture_log.json` is written from.
+        var sceneExposure: (() -> DNGAuthor.DNGExposure?)? = nil
+        /// Identity and vocabulary for `capture_log.json`.
+        var sessionID: String = UUID().uuidString
+        var deviceModel: String = ""
         /// Geotag source: the EXIF GPS dictionary for the current fix, or nil
         /// when tagging is off or no fix exists yet. Called on the blend queue
         /// as each output is written, so every blended frame carries the fix
@@ -255,6 +267,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var windowLumaCount = 0
     /// The completed window's mean, handed to `onWindowOpened` for the next.
     private var lastWindowLuma: Double?
+    /// Auto's rolling EV average and last resolved count. videoQueue.
+    private var autoBlend = DynamicBlendState()
     /// nil result = nothing to register (zero outputs, or a discarded run).
     var onFinished: ((LiveBlendCaptureResult?) -> Void)?
     /// Fired on the blend queue for each completed unthrottled window — what
@@ -285,6 +299,10 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         var droppedByCamera = 0
         var bufferFailures = 0
         var partial = false
+        /// What the camera reported it was exposing at when this window
+        /// opened. The video tap's frames carry no EXIF of their own, so this
+        /// is the whole exposure record for the output the window produces.
+        var exposure: DNGAuthor.DNGExposure? = nil
     }
 
     private var selecting = false
@@ -302,6 +320,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     // blendQueue-confined output state.
     private var log: LiveBlendSessionLog
     private var frameURLs: [URL] = []
+    /// One entry per written output frame, for `capture_log.json`. blendQueue.
+    private var sessionFrameLog: [CaptureExposureLog.Entry] = []
+    private let runStartedAt = Date()
     private var outputIndex = 0
     private var completedOutputs = 0
     private var fallbackOutputs = 0
@@ -522,6 +543,24 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         return windowStartSeconds + (Double(index) + 0.5) * spacing
     }
 
+    /// Auto's per-window count: the scene's EV, smoothed over three windows,
+    /// mapped through `DynamicBlendPolicy` and capped by the device profile.
+    /// videoQueue.
+    private func resolveAutoFrameTarget(windowIndex index: Int) -> Int {
+        let profile = configuration.capabilityProfile?()
+        guard let ev = configuration.sceneExposure?()?.exposureValue else {
+            return autoBlend.resolveWithoutMeasurement(profile: profile)
+        }
+        let count = autoBlend.resolve(ev: ev, profile: profile)
+        let smoothed = autoBlend.lastSmoothedEV ?? ev
+        LLog("""
+            liveblend: auto window \(index) — EV \(String(format: "%.2f", ev)) \
+            (smoothed \(String(format: "%.2f", smoothed)), \
+            \(DynamicBlendPolicy.band(forEV: smoothed).name)) → \(count) frames
+            """)
+        return count
+    }
+
     /// Opens a window: resolves its frame target (Safe mode re-evaluates
     /// per interval, here) and stamps the thermal state the learning system
     /// keys on. videoQueue.
@@ -531,6 +570,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         case .fixed(let frames): target = frames
         case .unthrottled: target = nil
         case .throttled: target = max(1, configuration.throttledFrameTarget?() ?? 2)
+        case .auto: target = resolveAutoFrameTarget(windowIndex: index)
         }
         pushDiagnostics { $0.requestedFramesPerBlend = target ?? 0 }
         if onWindowOpened != nil {
@@ -543,7 +583,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             index: index,
             startSeconds: startSeconds,
             frameTarget: target,
-            thermalStateAtStart: LiveBlendController.thermalStateName())
+            thermalStateAtStart: LiveBlendController.thermalStateName(),
+            exposure: configuration.sceneExposure?())
     }
 
     /// Hands the current window to the blend queue and opens the next one.
@@ -649,6 +690,13 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
                 entry.fileBytes = (attributes?[.size] as? NSNumber)?.intValue
                 frameURLs.append(url)
+                // One line per file that exists, carrying the exposure the
+                // window opened at and how many tapped frames went into it.
+                sessionFrameLog.append(CaptureExposureLog.Entry(
+                    frameIndex: frameURLs.count,
+                    exposure: record.exposure ?? DNGAuthor.DNGExposure(),
+                    capturedAt: record.exposure?.capturedAt ?? Date(),
+                    blendCount: entry.capturedFrames))
                 outputIndex += 1
                 completedOutputs += 1
                 if entry.capturedFrames == 1 {
@@ -741,6 +789,23 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             try? FileManager.default.removeItem(at: configuration.outputDirectory)
             result = nil
         } else {
+            // The session's exposure record, written into the staging
+            // directory so project registration carries it into `source/`
+            // under its own name. No per-capture sidecar on this path: its
+            // frames are samples off the preview stream, and a sampled frame
+            // has no exposure of its own to record.
+            let session = CaptureExposureLog.Session(
+                sessionID: configuration.sessionID,
+                deviceModel: configuration.deviceModel,
+                captureMode: "interval",
+                blendMode: configuration.blendDepth.token,
+                startedAt: runStartedAt,
+                endedAt: Date(),
+                frames: sessionFrameLog)
+            if CaptureExposureLog.write(
+                session, toDirectory: configuration.outputDirectory) == nil {
+                LLog("liveblend: could not write \(CaptureExposureLog.sessionFileName)")
+            }
             result = LiveBlendCaptureResult(
                 frameURLs: frameURLs,
                 logURL: configuration.logURL,

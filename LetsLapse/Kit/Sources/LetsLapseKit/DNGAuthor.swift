@@ -259,6 +259,7 @@ public enum DNGAuthor {
         compress: Bool = false,
         cameraColor: [DNGTagValue]? = nil,
         gps: [DNGTagValue]? = nil,
+        exif: [DNGTagValue]? = nil,
         preview: Preview?,
         to url: URL
     ) throws {
@@ -320,7 +321,8 @@ public enum DNGAuthor {
             ifd0: ifd0Tags,
             raw: [
                 DNGTagValue(tag: 50717, type: 3, count: 3, payload: whitePayload),
-            ])
+            ],
+            exif: exif ?? [])
         // Deflate+predictor lands ~27 MB (measured on real data) and the
         // stream round-trips byte-perfectly — but Apple's ImageIO refuses
         // Deflate on integer LinearRaw (probe: DeflateProbeTests), which
@@ -391,6 +393,7 @@ public enum DNGAuthor {
         cameraColor: [DNGTagValue],
         headroomStops: Int = 0,
         gps: [DNGTagValue]? = nil,
+        exif: [DNGTagValue]? = nil,
         preview: Preview?,
         to url: URL
     ) throws {
@@ -473,6 +476,7 @@ public enum DNGAuthor {
             tiles: tiles,
             ifd0Tags: ifd0Tags, rawTags: rawTags,
             gps: gps,
+            exif: exif,
             preview: preview)
         do {
             try data.write(to: url, options: .atomic)
@@ -492,11 +496,15 @@ public enum DNGAuthor {
         ifd0Tags: [DNGTagValue],
         rawTags: [DNGTagValue],
         gps: [DNGTagValue]? = nil,
+        exif: [DNGTagValue]? = nil,
         preview: Preview?
     ) throws -> Data {
         let hasGPS = !(gps?.isEmpty ?? true)
         let gpsIFD = IFDBuilder()
         if let gps { for entry in gps { gpsIFD.add(entry) } }
+        let hasExif = !(exif?.isEmpty ?? true)
+        let exifIFD = IFDBuilder()
+        if let exif { for entry in exif { exifIFD.add(entry) } }
         let rawIFD = IFDBuilder()
         rawIFD.addLong(254, 0)
         rawIFD.addLong(256, UInt32(width))
@@ -538,6 +546,9 @@ public enum DNGAuthor {
         for tag in ifd0Tags {
             ifd0.add(tag)
         }
+        if hasExif {
+            ifd0.addLong(34665, 0) // ExifIFDPointer, patched to the EXIF IFD
+        }
         if hasGPS {
             ifd0.addLong(34853, 0) // GPSInfoIFDPointer, patched to the GPS IFD
         }
@@ -546,10 +557,13 @@ public enum DNGAuthor {
             ifd0.add(DNGTagValue(tag: 50708, type: 2, count: UInt32(name.count), payload: name))
         }
 
+        // Layout: header, IFD0, [EXIF], [GPS], [raw IFD], preview strip, tiles.
         let header = 8
         let ifd0Table = header
         let ifd0End = ifd0Table + ifd0.tableSize + ifd0.valueSize
-        let gpsTable = ifd0End
+        let exifTable = ifd0End
+        let exifEnd = hasExif ? exifTable + exifIFD.tableSize + exifIFD.valueSize : exifTable
+        let gpsTable = exifEnd
         let gpsEnd = hasGPS ? gpsTable + gpsIFD.tableSize + gpsIFD.valueSize : gpsTable
         let rawTable = gpsEnd
         let rawEnd = hasPreview ? rawTable + rawIFD.tableSize + rawIFD.valueSize : rawTable
@@ -568,6 +582,9 @@ public enum DNGAuthor {
             ifd0.patchLong(273, UInt32(previewStrip))
             ifd0.patchLong(330, UInt32(rawTable))
         }
+        if hasExif {
+            ifd0.patchLong(34665, UInt32(exifTable))
+        }
         if hasGPS {
             ifd0.patchLong(34853, UInt32(gpsTable))
         }
@@ -576,6 +593,9 @@ public enum DNGAuthor {
         output.append(contentsOf: [0x49, 0x49, 42, 0])
         output.appendU32(UInt32(ifd0Table))
         output.append(ifd0.serialize(tableOffset: ifd0Table))
+        if hasExif {
+            output.append(exifIFD.serialize(tableOffset: exifTable))
+        }
         if hasGPS {
             output.append(gpsIFD.serialize(tableOffset: gpsTable))
         }
@@ -919,6 +939,133 @@ public enum DNGAuthor {
                 }
                 return DNGTagValue(tag: field.tag, type: field.type, count: field.count, payload: payload)
             }
+    }
+
+    /// One capture's exposure, as the camera reported it. The values come
+    /// straight off `AVCapturePhoto.metadata`'s EXIF dictionary, which is the
+    /// only place they exist for an authored blend: the file the blend writes
+    /// is built from decoded samples, so nothing carries the shot's ISO,
+    /// shutter, aperture or metered brightness unless it is put there
+    /// deliberately.
+    ///
+    /// `brightness` is APEX `BrightnessValue` — scene-referred, describing the
+    /// light rather than the exposure chosen for it. `ev` derives the exposure
+    /// value the camera actually used, which is the number a grader wants when
+    /// comparing frames of a ramping shoot.
+    public struct DNGExposure: Equatable, Sendable {
+        /// ISO speed rating (EXIF 34855).
+        public var iso: Double?
+        /// Exposure time in seconds (EXIF 33434).
+        public var exposureDuration: Double?
+        /// f-number (EXIF 33437).
+        public var aperture: Double?
+        /// APEX scene brightness (EXIF 37379).
+        public var brightness: Double?
+        /// When the shutter fired (EXIF 36867 DateTimeOriginal).
+        public var capturedAt: Date?
+
+        public init(
+            iso: Double? = nil,
+            exposureDuration: Double? = nil,
+            aperture: Double? = nil,
+            brightness: Double? = nil,
+            capturedAt: Date? = nil
+        ) {
+            self.iso = iso
+            self.exposureDuration = exposureDuration
+            self.aperture = aperture
+            self.brightness = brightness
+            self.capturedAt = capturedAt
+        }
+
+        /// Nothing worth writing an EXIF IFD for.
+        public var isEmpty: Bool {
+            iso == nil && exposureDuration == nil && aperture == nil
+                && brightness == nil && capturedAt == nil
+        }
+
+        /// Exposure value at ISO 100 for the settings this frame was taken
+        /// with: `log2(N² / t)` corrected for the sensitivity actually used.
+        /// Nil unless aperture, shutter and ISO are all known — a partial EV is
+        /// a wrong EV, not an approximate one.
+        public var exposureValue: Double? {
+            guard let aperture, aperture > 0,
+                  let exposureDuration, exposureDuration > 0,
+                  let iso, iso > 0 else { return nil }
+            return log2((aperture * aperture) / exposureDuration) - log2(iso / 100)
+        }
+    }
+
+    /// The EXIF sub-IFD for one capture's exposure, as little-endian TIFF tags
+    /// ready for IFD0's ExifIFDPointer (34665). Emitted by hand for the same
+    /// reason `gpsTags` is: the DNG writer assembles IFDs itself rather than
+    /// going through ImageIO's property dictionaries.
+    ///
+    /// Only the fields that are actually known get a tag — an absent reading is
+    /// left out rather than written as a zero, so a reader can tell "the camera
+    /// didn't say" from "the camera said 0".
+    public static func exifTags(_ exposure: DNGExposure) -> [DNGTagValue] {
+        func rational(_ numerator: UInt32, _ denominator: UInt32) -> Data {
+            var payload = Data()
+            payload.appendU32(numerator)
+            payload.appendU32(denominator)
+            return payload
+        }
+        func signedRational(_ numerator: Int32, _ denominator: Int32) -> Data {
+            var payload = Data()
+            payload.appendU32(UInt32(bitPattern: numerator))
+            payload.appendU32(UInt32(bitPattern: denominator))
+            return payload
+        }
+
+        let iso = exposure.iso
+        let exposureDuration = exposure.exposureDuration
+        let aperture = exposure.aperture
+        let brightness = exposure.brightness
+        let capturedAt = exposure.capturedAt
+
+        var tags: [DNGTagValue] = []
+        // ExifVersion (2.31) — an EXIF IFD without it is technically malformed,
+        // and some readers skip the whole block rather than guess.
+        tags.append(DNGTagValue(tag: 36864, type: 7, count: 4, payload: Data("0231".utf8)))
+
+        if let exposureDuration, exposureDuration > 0 {
+            // Sub-second shutters keep the 1/N shape photographers read; longer
+            // ones get millisecond precision.
+            let payload = exposureDuration < 1
+                ? rational(1, UInt32(max(1, (1 / exposureDuration).rounded())))
+                : rational(UInt32((exposureDuration * 1000).rounded()), 1000)
+            tags.append(DNGTagValue(tag: 33434, type: 5, count: 1, payload: payload))
+        }
+        if let aperture, aperture > 0 {
+            tags.append(DNGTagValue(
+                tag: 33437, type: 5, count: 1,
+                payload: rational(UInt32((aperture * 100).rounded()), 100)))
+        }
+        if let capturedAt {
+            var calendar = Calendar(identifier: .gregorian)
+            calendar.timeZone = TimeZone.current
+            let parts = calendar.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second], from: capturedAt)
+            var stamp = Data(String(
+                format: "%04d:%02d:%02d %02d:%02d:%02d",
+                parts.year ?? 0, parts.month ?? 0, parts.day ?? 0,
+                parts.hour ?? 0, parts.minute ?? 0, parts.second ?? 0).utf8)
+            stamp.append(0)
+            tags.append(DNGTagValue(
+                tag: 36867, type: 2, count: UInt32(stamp.count), payload: stamp))
+        }
+        if let brightness {
+            tags.append(DNGTagValue(
+                tag: 37379, type: 10, count: 1,
+                payload: signedRational(Int32((brightness * 10000).rounded()), 10000)))
+        }
+        if let iso, iso > 0 {
+            var payload = Data()
+            payload.appendU16(UInt16(min(65535, max(1, iso.rounded()))))
+            tags.append(DNGTagValue(tag: 34855, type: 3, count: 1, payload: payload))
+        }
+        return tags
     }
 
     /// Adds a GPS sub-IFD to an already-encoded DNG without touching its

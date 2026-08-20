@@ -2023,6 +2023,7 @@ struct WatchControlView: View {
         case .fixed(let frames): return "\(every) · \(frames) fr"
         case .unthrottled: return "\(every) · Psycho"
         case .throttled: return "\(every) · Safe"
+        case .auto: return "\(every) · Auto"
         }
     }
 

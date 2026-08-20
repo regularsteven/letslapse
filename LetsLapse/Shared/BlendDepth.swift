@@ -14,6 +14,11 @@ enum BlendDepth: Hashable {
     /// A known-safe count looked up from what unthrottled runs have taught,
     /// re-evaluated each interval. Unavailable without a matching profile.
     case throttled
+    /// A count chosen from the light: the scene's EV picks a depth from
+    /// `DynamicBlendPolicy`'s table, capped by what the device measured itself
+    /// capable of at the start of the run. The other two adaptive depths ask
+    /// "what can this device take?"; this one asks "what does this scene need?"
+    case auto
 
     /// The counts the fixed picker offers, shared by phone and Watch, in the
     /// order they are meant to be **read**: deepest first, ending at Off. Every
@@ -46,6 +51,7 @@ enum BlendDepth: Hashable {
         case .fixed(let frames): return "\(frames)"
         case .unthrottled: return "Psycho"
         case .throttled: return "Safe"
+        case .auto: return "Auto"
         }
     }
 
@@ -56,6 +62,7 @@ enum BlendDepth: Hashable {
         case .fixed(let frames): return String(frames)
         case .unthrottled: return "unthrottled"
         case .throttled: return "throttled"
+        case .auto: return "auto"
         }
     }
 
@@ -63,6 +70,7 @@ enum BlendDepth: Hashable {
         switch token {
         case "unthrottled": self = .unthrottled
         case "throttled": self = .throttled
+        case "auto": self = .auto
         default:
             guard let frames = Int(token), (1...60).contains(frames) else { return nil }
             self = .fixed(frames)
@@ -76,6 +84,7 @@ enum BlendDepth: Hashable {
         case .fixed: return "fixed"
         case .unthrottled: return "unthrottled"
         case .throttled: return "throttled"
+        case .auto: return "auto"
         }
     }
 

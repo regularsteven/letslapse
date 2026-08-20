@@ -157,6 +157,7 @@ struct IntervalDialsRow: View, Equatable {
     let onSelectFixedBlend: (Int) -> Void
     let onSelectPsycho: () -> Void
     let onSelectSafe: () -> Void
+    let onSelectAuto: () -> Void
     let onSelectMode: (IntervalCaptureMode) -> Void
 
     static func == (lhs: Self, rhs: Self) -> Bool {
@@ -341,20 +342,40 @@ struct IntervalDialsRow: View, Equatable {
         }
     }
 
-    /// Displayed Safe above Psycho — the pair reversed with the rest of the
-    /// menu where the platform reverses it (`BlendMenuOrder`).
+    /// Displayed Auto, Safe, Psycho — reversed with the rest of the menu where
+    /// the platform reverses it (`BlendMenuOrder`).
+    ///
+    /// Auto leads the group because it is the one that needs nothing of the
+    /// user: Psycho asks them to accept whatever the device does, Safe asks
+    /// them to have taught it first, and Auto just reads the light.
     @ViewBuilder
     private var adaptiveDepthButtons: some View {
         Group {
             if BlendMenuOrder.topFirst {
+                autoDepthButton
                 safeDepthButton
                 psychoDepthButton
             } else {
                 psychoDepthButton
                 safeDepthButton
+                autoDepthButton
             }
         }
         .disabled(intervalMode == .scanner)
+    }
+
+    /// Always available: unlike Safe it needs no learned profile, because its
+    /// bound is measured at the start of the run it is used in.
+    private var autoDepthButton: some View {
+        Button {
+            onSelectAuto()
+        } label: {
+            if blendDepth == .auto {
+                Label("Auto · from the light", systemImage: "checkmark")
+            } else {
+                Text("Auto · from the light")
+            }
+        }
     }
 
     private var psychoDepthButton: some View {
