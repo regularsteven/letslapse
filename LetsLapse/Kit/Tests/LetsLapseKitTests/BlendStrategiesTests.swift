@@ -254,6 +254,62 @@ final class BlendStrategiesTests: XCTestCase {
         XCTAssertEqual(lumen.boost, 1)
     }
 
+    // MARK: Processing ceiling (AIMD)
+
+    func testProcessingCeilingDoesNotSpiralOnFixedOverhead() {
+        // The regression the bench caught: 0.4s fixed overhead + 0.5s/frame
+        // at a 3s interval. A per-frame model derived from shrinking windows
+        // walks to 1; AIMD must settle where the TOTAL fits.
+        var governor = ProcessingCeiling()
+        var frames = 5
+        for _ in 0..<20 {
+            let total = 0.4 + 0.5 * Double(frames)
+            governor.record(windowSeconds: total, frames: frames, intervalSeconds: 3)
+            frames = governor.ceiling
+        }
+        // 5 frames = 2.9s fits (hold); the governor must never leave it.
+        XCTAssertEqual(governor.ceiling, 5)
+    }
+
+    func testProcessingCeilingConvergesWhenGenuinelyOverBudget() {
+        // The 12 Pro's sunrise shape: ~1.04s/frame + 0.5s overhead, 3s
+        // interval. 5 frames = 5.7s drowns; 2 frames = 2.58s fits.
+        var governor = ProcessingCeiling()
+        var frames = 5
+        for _ in 0..<10 {
+            let total = 0.5 + 1.04 * Double(frames)
+            governor.record(windowSeconds: total, frames: frames, intervalSeconds: 3)
+            frames = min(governor.ceiling, 5)
+        }
+        XCTAssertEqual(governor.ceiling, 2, "must settle at the sustainable count, not 1")
+    }
+
+    func testProcessingCeilingRegrowsAfterConditionsImprove() {
+        var governor = ProcessingCeiling()
+        governor.record(windowSeconds: 6.0, frames: 5, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 4)
+        governor.record(windowSeconds: 5.0, frames: 4, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 3)
+        // Light moves on, windows get cheap: two comfortable windows per
+        // step back up — one lucky window must not oscillate it.
+        governor.record(windowSeconds: 1.0, frames: 3, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 3)
+        governor.record(windowSeconds: 1.0, frames: 3, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 4)
+        governor.record(windowSeconds: 1.2, frames: 4, intervalSeconds: 3)
+        governor.record(windowSeconds: 1.2, frames: 4, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 5)
+    }
+
+    func testProcessingCeilingShrinksBelowCeilingWhenSmallWindowOverruns() {
+        // A window that carried fewer frames than the ceiling and STILL
+        // overran must pull the ceiling below that count, not just below
+        // the old ceiling.
+        var governor = ProcessingCeiling()
+        governor.record(windowSeconds: 4.0, frames: 3, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 2)
+    }
+
     // MARK: Exposure divergence guard
 
     func testExposureDivergenceMath() {

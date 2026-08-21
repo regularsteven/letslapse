@@ -425,6 +425,56 @@ public struct LumenBlendStrategy: Sendable {
     }
 }
 
+// MARK: - Processing ceiling
+
+/// AIMD governor for the frames-per-window ceiling, driven by what whole
+/// windows actually cost to process — never by a derived per-frame rate.
+///
+/// The first attempt at this modelled per-frame cost from window totals and
+/// spiralled: window totals include fixed per-window overhead (queue hops,
+/// author/write setup), so shrinking the window inflated the estimated
+/// per-frame cost, which shrank the window further, down to 1–2 frames on
+/// hardware that was comfortably sustaining 5. Bench-caught 2026-08-22.
+/// AIMD on the measured total has no model to be wrong about: over budget →
+/// step down one frame; comfortably under for two windows running → step
+/// back up one.
+public struct ProcessingCeiling: Sendable {
+    /// Growth requires this many comfortable windows in a row, so one lucky
+    /// fast window doesn't oscillate the ceiling.
+    static let growthStreak = 2
+    /// "Comfortable" = the window's processing finished inside this fraction
+    /// of the interval.
+    static let comfortableFraction = 0.7
+
+    private(set) public var ceiling = ZoneBlendStrategy.bands[0].frames
+    private var comfortableStreak = 0
+
+    public init() {}
+
+    /// Feed one produced window's measured processing cost.
+    public mutating func record(windowSeconds: Double, frames: Int, intervalSeconds: Double) {
+        guard frames > 0, windowSeconds > 0, intervalSeconds > 0 else { return }
+        if windowSeconds > intervalSeconds {
+            // Over budget: the pipeline owes time it doesn't have. Step to
+            // one below what this window actually carried (stepping below
+            // the current ceiling matters when the window was already
+            // smaller than the ceiling allowed).
+            comfortableStreak = 0
+            ceiling = max(1, min(ceiling, frames) - 1)
+        } else if windowSeconds < intervalSeconds * Self.comfortableFraction {
+            comfortableStreak += 1
+            if comfortableStreak >= Self.growthStreak,
+               ceiling < ZoneBlendStrategy.bands[0].frames {
+                ceiling += 1
+                comfortableStreak = 0
+            }
+        } else {
+            // In the band between comfortable and over: hold.
+            comfortableStreak = 0
+        }
+    }
+}
+
 // MARK: - Bank
 
 /// All three strategies resolved together each cycle, so every shoot logs
