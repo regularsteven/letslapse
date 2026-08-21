@@ -203,12 +203,13 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private var windowSawBackpressure = false
     /// Windows skipped to backpressure this run (no output, not failures).
     private var skippedStarvedWindows = 0
-    /// Rolling record of recent completed windows' processing cost, the
-    /// throughput signal the capability probe cannot measure (it times
-    /// capture+write, never blend+author). Feeds a processing-aware ceiling
-    /// so a device that blends slower than the interval degrades to fewer
-    /// frames instead of drowning. workQueue.
-    private var recentProcessing: [(seconds: Double, frames: Int)] = []
+    /// AIMD governor over frames-per-window, fed by whole-window processing
+    /// cost — the throughput signal the capability probe cannot measure (it
+    /// times capture+write, never blend+author). A device that blends
+    /// slower than the interval degrades to fewer frames instead of
+    /// drowning; see `ProcessingCeiling` for why this is AIMD and not a
+    /// per-frame model. workQueue.
+    private var processingCeiling = ProcessingCeiling()
     /// Why the run ended, for `capture_log.json` — "user" unless a guard
     /// says otherwise. The stop reason used to exist only in print-level
     /// logs, invisible on a field device. workQueue.
@@ -416,28 +417,14 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 currentShutterSeconds: scene?.exposureDuration)
         }
         // The probe measures capture speed; blend+author speed it cannot
-        // know. Measured live instead: if recent windows cost more to
-        // process than the interval provides, shrink the ask until the
-        // pipeline is sustainable — the 12 Pro's sunrise runs died because
-        // this number was allowed to sit above 100%.
-        var ceiling = captureCeiling
-        if recentProcessing.count >= 3 {
-            let seconds = recentProcessing.reduce(0.0) { $0 + $1.seconds }
-            let frames = recentProcessing.reduce(0) { $0 + $1.frames }
-            if frames > 0 {
-                let perFrame = seconds / Double(frames)
-                let sustainable = max(1, Int(configuration.intervalSeconds * 0.9 / max(perFrame, 0.001)))
-                if sustainable < (ceiling ?? Int.max) {
-                    LLog("""
-                        liveblend-dng: processing ceiling \(sustainable) \
-                        (\(String(format: "%.2f", perFrame))s/frame against a \
-                        \(configuration.intervalSeconds)s interval)\
-                        \(captureCeiling.map { " under capture ceiling \($0)" } ?? "")
-                        """)
-                    ceiling = sustainable
-                }
-            }
-        }
+        // know. The AIMD governor tracks it live from whole-window costs —
+        // the 12 Pro's sunrise runs died because processing utilization was
+        // allowed to sit above 100%.
+        // The governor idles at the band maximum, so with no capture profile
+        // this is simply "never more than the table can ask for".
+        let ceiling: Int? = min(
+            captureCeiling ?? ZoneBlendStrategy.bands[0].frames,
+            processingCeiling.ceiling)
         guard let ev = scene?.exposureValue else {
             // A scene doesn't get brighter because a read failed: hold the
             // last actuated count verbatim — not the strategies' uncapped
@@ -624,6 +611,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             // Speed over per-shot polish: blending supplies the noise
             // reduction, and slow captures are what starve short windows.
             settings.photoQualityPrioritization = .speed
+            settings.suppressShutterSound(for: self.photoOutput)
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }
     }
@@ -670,6 +658,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 rawPixelFormatType: format,
                 processedFormat: nil,
                 bracketedSettings: perFrame)
+            settings.suppressShutterSound(for: self.photoOutput)
             self.photoOutput.capturePhoto(with: settings, delegate: self)
         }
     }
@@ -943,12 +932,21 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             if entry.fallbackSingleFrame {
                 fallbackOutputs += 1
             }
-            // Feed the throughput signal: what a real window of this size
-            // actually cost to process, for the processing-aware ceiling.
-            if entry.capturedFrames > 0, entry.totalMillis > 0 {
-                recentProcessing.append(
-                    (seconds: entry.totalMillis / 1000, frames: entry.capturedFrames))
-                if recentProcessing.count > 5 { recentProcessing.removeFirst() }
+            // Feed the throughput governor: what this whole window actually
+            // cost to process against the interval it had.
+            let before = processingCeiling.ceiling
+            processingCeiling.record(
+                windowSeconds: entry.totalMillis / 1000,
+                frames: entry.capturedFrames,
+                intervalSeconds: configuration.intervalSeconds)
+            if processingCeiling.ceiling != before {
+                LLog("""
+                    liveblend-dng: processing ceiling \(before) → \
+                    \(processingCeiling.ceiling) \
+                    (window \(entry.capturedFrames) frames took \
+                    \(String(format: "%.2f", entry.totalMillis / 1000))s of a \
+                    \(configuration.intervalSeconds)s interval)
+                    """)
             }
         }
         log.outputs.append(entry)
