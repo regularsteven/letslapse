@@ -95,6 +95,8 @@ final class Probe {
     /// read against the interval it is supposed to be moving on.
     static let started = Date()
     private var browser: NWBrowser?
+    /// Once-guard for connect — see the browse handler.
+    private var didStartConnecting = false
     private var connection: NWConnection?
     private var nextID: UInt32 = 1
 
@@ -141,10 +143,16 @@ final class Probe {
             // the code precisely so the right endpoint is identifiable
             // before connecting.
             if let code = pairingCode {
+                // Connect exactly once: browse results arrive in batches and
+                // `cancel()` doesn't stop callbacks already queued — a second
+                // connect to the same camera "replaces existing peer" on the
+                // listener and tears BOTH links down.
+                guard self?.didStartConnecting != true else { return }
                 let wanted = CaptureRemotePairing.pairingID(code: code)
                 for result in results {
                     if case .bonjour(let txt) = result.metadata,
                        txt[CaptureRemoteService.TXTKey.pairingID] == wanted {
+                        self?.didStartConnecting = true
                         self?.browser?.cancel()
                         self?.connect(to: result.endpoint, code: code)
                         return
