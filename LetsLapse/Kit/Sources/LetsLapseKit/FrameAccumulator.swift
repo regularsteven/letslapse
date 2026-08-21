@@ -49,6 +49,37 @@ public final class FrameAccumulator {
         frameCount += 1
     }
 
+    /// Accumulate straight from the decoder's biplanar output, converting
+    /// YCbCr -> RGB (and optionally to linear light) in the same pass. Saves
+    /// the reader's 32BGRA conversion, which is what actually bounds a render.
+    func accumulateYUV(
+        luma: MTLTexture,
+        chroma: MTLTexture,
+        params: BlendCore.YUVParams,
+        commandBuffer: MTLCommandBuffer
+    ) throws {
+        guard let accumulator else {
+            throw LapseError.gpuSetupFailed("accumulate called before reset")
+        }
+        guard luma.width == width, luma.height == height else {
+            throw LapseError.sizeMismatch(
+                expectedWidth: width, expectedHeight: height,
+                actualWidth: luma.width, actualHeight: luma.height)
+        }
+        guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+            throw LapseError.gpuSetupFailed("could not encode frame accumulation")
+        }
+        var value = params
+        encoder.setTexture(luma, index: 0)
+        encoder.setTexture(chroma, index: 1)
+        encoder.setTexture(accumulator, index: 2)
+        encoder.setBytes(&value, length: MemoryLayout<BlendCore.YUVParams>.stride, index: 0)
+        encoder.setSamplerState(core.chromaSampler, index: 0)
+        core.dispatch(core.accumulateYUVPipeline, encoder: encoder, width: width, height: height)
+        encoder.endEncoding()
+        frameCount += 1
+    }
+
     public func finalize(into destination: MTLTexture, commandBuffer: MTLCommandBuffer) throws {
         try finalize(into: destination, pipeline: core.finalizePipeline, commandBuffer: commandBuffer)
     }

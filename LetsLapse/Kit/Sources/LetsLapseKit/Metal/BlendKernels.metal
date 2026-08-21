@@ -108,3 +108,57 @@ kernel void encodeGamma(
     }
     destination.write(float4(clamp(value, 0.0, 1.0), 1.0), gid);
 }
+
+// The native-YUV accumulate path. Asking the reader for 32BGRA makes
+// VideoToolbox convert every frame, and that conversion — not the decode —
+// is what bounds a blend render (measured 212 fps to BGRA vs 481 fps native
+// on the same 12 MP HEVC clip, same single thread). Reading the decoder's own
+// biplanar output and converting here costs the GPU almost nothing, and moves
+// a quarter as many bytes.
+
+struct YUVParams {
+    float3x3 matrix;    // (Y,Cb,Cr) -> (R,G,B), full-range coefficients
+    float lumaOffset;   // subtracted from Y before scaling
+    float chromaOffset; // subtracted from Cb/Cr before scaling
+    float lumaScale;    // video-range expansion for Y
+    float chromaScale;  // video-range expansion for Cb/Cr
+    uint  toLinear;     // 1 = decode sRGB -> linear light, matching the
+                        // bgra8Unorm_srgb texture view the BGRA path relied on
+};
+
+static inline float srgbToLinear(float x)
+{
+    return x <= 0.04045 ? x / 12.92 : pow((x + 0.055) / 1.055, 2.4);
+}
+
+kernel void accumulateFrameYUV(
+    texture2d<float, access::read> luma [[texture(0)]],
+    texture2d<float> chroma [[texture(1)]],
+    texture2d<float, access::read_write> accumulator [[texture(2)]],
+    constant YUVParams &params [[buffer(0)]],
+    sampler chromaSampler [[sampler(0)]],
+    uint2 gid [[thread_position_in_grid]])
+{
+    uint width = accumulator.get_width();
+    uint height = accumulator.get_height();
+    if (gid.x >= width || gid.y >= height) {
+        return;
+    }
+    // Chroma is half resolution; sampling it bilinearly at the luma pixel
+    // centre reproduces the decoder's own upsampling closely enough that the
+    // difference disappears into the window average.
+    float2 centre = (float2(gid) + 0.5) / float2(width, height);
+    float y = luma.read(gid).r;
+    float2 cbcr = chroma.sample(chromaSampler, centre).rg;
+    float3 ycc = float3(
+        (y - params.lumaOffset) * params.lumaScale,
+        (cbcr.x - params.chromaOffset) * params.chromaScale,
+        (cbcr.y - params.chromaOffset) * params.chromaScale);
+    // Clamped before the transfer curve because the 8-bit BGRA buffer this
+    // replaces was clamped by the conversion that wrote it.
+    float3 rgb = clamp(params.matrix * ycc, 0.0, 1.0);
+    if (params.toLinear != 0) {
+        rgb = float3(srgbToLinear(rgb.r), srgbToLinear(rgb.g), srgbToLinear(rgb.b));
+    }
+    accumulator.write(accumulator.read(gid) + float4(rgb, 1.0), gid);
+}
