@@ -87,6 +87,34 @@ Each output frame is independent of the others, so the pipeline streams:
 decode → accumulate on GPU (float32) → divide → encode, with a small
 in-flight window keeping memory flat on arbitrarily long clips.
 
+## Holy Grail strategy testing (the remote bench)
+
+The holy-grail work — day→night interval shoots where every frame is as
+blended as it needs to be, with real long exposures and ISO ramping after
+dark — is developed against a **field-test harness** rather than by feel:
+
+- **Strategies.** BLEND=Auto's decision logic is selectable per device
+  (Settings ▸ Advanced ▸ Auto blend strategy: Zone / Latitude / Lumen), and
+  every Auto run *shadow-logs all three strategies' proposals per window*
+  into `capture_log.json`, so a single device yields a three-way decision
+  comparison regardless of which strategy actuated. The engine lives in
+  `Kit/Sources/LetsLapseKit/BlendStrategies.swift` with regression tests.
+- **Self-governing capture.** A capability probe caps burst depth by
+  measured capture rate; an AIMD governor caps it by measured *processing*
+  cost; when even a 2-frame blend can't fit the interval, processing
+  pressure re-paces EVERY=Auto instead of starving windows. Delivered vs
+  asked, starved/failed window counts, the run's `endReason`, and a
+  commanded-vs-delivered exposure divergence guard all land in the
+  travelling log — a run can be audited from its project folder alone.
+- **The bench.** Devices on USB are driven hands-free from the Mac:
+  `devicectl` installs/launches (pairing codes print on the attached
+  console) and `tools/remote_probe.swift` scripts whole runs over the
+  paired remote link. `tools/blend_compare.py` and `tools/shoot_audit.py`
+  are the standing analyzers. Field reports live in `docs/fieldtests/`.
+
+Operational rules and hard-won gotchas are in the repo `CLAUDE.md`
+(§ Strategy field-testing); read that before running a bench session.
+
 ## Notes / current limits (PoC)
 
 - Audio is dropped (time compression makes it meaningless).

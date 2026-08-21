@@ -45,3 +45,60 @@ Repeatable ground truth for on-device capture timing. Full spec:
   behavioural: arming requires the live card (advancing clock, so a photo of
   a card never arms), the countdown is visible and cancellable, and finished
   runs cool down 20 s before re-arming.
+
+## Strategy field-testing & the remote bench (holy grail)
+
+The blend-strategy work (Zone / Latitude / Lumen behind BLEND=Auto) is
+validated on real devices via a hands-free bench. Reports in
+`LetsLapse/docs/fieldtests/`; program history in the "Holy Grail Field
+Program" artifact. The loop:
+
+1. **Build & deploy** (signed Debug, isolated DerivedData — the shared one
+   can be broken by Xcode/MLX state):
+   `xcodebuild -project LetsLapse/LetsLapse.xcodeproj -scheme LetsLapse
+   -destination 'generic/platform=iOS' -configuration Debug
+   -derivedDataPath <scratch>/dd-device -allowProvisioningUpdates build`,
+   then `xcrun devicectl device install app --device <udid> <.app>`.
+2. **Launch + pairing code**: `xcrun devicectl device process launch
+   --device <udid> --console --terminate-existing
+   com.regularsteven.letslapse` — the capture screen opens itself and the
+   remote listener prints `code=NNNNNN` on the console. Do NOT pass
+   `LL_TAB`/hook env vars: any hook key suppresses the automatic
+   camera-open (screenshot mode) and the listener never starts.
+3. **Drive**: compile `LetsLapse/tools/remote_probe.swift` (with the four
+   Shared sources it lists) and script runs:
+   `./remote_probe <code>
+   "setIntervalMode:holyGrail,setAutoInterval#1,setFramesPerBlend:auto,
+   setBlendStrategy:zone,startRecording,poll@30xN,stopRecording"`.
+   `setCaptureMode:interval` is refused (wrong token) — the interval-mode
+   command already switches the tab.
+4. **Pull evidence** (no export/import needed): `xcrun devicectl device
+   copy from --device <udid> --domain-type appDataContainer
+   --domain-identifier com.regularsteven.letslapse --source
+   "Library/Application Support/LetsLapse/Logs" --destination <dir>` —
+   the experiment logs record EVERY window including failed/starved tails
+   that `capture_log.json` structurally omits. Analyze with
+   `tools/blend_compare.py` and `tools/shoot_audit.py`.
+
+**Hard rules learned on the bench:**
+
+- **One control link at a time.** The listener holds a single peer and
+  "replaces existing peer" on any new connection — concurrent probes (or a
+  running LetsLapse **Mac app** holding a stale stored pairing) tear links
+  down. Close the Mac app before bench sessions.
+- Locked iPhones refuse `devicectl` launches — Auto-Lock → Never for the
+  session. A device that advertises locally but never reaches the Mac's
+  browse = Local Network permission or wrong Wi-Fi.
+- LLog console timestamps re-anchor around 1000 s — it looks like an app
+  restart and is not; verify with the probe link + file mtimes before
+  believing a crash.
+- Bench thermals are brutal by design (back-to-back runs → `serious`);
+  a field run's cool start behaves far better. Let devices cool before a
+  real shoot.
+
+**Planned next bench (Steven):** a ~2-hour constrained daylight→sunset→
+darkness run driven from this monitor setup, reviewed live as it happens —
+consoles + monitors on the ramp/governor lines, periodic USB pulls mid-run.
+The monitor test card (above) is the candidate controlled light source: it
+can script a brightness ramp, which would make the light curve itself
+repeatable. Design the observation plan before the run, not during.
