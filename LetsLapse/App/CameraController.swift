@@ -258,6 +258,13 @@ final class CameraController: NSObject, ObservableObject {
     private var holyGrailEngine: HolyGrailRampEngine?
     private var holyGrailLimits: HolyGrailRampEngine.HardwareLimits?
     private var holyGrailWriter: FrameTimestampWriter?
+    /// The clamped exposure most recently WRITTEN to the device by the ramp.
+    /// The DNG bracket path reads it (from the session queue, hence the lock)
+    /// so per-shot bracket settings carry the ramp's exposure instead of
+    /// silently overriding it — the 2026-08-20 field test lost two sunset
+    /// runs to auto-exposure brackets resolving against an AE loop that
+    /// `.custom` mode had frozen. nil outside holy-grail runs.
+    private let holyGrailAppliedExposure = HolyGrailAppliedExposureHolder()
     private var holyGrailActive = false
     private var holyGrailPending = false
     private var holyGrailRawPixelFormat: OSType?
@@ -1206,6 +1213,12 @@ final class CameraController: NSObject, ObservableObject {
             // handed-over temp frames alone.
             #if os(iOS)
             if let rawController = self.liveBlendRawController, rawController.isActive {
+                // Before the format restore below: a bracket already queued
+                // behind this block must not see a ramp target once the run
+                // is torn down — the settings themselves are range-proof
+                // (`current` constants), but the honesty guard would compare
+                // straggler frames against a dead target.
+                self.holyGrailAppliedExposure.set(nil)
                 rawController.requestStop(discard: true)
                 self.restoreAfterDNGRun()
                 DispatchQueue.main.async { self.isLiveBlendRunning = false }
@@ -5302,15 +5315,45 @@ final class CameraController: NSObject, ObservableObject {
         guard let device = videoDevice, let target = holyGrailEngine?.currentTarget,
               device.isExposureModeSupported(.custom)
         else { return }
+        // Clamp to the format's REAL envelope before writing: an out-of-range
+        // duration or ISO makes `setExposureModeCustom` throw an ObjC
+        // exception (not a Swift error), and the 2026-08-20 field test's
+        // commanded ISO 18 sat below the iPad's floor. The engine's own
+        // limits should prevent this; this is the belt at the last write.
+        let format = device.activeFormat
+        let iso = min(max(target.iso, format.minISO), format.maxISO)
+        var duration = target.shutter
+        if CMTimeCompare(duration, format.minExposureDuration) < 0 {
+            duration = format.minExposureDuration
+        }
+        if CMTimeCompare(duration, format.maxExposureDuration) > 0 {
+            duration = format.maxExposureDuration
+        }
+        if abs(log2(Double(max(iso, 1)) / Double(max(target.iso, 1)))) > 0.17
+            || abs(log2(max(duration.seconds, 1e-6) / max(target.shutter.seconds, 1e-6))) > 0.17 {
+            LLog(String(format: """
+                holygrail: commanded exposure clamped to the format envelope — \
+                asked %.4fs ISO %.0f, applying %.4fs ISO %.0f
+                """, target.shutter.seconds, Double(target.iso), duration.seconds, Double(iso)))
+        }
+        var applied = false
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             if device.isWhiteBalanceModeSupported(.locked) {
                 device.whiteBalanceMode = .locked
             }
-            device.setExposureModeCustom(duration: target.shutter, iso: target.iso, completionHandler: nil)
+            device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
+            applied = true
         } catch {
             LLog("holygrail: lockForConfiguration failed — \(error.localizedDescription)")
+        }
+        if applied {
+            // Outside the device-lock scope (no nested locks): what the
+            // bracket path keys on, and what the honesty guard compares
+            // delivered frames against. Only what was actually written —
+            // a failed apply must not move the reference.
+            holyGrailAppliedExposure.set((duration: duration, iso: iso))
         }
     }
 
@@ -5336,6 +5379,12 @@ final class CameraController: NSObject, ObservableObject {
         }
         seedHolyGrailRamp(interval: interval)
         applyHolyGrailExposure()
+        if let device = videoDevice, !device.isExposureModeSupported(.custom) {
+            // The ramp cannot actuate at all here — say so at arm time
+            // instead of shooting a run whose brackets silently fall back
+            // to a frozen AE (the 2026-08-20 failure shape).
+            LLog("holygrail: WARNING — this camera does not support custom exposure; the ramp cannot drive it")
+        }
         publishHolyGrailState()
         LLog("holygrail: blending ramp armed, every \(interval)s\(autoInterval ? " (auto)" : "")"
              + " seed=\(holyGrailEngine.map { String(format: "%.4fs ISO %.0f", $0.currentTarget.shutterSeconds, $0.currentTarget.iso) } ?? "none")")
@@ -5370,6 +5419,7 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailAutoRequestedForRun = false
         holyGrailAutoIntervalSeconds = nil
         DispatchQueue.main.async { self.activeIntervalSeconds = nil }
+        holyGrailAppliedExposure.set(nil)
         guard holyGrailActive else { return }
         holyGrailActive = false
         holyGrailPending = false
@@ -6576,10 +6626,15 @@ final class CameraController: NSObject, ObservableObject {
         #endif
     }
 
-    /// Keeps the run's capability profile honest as the phone heats up.
-    /// Sustained RAW capture moves the thermal state within minutes, and a
-    /// ceiling measured cool is exactly how Auto would keep asking a throttled
-    /// device for frames it can no longer deliver.
+    /// Logs thermal movement during a run. This used to RE-PROBE — ten
+    /// serialized RAW captures fired into the same photo output the run was
+    /// using, with no coordination with its in-flight brackets. The 2026-08-22
+    /// investigation could not clear that probe of colliding with the 16 Pro's
+    /// bracket refusal at its serious transition, and the probe's one product
+    /// (a fresher fps) is now redundant: both resolve sites derive the live
+    /// ceiling from the stored fps per window, and the processing-aware
+    /// ceiling in the controller adapts to real slowdown continuously. So a
+    /// thermal change is now just recorded, never acted on with captures.
     private func startCapabilityReprofiling(rawPixelFormat: OSType, interval: Double) {
         #if os(iOS)
         stopCapabilityReprofiling()
@@ -6590,13 +6645,7 @@ final class CameraController: NSObject, ObservableObject {
             guard let self else { return }
             let state = ProcessInfo.processInfo.thermalState
             guard self.capabilityProfileHolder.isStale(for: state) else { return }
-            self.sessionQueue.async {
-                // Only while the run that asked for it is still going: a probe
-                // fired into a torn-down session is ten wasted captures.
-                guard self.liveBlendRawController?.isActive == true else { return }
-                LLog("capability: thermal state moved — re-profiling")
-                self.runCapabilityProbe(rawPixelFormat: rawPixelFormat, interval: interval) { _ in }
-            }
+            LLog("capability: thermal state moved mid-run — profile kept, live ceilings adapt")
         }
         #endif
     }
@@ -6888,6 +6937,12 @@ final class CameraController: NSObject, ObservableObject {
             throttledFrameTarget: Self.throttledFrameTarget(pipeline: "dng", interval: interval),
             capabilityProfile: { [weak self] in self?.capabilityProfileHolder.profile },
             sceneExposure: sceneExposureProvider(),
+            blendStrategy: BlendStrategyID.selected,
+            // Only a ramped run supplies a target: plain runs keep AE-driven
+            // brackets, and the guard/manual-bracket machinery stays inert.
+            rampExposure: holyGrailRequestedForRun
+                ? { [weak self] in self?.holyGrailAppliedExposure.target ?? nil }
+                : nil,
             sessionID: UUID().uuidString,
             deviceModel: LiveBlendController.deviceModelIdentifier(),
             gpsProvider: { [weak self] in

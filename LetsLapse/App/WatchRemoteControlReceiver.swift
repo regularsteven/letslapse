@@ -2,6 +2,7 @@
 import Foundation
 import UIKit
 import WatchConnectivity
+import LetsLapseKit
 
 // `WatchCaptureCommand` and `WatchRecordingState` live in
 // Shared/WatchCaptureCommand.swift — both ends of the link need them.
@@ -548,6 +549,10 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         payload[WatchMessageKey.intervalSeconds] = intervalSeconds
         payload[WatchMessageKey.framesPerBlend] = framesPerBlend
         payload[WatchMessageKey.blendDepth] = blendDepthToken
+        // The field-test strategy, straight from its defaults key — so a
+        // scripted test can verify a setBlendStrategy landed before arming.
+        payload[WatchMessageKey.blendStrategy] =
+            UserDefaults.standard.string(forKey: BlendStrategyID.defaultsKey) ?? BlendStrategyID.zone.rawValue
         payload[WatchMessageKey.isBulbMode] = isBulbMode
         payload[WatchMessageKey.captureCount] = captureCount
         payload[WatchMessageKey.intervalMode] = intervalMode.rawValue

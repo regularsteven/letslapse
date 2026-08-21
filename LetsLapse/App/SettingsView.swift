@@ -32,6 +32,9 @@ struct SettingsView: View {
     /// accepts start/stop commands, so it is opt-in rather than something the
     /// camera does because the build supports it.
     @AppStorage(CaptureRemoteListener.enabledKey) private var allowRemoteAccess = false
+    /// Field-test selector for BLEND=Auto's decision logic (DNG path).
+    /// Stored as the raw strategy id; stamped into every run's capture log.
+    @AppStorage(BlendStrategyID.defaultsKey) private var blendStrategy = BlendStrategyID.zone.rawValue
     @State private var storage: AppModel.LibraryStorage?
     /// Room left on the volume the library lives on — the number that decides
     /// whether the next shoot fits, which the library's own total never could.
@@ -630,6 +633,31 @@ struct SettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+
+            #if os(iOS)
+            LLRow(
+                title: "Auto blend strategy",
+                subtitle: "Field test: how BLEND Auto picks its depth on DNG shoots. Every run logs what all three would have chosen"
+            ) {
+                Menu {
+                    ForEach(BlendStrategyID.allCases, id: \.rawValue) { strategy in
+                        Button {
+                            blendStrategy = strategy.rawValue
+                        } label: {
+                            if strategy.rawValue == blendStrategy {
+                                Label(strategy.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(strategy.displayName)
+                            }
+                        }
+                    }
+                } label: {
+                    menuValueLabel(BlendStrategyID(rawValue: blendStrategy)?.displayName ?? "Zone")
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+            #endif
 
             NavigationLink(value: SettingsDestination.performance) {
                 LLRow(title: "Performance", subtitle: "CPU workers, GPU batches") {

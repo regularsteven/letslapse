@@ -47,6 +47,8 @@ func extraKey(for command: String) -> String? {
     case "setCaptureMode": return WatchMessageKey.captureMode
     case "setSequenceMode": return WatchMessageKey.sequenceMode
     case "scheduleStop": return WatchMessageKey.stopAtUnit
+    case "setBlendStrategy": return WatchMessageKey.blendStrategy
+    case "setFramesPerBlend": return WatchMessageKey.blendDepth
     default: return nil
     }
 }
@@ -132,9 +134,23 @@ final class Probe {
                 }
                 print("FOUND: \(label)")
             }
-            if let code = pairingCode, let first = results.first {
-                self?.browser?.cancel()
-                self?.connect(to: first.endpoint, code: code)
+            // Select by pairing id, never by arrival order: with several
+            // cameras advertising (the whole point of a multi-device field
+            // rig), "first found" hands the code to the wrong camera and the
+            // PSK handshake just hangs. The TXT pairing id is derived from
+            // the code precisely so the right endpoint is identifiable
+            // before connecting.
+            if let code = pairingCode {
+                let wanted = CaptureRemotePairing.pairingID(code: code)
+                for result in results {
+                    if case .bonjour(let txt) = result.metadata,
+                       txt[CaptureRemoteService.TXTKey.pairingID] == wanted {
+                        self?.browser?.cancel()
+                        self?.connect(to: result.endpoint, code: code)
+                        return
+                    }
+                }
+                print("no camera with pairing \(wanted) yet — still browsing…")
             }
         }
         self.browser = browser

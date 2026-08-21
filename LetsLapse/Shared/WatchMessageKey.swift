@@ -53,6 +53,8 @@ enum WatchMessageKey {
     static let intervalSeconds = "intervalSeconds"
     static let framesPerBlend = "framesPerBlend"
     static let blendDepth = "blendDepth"
+    /// Auto's field-test decision logic (`BlendStrategyID` raw value).
+    static let blendStrategy = "blendStrategy"
 
     // MARK: Interval's MODE dial and its two live readouts
     //

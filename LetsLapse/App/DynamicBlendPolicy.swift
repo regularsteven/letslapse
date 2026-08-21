@@ -1,114 +1,25 @@
 import Foundation
+import CoreMedia
 import LetsLapseKit
 #if os(iOS)
 import AVFoundation
 #endif
 
-/// Auto blend: how deep to blend an interval, decided from the light.
-///
-/// The other adaptive depths answer a different question. **Psycho** takes as
-/// many frames as the device physically can, whatever the scene looks like;
-/// **Safe** takes as many as past Psycho runs proved survivable. Both are about
-/// the *device*. Auto is about the *scene*: a bright noon frontage needs no
-/// noise averaging and gains nothing but heat from twenty exposures, while
-/// dusk is exactly where stacking earns its keep — so the count follows the
-/// measured EV, bounded by what this device was profiled at.
-///
-/// Two guards keep it from thrashing:
-///
-/// - The device's own **capability profile** (`DeviceCapabilityProfile`) caps
-///   every band. Asking for 8 frames on hardware that measured 3 RAW writes a
-///   second inside a 2-second interval is a request for dropped frames, not
-///   depth.
-/// - A **3-cycle rolling average** of EV drives the lookup. Auto-exposure
-///   hunts by a third of a stop constantly, and a raw per-cycle reading sat
-///   right on a band edge would alternate 5 and 3 frames from one interval to
-///   the next — visible in the finished clip as a noise-floor flicker, which is
-///   the exact artefact blending exists to remove.
-enum DynamicBlendPolicy {
+// Auto blend's decision logic lives in the Kit (`BlendStrategies.swift`:
+// `ZoneBlendStrategy` and its field-test siblings), where both blend
+// controllers share one implementation and the regression tests can reach
+// it. This file keeps the *device* side: the capability profile, its
+// holder, and the probe that measures what this hardware can actually do.
 
-    /// One row of the EV → frame-count table. `lowerBound` is inclusive.
-    struct Band: Equatable {
-        let lowerBound: Double
-        let frames: Int
-        let name: String
-    }
+extension BlendStrategyID {
+    /// Settings ▸ Advanced ▸ "Auto blend strategy" — the field-test selector.
+    /// Per-device on purpose: a comparison shoot sets one strategy on each
+    /// device and the choice rides into `capture_log.json`.
+    static let defaultsKey = "capture.blendStrategy"
 
-    /// Bright daylight needs the least help; the deepest stacks are for the
-    /// light that is nearly gone. Read top-down: the first band whose
-    /// `lowerBound` the EV clears wins.
-    static let bands: [Band] = [
-        Band(lowerBound: 13, frames: 8, name: "daylight"),
-        Band(lowerBound: 10, frames: 5, name: "overcast"),
-        Band(lowerBound: 7, frames: 3, name: "dim"),
-        Band(lowerBound: 4, frames: 2, name: "dusk"),
-        Band(lowerBound: -.infinity, frames: 1, name: "night"),
-    ]
-
-    /// How many cycles of EV the rolling average spans.
-    static let smoothingWindow = 3
-
-    /// The band an EV falls in.
-    static func band(forEV ev: Double) -> Band {
-        bands.first { ev >= $0.lowerBound } ?? bands[bands.count - 1]
-    }
-
-    /// The blend count for an EV, capped by what the device can actually
-    /// deliver in one cycle. The cap is a floor of 1, never 0 — a cycle that
-    /// captures nothing is a dropped frame, not a shallow blend.
-    static func frameCount(forEV ev: Double, profile: DeviceCapabilityProfile?) -> Int {
-        let wanted = band(forEV: ev).frames
-        guard let profile else { return wanted }
-        return max(1, min(wanted, profile.maxBurstFramesPerCycle))
-    }
-
-    /// Exposure value at ISO 100 for a set of camera settings — the same
-    /// derivation `DNGAuthor.DNGExposure` uses, exposed here for the live AE
-    /// read (which comes off `AVCaptureDevice`, not off a captured photo).
-    static func exposureValue(aperture: Double, exposureDuration: Double, iso: Double) -> Double? {
-        guard aperture > 0, exposureDuration > 0, iso > 0 else { return nil }
-        return log2((aperture * aperture) / exposureDuration) - log2(iso / 100)
-    }
-}
-
-/// The rolling EV average behind Auto's count, plus the count it last
-/// resolved. Not thread-safe on its own: both blend controllers confine their
-/// window state to a single queue and this rides along with it.
-struct DynamicBlendState {
-    private var readings: [Double] = []
-    /// The count the last resolved cycle asked for — what the session log and
-    /// the readouts report.
-    private(set) var lastResolvedCount: Int?
-    /// The smoothed EV the last resolution was made on.
-    private(set) var lastSmoothedEV: Double?
-
-    /// Folds one cycle's EV in and resolves the count for the cycle about to
-    /// open. Called once per cycle, before its captures are requested.
-    ///
-    /// The first cycle has one reading and resolves from it directly — waiting
-    /// three intervals before Auto did anything would mean a shoot that starts
-    /// at dusk opens on a daylight-shaped blend.
-    mutating func resolve(ev: Double, profile: DeviceCapabilityProfile?) -> Int {
-        readings.append(ev)
-        if readings.count > DynamicBlendPolicy.smoothingWindow {
-            readings.removeFirst(readings.count - DynamicBlendPolicy.smoothingWindow)
-        }
-        let smoothed = readings.reduce(0, +) / Double(readings.count)
-        let count = DynamicBlendPolicy.frameCount(forEV: smoothed, profile: profile)
-        lastSmoothedEV = smoothed
-        lastResolvedCount = count
-        return count
-    }
-
-    /// No EV to be had this cycle (the meter reported nothing usable): hold the
-    /// last resolved count rather than guessing, and fall back to the middle of
-    /// the table on the very first cycle.
-    mutating func resolveWithoutMeasurement(profile: DeviceCapabilityProfile?) -> Int {
-        if let held = lastResolvedCount { return held }
-        let fallback = DynamicBlendPolicy.band(forEV: 10).frames
-        let count = max(1, min(fallback, profile?.maxBurstFramesPerCycle ?? fallback))
-        lastResolvedCount = count
-        return count
+    static var selected: BlendStrategyID {
+        BlendStrategyID(rawValue:
+            UserDefaults.standard.string(forKey: defaultsKey) ?? "") ?? .zone
     }
 }
 
@@ -120,7 +31,11 @@ struct DynamicBlendState {
 /// things a lookup table can't know: the format's resolution, the file system's
 /// mood, and whatever else is running on the phone.
 struct DeviceCapabilityProfile: Equatable {
-    /// How many frames one capture cycle can ask for and expect to get.
+    /// The ceiling as computed at probe time, against the interval the run
+    /// STARTED at. Informational — the log line and the probe record use
+    /// it; both blend controllers derive their live ceiling per window from
+    /// `framesPerSecond` against the interval the run is pacing at now,
+    /// because EVERY=Auto re-paces mid-run and this number does not follow.
     let maxBurstFramesPerCycle: Int
     /// Measured bytes-to-disk rate during the probe, in MB/s.
     let writeThroughputMBps: Double
@@ -147,10 +62,24 @@ struct DeviceCapabilityProfile: Equatable {
 
     /// Frames the profiled rate can deliver inside one interval, with a margin
     /// so the last capture of a cycle isn't racing the window's close.
-    static func ceiling(framesPerSecond: Double, intervalSeconds: Double) -> Int {
+    ///
+    /// `currentShutterSeconds`, when known, guards the direction the probe
+    /// can't: the probe's fps was measured at whatever shutter the probe ran
+    /// at (usually short, in daylight), but a holy-grail run ends with the
+    /// shutter pinned near 1 s — a frame can never take less wall clock than
+    /// its own exposure, so the per-frame cost is floored at the live
+    /// shutter plus a margin before the interval is divided up.
+    static func ceiling(
+        framesPerSecond: Double, intervalSeconds: Double,
+        currentShutterSeconds: Double? = nil
+    ) -> Int {
         guard framesPerSecond > 0, intervalSeconds > 0 else { return 1 }
         let usable = intervalSeconds * 0.8
-        return max(1, min(DynamicBlendPolicy.bands[0].frames, Int(framesPerSecond * usable)))
+        var perFrame = 1 / framesPerSecond
+        if let shutter = currentShutterSeconds, shutter > 0 {
+            perFrame = max(perFrame, shutter * 1.2)
+        }
+        return max(1, min(ZoneBlendStrategy.bands[0].frames, Int(usable / perFrame)))
     }
 
     var thermalStateName: String {
@@ -161,6 +90,28 @@ struct DeviceCapabilityProfile: Equatable {
         case .critical: return "critical"
         @unknown default: return "unknown"
         }
+    }
+}
+
+/// The exposure the holy-grail ramp most recently wrote to the device,
+/// clamped to the format's real envelope. Written on the session queue
+/// (`applyHolyGrailExposure`), read by the DNG bracket path when it builds
+/// per-shot settings — same shape as `CapabilityProfileHolder` below: one
+/// small lock, because the read sits on the capture path.
+final class HolyGrailAppliedExposureHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: (duration: CMTime, iso: Float)?
+
+    var target: (duration: CMTime, iso: Float)? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func set(_ target: (duration: CMTime, iso: Float)?) {
+        lock.lock()
+        stored = target
+        lock.unlock()
     }
 }
 

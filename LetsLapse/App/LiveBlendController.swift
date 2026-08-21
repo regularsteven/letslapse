@@ -129,9 +129,16 @@ struct LiveBlendSessionLog: Codable {
         var partial: Bool
         var fallbackSingleFrame: Bool = false
         var failed: Bool = false
+        /// Empty because the backpressure gate withheld captures while
+        /// processing caught up — the scheduler's restraint, not a failure;
+        /// excluded from the consecutive-failure stop guard.
+        var starvedBackpressure: Bool = false
         /// Per-output format ("dng"/"standard"); records mid-session
         /// fallbacks individually.
         var outputFormat: String? = nil
+        /// Ramped runs (DNG path): worst commanded-vs-delivered exposure
+        /// divergence among this window's frames, in stops.
+        var exposureDivergenceStops: Double? = nil
     }
 
     struct Summary: Codable {
@@ -151,6 +158,35 @@ struct LiveBlendSessionLog: Codable {
     var header: Header
     var outputs: [OutputEntry] = []
     var summary: Summary?
+}
+
+extension CaptureExposureLog.WindowPerformance {
+    /// The travelling-log view of one experiment-log window: the delivery
+    /// facts an analyst needs, with flags stamped only when true so the
+    /// per-project document stays small. Both blend controllers feed their
+    /// windows through here, so `capture_log.json` reads the same whichever
+    /// pipeline produced it.
+    init(entry: LiveBlendSessionLog.OutputEntry) {
+        self.init(
+            requestedFrames: entry.requestedFrames > 0 ? entry.requestedFrames : nil,
+            missed: entry.missedRateLimited > 0 ? entry.missedRateLimited : nil,
+            droppedProcessingBehind: entry.droppedProcessingBehind > 0
+                ? entry.droppedProcessingBehind : nil,
+            droppedByCamera: entry.droppedByCamera > 0 ? entry.droppedByCamera : nil,
+            failures: entry.frameFailures > 0 ? entry.frameFailures : nil,
+            partial: entry.partial ? true : nil,
+            memoryCapped: entry.memoryCapped == true ? true : nil,
+            fallbackSingleFrame: entry.fallbackSingleFrame ? true : nil,
+            thermalStateAtStart: entry.thermalStateAtStart,
+            thermalStateAtClose: entry.thermalState,
+            frameSpacingAvgSeconds: entry.frameSpacingAvgSeconds,
+            frameSpacingMaxSeconds: entry.frameSpacingMaxSeconds,
+            processingMillis: entry.totalMillis > 0 ? entry.totalMillis : nil,
+            actualIntervalSeconds: entry.actualIntervalSeconds,
+            intervalSeconds: entry.requestedIntervalSeconds,
+            fileBytes: entry.fileBytes,
+            exposureDivergenceStops: entry.exposureDivergenceStops)
+    }
 }
 
 extension LiveBlendSessionLog.OutputEntry {
@@ -267,8 +303,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var windowLumaCount = 0
     /// The completed window's mean, handed to `onWindowOpened` for the next.
     private var lastWindowLuma: Double?
-    /// Auto's rolling EV average and last resolved count. videoQueue.
-    private var autoBlend = DynamicBlendState()
+    /// Auto's Zone decision state — the same Kit strategy the DNG path's
+    /// control arm runs, so the two Auto pipelines cannot drift. videoQueue.
+    private var zoneBlend = ZoneBlendStrategy()
+    /// The last actuated Auto count, held verbatim through meter dropouts.
+    private var lastAutoCount: Int?
     /// nil result = nothing to register (zero outputs, or a discarded run).
     var onFinished: ((LiveBlendCaptureResult?) -> Void)?
     /// Fired on the blend queue for each completed unthrottled window — what
@@ -290,6 +329,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private struct WindowRecord {
         var index: Int
         var startSeconds: Double
+        /// The interval the window was paced by, snapshotted at open on
+        /// videoQueue — `configuration.intervalSeconds` is videoQueue-owned
+        /// and can be re-paced (EVERY=Auto) before this window's close is
+        /// processed on blendQueue.
+        var intervalSeconds: Double
         /// Resolved at window open; nil = unthrottled (take every frame).
         var frameTarget: Int? = nil
         var thermalStateAtStart = "unknown"
@@ -342,7 +386,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
         self.configuration = configuration
         self.blender = PixelBufferBlender(core: core, linearLight: true)
-        self.window = WindowRecord(index: 0, startSeconds: 0)
+        self.window = WindowRecord(
+            index: 0, startSeconds: 0,
+            intervalSeconds: configuration.intervalSeconds)
         self.diagnostics = OSAllocatedUnfairLock(initialState: LiveBlendDiagnosticsSnapshot(
             requestedIntervalSeconds: configuration.intervalSeconds,
             requestedFramesPerBlend: configuration.initialDisplayFrames))
@@ -544,19 +590,36 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     }
 
     /// Auto's per-window count: the scene's EV, smoothed over three windows,
-    /// mapped through `DynamicBlendPolicy` and capped by the device profile.
-    /// videoQueue.
+    /// mapped through `ZoneBlendStrategy` and capped by a ceiling derived
+    /// from the profile's measured rate against the interval the run is
+    /// pacing at *now* — not the ceiling frozen at probe time, which goes
+    /// stale when EVERY=Auto re-paces. videoQueue.
     private func resolveAutoFrameTarget(windowIndex index: Int) -> Int {
         let profile = configuration.capabilityProfile?()
-        guard let ev = configuration.sceneExposure?()?.exposureValue else {
-            return autoBlend.resolveWithoutMeasurement(profile: profile)
+        let scene = configuration.sceneExposure?()
+        let ceiling = profile.map {
+            DeviceCapabilityProfile.ceiling(
+                framesPerSecond: $0.framesPerSecond,
+                intervalSeconds: configuration.intervalSeconds,
+                currentShutterSeconds: scene?.exposureDuration)
         }
-        let count = autoBlend.resolve(ev: ev, profile: profile)
-        let smoothed = autoBlend.lastSmoothedEV ?? ev
+        guard let ev = scene?.exposureValue else {
+            // Hold the last actuated count — a scene doesn't get brighter
+            // because a read failed.
+            if let held = lastAutoCount { return held }
+            let fallback = max(1, min(ZoneBlendStrategy.band(forEV: 10).frames, ceiling ?? Int.max))
+            lastAutoCount = fallback
+            return fallback
+        }
+        let wanted = zoneBlend.resolve(ev: ev)
+        let count = max(1, min(wanted, ceiling ?? wanted))
+        lastAutoCount = count
+        let smoothed = zoneBlend.lastSmoothedEV ?? ev
         LLog("""
             liveblend: auto window \(index) — EV \(String(format: "%.2f", ev)) \
             (smoothed \(String(format: "%.2f", smoothed)), \
-            \(DynamicBlendPolicy.band(forEV: smoothed).name)) → \(count) frames
+            \(ZoneBlendStrategy.band(forEV: smoothed).name)) → \(count) frames\
+            \(ceiling.map { ", ceiling \($0)" } ?? "")
             """)
         return count
     }
@@ -582,6 +645,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         return WindowRecord(
             index: index,
             startSeconds: startSeconds,
+            intervalSeconds: configuration.intervalSeconds,
             frameTarget: target,
             thermalStateAtStart: LiveBlendController.thermalStateName(),
             exposure: configuration.sceneExposure?())
@@ -651,8 +715,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         var entry = LiveBlendSessionLog.OutputEntry(
             index: record.index,
             windowStartSeconds: record.startSeconds,
-            windowEndSeconds: record.startSeconds + configuration.intervalSeconds,
-            requestedIntervalSeconds: configuration.intervalSeconds,
+            windowEndSeconds: record.startSeconds + record.intervalSeconds,
+            requestedIntervalSeconds: record.intervalSeconds,
             requestedFrames: record.frameTarget ?? 0,
             capturedFrames: blender.frameCount,
             missedRateLimited: record.missedRateLimited,
@@ -691,12 +755,15 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 entry.fileBytes = (attributes?[.size] as? NSNumber)?.intValue
                 frameURLs.append(url)
                 // One line per file that exists, carrying the exposure the
-                // window opened at and how many tapped frames went into it.
+                // window opened at, how many tapped frames went into it, and
+                // how the window delivered. totalMillis/actualInterval are
+                // finalized below, after this append — patched in there.
                 sessionFrameLog.append(CaptureExposureLog.Entry(
                     frameIndex: frameURLs.count,
                     exposure: record.exposure ?? DNGAuthor.DNGExposure(),
                     capturedAt: record.exposure?.capturedAt ?? Date(),
-                    blendCount: entry.capturedFrames))
+                    blendCount: entry.capturedFrames,
+                    window: CaptureExposureLog.WindowPerformance(entry: entry)))
                 outputIndex += 1
                 completedOutputs += 1
                 if entry.capturedFrames == 1 {
@@ -721,6 +788,17 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         entry.memoryFootprintBytes = LiveBlendController.memoryFootprintBytes()
         if let footprint = entry.memoryFootprintBytes {
             peakMemoryFootprint = max(peakMemoryFootprint ?? 0, footprint)
+        }
+        // The session-log line for this window was appended before these
+        // figures existed (timings finalize here; the single-frame flag is
+        // set just after the append) — complete it now.
+        if !entry.failed, let last = sessionFrameLog.indices.last,
+           sessionFrameLog[last].window != nil {
+            sessionFrameLog[last].window?.processingMillis =
+                entry.totalMillis > 0 ? entry.totalMillis : nil
+            sessionFrameLog[last].window?.actualIntervalSeconds = entry.actualIntervalSeconds
+            sessionFrameLog[last].window?.fallbackSingleFrame =
+                entry.fallbackSingleFrame ? true : nil
         }
         log.outputs.append(entry)
         rewriteLog()
@@ -799,6 +877,14 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 deviceModel: configuration.deviceModel,
                 captureMode: "interval",
                 blendMode: configuration.blendDepth.token,
+                algorithm: configuration.blendDepth == .auto
+                    ? BlendStrategyID.zone.rawValue : nil,
+                algorithmVersion: configuration.blendDepth == .auto
+                    ? BlendStrategyID.version : nil,
+                cameraName: configuration.cameraName,
+                captureWidth: configuration.captureWidth,
+                captureHeight: configuration.captureHeight,
+                intervalSeconds: log.header.requestedIntervalSeconds,
                 startedAt: runStartedAt,
                 endedAt: Date(),
                 frames: sessionFrameLog)

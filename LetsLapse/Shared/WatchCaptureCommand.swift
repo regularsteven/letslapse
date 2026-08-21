@@ -22,6 +22,11 @@ enum WatchCaptureCommand: String {
     case setCaptureMode
     case setIntervalSeconds
     case setFramesPerBlend
+    /// Field test: which Auto decision logic runs (`BlendStrategyID` raw
+    /// value — zone / latitude / lumen). Idle-only like the depth itself;
+    /// exists so a scripted multi-device test can configure each camera's
+    /// strategy without a hand on the screen.
+    case setBlendStrategy
     /// Interval's MODE dial — Off · Holy Grail · Scanner
     /// (`IntervalCaptureMode`). Idle-only: both non-`off` modes reconfigure the
     /// session for RAW at start, and Scanner adds a preview tap, neither of
@@ -97,6 +102,7 @@ extension WatchCaptureCommand {
         case .startRecording, .stopRecording, .triggerMoment, .timedBurst,
              .lockExposure, .unlockExposure, .setISO, .setLensPosition,
              .setCaptureMode, .setIntervalSeconds, .setFramesPerBlend,
+             .setBlendStrategy,
              .setIntervalMode, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop,
@@ -128,6 +134,8 @@ extension WatchCaptureCommand {
             return "The capture mode is unchanged."
         case .setIntervalSeconds, .setFramesPerBlend:
             return "The setting is unchanged."
+        case .setBlendStrategy:
+            return "The blend strategy is unchanged."
         case .setIntervalMode:
             return "The shoot mode is unchanged."
         case .setAutoInterval:

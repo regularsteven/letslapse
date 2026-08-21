@@ -4035,12 +4035,41 @@ struct CaptureView: View {
             camera.deleteLastScannerFrame()
             return true
         case .setFramesPerBlend:
-            // The Watch picker only offers the fixed counts; the adaptive
-            // depths are set on the phone, where Safe's gating lives.
-            guard !isCapturing, let value,
+            guard !isCapturing else { return false }
+            // Token form first (the Mac remote's scripted tests use it, and
+            // it is how Auto is reached at a distance): a `blendDepth` token
+            // accepts auto or a fixed count. Psycho/Safe stay phone-only —
+            // Safe's gating lives here and Psycho is a deliberate hands-on
+            // choice.
+            if let token = payload[WatchMessageKey.blendDepth] as? String {
+                guard let depth = BlendDepth(token: token) else { return false }
+                switch depth {
+                case .auto:
+                    blendDepth = .auto
+                    return true
+                case .fixed(let frames):
+                    guard BlendDepth.fixedOptions.contains(where: { $0.frames == frames }) else { return false }
+                    blendDepth = .fixed(frames)
+                    lastFixedBlendFrames = frames
+                    return true
+                case .throttled, .unthrottled:
+                    return false
+                }
+            }
+            // Numeric form: the Watch picker's fixed counts.
+            guard let value,
                   BlendDepth.fixedOptions.contains(where: { $0.frames == Int(value) }) else { return false }
             blendDepth = .fixed(Int(value))
             lastFixedBlendFrames = Int(value)
+            return true
+        case .setBlendStrategy:
+            // Idle-only, like the depth: the strategy is read once at run
+            // start. Persisted straight to the same defaults key the
+            // Settings row writes, so the two surfaces cannot disagree.
+            guard !isCapturing,
+                  let token = payload[WatchMessageKey.blendStrategy] as? String,
+                  let strategy = BlendStrategyID(rawValue: token) else { return false }
+            UserDefaults.standard.set(strategy.rawValue, forKey: BlendStrategyID.defaultsKey)
             return true
         case .setBurstFPS:
             // Live mid-shoot, unlike the other setters: changing what the NEXT

@@ -705,6 +705,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 blendDepth = .fixed(Int(frames))
             }
             playHaptic(.click)
+        case .setBlendStrategy:
+            // Mirrors nothing on the watch: the strategy is a Settings-level
+            // fact the watch UI never shows. Mac-remote scripts use it.
+            break
         case .setBurstFPS:
             // Echoed locally so the ladder's selected rung moves with the
             // crown instead of lagging a round-trip behind it. No haptic —

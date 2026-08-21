@@ -52,6 +52,19 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         /// now, from the live device rather than from a captured frame — the
         /// count has to be chosen *before* the window's first capture.
         var sceneExposure: (() -> DNGAuthor.DNGExposure?)? = nil
+        /// Which field-test strategy actuates Auto's count. Whatever it is,
+        /// every cycle resolves and logs all three (see `BlendStrategyBank`).
+        var blendStrategy: BlendStrategyID = .zone
+        /// Holy Grail only: the ramp's most recently APPLIED (clamped)
+        /// exposure. Brackets must build per-shot manual settings from it —
+        /// auto-exposure bracket settings override the device's custom
+        /// exposure and resolve against an AE loop that `.custom` mode has
+        /// frozen, which is how the 2026-08-20 field test shot two 50-minute
+        /// runs at the pre-lock exposure while the ramp commanded a perfect
+        /// sunset walk. Also the reference for the delivered-exposure
+        /// honesty guard. nil on plain runs (brackets stay auto there — a
+        /// live AE is exactly what they should follow).
+        var rampExposure: (() -> (duration: CMTime, iso: Float)?)? = nil
         /// Identity and vocabulary for `capture_log.json`.
         var sessionID: String = UUID().uuidString
         var deviceModel: String = ""
@@ -140,8 +153,23 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// first one describes the blend: a window is one AE decision, and it is
     /// the only frame whose tags can honestly stand for the output.
     private var windowFrameExposures: [DNGAuthor.DNGExposure] = []
-    /// Auto's rolling EV average and last resolved count.
-    private var autoBlend = DynamicBlendState()
+    /// Auto's three field-test strategies, resolved together every window;
+    /// `configuration.blendStrategy` names the one that actuates.
+    private var strategyBank = BlendStrategyBank()
+    /// The newest committed luminance analysis — Lumen's input. At least
+    /// one window old, often two: the count for window N+1 is resolved at
+    /// N's close, before N's processing lands, so it sees N−1's stats. The
+    /// stats' own iso/shutter/ev say which window they came from, and the
+    /// strategies only act once per distinct measurement. workQueue.
+    private var lastWindowStats: FrameLuminanceStats?
+    /// The decision behind the currently open window, attached to its
+    /// output's log entry when the window commits — and held verbatim
+    /// through meter dropouts and catch-up closes. workQueue.
+    private var windowDecision: BlendStrategyDecision?
+    /// When the bank last genuinely resolved. Catch-up closes (tick() can
+    /// close three stalled windows in one pass) reuse the standing decision
+    /// instead of re-feeding one EV reading into every strategy's history.
+    private var lastStrategyResolveUptime: Double = -.infinity
     /// Every capture this run has landed, for the per-capture sidecar.
     private var captureIndex = 0
     private var exposureWriter: CaptureExposureWriter?
@@ -158,9 +186,33 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// Set after a bracket request fails so the run degrades to singles
     /// instead of sinking every window on a rejected settings shape.
     private var bracketDisabled = false
+    /// Ramped runs: the window's worst commanded-vs-delivered exposure
+    /// divergence in stops, and the last magnitude the loud log reported
+    /// (so 700 diverging frames make a handful of lines, not a flood).
+    /// workQueue.
+    private var windowExposureDivergenceMax: Double = 0
+    private var lastDivergenceLogged: Double = 0
     /// Windows handed to `processingQueue` whose commit hasn't landed yet.
     /// Backpressure: ≥2 pauses new captures so frame Data can't pile up.
     private var pendingProcessingWindows = 0
+    /// Whether the CURRENT window has had captures withheld by that gate.
+    /// An empty window that closes with this set is the scheduler's own
+    /// restraint, not a camera fault — the 2026-08-22 sunrise killed five
+    /// 12 Pro runs by counting exactly those windows as "failures" until
+    /// three in a row tripped the stop guard. workQueue.
+    private var windowSawBackpressure = false
+    /// Windows skipped to backpressure this run (no output, not failures).
+    private var skippedStarvedWindows = 0
+    /// Rolling record of recent completed windows' processing cost, the
+    /// throughput signal the capability probe cannot measure (it times
+    /// capture+write, never blend+author). Feeds a processing-aware ceiling
+    /// so a device that blends slower than the interval degrades to fewer
+    /// frames instead of drowning. workQueue.
+    private var recentProcessing: [(seconds: Double, frames: Int)] = []
+    /// Why the run ended, for `capture_log.json` — "user" unless a guard
+    /// says otherwise. The stop reason used to exist only in print-level
+    /// logs, invisible on a field device. workQueue.
+    private var endReason = "user"
 
     /// Blend/author work runs here so capture scheduling never stalls
     /// behind it — the next window's burst fires while the previous window
@@ -332,28 +384,114 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         }
     }
 
-    /// Auto's per-window count: the scene's EV, smoothed over the last three
-    /// windows, mapped through `DynamicBlendPolicy` and capped by what the
-    /// device measured itself doing. workQueue.
+    /// Auto's per-window count: all three field-test strategies resolved
+    /// from the live AE's EV (and, for Lumen, the last closed window's pixel
+    /// stats), the configured one actuated, everything logged. workQueue.
     ///
     /// The EV is read from the live AE rather than from the previous window's
     /// frames because the count has to exist before the first capture of the
-    /// window it governs. When the meter says nothing usable, the last resolved
-    /// count is held — a scene doesn't get brighter because a read failed.
+    /// window it governs. When the meter says nothing usable, each strategy
+    /// holds its last count — a scene doesn't get brighter because a read
+    /// failed.
+    ///
+    /// The device ceiling is recomputed here from the profile's measured
+    /// frames-per-second against the interval the run is pacing at *now* —
+    /// not the profile's stored ceiling, which was computed against the
+    /// run-start interval and goes stale the moment EVERY=Auto re-paces.
     private func resolveAutoFrameTarget() -> Int {
-        let profile = configuration.capabilityProfile?()
-        guard let ev = configuration.sceneExposure?()?.exposureValue else {
-            let held = autoBlend.resolveWithoutMeasurement(profile: profile)
-            LLog("liveblend-dng: auto window \(windowIndex) — no EV reading, holding \(held) frames")
-            return held
+        let now = ProcessInfo.processInfo.systemUptime
+        // Catch-up closes reuse the standing decision: three windows closed
+        // in one stalled tick are one moment of light, not three readings.
+        if let held = windowDecision,
+           now - lastStrategyResolveUptime < configuration.intervalSeconds * 0.5 {
+            LLog("liveblend-dng: auto window \(windowIndex) — catch-up close, keeping \(held.actuatedCount) frames")
+            return held.actuatedCount
         }
-        let count = autoBlend.resolve(ev: ev, profile: profile)
-        let smoothed = autoBlend.lastSmoothedEV ?? ev
+        let profile = configuration.capabilityProfile?()
+        let scene = configuration.sceneExposure?()
+        let captureCeiling = profile.map {
+            DeviceCapabilityProfile.ceiling(
+                framesPerSecond: $0.framesPerSecond,
+                intervalSeconds: configuration.intervalSeconds,
+                currentShutterSeconds: scene?.exposureDuration)
+        }
+        // The probe measures capture speed; blend+author speed it cannot
+        // know. Measured live instead: if recent windows cost more to
+        // process than the interval provides, shrink the ask until the
+        // pipeline is sustainable — the 12 Pro's sunrise runs died because
+        // this number was allowed to sit above 100%.
+        var ceiling = captureCeiling
+        if recentProcessing.count >= 3 {
+            let seconds = recentProcessing.reduce(0.0) { $0 + $1.seconds }
+            let frames = recentProcessing.reduce(0) { $0 + $1.frames }
+            if frames > 0 {
+                let perFrame = seconds / Double(frames)
+                let sustainable = max(1, Int(configuration.intervalSeconds * 0.9 / max(perFrame, 0.001)))
+                if sustainable < (ceiling ?? Int.max) {
+                    LLog("""
+                        liveblend-dng: processing ceiling \(sustainable) \
+                        (\(String(format: "%.2f", perFrame))s/frame against a \
+                        \(configuration.intervalSeconds)s interval)\
+                        \(captureCeiling.map { " under capture ceiling \($0)" } ?? "")
+                        """)
+                    ceiling = sustainable
+                }
+            }
+        }
+        guard let ev = scene?.exposureValue else {
+            // A scene doesn't get brighter because a read failed: hold the
+            // last actuated count verbatim — not the strategies' uncapped
+            // wants, which a freshly grown ceiling could inflate.
+            if let held = windowDecision {
+                LLog("liveblend-dng: auto window \(windowIndex) — no EV reading, holding \(held.actuatedCount) frames")
+                return held.actuatedCount
+            }
+            let fallback = max(1, min(ZoneBlendStrategy.band(forEV: 10).frames, ceiling ?? Int.max))
+            LLog("liveblend-dng: auto window \(windowIndex) — no EV reading on the first cycle, starting at \(fallback) frames")
+            windowDecision = BlendStrategyDecision(
+                algorithm: configuration.blendStrategy.rawValue,
+                sceneEV: nil,
+                proposedZone: fallback, proposedLatitude: fallback, proposedLumen: fallback,
+                deviceCeiling: ceiling,
+                intervalSeconds: configuration.intervalSeconds,
+                actuatedCount: fallback)
+            lastStrategyResolveUptime = now
+            return fallback
+        }
+        let proposals = strategyBank.resolveAll(ev: ev, at: now, stats: lastWindowStats)
+        lastStrategyResolveUptime = now
+        let wanted: Int
+        switch configuration.blendStrategy {
+        case .zone: wanted = proposals.zone
+        case .latitude: wanted = proposals.latitude
+        case .lumen: wanted = proposals.lumen
+        }
+        let count = max(1, min(wanted, ceiling ?? wanted))
+        windowDecision = BlendStrategyDecision(
+            algorithm: configuration.blendStrategy.rawValue,
+            sceneEV: ev,
+            proposedZone: proposals.zone,
+            proposedLatitude: proposals.latitude,
+            proposedLumen: proposals.lumen,
+            zoneSmoothedEV: proposals.zoneSmoothedEV,
+            latitudeContinuous: proposals.latitudeContinuous,
+            evVelocityStopsPerMinute: proposals.evVelocityStopsPerMinute,
+            lumenScore: proposals.lumenScore,
+            lumenBoost: proposals.lumenBoost,
+            deviceCeiling: ceiling,
+            intervalSeconds: configuration.intervalSeconds,
+            actuatedCount: count,
+            stats: lastWindowStats)
         LLog("""
-            liveblend-dng: auto window \(windowIndex) — EV \(String(format: "%.2f", ev)) \
-            (smoothed \(String(format: "%.2f", smoothed)), \
-            \(DynamicBlendPolicy.band(forEV: smoothed).name)) → \(count) frames\
-            \(profile.map { ", device ceiling \($0.maxBurstFramesPerCycle)" } ?? "")
+            liveblend-dng: auto window \(windowIndex) \
+            [\(configuration.blendStrategy.rawValue)] — \
+            EV \(String(format: "%.2f", ev)) \
+            (smoothed \(proposals.zoneSmoothedEV.map { String(format: "%.2f", $0) } ?? "—"), \
+            \(ZoneBlendStrategy.band(forEV: proposals.zoneSmoothedEV ?? ev).name)) → \(count) frames \
+            (zone \(proposals.zone), latitude \(proposals.latitude), \
+            lumen \(proposals.lumen)\
+            \(proposals.lumenScore.map { String(format: " score %.3f", $0) } ?? "")\
+            \(ceiling.map { ", ceiling \($0)" } ?? ""))
             """)
         return count
     }
@@ -388,6 +526,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // instead of piling captured frames into memory.
         guard pendingProcessingWindows < 2 else {
             windowMissed += 1
+            windowSawBackpressure = true
             return
         }
         // Spread mode keeps strictly one RAW capture at a time. Overlapping
@@ -424,7 +563,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             LLog("liveblend-dng: capture stalled >8s — resetting in-flight guard")
             inFlightCaptures = 0
         }
-        guard pendingProcessingWindows < 2 else { return }
+        guard pendingProcessingWindows < 2 else {
+            windowSawBackpressure = true
+            return
+        }
         // Unthrottled fires until the window closes; its bound is memory,
         // not a count. Failed captures free their slots for a replacement
         // shot, but never an unbounded retry loop inside one window.
@@ -442,7 +584,11 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             guard wanted > 0 else { return }
             if usesBrackets {
                 // One bracket in flight at a time; its frames arrive at
-                // sensor-consecutive spacing.
+                // sensor-consecutive spacing. Ramped runs bracket too —
+                // fireBracket carries the device's custom exposure via the
+                // `current` constants — and a device that refuses a bracket
+                // shape at runtime degrades through bracketDisabled to
+                // singles, which inherit the custom exposure as well.
                 guard inFlightCaptures == 0 else { return }
                 let count = min(wanted, configuration.maxBracketFrames)
                 if count >= 2 {
@@ -450,10 +596,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 } else {
                     fireCapture()
                 }
-            } else if #available(iOS 17.0, *) {
+            } else if #available(iOS 17.0, *), configuration.responsiveCapture {
                 guard photoOutput.captureReadiness == .ready, inFlightCaptures < 3 else { return }
                 fireCapture()
             } else {
+                // Serialized singles. Also the landing path after
+                // bracketDisabled trips on a bracketed run: that pipeline
+                // never enabled responsive capture, so readiness can stay
+                // un-ready forever — gating on it here starved the 16 Pro's
+                // sunrise run to death after its brackets were refused.
                 guard inFlightCaptures == 0 else { return }
                 fireCapture()
             }
@@ -486,11 +637,31 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         lastCaptureFiredUptime = ProcessInfo.processInfo.systemUptime
         shotsRequestedThisWindow += count
         let format = configuration.rawPixelFormat
+        // Snapshot on workQueue; the closure itself is lock-protected and
+        // safe to call from the session queue below.
+        let rampExposure = configuration.rampExposure
         captureExecutor { [weak self] in
             guard let self else { return }
-            let perFrame = (0..<count).map { _ in
-                AVCaptureAutoExposureBracketedStillImageSettings.autoExposureSettings(
-                    exposureTargetBias: AVCaptureDevice.currentExposureTargetBias)
+            let perFrame: [AVCaptureBracketedStillImageSettings]
+            if rampExposure?() != nil {
+                // Ramped run: the bracket CARRIES the device's custom
+                // exposure — the ramp's, since `applyHolyGrailExposure` set
+                // it. The `current` constants resolve on the device at
+                // capture time, so they are range-proof by construction:
+                // no clamped snapshot can go stale against a format switch
+                // during teardown (explicit values could, and out-of-range
+                // manual brackets raise an uncatchable NSException).
+                perFrame = (0..<count).map { _ in
+                    AVCaptureManualExposureBracketedStillImageSettings.manualExposureSettings(
+                        exposureDuration: AVCaptureDevice.currentExposureDuration,
+                        iso: AVCaptureDevice.currentISO)
+                }
+            } else {
+                // Plain run: AE is live and the brackets should follow it.
+                perFrame = (0..<count).map { _ in
+                    AVCaptureAutoExposureBracketedStillImageSettings.autoExposureSettings(
+                        exposureTargetBias: AVCaptureDevice.currentExposureTargetBias)
+                }
             }
             // Quality prioritization is deliberately left default here —
             // bracket settings reject some per-shot options that plain
@@ -564,6 +735,37 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             LLog("liveblend-dng: raw photo without pixel buffer")
             return
         }
+        // Commanded-vs-delivered honesty guard: on a ramped run, every
+        // frame's own EXIF is compared against what the ramp applied. A
+        // divergence is the actuation chain failing — the class of bug that
+        // silently cost the 2026-08-20 field test two sunset runs — so it is
+        // logged loudly and stamped into the window's capture_log record.
+        if let target = configuration.rampExposure?(),
+           let iso = exposure.iso, let duration = exposure.exposureDuration,
+           let divergence = CaptureExposureLog.WindowPerformance.exposureDivergenceStops(
+               actualISO: iso, actualDuration: duration,
+               targetISO: Double(target.iso), targetDuration: target.duration.seconds) {
+            // Devices quantize the commanded ISO to a neighbouring supported
+            // value and EXIF reports the quantized one (measured: commanded
+            // 33 → EXIF 32, 54 → 50, 18 → 16), a constant ≤⅙-stop offset.
+            // Below a ¼ stop nothing is wrong — don't stamp the log.
+            if divergence > 0.25 {
+                windowExposureDivergenceMax = max(windowExposureDivergenceMax, divergence)
+            }
+            if divergence <= 0.5 {
+                // Recovered: re-arm the limiter so a recurrence at the same
+                // magnitude logs loudly again instead of staying silent.
+                lastDivergenceLogged = 0
+            }
+            if divergence > 0.5, abs(divergence - lastDivergenceLogged) > 0.5 {
+                lastDivergenceLogged = divergence
+                LLog(String(format: """
+                    liveblend-dng: EXPOSURE DIVERGENCE %.1f stops — ramp \
+                    commanded %.4fs ISO %.0f, sensor delivered %.4fs ISO %.0f
+                    """, divergence, target.duration.seconds, Double(target.iso),
+                    duration, iso))
+            }
+        }
         if !loggedBufferAttachments {
             loggedBufferAttachments = true
             let attachments = (CVBufferCopyAttachments(pixelBuffer, .shouldPropagate) as? [String: Any]) ?? [:]
@@ -607,6 +809,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // remaining ones are the same exposure repeated (and on a ramping shoot
         // the first is the one the window was opened on).
         let exposure = windowFrameExposures.first ?? DNGAuthor.DNGExposure()
+        // The strategy decision that opened THIS window, snapshotted before
+        // openWindowState() below resolves the next one over it — and the
+        // stats gate read here on workQueue, so the processing closure never
+        // touches `configuration` fields the interval re-pace can rewrite.
+        let decision = windowDecision
+        let wantsStats = configuration.blendDepth == .auto
+        // Snapshot before the reset below: whether this window's emptiness
+        // (if it is empty) was the backpressure gate's own doing.
+        let sawBackpressure = windowSawBackpressure
         let times = windowFrameTimes
         let spacings = zip(times.dropFirst(), times).map(-)
         var entry = LiveBlendSessionLog.OutputEntry(
@@ -630,6 +841,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         if windowMemoryCapped {
             entry.memoryCapped = true
         }
+        if windowExposureDivergenceMax > 0 {
+            entry.exposureDivergenceStops = windowExposureDivergenceMax
+        }
 
         windowIndex += 1
         windowStartUptime += configuration.intervalSeconds
@@ -638,6 +852,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         windowMissed = 0
         windowFailures = 0
         windowPartial = false
+        windowSawBackpressure = false
+        windowExposureDivergenceMax = 0
         windowFrameDNGs = []
         windowFrameExposures = []
         openWindowState()
@@ -648,17 +864,32 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 let processStart = ProcessInfo.processInfo.systemUptime
                 var processed = entry
                 var url: URL?
+                var stats: FrameLuminanceStats?
                 if frames.isEmpty || self.discardRequested.withLock({ $0 }) {
                     // Empty window, or a discard raced the queue: nothing to
-                    // produce (a discarded run's log already says so).
-                    processed.failed = true
+                    // produce (a discarded run's log already says so). An
+                    // emptiness the backpressure gate caused — captures
+                    // withheld while processing caught up, with no camera
+                    // error — is the scheduler's own restraint, recorded as
+                    // starved rather than failed so it never feeds the
+                    // consecutive-failure stop guard.
+                    if frames.isEmpty, sawBackpressure, processed.frameFailures == 0,
+                       !self.discardRequested.withLock({ $0 }) {
+                        processed.starvedBackpressure = true
+                    } else {
+                        processed.failed = true
+                    }
                 } else {
                     url = self.processWindow(
-                        frames: frames, exposure: exposure, entry: &processed)
+                        frames: frames, exposure: exposure,
+                        wantsStats: wantsStats, entry: &processed,
+                        stats: &stats)
                 }
                 processed.totalMillis = (ProcessInfo.processInfo.systemUptime - processStart) * 1000
                 self.workQueue.async {
-                    self.commitOutput(processed, url: url, exposure: exposure)
+                    self.commitOutput(
+                        processed, url: url, exposure: exposure,
+                        stats: stats, decision: decision)
                 }
             }
         }
@@ -668,7 +899,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private func commitOutput(
         _ processed: LiveBlendSessionLog.OutputEntry,
         url: URL?,
-        exposure: DNGAuthor.DNGExposure
+        exposure: DNGAuthor.DNGExposure,
+        stats: FrameLuminanceStats?,
+        decision: BlendStrategyDecision?
     ) {
         pendingProcessingWindows = max(0, pendingProcessingWindows - 1)
         var entry = processed
@@ -680,18 +913,28 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         if let footprint = entry.memoryFootprintBytes {
             peakMemoryFootprint = max(peakMemoryFootprint ?? 0, footprint)
         }
+        // The stats feed the NEXT resolution whether or not this window's
+        // write succeeded — the pixels were measured either way.
+        if let stats { lastWindowStats = stats }
         if let url {
             frameURLs.append(url)
             // One session-log line per file that actually exists, numbered by
             // its place in the finished sequence, carrying the exposure the
-            // blend was made at and how many captures went into it.
+            // blend was made at, how many captures went into it, and (on
+            // Auto) the full strategy decision behind the count.
             sessionFrameLog.append(CaptureExposureLog.Entry(
                 frameIndex: frameURLs.count,
                 exposure: exposure,
                 capturedAt: exposure.capturedAt ?? Date(),
-                blendCount: entry.capturedFrames))
+                blendCount: entry.capturedFrames,
+                strategy: decision,
+                window: CaptureExposureLog.WindowPerformance(entry: entry)))
         }
-        if entry.failed {
+        if entry.starvedBackpressure {
+            // Neither a failure (the camera did nothing wrong) nor a success
+            // (nothing was produced): the streak counter holds where it is.
+            skippedStarvedWindows += 1
+        } else if entry.failed {
             failedOutputs += 1
             consecutiveProcessingFailures += 1
         } else {
@@ -699,6 +942,13 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             consecutiveProcessingFailures = 0
             if entry.fallbackSingleFrame {
                 fallbackOutputs += 1
+            }
+            // Feed the throughput signal: what a real window of this size
+            // actually cost to process, for the processing-aware ceiling.
+            if entry.capturedFrames > 0, entry.totalMillis > 0 {
+                recentProcessing.append(
+                    (seconds: entry.totalMillis / 1000, frames: entry.capturedFrames))
+                if recentProcessing.count > 5 { recentProcessing.removeFirst() }
             }
         }
         log.outputs.append(entry)
@@ -729,6 +979,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
 
         if consecutiveProcessingFailures >= 3, !finishRequested {
             LLog("liveblend-dng: three consecutive output failures, stopping")
+            endReason = "consecutiveFailures"
             requestStop(discard: false)
         }
         pumpCaptures()
@@ -744,7 +995,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     private func processWindow(
         frames: [Data],
         exposure: DNGAuthor.DNGExposure,
-        entry: inout LiveBlendSessionLog.OutputEntry
+        wantsStats: Bool,
+        entry: inout LiveBlendSessionLog.OutputEntry,
+        stats: inout FrameLuminanceStats?
     ) -> URL? {
         let referenceData = frames.first
         // The exposure tags the authored output will carry. An authored DNG has
@@ -806,6 +1059,19 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 entry.outputFormat = "dng"
                 entry.fileBytes = output.count
                 processingFileIndex += 1
+                if singleCapture, wantsStats {
+                    // The pass-through skips the blend decode, but Auto's
+                    // strategies still need to know what this window's
+                    // pixels said — night, where single-capture windows
+                    // live, is exactly where Lumen's question is asked. A
+                    // quarter-scale decode keeps the cost and the transient
+                    // buffer a sixteenth of a full decode's; the resulting
+                    // stats carry `sourceScale` so analysis never mistakes
+                    // them for the blend path's full-resolution samples.
+                    // The decode's cost lands in the window's totalMillis —
+                    // blendMillis stays nil here because nothing blended.
+                    stats = luminanceStats(ofDNG: referenceData, exposure: exposure)
+                }
                 return url
             } catch {
                 LLog("liveblend-dng: untouched write failed: \(error)")
@@ -887,6 +1153,20 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 format: .RGBA16,
                 colorSpace: LiveBlendRawController.linearColorSpace)
             entry.blendMillis = (ProcessInfo.processInfo.systemUptime - blendStart) * 1000
+
+            if wantsStats {
+                // Strided point sample of the buffer the blend just rendered
+                // anyway — the strategies' pixel signal costs milliseconds
+                // here, never a second decode. Stored values are scene/2^2
+                // (the headroom), which `compute` undoes.
+                stats = FrameLuminanceStats.compute(
+                    rgba16: rgba, width: width, height: height,
+                    headroomStops: LiveBlendRawController.headroomStops,
+                    iso: exposure.iso,
+                    exposureDuration: exposure.exposureDuration,
+                    ev: exposure.exposureValue,
+                    sourceScale: 1.0)
+            }
 
             let url = configuration.outputDirectory
                 .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
@@ -1021,7 +1301,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             completedOutputs: completedOutputs,
             fallbackOutputs: fallbackOutputs,
             failedOutputs: failedOutputs,
-            skippedWindows: 0,
+            skippedWindows: skippedStarvedWindows,
             peakProcessingSeconds: peakProcessingSeconds,
             peakMemoryFootprintBytes: peakMemoryFootprint,
             finalThermalState: LiveBlendController.thermalStateName(),
@@ -1044,6 +1324,17 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 deviceModel: configuration.deviceModel,
                 captureMode: "interval",
                 blendMode: configuration.blendDepth.token,
+                algorithm: configuration.blendDepth == .auto
+                    ? configuration.blendStrategy.rawValue : nil,
+                algorithmVersion: configuration.blendDepth == .auto
+                    ? BlendStrategyID.version : nil,
+                cameraName: configuration.cameraName,
+                captureWidth: configuration.captureWidth,
+                captureHeight: configuration.captureHeight,
+                intervalSeconds: log.header.requestedIntervalSeconds,
+                endReason: endReason,
+                failedWindows: failedOutputs > 0 ? failedOutputs : nil,
+                starvedWindows: skippedStarvedWindows > 0 ? skippedStarvedWindows : nil,
                 startedAt: runStartedAt,
                 endedAt: Date(),
                 frames: sessionFrameLog)
@@ -1071,6 +1362,46 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     }
 
     // MARK: Support
+
+    /// Luminance stats for a single pass-through DNG: decoded at quarter
+    /// scale through the same calibrated RAW path the blend uses, with no
+    /// headroom scale applied. The downscale is a demosaic-level average,
+    /// which the stats type's contract warns pulls shadow tails toward
+    /// their neighbours — accepted here because a full-scale decode of a
+    /// 48MP frame renders a ~97 MB bitmap to draw 8k samples; the stats are
+    /// stamped `sourceScale: 0.25` so no analysis mixes the populations
+    /// unknowingly. processingQueue.
+    private static let singleCaptureStatsScale = 0.25
+    private func luminanceStats(
+        ofDNG data: Data, exposure: DNGAuthor.DNGExposure
+    ) -> FrameLuminanceStats? {
+        autoreleasepool {
+            guard let filter = CIRAWFilter(imageData: data, identifierHint: nil) else { return nil }
+            filter.boostAmount = 0
+            filter.scaleFactor = Float(Self.singleCaptureStatsScale)
+            guard let image = filter.outputImage else { return nil }
+            let width = Int(image.extent.width)
+            let height = Int(image.extent.height)
+            guard width > 0, height > 0 else { return nil }
+            var rgba = [UInt16](repeating: 0, count: width * height * 4)
+            rgba.withUnsafeMutableBytes { buffer in
+                ciContext.render(
+                    image,
+                    toBitmap: buffer.baseAddress!,
+                    rowBytes: width * 8,
+                    bounds: image.extent,
+                    format: .RGBA16,
+                    colorSpace: LiveBlendRawController.linearColorSpace)
+            }
+            return FrameLuminanceStats.compute(
+                rgba16: rgba, width: width, height: height,
+                headroomStops: 0,
+                iso: exposure.iso,
+                exposureDuration: exposure.exposureDuration,
+                ev: exposure.exposureValue,
+                sourceScale: Self.singleCaptureStatsScale)
+        }
+    }
 
     private func rewriteLog() {
         let encoder = JSONEncoder()
