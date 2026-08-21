@@ -470,18 +470,28 @@ public struct ProcessingCeiling: Sendable {
             // the current ceiling matters when the window was already
             // smaller than the ceiling allowed).
             comfortableStreak = 0
-            if frames <= 1 {
-                // Bottomed out: ask pacing for the time instead. Capped at
-                // 4x so one pathological window can't demand a crawl.
+            let stepped = max(1, min(ceiling, frames) - 1)
+            if stepped <= 1 {
+                // The step lands below a real blend (2 frames): the mission
+                // is blended frames, so rather than retreating to unblended
+                // singles — which are cheap pass-throughs that never
+                // overrun, leaving a 1↔2 limit cycle the bench observed —
+                // ask pacing for the time a blend costs. Capped at 4x so
+                // one pathological window can't demand a crawl.
                 let wanted = min(windowSeconds * 1.15, intervalSeconds * 4)
                 sustainableIntervalSeconds = max(sustainableIntervalSeconds ?? 0, wanted)
             }
-            ceiling = max(1, min(ceiling, frames) - 1)
+            ceiling = stepped
         } else if windowSeconds < intervalSeconds * Self.comfortableFraction {
-            // Fitting comfortably again: pacing may narrow back; if the
-            // pressure returns, the floor re-engages from measurement.
-            sustainableIntervalSeconds = nil
             comfortableStreak += 1
+            // The floor lets go only on a comfortable STREAK — the same
+            // hysteresis growth uses. Clearing on one comfortable window
+            // oscillated on the bench: the stretched pace makes cheap
+            // windows, one clears the floor, pacing narrows, the next blend
+            // overruns, the floor re-engages — 12s↔23s forever.
+            if comfortableStreak >= Self.growthStreak {
+                sustainableIntervalSeconds = nil
+            }
             if comfortableStreak >= Self.growthStreak,
                ceiling < ZoneBlendStrategy.bands[0].frames {
                 ceiling += 1

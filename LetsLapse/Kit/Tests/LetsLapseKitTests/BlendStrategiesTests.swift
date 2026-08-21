@@ -301,34 +301,38 @@ final class BlendStrategiesTests: XCTestCase {
         XCTAssertEqual(governor.ceiling, 5)
     }
 
-    func testPaceFloorEngagesOnlyWhenFramesAreBottomedOut() throws {
+    func testPaceFloorEngagesWhenBlendingBecomesUnaffordable() throws {
         var governor = ProcessingCeiling()
         // Plenty of frame-count room: overruns shrink the count, never
         // demand pacing.
         governor.record(windowSeconds: 6.0, frames: 5, intervalSeconds: 3)
         XCTAssertNil(governor.sustainableIntervalSeconds)
-        // Walk to the bottom.
         governor.record(windowSeconds: 5.0, frames: 4, intervalSeconds: 3)
         governor.record(windowSeconds: 4.5, frames: 3, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 2)
+        XCTAssertNil(governor.sustainableIntervalSeconds)
+        // A TWO-frame window over the interval would step below a real
+        // blend — the mission is blended frames, so pacing pays instead:
+        // the floor is the blend's measured cost plus margin. (Retreating
+        // to singles is a trap: pass-through singles are cheap and never
+        // overrun, leaving a 1↔2 limit cycle — bench-observed.)
         governor.record(windowSeconds: 4.0, frames: 2, intervalSeconds: 3)
         XCTAssertEqual(governor.ceiling, 1)
-        XCTAssertNil(governor.sustainableIntervalSeconds)
-        // A ONE-frame window still over the interval: pacing is the only
-        // remedy left — the floor is the measured cost plus margin.
-        governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 3)
         XCTAssertEqual(try XCTUnwrap(governor.sustainableIntervalSeconds), 4.6, accuracy: 0.01)
         // And it is capped at 4x the interval.
         governor.record(windowSeconds: 60, frames: 1, intervalSeconds: 3)
         XCTAssertEqual(try XCTUnwrap(governor.sustainableIntervalSeconds), 12, accuracy: 0.01)
     }
 
-    func testPaceFloorClearsWhenWindowsFitComfortably() throws {
+    func testPaceFloorClearsOnAComfortableStreakOnly() throws {
         var governor = ProcessingCeiling()
         governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 3)
         XCTAssertNotNil(governor.sustainableIntervalSeconds)
-        // The repace stretched the interval; the same window now fits
-        // comfortably — the floor lets go so pacing can narrow back when
-        // the light (or the thermals) allow.
+        // One comfortable window must NOT release the floor — clearing on a
+        // single cheap window oscillated the pace 12s↔23s on the bench.
+        governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 6)
+        XCTAssertNotNil(governor.sustainableIntervalSeconds)
+        // A streak does: the thermals (or the light) genuinely improved.
         governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 6)
         XCTAssertNil(governor.sustainableIntervalSeconds)
     }
