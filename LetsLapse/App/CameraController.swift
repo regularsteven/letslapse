@@ -5293,7 +5293,17 @@ final class CameraController: NSObject, ObservableObject {
     private func repaceHolyGrailAutoInterval() {
         guard let current = holyGrailAutoIntervalSeconds,
               let engine = holyGrailEngine, let limits = holyGrailLimits else { return }
-        let next = HolyGrailAutoInterval.seconds(for: engine, limits: limits)
+        // Two demands on the pacing, and the slower one wins: the exposure
+        // the light needs, and the window cost the processing pipeline
+        // demonstrably pays. The second is what turns a slow device's
+        // starved-window churn into fewer, full windows at honest spacing.
+        let exposureNext = HolyGrailAutoInterval.seconds(for: engine, limits: limits)
+        let processingFloor = liveBlendRawController?.processingPaceFloorSeconds
+        let next = max(exposureNext, processingFloor ?? 0)
+        if let processingFloor, processingFloor > exposureNext,
+           HolyGrailAutoInterval.isMeaningfulChange(from: current, to: next) {
+            LLog(String(format: "holygrail: processing pressure paces the interval — %.1fs (exposure wanted %.1fs)", next, exposureNext))
+        }
         guard HolyGrailAutoInterval.isMeaningfulChange(from: current, to: next) else { return }
         holyGrailAutoIntervalSeconds = next
         DispatchQueue.main.async { self.activeIntervalSeconds = next }

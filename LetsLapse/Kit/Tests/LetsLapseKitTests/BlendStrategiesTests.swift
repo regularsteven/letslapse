@@ -301,6 +301,38 @@ final class BlendStrategiesTests: XCTestCase {
         XCTAssertEqual(governor.ceiling, 5)
     }
 
+    func testPaceFloorEngagesOnlyWhenFramesAreBottomedOut() throws {
+        var governor = ProcessingCeiling()
+        // Plenty of frame-count room: overruns shrink the count, never
+        // demand pacing.
+        governor.record(windowSeconds: 6.0, frames: 5, intervalSeconds: 3)
+        XCTAssertNil(governor.sustainableIntervalSeconds)
+        // Walk to the bottom.
+        governor.record(windowSeconds: 5.0, frames: 4, intervalSeconds: 3)
+        governor.record(windowSeconds: 4.5, frames: 3, intervalSeconds: 3)
+        governor.record(windowSeconds: 4.0, frames: 2, intervalSeconds: 3)
+        XCTAssertEqual(governor.ceiling, 1)
+        XCTAssertNil(governor.sustainableIntervalSeconds)
+        // A ONE-frame window still over the interval: pacing is the only
+        // remedy left — the floor is the measured cost plus margin.
+        governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 3)
+        XCTAssertEqual(try XCTUnwrap(governor.sustainableIntervalSeconds), 4.6, accuracy: 0.01)
+        // And it is capped at 4x the interval.
+        governor.record(windowSeconds: 60, frames: 1, intervalSeconds: 3)
+        XCTAssertEqual(try XCTUnwrap(governor.sustainableIntervalSeconds), 12, accuracy: 0.01)
+    }
+
+    func testPaceFloorClearsWhenWindowsFitComfortably() throws {
+        var governor = ProcessingCeiling()
+        governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 3)
+        XCTAssertNotNil(governor.sustainableIntervalSeconds)
+        // The repace stretched the interval; the same window now fits
+        // comfortably — the floor lets go so pacing can narrow back when
+        // the light (or the thermals) allow.
+        governor.record(windowSeconds: 4.0, frames: 1, intervalSeconds: 6)
+        XCTAssertNil(governor.sustainableIntervalSeconds)
+    }
+
     func testProcessingCeilingShrinksBelowCeilingWhenSmallWindowOverruns() {
         // A window that carried fewer frames than the ceiling and STILL
         // overran must pull the ceiling below that count, not just below

@@ -448,6 +448,16 @@ public struct ProcessingCeiling: Sendable {
 
     private(set) public var ceiling = ZoneBlendStrategy.bands[0].frames
     private var comfortableStreak = 0
+    /// When even a ONE-frame window costs more than the interval, frame
+    /// count has no more room to give — pacing must stretch. This is the
+    /// interval the pipeline demonstrably needs (measured cost plus
+    /// margin), for EVERY=Auto to repace against; nil while frame-count
+    /// reduction is still the remedy or once windows fit comfortably
+    /// again. Without it a slow device SURVIVES by churning empty starved
+    /// windows (the 12 Pro's resurrection ran 204 of them in 15 minutes);
+    /// with it, the same time becomes fewer, full windows at honest
+    /// spacing.
+    private(set) public var sustainableIntervalSeconds: Double?
 
     public init() {}
 
@@ -460,8 +470,17 @@ public struct ProcessingCeiling: Sendable {
             // the current ceiling matters when the window was already
             // smaller than the ceiling allowed).
             comfortableStreak = 0
+            if frames <= 1 {
+                // Bottomed out: ask pacing for the time instead. Capped at
+                // 4x so one pathological window can't demand a crawl.
+                let wanted = min(windowSeconds * 1.15, intervalSeconds * 4)
+                sustainableIntervalSeconds = max(sustainableIntervalSeconds ?? 0, wanted)
+            }
             ceiling = max(1, min(ceiling, frames) - 1)
         } else if windowSeconds < intervalSeconds * Self.comfortableFraction {
+            // Fitting comfortably again: pacing may narrow back; if the
+            // pressure returns, the floor re-engages from measurement.
+            sustainableIntervalSeconds = nil
             comfortableStreak += 1
             if comfortableStreak >= Self.growthStreak,
                ceiling < ZoneBlendStrategy.bands[0].frames {

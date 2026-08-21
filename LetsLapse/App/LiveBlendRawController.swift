@@ -210,6 +210,12 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// drowning; see `ProcessingCeiling` for why this is AIMD and not a
     /// per-frame model. workQueue.
     private var processingCeiling = ProcessingCeiling()
+    /// The governor's pacing floor, published for `CameraController`'s
+    /// EVERY=Auto repace (read on the session queue, hence the lock).
+    private let paceFloor = OSAllocatedUnfairLock<Double?>(initialState: nil)
+    /// Seconds the processing pipeline demonstrably needs per window; nil
+    /// while frame-count reduction still covers it.
+    var processingPaceFloorSeconds: Double? { paceFloor.withLock { $0 } }
     /// Why the run ended, for `capture_log.json` — "user" unless a guard
     /// says otherwise. The stop reason used to exist only in print-level
     /// logs, invisible on a field device. workQueue.
@@ -948,6 +954,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     \(configuration.intervalSeconds)s interval)
                     """)
             }
+            paceFloor.withLock { $0 = processingCeiling.sustainableIntervalSeconds }
         }
         log.outputs.append(entry)
         rewriteLog()
