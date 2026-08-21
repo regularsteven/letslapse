@@ -5097,6 +5097,9 @@ final class CameraController: NSObject, ObservableObject {
                 if let photoDimensions = self.selectedPhotoDimensions {
                     settings.maxPhotoDimensions = photoDimensions
                 }
+                #if os(iOS)
+                settings.suppressShutterSound(for: self.photoOutput)
+                #endif
                 self.photoOutput.capturePhoto(with: settings, delegate: self)
                 self.intervalFramesRequested += 1
                 // Burst complete: stop the repeating timer now. The session

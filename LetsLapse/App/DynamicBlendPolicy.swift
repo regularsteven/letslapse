@@ -147,6 +147,21 @@ final class CapabilityProfileHolder: @unchecked Sendable {
 
 #if os(iOS)
 
+extension AVCapturePhotoSettings {
+    /// Timelapse capture is silent by intent: a shoot is hundreds to
+    /// thousands of captures, and a shutter click per RAW frame (five per
+    /// window under a blend) is noise pollution, not feedback. Applied to
+    /// every timelapse-path capture — blend frames, brackets, the
+    /// capability probe, interval stills — and honored wherever the OS
+    /// allows (regions that mandate the sound report the API unsupported,
+    /// and the sound stays).
+    func suppressShutterSound(for output: AVCapturePhotoOutput) {
+        if #available(iOS 18.0, *), output.isShutterSoundSuppressionSupported {
+            isShutterSoundSuppressionEnabled = true
+        }
+    }
+}
+
 /// Measures what the device can really do before a shoot commits to a depth.
 ///
 /// The probe is a short burst of RAW captures with no pacing at all, timed from
@@ -317,6 +332,7 @@ final class DeviceCapabilityProfiler {
                 guard let self else { return }
                 let settings = AVCapturePhotoSettings(rawPixelFormatType: format)
                 settings.photoQualityPrioritization = .speed
+                settings.suppressShutterSound(for: photoOutput)
                 photoOutput.capturePhoto(with: settings, delegate: self)
             }
         }
