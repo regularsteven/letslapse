@@ -1,0 +1,44 @@
+{
+  "_comment": [
+    "The bench fleet. Aliases are what a human or a skill invocation says;",
+    "marketingName is what `devicectl list devices --json-output` reports and",
+    "the only safe key to match on — display names carry a U+2019 apostrophe",
+    "and a U+00A0 space, so they look ASCII and never compare equal, and they",
+    "are user-editable besides.",
+    "Identifiers are deliberately NOT stored here: they are resolved at run",
+    "time, so a re-paired or restored device does not silently point the fleet",
+    "at nothing."
+  ],
+  "site": {
+    "name": "Prague",
+    "latitude": 50.0755,
+    "longitude": 14.4378,
+    "_comment": "Used only to resolve sunset-relative start times (--at sunset-30m)."
+  },
+  "devices": [
+    {
+      "alias": "iphone-16",
+      "marketingName": "iPhone 16 Pro",
+      "aka": ["iphone 16 pro", "iphone 16", "16 pro", "16pro"],
+      "notes": "Primary dev device. Fastest arm; survives short intervals."
+    },
+    {
+      "alias": "iphone-12",
+      "marketingName": "iPhone 12 Pro",
+      "aka": ["iphone 12 pro", "iphone 12", "12 pro", "12pro"],
+      "notes": "Slowest arm. Blend+author median ran 3.35-9.05s, so it sets the fleet's interval floor."
+    },
+    {
+      "alias": "ipad-m1",
+      "marketingName": "iPad Air (5th generation)",
+      "aka": ["ipad air m1", "ipad m1", "ipad air 11", "ipad air (m1)"],
+      "notes": "Custom exposure durations below ~1/253s never latch on this panel - watch V3."
+    },
+    {
+      "alias": "ipad-m3",
+      "marketingName": "iPad Air 13-inch (M3)",
+      "aka": ["ipad air m3", "ipad m3", "ipad air 13", "ipad air (m3)"],
+      "notes": "Fourth arm. Usually the duplicate-strategy control."
+    }
+  ]
+}

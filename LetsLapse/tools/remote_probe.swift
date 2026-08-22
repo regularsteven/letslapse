@@ -4,7 +4,8 @@
 // Mac UI.
 //
 //   swiftc -O -o remote_probe remote_probe.swift \
-//     ../Shared/CaptureRemoteFrame.swift ../Shared/CaptureRemotePairing.swift
+//     ../Shared/CaptureRemoteFrame.swift ../Shared/CaptureRemotePairing.swift \
+//     ../Shared/WatchMessageKey.swift
 //   ./remote_probe                    # browse only, list cameras
 //   ./remote_probe <code>             # connect with a pairing code, poll state
 //   ./remote_probe <code> "<script>"  # run a sequence (see below)
@@ -15,6 +16,8 @@
 //   setIntervalMode:scanner     a command with its String extra (the key is
 //                               inferred from the command — see `extraKey`)
 //   setAutoInterval#1           a command with a numeric `value`
+//   scheduleStop:minutes#60     both at once — the device owns the deadline
+//                               and stops itself with no link held open
 //   wait@3                      sleep 3 seconds
 //   poll@2x8                    send `state` 8 times, 2 seconds apart
 //
@@ -246,12 +249,25 @@ final class Probe {
                 }
                 continue
             }
-            if let hash = step.firstIndex(of: "#") {
+            // The colon is tested FIRST so `cmd:extra#value` parses as one
+            // command carrying both. `scheduleStop` is the only command in
+            // the vocabulary that needs both (a unit token plus an amount),
+            // and testing `#` first swallowed the whole `cmd:extra` into the
+            // command name — which is why timed shoots used to be stopped
+            // from the Mac instead of by the device itself.
+            if let colon = step.firstIndex(of: ":") {
+                let command = String(step[step.startIndex..<colon])
+                let rest = step[step.index(after: colon)...]
+                if let hash = rest.firstIndex(of: "#") {
+                    send(command: command,
+                         extra: String(rest[rest.startIndex..<hash]),
+                         value: Double(rest[rest.index(after: hash)...]) ?? 0)
+                } else {
+                    send(command: command, extra: String(rest))
+                }
+            } else if let hash = step.firstIndex(of: "#") {
                 send(command: String(step[step.startIndex..<hash]),
                      value: Double(step[step.index(after: hash)...]) ?? 0)
-            } else if let colon = step.firstIndex(of: ":") {
-                send(command: String(step[step.startIndex..<colon]),
-                     extra: String(step[step.index(after: colon)...]))
             } else {
                 send(command: step)
             }

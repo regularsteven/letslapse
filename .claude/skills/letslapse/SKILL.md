@@ -1,6 +1,6 @@
 ---
 name: letslapse
-description: Run a real-camera capture test on an iPhone or iPad from this Mac, over the LetsLapse Camera remote. Use when asked to test capture, shoot a test, run a photo/interval/video test, try a Holy Grail or Scanner run, test bursts or a speed ramp, check blend depth or a blend strategy on a real device, or drive a paired camera from the Mac. Interactive — ask what to shoot and how, then run it and report.
+description: Run a real-camera capture test on one iPhone/iPad, or a synchronised shoot across several at once, from this Mac over the LetsLapse Camera remote. Use when asked to test capture, shoot a test, run a photo/interval/video test, try a Holy Grail or Scanner run, test bursts or a speed ramp, check blend depth or a blend strategy on a real device, compare Zone/Latitude/Lumen, run a fleet or multi-device shoot, schedule a shoot for a time or for sunset, or drive paired cameras from the Mac. Interactive — ask what to shoot and how, then run it and report.
 ---
 
 Drives a **real iPhone or iPad** — real lens, real light — from this Mac. The
@@ -96,6 +96,102 @@ python3 .claude/skills/letslapse/shoot.py logs --device <UDID>
 ```bash
 python3 .claude/skills/letslapse/shoot.py release
 ```
+
+---
+
+## Fleet shoots — several cameras, one sky
+
+`fleet` runs one scripted shoot across several devices at once, each on its
+own strategy. Use it whenever the question is *which strategy*, because a
+strategy comparison needs arms that ran the **same light at the same time**:
+both previous field tests were voided by device confounds, and every arm that
+died early took its evidence with it.
+
+```bash
+python3 .claude/skills/letslapse/shoot.py fleet \
+  --arm ipad-m1:lumen --arm iphone-16:latitude --arm iphone-12:zone \
+  --duration 60m --at sunset-30m --every 10
+```
+
+Devices are named by registry alias from `devices.json` — `iphone-16`,
+`iphone-12`, `ipad-m1`, `ipad-m3` — or by any `aka` in it. Identifiers are
+resolved at run time, never stored.
+
+### Turning a sentence into a command
+
+| The operator says | The command |
+|---|---|
+| "60 minute holy grail shoot with zone on the iPad M1 right now" | `fleet --arm ipad-m1:zone --duration 60m --at now` |
+| "…with zone, lumen and latitude on the iPad M1 (lumen), iPhone 16 (latitude) and iPhone 12 (zone) at 5pm today" | `fleet --arm ipad-m1:lumen --arm iphone-16:latitude --arm iphone-12:zone --duration 60m --at 17:00` |
+| "start half an hour before sunset and run till dark" | `fleet … --at sunset-30m --duration 90m` |
+| "all four on zone for an hour" | `fleet --arm ipad-m1:zone --arm ipad-m3:zone --arm iphone-16:zone --arm iphone-12:zone --duration 60m` |
+
+`--duration` takes `60m`, `4h`, `90s`, `1h30m`, or a bare number of minutes.
+`--at` takes `now`, `+10m`, `17:00`, `2026-08-22T17:00`, or `sunset±Nm`
+(computed for the site in `devices.json`). A bare clock time that has already
+passed today means tomorrow.
+
+**Auto is assumed for blend depth — that is the thing under test — and is
+always on.** Auto *interval* is not, and `--every auto` should be a deliberate
+choice: Zone smooths over **3 samples** and Latitude over a **20-second EMA**,
+so a repaced interval stretches one strategy's memory and not the other's,
+which makes the two non-comparable. Fixed spacing is the comparison preset;
+`--every auto` is for reliability runs.
+
+### How it runs, and why in that order
+
+1. **Launch** every device over USB and scrape its pairing code. Slowest step,
+   done first because it does not depend on the start time.
+2. **Arm** each device in turn — settings, verify, `scheduleStart#<epoch>`.
+   One at a time: the listener holds a single peer. The start epoch is pushed
+   out automatically if arming needs longer than the requested time allows.
+3. **Fire.** Every device starts on its own clock (~124 ms apart, measured).
+4. **Confirm and set the deadline** a minute in: `scheduleStop:minutes#N`.
+   Because `scheduleStop` is anchored to each device's own
+   `captureRunStartedAt`, sending it mid-run still stops that arm exactly N
+   minutes after *it* started — which is what makes a four-hour shoot
+   hands-free without holding four links open. It also **doubles as the start
+   check**: `scheduleStop` requires `isCapturing`, so an arm that never fired
+   refuses here, loudly, one minute in rather than at the end.
+5. **Collect** the experiment logs and this run's `capture_log.json` per
+   device — small files, no frames — then release the consoles.
+
+`--watch 300` polls every arm every five minutes so a long run can be reviewed
+live. `--dry-run` verifies every arm's settings and presses no shutter.
+`--release` just ends consoles a previous run left open.
+
+### Choosing the interval
+
+`--every` must be one of `0.5 1 2 3 5 10` or `auto` — the phone refuses
+anything else outright. **10 s is the default for a mixed fleet**, and the
+reason is gate criterion V2: the 12 Pro's blend+author median ran 3.35–9.05 s,
+and a window that overruns its interval makes the processing ceiling clamp the
+count. A clamped window is the *hardware* choosing the count, which voids the
+run as strategy evidence however good the frames look.
+
+### Reading the result
+
+```bash
+python3 LetsLapse/tools/fleet_report.py ~/Library/Developer/LetsLapseRun/shoots/fleet-<stamp> --label sunset-control
+```
+
+That prints the per-arm comparison, the validity gate's verdict per arm, and a
+regression diff against the newest earlier baseline for the same device and
+strategy — then writes this session into
+`LetsLapse/docs/fieldtests/baselines/`. Only arms that PASS the gate belong in
+a strategy comparison; the README there explains the six criteria.
+
+### Designing a session
+
+- **The first session of a programme should put every device on the SAME
+  strategy.** That measures device-to-device variance with strategy held
+  constant — the noise floor everything later is read against. Without it a
+  small strategy difference cannot be told from a sensor difference.
+- **Rotate strategies across sessions** so each device eventually runs each
+  one.
+- **Anchor the duration to sunset.** The strategies only differentiate across
+  a real light traverse; sunset−30 min to sunset+60 min is the standing
+  window.
 
 ---
 
@@ -233,6 +329,16 @@ logs before drawing a conclusion about delivered density.**
 - **`remote_probe` browses forever when nothing is advertising**, printing
   nothing, so a naive read loop hangs rather than timing out. `shoot.py` kills
   it with a watchdog thread and says the camera is not there.
+- **`devicectl copy from --destination` must be a FILE path** when the source
+  is a file. Handed a directory it reports "File received from Device" and
+  writes nothing — a silent no-op that looks like success.
+- **`--every` is a ladder, not a number.** `0.5 1 2 3 5 10` only; 8 is refused.
+  For a mixed fleet 10 s is the floor that keeps the processing ceiling from
+  clamping the blend count on the 12 Pro (which voids the run as strategy
+  evidence — gate V2).
+- **A fleet arm that will not start is caught at T+60 s, not at the end** —
+  `scheduleStop` requires `isCapturing`, so the stop pass is also the start
+  check. Trust that ✗ over anything the launch printed.
 - **Bench thermals are not field thermals.** Back-to-back runs push the device
   to `serious`; the log's `finalThermalState` is in every report. Let it cool
   before drawing conclusions about a real shoot.
@@ -251,11 +357,20 @@ logs before drawing a conclusion about delivered density.**
 
 ## Files
 
-- `shoot.py` — the driver. `cameras`, `prep`, `release`, `state`, `run`, `logs`.
+- `shoot.py` — the driver. `cameras`, `prep`, `release`, `state`, `run`,
+  `fleet`, `logs`.
+- `devices.json` — the fleet registry: alias → `marketingName`, plus the
+  site's lat/long for sunset-relative start times. Shared with the
+  `run-letslapse` skill.
 - Built on `../../tools/remote_probe` (gitignored; `shoot.py` builds it on demand
   from `remote_probe.swift` + `Shared/CaptureRemoteFrame.swift` +
   `CaptureRemotePairing.swift` + `WatchMessageKey.swift` — **three** Shared
   sources, not the two its own header comment lists).
 - Shoot logs and pulled device logs land in
-  `~/Library/Developer/LetsLapseRun/shoots/`.
+  `~/Library/Developer/LetsLapseRun/shoots/`; fleet runs get their own
+  `fleet-<stamp>/` there, and per-device consoles live under `fleet/<alias>/`.
+- Analysis: `LetsLapse/tools/blend_compare.py` (per-log decisions, metrics
+  and the validity gate), `tools/fleet_report.py` (session report, baseline,
+  regression diff), `tools/flicker_report.py` (measured flicker, needs an
+  exported clip).
 - To build and run the app itself, see the sibling skill `run-letslapse`.

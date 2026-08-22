@@ -1,6 +1,6 @@
 ---
 name: run-letslapse
-description: Build, launch, screenshot and drive the LetsLapse app — the iOS/iPadOS Simulator app, the macOS app, the `lapse` command line, and the LetsLapseKit tests. Use when asked to run or start LetsLapse, build it for the simulator or the Mac, take a screenshot of a screen, check a UI change in the real app, blend a clip from the shell, or drive the app without tapping it by hand.
+description: Launch, screenshot and drive the LetsLapse app on a chosen device — Steven's physical iPhones and iPads, the macOS app, the iOS/iPadOS Simulator, the `lapse` command line, and the LetsLapseKit tests. Use when asked to run or start LetsLapse, run it on a specific device, take a screenshot of a screen, check a UI change in the real app, blend a clip from the shell, or drive the app without tapping it by hand. Asks which device first; running never builds.
 ---
 
 ## Start here — ask which device
@@ -10,21 +10,44 @@ and do not start with the Simulator because it is convenient.
 
 Ask one question — *"Which device?"* — offering exactly these, plus **other**:
 
-| Answer | Target | UDID |
+| Answer | Target | `marketingName` to resolve |
 |---|---|---|
-| macOS | the Mac app | — |
-| iPhone 16 Pro | `Steven's iPhone` | `DD61F99C-309F-506E-9A40-16ED1712ECF8` |
-| iPhone 12 Pro | `iPhone 12 Pro` | `5E55775F-D1B8-5E23-8D7C-C9607E3D3948` |
-| iPad Air M1 11" | `Steven's iPad` (iPad Air 5th gen) | `D1F3DCA8-B70E-5BC8-B771-1169397B3E6E` |
-| iPad Air M3 13" | `iPad M3` (iPad Air 13-inch M3) | `2D8CD0F3-03E7-5377-94DE-CD7EBA2BA21A` |
+| macOS | the Mac app | — (`driver.py mac`) |
+| iPhone 16 Pro | Steven's iPhone | `iPhone 16 Pro` |
+| iPhone 12 Pro | — | `iPhone 12 Pro` |
+| iPad Air M1 11" | Steven's iPad | `iPad Air (5th generation)` |
+| iPad Air M3 13" | — | `iPad Air 13-inch (M3)` |
 
 **other** covers the Simulator, the `lapse` CLI and the Kit tests — the faces
-documented further down. Confirm the UDIDs are still current before using one;
-they are per device+host pairing:
+documented further down.
+
+`driver.py devices` prints the registry alongside what `devicectl` can see
+right now, and every device command takes the alias:
 
 ```bash
-xcrun devicectl list devices
+python3 .claude/skills/run-letslapse/driver.py devices
 ```
+
+The aliases live in `.claude/skills/letslapse/devices.json`, shared with the
+`letslapse` shoot skill. Under the hood it resolves the chosen device to the
+identifier `--device` wants, at run time:
+
+```bash
+xcrun devicectl list devices --json-output /tmp/ll-dev.json >/dev/null && python3 -c "import json,sys; d=json.load(open('/tmp/ll-dev.json')); m=[v for v in d['result']['devices'] if v['hardwareProperties']['marketingName']==sys.argv[1]]; print(m[0]['identifier'] if len(m)==1 else sys.exit('no unique match: %d'%len(m)))" 'iPhone 16 Pro'
+```
+
+Three traps here, all measured:
+
+- **Match on `marketingName`, never on `name`.** The display names carry a
+  U+2019 apostrophe and a U+00A0 non-breaking space (`'Steven’s Apple\xa0Watch'`),
+  so they look ASCII in a terminal and do not compare equal. They are also
+  user-editable.
+- **Use the top-level `identifier`, not `hardwareProperties.udid`.** They are
+  different values — the ECID-style `udid` is not what `--device` accepts.
+- **`available (paired)` does not mean unreachable.** Both iPads report
+  `tunnelState: disconnected` while sitting on the same Wi-Fi, and `devicectl`
+  still brings the tunnel up on demand (verified with `device info details`).
+  A genuinely unavailable device fails the command outright.
 
 ### Running never builds
 
@@ -44,8 +67,20 @@ No hook env vars. Any `LL_*` key suppresses the automatic camera-open, and then
 the remote listener never starts (see Gotchas):
 
 ```bash
-xcrun devicectl device process launch --device <udid> --console --terminate-existing com.regularsteven.letslapse
+xcrun devicectl device process launch --device <identifier> --console --terminate-existing com.regularsteven.letslapse
 ```
+
+To put the current source on a device — **only when asked**, see "Running
+never builds" above:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py build device --device iphone-16
+python3 .claude/skills/run-letslapse/driver.py deploy --device iphone-16
+```
+
+`build device` uses `-destination generic/platform=iOS -allowProvisioningUpdates`
+and signs properly (no `CODE_SIGNING_ALLOWED=NO`), so one build installs on the
+whole fleet. `deploy` installs only; pass `--build` to do both in one step.
 
 `--console` streams the app's own `🎥LL …` lines. Redirect it to a file and read
 from there — it does not exit on its own, so run it in the background and detach
@@ -85,7 +120,10 @@ unit itself and works from any cwd. The few raw `xcodebuild`/`swift` commands
 below still need their own `cd` in the *same* command (see Gotchas: the shell's
 cwd resets between calls).
 
-The app has four runnable faces and the driver covers each:
+Once the device question above is answered, the rest of this document is the
+reference for that target. A physical iPhone or iPad uses the `devicectl` recipe
+above; **macOS** uses `driver.py mac`; the Simulator, the CLI and the tests are
+what **other** means:
 
 | Face | Command | What it proves |
 |---|---|---|

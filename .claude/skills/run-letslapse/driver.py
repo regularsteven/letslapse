@@ -29,6 +29,7 @@ process with time.sleep. That single fact is what this file exists for.
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import plistlib
 import re
@@ -70,18 +71,25 @@ OUT_ROOT = DD_ROOT / "out"
 
 # --------------------------------------------------------------------------- util
 
-def run(cmd, check=True, capture=False, env=None, cwd=None, quiet=False):
+def run(cmd, check=True, capture=False, env=None, cwd=None, quiet=False,
+        timeout=None):
     if not quiet:
         print("$ " + " ".join(str(c) for c in cmd), file=sys.stderr)
-    proc = subprocess.run(
-        [str(c) for c in cmd],
-        check=False,
-        text=True,
-        env=env,
-        cwd=str(cwd) if cwd else None,
-        stdout=subprocess.PIPE if capture else None,
-        stderr=subprocess.STDOUT if capture else None,
-    )
+    try:
+        proc = subprocess.run(
+            [str(c) for c in cmd],
+            check=False,
+            text=True,
+            env=env,
+            cwd=str(cwd) if cwd else None,
+            stdout=subprocess.PIPE if capture else None,
+            stderr=subprocess.STDOUT if capture else None,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired:
+        # Without this every long call here could hang forever: xcodebuild
+        # waiting on a lock, devicectl waiting on a device that went away.
+        sys.exit(f"driver: `{cmd[0]}` timed out after {timeout}s")
     if check and proc.returncode != 0:
         if capture and proc.stdout:
             print(proc.stdout[-4000:], file=sys.stderr)
@@ -176,6 +184,15 @@ def cmd_build(args):
                 # Simulator builds never need a signature; skipping it keeps the
                 # build off the keychain entirely.
                 "CODE_SIGNING_ALLOWED=NO"]
+    elif args.platform == "device":
+        udid = resolve_device(args.device)
+        # A device build must actually sign — no CODE_SIGNING_ALLOWED=NO here.
+        # `generic/platform=iOS` builds for the family rather than for that one
+        # device, which is what makes one build installable on the whole fleet.
+        cmd += ["-destination", "generic/platform=iOS",
+                "-allowProvisioningUpdates"]
+        print(f"driver: device build (will install to {udid} on `deploy`)",
+              file=sys.stderr)
     elif args.platform == "mac":
         # Deliberately NOT ad-hoc (CODE_SIGN_IDENTITY=-): an ad-hoc copy records
         # an automatic camera DENY against the bundle id that then blocks the
@@ -192,9 +209,11 @@ def cmd_build(args):
     print(f"driver: built → {product_path(args.platform, args.configuration)}")
 
 
+PRODUCT_SUFFIX = {"sim": "-iphonesimulator", "device": "-iphoneos", "mac": ""}
+
+
 def product_path(platform, configuration="Debug"):
-    subdir = "Debug-iphonesimulator" if platform == "sim" else "Debug"
-    subdir = subdir.replace("Debug", configuration)
+    subdir = f"{configuration}{PRODUCT_SUFFIX[platform]}"
     return dd_path(platform) / "Build/Products" / subdir / "LetsLapse.app"
 
 
@@ -203,6 +222,98 @@ def require_product(platform, configuration="Debug"):
     if not app.exists():
         sys.exit(f"driver: {app} does not exist — run `driver.py build {platform}` first")
     return app
+
+
+# --------------------------------------------------------------------------- devices
+
+# The fleet registry is shared with the `letslapse` shoot skill: one list of
+# aliases, one place to fix when a device is replaced.
+REGISTRY = HERE.parent / "letslapse" / "devices.json"
+
+
+def load_registry():
+    if not REGISTRY.exists():
+        sys.exit(f"driver: no device registry at {REGISTRY}")
+    return json.loads(REGISTRY.read_text())
+
+
+def registry_entry(alias):
+    """Alias, aka, or marketingName → the registry row. Case-insensitive."""
+    wanted = (alias or "").strip().lower()
+    for row in load_registry()["devices"]:
+        names = [row["alias"], row["marketingName"], *row.get("aka", [])]
+        if wanted in (n.lower() for n in names):
+            return row
+    known = ", ".join(r["alias"] for r in load_registry()["devices"])
+    sys.exit(f"driver: unknown device {alias!r} — the registry knows: {known}")
+
+
+def devicectl_devices():
+    out = OUT_ROOT / "devicectl-devices.json"
+    run(["xcrun", "devicectl", "list", "devices", "--json-output", out],
+        capture=True, quiet=True, timeout=90)
+    return json.loads(out.read_text())["result"]["devices"]
+
+
+def resolve_device(alias):
+    """Registry alias → the identifier `devicectl --device` wants.
+
+    Matches on `marketingName`, never on `name`: display names carry a U+2019
+    apostrophe and a U+00A0 space, so they look ASCII in a terminal and never
+    compare equal, and the user can rename them. Returns the top-level
+    `identifier` — NOT `hardwareProperties.udid`, which is a different,
+    ECID-style value that `--device` does not accept.
+    """
+    if not alias:
+        sys.exit("driver: --device is required for a physical device "
+                 "(an alias from devices.json, e.g. iphone-16)")
+    # An identifier passed straight through stays usable.
+    if re.fullmatch(r"[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}",
+                    alias, re.I):
+        return alias
+    row = registry_entry(alias)
+    matches = [d for d in devicectl_devices()
+               if d.get("hardwareProperties", {}).get("marketingName")
+               == row["marketingName"]]
+    if len(matches) != 1:
+        sys.exit(f"driver: {row['marketingName']!r} matched {len(matches)} devices — "
+                 f"connect it over USB, or unlock and re-pair it")
+    identifier = matches[0]["identifier"]
+    print(f"driver: {row['alias']} → {row['marketingName']} ({identifier})",
+          file=sys.stderr)
+    return identifier
+
+
+def cmd_devices(args):
+    """What the registry knows, and which of those devicectl can see now."""
+    seen = {}
+    for d in devicectl_devices():
+        hp, cp = d.get("hardwareProperties", {}), d.get("connectionProperties", {})
+        seen[hp.get("marketingName")] = (d.get("identifier"),
+                                         cp.get("tunnelState", "?"))
+    for row in load_registry()["devices"]:
+        found = seen.get(row["marketingName"])
+        if found:
+            print(f"{row['alias']:<12} {row['marketingName']:<28} {found[0]}  {found[1]}")
+        else:
+            print(f"{row['alias']:<12} {row['marketingName']:<28} — not visible")
+
+
+def cmd_deploy(args):
+    """Install the current device build onto one device.
+
+    Kept separate from `build` on purpose: `/run-letslapse`'s rule is that
+    running never builds, and installing over the top can destroy a build that
+    was deliberately put there. `--build` is the explicit opt-in.
+    """
+    if args.build:
+        cmd_build(argparse.Namespace(platform="device", device=args.device,
+                                     configuration=args.configuration))
+    app = require_product("device", args.configuration)
+    udid = resolve_device(args.device)
+    run(["xcrun", "devicectl", "device", "install", "app",
+         "--device", udid, app], capture=True, timeout=600)
+    print(f"driver: installed {app.name} → {args.device}")
 
 
 # --------------------------------------------------------------------------- simulator
@@ -511,8 +622,19 @@ def main():
     p = sub.add_parser("test", help="swift test in Kit/")
     p.set_defaults(func=cmd_test)
 
+    p = sub.add_parser("devices", help="list the fleet registry and what is visible")
+    p.set_defaults(func=cmd_devices)
+
+    p = sub.add_parser("deploy", help="install the device build onto one device")
+    p.add_argument("--device", required=True,
+                   help="registry alias (iphone-16, ipad-m1, …) or an identifier")
+    p.add_argument("--configuration", default="Debug")
+    p.add_argument("--build", action="store_true",
+                   help="build first — off by default; running never builds")
+    p.set_defaults(func=cmd_deploy)
+
     p = sub.add_parser("build", help="xcodebuild into an isolated DerivedData")
-    p.add_argument("platform", choices=["sim", "mac"])
+    p.add_argument("platform", choices=["sim", "mac", "device"])
     p.add_argument("--device", help="simulator UDID (sim only)")
     p.add_argument("--configuration", default="Debug",
                    help="Debug keeps the #if DEBUG LL_* hooks; Release strips them")

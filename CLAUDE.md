@@ -66,8 +66,9 @@ Program" artifact. The loop:
    remote listener prints `code=NNNNNN` on the console. Do NOT pass
    `LL_TAB`/hook env vars: any hook key suppresses the automatic
    camera-open (screenshot mode) and the listener never starts.
-3. **Drive**: compile `LetsLapse/tools/remote_probe.swift` (with the four
-   Shared sources it lists) and script runs:
+3. **Drive**: compile `LetsLapse/tools/remote_probe.swift` (with the **three**
+   Shared sources it needs — `CaptureRemoteFrame`, `CaptureRemotePairing`,
+   `WatchMessageKey`; its own header comment used to list two) and script runs:
    `./remote_probe <code>
    "setIntervalMode:holyGrail,setAutoInterval#1,setFramesPerBlend:auto,
    setBlendStrategy:zone,startRecording,poll@30xN,stopRecording"`.
@@ -105,15 +106,27 @@ can script a brightness ramp, which would make the light curve itself
 repeatable. Design the observation plan before the run, not during.
 
 **Bench addenda (2026-08-22):**
-- Pairing codes ROTATE whenever a link dies mid-session (the listener
-  re-advertises with a fresh code). Harvest `code=` from the attached
-  console immediately before every connect; never reuse a code across a
-  killed session.
+- Pairing codes are minted in `CaptureRemoteListener.start()`, which is a
+  no-op while a listener exists — so a code rotates when the CAPTURE SCREEN
+  tears down and comes back, **not** when a link dies. `dropPeer` keeps the
+  listener and the code (verified 2026-08-22; the earlier note here had the
+  cause wrong). Practically: re-harvest `code=` after any relaunch or any
+  screen exit, but one code stays good for many connections across a single
+  shoot — which is what lets a fleet run re-visit each device mid-run.
 - `remote_probe` scripted mode exits after its script (fixed); interactive
   modes still hold the link. For simultaneous multi-camera starts use
   `scheduleStart#<epoch>` — each device fires its own shutter on its own
-  clock (measured 124 ms apart across two iPhones); stops are per-device
-  `stopRecording` scripts afterwards.
+  clock (measured 124 ms apart across two iPhones).
+- Stops are now device-owned: the probe's script grammar parses
+  `cmd:extra#value` (fixed 2026-08-22), so `scheduleStop:minutes#60` is
+  sendable. It is anchored to the device's own `captureRunStartedAt`, so
+  sending it mid-run still stops that arm exactly N minutes after IT started
+  — no link needs to stay open for a multi-hour shoot. It also requires
+  `isCapturing`, which makes the stop pass double as the start check.
+- Fleet shoots: `shoot.py fleet --arm <alias>:<strategy> … --duration 60m
+  --at sunset-30m` runs the whole choreography (launch, arm, fire, confirm,
+  collect) across several devices. Registry in
+  `.claude/skills/letslapse/devices.json`.
 - The listener stands down during project registration after a stop — an
   empty browse right after a run is saving, not a crash.
 - Flicker quality gate: export the project's blend clip at NO depth, pull

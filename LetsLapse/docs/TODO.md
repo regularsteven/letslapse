@@ -39,20 +39,73 @@ else. Point it at `FileManager.default.temporaryDirectory` (or a
 `URL.temporaryDirectory` subfolder created by the test). Until it is fixed,
 `.claude/skills/run-letslapse/SKILL.md` documents the failure as expected.
 
-### `remote_probe` script grammar can't express a scheduled stop
+### iPad ramp commands never reach the sensor
+
+**Raised:** 2026-08-22 · **Not started** · **high** — this silently ruins iPad
+holy-grail shoots
+
+Seen live on the M3 (project `6890F974`, "Stack 22. 8. at 17:16", Auto/Auto,
+Zone) and reproduced the same afternoon on the M1 in a fleet smoke. Frames
+look right at the start and blow out as the light rises.
+
+**The ramp engine is innocent.** Its own record (`frames.timestamps`) shows it
+tracking the sun correctly — `smoothedEV` 12.45 → 13.70 → 12.11, a 1.59-stop
+excursion — and commanding the shutter both ways, 1/221 → 1/524 → 1/174.
+
+**The sensor never moved.** Across all 184 frames the M3 delivered exactly
+**one** shutter value (1/222 s) and **one** ISO (16). Not a clamp and not the
+known ~1/253 s latch floor: at the tail the ramp asked for 1/174 s — *longer*
+than delivered, comfortably inside any envelope — and the delivered value
+still did not change. The very first commanded ISO (18) never landed either,
+so nothing was ever applied, not once.
+
+Fleet smoke, same build, same afternoon:
+
+| device | frames | distinct shutters | worst divergence |
+|---|---|---|---|
+| iPad Air M3 (iPad15,5) | 184 | **1** | 1.1 stops |
+| iPad Air M1 (iPad13,16) | 59 | **2** | 1.0 stops |
+| iPhone 16 Pro | 59 | 13 | 0.60 stops |
+| iPhone 12 Pro | 34 | 21 | none recorded |
+
+So it is **iPad-specific**; both iPhones actuate freely.
+
+Where to look: `setExposureModeCustom` on the bracketed-RAW path. The
+2026-08-20 fix made ramped brackets carry the device's live values via the
+range-proof `current` constants — which is faithful, and therefore invisible,
+if the custom write itself never takes: the bracket then reproduces a stale
+exposure forever. Config in the header of the failing run: `bracketedRAW:
+true`, `bracketMaxFrames: 8`, `responsiveCapture: false`, iPadOS 26.6.
+
+The divergence guard did its job — 102 of 135 windows over 0.5 stop — but
+nothing feeds it back, so the ramp walks into a wall for the whole shoot.
+Worth considering a run-time assertion: if N consecutive windows diverge by
+more than a stop, say so on the capture screen rather than only in the log.
+
+### A scheduled stop is logged as `endReason: user`
 
 **Raised:** 2026-08-22 · **Not started** · small
 
-A step is parsed as either `cmd:extra` **or** `cmd#value`, never both (`#` is
-tested first, `tools/remote_probe.swift` ~line 249). `scheduleStop` needs a
-`stopAtUnit` token *and* an amount, so it is the one command in the vocabulary
-the probe cannot send — `/letslapse` times its shoots from the Mac instead,
-which is less robust than a device-owned deadline over a flaky link. Allow
-`cmd:extra#value`. While in there: the file's header comment lists **two**
-`Shared/` sources and it needs **three** (`WatchMessageKey.swift` is missing),
-and `CLAUDE.md` says four. Also worth adding the video keys (`baseFPS`,
-`rampFPS`, `sequenceMode`, `segmentCount`, `markerCount`) to `digest()` — a
-video run's one-line digest currently shows almost nothing.
+The fleet smoke's three arms were stopped by `scheduleStop`, and all three
+logs record `endReason: user` (they ran 9.99, 9.99 and 10.18 minutes against a
+10-minute deadline, so the mechanism itself worked). `performScheduledStop()`
+passes `source: .scheduled`, so the mapping to the log's `endReason` is
+losing it. It matters because gate criterion V4 ("ran to plan") cannot
+distinguish a planned end from someone tapping stop.
+
+### `remote_probe` digest() shows almost nothing for a video run
+
+**Raised:** 2026-08-22 · **Not started** · small
+
+Add the video keys (`baseFPS`, `rampFPS`, `sequenceMode`, `segmentCount`,
+`markerCount`) to `digest()` in `tools/remote_probe.swift` — a video run's
+one-line digest currently shows almost nothing, because the digest was written
+around the interval keys.
+
+*(The other half of this entry is done: the script grammar now parses
+`cmd:extra#value`, so `scheduleStop:minutes#60` is sendable and a shoot can own
+its own deadline instead of being timed from the Mac. The header comment's
+Shared-source list was corrected to three at the same time.)*
 
 ---
 

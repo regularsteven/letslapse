@@ -34,6 +34,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 
+def default_label(path: Path) -> str:
+    """A label worth reading. Every project log is `<UUID>/source/capture_log.json`,
+    so the parent folder is the useless constant "source" — name the project."""
+    if path.parent.name == "source" and path.parent.parent.name:
+        return path.parent.parent.name.split("-")[0]
+    return path.parent.name or path.stem
+
+
 def parse_date(raw: str | None) -> datetime | None:
     if not raw:
         return None
@@ -207,6 +215,129 @@ def histogram(values: list[int]) -> str:
     return "  ".join(f"{k}f×{counts[k]}" for k in sorted(counts))
 
 
+# --- Metrics and the validity gate ---------------------------------------
+#
+# The gate exists because every field test so far compared strategies on
+# runs that could not have differentiated them: EV never traversed Zone's
+# bands, so all three emitted one constant count for the whole shoot. A run
+# that fails these criteria is not evidence about strategy quality,
+# whatever its frames look like.
+
+# A run must traverse enough light for Zone to cross its bands (13/10/7/4).
+MIN_EV_SPAN_STOPS = 5.0
+# Above this the sensor is not doing what the ramp asked; the guard that
+# writes exposureDivergenceStops uses the same threshold.
+MAX_DIVERGENCE_STOPS = 0.5
+MIN_HONEST_FRACTION = 0.99
+# Zone has five reachable counts; fewer than three distinct actuated values
+# means the strategy sat still and the run says nothing about its curve.
+MIN_DISTINCT_COUNTS = 3
+
+
+def integration_coverage(row: FrameRow, fallback_interval: float | None) -> float | None:
+    """Fraction of the interval this output frame actually integrated light.
+
+    ``blendCount x exposureDuration / intervalSeconds``. This is the
+    motion-blur axis, and it needs no pixels: blend frames are
+    sensor-consecutive, so the light they collect is the sum of their
+    exposures against the wall-clock window they represent. A ~50% film-look
+    target is the reference; measured holy-grail runs sit under 1%.
+    """
+    interval = row.win_interval or row.interval or fallback_interval
+    if not interval or interval <= 0:
+        return None
+    if row.blend_count is None or row.shutter is None:
+        return None
+    return row.blend_count * row.shutter / interval
+
+
+def count_change_stats(decided: list[FrameRow]) -> dict[str, int]:
+    """How the actuated count moved, split by step size.
+
+    BlendCountDamper holds a +-1 ask until it repeats but lets |delta| >= 2
+    through immediately, so a big step is both more visible in the output
+    and less filtered. Zone's table steps 3->5 and 5->8; Latitude only ever
+    moves +-1. The `jumps` count is therefore the damper-bypass count, and
+    the flicker-risk predictor to test measured flicker against.
+    """
+    steps: list[int] = []
+    for a, b in zip(decided, decided[1:]):
+        if a.actuated is None or b.actuated is None:
+            continue
+        if a.actuated != b.actuated:
+            steps.append(abs(b.actuated - a.actuated))
+    return {
+        "changes": len(steps),
+        "singles": sum(1 for s in steps if s == 1),
+        "jumps": sum(1 for s in steps if s >= 2),
+        "largest": max(steps) if steps else 0,
+    }
+
+
+def validity_gate(log: SessionLog, decided: list[FrameRow]) -> list[tuple[str, str, str]]:
+    """Six criteria, each (id, verdict, detail). Verdict is pass/fail/unknown.
+
+    `unknown` is not `pass`: logs written before the endReason/failedWindows
+    schema cannot certify V4, and saying so is the point of the guard.
+    """
+    checks: list[tuple[str, str, str]] = []
+
+    # V1 — the traverse actually happened. sceneEV is what the strategies
+    # read; fall back to frame EV on logs that carry no decisions.
+    scene = [f.scene_ev for f in decided if f.scene_ev is not None]
+    if not scene:
+        scene = [f.ev for f in log.frames if f.ev is not None]
+    if scene:
+        span = max(scene) - min(scene)
+        checks.append(("V1 EV traverse", "pass" if span >= MIN_EV_SPAN_STOPS else "fail",
+                       f"{span:.2f} stops (need >= {MIN_EV_SPAN_STOPS:g})"))
+    else:
+        checks.append(("V1 EV traverse", "unknown", "no EV recorded"))
+
+    # V2 — the strategy chose the count, not the hardware.
+    clamps = sum(1 for f in decided if f.clamped)
+    checks.append(("V2 no ceiling clamp", "pass" if clamps == 0 else "fail",
+                   f"{clamps} clamped windows"))
+
+    # V3 — commanded exposure was actually delivered.
+    measured = [f.divergence for f in log.frames if f.divergence is not None]
+    if measured:
+        honest = sum(1 for d in measured if d <= MAX_DIVERGENCE_STOPS)
+        fraction = honest / len(measured)
+        checks.append(("V3 actuation honest",
+                       "pass" if fraction >= MIN_HONEST_FRACTION else "fail",
+                       f"{fraction * 100:.1f}% of {len(measured)} windows within "
+                       f"{MAX_DIVERGENCE_STOPS:g} stop"))
+    else:
+        checks.append(("V3 actuation honest", "unknown",
+                       "no exposureDivergenceStops in this log"))
+
+    # V4 — the run did not die. Both fields postdate the field-test builds,
+    # and neither is derivable from the frames (a failed window writes no
+    # entry at all), so absence is unknown, never pass.
+    if log.end_reason is None and log.failed_windows is None:
+        checks.append(("V4 ran to plan", "unknown",
+                       "log predates endReason/failedWindows"))
+    else:
+        ok = (log.failed_windows or 0) == 0 and (
+            log.end_reason in (None, "user", "scheduled"))
+        detail = f"endReason {log.end_reason or '—'}, {log.failed_windows or 0} failed"
+        checks.append(("V4 ran to plan", "pass" if ok else "fail", detail))
+
+    # V5 — delivered what it asked for.
+    shortfalls = sum(1 for f in log.frames if f.shortfall)
+    checks.append(("V5 no shortfall", "pass" if shortfalls == 0 else "fail",
+                   f"{shortfalls} short windows"))
+
+    # V6 — the strategy actually moved.
+    counts = {f.actuated for f in decided if f.actuated is not None}
+    checks.append(("V6 strategy moved",
+                   "pass" if len(counts) >= MIN_DISTINCT_COUNTS else "fail",
+                   f"{len(counts)} distinct actuated counts "
+                   f"{sorted(counts) if counts else ''}".strip()))
+    return checks
+
+
 def summarize(log: SessionLog) -> None:
     print(f"\n=== {log.label}  ({log.path.name})")
     print(f"    device {log.device}   blend {log.blend_mode}"
@@ -307,32 +438,65 @@ def summarize(log: SessionLog) -> None:
             print(f"    processing per window: median "
                   f"{processing[len(processing) // 2]:.0f} ms, p95 {p95:.0f} ms")
 
+    # Integration coverage — the motion-blur axis. Printed for every run,
+    # fixed-depth included, because it is a property of the delivered frames
+    # rather than of the decision layer.
+    coverage = [c for c in (integration_coverage(f, log.interval)
+                            for f in log.frames) if c is not None]
+    if coverage:
+        coverage.sort()
+        median = coverage[len(coverage) // 2]
+        print(f"    integration coverage: median {median * 100:.2f}% of the "
+              f"interval, peak {max(coverage) * 100:.2f}% "
+              f"(~50% is the film-look reference)")
+
     decided = [f for f in log.frames if f.proposed]
-    if not decided:
+    if decided:
+        clamps = [f for f in decided if f.clamped]
+        if clamps:
+            print(f"    ceiling clamps: {len(clamps)} windows had the active "
+                  f"strategy asking above the device ceiling")
+        steps = count_change_stats(decided)
+        print(f"    asked-count changes: {steps['changes']} over "
+              f"{len(decided)} decided windows "
+              f"({steps['singles']} of ±1, {steps['jumps']} of ≥2"
+              f"{f', largest {steps["largest"]}' if steps['largest'] else ''})")
+        if steps["jumps"]:
+            print(f"    ⚠ {steps['jumps']} count changes bypassed the damper "
+                  f"(it passes |Δ|≥2 immediately) — the flicker-risk windows")
+        for pair in (("zone", "latitude"), ("zone", "lumen"), ("latitude", "lumen")):
+            diffs = [
+                f for f in decided
+                if f.proposed.get(pair[0]) is not None
+                and f.proposed.get(pair[1]) is not None
+                and f.proposed[pair[0]] != f.proposed[pair[1]]]
+            print(f"    {pair[0]} vs {pair[1]}: disagreed on "
+                  f"{len(diffs)}/{len(decided)} windows")
+        boosts = [f for f in decided if (f.lumen_boost or 0) > 0]
+        if boosts:
+            scores = [f.lumen_score for f in boosts if f.lumen_score is not None]
+            top = f", peak score {max(scores):.3f}" if scores else ""
+            print(f"    lumen boost active on {len(boosts)} windows{top}")
+    else:
         print("    (no strategy decisions in this log — a fixed-depth run, "
               "or a pre-field-test build)")
-        return
-    clamps = [f for f in decided if f.clamped]
-    if clamps:
-        print(f"    ceiling clamps: {len(clamps)} windows had the active "
-              f"strategy asking above the device ceiling")
-    changes = sum(
-        1 for a, b in zip(decided, decided[1:])
-        if a.actuated is not None and b.actuated is not None and a.actuated != b.actuated)
-    print(f"    asked-count changes: {changes} over {len(decided)} decided windows")
-    for pair in (("zone", "latitude"), ("zone", "lumen"), ("latitude", "lumen")):
-        diffs = [
-            f for f in decided
-            if f.proposed.get(pair[0]) is not None
-            and f.proposed.get(pair[1]) is not None
-            and f.proposed[pair[0]] != f.proposed[pair[1]]]
-        print(f"    {pair[0]} vs {pair[1]}: disagreed on "
-              f"{len(diffs)}/{len(decided)} windows")
-    boosts = [f for f in decided if (f.lumen_boost or 0) > 0]
-    if boosts:
-        scores = [f.lumen_score for f in boosts if f.lumen_score is not None]
-        top = f", peak score {max(scores):.3f}" if scores else ""
-        print(f"    lumen boost active on {len(boosts)} windows{top}")
+
+    # The gate. Printed last so the verdict is the final word on the run.
+    checks = validity_gate(log, decided)
+    print("    validity gate:")
+    marks = {"pass": "✓", "fail": "✗", "unknown": "?"}
+    for name, verdict, detail in checks:
+        print(f"      {marks[verdict]} {name:<22} {detail}")
+    verdicts = {v for _, v, _ in checks}
+    overall = ("FAIL" if "fail" in verdicts
+               else "INCOMPLETE" if "unknown" in verdicts else "PASS")
+    reason = ""
+    if overall != "PASS":
+        failed = [n for n, v, _ in checks if v == ("fail" if overall == "FAIL" else "unknown")]
+        reason = " — " + ", ".join(failed)
+    print(f"    VALIDITY {overall}: this run "
+          f"{'is' if overall == 'PASS' else 'is not'} usable as strategy "
+          f"evidence{reason}")
 
 
 def write_csv(logs: list[SessionLog], out: Path) -> None:
@@ -349,7 +513,7 @@ def write_csv(logs: list[SessionLog], out: Path) -> None:
         "memoryCapped", "fallbackSingleFrame", "thermalAtStart",
         "thermalAtClose", "frameSpacingMaxSeconds", "processingMillis",
         "actualIntervalSeconds", "windowIntervalSeconds", "fileBytes",
-        "exposureDivergenceStops",
+        "exposureDivergenceStops", "integrationCoverage",
     ]
     epoch = min(
         (log.started_at for log in logs if log.started_at),
@@ -378,6 +542,7 @@ def write_csv(logs: list[SessionLog], out: Path) -> None:
                     f.thermal_close, f.spacing_max, f.processing_ms,
                     f.actual_interval, f.win_interval, f.file_bytes,
                     f.divergence,
+                    integration_coverage(f, log.interval),
                 ])
     print(f"\nCSV written: {out}")
 
@@ -479,7 +644,7 @@ def main() -> int:
     for i, path in enumerate(args.logs):
         if not path.exists():
             parser.error(f"no such log: {path}")
-        label = labels[i] if labels else path.parent.name or path.stem
+        label = labels[i] if labels else default_label(path)
         sessions.append(load_session(path, label))
 
     for session in sessions:

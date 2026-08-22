@@ -741,6 +741,515 @@ def cmd_logs(args):
               f"format the\n      shoot is encode-bound, not capture-bound.")
 
 
+# ---------------------------------------------------------------- fleet
+
+# Several cameras, one sky, one command. The whole point is that a strategy
+# comparison needs arms that ran the SAME light at the SAME time: two field
+# tests were voided by device confounds, and every arm that died early took
+# its evidence with it.
+#
+# The choreography is built around two facts about the wire protocol:
+#
+#   - the listener holds ONE peer, so devices are visited strictly one at a
+#     time (a second connect to the same camera tears the first link down);
+#   - `scheduleStop` is anchored to the device's own `captureRunStartedAt`,
+#     so `scheduleStop:minutes#60` sent at ANY point during a run stops it
+#     exactly 60 minutes after that device started. That is what makes a
+#     multi-hour shoot hands-free without holding four links open.
+#
+# So: arm everyone with a shared `scheduleStart` epoch, let them fire on
+# their own clocks, then walk the fleet once more to hand each device its
+# own deadline. The stop pass doubles as the start check — `scheduleStop`
+# requires `isCapturing`, so a device that failed to fire refuses here,
+# loudly, one minute in rather than at the end.
+
+FLEET_DIR = STATE_DIR / "fleet"
+REGISTRY = HERE / "devices.json"
+
+# Budgeted per device for the arming pass: a launch that waits on the code,
+# then two short scripted connections. Measured runs sit well inside this;
+# the cost of being wrong is a rejected scheduleStart, not a bad shoot.
+ARM_BUDGET_SECONDS = 45.0
+# How long after the start epoch to walk the fleet arming stops. Long enough
+# that a device is unambiguously recording, short enough to catch a failure
+# while the shoot is still worth restarting.
+CONFIRM_DELAY_SECONDS = 60.0
+
+
+def load_registry():
+    if not REGISTRY.exists():
+        die(f"no device registry at {REGISTRY}")
+    return json.loads(REGISTRY.read_text())
+
+
+def registry_entry(alias):
+    wanted = (alias or "").strip().lower()
+    for row in load_registry()["devices"]:
+        if wanted in (n.lower() for n in
+                      [row["alias"], row["marketingName"], *row.get("aka", [])]):
+            return row
+    known = ", ".join(r["alias"] for r in load_registry()["devices"])
+    die(f"unknown device {alias!r}", f"the registry knows: {known}")
+
+
+def resolve_identifier(alias):
+    """Registry alias → the identifier `devicectl --device` wants.
+
+    Matches on `marketingName`: display names carry a U+2019 apostrophe and a
+    U+00A0 space, so they look ASCII and never compare equal, and the user can
+    rename them. Returns the top-level `identifier`, NOT
+    `hardwareProperties.udid` — a different, ECID-style value `--device` does
+    not accept.
+    """
+    row = registry_entry(alias)
+    out = FLEET_DIR / "devicectl-devices.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(["xcrun", "devicectl", "list", "devices",
+                    "--json-output", str(out)],
+                   capture_output=True, text=True, timeout=90)
+    devices = json.loads(out.read_text())["result"]["devices"]
+    matches = [d for d in devices
+               if d.get("hardwareProperties", {}).get("marketingName")
+               == row["marketingName"]]
+    if len(matches) != 1:
+        die(f"{row['marketingName']!r} matched {len(matches)} devices",
+            "connect it over USB and unlock it (Auto-Lock → Never for the session)")
+    return matches[0]["identifier"]
+
+
+# --- time ----------------------------------------------------------------
+
+def parse_duration(text):
+    """'60m' · '4h' · '90s' · '1h30m' · bare number = minutes."""
+    text = str(text).strip().lower()
+    if re.fullmatch(r"[\d.]+", text):
+        return float(text) * 60
+    total, found = 0.0, False
+    for value, unit in re.findall(r"([\d.]+)\s*([hms])", text):
+        total += float(value) * {"h": 3600, "m": 60, "s": 1}[unit]
+        found = True
+    if not found:
+        die(f"could not read a duration from {text!r}",
+            "use forms like 60m, 4h, 90s, 1h30m")
+    return total
+
+
+def sunset_epoch(latitude, longitude, when):
+    """NOAA sunset for a date, as epoch seconds. Pure arithmetic, no deps.
+
+    `longitude` is east-positive (as stored in the registry); the algorithm
+    wants west-positive, hence the negation.
+    """
+    import math
+    # `when` is a time.struct_time. Anchor on LOCAL noon of that date and let
+    # mktime resolve the offset (isdst=-1), so the result is right on both
+    # sides of a DST change without any timezone arithmetic here.
+    noon = time.mktime((when.tm_year, when.tm_mon, when.tm_mday,
+                        12, 0, 0, 0, 0, -1))
+    julian = noon / 86400.0 + 2440587.5
+    # n is a WHOLE day count since J2000, not a fractional Julian date —
+    # leaving the fraction in shifts sunset by the local UTC offset.
+    n = math.ceil(julian - 2451545.0 + 0.0008)
+    mean = n + (-longitude) / 360.0
+    anomaly = math.radians((357.5291 + 0.98560028 * mean) % 360)
+    center = (1.9148 * math.sin(anomaly) + 0.0200 * math.sin(2 * anomaly)
+              + 0.0003 * math.sin(3 * anomaly))
+    lam = math.radians((math.degrees(anomaly) + center + 180 + 102.9372) % 360)
+    transit = 2451545.0 + mean + 0.0053 * math.sin(anomaly) - 0.0069 * math.sin(2 * lam)
+    declination = math.asin(math.sin(lam) * math.sin(math.radians(23.44)))
+    phi = math.radians(latitude)
+    cos_hour = ((math.sin(math.radians(-0.833)) - math.sin(phi) * math.sin(declination))
+                / (math.cos(phi) * math.cos(declination)))
+    if not -1 <= cos_hour <= 1:
+        die("the sun does not set at this latitude on this date",
+            "give an absolute --at time instead")
+    hour_angle = math.degrees(math.acos(cos_hour))
+    return ((transit + hour_angle / 360.0) - 2440587.5) * 86400.0
+
+
+def parse_at(text, site):
+    """'now' · '+10m' · '17:00' · '2026-08-22T17:00' · 'sunset-30m'."""
+    text = (text or "now").strip().lower()
+    now = time.time()
+    if text == "now":
+        return now
+    if text.startswith("+"):
+        return now + parse_duration(text[1:])
+    if text.startswith("sunset"):
+        base = sunset_epoch(site["latitude"], site["longitude"],
+                            time.localtime(now))
+        offset = text[len("sunset"):].strip()
+        if offset:
+            sign = -1 if offset[0] == "-" else 1
+            base += sign * parse_duration(offset[1:])
+        return base
+    for fmt in ("%Y-%m-%dT%H:%M", "%Y-%m-%d %H:%M", "%H:%M"):
+        try:
+            parsed = time.strptime(text.upper(), fmt)
+        except ValueError:
+            continue
+        if fmt == "%H:%M":
+            today = time.localtime(now)
+            stamp = time.mktime((today.tm_year, today.tm_mon, today.tm_mday,
+                                 parsed.tm_hour, parsed.tm_min, 0, 0, 0, -1))
+            # A bare clock time that has already gone by today means tomorrow.
+            return stamp if stamp > now else stamp + 86400
+        return time.mktime(parsed)
+    die(f"could not read a start time from {text!r}",
+        "use now, +10m, 17:00, 2026-08-22T17:00, or sunset-30m")
+
+
+def clock(epoch):
+    return time.strftime("%H:%M:%S", time.localtime(epoch))
+
+
+def wait_until(epoch, why):
+    remaining = epoch - time.time()
+    if remaining <= 0:
+        return
+    print(f"… {why} — {remaining / 60:.1f} min (until {clock(epoch)})",
+          file=sys.stderr)
+    while True:
+        remaining = epoch - time.time()
+        if remaining <= 0:
+            return
+        time.sleep(min(remaining, 30.0))
+
+
+# --- arms ----------------------------------------------------------------
+
+def parse_arm(text):
+    """'ipad-m1:lumen' → (row, strategy)."""
+    alias, _, strategy = text.partition(":")
+    row = registry_entry(alias)
+    strategy = (strategy or "").strip().lower()
+    if strategy not in STRATEGIES:
+        die(f"arm {text!r} needs a strategy",
+            f"write <device>:<strategy>, one of {', '.join(STRATEGIES)}")
+    return row, strategy
+
+
+def fleet_launch(alias, identifier, wait):
+    """Launch over USB and scrape the pairing code, per device.
+
+    `devicectl … --console` OWNS the app's lifetime — detach and the app dies
+    on the device, taking the listener with it — so each arm keeps its own
+    console running for the whole shoot and `--release` ends them.
+    """
+    directory = FLEET_DIR / alias
+    directory.mkdir(parents=True, exist_ok=True)
+    log = directory / "console.log"
+    handle = open(log, "w")
+    process = subprocess.Popen(
+        ["xcrun", "devicectl", "device", "process", "launch", "--device",
+         identifier, "--console", "--terminate-existing", BUNDLE_ID],
+        stdout=handle, stderr=subprocess.STDOUT, text=True, start_new_session=True)
+    (directory / "console.pid").write_text(str(process.pid))
+    deadline = time.time() + wait
+    while time.time() < deadline:
+        time.sleep(1.0)
+        # Harvest the code from THIS launch every time. A code from an earlier
+        # session is stale: a new one is minted whenever the capture screen
+        # comes back, which is exactly what a relaunch does.
+        found = re.findall(r"remote-listener advertising on \d+ code=(\d{6})",
+                           log.read_text(errors="replace"))
+        if found:
+            (directory / "code").write_text(found[-1])
+            return found[-1]
+        if process.poll() is not None:
+            print(log.read_text(errors="replace")[-1200:], file=sys.stderr)
+            die(f"{alias}: the launch exited before the listener started",
+                "a locked device refuses devicectl launches — unlock it and set "
+                "Auto-Lock → Never for the session")
+    # Distinguish the three ways this fails. The camera starting but the
+    # listener never advertising is the opt-in toggle being off, and nothing
+    # about "no code appeared" points at that — it cost this rig one run.
+    transcript = log.read_text(errors="replace")
+    if "DidStartRunning" in transcript and "remote-listener" not in transcript:
+        die(f"{alias}: the camera opened but the remote listener never started",
+            "Allow remote access is OFF on this device. It is opt-in and off by "
+            "default (remote.allowRemoteAccess). On the device: LetsLapse ▸ "
+            "Settings ▸ Allow remote access. Then re-run.")
+    if "remote-listener" in transcript and "advertising" not in transcript:
+        die(f"{alias}: the listener started but never advertised",
+            "Local Network permission is denied for LetsLapse on this device — "
+            "Settings ▸ Privacy & Security ▸ Local Network ▸ LetsLapse")
+    die(f"{alias}: no pairing code appeared",
+        "the capture screen never opened. Is the device on this Wi-Fi and unlocked?")
+
+
+def fleet_release():
+    if not FLEET_DIR.exists():
+        return
+    for pidfile in sorted(FLEET_DIR.glob("*/console.pid")):
+        try:
+            os.kill(int(pidfile.read_text()), signal.SIGTERM)
+            print(f"  {pidfile.parent.name}: console detached")
+        except (ProcessLookupError, ValueError):
+            print(f"  {pidfile.parent.name}: console already gone")
+        pidfile.unlink()
+
+
+def send_script(alias, code, script, timeout=120, echo=False):
+    """One scripted connection. Returns (replies, latest state)."""
+    frames, _ = probe(code, script, echo=echo, timeout=timeout)
+    return replies(frames), latest_state(frames)
+
+
+def refusals(pairs):
+    return [(label, frame["body"].get("message", ""))
+            for label, frame in pairs
+            if frame["body"].get("status") not in ACCEPTED]
+
+
+def fleet_settings(strategy, every):
+    """Holy Grail, Auto blend depth, one strategy — the comparison preset.
+
+    Auto blend DEPTH is the thing under test and stays on. Auto INTERVAL is
+    off by default and is a flag, because it makes Zone and Latitude
+    non-comparable: Zone smooths over 3 SAMPLES and Latitude over a 20-SECOND
+    EMA, so a repaced interval stretches one strategy's memory and not the
+    other's.
+    """
+    steps = ["setIntervalMode:holyGrail"]
+    if str(every).lower() == "auto":
+        steps.append("setAutoInterval#1")
+    else:
+        steps.append("setAutoInterval#0")
+        steps.append(f"setIntervalSeconds#{float(every)}")
+    steps.append("setFramesPerBlend:auto")
+    steps.append(f"setBlendStrategy:{strategy}")
+    return steps
+
+
+def collect_arm(alias, identifier, outdir):
+    """Pull the small evidence: the experiment logs, and this run's capture log.
+
+    Deliberately NOT the frames. A 90-minute 8 s run is ~12 GB of DNGs per
+    arm; the decision record, the delivery record and the validity gate all
+    live in these two files. `--pull-frames` is the opt-in for the rest.
+    """
+    directory = outdir / alias
+    directory.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+         "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+         "--source", "Library/Application Support/LetsLapse/Logs",
+         "--destination", str(directory), "--user", "mobile"],
+        capture_output=True, text=True, timeout=600)
+
+    listing = directory / "projects.json"
+    result = subprocess.run(
+        ["xcrun", "devicectl", "device", "info", "files", "--device", identifier,
+         "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+         "--username", "mobile", "--subdirectory",
+         "Library/Application Support/LetsLapse/Projects",
+         "--filter", "name ENDSWITH 'capture_log.json'",
+         "--json-output", str(listing)],
+        capture_output=True, text=True, timeout=300)
+    if result.returncode != 0 or not listing.exists():
+        print(f"  {alias}: could not list projects — no capture log pulled")
+        return None
+    files = json.loads(listing.read_text())["result"]["files"]
+    if not files:
+        print(f"  {alias}: no capture_log.json on the device")
+        return None
+    newest = max(files, key=lambda f: f["metadata"]["lastModDate"])
+    # --destination must be a FILE path here. Handed a directory, devicectl
+    # reports success and writes nothing.
+    target = directory / "capture_log.json"
+    subprocess.run(
+        ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+         "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+         "--user", "mobile", "--source",
+         f"Library/Application Support/LetsLapse/Projects/{newest['relativePath']}",
+         "--destination", str(target)],
+        capture_output=True, text=True, timeout=300)
+    if target.exists():
+        print(f"  {alias}: capture log → {target} "
+              f"({target.stat().st_size / 1024:.0f} KB)")
+        return target
+    print(f"  {alias}: capture log did not land")
+    return None
+
+
+def cmd_fleet(args):
+    if args.release:
+        fleet_release()
+        return
+
+    registry = load_registry()
+    site = registry.get("site", {})
+    arms = [parse_arm(text) for text in args.arm]
+    seen = [row["alias"] for row, _ in arms]
+    if len(set(seen)) != len(seen):
+        die("the same device appears twice", "one strategy per device per session")
+    # The phone refuses anything outside this ladder outright, so catch it
+    # here rather than after four launches.
+    if str(args.every).lower() != "auto" and float(args.every) not in INTERVAL_EVERY:
+        die(f"--every must be auto or one of {INTERVAL_EVERY}",
+            "the phone refuses anything else outright. For a mixed fleet 10 s is "
+            "the safe floor — the 12 Pro's blend+author median ran 3.35-9.05 s, and "
+            "a window that overruns its interval makes the ceiling clamp the count, "
+            "which voids the run as strategy evidence (gate V2).")
+    duration = parse_duration(args.duration)
+    requested = parse_at(args.at, site)
+
+    print(f"fleet: {len(arms)} arm(s), {duration / 60:.0f} min each, "
+          f"every {args.every}s")
+    for row, strategy in arms:
+        print(f"  {row['alias']:<12} {row['marketingName']:<28} {strategy}")
+    strategies = {s for _, s in arms}
+    if len(strategies) == 1:
+        print(f"  → control session: all arms on {strategies.pop()}, which "
+              f"measures device-to-device variance with strategy held constant")
+
+    # Everything from here until the fleet is recording can abort — a locked
+    # device, a refused setting. Release whatever was already launched rather
+    # than leaving half the fleet with consoles attached and settings changed.
+    try:
+        # ---- resolve + launch. Done first because it is the slow part and does
+        # not depend on the start time; the epoch is fixed once we know the cost.
+        print("\n① launching")
+        ready = []
+        for row, strategy in arms:
+            identifier = resolve_identifier(row["alias"])
+            code = fleet_launch(row["alias"], identifier, args.wait)
+            print(f"  {row['alias']:<12} {identifier}  code {code}")
+            ready.append((row, strategy, identifier, code))
+
+        floor = time.time() + 20 + ARM_BUDGET_SECONDS * len(ready)
+        start = max(requested, floor)
+        if start > requested + 1:
+            print(f"\n  start moved to {clock(start)} — arming {len(ready)} devices "
+                  f"needs about {ARM_BUDGET_SECONDS * len(ready) / 60:.0f} min")
+
+        # ---- arm each device, one at a time: the listener holds one peer.
+        print(f"\n② arming for {clock(start)}")
+        armed = []
+        for row, strategy, identifier, code in ready:
+            alias = row["alias"]
+            pairs, body = send_script(alias, code, "state", timeout=60, echo=args.echo)
+            if not body:
+                die(f"{alias}: no state came back",
+                    "capture screen open? is the LetsLapse Mac app holding the link?")
+            preflight(body)
+            script = fleet_settings(strategy, args.every) + ["wait@2", "state"]
+            pairs, applied = send_script(alias, code, ",".join(script),
+                                         timeout=150, echo=args.echo)
+            refused = refusals(pairs)
+            if refused:
+                die(f"{alias} refused: " + ", ".join(f"{l} ({m})" for l, m in refused),
+                    "a value outside what the phone allows is rejected, not coerced. "
+                    "Nothing was started.")
+            if applied.get("blendStrategy") != strategy:
+                die(f"{alias}: strategy reads {applied.get('blendStrategy')!r}, "
+                    f"asked for {strategy!r}", "nothing was started")
+            check_format(applied, args)
+            if args.dry_run:
+                print(f"  {alias:<12} settings verified (--dry-run, no shutter)")
+                armed.append((row, strategy, identifier, code))
+                continue
+            pairs, _ = send_script(alias, code, f"scheduleStart#{start:.0f}",
+                                   timeout=60, echo=args.echo)
+            refused = refusals(pairs)
+            if refused:
+                die(f"{alias}: scheduleStart was refused ({refused[0][1]})",
+                    "the epoch has already passed — arming took longer than budgeted. "
+                    "Nothing is recording; re-run.")
+            print(f"  {alias:<12} armed for {clock(start)}  [{strategy}]")
+            armed.append((row, strategy, identifier, code))
+
+    except BaseException:
+        print("\n  aborting — releasing the consoles already opened so no "
+              "device is left half-armed", file=sys.stderr)
+        fleet_release()
+        raise
+
+    if args.dry_run:
+        print("\n--dry-run: every arm verified, no shutter pressed")
+        fleet_release()
+        return
+
+    # ---- confirm the start and hand each device its own deadline.
+    wait_until(start + CONFIRM_DELAY_SECONDS, "waiting for the fleet to fire")
+    print(f"\n③ confirming and arming stops (+{duration / 60:.0f} min per device)")
+    live, dead = [], []
+    for row, strategy, identifier, code in armed:
+        alias = row["alias"]
+        script = f"state,scheduleStop:minutes#{duration / 60:.4f}"
+        pairs, body = send_script(alias, code, script, timeout=90, echo=args.echo)
+        recording = body.get("recordingState") not in (None, "idle")
+        refused = refusals(pairs)
+        if recording and not refused:
+            print(f"  ✓ {alias:<12} recording, stops at "
+                  f"{clock(start + duration)}")
+            live.append((row, strategy, identifier, code))
+        else:
+            # scheduleStop requires isCapturing, so a refusal here IS the
+            # start check — this arm never fired.
+            print(f"  ✗ {alias:<12} not recording "
+                  f"({body.get('recordingState')}) — this arm did not start")
+            dead.append(alias)
+    if not live:
+        die("no arm is recording", "nothing to wait for — check the devices")
+    if dead:
+        print(f"\n  ⚠ {len(dead)} arm(s) down: {', '.join(dead)} — the session "
+              f"continues with {len(live)}")
+
+    # ---- watch, then collect.
+    finish = start + duration
+    if args.watch:
+        while time.time() < finish:
+            wait_until(min(finish, time.time() + args.watch), "next health check")
+            if time.time() >= finish:
+                break
+            print(f"\n  health at {clock(time.time())}")
+            for row, _, _, code in live:
+                _, body = send_script(row["alias"], code, "state", timeout=60)
+                print(f"    {row['alias']:<12} rec={body.get('recordingState')} "
+                      f"count={body.get('captureCount')} "
+                      f"every={body.get('intervalSeconds')} "
+                      f"blend={body.get('blendDepth')}")
+    else:
+        wait_until(finish, "shooting")
+
+    # Registration after a stop takes a moment, and the listener stands down
+    # while it happens — an empty browse here is saving, not a crash.
+    wait_until(time.time() + 90, "letting the devices register their projects")
+
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    outdir = Path(args.out) if args.out else STATE_DIR / f"fleet-{stamp}"
+    outdir.mkdir(parents=True, exist_ok=True)
+    print(f"\n④ collecting → {outdir}")
+    session = {
+        "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start)),
+        "durationMinutes": duration / 60,
+        "intervalSeconds": args.every,
+        "site": site.get("name"),
+        "arms": [],
+    }
+    for row, strategy, identifier, code in live:
+        log = collect_arm(row["alias"], identifier, outdir)
+        session["arms"].append({
+            "alias": row["alias"],
+            "marketingName": row["marketingName"],
+            "strategy": strategy,
+            "captureLog": str(log) if log else None,
+        })
+    (outdir / "session.json").write_text(json.dumps(session, indent=2))
+
+    print("\n⑤ releasing")
+    fleet_release()
+
+    logs = [a["captureLog"] for a in session["arms"] if a["captureLog"]]
+    print(f"\ndone — {len(logs)} capture log(s) collected")
+    if logs:
+        print("\nNext, for the verdict and the baseline:")
+        print(f"  python3 LetsLapse/tools/blend_compare.py report {' '.join(logs)}")
+        print(f"  python3 LetsLapse/tools/fleet_report.py {outdir}")
+
+
 # ---------------------------------------------------------------- args
 
 def burst_spec(text):
@@ -798,6 +1307,30 @@ def main():
     p.add_argument("--dry-run", action="store_true", help="verify settings, don't shoot")
     p.add_argument("--echo", action="store_true", help="stream the raw frames")
     p.set_defaults(func=cmd_run)
+
+    p = sub.add_parser("fleet", help="one scripted shoot across several devices")
+    p.add_argument("--arm", action="append", metavar="DEVICE:STRATEGY", default=[],
+                   help="repeatable, e.g. --arm ipad-m1:lumen --arm iphone-16:latitude")
+    p.add_argument("--duration", default="60m", help="60m · 4h · 90s · 1h30m")
+    p.add_argument("--at", default="now",
+                   help="now · +10m · 17:00 · 2026-08-22T17:00 · sunset-30m")
+    p.add_argument("--every", default="10",
+                   help=f"fixed spacing, one of {INTERVAL_EVERY}, or 'auto' "
+                        f"(see the caveat in SKILL.md). 10 s is the mixed-fleet "
+                        f"default: the 12 Pro's blend+author median ran 3.35-9.05 s.")
+    p.add_argument("--watch", type=float, metavar="SECONDS",
+                   help="poll every arm this often during the run")
+    p.add_argument("--expect-format", action="append", metavar="TOKEN",
+                   default=["DNG"],
+                   help="substring that must appear in formatLine (default DNG)")
+    p.add_argument("--out", help="collection directory (default: a stamped one)")
+    p.add_argument("--wait", type=float, default=60, help="seconds to wait for each code")
+    p.add_argument("--dry-run", action="store_true",
+                   help="verify every arm's settings, press no shutter")
+    p.add_argument("--release", action="store_true",
+                   help="just end any consoles a previous fleet run left open")
+    p.add_argument("--echo", action="store_true")
+    p.set_defaults(func=cmd_fleet)
 
     p = sub.add_parser("logs", help="pull experiment logs off a USB device")
     p.add_argument("--device")
