@@ -4,6 +4,7 @@
 
 - `main` branch: the original Raspberry Pi LetsLapse project (Python capture/blend scripts + web UI). **Untouchable** — never modify it from Swift-app work.
 - `ios-app` branch: the native Swift app in `LetsLapse/` (universal iOS/iPadOS/macOS target + watchOS companion + `LetsLapseKit` package). Architecture handover doc: `LetsLapse/docs/letslapse-app-overview.md`.
+- Open, scoped-but-unstarted work lives in `LetsLapse/docs/TODO.md` — one entry per job, long jobs in their own document alongside it. Add a job there rather than leaving it in a conversation.
 
 ## Design-sync requirement (ALL iOS / iPadOS / macOS / watchOS UI work)
 
@@ -102,3 +103,20 @@ consoles + monitors on the ramp/governor lines, periodic USB pulls mid-run.
 The monitor test card (above) is the candidate controlled light source: it
 can script a brightness ramp, which would make the light curve itself
 repeatable. Design the observation plan before the run, not during.
+
+**Bench addenda (2026-08-22):**
+- Pairing codes ROTATE whenever a link dies mid-session (the listener
+  re-advertises with a fresh code). Harvest `code=` from the attached
+  console immediately before every connect; never reuse a code across a
+  killed session.
+- `remote_probe` scripted mode exits after its script (fixed); interactive
+  modes still hold the link. For simultaneous multi-camera starts use
+  `scheduleStart#<epoch>` — each device fires its own shutter on its own
+  clock (measured 124 ms apart across two iPhones); stops are per-device
+  `stopRecording` scripts afterwards.
+- The listener stands down during project registration after a stop — an
+  empty browse right after a run is saving, not a crash.
+- Flicker quality gate: export the project's blend clip at NO depth, pull
+  its `capture_log.json`, run `tools/flicker_report.py <clip> <log>` —
+  attributes every visible luma step to what the engine changed at that
+  frame; greppable FLICKER PASS/FAIL verdict.
