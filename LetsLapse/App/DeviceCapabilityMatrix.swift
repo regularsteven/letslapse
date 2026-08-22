@@ -43,12 +43,17 @@ struct CaptureCapabilityKey: Hashable, Codable {
 
 /// The opt-in gate for per-segment burst resolution.
 ///
-/// Off by default, and deliberately: with it off the burst picker only ever
-/// offers formats at the base resolution, so no shoot can record two of them
-/// and every path downstream — the capture switch, the sidecar, the stitch, the
-/// reframe — behaves exactly as it did before the feature existed. That makes
-/// the setting a real kill switch for a day in the field rather than a
-/// cosmetic preference.
+/// Off by default, and deliberately: with it off the burst picker serves every
+/// rate at the base resolution, so a shoot records one resolution and every
+/// path downstream — the capture switch, the sidecar, the stitch, the reframe —
+/// behaves exactly as it did before the feature existed. That makes the setting
+/// a real kill switch for a day in the field rather than a cosmetic preference.
+///
+/// It gates the RESOLUTION, never the RATE (2026-08-22). Where a rate is
+/// reachable only at a larger resolution, the option survives the switch being
+/// off and that burst does change resolution: a frame-rate ceiling is not what
+/// this setting is for, and the composition is identical either way — which is
+/// exactly what the fingerprint below guarantees.
 ///
 /// It gates **capture only**. A recording that already holds two resolutions
 /// still renders through the per-segment path whatever this says, because that

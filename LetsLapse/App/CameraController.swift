@@ -2271,14 +2271,20 @@ final class CameraController: NSObject, ObservableObject {
         preferredFrameRate: Int? = nil
     ) {
         guard let device = videoDevice else { return }
-        // While a run is pinned to one physical lens the menus must still
-        // describe the optics device — reading the pinned constituent would
-        // narrow them to its own list mid-session.
-        #if os(iOS)
-        let listDevice = sequenceLensPin != nil ? (opticsDevice ?? device) : device
-        #else
-        let listDevice = device
-        #endif
+        // The resolution and base-rate menus describe the lens the run would
+        // actually pin to — `effectiveRecordingDevice`, the same answer the
+        // burst menu below is built from. Reading them off the optics device
+        // instead is what hid every rate above 60 fps from this app between
+        // 63c1c23 (2026-08-10) and 2026-08-22: AVFoundation publishes no
+        // format faster than 60 on `builtInTripleCamera` at all, so a phone
+        // whose wide shoots 1080p240 and 4K120 offered neither. Probed on
+        // iPhone17,1 / iOS 26.6, every physical lens reaches 1080p240 and only
+        // the wide reaches 4K above 60 — so the pinned lens is both the honest
+        // list and the full one, at every stop.
+        //
+        // A pinned run reads the pin's own lens (it IS the recording device),
+        // which widens the menus rather than narrowing them.
+        let listDevice = effectiveRecordingDevice(for: currentStop) ?? device
         let supportedRates = supportedFrameRatesByResolution(for: listDevice)
         guard !supportedRates.isEmpty else {
             DispatchQueue.main.async {
@@ -2308,12 +2314,11 @@ final class CameraController: NSObject, ObservableObject {
             : nearestFrameRate(to: desiredFrameRate, in: frameRates)
         // The burst menu is the matrix's answer, not "everything faster":
         // a faster format on a different optic (or codec) would reframe the
-        // clip at the segment boundary. Unlike the base-rate menu it is asked
-        // of the lens the run would pin to, not the optics device — see
-        // `effectiveRecordingDevice`.
-        let burstDevice = effectiveRecordingDevice(for: currentStop) ?? listDevice
+        // clip at the segment boundary. Asked of `listDevice` — the same lens
+        // the base menus above describe, so a run can never be offered a base
+        // pair and a burst pair that live on two different cameras.
         let burstOptions = self.burstOptions(
-            for: burstDevice,
+            for: listDevice,
             resolution: resolution,
             baseFrameRate: frameRate,
             allRates: rateSet)
@@ -2446,16 +2451,33 @@ final class CameraController: NSObject, ObservableObject {
                 stabilizationEnabled: videoStabilizationRequested,
                 appleLogEnabled: logRequested,
                 baseFPS: baseFrameRate) {
-            // The kill switch, applied at the single point that decides what a
-            // burst may become. With it off nothing else has to know: the
-            // picker lists plain rates, `selectedBurstResolution` re-pins to
-            // the base, `burstChangesResolution` is false, no segment ever
-            // carries a resolution, and every path downstream is the one that
-            // shipped before this feature.
+            // The setting decides RESOLUTION, never RATE. With it off a burst
+            // stays at the base resolution wherever that resolution can shoot
+            // the rate — the picker lists plain rates, `selectedBurstResolution`
+            // re-pins to the base, `burstChangesResolution` is false, and every
+            // path downstream is the one that shipped before the feature.
+            //
+            // What it must NOT do is shorten the rate ladder: a blanket filter
+            // on pixel dimensions dropped any rate the base resolution cannot
+            // reach (on iPhone17,1: 100/120/240 from a 960×540 base), which
+            // turned a resolution preference into a frame-rate ceiling. A rate
+            // reachable only at a larger resolution keeps its option, and the
+            // composition is identical either way — that is what the matrix's
+            // FOV-and-aspect fingerprint guarantees, and the reason the two
+            // choices are separable at all.
             guard BurstResolutionSetting.isEnabled else {
-                return options.filter {
-                    $0.pixelWidth == resolution.width && $0.pixelHeight == resolution.height
+                var byRate: [Int: BurstOption] = [:]
+                for option in options {
+                    let atBase = option.pixelWidth == resolution.width
+                        && option.pixelHeight == resolution.height
+                    // First option wins per rate unless a base-resolution one
+                    // turns up: `pickerOrder` sorts rate-then-pixels, so the
+                    // fallback is the smallest resolution that offers the rate.
+                    if byRate[option.fps] == nil || atBase {
+                        byRate[option.fps] = option
+                    }
                 }
+                return byRate.values.sorted(by: BurstOption.pickerOrder)
             }
             return options
         }
