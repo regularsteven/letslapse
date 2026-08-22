@@ -257,7 +257,17 @@ final class Probe {
             }
             Thread.sleep(forTimeInterval: 0.6)
         }
-        print("script complete — still listening; ^C to stop")
+        // Scripted mode is automation: exit when the script is done, after a
+        // short grace for the last replies to land. Staying connected here
+        // once blocked a two-camera choreography for 15 minutes — the open
+        // link streamed pushes forever and everything sequenced behind it
+        // never ran. (Browse-only and single-code interactive modes never
+        // reach this path and still listen until ^C.)
+        print("script complete — disconnecting")
+        Thread.sleep(forTimeInterval: 1.5)
+        connection?.cancel()
+        Thread.sleep(forTimeInterval: 0.3)
+        exit(0)
     }
 
     private func receive() {
