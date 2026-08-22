@@ -504,6 +504,43 @@ public struct ProcessingCeiling: Sendable {
     }
 }
 
+// MARK: - Count damper
+
+/// Damps the ACTUATED blend count: a ±1 change must be asked for on two
+/// consecutive windows before it lands; a jump of two or more (the light
+/// genuinely moved) lands immediately.
+///
+/// Exists because of the 2026-08-21 night shoot: ceilings and strategy
+/// wants near a boundary made the count alternate 1↔2 nearly every window,
+/// and every crossing is a texture (and, before uniform authoring, a
+/// luminance) step in the finished clip — 39 of 39 measured flicker events
+/// sat on count changes. One window of patience removes the alternation
+/// without dulling real transitions.
+public struct BlendCountDamper: Sendable {
+    private var current: Int?
+    private var pending: Int?
+
+    public init() {}
+
+    public mutating func damp(_ wanted: Int) -> Int {
+        guard let held = current else {
+            current = wanted
+            return wanted
+        }
+        if wanted == held {
+            pending = nil
+            return held
+        }
+        if abs(wanted - held) >= 2 || pending == wanted {
+            current = wanted
+            pending = nil
+            return wanted
+        }
+        pending = wanted
+        return held
+    }
+}
+
 // MARK: - Bank
 
 /// All three strategies resolved together each cycle, so every shoot logs

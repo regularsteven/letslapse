@@ -346,6 +346,32 @@ final class BlendStrategiesTests: XCTestCase {
         XCTAssertEqual(governor.ceiling, 2)
     }
 
+    // MARK: Count damper
+
+    func testDamperKillsBoundaryAlternation() {
+        // The 2026-08-21 flicker shape: the ask alternates 1,2,1,2,… every
+        // window. The damper must hold a single steady count.
+        var damper = BlendCountDamper()
+        var actuated: [Int] = []
+        for i in 0..<12 { actuated.append(damper.damp(i % 2 == 0 ? 1 : 2)) }
+        XCTAssertEqual(Set(actuated.dropFirst()).count, 1,
+                       "alternating asks must not alternate the actuated count: \(actuated)")
+    }
+
+    func testDamperPassesSustainedChangesWithOneWindowLag() {
+        var damper = BlendCountDamper()
+        XCTAssertEqual(damper.damp(5), 5)
+        XCTAssertEqual(damper.damp(4), 5, "first ask holds")
+        XCTAssertEqual(damper.damp(4), 4, "second consecutive ask lands")
+        XCTAssertEqual(damper.damp(4), 4)
+    }
+
+    func testDamperLetsRealJumpsThroughImmediately() {
+        var damper = BlendCountDamper()
+        XCTAssertEqual(damper.damp(2), 2)
+        XCTAssertEqual(damper.damp(5), 5, "a >=2 jump is the light moving, not a boundary")
+    }
+
     // MARK: Exposure divergence guard
 
     func testExposureDivergenceMath() {

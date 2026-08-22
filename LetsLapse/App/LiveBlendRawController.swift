@@ -156,6 +156,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// Auto's three field-test strategies, resolved together every window;
     /// `configuration.blendStrategy` names the one that actuates.
     private var strategyBank = BlendStrategyBank()
+    /// Damps the actuated count so boundary conditions can't alternate it
+    /// window to window — the 2026-08-21 flicker source. workQueue.
+    private var countDamper = BlendCountDamper()
     /// The newest committed luminance analysis — Lumen's input. At least
     /// one window old, often two: the count for window N+1 is resolved at
     /// N's close, before N's processing lands, so it sees N−1's stats. The
@@ -459,7 +462,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         case .latitude: wanted = proposals.latitude
         case .lumen: wanted = proposals.lumen
         }
-        let count = max(1, min(wanted, ceiling ?? wanted))
+        let count = countDamper.damp(max(1, min(wanted, ceiling ?? wanted)))
         windowDecision = BlendStrategyDecision(
             algorithm: configuration.blendStrategy.rawValue,
             sceneEV: ev,
@@ -1054,8 +1057,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // frame: one capture blended with nothing is the same picture, and
         // passing it through skips a decode/re-author round trip while keeping
         // Apple's own tags.
-        let singleCapture = configuration.blendDepth == .auto && frames.count == 1
-        if configuration.blendDepth == .fixed(1) || singleCapture, let referenceData {
+        // Auto used to pass single-frame windows through as Apple's own DNG
+        // (skipping a decode round-trip). The 2026-08-21 night shoot showed
+        // why that cannot stand: Apple's rendering and the authored linear
+        // blend differ by ~1/8 stop, and with the count oscillating 1<->2
+        // EVERY crossing was a visible luminance step — 39 of 39 flagged
+        // flicker events in the two clips sat exactly on that boundary. On
+        // Auto, a single frame now takes the same authored path as a blend
+        // of one, so a count change never switches rendering pipelines.
+        // fixed(1) keeps the pass-through: that run is uniform end to end.
+        if configuration.blendDepth == .fixed(1), let referenceData {
             let output = withExposure(geotagged(referenceData))
             let url = configuration.outputDirectory
                 .appendingPathComponent(String(format: "frame-%05d.dng", processingFileIndex))
@@ -1064,19 +1075,6 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 entry.outputFormat = "dng"
                 entry.fileBytes = output.count
                 processingFileIndex += 1
-                if singleCapture, wantsStats {
-                    // The pass-through skips the blend decode, but Auto's
-                    // strategies still need to know what this window's
-                    // pixels said — night, where single-capture windows
-                    // live, is exactly where Lumen's question is asked. A
-                    // quarter-scale decode keeps the cost and the transient
-                    // buffer a sixteenth of a full decode's; the resulting
-                    // stats carry `sourceScale` so analysis never mistakes
-                    // them for the blend path's full-resolution samples.
-                    // The decode's cost lands in the window's totalMillis —
-                    // blendMillis stays nil here because nothing blended.
-                    stats = luminanceStats(ofDNG: referenceData, exposure: exposure)
-                }
                 return url
             } catch {
                 LLog("liveblend-dng: untouched write failed: \(error)")
@@ -1367,46 +1365,6 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     }
 
     // MARK: Support
-
-    /// Luminance stats for a single pass-through DNG: decoded at quarter
-    /// scale through the same calibrated RAW path the blend uses, with no
-    /// headroom scale applied. The downscale is a demosaic-level average,
-    /// which the stats type's contract warns pulls shadow tails toward
-    /// their neighbours — accepted here because a full-scale decode of a
-    /// 48MP frame renders a ~97 MB bitmap to draw 8k samples; the stats are
-    /// stamped `sourceScale: 0.25` so no analysis mixes the populations
-    /// unknowingly. processingQueue.
-    private static let singleCaptureStatsScale = 0.25
-    private func luminanceStats(
-        ofDNG data: Data, exposure: DNGAuthor.DNGExposure
-    ) -> FrameLuminanceStats? {
-        autoreleasepool {
-            guard let filter = CIRAWFilter(imageData: data, identifierHint: nil) else { return nil }
-            filter.boostAmount = 0
-            filter.scaleFactor = Float(Self.singleCaptureStatsScale)
-            guard let image = filter.outputImage else { return nil }
-            let width = Int(image.extent.width)
-            let height = Int(image.extent.height)
-            guard width > 0, height > 0 else { return nil }
-            var rgba = [UInt16](repeating: 0, count: width * height * 4)
-            rgba.withUnsafeMutableBytes { buffer in
-                ciContext.render(
-                    image,
-                    toBitmap: buffer.baseAddress!,
-                    rowBytes: width * 8,
-                    bounds: image.extent,
-                    format: .RGBA16,
-                    colorSpace: LiveBlendRawController.linearColorSpace)
-            }
-            return FrameLuminanceStats.compute(
-                rgba16: rgba, width: width, height: height,
-                headroomStops: 0,
-                iso: exposure.iso,
-                exposureDuration: exposure.exposureDuration,
-                ev: exposure.exposureValue,
-                sourceScale: Self.singleCaptureStatsScale)
-        }
-    }
 
     private func rewriteLog() {
         let encoder = JSONEncoder()
