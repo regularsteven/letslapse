@@ -1,0 +1,395 @@
+---
+name: run-letslapse
+description: Build, launch, screenshot and drive the LetsLapse app — the iOS/iPadOS Simulator app, the macOS app, the `lapse` command line, and the LetsLapseKit tests. Use when asked to run or start LetsLapse, build it for the simulator or the Mac, take a screenshot of a screen, check a UI change in the real app, blend a clip from the shell, or drive the app without tapping it by hand.
+---
+
+## Start here — ask which device
+
+**`/run-letslapse` with no target means: ask, then run.** Do not guess a target,
+and do not start with the Simulator because it is convenient.
+
+Ask one question — *"Which device?"* — offering exactly these, plus **other**:
+
+| Answer | Target | UDID |
+|---|---|---|
+| macOS | the Mac app | — |
+| iPhone 16 Pro | `Steven's iPhone` | `DD61F99C-309F-506E-9A40-16ED1712ECF8` |
+| iPhone 12 Pro | `iPhone 12 Pro` | `5E55775F-D1B8-5E23-8D7C-C9607E3D3948` |
+| iPad Air M1 11" | `Steven's iPad` (iPad Air 5th gen) | `D1F3DCA8-B70E-5BC8-B771-1169397B3E6E` |
+| iPad Air M3 13" | `iPad M3` (iPad Air 13-inch M3) | `2D8CD0F3-03E7-5377-94DE-CD7EBA2BA21A` |
+
+**other** covers the Simulator, the `lapse` CLI and the Kit tests — the faces
+documented further down. Confirm the UDIDs are still current before using one;
+they are per device+host pairing:
+
+```bash
+xcrun devicectl list devices
+```
+
+### Running never builds
+
+There is no `/build-letslapse`. **`/run-letslapse` launches whatever build is
+already installed on the chosen target.** Do not run `xcodebuild` as a prelude
+to a run: a device build costs 3–4 minutes in front of what should be a quick
+look, and installing over the top can destroy a build that was deliberately put
+there. Build only when the human asks in so many words, using the **Build**
+section below.
+
+If the installed build turns out to be stale or missing, say so and ask — do not
+silently fix it by building.
+
+### Launching on a physical device
+
+No hook env vars. Any `LL_*` key suppresses the automatic camera-open, and then
+the remote listener never starts (see Gotchas):
+
+```bash
+xcrun devicectl device process launch --device <udid> --console --terminate-existing com.regularsteven.letslapse
+```
+
+`--console` streams the app's own `🎥LL …` lines. Redirect it to a file and read
+from there — it does not exit on its own, so run it in the background and detach
+when finished. A healthy capture-screen launch prints, within a few seconds:
+
+```
+🎥LL … remote-listener advertising on <port> code=<NNNNNN>
+🎥LL … ✅ DidStartRunning
+```
+
+That `code=` is the pairing code for `remote_probe`. **Harvest it immediately
+before every connect** — codes rotate whenever a link dies and the listener
+re-advertises. Confirm the device is reachable without spending the code by
+browsing only (this pairs nothing):
+
+```bash
+LetsLapse/tools/remote_probe
+```
+
+A `WCErrorDomain 7007` watch-link line at startup is benign — it only means the
+Apple Watch is not reachable.
+
+**Before holding any remote link, close the LetsLapse Mac app.** The listener
+keeps a single peer and "replaces existing peer" on every new connection, so a
+running Mac app with a stored pairing tears the link down. Ask before quitting
+it — it is Steven's own running app. The two iPads are usually `available
+(paired)` rather than `connected`; they launch over the network on the same
+Wi-Fi, but a locked device refuses `devicectl` launches entirely (Auto-Lock →
+Never for a bench session).
+
+Everything here is driven by one script:
+**`.claude/skills/run-letslapse/driver.py`** (python3, no dependencies).
+It builds, installs, launches with the app's `LL_*` debug hooks, screenshots,
+and clicks. Run the driver from the **repo root**
+(`/Users/stevenwright/Documents/dev/letslapse`) — it locates the `LetsLapse/`
+unit itself and works from any cwd. The few raw `xcodebuild`/`swift` commands
+below still need their own `cd` in the *same* command (see Gotchas: the shell's
+cwd resets between calls).
+
+The app has four runnable faces and the driver covers each:
+
+| Face | Command | What it proves |
+|---|---|---|
+| iOS / iPadOS app | `driver.py sim` | the product, on a booted simulator, driven into any screen by hook |
+| macOS app | `driver.py mac` | the same target built for the Mac, captured by window id |
+| `lapse` CLI | `driver.py cli` | the blend engine with no UI in the way |
+| LetsLapseKit | `driver.py test` | 243 unit + real-Metal GPU tests |
+
+## Prerequisites
+
+macOS with Xcode. Verified on Xcode 26.1.1 (build 17B100), macOS 15.6, M4 Max.
+
+```bash
+xcodebuild -version && xcode-select -p
+```
+
+`ffmpeg` is optional — only the CLI smoke's `stack`/`grade` steps use it (they
+need stills), and the driver skips them with a note when it is absent. It is
+already installed here via Homebrew:
+
+```bash
+which ffmpeg
+```
+
+No `pod install`/`npm install` step exists: every dependency is a Swift package
+resolved by Xcode (MLX, swift-transformers, swift-nio and friends), plus two
+local packages — `Kit/` and a vendored `mlx-swift-lm` under
+`tools/mlx-vlm-spike/vendor/`.
+
+## Build (only when asked — see "Running never builds" above)
+
+Isolated DerivedData under `~/Library/Developer/LetsLapseRun/` — deliberately
+*not* the shared one, which Xcode/MLX state has broken here before.
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py build sim
+```
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py build mac
+```
+
+Clean build ≈ 3–4 min each here; incremental ≈ 1 min. Both configurations
+default to **Debug on purpose**: the `LL_*` hooks below are inside `#if DEBUG`,
+and the scheme's command-line default is Release, which strips them.
+
+## Run (agent path) — iOS / iPadOS Simulator
+
+Pick up any booted simulator (iPhone first), install, launch with hooks, wait,
+screenshot:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py sim --hook LL_TAB=projects --wait 7
+```
+
+The screenshot lands in `~/Library/Developer/LetsLapseRun/out/sim.png` and the
+app's own console (`🎥LL …` lines) in `out/sim-launch.log`. `--shot`/`--log`
+override either; `--device <udid>` picks a specific simulator; `--fresh`
+uninstalls first for a clean container.
+
+**Hooks are how you reach a screen.** They are read in
+`App/LetsLapseApp.swift:444` (`applyUIPreviewHooks`) — read that function for
+the full set; these are the ones exercised here:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py sim --hook LL_TAB=settings --wait 7
+```
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py sim --hook LL_SCANS=seed --wait 7
+```
+
+`LL_TAB` takes `create|gallery|scans|projects|collections|settings`.
+`LL_SCANS=seed` fabricates three scan sessions — the Scans tab is otherwise
+unreachable off-device, because a simulator has no camera to difference frames
+from. Other hooks in the same function, unverified in this session but read
+from the source: `LL_OPEN=latest`, `LL_DETAIL=latest`, `LL_PUSH=<settings
+destination>`, `LL_ADJUST=demo`, `LL_REFRAME=latest`, `LL_COLLECTIONS`,
+`LL_PROJECT_SCANNER`, `LL_SCANS_DETAIL|_CORRECTED|_AUTOCORRECT|_DELETED|_DOCS`,
+`LL_GUIDED`, `LL_VIEWER`, `LL_KEYFRAMES`, `LL_CANVAS`, `LL_STRETCH`.
+
+### The whole product in one command
+
+`LL_SEED` + `LL_SPEED` + `LL_AUTO=process` imports a video, blends it on the
+GPU and lands on the result screen — capture → blend → saved clip, unattended:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py cli && python3 .claude/skills/run-letslapse/driver.py sim --hook LL_SEED=$HOME/Library/Developer/LetsLapseRun/out/cli/test.mov --hook LL_SPEED=20 --hook LL_AUTO=process --wait 12
+```
+
+That screenshots "Saved as **blended clip 1** in **test**", 20× · 0.2 s ·
+25 fps. `LL_SEED` takes a **host** path — a simulator process reads the Mac
+filesystem directly, so no copying into the container is needed.
+
+### Tapping the simulator
+
+Use the iOS-Simulator MCP (`mcp__Claude_Code_iOS_Simulator__control`), which
+takes **device points** and is exact. Convert a screenshot pixel to a device
+point with:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py devpoint 742 666
+```
+
+→ `scale 3× — screenshot px (742,666) = device point (247,222)`, which taps
+the LetsLapse home-screen icon on an iPhone 17 Pro. Crop a region out of a
+screenshot first when you need to measure precisely — reading coordinates off a
+scaled render is how you miss by a row:
+
+```bash
+cd ~/Library/Developer/LetsLapseRun/out && sips -c 700 1206 --cropOffset 300 0 sim-home.png --out sim-home-crop.png
+```
+
+Do **not** use `driver.py click` on a Simulator window — it refuses, and the
+refusal explains why (the device screen is inset in a bezel below the title
+bar, so window-frame arithmetic lands a row or two off; measured).
+
+A cold launch with no hooks opens the camera by itself and prompts for
+**camera, then location** — grant both once and later runs are clean.
+
+## Run (agent path) — macOS app
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py mac --hook LL_TAB=settings
+```
+
+Launches the built binary directly (env vars are the whole point — `open`
+cannot pass them, so `LL_*` never fires through `open`), waits for a window
+belonging to *that pid*, and captures it with `screencapture -l <windowID>`.
+That grabs the window's own buffer, so it works while the window is buried
+under Chrome, and while Steven's own copy of the app is running. The screenshot
+lands in `~/Library/Developer/LetsLapseRun/out/mac.png`, and the driver leaves
+the process running and prints its pid.
+
+Clicking works here and is exact — coordinates are pixels **in the captured
+image**, which the driver scales by the window frame:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py click 1212 1810 --pid <pid>
+```
+
+That is the Gallery tab in a 2800×1900 capture of a 1400×950 pt window. Before
+clicking, the driver checks that the target really is the topmost window at
+that screen point and refuses otherwise — necessary, not decorative, because a
+second instance opens at the *identical* frame as the first.
+
+Inspect and re-capture windows without launching anything:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py windows LetsLapse
+```
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py winshot --pid <pid> --out /tmp/shot.png
+```
+
+Clean up (the Mac app is left running deliberately, so you can keep poking it):
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py kill --pid <pid> --sim
+```
+
+## Run (agent path) — the `lapse` CLI
+
+The blend engine with no UI. Builds the executable and puts every subcommand
+through a real render — synth → info → blend (ramp) → blend (constant) →
+stack → grade:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py cli
+```
+
+Ends with a size table and `driver: CLI smoke OK`. Outputs in
+`~/Library/Developer/LetsLapseRun/out/cli/`. This is the fastest way to check a
+change in `Kit/Sources/LetsLapseKit/` — ~10 s incremental build, ~1 s to
+render. Hand-driving is the same binary — `--help` lists every flag
+(`blend`, `stack`, `synth`, `info`, `grade`):
+
+```bash
+LetsLapse/Kit/.build/release/lapse blend ~/Library/Developer/LetsLapseRun/out/cli/test.mov -o /tmp/hand.mp4 --ramp 1:40 --curve ease-in-out
+```
+
+## Test
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py test
+```
+
+**243 tests, 242 pass, 1 fails — and the failure is not yours.**
+`LinearDNGTests.testBlendsRealUntouchedSequence` writes its output to a
+hard-coded absolute scratchpad path from a long-dead session
+(`Kit/Tests/LetsLapseKitTests/LinearDNGTests.swift:156`) and dies with
+`writeFailed("The folder "untouched-blend-3.dng" doesn't exist.")`. It
+`XCTSkip`s on a machine with no untouched-DNG project in
+`~/Library/Application Support/LetsLapse/Projects`, so it only fails where
+there is real capture data — i.e. here. Confirm the failure is still only that
+one before blaming a change:
+
+```bash
+cd LetsLapse/Kit && swift test 2>&1 | grep -E "Test Case '.*' failed"
+```
+
+These tests really run Metal, so they need a GPU — they are not a headless-CI
+check.
+
+## Device bench (iPhone / iPad over the local network)
+
+Real capture behaviour — ramps, blend strategies, thermals — cannot be measured
+on a simulator (no camera: interval capture starts and every frame fails). The
+hands-free bench is documented in `../CLAUDE.md` under "Strategy field-testing
+& the remote bench"; that recipe was **not** re-run in this session, so treat
+its commands as the reference and this section as the two pieces that were
+checked.
+
+Connected devices:
+
+```bash
+xcrun devicectl list devices
+```
+
+The scripted control client compiles from the app's own `Shared/` wire sources
+— so a wire-format change that breaks the app breaks the probe too:
+
+```bash
+cd LetsLapse/tools && swiftc -O -o remote_probe remote_probe.swift ../Shared/CaptureRemoteFrame.swift ../Shared/CaptureRemotePairing.swift ../Shared/WatchMessageKey.swift
+```
+
+```bash
+LetsLapse/tools/remote_probe
+```
+
+With no arguments it browses for `_letslapse-remote._tcp` and lists cameras;
+with a pairing code (printed on the device console at launch) it drives a
+scripted run. **Note the source list**: the file's own header comment lists two
+sources and `CLAUDE.md` says four — three is what actually compiles.
+
+## Gotchas
+
+- **The shell's cwd resets to the repo root** between commands (and after any
+  command that `cd`s elsewhere). An un-`cd`'d `xcodebuild` fails with "does not
+  contain an Xcode project", and a stale `build/` tree at the repo root makes
+  that failure look like a success. Always `cd LetsLapse && …` in one command.
+- **`| tail` swallows build failures.** `xcodebuild … | tail -40` shows nothing
+  at all until the process exits, and the `error:` line is usually above the
+  tail window. The driver captures the whole log and prints the tail only on
+  failure — do the same by hand.
+- **Release strips the hooks.** The `LetsLapse` scheme's command-line default
+  configuration is Release, and every `LL_*` hook is inside `#if DEBUG`. A run
+  where "the hooks do nothing" is almost always a Release build.
+- **Any hook key suppresses the camera auto-open.** `openCameraOnLaunch()`
+  bails when *any* of ~24 hook keys is set. That is why the device bench
+  insists on passing no hook env vars: with one set, the capture screen never
+  opens and the remote listener never starts.
+- **`SIMCTL_CHILD_` must be in the shell environment**, not a launch argument.
+  As an argument it silently does nothing.
+- **Two same-named processes.** Steven's own Mac app is usually running, and a
+  second instance opens at the *same* window frame. AppleScript's
+  `first process whose unix id is <pid>` silently resolves to the **wrong**
+  one — it is not a usable handle. Enumerate with `winlist.swift`
+  (`CGWindowListCopyWindowInfo`, real pids and window ids) and capture with
+  `screencapture -l <windowID>`, which is immune to occlusion and to the other
+  instance. `driver.py click` additionally verifies z-order before clicking.
+- **A desktop-wide overlay can sit above everything.** The z-order check walks
+  `CGWindowListCopyWindowInfo` front-to-back; a window-manager overlay (Magnet
+  here) is genuinely at index 0. It did not intercept any click in this
+  session, but if `click` starts refusing with an unexpected owner, that is the
+  first thing to look at.
+- **`screencapture -o` matters.** Without it the drop shadow is included and
+  every coordinate you measure off the image is offset.
+- **A foreground `sleep` is blocked in this harness**, and a backgrounded shell
+  script full of them produces no output at all. That is why the driver is
+  python3 with `time.sleep` — do not "simplify" it into shell.
+- **Watch simulators need Simulator.app open first.** `simctl boot <watch-udid>`
+  with Simulator.app not running crash-loops the sim's system shell
+  (`com.apple.Carousel`), spamming the crash reporter. iOS sims boot headless
+  fine. The driver never boots anything on its own.
+- **Ad-hoc signing poisons the camera permission.** Do not build the Mac app
+  with `CODE_SIGN_IDENTITY=-`: it records an automatic camera DENY against
+  `com.regularsteven.letslapse` that then blocks the properly signed copy —
+  including Steven's real one. `driver.py build mac` uses normal automatic
+  signing for exactly this reason.
+- **The simulator has no camera.** Interval capture starts and every frame
+  fails ("Capture failed"). Useful for failure/recovery paths, useless for
+  capture timing — that is what the device bench is for.
+- **Vision / Core ML cannot run in the simulator** (`Failed to create espresso
+  context`). The simulator proves the wiring; classification has to be measured
+  off-sim.
+
+## Troubleshooting
+
+| Symptom | Cause and fix |
+|---|---|
+| `driver: no booted simulator` | Nothing is booted. `xcrun simctl boot <udid>`; `xcrun simctl list devices available` lists them. |
+| Screenshot shows the home screen, not the app | The driver terminates the `simctl launch --console-pty` child after capturing. Pass `--follow` to keep the app and its console alive. |
+| `driver: no window appeared for that pid` | The Mac app died before showing a window, or is still resolving its library. Raise `--wait`; a shell-launched Mac app prints nothing, so check `~/Library/Logs/DiagnosticReports/` for a crash instead of the console. |
+| `driver: refusing to click — the window on top … is <other>` | Working as intended: something else covers that point. Move or quit it, or re-run (the raise is best-effort). `--force` overrides, at the risk of clicking the wrong app. |
+| `driver: this is a Simulator window` | Use device points + the iOS-Simulator MCP, or reach the screen with an `LL_*` hook instead. |
+| `swift test` reports 1 failure | Expected — see **Test** above. Anything beyond `testBlendsRealUntouchedSequence` is real. |
+| `cannot find 'WatchMessageKey' in scope` building `remote_probe` | Its header comment is stale. Add `../Shared/WatchMessageKey.swift` to the `swiftc` line. |
+| iOS-Simulator MCP refuses ("requires an attended session") | Non-attended session. Fall back to `LL_*` hooks for navigation; there is no scripted tap path for the simulator. |
+| Hooks appear to do nothing | Release build (see Gotchas), or the value is misspelled — the driver refuses any key not starting with `LL_`, but not a bad *value*. |
+
+## Files
+
+- `driver.py` — everything above.
+- `winlist.swift` — window enumeration (`CGWindowID`, pid, frame). Run by
+  `driver.py`; also useful alone: `xcrun swift winlist.swift LetsLapse`.
