@@ -1324,6 +1324,11 @@ def pull_device_library(identifier, alias):
     directory = STATE_DIR / "import" / alias
     directory.mkdir(parents=True, exist_ok=True)
     target = directory / "library.json"
+    # Delete first. A failed copy leaves the PREVIOUS pull in place, and
+    # reading that silently answers a question about the device with
+    # yesterday's data — which is exactly how a disconnected phone looked
+    # like a phone with no new shoots on it.
+    target.unlink(missing_ok=True)
     result = subprocess.run(
         ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
          "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
@@ -1331,8 +1336,12 @@ def pull_device_library(identifier, alias):
          "--destination", str(target)],
         capture_output=True, text=True, timeout=300)
     if not target.exists():
-        die(f"{alias}: could not read the device's project library",
-            result.stderr.strip()[-300:] or "is LetsLapse installed and unlocked?")
+        detail = (result.stdout + result.stderr).strip()
+        hint = "is the device connected and unlocked?"
+        if "not found" in detail.lower():
+            hint = ("devicectl cannot see this device at all — plug it back in, "
+                    "unlock it, and check `driver.py devices`")
+        die(f"{alias}: could not read the device's project library", hint)
     return json.loads(target.read_text())
 
 
