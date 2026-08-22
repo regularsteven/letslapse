@@ -120,9 +120,68 @@ def measure(path: Path, strategy: str | None = None) -> dict:
         "endReason": log.end_reason,
         "worstDivergenceStops": round(max(divergences), 3) if divergences else None,
         "thermalAtClose": thermal,
+        "actuation": actuation(path),
         "gate": {name: verdict for name, verdict, _ in gate},
         "gateDetail": {name: detail for name, _, detail in gate},
         "validity": overall,
+    }
+
+
+def actuation(capture_path: Path) -> dict | None:
+    """Did the sensor do what the ramp asked?
+
+    Reads the ramp's own per-frame command record (`frames.timestamps`) beside
+    the capture log and compares it to what the frames actually reported. This
+    separates the two failures that look identical in a finished clip: the
+    engine choosing badly, and the engine choosing right while the capture
+    chain ignores it.
+
+    Found this way on 2026-08-22: two iPads commanded down to 1/387 and 1/524
+    and delivered one and two distinct shutter values respectively, while two
+    iPhones on the identical capture path reached 1/715 and 1/796.
+    """
+    sidecar = capture_path.parent / "frames.timestamps"
+    if not sidecar.exists():
+        return None
+    raw = sidecar.read_text().strip()
+    if not raw:
+        return None
+    try:
+        entries = (json.loads(raw) if raw.startswith("[")
+                   else [json.loads(line) for line in raw.splitlines() if line.strip()])
+    except ValueError:
+        return None
+    commanded = [e["shutter"] for e in entries
+                 if isinstance(e.get("shutter"), (int, float)) and e["shutter"] > 0]
+    if not commanded:
+        return None
+    log = json.loads(capture_path.read_text())
+    delivered = sorted({f["exposureDuration"] for f in log.get("frames", [])
+                        if f.get("exposureDuration")})
+    if not delivered:
+        return None
+    floor = min(delivered)
+    # Commands meaningfully shorter than anything ever delivered: the engine
+    # asked for less light and never got it.
+    ignored_short = sum(1 for c in commanded if c < floor * 0.98)
+    # And the reverse — asked for MORE light than the longest delivered. A
+    # device sitting at a hardware floor still lengthens happily, so this
+    # separates "floored" from "stuck".
+    ceiling = max(delivered)
+    ignored_long = sum(1 for c in commanded if c > ceiling * 1.02)
+    verdict = "actuating"
+    if len(delivered) <= 2 and (ignored_short or ignored_long):
+        verdict = "STUCK" if ignored_long else "FLOORED"
+    elif ignored_short > len(commanded) * 0.5:
+        verdict = "FLOORED"
+    return {
+        "commandedShortest": round(min(commanded), 6),
+        "commandedLongest": round(max(commanded), 6),
+        "deliveredDistinct": len(delivered),
+        "deliveredShortest": round(floor, 6),
+        "commandsIgnoredShort": ignored_short,
+        "commandsIgnoredLong": ignored_long,
+        "verdict": verdict,
     }
 
 
@@ -231,6 +290,19 @@ def main() -> int:
               f"{(arm['coverageMedianPercent'] or 0):>8.2f}"
               f"{arm['countChanges']:>5}{arm['damperBypassJumps']:>6}"
               f"{arm['clampedWindows']:>7}  {arm['validity']}")
+
+    measured = [a for a in arms if a.get("actuation")]
+    if measured:
+        print("\nActuation — did the sensor do what the ramp asked?")
+        for arm in measured:
+            act = arm["actuation"]
+            print(f"  {str(arm['device']):<13} commanded 1/{1/act['commandedShortest']:.0f}"
+                  f" … 1/{1/act['commandedLongest']:.0f}   delivered"
+                  f" {act['deliveredDistinct']:>3} value(s), shortest"
+                  f" 1/{1/act['deliveredShortest']:.0f}   {act['verdict']}")
+            if act["verdict"] != "actuating":
+                print(f"  {'':<13}   {act['commandsIgnoredShort']} shorter and "
+                      f"{act['commandsIgnoredLong']} longer commands never landed")
 
     usable = [a for a in arms if a["validity"] == "PASS"]
     print(f"\n{len(usable)}/{len(arms)} arm(s) are usable as strategy evidence")

@@ -1065,12 +1065,29 @@ def collect_arm(alias, identifier, outdir):
          f"Library/Application Support/LetsLapse/Projects/{newest['relativePath']}",
          "--destination", str(target)],
         capture_output=True, text=True, timeout=300)
-    if target.exists():
-        print(f"  {alias}: capture log → {target} "
-              f"({target.stat().st_size / 1024:.0f} KB)")
-        return target
-    print(f"  {alias}: capture log did not land")
-    return None
+    if not target.exists():
+        print(f"  {alias}: capture log did not land")
+        return None
+    print(f"  {alias}: capture log → {target} "
+          f"({target.stat().st_size / 1024:.0f} KB)")
+
+    # The ramp's OWN record of what it commanded, and the per-capture record of
+    # what was delivered. Both are tens of KB and both are needed to tell "the
+    # engine chose badly" from "the engine chose right and the sensor ignored
+    # it" — the distinction that decided the 2026-08-22 iPad actuation finding.
+    stem = newest["relativePath"].rsplit("/", 1)[0]
+    for sidecar in ("frames.timestamps", "frames.exposure"):
+        subprocess.run(
+            ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+             "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+             "--user", "mobile", "--source",
+             f"Library/Application Support/LetsLapse/Projects/{stem}/{sidecar}",
+             "--destination", str(directory / sidecar)],
+            capture_output=True, text=True, timeout=300)
+        if (directory / sidecar).exists():
+            print(f"  {alias}: {sidecar} → "
+                  f"{(directory / sidecar).stat().st_size / 1024:.0f} KB")
+    return target
 
 
 def cmd_fleet(args):

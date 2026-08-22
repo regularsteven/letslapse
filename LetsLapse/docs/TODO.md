@@ -39,48 +39,56 @@ else. Point it at `FileManager.default.temporaryDirectory` (or a
 `URL.temporaryDirectory` subfolder created by the test). Until it is fixed,
 `.claude/skills/run-letslapse/SKILL.md` documents the failure as expected.
 
-### iPad ramp commands never reach the sensor
+### iPad ramp commands are not actuated — shoots blow out as light rises
 
-**Raised:** 2026-08-22 · **Not started** · **high** — this silently ruins iPad
+**Raised:** 2026-08-22 · **Not started** · **high** — silently ruins iPad
 holy-grail shoots
 
 Seen live on the M3 (project `6890F974`, "Stack 22. 8. at 17:16", Auto/Auto,
-Zone) and reproduced the same afternoon on the M1 in a fleet smoke. Frames
-look right at the start and blow out as the light rises.
+Zone) and reproduced the same afternoon on the M1 in a fleet smoke. Frames look
+right at the start and blow out as the light rises.
 
 **The ramp engine is innocent.** Its own record (`frames.timestamps`) shows it
-tracking the sun correctly — `smoothedEV` 12.45 → 13.70 → 12.11, a 1.59-stop
-excursion — and commanding the shutter both ways, 1/221 → 1/524 → 1/174.
+tracking the sun correctly — M3 `smoothedEV` 12.45 → 13.70 → 12.11, a 1.59-stop
+excursion — and commanding the shutter in both directions.
 
-**The sensor never moved.** Across all 184 frames the M3 delivered exactly
-**one** shutter value (1/222 s) and **one** ISO (16). Not a clamp and not the
-known ~1/253 s latch floor: at the tail the ramp asked for 1/174 s — *longer*
-than delivered, comfortably inside any envelope — and the delivered value
-still did not change. The very first commanded ISO (18) never landed either,
-so nothing was ever applied, not once.
+**The sensor did not follow, and the two iPads fail differently:**
 
-Fleet smoke, same build, same afternoon:
-
-| device | frames | distinct shutters | worst divergence |
+| device | commanded | delivered | verdict |
 |---|---|---|---|
-| iPad Air M3 (iPad15,5) | 184 | **1** | 1.1 stops |
-| iPad Air M1 (iPad13,16) | 59 | **2** | 1.0 stops |
-| iPhone 16 Pro | 59 | 13 | 0.60 stops |
-| iPhone 12 Pro | 34 | 21 | none recorded |
+| iPad Air M3 (iPad15,5) | 1/524 … 1/174 | **1** value, 1/222 | **STUCK** — 139 shorter *and* 36 longer commands ignored |
+| iPad Air M1 (iPad13,16) | 1/387 … 1/170 | 2 values, ~1/171 | **FLOORED** — 51 shorter ignored, 0 longer |
+| iPhone 16 Pro | — | 13 values, to 1/715 | actuating |
+| iPhone 12 Pro | — | 21 values, to 1/796 | actuating |
 
-So it is **iPad-specific**; both iPhones actuate freely.
+The M1 looks like a minimum-exposure-duration limit around 1/171 s: it
+lengthens when asked and never shortens past that. The M3 is worse than a
+limit — it ignored 36 sustained *longer* commands (frames 138–185) as well, so
+its exposure is simply pinned. Both are far longer than
+`format.minExposureDuration`, which is what `holyGrailHardwareLimits`
+(`CameraController.swift:5221`) hands the ramp as `minShutter` — so the engine
+believes it has room it does not have and walks into a wall.
 
-Where to look: `setExposureModeCustom` on the bracketed-RAW path. The
-2026-08-20 fix made ramped brackets carry the device's live values via the
-range-proof `current` constants — which is faithful, and therefore invisible,
-if the custom write itself never takes: the bracket then reproduces a stale
-exposure forever. Config in the header of the failing run: `bracketedRAW:
-true`, `bracketMaxFrames: 8`, `responsiveCapture: false`, iPadOS 26.6.
+All four arms ran the identical capture path (`bracketedRAW: true`,
+`bracketMaxFrames: 8`, `responsiveCapture: false`, DNG, iOS/iPadOS 26.6), so
+this is not a configuration difference.
 
-The divergence guard did its job — 102 of 135 windows over 0.5 stop — but
-nothing feeds it back, so the ramp walks into a wall for the whole shoot.
-Worth considering a run-time assertion: if N consecutive windows diverge by
-more than a stop, say so on the capture screen rather than only in the log.
+**Caveat not yet closed:** the iPhones were pointed at a different, less bright
+scene, so it is proven they actuate two stops past where the iPads stop — not
+that they would comply at *their* own floor. A matched-framing four-device
+re-run settles it.
+
+Where to look: `setExposureModeCustom` on the bracketed-RAW path, and whether
+the true minimum latchable duration should be probed at session start (the
+capability profiler already does this kind of measurement) rather than trusting
+the format's claim. Consider surfacing sustained divergence on the capture
+screen — the guard measured 102 of 135 windows over 0.5 stop and nothing acted
+on it.
+
+Diagnosis is automated now: `tools/fleet_report.py` prints an **Actuation**
+section per arm (commanded range vs delivered distinct values) and classifies
+each as actuating / FLOORED / STUCK, and `shoot.py fleet` collects
+`frames.timestamps` so the evidence travels.
 
 ### A scheduled stop is logged as `endReason: user`
 
