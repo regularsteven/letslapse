@@ -248,6 +248,13 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// the preview stream carry no EXIF, so the device's own reading is
         /// what `capture_log.json` is written from.
         var sceneExposure: (() -> DNGAuthor.DNGExposure?)? = nil
+        /// Holy Grail only: the exposure the ramp last COMMANDED, for the
+        /// commanded-vs-delivered guard. The DNG path has had this since the
+        /// 2026-08-20 sunset; this path did not, which is how a 4.7-stop
+        /// divergence ran a whole shoot unremarked (2026-08-22: ramp asked
+        /// 1.0 s / ISO 97, sensor delivered 1/25 s / ISO 2534, because a
+        /// video frame cannot expose for longer than its frame duration).
+        var rampExposure: (() -> (duration: CMTime, iso: Float)?)? = nil
         /// Identity and vocabulary for `capture_log.json`.
         var sessionID: String = UUID().uuidString
         var deviceModel: String = ""
@@ -373,6 +380,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var failedOutputs = 0
     private var skippedWindows = 0
     private var accumulateFailuresThisWindow = 0
+    /// Rate-limits the divergence log to one line per half-stop of change.
+    private var lastDivergenceLogged: Double = 0
     private var consecutiveProcessingFailures = 0
     private var lastCompletionUptime: Double?
     private var peakProcessingSeconds = 0.0
@@ -731,6 +740,34 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             partial: record.partial)
         entry.thermalStateAtStart = record.thermalStateAtStart
         accumulateFailuresThisWindow = 0
+
+        // Commanded-vs-delivered honesty guard, matching the DNG path. This
+        // pipeline holds one exposure per window, so the comparison is per
+        // window rather than per frame — but the failure it catches is the
+        // same one, and on this path it is silent by construction: the AE
+        // makes up a clamped shutter with ISO, so the picture looks right
+        // while the ramp's model is stops away from the sensor.
+        if let target = configuration.rampExposure?(),
+           let delivered = record.exposure,
+           let deliveredISO = delivered.iso,
+           let deliveredDuration = delivered.exposureDuration,
+           let divergence = CaptureExposureLog.WindowPerformance.exposureDivergenceStops(
+               actualISO: deliveredISO, actualDuration: deliveredDuration,
+               targetISO: Double(target.iso), targetDuration: target.duration.seconds) {
+            // Under a quarter stop is ISO quantization, not a fault.
+            if divergence > 0.25 {
+                entry.exposureDivergenceStops = divergence
+            }
+            if divergence <= 0.5 { lastDivergenceLogged = 0 }
+            if divergence > 0.5, abs(divergence - lastDivergenceLogged) > 0.5 {
+                lastDivergenceLogged = divergence
+                LLog(String(format: """
+                    liveblend: EXPOSURE DIVERGENCE %.1f stops — ramp commanded \
+                    %.4fs ISO %.0f, sensor delivered %.4fs ISO %.0f
+                    """, divergence, target.duration.seconds, Double(target.iso),
+                    deliveredDuration, deliveredISO))
+            }
+        }
 
         if entry.capturedFrames == 0 {
             // Nothing usable arrived; keep the session going. Not counted as
