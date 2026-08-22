@@ -5346,6 +5346,30 @@ final class CameraController: NSObject, ObservableObject {
     /// latch before it fires a shutter — see
     /// `applyHolyGrailExposureThenCapture` — but a blend window has no
     /// shutter to time, only frames arriving continuously.
+    /// The ramp's last applied exposure, re-clamped to the format that is
+    /// mounted *now*.
+    ///
+    /// Brackets build manual per-shot settings from this, and an out-of-range
+    /// manual bracket raises an uncatchable NSException — so the clamp cannot
+    /// be skipped. `applyHolyGrailExposure` already clamped before writing,
+    /// but the format can change under a running value during teardown or a
+    /// camera switch, which is exactly the staleness the `current` sentinels
+    /// were meant to avoid. Clamping here keeps that protection while still
+    /// carrying the ramp's real numbers, which the sentinels do not on iPad.
+    private func rampExposureForBracket() -> (duration: CMTime, iso: Float)? {
+        guard let target = holyGrailAppliedExposure.target else { return nil }
+        guard let format = videoDevice?.activeFormat else { return target }
+        var duration = target.duration
+        if CMTimeCompare(duration, format.minExposureDuration) < 0 {
+            duration = format.minExposureDuration
+        }
+        if CMTimeCompare(duration, format.maxExposureDuration) > 0 {
+            duration = format.maxExposureDuration
+        }
+        let iso = min(max(target.iso, format.minISO), format.maxISO)
+        return (duration: duration, iso: iso)
+    }
+
     private func applyHolyGrailExposure() {
         guard let device = videoDevice, let target = holyGrailEngine?.currentTarget,
               device.isExposureModeSupported(.custom)
@@ -6976,7 +7000,7 @@ final class CameraController: NSObject, ObservableObject {
             // Only a ramped run supplies a target: plain runs keep AE-driven
             // brackets, and the guard/manual-bracket machinery stays inert.
             rampExposure: holyGrailRequestedForRun
-                ? { [weak self] in self?.holyGrailAppliedExposure.target ?? nil }
+                ? { [weak self] in self?.rampExposureForBracket() }
                 : nil,
             sessionID: UUID().uuidString,
             deviceModel: LiveBlendController.deviceModelIdentifier(),

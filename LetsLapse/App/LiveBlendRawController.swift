@@ -640,18 +640,30 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         captureExecutor { [weak self] in
             guard let self else { return }
             let perFrame: [AVCaptureBracketedStillImageSettings]
-            if rampExposure?() != nil {
-                // Ramped run: the bracket CARRIES the device's custom
-                // exposure — the ramp's, since `applyHolyGrailExposure` set
-                // it. The `current` constants resolve on the device at
-                // capture time, so they are range-proof by construction:
-                // no clamped snapshot can go stale against a format switch
-                // during teardown (explicit values could, and out-of-range
-                // manual brackets raise an uncatchable NSException).
+            if let target = rampExposure?() {
+                // Ramped run: the bracket carries the ramp's OWN values.
+                //
+                // It used to pass `AVCaptureDevice.currentExposureDuration` /
+                // `currentISO`, on the reasoning that the sentinels resolve on
+                // the device at capture time and so cannot go stale. On iPad
+                // they do not resolve to the device's custom exposure at all.
+                // Measured 2026-08-22 on an iPad Air M3 and M1: every
+                // bracketed frame came back at the run's SEED exposure for a
+                // whole 15-minute shoot while the ramp commanded a 1.6-stop
+                // walk, and the same device on the singles path (blend 1,
+                // `fireCapture`, no bracket settings) tracked the ramp across
+                // 13 delivered values. Both iPhones happened to mask it.
+                //
+                // Staleness — the reason the sentinels were chosen — is
+                // handled at the source instead: `rampExposure` re-clamps to
+                // the device's live `activeFormat` on every call, so what
+                // arrives here is in range for the format that is actually
+                // mounted. That matters because an out-of-range manual
+                // bracket raises an uncatchable NSException.
                 perFrame = (0..<count).map { _ in
                     AVCaptureManualExposureBracketedStillImageSettings.manualExposureSettings(
-                        exposureDuration: AVCaptureDevice.currentExposureDuration,
-                        iso: AVCaptureDevice.currentISO)
+                        exposureDuration: target.duration,
+                        iso: target.iso)
                 }
             } else {
                 // Plain run: AE is live and the brackets should follow it.
