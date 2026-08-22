@@ -4065,9 +4065,15 @@ struct CaptureView: View {
             guard !isCapturing else { return false }
             // Token form first (the Mac remote's scripted tests use it, and
             // it is how Auto is reached at a distance): a `blendDepth` token
-            // accepts auto or a fixed count. Psycho/Safe stay phone-only —
-            // Safe's gating lives here and Psycho is a deliberate hands-on
-            // choice.
+            // accepts auto, a fixed count, or Safe/Psycho.
+            //
+            // Psycho and Safe used to be refused here as "a deliberate
+            // hands-on choice". That stopped being true the moment Psycho
+            // turned out to be the mode that actually delivers motion blur
+            // (2026-08-22 field testing: 25 fps of frames spanning 99% of the
+            // interval, against ~4% on the fixed-depth DNG path). A mode that
+            // has to be reached by hand cannot be in a scripted comparison or
+            // a fleet shoot, which is precisely where it now needs to be.
             if let token = payload[WatchMessageKey.blendDepth] as? String {
                 guard let depth = BlendDepth(token: token) else { return false }
                 switch depth {
@@ -4080,7 +4086,8 @@ struct CaptureView: View {
                     lastFixedBlendFrames = frames
                     return true
                 case .throttled, .unthrottled:
-                    return false
+                    blendDepth = depth
+                    return true
                 }
             }
             // Numeric form: the Watch picker's fixed counts.

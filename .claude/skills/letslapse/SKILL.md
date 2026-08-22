@@ -23,6 +23,19 @@ so it does not care what the cwd is.
 
 ## How to run this skill
 
+**Invoked bare — `/letslapse` with no detail — ask what they want to do first**,
+with `AskUserQuestion`, offering exactly these:
+
+| answer | goes to |
+|---|---|
+| **Shoot on one camera** | *What to shoot* below — mode, settings, duration |
+| **Shoot across several cameras** | **Fleet shoots**: one sky, one strategy each, synchronised start |
+| **Import shoots from a device** | **Import shoots off a device**: pull projects into this Mac's library |
+| **Look at a camera** | `shoot.py state` — what it is set to right now |
+
+Then ask only what that path actually needs, and translate their words into
+flags rather than making them learn the flags.
+
 **Ask, then shoot.** Do not guess a test the operator did not ask for — a shoot
 costs real time on a real device, and the parameters below change what is being
 measured. Ask with `AskUserQuestion`, one round, and only about things that are
@@ -96,6 +109,64 @@ python3 .claude/skills/letslapse/shoot.py logs --device <UDID>
 ```bash
 python3 .claude/skills/letslapse/shoot.py release
 ```
+
+---
+
+## Import shoots off a device
+
+Pulls whole projects from a phone or iPad straight into this Mac's LetsLapse
+library — no share sheet, no opening `.lapse` files one at a time.
+
+```bash
+python3 .claude/skills/letslapse/shoot.py import --device iphone-16 --since tonight --list
+python3 .claude/skills/letslapse/shoot.py import --device iphone-16 --since tonight
+```
+
+**Always `--list` first.** A long DNG shoot is ~17 MB per frame, so a
+55-minute run at 3 s is over 10 GB, and the listing is the only warning you
+get before a very slow USB pull.
+
+| you want | flag |
+|---|---|
+| tonight's shoots | `--since tonight` (from 17:00 local) |
+| everything today | `--since today` |
+| after a time | `--since 20:00` |
+| the last few hours | `--since 3h` |
+| one shoot by name/mode | `--name "Psycho"` · `--name "603 photos"` |
+| skip the huge one for now | `--max-files 200` |
+| sidecars only, no frames | `--logs-only` (seconds, enough for every analyzer) |
+| see the plan, copy nothing | `--list` or `--dry-run` |
+
+### The interactive flow
+
+When the operator says "import from device" without detail, ask in this order
+and translate their words into the flags above:
+
+1. **Which device?** — run `shoot.py import --device <alias> --list` for the
+   one they name; the aliases are in `devices.json`.
+2. **From when?** — "tonight", "after 8pm", "today", "the one called XYZ".
+3. **Show them the listing and confirm**, with the size implication spelled
+   out: frame counts are in the listing and DNG runs are ~17 MB a frame,
+   JPEG ~1–3 MB. Offer `--logs-only` when they only want to analyse.
+
+### What it actually does, and the two rules that follow
+
+A project on disk is just `Projects/<id>/{source,blends}` plus an entry in
+`Projects/library.json`, and every path inside that entry is **relative**
+(`source/frame-00001.dng`). So an entry copied from the device's own index
+describes the same project equally well here. The import gives the copy a
+fresh `id` and records the device's id in `importedFromID` — the same
+convention the app's archive import uses.
+
+- **Quit the LetsLapse Mac app first.** It owns `library.json` and will
+  overwrite anything written underneath it. `import` refuses to write while
+  the app is running (listing and `--dry-run` are fine).
+- **Re-importing is safe.** Anything whose `importedFromID` already appears in
+  this Mac's library is skipped and reported, so running the same command
+  twice does not duplicate shoots.
+
+The previous index is copied to `library.json.bak` before every write, and the
+index is written last — after the frames have landed.
 
 ---
 

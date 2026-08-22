@@ -31,10 +31,12 @@ import json
 import os
 import re
 import signal
+import shutil
 import subprocess
 import sys
 import threading
 import time
+import uuid
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
@@ -76,7 +78,12 @@ STATE_DIR = Path.home() / "Library/Developer/LetsLapseRun/shoots"
 CAPTURE_MODES = {"photo": "Photo", "interval": "Interval", "video": "Video"}
 INTERVAL_MODES = {"basic": "off", "holygrail": "holyGrail", "scanner": "scanner"}
 INTERVAL_EVERY = [0.5, 1.0, 2.0, 3.0, 5.0, 10.0]
-BLEND_FIXED = [1, 3, 5, 10, 20]          # 1 == "Off"; Psycho/Safe are phone-only
+BLEND_FIXED = [1, 3, 5, 10, 20]          # 1 == "Off"
+# Psycho (unthrottled) and Safe (throttled) became remotable 2026-08-22:
+# Psycho is the mode that actually delivers motion blur, so it has to be
+# reachable from a scripted comparison and a fleet shoot.
+BLEND_ADAPTIVE = {"psycho": "unthrottled", "unthrottled": "unthrottled",
+                  "safe": "throttled", "throttled": "throttled"}
 STRATEGIES = ["zone", "latitude", "lumen"]
 SEQUENCE_MODES = ["ramp", "marker"]
 ACCEPTED = {"ok", "accepted"}
@@ -453,12 +460,17 @@ def check_format(body, args):
         print(f"✓ format ok — {format_line}")
 
 
+def blend_token(value):
+    """`--blend psycho` → the wire's `unthrottled`; everything else passes through."""
+    return BLEND_ADAPTIVE.get(str(value).lower(), str(value))
+
+
 def build_settings(args, body):
     """The setter script, in the order the phone's own guards require."""
     steps = []
     if args.mode == "photo":
         steps.append("setCaptureMode:Photo")
-        steps.append(f"setFramesPerBlend:{args.blend}")
+        steps.append(f"setFramesPerBlend:{blend_token(args.blend)}")
 
     elif args.mode == "interval":
         token = INTERVAL_MODES[args.interval_mode]
@@ -475,7 +487,7 @@ def build_settings(args, body):
             if args.interval_mode == "holygrail":
                 steps.append("setAutoInterval#0")
             steps.append(f"setIntervalSeconds#{float(args.every)}")
-        steps.append(f"setFramesPerBlend:{args.blend}")
+        steps.append(f"setFramesPerBlend:{blend_token(args.blend)}")
         if args.strategy:
             steps.append(f"setBlendStrategy:{args.strategy}")
 
@@ -1267,6 +1279,221 @@ def cmd_fleet(args):
         print(f"  python3 LetsLapse/tools/fleet_report.py {outdir}")
 
 
+# ---------------------------------------------------------------- import
+
+# Pull shoots off a device straight into this Mac's LetsLapse library, so a
+# run can be inspected here without the share-sheet-then-open-each-.lapse
+# dance.
+#
+# Why this works without building a `.lapse`: a project on disk is just
+# `Projects/<id>/{source,blends}`, and the library index beside it
+# (`Projects/library.json`) holds the app's own serialised model. Every path
+# inside a capture entry is RELATIVE (`source/frame-00001.dng`), so an entry
+# copied from the device's index describes the same project equally well
+# here. We give the copy a fresh `id` and record the device's id in
+# `importedFromID` — the same convention the app's own archive import uses,
+# which is what makes a second import of the same shoot detectable.
+
+LIBRARY = Path.home() / "Library/Application Support/LetsLapse"
+DEVICE_LIBRARY = "Library/Application Support/LetsLapse"
+# Core Data's reference date: `createdAt` is seconds since 2001-01-01 UTC.
+APPLE_EPOCH = 978307200
+
+
+def mac_app_running():
+    """Is the MAC app running — as opposed to a Simulator copy of it?
+
+    Both have the process name "LetsLapse", so `pgrep -x` cannot tell them
+    apart and reports a closed Mac app as open. Only the Mac app can write
+    this library; a Simulator instance lives in its own container and is
+    irrelevant here. Match on the executable path instead.
+    """
+    result = subprocess.run(["pgrep", "-lf", "LetsLapse"],
+                            capture_output=True, text=True)
+    for line in result.stdout.splitlines():
+        _, _, command = line.partition(" ")
+        if "CoreSimulator" in command:
+            continue
+        if command.endswith("LetsLapse.app/Contents/MacOS/LetsLapse"):
+            return True
+    return False
+
+
+def pull_device_library(identifier, alias):
+    """The device's project index. Also the list of what is importable."""
+    directory = STATE_DIR / "import" / alias
+    directory.mkdir(parents=True, exist_ok=True)
+    target = directory / "library.json"
+    result = subprocess.run(
+        ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+         "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+         "--user", "mobile", "--source", f"{DEVICE_LIBRARY}/Projects/library.json",
+         "--destination", str(target)],
+        capture_output=True, text=True, timeout=300)
+    if not target.exists():
+        die(f"{alias}: could not read the device's project library",
+            result.stderr.strip()[-300:] or "is LetsLapse installed and unlocked?")
+    return json.loads(target.read_text())
+
+
+def parse_since(text):
+    """'today' · 'tonight' · '20:00' · '3h' · '2026-08-22T19:00' → epoch."""
+    text = (text or "").strip().lower()
+    now = time.time()
+    today = time.localtime(now)
+    midnight = time.mktime((today.tm_year, today.tm_mon, today.tm_mday, 0, 0, 0, 0, 0, -1))
+    if text in ("today", "all today"):
+        return midnight
+    if text == "tonight":
+        # Everything from late afternoon on — the shooting half of the day.
+        return midnight + 17 * 3600
+    if re.fullmatch(r"[\d.]+h", text):
+        return now - float(text[:-1]) * 3600
+    for fmt in ("%Y-%m-%dt%H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%d", "%H:%M"):
+        try:
+            parsed = time.strptime(text, fmt)
+        except ValueError:
+            continue
+        if fmt == "%H:%M":
+            return time.mktime((today.tm_year, today.tm_mon, today.tm_mday,
+                                parsed.tm_hour, parsed.tm_min, 0, 0, 0, -1))
+        return time.mktime(parsed)
+    die(f"could not read a time from {text!r}",
+        "use today, tonight, 20:00, 3h, or 2026-08-22T19:00")
+
+
+def device_captures(library, since=None, name=None, max_files=None):
+    """Capture entries, newest first, filtered by when, name and size."""
+    out = []
+    for capture in library.get("captures", []):
+        stamp = (capture.get("createdAt") or 0) + APPLE_EPOCH
+        if since and stamp < since:
+            continue
+        # Size guard: one long DNG shoot can outweigh every other run of the
+        # night put together, and it is usually the one worth deferring so the
+        # quick ones land first.
+        if max_files and len(capture.get("sourceFileNames") or []) > max_files:
+            continue
+        haystack = " ".join(str(capture.get(k, "")) for k in
+                            ("originalName", "mode", "selectedPreset"))
+        if name and name.lower() not in haystack.lower():
+            continue
+        out.append((stamp, capture))
+    return sorted(out, key=lambda row: row[0], reverse=True)
+
+
+def describe(stamp, capture):
+    return (f"{time.strftime('%H:%M', time.localtime(stamp))}  "
+            f"{str(capture.get('originalName', '?')):<16} "
+            f"{str(capture.get('mode', '')):<34} "
+            f"{len(capture.get('sourceFileNames') or []):>5} files")
+
+
+def import_capture(identifier, alias, capture, logs_only):
+    """Copy one project's folder over and register it in this Mac's library."""
+    device_id = capture["id"]
+    local_id = str(uuid.uuid4()).upper()
+    destination = LIBRARY / "Projects" / local_id
+    destination.mkdir(parents=True, exist_ok=True)
+
+    if logs_only:
+        # The sidecars are what analysis needs; the frames are the gigabytes.
+        (destination / "source").mkdir(exist_ok=True)
+        for sidecar in ("capture_log.json", "frames.timestamps", "frames.exposure"):
+            subprocess.run(
+                ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+                 "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+                 "--user", "mobile",
+                 "--source", f"{DEVICE_LIBRARY}/Projects/{device_id}/source/{sidecar}",
+                 "--destination", str(destination / "source" / sidecar)],
+                capture_output=True, text=True, timeout=600)
+    else:
+        # devicectl writes the folder INTO the destination, so pull into a
+        # staging dir and lift the contents out.
+        staging = destination.parent / f"{local_id}-staging"
+        staging.mkdir(parents=True, exist_ok=True)
+        subprocess.run(
+            ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+             "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+             "--user", "mobile", "--source", f"{DEVICE_LIBRARY}/Projects/{device_id}",
+             "--destination", str(staging)],
+            capture_output=True, text=True, timeout=7200)
+        inner = staging / device_id
+        root = inner if inner.exists() else staging
+        for item in root.iterdir():
+            shutil.move(str(item), str(destination / item.name))
+        shutil.rmtree(staging, ignore_errors=True)
+
+    entry = dict(capture)
+    entry["id"] = local_id
+    # The app's own convention for "this came from somewhere else", and what
+    # makes a repeat import recognisable rather than silently duplicated.
+    entry["importedFromID"] = device_id
+    if logs_only:
+        # Do not claim frames that were not copied.
+        entry["sourceFileNames"] = [
+            n for n in (capture.get("sourceFileNames") or [])
+            if (destination / n).exists()]
+    return entry, destination
+
+
+def cmd_import(args):
+    row = registry_entry(args.device)
+    identifier = resolve_identifier(row["alias"])
+    library = pull_device_library(identifier, row["alias"])
+    since = parse_since(args.since) if args.since else None
+    found = device_captures(library, since=since, name=args.name,
+                            max_files=args.max_files)
+    if not found:
+        die("nothing on that device matches",
+            "try `--list` with no filters to see what is there")
+
+    print(f"{len(found)} shoot(s) on {row['alias']}"
+          + (f" since {time.strftime('%Y-%m-%d %H:%M', time.localtime(since))}" if since else ""))
+    for stamp, capture in found:
+        print("  " + describe(stamp, capture))
+    if args.list:
+        return
+
+    existing = json.loads((LIBRARY / "Projects" / "library.json").read_text())
+    already = {c.get("importedFromID") for c in existing.get("captures", [])}
+    fresh = [(s, c) for s, c in found if c["id"] not in already]
+    if len(fresh) != len(found):
+        print(f"\n  {len(found) - len(fresh)} already imported — skipping those")
+    if not fresh:
+        print("nothing new to import")
+        return
+    if args.dry_run:
+        print(f"\n--dry-run: would import {len(fresh)} shoot(s)")
+        return
+
+    # Checked here rather than up front: listing and dry runs write nothing,
+    # and the app being open is only a problem for the index write below.
+    if mac_app_running():
+        die("the LetsLapse Mac app is running",
+            "it owns Projects/library.json and would overwrite anything written "
+            "underneath it. Quit LetsLapse, re-run, then open it to see the imports.")
+
+    print(f"\nimporting {len(fresh)} shoot(s)"
+          + (" (logs only)" if args.logs_only else " — frames included, this is the slow part"))
+    imported = []
+    for stamp, capture in fresh:
+        print(f"  {describe(stamp, capture)}")
+        entry, destination = import_capture(identifier, row["alias"], capture, args.logs_only)
+        size = sum(f.stat().st_size for f in destination.rglob("*") if f.is_file())
+        print(f"    → {destination.name}  ({size / 1e9:.2f} GB)")
+        imported.append(entry)
+
+    # Write the index LAST: a half-written library.json is the one failure
+    # that would cost projects that are already on disk here.
+    existing.setdefault("captures", []).extend(imported)
+    backup = LIBRARY / "Projects" / "library.json.bak"
+    shutil.copy2(LIBRARY / "Projects" / "library.json", backup)
+    (LIBRARY / "Projects" / "library.json").write_text(json.dumps(existing, indent=2))
+    print(f"\nregistered {len(imported)} shoot(s) — previous index saved as {backup.name}")
+    print("open LetsLapse on this Mac to see them")
+
+
 # ---------------------------------------------------------------- args
 
 def burst_spec(text):
@@ -1349,6 +1576,18 @@ def main():
     p.add_argument("--echo", action="store_true")
     p.set_defaults(func=cmd_fleet)
 
+    p = sub.add_parser("import", help="pull shoots off a device into this Mac's library")
+    p.add_argument("--device", required=True, help="registry alias (iphone-16, ipad-m1, …)")
+    p.add_argument("--since", help="today · tonight · 20:00 · 3h · 2026-08-22T19:00")
+    p.add_argument("--name", help="substring of the shoot's name or mode")
+    p.add_argument("--max-files", type=int, metavar="N",
+                   help="skip shoots with more than N frames (defer the big one)")
+    p.add_argument("--list", action="store_true", help="show what is there, import nothing")
+    p.add_argument("--logs-only", action="store_true",
+                   help="sidecars only, no frames — seconds instead of minutes")
+    p.add_argument("--dry-run", action="store_true")
+    p.set_defaults(func=cmd_import)
+
     p = sub.add_parser("logs", help="pull experiment logs off a USB device")
     p.add_argument("--device")
     p.add_argument("--out")
@@ -1361,9 +1600,16 @@ def main():
 
 
 def validate(args):
-    if args.blend != "auto" and int(args.blend) not in BLEND_FIXED:
-        die(f"--blend must be auto or one of {BLEND_FIXED} (1 = Off)",
-            "Psycho and Safe are deliberately phone-only — the remote cannot reach them")
+    blend = str(args.blend).lower()
+    if blend != "auto" and blend not in BLEND_ADAPTIVE:
+        try:
+            fixed = int(blend)
+        except ValueError:
+            fixed = None
+        if fixed not in BLEND_FIXED:
+            die(f"--blend must be auto, one of {BLEND_FIXED} (1 = Off), "
+                f"or {sorted(set(BLEND_ADAPTIVE))}",
+                "anything else comes back rejected rather than coerced")
     if args.mode == "interval":
         if args.interval_mode == "basic" and args.every == "auto":
             die("Basic cannot pace itself — Auto needs Holy Grail or Scanner",
