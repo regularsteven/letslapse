@@ -39,63 +39,6 @@ else. Point it at `FileManager.default.temporaryDirectory` (or a
 `URL.temporaryDirectory` subfolder created by the test). Until it is fixed,
 `.claude/skills/run-letslapse/SKILL.md` documents the failure as expected.
 
-### iPad exposure pins at run start — the ramp never actuates
-
-**Raised:** 2026-08-22 · **Not started** · **high** — silently ruins iPad
-holy-grail shoots
-
-Noticed by Steven as blown highlights when the sun came out on the M3, then
-isolated with a four-device, matched-framing, 15-minute run (all arms Zone,
-10 s, identical capture path: `bracketedRAW: true`, `bracketMaxFrames: 8`,
-`responsiveCapture: false`, DNG, iOS/iPadOS 26.6).
-
-**The ramp engine is not at fault.** Its own command record
-(`frames.timestamps`) tracks the scene correctly on every device, and the
-commanded ranges differ between families exactly as the ISO floors predict
-(iPad ISO 16 vs iPhone 50 is ~1.6 stops, and 1/284 vs 1/840 is ~1.6 stops).
-
-| arm | commanded | delivered | verdict |
-|---|---|---|---|
-| iPhone 16 Pro | 1/901 … 1/494 | 7 values, to **1/840** | actuating |
-| iPhone 12 Pro | 1/826 … 1/451 | 30 values, to **1/831** | actuating |
-| iPad Air M1 | 1/284 … 1/139 | **2** values | **STUCK** — 49 shorter *and* 31 longer ignored |
-| iPad Air M3 | 1/309 … 1/136 | **1** value | **STUCK** — 51 shorter *and* 34 longer ignored |
-
-Divergence: iPads 0.95 and 1.07 stops worst, with half of all measured windows
-over 0.5 stop (15/29 and 18/30). The 16 Pro peaked at 0.53 on 1 window of 19.
-
-**It is not a hardware floor.** Both iPads ignored *longer* commands as well,
-which a device sitting at its minimum duration would happily accept.
-
-**The tell — the pinned value changes between runs on the same device:**
-
-| device | earlier run | matched-framing run |
-|---|---|---|
-| iPad M1 | 1/171 s | 1/248 s |
-| iPad M3 | 1/222 s | 1/253 s |
-
-So each iPad pins to whatever exposure was current **when the run started** and
-then never moves — ISO included (a single value, 16, on both). That is the same
-signature as the 2026-08-20 sunset, where all 2,247 iPad captures sat at the
-pre-lock exposure.
-
-Where to look: whether `setExposureModeCustom` is applied and *survives* on the
-iPad bracketed-RAW path. The 2026-08-20 fix made ramped brackets carry the
-device's live values via the range-proof `current` constants — faithful, and
-therefore invisible, if the custom write never takes: the bracket then
-reproduces the run's opening exposure forever. It was verified on iPhones
-(≤0.14 stop) and evidently not on iPads.
-
-Also worth fixing: `holyGrailHardwareLimits` (`CameraController.swift:5221`)
-hands the ramp `format.minExposureDuration` as `minShutter`, so the engine
-believes it has room it may not have; and sustained divergence should surface
-on the capture screen rather than only in the log — the guard measured this
-correctly for a whole shoot and nothing acted on it.
-
-Diagnosis is automated: `tools/fleet_report.py` prints an **Actuation** section
-per arm and classifies each actuating / FLOORED / STUCK; `shoot.py fleet`
-collects `frames.timestamps`.
-
 ### A scheduled stop is logged as `endReason: user`
 
 **Raised:** 2026-08-22 · **Not started** · small

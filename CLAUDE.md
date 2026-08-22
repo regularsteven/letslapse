@@ -127,6 +127,21 @@ repeatable. Design the observation plan before the run, not during.
   --at sunset-30m` runs the whole choreography (launch, arm, fire, confirm,
   collect) across several devices. Registry in
   `.claude/skills/letslapse/devices.json`.
+- **iPad bracket trap (fixed 2026-08-22, worth remembering):**
+  `AVCaptureDevice.currentExposureDuration` / `currentISO` — the sentinels
+  that are supposed to resolve on-device at capture time — do NOT resolve to
+  the device's custom exposure inside an
+  `AVCaptureManualExposureBracketedStillImageSettings` on iPad. Both iPads
+  shot whole runs at the exposure the run opened with while the ramp
+  commanded a full walk; both iPhones resolved them correctly, which is why
+  the 2026-08-20 actuation fix verified clean and this survived under it.
+  Ramped brackets now carry explicit values, re-clamped to the live
+  `activeFormat` on every call (an out-of-range manual bracket raises an
+  *uncatchable* NSException, so the clamp is not optional).
+  **The isolation trick generalises:** run the same device at blend depth 1,
+  which routes through `fireCapture` with plain `AVCapturePhotoSettings` and
+  no bracket settings at all. If exposure tracks there and pins on `auto`,
+  the bracket is the culprit and the device write is fine.
 - The listener stands down during project registration after a stop — an
   empty browse right after a run is saving, not a crash.
 - Flicker quality gate: export the project's blend clip at NO depth, pull
