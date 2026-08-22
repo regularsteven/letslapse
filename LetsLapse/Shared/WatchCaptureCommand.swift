@@ -27,6 +27,13 @@ enum WatchCaptureCommand: String {
     /// exists so a scripted multi-device test can configure each camera's
     /// strategy without a hand on the screen.
     case setBlendStrategy
+    /// Arm a start at an absolute time (`value` = epoch seconds, ≤24h out;
+    /// 0 cancels). The device fires its own shutter on its own clock, so a
+    /// rig of cameras armed minutes apart still starts the same wall-clock
+    /// second — and an overnight bench can arm a 5am dawn shoot and let
+    /// the Mac sleep. Idle-only; a manual start before the hour simply
+    /// wins (the timer re-checks idle before firing).
+    case scheduleStart
     /// Interval's MODE dial — Off · Holy Grail · Scanner
     /// (`IntervalCaptureMode`). Idle-only: both non-`off` modes reconfigure the
     /// session for RAW at start, and Scanner adds a preview tap, neither of
@@ -102,7 +109,7 @@ extension WatchCaptureCommand {
         case .startRecording, .stopRecording, .triggerMoment, .timedBurst,
              .lockExposure, .unlockExposure, .setISO, .setLensPosition,
              .setCaptureMode, .setIntervalSeconds, .setFramesPerBlend,
-             .setBlendStrategy,
+             .setBlendStrategy, .scheduleStart,
              .setIntervalMode, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop,
@@ -136,6 +143,8 @@ extension WatchCaptureCommand {
             return "The setting is unchanged."
         case .setBlendStrategy:
             return "The blend strategy is unchanged."
+        case .scheduleStart:
+            return "No start is scheduled."
         case .setIntervalMode:
             return "The shoot mode is unchanged."
         case .setAutoInterval:

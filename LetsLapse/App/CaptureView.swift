@@ -41,6 +41,10 @@ struct CaptureView: View {
     /// showed bracketed RAW delivers 10 frames in ~0.65s, and dense sampling
     /// is what reads as motion blur — 3-5 spread samples read as ghosts.
     @State private var blendDepth: BlendDepth = .fixed(10)
+    /// A remote-armed shutter alarm (`scheduleStart`): fires `shutterAction`
+    /// at an absolute time on this device's own clock, so a rig of cameras
+    /// armed one by one starts the same wall-clock second.
+    @State private var scheduledStartTimer: Timer?
     /// Where Safe falls back when its profile basis disappears (interval or
     /// format change, learning reset) — the last deliberate fixed choice.
     @State private var lastFixedBlendFrames = 10
@@ -3936,6 +3940,29 @@ struct CaptureView: View {
             // dispatch as the on-phone shutter, not a forced video recording.
             guard !isCapturing else { return false }
             shutterAction()
+            return true
+        case .scheduleStart:
+            // Arm the shutter at an absolute time, on THIS device's clock —
+            // a multi-camera rig armed one by one still starts the same
+            // wall-clock second, and an overnight bench can arm a dawn
+            // shoot and let the Mac sleep. value = epoch seconds; 0 cancels.
+            guard !isCapturing, let value else { return false }
+            scheduledStartTimer?.invalidate()
+            scheduledStartTimer = nil
+            if value <= 0 { return true }
+            let fireAt = Date(timeIntervalSince1970: value)
+            let delay = fireAt.timeIntervalSinceNow
+            guard delay > 0, delay <= 24 * 3600 else { return false }
+            let timer = Timer(fire: fireAt, interval: 0, repeats: false) { _ in
+                // Re-checked at the hour: a manual start (or a mode change
+                // into a run) before the alarm simply wins.
+                if !isCapturing { shutterAction() }
+                scheduledStartTimer = nil
+            }
+            // .common so a finger on a dial doesn't delay the shutter.
+            RunLoop.main.add(timer, forMode: .common)
+            scheduledStartTimer = timer
+            LLog(String(format: "remote: start scheduled in %.1fs", delay))
             return true
         case .stopRecording:
             // Scanner is tested FIRST and must stay first. It reports through

@@ -709,6 +709,10 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // Mirrors nothing on the watch: the strategy is a Settings-level
             // fact the watch UI never shows. Mac-remote scripts use it.
             break
+        case .scheduleStart:
+            // Mirrors nothing: the armed alarm lives on the phone, and the
+            // recording state will arrive as a push when it fires.
+            break
         case .setBurstFPS:
             // Echoed locally so the ladder's selected rung moves with the
             // crown instead of lagging a round-trip behind it. No haptic —
