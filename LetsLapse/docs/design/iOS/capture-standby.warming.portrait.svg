@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — scheduled standby (warming) · portrait</title>
+  <desc>Mirrors App/CaptureStandby.swift (StandbyOverlay, isWarmingCamera = true). The last minute of standby: at T−60s the warm-up timer brings the capture session up BEHIND the overlay — the screen stays black and dimmed, and the status line becomes the "Preparing camera…" chip. The taller chip pushes the block 8pt up from the cold state; everything else is identical. Screenshot with LL_CAPTURE=1 LL_STANDBY=warming, ~15s after launch.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.h{font-weight:800}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <text x="196.5" y="271" text-anchor="middle" font-size="12" class="h" fill="#C36A00" letter-spacing="2.4">STANDBY</text>
+      <text x="196.5" y="301" text-anchor="middle" font-size="17" class="sb" fill="#FFF">Sunset over the harbour</text>
+
+      <text x="196.5" y="369" text-anchor="middle" font-size="54" class="b" fill="#FFB340"
+            font-family="ui-rounded, -apple-system, 'SF Pro Rounded', sans-serif"
+            style="font-variant-numeric:tabular-nums">00:00:54</text>
+
+      <text x="196.5" y="403" text-anchor="middle" font-size="14" fill="#FFF" opacity="0.45">Starts at 1:02</text>
+
+      <g id="summary">
+        <g id="chip-every">
+          <rect x="41.5" y="431.5" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="90.5" y="455" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">EVERY</text>
+          <text x="90.5" y="475" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">3s</text>
+        </g>
+        <g id="chip-for">
+          <rect x="147.5" y="431.5" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="196.5" y="455" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">FOR</text>
+          <text x="196.5" y="475" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">1h</text>
+        </g>
+        <g id="chip-blend">
+          <rect x="253.5" y="431.5" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="302.5" y="455" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">BLEND</text>
+          <text x="302.5" y="475" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">5</text>
+        </g>
+      </g>
+
+      <!-- warm-up: the session is coming up behind the black -->
+      <g id="status-warming">
+        <rect x="112" y="495" width="169" height="32" rx="16" fill="#FFB340" opacity="0.12"/>
+        <rect x="112" y="495" width="169" height="32" rx="16" fill="none" stroke="#FFB340" stroke-opacity="0.35" stroke-width="1"/>
+        <g data-symbol="ProgressView" stroke="#FFB340" stroke-width="1.6" stroke-linecap="round">
+          <path d="M131 504 v-3.5 M131 518 v3.5 M124 511 h-3.5 M138 511 h3.5" opacity="0.9"/>
+          <path d="M126 506 l-2.4 -2.4 M136 516 l2.4 2.4 M136 506 l2.4 -2.4 M126 516 l-2.4 2.4" opacity="0.5"/>
+        </g>
+        <text x="149" y="516" font-size="13" class="sb" fill="#FFB340">Preparing camera…</text>
+      </g>
+
+      <g id="cancel">
+        <rect x="32" y="733" width="329" height="50" rx="25" fill="none" stroke="#FFF" stroke-opacity="0.28" stroke-width="1"/>
+        <text x="196.5" y="763" text-anchor="middle" font-size="15" class="sb" fill="#FFF">Cancel scheduled shoot</text>
+      </g>
+
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — scheduled standby (warming) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureStandby.swift — StandbyOverlay · T−60s warm-up · session up behind the black</text>
+</svg>

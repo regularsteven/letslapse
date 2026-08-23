@@ -45,6 +45,30 @@ struct CaptureView: View {
     /// at an absolute time on this device's own clock, so a rig of cameras
     /// armed one by one starts the same wall-clock second.
     @State private var scheduledStartTimer: Timer?
+    /// Cold standby: a `model.scheduledRecording` far enough away that the
+    /// camera has no business being powered. True while the standby overlay
+    /// owns the screen and the capture session is deliberately NOT running.
+    @State private var standbyActive = false
+    /// Whether the warm-up already ran (the session is up behind the overlay).
+    /// Also the flag that says whether leaving standby still owes a
+    /// `startCameraSession()` — see `exitStandby(startingCamera:)`.
+    @State private var standbyWarmedUp = false
+    /// Fires at T−`standbyWarmupLead`; brings the session up behind the
+    /// overlay so the shutter at T=0 meets a camera that has already settled.
+    @State private var standbyWarmupTimer: Timer?
+    /// Fires at T=0: applies the armed dials and pulls the shutter.
+    @State private var standbyFireTimer: Timer?
+    /// A scheduled run's duration, held from the moment the shutter is pulled
+    /// until the engine actually reports a run — `camera.scheduleStop` refuses
+    /// to arm before `isCapturing`, and the start is a queue hop away.
+    @State private var pendingScheduledStopMinutes: Int?
+    @State private var showScheduleSheet = false
+    /// Standby wakes the camera this far ahead of the start, and only bothers
+    /// going cold at all when there is more than a wake-up plus a margin to
+    /// wait for. Ten seconds of margin so the boundary case (a schedule armed
+    /// 71 s out) doesn't sleep the session for one second and wake it again.
+    private static let standbyWarmupLead: TimeInterval = 60
+    private static let standbyMinimumLead: TimeInterval = 70
     /// Where Safe falls back when its profile basis disappears (interval or
     /// format change, learning reset) — the last deliberate fixed choice.
     @State private var lastFixedBlendFrames = 10
@@ -363,6 +387,9 @@ struct CaptureView: View {
                 delayedStartAt = nil
                 shutterAction()
             }
+            // A scheduled run's duration, armed as soon as the engine admits
+            // to running. No-op on every other tick.
+            applyPendingScheduledStop()
         }
         // A run's own consumption is the only honest source for what this
         // device's frames really weigh, so every run is weighed. See
@@ -546,9 +573,46 @@ struct CaptureView: View {
         }
     }
 
+    /// Scheduled standby: the sheet that arms a shoot, and the black overlay
+    /// that owns the screen while the camera is deliberately cold.
+    private var scheduling: some View {
+        settingsObservers
+        .sheet(isPresented: $showScheduleSheet) {
+            ScheduleShootSheet(
+                intervalSeconds: interval,
+                blendFrames: blendDepth.fixedFrames
+            ) { armed in
+                model.scheduledRecording = armed
+            }
+        }
+        // Arming from the sheet takes the screen cold immediately — that is
+        // the whole point of the feature, and waiting for the next visit would
+        // leave the session burning through the very battery it exists to
+        // save. Also covers the schedule being armed from anywhere else.
+        .onChange(of: model.scheduledRecording) { armed in
+            if armed == nil {
+                if standbyActive { exitStandby() }
+                cancelStandbyTimers()
+            } else if !enterStandbyIfScheduled(stoppingCamera: true) {
+                armImminentSchedule()
+            }
+        }
+        .overlay {
+            if standbyActive, let scheduled = model.scheduledRecording {
+                StandbyOverlay(
+                    scheduled: scheduled,
+                    now: now,
+                    isWarmingCamera: standbyWarmedUp,
+                    onCancel: cancelScheduledShoot
+                )
+                .transition(.opacity)
+            }
+        }
+    }
+
     /// Orientation and the Watch-link mirrors — iOS only, bar the one shared recording hook.
     var body: some View {
-        settingsObservers
+        scheduling
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             // Refresh the orientation the grid overlay sizes against, and nudge
@@ -682,6 +746,7 @@ struct CaptureView: View {
         updateTestCardWatch()
         #if DEBUG
         applyModePreviewHook()
+        applyStandbyPreviewHook()
         applyHolyGrailPreviewHook()
         applyScannerPreviewHook()
         applyBurstPreviewHook()
@@ -870,12 +935,200 @@ struct CaptureView: View {
         let captureSeed = effectiveCaptureOrientation(device: UIDevice.current.orientation) ?? orientation
         camera.setVideoOrientation(captureSeed)
         #endif
+        // A scheduled shoot that is still a long way off gets a cold screen:
+        // no session, no preview, no power. Everything above this line has
+        // already run — the finish handlers, the Watch mirrors, the idle timer
+        // (a standby phone must not lock: it has a shutter to pull) — so
+        // leaving standby only owes the camera itself.
+        if enterStandbyIfScheduled() { return }
+        startCameraSession()
+        // Not far enough out for a cold screen, but still a shoot someone
+        // armed — the shutter alarm is owed either way.
+        armImminentSchedule()
+    }
+
+    /// The tail of `configureOnAppear`: bring the capture session up and sync
+    /// the things that are derived from it. Split out because cold standby
+    /// runs it later — at warm-up, or the moment the schedule is cancelled —
+    /// rather than on appear.
+    private func startCameraSession() {
         // Before start(): the session log opens there and names the mode.
         syncLoggedCaptureMode()
         camera.start()
         updateAspectPreview()
         syncAppleLog()
         framingStartedAt = Date()
+    }
+
+    // MARK: - Scheduled standby
+
+    /// Enter cold standby if there is a schedule far enough out to be worth
+    /// powering the camera down for. Returns whether standby was entered.
+    ///
+    /// `stoppingCamera` is for the case where the schedule is armed on a
+    /// screen that is already live — the session has to be told to stop, where
+    /// on appear it was simply never started.
+    @discardableResult
+    private func enterStandbyIfScheduled(stoppingCamera: Bool = false) -> Bool {
+        guard !standbyActive, !isCapturing else { return false }
+        guard let scheduled = model.scheduledRecording else { return false }
+        guard scheduled.secondsUntilStart > Self.standbyMinimumLead else { return false }
+        if stoppingCamera {
+            camera.endSessionLog()
+            camera.stop()
+        }
+        standbyWarmedUp = false
+        standbyActive = true
+        armStandbyTimers(for: scheduled)
+        LLog(String(format: "standby: armed, T-%.0fs", scheduled.secondsUntilStart))
+        return true
+    }
+
+    /// A schedule too close for standby to be worth it — or one found on a
+    /// screen that opened *inside* the warm-up window, which is the case a
+    /// relaunch at T−30 s lands in. The camera is up already; only the
+    /// shutter alarm is owed, and no overlay is shown.
+    private func armImminentSchedule() {
+        guard !standbyActive, !isCapturing, let scheduled = model.scheduledRecording else { return }
+        let delay = scheduled.secondsUntilStart
+        // A start that came and went while the app was closed is NOT fired
+        // hours later. A timelapse is aimed at a particular light; firing a
+        // dawn shoot at lunchtime is worse than not firing it, because it
+        // also spends the storage and the battery the real one needed. Two
+        // minutes of grace covers a relaunch that raced its own alarm.
+        guard delay > -120 else {
+            model.scheduledRecording = nil
+            LLog("standby: dropped a scheduled shoot whose start had already passed")
+            return
+        }
+        cancelStandbyTimers()
+        // The session is live, so the fire path owes no bring-up.
+        standbyWarmedUp = true
+        guard delay > 0 else {
+            fireScheduledShoot()
+            return
+        }
+        let timer = Timer(fire: scheduled.startDate, interval: 0, repeats: false) { _ in
+            fireScheduledShoot()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        standbyFireTimer = timer
+        LLog(String(format: "standby: shoot armed warm, T-%.0fs", delay))
+    }
+
+    /// The two alarms standby runs on. Absolute-time `Timer`s on the common
+    /// run-loop mode, like the remote's `scheduleStart`: a finger dragging a
+    /// control must not be able to delay the shutter, and a wall-clock fire
+    /// date survives the run loop being busy in between.
+    private func armStandbyTimers(for scheduled: ScheduledRecording) {
+        cancelStandbyTimers()
+
+        let warmAt = scheduled.startDate.addingTimeInterval(-Self.standbyWarmupLead)
+        if warmAt.timeIntervalSinceNow > 0 {
+            let warmTimer = Timer(fire: warmAt, interval: 0, repeats: false) { _ in
+                standbyWarmUp()
+            }
+            RunLoop.main.add(warmTimer, forMode: .common)
+            standbyWarmupTimer = warmTimer
+        } else {
+            // Inside the warm-up window already (a relaunch at T−30s): the
+            // camera is owed immediately, not at a date in the past.
+            standbyWarmUp()
+        }
+
+        let fireTimer = Timer(fire: scheduled.startDate, interval: 0, repeats: false) { _ in
+            fireScheduledShoot()
+        }
+        RunLoop.main.add(fireTimer, forMode: .common)
+        standbyFireTimer = fireTimer
+    }
+
+    private func cancelStandbyTimers() {
+        standbyWarmupTimer?.invalidate()
+        standbyWarmupTimer = nil
+        standbyFireTimer?.invalidate()
+        standbyFireTimer = nil
+    }
+
+    /// T−60 s: bring the session up behind the overlay. The screen stays black
+    /// — the point is that the shutter at T=0 meets a camera that has already
+    /// configured its format, settled its exposure and opened its session log.
+    private func standbyWarmUp() {
+        guard standbyActive, !standbyWarmedUp else { return }
+        standbyWarmedUp = true
+        startCameraSession()
+        LLog("standby: warming camera")
+    }
+
+    /// T=0. Applies the armed dials, drops the overlay and pulls the shutter.
+    private func fireScheduledShoot() {
+        guard let scheduled = model.scheduledRecording else {
+            exitStandby()
+            return
+        }
+        cancelStandbyTimers()
+        // A schedule can only be honoured as an Interval shoot; set the mode
+        // first so the mode's own `onChange` (which swaps in that mode's
+        // remembered spacing) lands BEFORE the armed spacing is written, and
+        // not after it.
+        let wasWarm = standbyWarmedUp
+        mode = .interval
+        model.scheduledRecording = nil
+        pendingScheduledStopMinutes = scheduled.durationMinutes
+        exitStandby()
+
+        // Two hops on purpose. The first gives the mode switch — and, if this
+        // is a device that never got its warm-up (app relaunched seconds
+        // before the start), the whole session bring-up — time to land; the
+        // second guarantees the dials written above are what the shutter
+        // reads. Both are on the main queue, so the order is fixed.
+        let settle: TimeInterval = wasWarm ? 0.4 : 2.5
+        DispatchQueue.main.asyncAfter(deadline: .now() + settle) {
+            interval = scheduled.intervalSeconds
+            lastFixedInterval = scheduled.intervalSeconds
+            if let frames = scheduled.blendDepth {
+                blendDepth = .fixed(frames)
+                lastFixedBlendFrames = frames
+            }
+            RecordingSettingsStore.save(intervalSeconds: scheduled.intervalSeconds, for: .interval)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                guard !isCapturing else { return }
+                LLog(String(format: "standby: firing scheduled shoot, every %.1fs",
+                            scheduled.intervalSeconds))
+                shutterAction()
+            }
+        }
+    }
+
+    /// The user's out. Drops the schedule, the timers and the overlay, and
+    /// hands the screen back to a normal, live capture session.
+    private func cancelScheduledShoot() {
+        cancelStandbyTimers()
+        model.scheduledRecording = nil
+        pendingScheduledStopMinutes = nil
+        exitStandby()
+        LLog("standby: cancelled")
+    }
+
+    /// Leave standby, starting the camera if the warm-up never got to it.
+    /// Brightness is restored by the overlay's own `onDisappear`, so that it
+    /// cannot be leaked by an exit path that forgot about it.
+    private func exitStandby() {
+        standbyActive = false
+        if !standbyWarmedUp {
+            startCameraSession()
+        }
+        standbyWarmedUp = false
+    }
+
+    /// A scheduled run's duration becomes an ordinary device-owned scheduled
+    /// stop, anchored to the run's own start — the same mechanism the remote's
+    /// `scheduleStop` uses. It can only be armed once the engine reports a
+    /// run, which is a queue hop after the shutter, so it waits on the tick.
+    private func applyPendingScheduledStop() {
+        guard let minutes = pendingScheduledStopMinutes, isCapturing else { return }
+        pendingScheduledStopMinutes = nil
+        camera.scheduleStop(unit: .minutes, amount: Double(minutes))
     }
 
     /// Apple Log is video-only and requires a supporting device: enable it just
@@ -947,6 +1200,13 @@ struct CaptureView: View {
     }
 
     private func cleanUpOnDisappear() {
+        // Standby's alarms belong to this screen. The schedule itself is
+        // deliberately left standing — closing the capture screen is not
+        // cancelling the shoot, and re-opening it re-arms from the stored
+        // `scheduledRecording`.
+        cancelStandbyTimers()
+        standbyActive = false
+        standbyWarmedUp = false
         // Idempotent — the finish handlers already stop it, but a mid-session
         // close (or a Photo-mode exit) shouldn't leave motion updates running.
         steadiness.stop()
@@ -1043,6 +1303,7 @@ struct CaptureView: View {
                     closeCapture()
                 }
                 .accessibilityLabel("Close capture")
+                scheduleShootButton
             }
 
             Spacer(minLength: 8)
@@ -1067,6 +1328,19 @@ struct CaptureView: View {
                 }
                 formatPill
             }
+        }
+    }
+
+    /// Arms a shoot for a wall-clock time. Interval only — a schedule fires
+    /// the interval engine — and idle only: a running shoot has nothing to
+    /// schedule, and the button's slot belongs to the recording pill anyway.
+    @ViewBuilder
+    private var scheduleShootButton: some View {
+        if mode == .interval && !isCapturing {
+            CameraChromeButton(systemImage: "clock") {
+                showScheduleSheet = true
+            }
+            .accessibilityLabel("Schedule shoot")
         }
     }
 
@@ -1156,6 +1430,8 @@ struct CaptureView: View {
                     CameraChromeButton(systemImage: "xmark") {
                         closeCapture()
                     }
+                    scheduleShootButton
+                        .padding(.top, 10)
                 }
                 Spacer()
                 VStack(spacing: 8) {
@@ -2223,6 +2499,32 @@ struct CaptureView: View {
     ///
     /// All of them draw 12 of a 36-pose target, which is what makes the count
     /// and the shutter ring legible in a mirror screenshot.
+    /// `LL_STANDBY=<seconds>|warming` arms a scheduled shoot that far out, so
+    /// the standby screen can be screenshotted against its SVG. Implies
+    /// Interval mode. Pair with `LL_CAPTURE=1`.
+    ///
+    /// `warming` stages 75 s: just past the threshold, so the screen still
+    /// goes cold on appear and then crosses T−60 s about fifteen seconds
+    /// later — screenshot then for the "Preparing camera…" chip. It cannot be
+    /// staged any closer than the threshold, because a start inside the
+    /// warm-up window is precisely the case standby declines to take.
+    ///
+    /// The alternative is seeding `scheduledRecording` into the simulator's
+    /// defaults before launch, which works but has to be re-timed for every
+    /// run — the start is an absolute date, so a seed goes stale the moment
+    /// the screenshot pass takes longer than the countdown.
+    private func applyStandbyPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_STANDBY"] else { return }
+        let seconds = raw == "warming" ? 75.0 : (Double(raw) ?? 3600)
+        mode = .interval
+        model.scheduledRecording = ScheduledRecording(
+            startDate: Date().addingTimeInterval(seconds),
+            intervalSeconds: interval,
+            durationMinutes: 60,
+            blendDepth: blendDepth.fixedFrames,
+            label: "Sunset over the harbour")
+    }
+
     private func applyScannerPreviewHook() {
         let environment = ProcessInfo.processInfo.environment
         let rectangleHook = environment["LL_SCANNER_RECT"]

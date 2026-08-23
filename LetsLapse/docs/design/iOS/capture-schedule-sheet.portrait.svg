@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Schedule shoot (sheet) · portrait</title>
+  <desc>Mirrors App/CaptureStandby.swift (ScheduleShootSheet), 470pt detent over the dimmed camera. Reached from the clock button in Interval mode's top bar. Start time (floored at now + 5 minutes, opening on now + 10), run length as six chips, an optional label, and a read-only line naming the spacing and blend depth the shoot will inherit from the capture screen behind it — those dials are set there, and asking for them twice would be asking which answer is the real one. Picking Custom reveals a 15…720-minute stepper under the chips and the detent grows to 530. Date and time render in the device locale.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="24" y="406" width="393" height="470" rx="10"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- dimmed capture screen behind -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)" opacity="0.3">
+      <rect x="0" y="115" width="393" height="290" fill="url(#sky)"/>
+      <circle cx="132" cy="266" r="26" fill="#FFB340" opacity="0.9"/>
+    </g>
+    <rect x="24" y="24" width="393" height="852" fill="#000" opacity="0.3"/>
+
+    <!-- sheet (470pt detent; 530 with Custom open) -->
+    <g clip-path="url(#sheet)">
+      <rect x="24" y="406" width="393" height="470" fill="#1C1C1F"/>
+      <g transform="translate(24,406)">
+        <rect x="178.5" y="10" width="36" height="4" rx="2" fill="#FFF" opacity="0.25"/>
+
+        <text x="20" y="50" font-size="19" class="b" fill="#FFF">Schedule shoot</text>
+        <text x="20" y="67" font-size="13" fill="#FFF" opacity="0.5">The screen goes dark and the camera powers down until a</text>
+        <text x="20" y="83" font-size="13" fill="#FFF" opacity="0.5">minute before the start.</text>
+
+        <!-- start time: a compact DatePicker, floored at now + 5 minutes -->
+        <g id="starts">
+          <text x="20" y="132" font-size="14" fill="#FFF">Starts</text>
+          <rect x="212" y="110" width="106" height="34" rx="8" fill="#FFF" opacity="0.10"/>
+          <text x="265" y="132" text-anchor="middle" font-size="14" class="sb" fill="#FFF">23 Aug 2026</text>
+          <rect x="324" y="110" width="49" height="34" rx="8" fill="#FFF" opacity="0.10"/>
+          <text x="348.5" y="132" text-anchor="middle" font-size="14" class="sb" fill="#FFF">01:06</text>
+        </g>
+
+        <!-- run length. Off = shoot until stopped by hand or by the remote;
+             anything else becomes a device-owned scheduled stop anchored to
+             the run's own start (CameraController.scheduleStop) -->
+        <text x="20" y="173" font-size="14" fill="#FFF">Run for</text>
+        <g id="duration-chips">
+          <rect x="20" y="191" width="53.8" height="30" rx="10" fill="#FFB340"/>
+          <text x="46.9" y="211" text-anchor="middle" font-size="12" class="b" fill="#000">Off</text>
+          <rect x="79.8" y="191" width="53.8" height="30" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="106.7" y="211" text-anchor="middle" font-size="12" fill="#FFF">30m</text>
+          <rect x="139.7" y="191" width="53.8" height="30" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="166.6" y="211" text-anchor="middle" font-size="12" fill="#FFF">1h</text>
+          <rect x="199.5" y="191" width="53.8" height="30" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="226.4" y="211" text-anchor="middle" font-size="12" fill="#FFF">2h</text>
+          <rect x="259.3" y="191" width="53.8" height="30" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="286.2" y="211" text-anchor="middle" font-size="12" fill="#FFF">4h</text>
+          <rect x="319.2" y="191" width="53.8" height="30" rx="10" fill="#FFF" opacity="0.1"/>
+          <text x="346.1" y="211" text-anchor="middle" font-size="12" fill="#FFF">Custom</text>
+        </g>
+
+        <!-- optional: what the shoot is for, shown big on the standby screen -->
+        <g id="label-field">
+          <rect x="20" y="244" width="353" height="39" rx="10" fill="#FFF" opacity="0.08"/>
+          <text x="32" y="269" font-size="14" fill="#FFF" opacity="0.35">Label (optional)</text>
+        </g>
+
+        <!-- inherited dials, said out loud -->
+        <g id="dials-summary">
+          <rect x="20" y="292" width="353" height="55" rx="12" fill="#FFB340" opacity="0.10"/>
+          <g data-symbol="timer" transform="translate(32,310)" stroke="#FFB340" stroke-width="1.6" fill="none">
+            <circle cx="9" cy="10" r="8.5"/>
+            <path d="M9 10 v-6 M6 1 h6" stroke-linecap="round"/>
+          </g>
+          <text x="62" y="315" font-size="12" fill="#FFF" opacity="0.55">Shoots every 3s, blending 5 frames — the dials set</text>
+          <text x="62" y="331" font-size="12" fill="#FFF" opacity="0.55">on the capture screen.</text>
+        </g>
+
+        <g id="confirm">
+          <rect x="20" y="364" width="353" height="50" rx="14" fill="#FFB340"/>
+          <text x="196.5" y="395" text-anchor="middle" font-size="16" class="b" fill="#000">Schedule</text>
+        </g>
+      </g>
+    </g>
+
+    <!-- hardware -->
+    <rect x="158.5" y="35" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+    <rect x="153.5" y="863" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Schedule shoot (sheet) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureStandby.swift — ScheduleShootSheet · 470pt detent · reached from the top bar's clock</text>
+</svg>

@@ -30,6 +30,13 @@
           <circle cx="113" cy="40" r="19" fill="#2B2B2E" opacity="0.9"/>
           <path d="M107.5 34.5 L118.5 45.5 M118.5 34.5 L107.5 45.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
         </g>
+        <!-- schedule shoot: Interval only, idle only. Under the close button
+             in the rail, the same pairing portrait makes beside it -->
+        <g id="schedule" data-symbol="clock">
+          <circle cx="113" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="113" cy="88" r="8.5" fill="none" stroke="#FFF" stroke-width="1.8"/>
+          <path d="M113 83 v5 h3.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
         <g id="format-pill">
           <rect x="43" y="133" width="140" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
           <text x="57" y="155" font-size="13" class="sb" fill="#FFF">12MP 4:3</text>

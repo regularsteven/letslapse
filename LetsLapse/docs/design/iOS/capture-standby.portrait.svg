@@ -1,0 +1,76 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — scheduled standby (cold) · portrait</title>
+  <desc>Mirrors App/CaptureStandby.swift (StandbyOverlay) over App/CaptureView.swift (standby branch in configureOnAppear). The state a phone sits in while it waits for a ScheduledRecording more than 70s away: NO capture session is running, the viewfinder is not drawn at all, the screen is black to the edges and the device brightness is dropped to 5%. Screenshot with LL_CAPTURE=1 LL_STANDBY=3600.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.h{font-weight:800}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- OLED-safe: pure black, and nothing else lit. The overlay covers the
+         whole capture screen, top bar and controls included -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- eyebrow -->
+      <text x="196.5" y="279" text-anchor="middle" font-size="12" class="h" fill="#C36A00" letter-spacing="2.4">STANDBY</text>
+
+      <!-- the shoot's label, when one was typed into the schedule sheet -->
+      <text x="196.5" y="309" text-anchor="middle" font-size="17" class="sb" fill="#FFF">Sunset over the harbour</text>
+
+      <!-- countdown: HH:MM:SS, rounded, monospaced digits so it never
+           reflows as it counts down -->
+      <text x="196.5" y="377" text-anchor="middle" font-size="54" class="b" fill="#FFB340"
+            font-family="ui-rounded, -apple-system, 'SF Pro Rounded', sans-serif"
+            style="font-variant-numeric:tabular-nums">00:59:54</text>
+
+      <text x="196.5" y="411" text-anchor="middle" font-size="14" fill="#FFF" opacity="0.45">Starts at 2:01</text>
+
+      <!-- what the shoot is armed to do: the dials carried in the schedule,
+           not whatever the capture screen behind this is currently set to -->
+      <g id="summary">
+        <g id="chip-every">
+          <rect x="41.5" y="439.5" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="90.5" y="463" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">EVERY</text>
+          <text x="90.5" y="483" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">3s</text>
+        </g>
+        <g id="chip-for">
+          <rect x="147.5" y="439.5" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="196.5" y="463" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">FOR</text>
+          <text x="196.5" y="483" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">1h</text>
+        </g>
+        <!-- BLEND is drawn only when the schedule carried a depth; FOR only
+             when it carried a duration. EVERY is always present -->
+        <g id="chip-blend">
+          <rect x="253.5" y="439.5" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="302.5" y="463" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">BLEND</text>
+          <text x="302.5" y="483" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">5</text>
+        </g>
+      </g>
+
+      <!-- status: before T-60s the honest answer is that there is no session -->
+      <g id="status-cold">
+        <g data-symbol="camera.fill" transform="translate(120,512)" fill="#FFF" opacity="0.35">
+          <rect x="0" y="3" width="15" height="10" rx="2.5"/>
+          <path d="M4 3 l1.5 -2.5 h4 L11 3 Z"/>
+        </g>
+        <text x="143" y="524" font-size="13" fill="#FFF" opacity="0.35">Camera off to save power</text>
+      </g>
+
+      <!-- the one control: drops the schedule, restores the brightness and
+           hands the screen back to a live capture session -->
+      <g id="cancel">
+        <rect x="32" y="733" width="329" height="50" rx="25" fill="none" stroke="#FFF" stroke-opacity="0.28" stroke-width="1"/>
+        <text x="196.5" y="763" text-anchor="middle" font-size="15" class="sb" fill="#FFF">Cancel scheduled shoot</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — scheduled standby (cold) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureStandby.swift — StandbyOverlay · no capture session · brightness 5%</text>
+</svg>

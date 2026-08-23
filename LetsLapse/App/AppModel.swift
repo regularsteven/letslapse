@@ -733,6 +733,18 @@ final class AppModel: ObservableObject {
         didSet { UserDefaults.standard.set(burstResolutionEnabled, forKey: DefaultsKey.burstResolution) }
     }
 
+    /// A shoot armed for a future wall-clock time, or nil for none.
+    ///
+    /// Lives on the model rather than in the capture screen's `@State` because
+    /// it outlives the screen: it is set from the schedule sheet, survives the
+    /// app being relaunched while the phone waits on a tripod, and is cleared
+    /// by whichever of "the shoot fired" or "the user cancelled" comes first.
+    /// The capture screen watches it and enters cold standby (no capture
+    /// session at all) whenever the start is far enough away to be worth it.
+    @Published var scheduledRecording: ScheduledRecording? = ScheduledRecordingStore.load() {
+        didSet { ScheduledRecordingStore.save(scheduledRecording) }
+    }
+
     // Recording options
     @Published var rememberRecordingSettings = RecordingSettingsStore.isEnabled {
         didSet {

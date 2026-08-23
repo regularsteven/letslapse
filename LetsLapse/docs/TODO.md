@@ -11,6 +11,26 @@ live inline.
 
 ## Open
 
+### JPEG Holy Grail locks white balance, and writes no EXIF
+
+**Detail:** [jpeg-holygrail-wb-brief.md](jpeg-holygrail-wb-brief.md) ·
+**Raised:** 2026-08-23 · **Not started**
+
+`applyHolyGrailExposure()` sets `whiteBalanceMode = .locked` on every ramp write
+and nothing restores AWB until the run ends, so the 2026-08-23 `jpeg sunrise`
+shoot rendered two hours of sunrise through sodium-vapour gains: red ends at
+**14 of 255 code values** — quantised away, unrecoverable in 8-bit. Acceptable
+for DNG (grading latitude, and the stability is wanted); a show-stopper for
+JPEG. Separately, the JPEG blend output is written with a GPS dictionary and
+nothing else, so it carries no `DateTimeOriginal`, `ExposureTime`, `ISO` or
+`FNumber` — the DNG author writes a real EXIF IFD, JPEG never has.
+
+**The trap:** `applyHolyGrailExposure()` is shared by both pipelines, so a naive
+edit changes DNG too — the fix has to be conditioned on the active pipeline.
+The brief also records what is *not* wrong: the ramp did not run away (it held
+to 0.12 stops over two hours), and the darkness is the seed anchor working as
+designed.
+
 ### Storage accounting, and the Settings storage card
 
 **Detail:** [storage-accounting-job.md](storage-accounting-job.md) ·

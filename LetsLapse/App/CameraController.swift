@@ -5371,63 +5371,6 @@ final class CameraController: NSObject, ObservableObject {
         return (duration: duration, iso: iso)
     }
 
-    /// What `activeVideoMaxFrameDuration` was before a blend run relaxed it.
-    private var pinnedVideoMaxFrameDuration: CMTime?
-
-    /// Let the shutter reach the exposure the ramp is asking for.
-    ///
-    /// Interval blending taps the VIDEO output, and a video frame's exposure
-    /// can never exceed its own frame duration. `applyCaptureFormat` pins
-    /// `min == max`, so the ceiling is 1/fps — 40 ms at 25 fps. Measured on a
-    /// 16 Pro (2026-08-22): the ramp commanded 1.0 s at ISO 97, the sensor
-    /// delivered 0.0399 s at ISO 2534, and AE made up all 4.7 stops with gain
-    /// so nothing looked wrong. The DNG path was never affected because it
-    /// captures through the PHOTO output, which the frame duration does not
-    /// bound — which is why the same shoot reached 1.0 s there.
-    ///
-    /// Only the MAXIMUM moves. The minimum stays where the format put it, so
-    /// bright scenes still run at the configured rate and only a scene that
-    /// actually needs a long exposure slows the delivered rate down — exactly
-    /// what the iPads were already doing when they shot 1 fps in Psycho.
-    private func relaxVideoFrameDurationForBlend(interval: Double) {
-        #if os(iOS)
-        guard let device = videoDevice else { return }
-        let ceiling = min(device.activeFormat.maxExposureDuration.seconds,
-                          max(0.05, interval))
-        let current = device.activeVideoMaxFrameDuration
-        guard current.isValid, ceiling > current.seconds * 1.01 else { return }
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-            pinnedVideoMaxFrameDuration = current
-            device.activeVideoMaxFrameDuration =
-                CMTimeMakeWithSeconds(ceiling, preferredTimescale: 1_000_000)
-            LLog(String(format:
-                "liveblend: shutter ceiling raised %.3fs → %.2fs (video frame duration)",
-                current.seconds, ceiling))
-        } catch {
-            LLog("liveblend: could not raise the shutter ceiling — \(error.localizedDescription)")
-        }
-        #endif
-    }
-
-    /// Puts the frame rate back where the format pinned it. A relaxed ceiling
-    /// left behind would let a later VIDEO recording drop frames in low light.
-    private func restoreVideoFrameDuration() {
-        #if os(iOS)
-        guard let device = videoDevice, let pinned = pinnedVideoMaxFrameDuration
-        else { return }
-        pinnedVideoMaxFrameDuration = nil
-        do {
-            try device.lockForConfiguration()
-            defer { device.unlockForConfiguration() }
-            device.activeVideoMaxFrameDuration = pinned
-        } catch {
-            LLog("liveblend: could not restore the frame duration — \(error.localizedDescription)")
-        }
-        #endif
-    }
-
     private func applyHolyGrailExposure() {
         guard let device = videoDevice, let target = holyGrailEngine?.currentTarget,
               device.isExposureModeSupported(.custom)
@@ -6560,6 +6503,79 @@ final class CameraController: NSObject, ObservableObject {
         DispatchQueue.main.async { completion?(0) }
     }
 
+    #endif
+
+    // MARK: - Shutter ceiling for blend runs
+
+    // These two live OUTSIDE the ramp section above on purpose: the live-blend
+    // start/stop paths that call them are shared with macOS, so a copy that
+    // only exists on iOS breaks the Mac build. Their bodies are iOS-only —
+    // `activeVideoMaxFrameDuration` is an AVCaptureDevice API the Mac doesn't
+    // offer — so on macOS they are simply no-ops.
+
+    /// What `activeVideoMaxFrameDuration` was before a blend run relaxed it.
+    private var pinnedVideoMaxFrameDuration: CMTime?
+
+    /// Let the shutter reach the exposure the ramp is asking for.
+    ///
+    /// Interval blending taps the VIDEO output, and a video frame's exposure
+    /// can never exceed its own frame duration. `applyCaptureFormat` pins
+    /// `min == max`, so the ceiling is 1/fps — 40 ms at 25 fps. Measured on a
+    /// 16 Pro (2026-08-22): the ramp commanded 1.0 s at ISO 97, the sensor
+    /// delivered 0.0399 s at ISO 2534, and AE made up all 4.7 stops with gain
+    /// so nothing looked wrong. The DNG path was never affected because it
+    /// captures through the PHOTO output, which the frame duration does not
+    /// bound — which is why the same shoot reached 1.0 s there.
+    ///
+    /// Only the MAXIMUM moves. The minimum stays where the format put it, so
+    /// bright scenes still run at the configured rate and only a scene that
+    /// actually needs a long exposure slows the delivered rate down — exactly
+    /// what the iPads were already doing when they shot 1 fps in Psycho.
+    private func relaxVideoFrameDurationForBlend(interval: Double) {
+        #if os(iOS)
+        guard let device = videoDevice else { return }
+        let ceiling = min(device.activeFormat.maxExposureDuration.seconds,
+                          max(0.05, interval))
+        let current = device.activeVideoMaxFrameDuration
+        guard current.isValid, ceiling > current.seconds * 1.01 else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            pinnedVideoMaxFrameDuration = current
+            device.activeVideoMaxFrameDuration =
+                CMTimeMakeWithSeconds(ceiling, preferredTimescale: 1_000_000)
+            LLog(String(format:
+                "liveblend: shutter ceiling raised %.3fs → %.2fs (video frame duration)",
+                current.seconds, ceiling))
+        } catch {
+            LLog("liveblend: could not raise the shutter ceiling — \(error.localizedDescription)")
+        }
+        #endif
+    }
+
+    /// Puts the frame rate back where the format pinned it. A relaxed ceiling
+    /// left behind would let a later VIDEO recording drop frames in low light.
+    private func restoreVideoFrameDuration() {
+        #if os(iOS)
+        guard let device = videoDevice, let pinned = pinnedVideoMaxFrameDuration
+        else { return }
+        pinnedVideoMaxFrameDuration = nil
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.activeVideoMaxFrameDuration = pinned
+        } catch {
+            LLog("liveblend: could not restore the frame duration — \(error.localizedDescription)")
+        }
+        #endif
+    }
+
+    #if !os(iOS)
+    /// macOS has no ramp (see the Holy Grail section's note), so the shared
+    /// live-blend start path's "is this a ramped run?" question has one
+    /// answer here. Declared rather than `#if`-ed around every call site so
+    /// the shared path stays a single piece of code.
+    private var holyGrailRequestedForRun: Bool { false }
     #endif
 
     // MARK: - Scheduled stop (Watch "stop at…")
