@@ -1337,7 +1337,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             let session = CaptureExposureLog.Session(
                 sessionID: configuration.sessionID,
                 deviceModel: configuration.deviceModel,
-                captureMode: "interval",
+                // "dynamic" when the Holy Grail ramp drove the run — only a
+                // ramped run is handed a commanded exposure. `captureFlat`
+                // stays absent here: the setting is never offered for DNG.
+                captureMode: configuration.rampExposure != nil ? "dynamic" : "interval",
                 blendMode: configuration.blendDepth.token,
                 algorithm: configuration.blendDepth == .auto
                     ? configuration.blendStrategy.rawValue : nil,

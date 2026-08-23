@@ -171,6 +171,94 @@ final class PixelBufferBlenderTests: XCTestCase {
         }
     }
 
+    /// The float finalize preserves tonal depth below one 8-bit step — the
+    /// mean of a 100-valued and a 101-valued frame reads back as ≈100.5,
+    /// which the 8-bit path must round away. This is the property Capture
+    /// Flat's grade-then-quantize path is built on.
+    func testFinalizeFloatImageKeepsSubBitPrecision() throws {
+        let core = try makeCore()
+        let blender = PixelBufferBlender(core: core, linearLight: false)
+        try blender.accumulate(makePixelBuffer(width: 32, height: 32, value: 100))
+        try blender.accumulate(makePixelBuffer(width: 32, height: 32, value: 101))
+
+        let image = try blender.finalizeFloatImage()
+        XCTAssertEqual(image.width, 32)
+        XCTAssertEqual(image.bitsPerComponent, 16)
+        // Byte-space accumulation → the values are still encoded, and say so.
+        XCTAssertEqual(image.colorSpace?.name as String?, CGColorSpace.sRGB as String)
+        let expected = Float(100.5 / 255.0)
+        for value in floatGrayValues(of: image) {
+            XCTAssertLessThanOrEqual(abs(value - expected), 0.002,
+                "expected ≈\(expected), got \(value)")
+        }
+    }
+
+    /// With linear-light accumulation the float image is tagged linear and
+    /// carries the linear mean itself — no transfer encode has happened yet.
+    func testFinalizeFloatImageLinearTagging() throws {
+        let core = try makeCore()
+        let blender = PixelBufferBlender(core: core, linearLight: true)
+        try blender.accumulate(makePixelBuffer(width: 32, height: 32, value: 40))
+        try blender.accumulate(makePixelBuffer(width: 32, height: 32, value: 200))
+
+        let image = try blender.finalizeFloatImage()
+        XCTAssertEqual(image.colorSpace?.name as String?, CGColorSpace.linearSRGB as String)
+        let expected = (srgbToLinear(40.0 / 255.0) + srgbToLinear(200.0 / 255.0)) / 2
+        for value in floatGrayValues(of: image) {
+            XCTAssertLessThanOrEqual(abs(Double(value) - expected), 0.004,
+                "expected ≈\(expected), got \(value)")
+        }
+    }
+
+    /// Reads the red channel of an rgba16Float-backed CGImage, asserting the
+    /// pixels are gray. Half-floats decoded by hand so the test also runs on
+    /// architectures without a native Float16.
+    private func floatGrayValues(of image: CGImage) -> [Float] {
+        guard let data = image.dataProvider?.data as Data? else {
+            XCTFail("float image has no backing data")
+            return []
+        }
+        func half(_ bits: UInt16) -> Float {
+            let sign = UInt32(bits >> 15) & 1
+            let exponent = UInt32(bits >> 10) & 0x1F
+            let mantissa = UInt32(bits) & 0x3FF
+            var pattern: UInt32
+            if exponent == 0 {
+                if mantissa == 0 {
+                    pattern = sign << 31
+                } else {
+                    var e: UInt32 = 127 - 15 + 1
+                    var m = mantissa
+                    while m & 0x400 == 0 { m <<= 1; e -= 1 }
+                    pattern = (sign << 31) | (e << 23) | ((m & 0x3FF) << 13)
+                }
+            } else if exponent == 0x1F {
+                pattern = (sign << 31) | (0xFF << 23) | (mantissa << 13)
+            } else {
+                // Rebias in Int — the half bias (15) exceeds small exponents
+                // and would underflow unsigned arithmetic.
+                pattern = (sign << 31) | (UInt32(Int(exponent) - 15 + 127) << 23) | (mantissa << 13)
+            }
+            return Float(bitPattern: pattern)
+        }
+        var values: [Float] = []
+        let bytesPerRow = image.bytesPerRow
+        data.withUnsafeBytes { (raw: UnsafeRawBufferPointer) in
+            for row in 0..<image.height {
+                for column in 0..<image.width {
+                    let offset = row * bytesPerRow + column * 8
+                    let r = half(raw.loadUnaligned(fromByteOffset: offset, as: UInt16.self))
+                    let g = half(raw.loadUnaligned(fromByteOffset: offset + 2, as: UInt16.self))
+                    let b = half(raw.loadUnaligned(fromByteOffset: offset + 4, as: UInt16.self))
+                    XCTAssertLessThanOrEqual(abs(r - g), 0.002)
+                    XCTAssertLessThanOrEqual(abs(g - b), 0.002)
+                    values.append(r)
+                }
+            }
+        }
+        return values
+    }
+
     func testDiscardWindowResets() throws {
         let core = try makeCore()
         let blender = PixelBufferBlender(core: core, linearLight: false)

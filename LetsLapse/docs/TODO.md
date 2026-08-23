@@ -14,7 +14,14 @@ live inline.
 ### JPEG Holy Grail locks white balance, and writes no EXIF
 
 **Detail:** [jpeg-holygrail-wb-brief.md](jpeg-holygrail-wb-brief.md) ·
-**Raised:** 2026-08-23 · **Not started**
+**Raised:** 2026-08-23 · **Implemented 2026-08-23 — device verification pending**
+
+*Jobs A (slew-limited WB tracking for JPEG runs; DNG untouched via an explicit
+`rawPipeline` flag) and B (EXIF authored on blended JPEGs) are implemented on
+`ios-app`. Still owed before this leaves the list: a dawn/dusk JPEG arm on
+device (WB tracks, EXIF present, flicker gate passes) and a DNG arm diffed
+unchanged against a pre-change run. Job C (scene-referred meter) remains
+record-only.*
 
 `applyHolyGrailExposure()` sets `whiteBalanceMode = .locked` on every ramp write
 and nothing restores AWB until the run ends, so the 2026-08-23 `jpeg sunrise`
@@ -30,6 +37,33 @@ edit changes DNG too — the fix has to be conditioned on the active pipeline.
 The brief also records what is *not* wrong: the ramp did not run away (it held
 to 0.12 stops over two hours), and the darkness is the seed anchor working as
 designed.
+
+### Capture Flat is dead on the blended JPEG path, and unlogged
+
+**Detail:** [capture-flat-jpeg-brief.md](capture-flat-jpeg-brief.md) ·
+**Raised:** 2026-08-23 · **Implemented 2026-08-23 — device verification pending**
+
+*Jobs A (log truth: `captureFlat`, honest `captureMode: dynamic`) and B (flat
+graded on the window's half-float mean, one 8-bit quantise, same curve as the
+photo path) are implemented on `ios-app`; Kit tests cover the float finalize.
+Still owed: re-run the §1 A/B on device — expect saturation ≈×0.80, contrast
+≈×0.90, `captureFlat` in both logs — plus the shadow-push latitude check. Job
+C (sensor-side probe) is open, and one product gap surfaced: the blend-strategy
+picker only reaches the DNG pipeline; JPEG Auto always runs Zone.*
+
+A measured A/B (projects `JPEG flat` / `JPEG non flat`, 2026-08-23, iPhone 16
+Pro, Interval · JPEG · Psycho · Dynamic) came out pixel-identical: the blended
+JPEG writer never reads the Capture Flat flag — the toggle only works for
+photo-output stills and video. Where it does run it is a save-time re-grade of
+the finished 8-bit JPEG (decode → grade → second lossy encode), which is the
+post filter the setting exists to avoid. And no still shoot records the setting:
+`capture_log.json` has no `captureFlat`, its `captureMode` is hardcoded
+`"interval"` (Dynamic runs are indistinguishable), and `algorithm` says `zone`
+for every Auto run. The fix that matters: apply the flat curve to the blend's
+existing **float32 mean** at finalize — one quantisation, in flat space
+(`finalizeMean` → `encodeGamma` already owns this) — which is metering-neutral,
+unlike any tap-encoding change. Related, and downstream in value of, the WB
+brief above.
 
 ### Storage accounting, and the Settings storage card
 

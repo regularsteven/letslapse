@@ -673,6 +673,19 @@ enum FlatCapture {
         return out
     }
 
+    /// The grade applied to a full-precision image — the live-blend path's
+    /// half-float window mean — quantized to 8 bits exactly once, here at the
+    /// render. Same filters as `write(jpegData:)`, so the photo-output path
+    /// and the blended path deliver one look; the difference is what the
+    /// curve gets to work with (the window's real tonal depth versus an
+    /// already-encoded 8-bit JPEG). Returns nil on any CoreImage failure so
+    /// the caller can fall back to writing the ungraded mean.
+    static func flatten(_ image: CGImage) -> CGImage? {
+        let output = apply(to: CIImage(cgImage: image))
+        guard output.extent.width > 0, output.extent.height > 0 else { return nil }
+        return context.createCGImage(output, from: output.extent)
+    }
+
     /// Renders `jpegData` through the flat grade and writes a JPEG to `url`,
     /// baking in the source orientation and carrying an optional GPS dictionary.
     /// Returns false if any step fails so the caller can fall back to writing the

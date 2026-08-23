@@ -273,6 +273,15 @@ final class CameraController: NSObject, ObservableObject {
     /// Deliberate over/under exposure, in stops, applied on top of the ramp's
     /// anchor. sessionQueue-confined mirror of `holyGrailBias`.
     private var holyGrailBiasStops: Double = 0
+    /// Which pipeline the active Holy Grail run feeds. White balance is the
+    /// consumer: DNG runs keep the frozen `.locked` illuminant (recoverable
+    /// in RAW, and the stability is wanted — docs/jpeg-holygrail-wb-brief.md
+    /// C3), JPEG runs track the scene instead, because gains baked into
+    /// 8-bit output destroyed a 2-hour sunrise (red at 14/255 code values).
+    /// Set by `beginHolyGrailForBlendRun` — an explicit parameter, because
+    /// the controller references and `holyGrailRawPixelFormat` are both
+    /// assigned AFTER that call runs. sessionQueue-confined.
+    private var holyGrailPipelineIsRAW = false
     #if os(iOS)
     /// Set by `startLiveBlend` when the run is a Holy Grail one, so both blend
     /// controllers can install the ramp without another parameter reaching
@@ -280,6 +289,10 @@ final class CameraController: NSObject, ObservableObject {
     private var holyGrailRequestedForRun = false
     /// Whether that run's EVERY dial was on Auto. Same reason as above.
     private var holyGrailAutoRequestedForRun = false
+    /// Slew-limited white-balance state for JPEG Holy Grail runs — the WB
+    /// analogue of the ramp's 1/3-stop-per-window exposure limit. nil outside
+    /// a run and on the DNG pipeline. sessionQueue-confined.
+    private var holyGrailWhiteBalance: HolyGrailWhiteBalance?
     /// The spacing a Holy Grail run on EVERY=Auto is currently using, so a
     /// re-pace only happens when the policy's answer has really moved (see
     /// `HolyGrailAutoInterval.isMeaningfulChange`). Nil when EVERY is a fixed
@@ -5371,6 +5384,83 @@ final class CameraController: NSObject, ObservableObject {
         return (duration: duration, iso: iso)
     }
 
+    #if os(iOS)
+    /// White balance for JPEG Holy Grail runs: locked gains that FOLLOW the
+    /// illuminant instead of freezing its first reading. A plain `.locked`
+    /// froze sodium-vapour gains over a 2-hour sunrise and quantised the red
+    /// channel to 14 of 255 code values — unrecoverable in 8-bit output
+    /// (docs/jpeg-holygrail-wb-brief.md, Finding 2's show-stopper). Fully
+    /// continuous AWB is the opposite failure: per-window scene-analysis
+    /// jumps read as colour flicker across a timelapse. So: gray-world's
+    /// running estimate, EMA-smoothed so scene content passing through (a
+    /// red bus) cannot move the gains, then slew-limited per window — the WB
+    /// analogue of the ramp's 1/3-stop exposure limit. Within a window the
+    /// gains never move at all, which is the property blending needs.
+    private struct HolyGrailWhiteBalance {
+        var applied: AVCaptureDevice.WhiteBalanceGains
+        var smoothed: SIMD3<Double>
+        /// Per-window EMA weight of the raw gray-world sample: at 1 s windows
+        /// a transient needs ~20 s of presence to half-register.
+        static let emaAlpha = 0.05
+        /// Max per-channel gain movement per window, in log2. An illuminant
+        /// traverse (sodium → daylight is ~1.2 log2 in red) completes in ~2
+        /// minutes of 1 s windows while staying invisible frame to frame.
+        static let maxStepLog2 = 0.01
+    }
+
+    /// One window's WB write for the JPEG pipeline. Called inside the
+    /// device's `lockForConfiguration` scope, every window, in place of the
+    /// DNG pipeline's plain `.locked`.
+    private func applyHolyGrailTrackedWhiteBalance(on device: AVCaptureDevice) {
+        let maxGain = device.maxWhiteBalanceGain
+        // Gray-world reads can be NaN or out of range mid-configuration; a
+        // bad sample skips a window rather than poisoning the lock.
+        func isUsable(_ gains: AVCaptureDevice.WhiteBalanceGains) -> Bool {
+            for gain in [gains.redGain, gains.greenGain, gains.blueGain] {
+                guard gain.isFinite, gain >= 1, gain <= maxGain else { return false }
+            }
+            return true
+        }
+        guard var state = holyGrailWhiteBalance else {
+            // Seed from AWB's settled answer at arm time (the device is
+            // still in continuous AWB here) — the same gains a plain
+            // `.locked` would freeze, so the run OPENS identically to the
+            // old behaviour and diverges only as the illuminant moves.
+            let seed = device.deviceWhiteBalanceGains
+            guard isUsable(seed) else {
+                device.whiteBalanceMode = .locked
+                return
+            }
+            holyGrailWhiteBalance = HolyGrailWhiteBalance(
+                applied: seed,
+                smoothed: SIMD3(Double(seed.redGain), Double(seed.greenGain), Double(seed.blueGain)))
+            device.setWhiteBalanceModeLocked(with: seed, completionHandler: nil)
+            LLog(String(format: "holygrail: WB tracking armed (seed R %.2f G %.2f B %.2f)",
+                        seed.redGain, seed.greenGain, seed.blueGain))
+            return
+        }
+        let sample = device.grayWorldDeviceWhiteBalanceGains
+        if isUsable(sample) {
+            let alpha = HolyGrailWhiteBalance.emaAlpha
+            state.smoothed = state.smoothed * (1 - alpha)
+                + SIMD3(Double(sample.redGain), Double(sample.greenGain), Double(sample.blueGain)) * alpha
+        }
+        func stepped(_ current: Float, toward target: Double) -> Float {
+            let step = min(max(log2(target / Double(current)),
+                               -HolyGrailWhiteBalance.maxStepLog2),
+                           HolyGrailWhiteBalance.maxStepLog2)
+            return Float(Double(current) * pow(2, step))
+        }
+        var applied = state.applied
+        applied.redGain = min(max(stepped(applied.redGain, toward: state.smoothed.x), 1), maxGain)
+        applied.greenGain = min(max(stepped(applied.greenGain, toward: state.smoothed.y), 1), maxGain)
+        applied.blueGain = min(max(stepped(applied.blueGain, toward: state.smoothed.z), 1), maxGain)
+        state.applied = applied
+        holyGrailWhiteBalance = state
+        device.setWhiteBalanceModeLocked(with: applied, completionHandler: nil)
+    }
+    #endif
+
     private func applyHolyGrailExposure() {
         guard let device = videoDevice, let target = holyGrailEngine?.currentTarget,
               device.isExposureModeSupported(.custom)
@@ -5401,7 +5491,19 @@ final class CameraController: NSObject, ObservableObject {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
             if device.isWhiteBalanceModeSupported(.locked) {
+                #if os(iOS)
+                if holyGrailPipelineIsRAW {
+                    // DNG: freeze the arm-time illuminant. RAW carries the
+                    // grading latitude, and the stability is the feature.
+                    device.whiteBalanceMode = .locked
+                } else {
+                    // JPEG: the gains are baked into 8-bit output — track
+                    // the scene, slew-limited so it cannot flicker.
+                    applyHolyGrailTrackedWhiteBalance(on: device)
+                }
+                #else
                 device.whiteBalanceMode = .locked
+                #endif
             }
             device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
             applied = true
@@ -5423,11 +5525,18 @@ final class CameraController: NSObject, ObservableObject {
     /// at is the ramp's. Called from `startLiveBlend` on the sessionQueue,
     /// after the controller exists and before it starts.
     private func beginHolyGrailForBlendRun(
-        interval: TimeInterval, directory: URL, autoInterval: Bool
+        interval: TimeInterval, directory: URL, autoInterval: Bool, rawPipeline: Bool
     ) {
         holyGrailActive = true
         holyGrailPending = false
         holyGrailRawPixelFormat = nil  // the blend controller owns capture
+        // Passed in, not derived: the caller assigns its controller reference
+        // and `holyGrailRawPixelFormat` after this returns, so neither can
+        // answer "which pipeline?" during the seed's first exposure write.
+        holyGrailPipelineIsRAW = rawPipeline
+        #if os(iOS)
+        holyGrailWhiteBalance = nil
+        #endif
         holyGrailWriter = FrameTimestampWriter(directory: directory)
         holyGrailFramesWritten = 0
         // Auto starts at the policy's floor and widens from there as the ramp
@@ -5490,6 +5599,10 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailEngine = nil
         holyGrailLimits = nil
         holyGrailRawPixelFormat = nil
+        holyGrailPipelineIsRAW = false
+        #if os(iOS)
+        holyGrailWhiteBalance = nil
+        #endif
         // Hand the camera back: manual exposure is the run's, not the app's.
         if let device = videoDevice, !exposureLocked, (try? device.lockForConfiguration()) != nil {
             if device.isExposureModeSupported(.continuousAutoExposure) {
@@ -6888,7 +7001,8 @@ final class CameraController: NSObject, ObservableObject {
                     guard let self, self.gpsTaggingEnabled,
                           let location = LocationService.shared.latestLocation else { return nil }
                     return location.exifGPSDictionary()
-                })
+                },
+                captureFlat: UserDefaults.standard.bool(forKey: FlatCapture.storageKey))
 
             let controller: LiveBlendController
             do {
@@ -6911,7 +7025,8 @@ final class CameraController: NSObject, ObservableObject {
                 }
                 self.beginHolyGrailForBlendRun(
                     interval: interval, directory: directory,
-                    autoInterval: self.holyGrailAutoRequestedForRun)
+                    autoInterval: self.holyGrailAutoRequestedForRun,
+                    rawPipeline: false)
             }
             #endif
             controller.onDiagnostics = { [weak self] snapshot in
@@ -7110,7 +7225,8 @@ final class CameraController: NSObject, ObservableObject {
             }
             beginHolyGrailForBlendRun(
                 interval: interval, directory: directory,
-                autoInterval: holyGrailAutoRequestedForRun)
+                autoInterval: holyGrailAutoRequestedForRun,
+                rawPipeline: true)
             // Every frame of this run is Bayer RAW by construction.
             holyGrailRawPixelFormat = rawFormat
             publishHolyGrailState()

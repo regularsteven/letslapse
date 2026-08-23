@@ -327,6 +327,17 @@ struct CaptureView: View {
                     videoGravity: .resizeAspect
                 )
                 .allowsHitTesting(false)
+                // Capture Flat, made visible: the saturation/contrast half of
+                // the save-time grade, applied by the compositor to the live
+                // preview — no second render pipeline, and nothing here can
+                // touch the session, the tap, or the meter. The grade's
+                // highlight/shadow half has no compositor equivalent, so this
+                // is the look, not the pixels; the delivered file is the
+                // reference. Animated so flipping the toggle in the format
+                // sheet visibly answers behind it.
+                .saturation(previewShowsFlat ? 0.80 : 1.0)
+                .contrast(previewShowsFlat ? 0.90 : 1.0)
+                .animation(.easeInOut(duration: 0.35), value: previewShowsFlat)
                 .offset(y: previewTopAnchorOffset(in: geometry.size))
 
                 Group {
@@ -1281,6 +1292,22 @@ struct CaptureView: View {
     /// slack then collects at the bottom, under the image, where the controls
     /// and the recent-capture tile live. Landscape already fills the height, so
     /// there is nothing to reclaim there.
+    /// Whether the viewfinder wears the flat look — mirroring exactly the
+    /// conditions under which the delivered file gets the grade, so the
+    /// preview never claims a flatness the file won't have. Still modes
+    /// (interval in all its dial positions, photo): the save-time grade
+    /// applies to JPEG output only. Video: Apple Log previews are already
+    /// flat at the sensor — the approximation would double-apply — so only
+    /// the software-flatten selections (no Log at this resolution/rate, or
+    /// no Log hardware) show it.
+    private var previewShowsFlat: Bool {
+        guard captureFlat else { return false }
+        if mode == .video {
+            return !camera.appleLogAvailableForSelection
+        }
+        return model.intervalOutputFormat == .jpeg
+    }
+
     private func previewTopAnchorOffset(in size: CGSize) -> CGFloat {
         guard size.height > size.width else { return 0 }
         let fitted = aspectFitSize(

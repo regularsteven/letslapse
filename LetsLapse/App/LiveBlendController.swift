@@ -263,6 +263,12 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// as each output is written, so every blended frame carries the fix
         /// from its own moment — matching the plain-still capture path.
         var gpsMetadata: (() -> [String: Any]?)? = nil
+        /// Capture Flat: grade each output at the window's full float
+        /// precision before its one 8-bit quantization. Snapshotted at run
+        /// start (the toggle must not change a run midway) and recorded in
+        /// `capture_log.json` — the 2026-08-23 flat/non-flat A/B was
+        /// undiagnosable because the old path neither applied nor logged it.
+        var captureFlat: Bool = false
 
         /// What readouts show before the first window resolves: the fixed
         /// count, or 0 (unlimited/unresolved) for the adaptive depths.
@@ -778,15 +784,35 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         } else {
             do {
                 let blendStart = ProcessInfo.processInfo.systemUptime
-                let image = try blender.finalizeImage()
+                let image: CGImage
+                if configuration.captureFlat {
+                    // Capture Flat: grade the window's half-float mean, so
+                    // the single 8-bit quantization happens in flat space.
+                    // A CoreImage failure must not cost the frame — the
+                    // ungraded mean encodes to exactly what the plain path
+                    // would have delivered (ImageIO honours its colorspace).
+                    let mean = try blender.finalizeFloatImage()
+                    image = FlatCapture.flatten(mean) ?? mean
+                } else {
+                    image = try blender.finalizeImage()
+                }
                 entry.blendMillis = (ProcessInfo.processInfo.systemUptime - blendStart) * 1000
                 let url = configuration.outputDirectory
                     .appendingPathComponent(String(format: "frame-%05d.jpg", outputIndex))
                 let encodeStart = ProcessInfo.processInfo.systemUptime
-                let metadata = configuration.gpsMetadata?().map {
-                    [kCGImagePropertyGPSDictionary: $0 as Any]
+                // The tapped frames carry no EXIF of their own, so author the
+                // record the photo path gets from the camera: the exposure
+                // this window opened at, the device, and the fix. (Finding 4
+                // of docs/jpeg-holygrail-wb-brief.md — nothing stripped EXIF;
+                // it was never written.)
+                var metadata = Self.captureMetadata(
+                    exposure: record.exposure, deviceModel: configuration.deviceModel)
+                if let gps = configuration.gpsMetadata?() {
+                    metadata[kCGImagePropertyGPSDictionary] = gps
                 }
-                try ImageExporter.write(image, to: url, format: .jpeg, metadata: metadata)
+                try ImageExporter.write(
+                    image, to: url, format: .jpeg,
+                    metadata: metadata.isEmpty ? nil : metadata)
                 entry.encodeMillis = (ProcessInfo.processInfo.systemUptime - encodeStart) * 1000
                 let attributes = try? FileManager.default.attributesOfItem(atPath: url.path)
                 entry.fileBytes = (attributes?[.size] as? NSNumber)?.intValue
@@ -912,12 +938,19 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             let session = CaptureExposureLog.Session(
                 sessionID: configuration.sessionID,
                 deviceModel: configuration.deviceModel,
-                captureMode: "interval",
+                // "dynamic" when the Holy Grail ramp drove the run — only a
+                // ramped run is handed a commanded exposure. The old
+                // hardcoded "interval" made the 2026-08-23 A/B pair
+                // indistinguishable from unramped shoots in their own logs.
+                captureMode: configuration.rampExposure != nil ? "dynamic" : "interval",
                 blendMode: configuration.blendDepth.token,
+                // Zone genuinely is what this path's Auto runs (`zoneBlend`);
+                // the strategy picker only reaches the DNG pipeline today.
                 algorithm: configuration.blendDepth == .auto
                     ? BlendStrategyID.zone.rawValue : nil,
                 algorithmVersion: configuration.blendDepth == .auto
                     ? BlendStrategyID.version : nil,
+                captureFlat: configuration.captureFlat,
                 cameraName: configuration.cameraName,
                 captureWidth: configuration.captureWidth,
                 captureHeight: configuration.captureHeight,
@@ -1000,6 +1033,68 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         case .critical: return "critical"
         @unknown default: return "unknown"
         }
+    }
+
+    /// EXIF + TIFF for one blended output — the record a camera-written file
+    /// carries and a tapped-frame blend otherwise never gets. Exposure fields
+    /// come from the window-open reading (`WindowRecord.exposure`); during a
+    /// Holy Grail run those are the ramp's commanded values, which is the
+    /// honest answer to "what was this frame shot at".
+    static func captureMetadata(
+        exposure: DNGAuthor.DNGExposure?, deviceModel: String
+    ) -> [CFString: Any] {
+        var metadata: [CFString: Any] = [:]
+        var exif: [CFString: Any] = [:]
+        if let exposure {
+            if let iso = exposure.iso, iso > 0 {
+                exif[kCGImagePropertyExifISOSpeedRatings] = [Int(iso.rounded())]
+            }
+            if let duration = exposure.exposureDuration, duration > 0 {
+                exif[kCGImagePropertyExifExposureTime] = duration
+            }
+            if let aperture = exposure.aperture, aperture > 0 {
+                exif[kCGImagePropertyExifFNumber] = aperture
+            }
+            if let brightness = exposure.brightness {
+                exif[kCGImagePropertyExifBrightnessValue] = brightness
+            }
+            if let capturedAt = exposure.capturedAt {
+                exif[kCGImagePropertyExifDateTimeOriginal] =
+                    Self.exifDateFormatter.string(from: capturedAt)
+                let subseconds = Int(
+                    capturedAt.timeIntervalSince1970
+                        .truncatingRemainder(dividingBy: 1) * 1000)
+                exif[kCGImagePropertyExifSubsecTimeOriginal] = String(format: "%03d", subseconds)
+                exif[kCGImagePropertyExifOffsetTimeOriginal] = Self.exifOffset(for: capturedAt)
+            }
+        }
+        if !exif.isEmpty { metadata[kCGImagePropertyExifDictionary] = exif }
+        if !deviceModel.isEmpty {
+            // The TIFF camera identity `ImageExporter.carryoverMetadata`
+            // preserves on derived images elsewhere in the app.
+            metadata[kCGImagePropertyTIFFDictionary] = [
+                kCGImagePropertyTIFFMake: "Apple",
+                kCGImagePropertyTIFFModel: deviceModel,
+            ]
+        }
+        return metadata
+    }
+
+    /// EXIF datetimes are local time with no zone of their own —
+    /// `OffsetTimeOriginal` carries the zone. blendQueue-confined
+    /// (DateFormatter is not thread-safe).
+    private static let exifDateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy:MM:dd HH:mm:ss"
+        return formatter
+    }()
+
+    private static func exifOffset(for date: Date) -> String {
+        let seconds = TimeZone.current.secondsFromGMT(for: date)
+        let sign = seconds < 0 ? "-" : "+"
+        let magnitude = abs(seconds)
+        return String(format: "%@%02d:%02d", sign, magnitude / 3600, (magnitude % 3600) / 60)
     }
 
     /// Resident footprint (the number Activity Monitor's "Memory" shows),

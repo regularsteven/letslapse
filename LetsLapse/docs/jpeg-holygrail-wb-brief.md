@@ -1,6 +1,33 @@
 # JPEG Holy Grail: locked white balance, and the EXIF that was never written
 
-**Raised:** 2026-08-23 · **Not started** · Evidence: field shoot `jpeg sunrise`
+**Raised:** 2026-08-23 · **Jobs A + B implemented 2026-08-23 (device verification pending)** · Evidence: field shoot `jpeg sunrise`
+
+> **Status update (2026-08-23).** Implemented on `ios-app`, together with the
+> Capture Flat jobs ([capture-flat-jpeg-brief.md](capture-flat-jpeg-brief.md)):
+>
+> - **Job A** — §7's option 3, the slew-limited gains. JPEG-pipeline runs now
+>   hold `setWhiteBalanceModeLocked(with:)` gains that track an EMA-smoothed
+>   `grayWorldDeviceWhiteBalanceGains` signal, capped at 0.01 log2 per channel
+>   per window (`applyHolyGrailTrackedWhiteBalance`, `CameraController`). The
+>   seed is AWB's settled answer at arm — the same gains the old `.locked`
+>   froze — so a run opens identically and diverges only as the illuminant
+>   moves. Within a window the gains never move at all. **The C2 trap is
+>   honoured with an explicit flag**: `beginHolyGrailForBlendRun` now takes
+>   `rawPipeline:` (the controller references and `holyGrailRawPixelFormat`
+>   are both assigned *after* it runs, so neither could answer during the
+>   seed's first write), and the DNG pipeline keeps the plain `.locked`
+>   statement untouched.
+> - **Job B** — the blended-JPEG write site authors EXIF + TIFF from
+>   `record.exposure` (ISO, ExposureTime, FNumber, DateTimeOriginal +
+>   Subsec + OffsetTime, device identity), GPS alongside as before.
+>   `brightness`/`sceneExposureProvider` was NOT touched — it feeds both
+>   pipelines (C2), so BrightnessValue is simply absent until someone
+>   deliberately does that work.
+> - **Job C** — not actioned, per its own instruction.
+>
+> Verification per §8 is still owed: a dawn/dusk JPEG arm (WB must track,
+> EXIF must be present, `flicker_report.py` must pass) and an unchanged DNG
+> arm diffed against a pre-change run.
 
 This brief is self-contained. It assumes no knowledge of the conversation that
 produced it. Read the **Constraints** section before writing any code — this job

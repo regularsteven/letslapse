@@ -199,6 +199,11 @@ public struct CaptureExposureLog {
         /// `auto` for all of them.
         public var algorithm: String?
         public var algorithmVersion: String?
+        /// Whether Capture Flat was on for this run. nil where the setting
+        /// does not apply (the DNG path never offers it); the 2026-08-23
+        /// flat/non-flat A/B pair was indistinguishable from their logs
+        /// because nothing recorded this.
+        public var captureFlat: Bool?
         /// Run context a cross-device comparison needs beside the numbers:
         /// which camera and capture format produced them (a 12MP frame and
         /// a 48MP frame have very different per-frame costs), and the
@@ -226,6 +231,7 @@ public struct CaptureExposureLog {
             blendMode: String,
             algorithm: String? = nil,
             algorithmVersion: String? = nil,
+            captureFlat: Bool? = nil,
             cameraName: String? = nil,
             captureWidth: Int? = nil,
             captureHeight: Int? = nil,
@@ -243,6 +249,7 @@ public struct CaptureExposureLog {
             self.blendMode = blendMode
             self.algorithm = algorithm
             self.algorithmVersion = algorithmVersion
+            self.captureFlat = captureFlat
             self.cameraName = cameraName
             self.captureWidth = captureWidth
             self.captureHeight = captureHeight
