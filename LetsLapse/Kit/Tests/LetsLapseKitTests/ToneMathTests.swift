@@ -226,7 +226,10 @@ final class ToneMathTests: XCTestCase {
         let unprotected = ToneMath.evaluate(
             noisy, recipe: recipe, whiteBalance: matrix_identity_float3x3, lut: lut,
             baseLog2: -8, smoothed: noisy)
-        XCTAssertLessThan(saturation(protected), saturation(unprotected) * 0.4,
+        // The steering is capped (chromaProtectMixCap) so a quarter of the
+        // pixel's own colour survives — small colourful detail must not be
+        // averaged away — hence "wins" means halves, not erases.
+        XCTAssertLessThan(saturation(protected), saturation(unprotected) * 0.55,
                           "the neighbourhood chroma must win in a hard-lifted deep shadow")
         // And with no lift at all, the pixel's own chroma is untouched even
         // with a wild neighbourhood value supplied.
@@ -238,6 +241,24 @@ final class ToneMathTests: XCTestCase {
             noisy, recipe: .neutral, whiteBalance: matrix_identity_float3x3, lut: neutralLUT)
         XCTAssertEqual(untouched.x, reference.x, accuracy: 1e-6)
         XCTAssertEqual(untouched.z, reference.z, accuracy: 1e-6)
+    }
+
+    func testProtectedShadowsKeepTheUsersWarmth() {
+        // The steering's no-trust fallback is the white-balanced neutral, not
+        // display grey: with a strong warm move, a lifted noise-floor shadow
+        // must render warm like the rest of the frame.
+        var recipe = GradeRecipe()
+        recipe.shadows = 1
+        recipe.temperatureMired = 60
+        let lut = ToneMath.toneLUT(for: recipe)
+        let wb = ToneMath.whiteBalanceMatrix(recipe: recipe, reference: GradeReference())
+        let noisy = SIMD3<Float>(0.002, 0.002, 0.004)
+        let floorNeighbourhood = SIMD3<Float>(repeating: 0.0005)  // below trust floor
+        let out = ToneMath.evaluate(
+            noisy, recipe: recipe, whiteBalance: wb, lut: lut,
+            baseLog2: -8, smoothed: floorNeighbourhood)
+        XCTAssertGreaterThan(out.x, out.z,
+                             "a warmed image's protected shadows must stay warm, not fall back to grey")
     }
 
     func testHighlightPullKeepsColourBelowClip() {

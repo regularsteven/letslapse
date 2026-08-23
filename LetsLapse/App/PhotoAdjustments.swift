@@ -38,6 +38,11 @@ struct PhotoAdjustments: Codable, Equatable {
     /// Local contrast as detail gain: positive adds punch, negative smooths.
     /// −1…+1.
     var clarity: Float
+    /// Mid-frequency detail — the band between clarity's regions and
+    /// sharpen's pixels. −1…+1.
+    var texture: Float
+    /// Capture sharpening: small-radius luma acutance. 0…1.
+    var sharpen: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
 
@@ -45,7 +50,7 @@ struct PhotoAdjustments: Codable, Equatable {
     static var neutral: PhotoAdjustments {
         .init(exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0,
               blacks: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0,
-              clarity: 0, vignetteIntensity: 0)
+              clarity: 0, texture: 0, sharpen: 0, vignetteIntensity: 0)
     }
 
     /// True when nothing here would change a pixel, so the grader can skip the
@@ -68,6 +73,8 @@ struct PhotoAdjustments: Codable, Equatable {
     static let vibranceRange: ClosedRange<Float> = -1...1
     static let saturationRange: ClosedRange<Float> = -1...1
     static let clarityRange: ClosedRange<Float> = -1...1
+    static let textureRange: ClosedRange<Float> = -1...1
+    static let sharpenRange: ClosedRange<Float> = 0...1
     static let vignetteRange: ClosedRange<Float> = 0...1
 
     /// The engine-side recipe these adjustments describe, optionally layered
@@ -85,6 +92,8 @@ struct PhotoAdjustments: Codable, Equatable {
         recipe.vibrance = min(max(base.vibrance + vibrance, -1), 1)
         recipe.saturation = min(max(base.saturation + saturation, -1), 1)
         recipe.clarity = min(max(base.clarity + clarity, -1), 1)
+        recipe.texture = min(max(base.texture + texture, -1), 1)
+        recipe.sharpen = min(max(base.sharpen + sharpen, 0), 1)
         recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
         return recipe
     }
@@ -93,9 +102,10 @@ struct PhotoAdjustments: Codable, Equatable {
     var cacheToken: String {
         guard !isNeutral else { return "n" }
         return String(
-            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f",
+            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
             exposure, contrast, highlights, shadows, whites, blacks,
-            temperature, tint, vibrance, saturation, clarity, vignetteIntensity)
+            temperature, tint, vibrance, saturation, clarity, vignetteIntensity,
+            texture, sharpen)
     }
 
     // MARK: - Codable
@@ -107,7 +117,8 @@ struct PhotoAdjustments: Codable, Equatable {
 
     init(exposure: Float, contrast: Float, highlights: Float, shadows: Float,
          whites: Float, blacks: Float, temperature: Float, tint: Float,
-         vibrance: Float, saturation: Float, clarity: Float, vignetteIntensity: Float) {
+         vibrance: Float, saturation: Float, clarity: Float, texture: Float = 0,
+         sharpen: Float = 0, vignetteIntensity: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -119,6 +130,8 @@ struct PhotoAdjustments: Codable, Equatable {
         self.vibrance = vibrance
         self.saturation = saturation
         self.clarity = clarity
+        self.texture = texture
+        self.sharpen = sharpen
         self.vignetteIntensity = vignetteIntensity
     }
 
@@ -126,6 +139,7 @@ struct PhotoAdjustments: Codable, Equatable {
         case version = "v"
         case exposure, contrast, highlights, shadows, whites, blacks
         case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
+        case texture, sharpen
         case whiteBalance  // v1 only; never written by v2
     }
 
@@ -167,7 +181,8 @@ struct PhotoAdjustments: Codable, Equatable {
                 whites: field(.whites), blacks: field(.blacks),
                 temperature: field(.temperature), tint: field(.tint),
                 vibrance: field(.vibrance), saturation: field(.saturation),
-                clarity: field(.clarity), vignetteIntensity: field(.vignetteIntensity))
+                clarity: field(.clarity), texture: field(.texture),
+                sharpen: field(.sharpen), vignetteIntensity: field(.vignetteIntensity))
             return
         }
         let legacyWB = (try? container.decodeIfPresent(LegacyWhiteBalance.self, forKey: .whiteBalance)) ?? .asShot
@@ -208,6 +223,8 @@ struct PhotoAdjustments: Codable, Equatable {
         try container.encode(vibrance, forKey: .vibrance)
         try container.encode(saturation, forKey: .saturation)
         try container.encode(clarity, forKey: .clarity)
+        try container.encode(texture, forKey: .texture)
+        try container.encode(sharpen, forKey: .sharpen)
         try container.encode(vignetteIntensity, forKey: .vignetteIntensity)
     }
 }

@@ -25,6 +25,7 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     let knownKeys = [
         "exposure", "contrast", "highlights", "shadows", "whites", "blacks",
         "temperature", "tint", "vibrance", "saturation", "clarity", "vignette",
+        "texture", "sharpen",
     ]
     for key in values.keys where !knownKeys.contains(key) {
         fail("unknown recipe key '\(key)' — choose from: \(knownKeys.joined(separator: ", "))")
@@ -41,6 +42,8 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     recipe.vibrance = scaled("vibrance")
     recipe.saturation = scaled("saturation")
     recipe.clarity = scaled("clarity")
+    recipe.texture = scaled("texture")
+    recipe.sharpen = scaled("sharpen")
     recipe.vignette = scaled("vignette")
     return recipe
 }

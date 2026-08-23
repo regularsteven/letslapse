@@ -32,6 +32,13 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// Local contrast as detail-layer gain over the guided-filter base:
     /// positive adds punch, negative smooths. Halo-limited. −1…+1.
     public var clarity: Float = 0
+    /// Mid-frequency detail (the band between clarity's regions and
+    /// sharpen's pixels): positive makes surfaces tactile, negative smooths
+    /// them. −1…+1.
+    public var texture: Float = 0
+    /// Capture sharpening — small-radius luma acutance, the counterpart of
+    /// Lightroom's always-on Detail-panel sharpen. 0…1.
+    public var sharpen: Float = 0
     /// Darkens the corners. 0…1.
     public var vignette: Float = 0
 
@@ -55,6 +62,7 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
         let values: [Float] = [
             exposure, contrast, highlights, shadows, whites, blacks,
             temperatureMired, tint, vibrance, saturation, clarity, vignette,
+            texture, sharpen,
         ]
         let joined = values.map { String(format: "%.4f", $0) }.joined(separator: ",")
         return "e\(Self.engineVersion)|\(joined)"

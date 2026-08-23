@@ -13,6 +13,9 @@ final class GradeCore: @unchecked Sendable {
     let blurVerticalPipeline: MTLComputePipelineState
     let guidedABPipeline: MTLComputePipelineState
     let guidedResolvePipeline: MTLComputePipelineState
+    let detailLumaPipeline: MTLComputePipelineState
+    let textureApplyPipeline: MTLComputePipelineState
+    let sharpenPipeline: MTLComputePipelineState
     let vignettePipeline: MTLComputePipelineState
     let ditherPipeline: MTLComputePipelineState
 
@@ -39,6 +42,9 @@ final class GradeCore: @unchecked Sendable {
         self.blurVerticalPipeline = try pipeline("blurVertical2")
         self.guidedABPipeline = try pipeline("guidedAB")
         self.guidedResolvePipeline = try pipeline("guidedResolve")
+        self.detailLumaPipeline = try pipeline("detailLuma")
+        self.textureApplyPipeline = try pipeline("applyTexture")
+        self.sharpenPipeline = try pipeline("applySharpen")
         self.vignettePipeline = try pipeline("applyVignette")
         self.ditherPipeline = try pipeline("finalizeDither")
     }
@@ -82,6 +88,7 @@ public final class GradeRenderer {
     /// Mirror of the Metal `GradeParams` struct — layouts must match.
     private struct GPUGradeParams {
         var wb: simd_float3x3
+        var wbNeutral: SIMD3<Float>
         var exposureGain: Float
         var kneeK: Float
         var recoveryStrength: Float
@@ -113,6 +120,13 @@ public final class GradeRenderer {
         var seed: UInt32
     }
 
+    private struct GPUDetailParams {
+        var amount: Float
+        var tau: Float
+        var sigma: Float
+        var radius: Int32
+    }
+
     private let core: GradeCore
     private let commandQueue: MTLCommandQueue
     public private(set) var recipe: GradeRecipe
@@ -128,6 +142,8 @@ public final class GradeRenderer {
     private var momentsA: MTLTexture?
     private var momentsB: MTLTexture?
     private var baseTexture: MTLTexture?
+    private var halfLumaA: MTLTexture?
+    private var halfLumaB: MTLTexture?
     private var scratchWidth = 0
     private var scratchHeight = 0
 
@@ -167,8 +183,12 @@ public final class GradeRenderer {
         let usesBase = recipe.shadows != 0 || recipe.highlights != 0 || recipe.clarity != 0
         let highlightAmp = recipe.highlights >= 0
             ? ToneMath.highlightLiftEV : ToneMath.highlightCutEV
+        let wb = ToneMath.whiteBalanceMatrix(recipe: recipe, reference: reference)
+        let white = wb * SIMD3<Float>(repeating: 1)
+        let wbNeutral = white / max(simd_dot(white, ToneMath.lumaWeights), 1e-6)
         return GPUGradeParams(
-            wb: ToneMath.whiteBalanceMatrix(recipe: recipe, reference: reference),
+            wb: wb,
+            wbNeutral: wbNeutral,
             exposureGain: exp2(recipe.exposure),
             kneeK: 0.95 - 0.6 * recovery,
             recoveryStrength: strength,
@@ -290,6 +310,79 @@ public final class GradeRenderer {
         var current = scratchA
         var spare = scratchB
 
+        if recipe.texture != 0, let halfLumaA, let halfLumaB {
+            // Mid-frequency band: blur half-res encoded luma at sigma
+            // proportional to the image, then add the tanh-limited residual.
+            let halfLong = Float(max(halfLumaA.width, halfLumaA.height))
+            let sigma = max(halfLong * ToneMath.textureSigmaFraction, 1)
+            var blurParams = GPUBlurParams(
+                sigma: sigma,
+                radius: Int32(min(max(Int(sigma * 2.5), 1), 128)))
+            var textureParams = GPUDetailParams(
+                amount: ToneMath.textureStrength * recipe.texture,
+                tau: ToneMath.textureTau,
+                sigma: sigma,
+                radius: blurParams.radius)
+
+            guard let lumaEncoder = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the texture luma pass")
+            }
+            lumaEncoder.setTexture(current, index: 0)
+            lumaEncoder.setTexture(halfLumaA, index: 1)
+            core.dispatch(core.detailLumaPipeline, encoder: lumaEncoder, width: halfLumaA.width, height: halfLumaA.height)
+            lumaEncoder.endEncoding()
+
+            guard let horizontal = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the texture blur")
+            }
+            horizontal.setTexture(halfLumaA, index: 0)
+            horizontal.setTexture(halfLumaB, index: 1)
+            horizontal.setBytes(&blurParams, length: MemoryLayout<GPUBlurParams>.stride, index: 0)
+            core.dispatch(core.blurHorizontalPipeline, encoder: horizontal, width: halfLumaA.width, height: halfLumaA.height)
+            horizontal.endEncoding()
+
+            guard let vertical = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the texture blur")
+            }
+            vertical.setTexture(halfLumaB, index: 0)
+            vertical.setTexture(halfLumaA, index: 1)
+            vertical.setBytes(&blurParams, length: MemoryLayout<GPUBlurParams>.stride, index: 0)
+            core.dispatch(core.blurVerticalPipeline, encoder: vertical, width: halfLumaA.width, height: halfLumaA.height)
+            vertical.endEncoding()
+
+            guard let applyEncoder = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the texture apply")
+            }
+            applyEncoder.setTexture(current, index: 0)
+            applyEncoder.setTexture(halfLumaA, index: 1)
+            applyEncoder.setTexture(spare, index: 2)
+            applyEncoder.setBytes(&textureParams, length: MemoryLayout<GPUDetailParams>.stride, index: 0)
+            core.dispatch(core.textureApplyPipeline, encoder: applyEncoder, width: source.width, height: source.height)
+            applyEncoder.endEncoding()
+            swap(&current, &spare)
+        }
+
+        if recipe.sharpen > 0 {
+            // Capture sharpen: inline small-radius unsharp, resolution-anchored
+            // so a preview and an export carry the same acutance.
+            let longEdge = Float(max(source.width, source.height))
+            let sigma = max(longEdge * ToneMath.sharpenSigmaFraction, 0.4)
+            var sharpenParams = GPUDetailParams(
+                amount: ToneMath.sharpenStrength * recipe.sharpen,
+                tau: ToneMath.sharpenTau,
+                sigma: sigma,
+                radius: Int32(min(max(Int((sigma * 2.5).rounded(.up)), 1), 3)))
+            guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the sharpen pass")
+            }
+            encoder.setTexture(current, index: 0)
+            encoder.setTexture(spare, index: 1)
+            encoder.setBytes(&sharpenParams, length: MemoryLayout<GPUDetailParams>.stride, index: 0)
+            core.dispatch(core.sharpenPipeline, encoder: encoder, width: source.width, height: source.height)
+            encoder.endEncoding()
+            swap(&current, &spare)
+        }
+
         if recipe.vignette > 0 {
             var vignetteParams = Float(recipe.vignette) * 0.85
             guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
@@ -359,6 +452,11 @@ public final class GradeRenderer {
         momentsA = try make(.rg32Float, quarterWidth, quarterHeight)
         momentsB = try make(.rg32Float, quarterWidth, quarterHeight)
         baseTexture = try make(.r16Float, quarterWidth, quarterHeight)
+        // Half-res luma pair for the texture band's separable blur.
+        let halfWidth = max(width / 2, 1)
+        let halfHeight = max(height / 2, 1)
+        halfLumaA = try make(.r16Float, halfWidth, halfHeight)
+        halfLumaB = try make(.r16Float, halfWidth, halfHeight)
         scratchWidth = width
         scratchHeight = height
     }

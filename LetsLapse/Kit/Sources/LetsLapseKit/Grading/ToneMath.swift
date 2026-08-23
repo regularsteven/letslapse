@@ -26,8 +26,13 @@ import simd
 /// The spatial inputs (base, neighbourhood chroma) are textures on the GPU;
 /// `evaluate` takes them as explicit parameters so the parity tests can pin
 /// the kernel to this file. Every local term vanishes at slider zero, so a
-/// neutral render is untouched by all of this. Vignette stays a separate
-/// pass with no CPU mirror.
+/// neutral render is untouched by all of this.
+///
+/// After the tone stage come the detail passes — texture (mid-frequency
+/// band) and sharpen (capture acutance) — then vignette and the optional
+/// dither. They are pure spatial high-pass work with no per-pixel CPU
+/// mirror; on a flat field they are exact no-ops, which is how the
+/// uniform-image parity test still covers the whole chain.
 public enum ToneMath {
     // MARK: - Constants
 
@@ -113,6 +118,29 @@ public enum ToneMath {
     /// own to offer — below these levels the target fades to neutral too.
     static let chromaTrustFloorLo: Float = -11
     static let chromaTrustFloorHi: Float = -8
+    /// The steering never fully replaces the pixel's chroma — small colourful
+    /// detail (lichen on a wall, fairy lights) must survive a lifted shadow,
+    /// so a quarter of the pixel's own colour always remains.
+    static let chromaProtectMixCap: Float = 0.75
+
+    // MARK: - Detail stage constants
+    //
+    // Two spatial passes after the tone stage, both on encoded luma with
+    // tanh-limited high-pass terms (the same anti-halo idea as clarity).
+    // Sharpen is the counterpart of Lightroom's always-on capture sharpening
+    // (amount 40, radius 1.0); texture is the mid-frequency band between
+    // sharpen's pixels and clarity's regions. Both default to 0, so neutral
+    // renders are untouched.
+
+    /// Sharpen Gaussian sigma as a fraction of the long edge — 1.0 px at the
+    /// ultra-wide's 4032, scaling with resolution so preview and export agree.
+    static let sharpenSigmaFraction: Float = 1.0 / 4032.0
+    static let sharpenStrength: Float = 1.3
+    static let sharpenTau: Float = 0.05
+    /// Texture sigma — 8 px at 4032.
+    static let textureSigmaFraction: Float = 0.002
+    static let textureStrength: Float = 0.6
+    static let textureTau: Float = 0.35
     /// A strong lift widens the protected window upward: SNR is set at
     /// capture, so the deeper the lift reaches, the higher up the source
     /// axis the chroma stays noise-dominated.
@@ -351,12 +379,17 @@ public enum ToneMath {
             let windowScale = exp2(max(shadowLiftEV, 0) * chromaProtectLiftWindowScale)
             let deep = 1 - smoothstep(
                 chromaProtectDeepY0 * windowScale, chromaProtectDeepY1 * windowScale, y)
-            let mixAmount = min(max(liftAmount, 0), 1) * deep
+            let mixAmount = min(max(liftAmount, 0), chromaProtectMixCap) * deep
             let neighbourhoodLog = log2(max(sy, exp2(baseLumaFloorLog2)))
             let similarity = min(max(1 - abs(l - neighbourhoodLog) / chromaSimilaritySpanStops, 0), 1)
             let trust = similarity * smoothstep(chromaTrustFloorLo, chromaTrustFloorHi, neighbourhoodLog)
-            let target = SIMD3<Float>(repeating: 1)
-                + (s / sy - SIMD3<Float>(repeating: 1)) * trust
+            // The no-trust fallback is the WHITE-BALANCED neutral, not display
+            // grey — a warmed image must stay warm in its protected shadows,
+            // or the lift renders them cold while the rest of the frame
+            // carries the user's temperature move.
+            let white = whiteBalance * SIMD3<Float>(repeating: 1)
+            let neutralRatios = white / max(simd_dot(white, lumaWeights), 1e-6)
+            let target = neutralRatios + (s / sy - neutralRatios) * trust
             ratios = ratios + (target - ratios) * mixAmount
         }
         var out = ratios * y2

@@ -137,7 +137,9 @@ struct PhotoAdjustmentsPanel: View {
             slider("Vibrance", field: .vibrance)
             slider("Saturation", field: .saturation)
         case .effects:
+            slider("Texture", field: .texture)
             slider("Clarity", field: .clarity)
+            slider("Sharpen", field: .sharpen)
             slider("Vignette", field: .vignetteIntensity)
         }
     }
@@ -307,7 +309,8 @@ struct PhotoAdjustmentsPanel: View {
         case .color:
             return adjustments.vibrance == 0 && adjustments.saturation == 0
         case .effects:
-            return adjustments.clarity == 0 && adjustments.vignetteIntensity == 0
+            return adjustments.texture == 0 && adjustments.clarity == 0
+                && adjustments.sharpen == 0 && adjustments.vignetteIntensity == 0
         }
     }
 
@@ -318,7 +321,7 @@ struct PhotoAdjustmentsPanel: View {
         case .whiteBalance: return [.temperature, .tint]
         case .light: return [.exposure, .contrast, .highlights, .shadows, .whites, .blacks]
         case .color: return [.vibrance, .saturation]
-        case .effects: return [.clarity, .vignetteIntensity]
+        case .effects: return [.texture, .clarity, .sharpen, .vignetteIntensity]
         }
     }
 
@@ -342,7 +345,9 @@ struct PhotoAdjustmentsPanel: View {
             adjustments.vibrance = 0
             adjustments.saturation = 0
         case .effects:
+            adjustments.texture = 0
             adjustments.clarity = 0
+            adjustments.sharpen = 0
             adjustments.vignetteIntensity = 0
         }
     }

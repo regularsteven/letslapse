@@ -10,6 +10,7 @@ import Foundation
 enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     case exposure, contrast, highlights, shadows, whites, blacks
     case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
+    case texture, sharpen
 
     var keyPath: WritableKeyPath<PhotoAdjustments, Float> {
         switch self {
@@ -24,6 +25,8 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .vibrance: return \.vibrance
         case .saturation: return \.saturation
         case .clarity: return \.clarity
+        case .texture: return \.texture
+        case .sharpen: return \.sharpen
         case .vignetteIntensity: return \.vignetteIntensity
         }
     }
@@ -41,6 +44,8 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .vibrance: return PhotoAdjustments.vibranceRange
         case .saturation: return PhotoAdjustments.saturationRange
         case .clarity: return PhotoAdjustments.clarityRange
+        case .texture: return PhotoAdjustments.textureRange
+        case .sharpen: return PhotoAdjustments.sharpenRange
         case .vignetteIntensity: return PhotoAdjustments.vignetteRange
         }
     }

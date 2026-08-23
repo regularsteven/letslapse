@@ -42,12 +42,14 @@ enum GradeKernelSource {
     constant float kChromaTrustFloorLo = -11.0;
     constant float kChromaTrustFloorHi = -8.0;
     constant float kChromaLiftWindowScale = 0.5;
+    constant float kChromaMixCap = 0.75;
     constant float kVibranceGuardY0 = 0.012;
     constant float kVibranceGuardY1 = 0.1;
     constant float kBaseLumaFloorLog2 = -14.0;
 
     struct GradeParams {
         float3x3 wb;             // white-balance matrix, Display P3
+        float3 wbNeutral;        // luma-normalised wb * white — the warmed grey
         float exposureGain;      // 2^EV
         float kneeK;             // 0.95 - 0.6 * recovery
         float recoveryStrength;  // max(recovery, recoveryBase)
@@ -136,11 +138,11 @@ enum GradeKernelSource {
                 + p.blacksLift * kChromaBlacksScale;
             float windowScale = exp2(max(shadowLiftEV, 0.0) * kChromaLiftWindowScale);
             float deep = 1.0 - smoothstep(kChromaDeepY0 * windowScale, kChromaDeepY1 * windowScale, y);
-            float mixAmount = clamp(liftAmount, 0.0, 1.0) * deep;
+            float mixAmount = clamp(liftAmount, 0.0, kChromaMixCap) * deep;
             float neighbourhoodLog = log2(max(sy, exp2(kBaseLumaFloorLog2)));
             float similarity = clamp(1.0 - abs(l - neighbourhoodLog) / kChromaSimilaritySpan, 0.0, 1.0);
             float trust = similarity * smoothstep(kChromaTrustFloorLo, kChromaTrustFloorHi, neighbourhoodLog);
-            float3 target = mix(float3(1.0), s / sy, trust);
+            float3 target = mix(p.wbNeutral, s / sy, trust);
             ratios = mix(ratios, target, mixAmount);
         }
         float3 outv = ratios * y2;
@@ -285,6 +287,102 @@ enum GradeKernelSource {
         float2 ab = blurredCoefficients.read(gid).rg;
         float l = quarter.read(gid).a;
         baseTexture.write(float4(ab.r * l + ab.g, 0.0, 0.0, 1.0), gid);
+    }
+
+    struct DetailParams {
+        float amount;   // signed detail gain
+        float tau;      // tanh limiter, encoded domain
+        float sigma;    // Gaussian sigma at the blur's resolution
+        int   radius;   // tap radius
+    };
+
+    // Half-resolution encoded luma of the graded image — the texture band's
+    // blur source (the mid-frequency sibling of the guided base).
+    kernel void detailLuma(
+        texture2d<float, access::read> source [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        uint2 limit = uint2(source.get_width() - 1, source.get_height() - 1);
+        float3 sum = float3(0.0);
+        for (uint dy = 0; dy < 2; dy++) {
+            for (uint dx = 0; dx < 2; dx++) {
+                uint2 coordinate = min(gid * 2 + uint2(dx, dy), limit);
+                sum += source.read(coordinate).rgb;
+            }
+        }
+        float y = max(dot(sum * 0.25, kLuma), 0.0);
+        destination.write(float4(pow(y, 1.0 / 2.2), 0.0, 0.0, 1.0), gid);
+    }
+
+    // Texture: mid-frequency luma detail against the blurred half-res base,
+    // tanh-limited so edges saturate instead of haloing, mid-weighted so
+    // black and white stay pinned. Negative amount smooths the band.
+    kernel void applyTexture(
+        texture2d<float, access::read> graded [[texture(0)]],
+        texture2d<float, access::sample> blurred [[texture(1)]],
+        texture2d<float, access::write> destination [[texture(2)]],
+        constant DetailParams &p [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        constexpr sampler linearSampler(coord::normalized, address::clamp_to_edge, filter::linear);
+        float2 uv = (float2(gid) + 0.5)
+            / float2(destination.get_width(), destination.get_height());
+        float3 v = graded.read(gid).rgb;
+        float y = max(dot(v, kLuma), 1e-6);
+        float g = pow(y, 1.0 / 2.2);
+        float base = blurred.sample(linearSampler, uv).r;
+        float limited = p.tau * tanh((g - base) / p.tau);
+        float gc = clamp(g, 0.0, 1.0);
+        float midweight = 4.0 * gc * (1.0 - gc);
+        float g2 = g + p.amount * midweight * limited;
+        float ratio = pow(max(g2, 0.0), 2.2) / y;
+        float3 outv = clamp(v * ratio, 0.0, 1.0);
+        outv = select(outv, float3(0.0), isnan(outv));
+        destination.write(float4(outv, 1.0), gid);
+    }
+
+    // Capture sharpening: small-radius unsharp on encoded luma, computed
+    // inline (the radius never exceeds 3). The tanh limiter keeps strong
+    // edges from ringing; luma-only application leaves chroma noise alone.
+    kernel void applySharpen(
+        texture2d<float, access::read> graded [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        constant DetailParams &p [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        int2 limit = int2(graded.get_width() - 1, graded.get_height() - 1);
+        float twoSigmaSq = 2.0 * p.sigma * p.sigma;
+        float sum = 0.0;
+        float weightSum = 0.0;
+        for (int dy = -p.radius; dy <= p.radius; dy++) {
+            for (int dx = -p.radius; dx <= p.radius; dx++) {
+                int2 coordinate = clamp(int2(gid) + int2(dx, dy), int2(0), limit);
+                float w = exp(-float(dx * dx + dy * dy) / twoSigmaSq);
+                float yTap = max(dot(graded.read(uint2(coordinate)).rgb, kLuma), 0.0);
+                sum += w * pow(yTap, 1.0 / 2.2);
+                weightSum += w;
+            }
+        }
+        float3 v = graded.read(gid).rgb;
+        float y = max(dot(v, kLuma), 1e-6);
+        float g = pow(y, 1.0 / 2.2);
+        float blurredLuma = sum / weightSum;
+        float limited = p.tau * tanh((g - blurredLuma) / p.tau);
+        float g2 = g + p.amount * limited;
+        float ratio = pow(max(g2, 0.0), 2.2) / y;
+        float3 outv = clamp(v * ratio, 0.0, 1.0);
+        outv = select(outv, float3(0.0), isnan(outv));
+        destination.write(float4(outv, 1.0), gid);
     }
 
     struct VignetteParams {

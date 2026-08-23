@@ -192,6 +192,68 @@ final class GradeEngineTests: XCTestCase {
         var smooth = GradeRecipe()
         smooth.clarity = -1
         try assertUniformParity(recipe: smooth)
+
+        // The detail passes are exact no-ops on a flat field.
+        var detail = GradeRecipe()
+        detail.texture = 1
+        detail.sharpen = 1
+        try assertUniformParity(recipe: detail)
+    }
+
+    /// Sharpen and texture: both amplify their frequency band, both stay
+    /// bounded, and negative texture smooths.
+    func testDetailPassesShapeTheirBands() throws {
+        // Wide enough that the resolution-anchored sigmas land in their real
+        // bands (texture sigma is 0.2% of the long edge — ~4 px here).
+        let engine = try GradeEngine()
+        let width = 2048, height = 64
+
+        func ripplePixels(wavelength: Float) -> [Float16] {
+            var pixels = [Float16]()
+            pixels.reserveCapacity(width * height * 4)
+            for _ in 0..<height {
+                for x in 0..<width {
+                    let v = Float16(0.3 + 0.08 * sin(Float(x) * (2 * .pi / wavelength)))
+                    pixels.append(contentsOf: [v, v, v, 1])
+                }
+            }
+            return pixels
+        }
+
+        func amplitude(_ recipe: GradeRecipe, wavelength: Float) throws -> Float {
+            let texture = try makeTexture(
+                engine, pixels: ripplePixels(wavelength: wavelength), width: width, height: height)
+            let output = readBack(try engine.makeRenderer(recipe, reference: GradeReference()).apply(to: texture))
+            let row = height / 2
+            var low: Float = 1, high: Float = 0
+            for x in 32..<(width - 32) {
+                let v = Float(output[(row * width + x) * 4])
+                XCTAssertTrue(v.isFinite)
+                XCTAssertGreaterThanOrEqual(v, 0)
+                XCTAssertLessThanOrEqual(v, 1)
+                low = min(low, v)
+                high = max(high, v)
+            }
+            return high - low
+        }
+
+        // Sharpen: fine ripple (6 px) amplified.
+        var sharp = GradeRecipe()
+        sharp.sharpen = 1
+        XCTAssertGreaterThan(try amplitude(sharp, wavelength: 6),
+                             try amplitude(.neutral, wavelength: 6) * 1.1,
+                             "sharpen must add acutance at the pixel scale")
+
+        // Texture: mid ripple (16 px) amplified by +, smoothed by −.
+        var punch = GradeRecipe()
+        punch.texture = 1
+        var smooth = GradeRecipe()
+        smooth.texture = -1
+        let flat = try amplitude(.neutral, wavelength: 16)
+        XCTAssertGreaterThan(try amplitude(punch, wavelength: 16), flat * 1.15,
+                             "positive texture must amplify the mid band")
+        XCTAssertLessThan(try amplitude(smooth, wavelength: 16), flat * 0.9,
+                          "negative texture must smooth the mid band")
     }
 
     // MARK: - Locality
