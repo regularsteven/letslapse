@@ -39,6 +39,13 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// Capture sharpening — small-radius luma acutance, the counterpart of
     /// Lightroom's always-on Detail-panel sharpen. 0…1.
     public var sharpen: Float = 0
+    /// Luminance noise reduction — edge-preserving (bilateral) smoothing of
+    /// fine luma grain. 0…1.
+    public var noiseReduction: Float = 0
+    /// Colour noise reduction — steers chroma toward the tonally-similar
+    /// neighbourhood, which is where the mottling in pushed dark scenes
+    /// lives. 0…1.
+    public var colorNoiseReduction: Float = 0
     /// Darkens the corners. 0…1.
     public var vignette: Float = 0
 
@@ -62,7 +69,7 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
         let values: [Float] = [
             exposure, contrast, highlights, shadows, whites, blacks,
             temperatureMired, tint, vibrance, saturation, clarity, vignette,
-            texture, sharpen,
+            texture, sharpen, noiseReduction, colorNoiseReduction,
         ]
         let joined = values.map { String(format: "%.4f", $0) }.joined(separator: ",")
         return "e\(Self.engineVersion)|\(joined)"

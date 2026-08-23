@@ -141,6 +141,20 @@ public enum ToneMath {
     static let textureSigmaFraction: Float = 0.002
     static let textureStrength: Float = 0.6
     static let textureTau: Float = 0.35
+    /// Colour noise reduction: how far the slider can steer chroma toward
+    /// the tonally-similar neighbourhood at full strength — and how far the
+    /// neighbourhood itself widens (quarter-res Gaussian sigma) as the
+    /// slider rises, because dark-scene chroma noise blobs reach
+    /// cobblestone scale.
+    static let colorNoiseStrength: Float = 0.9
+    static let colorNoiseBlurSigmaMax: Float = 10
+    /// Luminance noise reduction: bilateral spatial footprint (pixels) and
+    /// the range gate in encoded luma — the base range catches quantisation
+    /// grain, the scaled part opens with the slider.
+    static let noiseSpatialSigma: Float = 1.4
+    static let noiseSpatialRadius: Int = 3
+    static let noiseRangeBase: Float = 0.015
+    static let noiseRangeScale: Float = 0.1
     /// A strong lift widens the protected window upward: SNR is set at
     /// capture, so the deeper the lift reaches, the higher up the source
     /// axis the chroma stays noise-dominated.
@@ -391,6 +405,17 @@ public enum ToneMath {
             let neutralRatios = white / max(simd_dot(white, lumaWeights), 1e-6)
             let target = neutralRatios + (s / sy - neutralRatios) * trust
             ratios = ratios + (target - ratios) * mixAmount
+        }
+        // Colour noise reduction: the same neighbourhood chroma, as a control
+        // rather than a lift-triggered guard — global, but gated by tonal
+        // similarity so edges (and point lights) keep their own colour.
+        if recipe.colorNoiseReduction > 0 {
+            let s = smoothed ?? v
+            let sy = max(simd_dot(s, lumaWeights), 1e-6)
+            let neighbourhoodLog = log2(max(sy, exp2(baseLumaFloorLog2)))
+            let similarity = min(max(1 - abs(l - neighbourhoodLog) / chromaSimilaritySpanStops, 0), 1)
+            let amount = colorNoiseStrength * recipe.colorNoiseReduction * similarity
+            ratios = ratios + (s / sy - ratios) * amount
         }
         var out = ratios * y2
 

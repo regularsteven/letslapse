@@ -16,6 +16,9 @@ final class GradeCore: @unchecked Sendable {
     let detailLumaPipeline: MTLComputePipelineState
     let textureApplyPipeline: MTLComputePipelineState
     let sharpenPipeline: MTLComputePipelineState
+    let lumaNoisePipeline: MTLComputePipelineState
+    let blurHorizontal4Pipeline: MTLComputePipelineState
+    let blurVertical4Pipeline: MTLComputePipelineState
     let vignettePipeline: MTLComputePipelineState
     let ditherPipeline: MTLComputePipelineState
 
@@ -45,6 +48,9 @@ final class GradeCore: @unchecked Sendable {
         self.detailLumaPipeline = try pipeline("detailLuma")
         self.textureApplyPipeline = try pipeline("applyTexture")
         self.sharpenPipeline = try pipeline("applySharpen")
+        self.lumaNoisePipeline = try pipeline("applyLumaNoise")
+        self.blurHorizontal4Pipeline = try pipeline("blurHorizontal4")
+        self.blurVertical4Pipeline = try pipeline("blurVertical4")
         self.vignettePipeline = try pipeline("applyVignette")
         self.ditherPipeline = try pipeline("finalizeDither")
     }
@@ -104,6 +110,7 @@ public final class GradeRenderer {
         var blacksLift: Float
         var usesBase: UInt32
         var chromaProtect: UInt32
+        var colorNoise: Float
     }
 
     private struct GPUBlurParams {
@@ -139,6 +146,7 @@ public final class GradeRenderer {
     private var scratchA: MTLTexture?
     private var scratchB: MTLTexture?
     private var quarter: MTLTexture?
+    private var quarterBlur: MTLTexture?
     private var momentsA: MTLTexture?
     private var momentsB: MTLTexture?
     private var baseTexture: MTLTexture?
@@ -203,7 +211,8 @@ public final class GradeRenderer {
             clarityGain: ToneMath.clarityDetailGain * recipe.clarity,
             blacksLift: max(recipe.blacks, 0),
             usesBase: usesBase ? 1 : 0,
-            chromaProtect: (recipe.shadows > 0 || recipe.blacks > 0) ? 1 : 0)
+            chromaProtect: (recipe.shadows > 0 || recipe.blacks > 0) ? 1 : 0,
+            colorNoise: ToneMath.colorNoiseStrength * recipe.colorNoiseReduction)
     }
 
     /// Encodes the whole grade into `commandBuffer` and returns the output
@@ -224,7 +233,7 @@ public final class GradeRenderer {
         }
 
         let usesBase = params.usesBase != 0
-        let needsQuarter = usesBase || params.chromaProtect != 0
+        let needsQuarter = usesBase || params.chromaProtect != 0 || params.colorNoise > 0
         var gradeParams = params
 
         if needsQuarter {
@@ -294,6 +303,33 @@ public final class GradeRenderer {
             resolveEncoder.endEncoding()
         }
 
+        if params.colorNoise > 0, let quarterBlur {
+            // Widen the neighbourhood chroma with the slider — after the
+            // guided resolve (which needs the unblurred log-luma) and before
+            // the tone pass samples it.
+            let sigma = 1 + ToneMath.colorNoiseBlurSigmaMax * recipe.colorNoiseReduction
+            var blurParams = GPUBlurParams(
+                sigma: sigma,
+                radius: Int32(min(max(Int(sigma * 2.5), 1), 128)))
+            guard let horizontal = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the chroma blur")
+            }
+            horizontal.setTexture(quarter, index: 0)
+            horizontal.setTexture(quarterBlur, index: 1)
+            horizontal.setBytes(&blurParams, length: MemoryLayout<GPUBlurParams>.stride, index: 0)
+            core.dispatch(core.blurHorizontal4Pipeline, encoder: horizontal, width: quarter.width, height: quarter.height)
+            horizontal.endEncoding()
+
+            guard let vertical = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the chroma blur")
+            }
+            vertical.setTexture(quarterBlur, index: 0)
+            vertical.setTexture(quarter, index: 1)
+            vertical.setBytes(&blurParams, length: MemoryLayout<GPUBlurParams>.stride, index: 0)
+            core.dispatch(core.blurVertical4Pipeline, encoder: vertical, width: quarter.width, height: quarter.height)
+            vertical.endEncoding()
+        }
+
         guard let toneEncoder = commandBuffer.makeComputeCommandEncoder() else {
             throw LapseError.gpuSetupFailed("could not encode the tone pass")
         }
@@ -309,6 +345,25 @@ public final class GradeRenderer {
         toneEncoder.endEncoding()
         var current = scratchA
         var spare = scratchB
+
+        if recipe.noiseReduction > 0 {
+            // Luma NR runs before texture and sharpen, so neither amplifies
+            // the grain it is meant to remove.
+            var noiseParams = GPUDetailParams(
+                amount: recipe.noiseReduction,
+                tau: ToneMath.noiseRangeBase + ToneMath.noiseRangeScale * recipe.noiseReduction,
+                sigma: ToneMath.noiseSpatialSigma,
+                radius: Int32(ToneMath.noiseSpatialRadius))
+            guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the noise pass")
+            }
+            encoder.setTexture(current, index: 0)
+            encoder.setTexture(spare, index: 1)
+            encoder.setBytes(&noiseParams, length: MemoryLayout<GPUDetailParams>.stride, index: 0)
+            core.dispatch(core.lumaNoisePipeline, encoder: encoder, width: source.width, height: source.height)
+            encoder.endEncoding()
+            swap(&current, &spare)
+        }
 
         if recipe.texture != 0, let halfLumaA, let halfLumaB {
             // Mid-frequency band: blur half-res encoded luma at sigma
@@ -449,6 +504,7 @@ public final class GradeRenderer {
         let quarterWidth = max(width / 4, 1)
         let quarterHeight = max(height / 4, 1)
         quarter = try make(.rgba16Float, quarterWidth, quarterHeight)
+        quarterBlur = try make(.rgba16Float, quarterWidth, quarterHeight)
         momentsA = try make(.rg32Float, quarterWidth, quarterHeight)
         momentsB = try make(.rg32Float, quarterWidth, quarterHeight)
         baseTexture = try make(.r16Float, quarterWidth, quarterHeight)

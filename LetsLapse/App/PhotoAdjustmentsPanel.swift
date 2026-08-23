@@ -44,6 +44,7 @@ struct PhotoAdjustmentsPanel: View {
         case light = "Light"
         case color = "Color"
         case effects = "Effects"
+        case detail = "Detail"
         var id: String { rawValue }
     }
 
@@ -139,8 +140,11 @@ struct PhotoAdjustmentsPanel: View {
         case .effects:
             slider("Texture", field: .texture)
             slider("Clarity", field: .clarity)
-            slider("Sharpen", field: .sharpen)
             slider("Vignette", field: .vignetteIntensity)
+        case .detail:
+            slider("Sharpen", field: .sharpen)
+            slider("Noise Reduction", field: .noiseReduction)
+            slider("Color Noise", field: .colorNoiseReduction)
         }
     }
 
@@ -310,7 +314,10 @@ struct PhotoAdjustmentsPanel: View {
             return adjustments.vibrance == 0 && adjustments.saturation == 0
         case .effects:
             return adjustments.texture == 0 && adjustments.clarity == 0
-                && adjustments.sharpen == 0 && adjustments.vignetteIntensity == 0
+                && adjustments.vignetteIntensity == 0
+        case .detail:
+            return adjustments.sharpen == 0 && adjustments.noiseReduction == 0
+                && adjustments.colorNoiseReduction == 0
         }
     }
 
@@ -321,7 +328,8 @@ struct PhotoAdjustmentsPanel: View {
         case .whiteBalance: return [.temperature, .tint]
         case .light: return [.exposure, .contrast, .highlights, .shadows, .whites, .blacks]
         case .color: return [.vibrance, .saturation]
-        case .effects: return [.texture, .clarity, .sharpen, .vignetteIntensity]
+        case .effects: return [.texture, .clarity, .vignetteIntensity]
+        case .detail: return [.sharpen, .noiseReduction, .colorNoiseReduction]
         }
     }
 
@@ -347,13 +355,16 @@ struct PhotoAdjustmentsPanel: View {
         case .effects:
             adjustments.texture = 0
             adjustments.clarity = 0
-            adjustments.sharpen = 0
             adjustments.vignetteIntensity = 0
+        case .detail:
+            adjustments.sharpen = 0
+            adjustments.noiseReduction = 0
+            adjustments.colorNoiseReduction = 0
         }
     }
 
-    /// `LL_SECTIONS=all|wb|light|color|effects` forces the stacked layout's
-    /// open state for design screenshots.
+    /// `LL_SECTIONS=all|wb|light|color|effects|detail` forces the stacked
+    /// layout's open state for design screenshots.
     private func applySectionHook() {
         #if DEBUG
         guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
@@ -363,6 +374,7 @@ struct PhotoAdjustmentsPanel: View {
         case "light": openSections = [.light]
         case "color": openSections = [.color]
         case "effects": openSections = [.effects]
+        case "detail": openSections = [.detail]
         default: break
         }
         #endif

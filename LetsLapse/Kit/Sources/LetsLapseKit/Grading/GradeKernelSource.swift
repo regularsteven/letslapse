@@ -65,6 +65,7 @@ enum GradeKernelSource {
         float blacksLift;        // max(blacks, 0)
         uint  usesBase;          // any of shadows/highlights/clarity non-zero
         uint  chromaProtect;     // shadows > 0 || blacks > 0
+        float colorNoise;        // 0.9 * colorNoiseReduction
     };
 
     static inline float lutSample(constant float *lut, uint n, float endSlope, float g)
@@ -144,6 +145,13 @@ enum GradeKernelSource {
             float trust = similarity * smoothstep(kChromaTrustFloorLo, kChromaTrustFloorHi, neighbourhoodLog);
             float3 target = mix(p.wbNeutral, s / sy, trust);
             ratios = mix(ratios, target, mixAmount);
+        }
+        if (p.colorNoise > 0.0) {
+            float3 s = quarter.sample(linearSampler, uv).rgb;
+            float sy = max(dot(s, kLuma), 1e-6);
+            float neighbourhoodLog = log2(max(sy, exp2(kBaseLumaFloorLog2)));
+            float similarity = clamp(1.0 - abs(l - neighbourhoodLog) / kChromaSimilaritySpan, 0.0, 1.0);
+            ratios = mix(ratios, s / sy, p.colorNoise * similarity);
         }
         float3 outv = ratios * y2;
 
@@ -252,6 +260,53 @@ enum GradeKernelSource {
         destination.write(float4(sum / weightSum, 0.0, 1.0), gid);
     }
 
+    // Four-channel separable blur, for widening the neighbourhood-chroma
+    // texture: colour noise in a pushed dark scene lives at every scale up to
+    // whole cobblestones, so the smoothing footprint follows the slider.
+    kernel void blurHorizontal4(
+        texture2d<float, access::read> source [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        constant BlurParams &p [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        int2 limit = int2(source.get_width() - 1, source.get_height() - 1);
+        float twoSigmaSq = 2.0 * p.sigma * p.sigma;
+        float4 sum = float4(0.0);
+        float weightSum = 0.0;
+        for (int dx = -p.radius; dx <= p.radius; dx++) {
+            int2 clamped = clamp(int2(gid) + int2(dx, 0), int2(0), limit);
+            float w = exp(-float(dx * dx) / twoSigmaSq);
+            sum += w * source.read(uint2(clamped));
+            weightSum += w;
+        }
+        destination.write(sum / weightSum, gid);
+    }
+
+    kernel void blurVertical4(
+        texture2d<float, access::read> source [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        constant BlurParams &p [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        int2 limit = int2(source.get_width() - 1, source.get_height() - 1);
+        float twoSigmaSq = 2.0 * p.sigma * p.sigma;
+        float4 sum = float4(0.0);
+        float weightSum = 0.0;
+        for (int dy = -p.radius; dy <= p.radius; dy++) {
+            int2 clamped = clamp(int2(gid) + int2(0, dy), int2(0), limit);
+            float w = exp(-float(dy * dy) / twoSigmaSq);
+            sum += w * source.read(uint2(clamped));
+            weightSum += w;
+        }
+        destination.write(sum / weightSum, gid);
+    }
+
     struct GuidedParams {
         float epsilon;  // variance floor, stops²
     };
@@ -342,6 +397,47 @@ enum GradeKernelSource {
         float gc = clamp(g, 0.0, 1.0);
         float midweight = 4.0 * gc * (1.0 - gc);
         float g2 = g + p.amount * midweight * limited;
+        float ratio = pow(max(g2, 0.0), 2.2) / y;
+        float3 outv = clamp(v * ratio, 0.0, 1.0);
+        outv = select(outv, float3(0.0), isnan(outv));
+        destination.write(float4(outv, 1.0), gid);
+    }
+
+    // Luminance noise reduction: a small bilateral on encoded luma. The
+    // range gate opens with the slider, so grain within it averages away
+    // while anything resembling an edge keeps its value; luma-ratio
+    // application leaves chroma to the colour-noise control.
+    kernel void applyLumaNoise(
+        texture2d<float, access::read> graded [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        constant DetailParams &p [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        int2 limit = int2(graded.get_width() - 1, graded.get_height() - 1);
+        float3 v = graded.read(gid).rgb;
+        float y = max(dot(v, kLuma), 1e-6);
+        float g = pow(y, 1.0 / 2.2);
+        float twoSigmaSq = 2.0 * p.sigma * p.sigma;
+        float twoRangeSq = 2.0 * p.tau * p.tau;
+        float sum = 0.0;
+        float weightSum = 0.0;
+        for (int dy = -p.radius; dy <= p.radius; dy++) {
+            for (int dx = -p.radius; dx <= p.radius; dx++) {
+                int2 coordinate = clamp(int2(gid) + int2(dx, dy), int2(0), limit);
+                float yTap = max(dot(graded.read(uint2(coordinate)).rgb, kLuma), 0.0);
+                float gTap = pow(yTap, 1.0 / 2.2);
+                float d = gTap - g;
+                float w = exp(-float(dx * dx + dy * dy) / twoSigmaSq)
+                    * exp(-(d * d) / twoRangeSq);
+                sum += w * gTap;
+                weightSum += w;
+            }
+        }
+        float smoothed = sum / weightSum;
+        float g2 = mix(g, smoothed, p.amount);
         float ratio = pow(max(g2, 0.0), 2.2) / y;
         float3 outv = clamp(v * ratio, 0.0, 1.0);
         outv = select(outv, float3(0.0), isnan(outv));

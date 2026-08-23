@@ -43,6 +43,12 @@ struct PhotoAdjustments: Codable, Equatable {
     var texture: Float
     /// Capture sharpening: small-radius luma acutance. 0…1.
     var sharpen: Float
+    /// Luminance noise reduction: edge-preserving smoothing of fine grain.
+    /// 0…1.
+    var noiseReduction: Float
+    /// Colour noise reduction: dissolves chroma mottling in pushed dark
+    /// scenes; the smoothing reach grows with the slider. 0…1.
+    var colorNoiseReduction: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
 
@@ -50,7 +56,8 @@ struct PhotoAdjustments: Codable, Equatable {
     static var neutral: PhotoAdjustments {
         .init(exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0,
               blacks: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0,
-              clarity: 0, texture: 0, sharpen: 0, vignetteIntensity: 0)
+              clarity: 0, texture: 0, sharpen: 0, noiseReduction: 0,
+              colorNoiseReduction: 0, vignetteIntensity: 0)
     }
 
     /// True when nothing here would change a pixel, so the grader can skip the
@@ -75,6 +82,8 @@ struct PhotoAdjustments: Codable, Equatable {
     static let clarityRange: ClosedRange<Float> = -1...1
     static let textureRange: ClosedRange<Float> = -1...1
     static let sharpenRange: ClosedRange<Float> = 0...1
+    static let noiseReductionRange: ClosedRange<Float> = 0...1
+    static let colorNoiseReductionRange: ClosedRange<Float> = 0...1
     static let vignetteRange: ClosedRange<Float> = 0...1
 
     /// The engine-side recipe these adjustments describe, optionally layered
@@ -94,6 +103,8 @@ struct PhotoAdjustments: Codable, Equatable {
         recipe.clarity = min(max(base.clarity + clarity, -1), 1)
         recipe.texture = min(max(base.texture + texture, -1), 1)
         recipe.sharpen = min(max(base.sharpen + sharpen, 0), 1)
+        recipe.noiseReduction = min(max(base.noiseReduction + noiseReduction, 0), 1)
+        recipe.colorNoiseReduction = min(max(base.colorNoiseReduction + colorNoiseReduction, 0), 1)
         recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
         return recipe
     }
@@ -102,10 +113,10 @@ struct PhotoAdjustments: Codable, Equatable {
     var cacheToken: String {
         guard !isNeutral else { return "n" }
         return String(
-            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
             exposure, contrast, highlights, shadows, whites, blacks,
             temperature, tint, vibrance, saturation, clarity, vignetteIntensity,
-            texture, sharpen)
+            texture, sharpen, noiseReduction, colorNoiseReduction)
     }
 
     // MARK: - Codable
@@ -118,7 +129,8 @@ struct PhotoAdjustments: Codable, Equatable {
     init(exposure: Float, contrast: Float, highlights: Float, shadows: Float,
          whites: Float, blacks: Float, temperature: Float, tint: Float,
          vibrance: Float, saturation: Float, clarity: Float, texture: Float = 0,
-         sharpen: Float = 0, vignetteIntensity: Float) {
+         sharpen: Float = 0, noiseReduction: Float = 0,
+         colorNoiseReduction: Float = 0, vignetteIntensity: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -132,6 +144,8 @@ struct PhotoAdjustments: Codable, Equatable {
         self.clarity = clarity
         self.texture = texture
         self.sharpen = sharpen
+        self.noiseReduction = noiseReduction
+        self.colorNoiseReduction = colorNoiseReduction
         self.vignetteIntensity = vignetteIntensity
     }
 
@@ -139,7 +153,7 @@ struct PhotoAdjustments: Codable, Equatable {
         case version = "v"
         case exposure, contrast, highlights, shadows, whites, blacks
         case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
-        case texture, sharpen
+        case texture, sharpen, noiseReduction, colorNoiseReduction
         case whiteBalance  // v1 only; never written by v2
     }
 
@@ -182,7 +196,9 @@ struct PhotoAdjustments: Codable, Equatable {
                 temperature: field(.temperature), tint: field(.tint),
                 vibrance: field(.vibrance), saturation: field(.saturation),
                 clarity: field(.clarity), texture: field(.texture),
-                sharpen: field(.sharpen), vignetteIntensity: field(.vignetteIntensity))
+                sharpen: field(.sharpen), noiseReduction: field(.noiseReduction),
+                colorNoiseReduction: field(.colorNoiseReduction),
+                vignetteIntensity: field(.vignetteIntensity))
             return
         }
         let legacyWB = (try? container.decodeIfPresent(LegacyWhiteBalance.self, forKey: .whiteBalance)) ?? .asShot
@@ -225,6 +241,8 @@ struct PhotoAdjustments: Codable, Equatable {
         try container.encode(clarity, forKey: .clarity)
         try container.encode(texture, forKey: .texture)
         try container.encode(sharpen, forKey: .sharpen)
+        try container.encode(noiseReduction, forKey: .noiseReduction)
+        try container.encode(colorNoiseReduction, forKey: .colorNoiseReduction)
         try container.encode(vignetteIntensity, forKey: .vignetteIntensity)
     }
 }

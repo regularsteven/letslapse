@@ -198,6 +198,86 @@ final class GradeEngineTests: XCTestCase {
         detail.texture = 1
         detail.sharpen = 1
         try assertUniformParity(recipe: detail)
+
+        // So is noise reduction: a flat field has no grain to remove.
+        var denoise = GradeRecipe()
+        denoise.noiseReduction = 1
+        denoise.colorNoiseReduction = 1
+        try assertUniformParity(recipe: denoise)
+    }
+
+    /// The noise controls: luma NR flattens seeded grain while a hard edge
+    /// survives, and colour NR collapses chroma speckle on constant luma.
+    func testNoiseReductionFlattensGrainAndKeepsEdges() throws {
+        let engine = try GradeEngine()
+        let width = 256, height = 64
+        var generator = SeededGenerator(seed: 7)
+
+        // Left half 0.08, right half 0.5, both with luma grain.
+        var pixels = [Float16]()
+        pixels.reserveCapacity(width * height * 4)
+        for _ in 0..<height {
+            for x in 0..<width {
+                let base: Float = x < width / 2 ? 0.08 : 0.5
+                let grain = Float.random(in: -0.015...0.015, using: &generator)
+                let v = Float16(max(base + grain, 0))
+                pixels.append(contentsOf: [v, v, v, 1])
+            }
+        }
+        let texture = try makeTexture(engine, pixels: pixels, width: width, height: height)
+
+        func rowStats(_ recipe: GradeRecipe) throws -> (noise: Float, edgeJump: Float) {
+            let output = readBack(try engine.makeRenderer(recipe, reference: GradeReference()).apply(to: texture))
+            let row = height / 2
+            // Grain: std-dev over a flat strip well inside the bright half.
+            var values = [Float]()
+            for x in (width / 2 + 24)..<(width - 16) {
+                values.append(Float(output[(row * width + x) * 4]))
+            }
+            let mean = values.reduce(0, +) / Float(values.count)
+            let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(values.count)
+            // Edge: difference across the boundary.
+            let left = Float(output[(row * width + width / 2 - 8) * 4])
+            let right = Float(output[(row * width + width / 2 + 8) * 4])
+            return (sqrt(variance), right - left)
+        }
+
+        var denoise = GradeRecipe()
+        denoise.noiseReduction = 1
+        let before = try rowStats(.neutral)
+        let after = try rowStats(denoise)
+        XCTAssertLessThan(after.noise, before.noise * 0.55,
+                          "full luma NR must at least halve the grain")
+        XCTAssertGreaterThan(after.edgeJump, before.edgeJump * 0.85,
+                             "the step edge must survive luma NR")
+
+        // Colour speckle: constant luma, alternating red/blue casts.
+        var chromaPixels = [Float16]()
+        chromaPixels.reserveCapacity(width * height * 4)
+        for y in 0..<height {
+            for x in 0..<width {
+                let flip = (x + y) % 2 == 0
+                let r: Float16 = flip ? 0.24 : 0.16
+                let b: Float16 = flip ? 0.16 : 0.24
+                chromaPixels.append(contentsOf: [r, 0.2, b, 1])
+            }
+        }
+        let chromaTexture = try makeTexture(engine, pixels: chromaPixels, width: width, height: height)
+        var colorDenoise = GradeRecipe()
+        colorDenoise.colorNoiseReduction = 1
+
+        func chromaSpread(_ recipe: GradeRecipe) throws -> Float {
+            let output = readBack(try engine.makeRenderer(recipe, reference: GradeReference()).apply(to: chromaTexture))
+            let row = height / 2
+            var spread: Float = 0
+            for x in 32..<(width - 32) {
+                let base = (row * width + x) * 4
+                spread = max(spread, abs(Float(output[base]) - Float(output[base + 2])))
+            }
+            return spread
+        }
+        XCTAssertLessThan(try chromaSpread(colorDenoise), try chromaSpread(.neutral) * 0.35,
+                          "full colour NR must collapse per-pixel chroma speckle")
     }
 
     /// Sharpen and texture: both amplify their frequency band, both stay
