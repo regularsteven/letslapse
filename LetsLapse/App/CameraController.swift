@@ -489,6 +489,11 @@ final class CameraController: NSObject, ObservableObject {
     /// separate from `focusLocked` (the user's own lock button) so the release
     /// can only ever undo what the run itself took.
     private var runFocusLocked = false
+    /// sessionQueue-confined. The reconfiguration this run opened with carried
+    /// the user's focus plane across it (see `restoreFocusState`), so the lens
+    /// is already exactly where the shot was framed and `lockFocusForRun` has
+    /// nothing to settle, and nothing to re-aim.
+    private var focusCarriedForRun = false
     /// sessionQueue-confined. Focus pinned by a tap on the preview while idle.
     /// Lasts until the shoot it was set up for ends, or until the lens changes:
     /// focus is a decision the user makes per shoot, and one that can always be
@@ -1990,6 +1995,11 @@ final class CameraController: NSObject, ObservableObject {
         }
         guard let input = try? AVCaptureDeviceInput(device: lens.device) else { return }
 
+        // Where the lens is right now, before the swap takes the device that
+        // knows it out of the session. The constituent arriving in its place is
+        // the same glass — it is the one already driving this preview — but it
+        // arrives in continuous auto-focus and hunts as it joins.
+        let focusBeforeSwap = captureFocusState()
         session.beginConfiguration()
         let previousInput = videoInput
         if let previousInput { session.removeInput(previousInput) }
@@ -2004,6 +2014,11 @@ final class CameraController: NSObject, ObservableObject {
         session.commitConfiguration()
 
         guard sequenceLensPin != nil else { return }
+        // Immediately after the commit and before anything can be recorded: put
+        // the lens back on the plane the shot was framed on, so the swap is
+        // invisible. Declines by itself if the new device is not the constituent
+        // that measured the position.
+        restoreFocusState(focusBeforeSwap, reason: "lens pin")
         let formats = configurations
             .map { "\($0.resolution.label)@\($0.fps)" }
             .joined(separator: ", ")
@@ -3896,10 +3911,173 @@ final class CameraController: NSObject, ObservableObject {
             return
         }
         manualLensHeld = false
+        focusCarriedForRun = false
         if lockedLensDevice === device {
             lockedLensValue = nil
             lockedLensDevice = nil
         }
+    }
+
+    // MARK: - Carrying focus across a run's opening reconfiguration
+
+    /// Focus as it stood at one moment — the plane the shot was framed on.
+    ///
+    /// Pressing Record reconfigures the session before the run's own hold is
+    /// taken: the lens pin swaps the input, the live-blend path adds a video
+    /// output, the DNG world switches to the photo preset. Every one of those
+    /// hands the lens back to continuous auto-focus, and a freshly added input
+    /// starts hunting for itself the moment it joins the session — so
+    /// `lockFocusForRun` waited out that hunt and pinned wherever it landed.
+    /// What the user saw was the shot re-focusing at the press.
+    ///
+    /// It bites hardest exactly where it was reported: an iPhone 16 Pro at 1×
+    /// is a virtual triple camera in the session, and `pinLensForSequence`
+    /// swaps it for the wide constituent — the same glass the preview was
+    /// already focused through, arriving as a new device object with no idea
+    /// where the lens was.
+    ///
+    /// So: snapshot before the reconfiguration, put it back after the commit,
+    /// and the press changes nothing.
+    private struct FocusState {
+        let device: AVCaptureDevice
+        let mode: AVCaptureDevice.FocusMode
+        /// -1 where there is no lens position to read at all — `lensPosition`
+        /// is not macOS API (see `resumeContinuousAutoFocus`).
+        let lensPosition: Float
+        /// The lens was between two planes when this was read, so the position
+        /// is a moment in a hunt rather than a plane anyone framed on.
+        let wasAdjusting: Bool
+    }
+
+    /// sessionQueue-confined. Read focus as it stands right now.
+    ///
+    /// Clearing the carry flag is part of taking the snapshot: a flag left
+    /// standing from the previous run would have `lockFocusForRun` skip a
+    /// settle and a re-aim that nothing had done for it.
+    private func captureFocusState(on device: AVCaptureDevice? = nil) -> FocusState? {
+        focusCarriedForRun = false
+        guard let device = device ?? videoDevice else { return nil }
+        #if os(iOS)
+        return FocusState(device: device, mode: device.focusMode,
+                          lensPosition: device.lensPosition,
+                          wasAdjusting: device.isAdjustingFocus)
+        #else
+        return FocusState(device: device, mode: device.focusMode,
+                          lensPosition: -1, wasAdjusting: device.isAdjustingFocus)
+        #endif
+    }
+
+    #if os(iOS)
+    /// sessionQueue-confined. The snapshot's lens position expressed on
+    /// `device`, or nil when the two are not the same piece of glass.
+    private func carriedLensPosition(
+        from state: FocusState,
+        to device: AVCaptureDevice,
+        reason: String
+    ) -> Float? {
+        guard state.lensPosition >= 0, state.lensPosition <= 1 else { return nil }
+        // A lens caught mid-hunt has no plane worth carrying: the number is
+        // wherever the motor had got to, and pinning it would hold the run
+        // between two planes — the one thing worse than the hunt. The run's own
+        // settle-then-pin is the right answer there, so leave it to it.
+        guard !state.wasAdjusting else {
+            LLog("focus: \(reason) — lens was still hunting at the press, letting it settle")
+            return nil
+        }
+        if state.device === device { return state.lensPosition }
+        // A virtual device's lens position is the constituent actually driving
+        // the preview, so a swap ONTO that constituent is the same lens and the
+        // number carries exactly. Any other pairing is two different lenses,
+        // whose positions are not comparable at all (see `lockedLensDevice`).
+        guard state.device.isVirtualDevice,
+              state.device.activePrimaryConstituent === device else { return nil }
+        // Two objects wrapping one piece of hardware have to agree. If they
+        // don't, one of the readings is wrong and there is no way to tell
+        // which — and carrying a wrong plane pins a whole run out of focus,
+        // where the old behaviour merely hunts once at the press. Decline,
+        // loudly, and let the run fall back to settling the hunt.
+        let direct = device.lensPosition
+        guard abs(direct - state.lensPosition) <= 0.02 else {
+            LLog(String(format: "focus: %@ — %@ reads lens %.3f, the virtual device read %.3f;"
+                        + " not carrying focus across", reason, device.localizedName,
+                        direct, state.lensPosition))
+            return nil
+        }
+        return direct
+    }
+    #endif
+
+    /// sessionQueue-confined. Put a snapshot back after the reconfiguration
+    /// that would otherwise have reset it.
+    ///
+    /// Only ever re-states focus the user already had, and every path that
+    /// calls it takes the run's own hold (`lockFocusForRun`) immediately
+    /// afterwards — or hands the lens back through
+    /// `abandonCarriedFocusIfUnowned` if the start fails first, so a carry can
+    /// never strand the lens the way an ownerless hold did in round 2.
+    @discardableResult
+    private func restoreFocusState(
+        _ state: FocusState?,
+        on device: AVCaptureDevice? = nil,
+        reason: String
+    ) -> Bool {
+        #if os(iOS)
+        guard let state, let device = device ?? videoDevice,
+              device.isFocusModeSupported(.locked),
+              let carried = carriedLensPosition(from: state, to: device, reason: reason)
+        else { return false }
+        // Already locked on that exact plane and not moving: the reconfiguration
+        // left focus alone, so there is nothing to put back. Anything else — a
+        // mode reset, a hunt already under way — is what this exists to undo.
+        if device.focusMode == .locked,
+           !device.isAdjustingFocus,
+           abs(device.lensPosition - carried) <= 0.001 {
+            focusCarriedForRun = true
+            return true
+        }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            // Same expression `pinFocusHere` uses: a device that supports
+            // `.locked` without a custom position (the ultra-wide) throws on an
+            // explicit value and is locked where it already is.
+            let custom = device.isLockingFocusWithCustomLensPositionSupported
+            device.setFocusModeLocked(
+                lensPosition: custom ? carried : AVCaptureDevice.currentLensPosition,
+                completionHandler: nil)
+        } catch {
+            LLog("focus: could not carry across \(reason) — \(error.localizedDescription)")
+            return false
+        }
+        focusCarriedForRun = true
+        rememberLensPosition(carried, on: device)
+        DispatchQueue.main.async { self.lockedLensPosition = carried }
+        CaptureSessionLogger.shared.log("focus_carry", [
+            "lensPosition": carried,
+            "reason": reason,
+            "modeBefore": state.mode.rawValue,
+            "inputSwap": state.device !== device,
+        ])
+        LLog(String(format: "focus: carried lens %.3f across %@%@", carried, reason,
+                    state.device !== device ? " (input swap)" : ""))
+        return true
+        #else
+        // No Mac camera supports focus at all, so there is nothing to carry.
+        _ = (state, device, reason)
+        return false
+        #endif
+    }
+
+    /// sessionQueue-confined. A start path that carried focus and then failed
+    /// before the run's hold was taken would leave the lens pinned with nothing
+    /// to release it — the stuck-until-relaunch failure this file already fixed
+    /// once. Hand it back, unless a standing user lock owns it.
+    private func abandonCarriedFocusIfUnowned() {
+        let carried = focusCarriedForRun
+        focusCarriedForRun = false
+        guard carried, !runFocusLocked, !focusHeldByUser else { return }
+        resumeContinuousAutoFocus()
+        LLog("focus: carried hold handed back — the run never started")
     }
 
     /// Pin the lens for the length of a capture run.
@@ -3938,7 +4116,14 @@ final class CameraController: NSObject, ObservableObject {
         // one that was already driving the preview, focused on what the user is
         // looking at. Re-hunting that would be a visible pump at the shutter
         // press, in the name of finding the plane it was already on.
-        if deviceChanged, let point = tapFocusPoint {
+        //
+        // Unless the run's own reconfiguration already carried the plane across
+        // (see `restoreFocusState`): then the lens is sitting exactly where the
+        // user framed the shot, on the same glass that measured it, and asking
+        // for a hunt here would BE the refocus-at-the-press this is meant to
+        // stop. Nothing to aim at, and nothing to settle either.
+        let carried = focusCarriedForRun
+        if deviceChanged, !carried, let point = tapFocusPoint {
             do {
                 try device.lockForConfiguration()
                 defer { device.unlockForConfiguration() }
@@ -3954,7 +4139,7 @@ final class CameraController: NSObject, ObservableObject {
         // hunt was, because nothing will correct it for the whole run. The grace
         // window on a device change covers both the aim above and a fresh input
         // that starts hunting for itself the moment it joins the session.
-        awaitFocusSettle(on: device, expectStart: deviceChanged)
+        awaitFocusSettle(on: device, expectStart: deviceChanged && !carried)
         pinFocusHere(on: device)
         runFocusLocked = true
         publishFocusHold()
@@ -3965,9 +4150,11 @@ final class CameraController: NSObject, ObservableObject {
             "lensPosition": pinned,
             "source": tapFocusLocked ? "tap" : "auto",
             "deviceChanged": deviceChanged,
+            "carried": carried,
         ])
-        LLog(String(format: "focus: run pinned at lens %.3f%@", pinned,
-                    deviceChanged ? " (after lens change)" : ""))
+        LLog(String(format: "focus: run pinned at lens %.3f%@%@", pinned,
+                    deviceChanged ? " (after lens change)" : "",
+                    carried ? " (carried from the press)" : ""))
     }
 
     /// Hand the lens back at the end of a shoot. Focus is a per-shoot decision:
@@ -3982,6 +4169,9 @@ final class CameraController: NSObject, ObservableObject {
     ///
     /// sessionQueue-confined.
     private func releaseRunFocusLock() {
+        // Cleared ahead of the guard: the carry belongs to the run that opened,
+        // whether or not that run went on to take a hold of its own.
+        focusCarriedForRun = false
         guard runFocusLocked else { return }
         runFocusLocked = false
         clearTapFocus()
@@ -6938,6 +7128,13 @@ final class CameraController: NSObject, ObservableObject {
 
     /// sessionQueue-confined: the video-tap JPEG path.
     private func startLiveBlendStandard(every interval: Double, depth: BlendDepth, requestedOutputFormat: String) {
+            // Focus as the user framed it, before this path's session
+            // transaction. Adding an output can have the session re-negotiate
+            // the active format, and a format write hands the lens back to
+            // continuous auto — the same reset the lens pin causes in a video
+            // take. Same device throughout here, so the position carries
+            // exactly.
+            let focusBeforeStart = self.captureFocusState()
             if self.liveBlendOutput == nil {
                 let output = AVCaptureVideoDataOutput()
                 output.videoSettings = [
@@ -6954,6 +7151,7 @@ final class CameraController: NSObject, ObservableObject {
             }
             guard let output = self.liveBlendOutput else {
                 LLog("liveblend: session refused the video data output")
+                self.abandonCarriedFocusIfUnowned()
                 self.publishLiveBlendStartFailure(interval: interval, depth: depth)
                 return
             }
@@ -6964,6 +7162,9 @@ final class CameraController: NSObject, ObservableObject {
             if self.holyGrailRequestedForRun {
                 self.relaxVideoFrameDurationForBlend(interval: interval)
             }
+            // Everything that touches the device or the session on this path is
+            // now behind us, so put focus back where the press found it.
+            self.restoreFocusState(focusBeforeStart, reason: "live blend start")
 
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("liveblend-\(Int(Date().timeIntervalSince1970))")
@@ -6971,6 +7172,7 @@ final class CameraController: NSObject, ObservableObject {
                 try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             } catch {
                 LLog("liveblend: could not create temp directory: \(error)")
+                self.abandonCarriedFocusIfUnowned()
                 self.publishLiveBlendStartFailure(interval: interval, depth: depth)
                 return
             }
@@ -7009,6 +7211,7 @@ final class CameraController: NSObject, ObservableObject {
                 controller = try LiveBlendController(configuration: configuration)
             } catch {
                 LLog("liveblend: controller init failed: \(error)")
+                self.abandonCarriedFocusIfUnowned()
                 self.publishLiveBlendStartFailure(interval: interval, depth: depth)
                 return
             }
@@ -7091,6 +7294,11 @@ final class CameraController: NSObject, ObservableObject {
     /// blended DNG per interval.
     private func startLiveBlendDNG(every interval: Double, depth: BlendDepth, options: LiveBlendCaptureOptions) {
         let deviceBeforeSwap = videoDevice
+        // Focus as the user framed it, ahead of both reconfigurations below.
+        // Carried across the swap first — while the virtual device can still
+        // say which constituent it was using — and again across the preset
+        // switch, which is a format change and resets focus on its own.
+        var focusBeforeStart = captureFocusState()
         // DNG frames come from a physical camera. The armed framing preview
         // normally swapped the input already, but the arm is async — if the
         // run starts from the standard world, move to the nearest optical
@@ -7108,16 +7316,24 @@ final class CameraController: NSObject, ObservableObject {
             }
             session.commitConfiguration()
             currentStop = target
+            restoreFocusState(focusBeforeStart, reason: "dng lens swap")
+            // Re-snapshot on the device the run will actually shoot through, so
+            // the preset carry below is a same-device one whatever the swap did.
+            focusBeforeStart = captureFocusState()
         }
         let previousPreset = session.sessionPreset
         session.beginConfiguration()
         session.sessionPreset = .photo
         session.commitConfiguration()
+        restoreFocusState(focusBeforeStart, reason: "dng photo preset")
         guard let rawFormat = availableBayerRawFormats().first else {
             session.beginConfiguration()
             session.sessionPreset = previousPreset
             session.commitConfiguration()
             applyCaptureFormat(resolution: selectedResolution, fps: selectedFrameRate)
+            // That format write is one more reset to undo before the standard
+            // path takes its own snapshot of what focus is doing.
+            restoreFocusState(focusBeforeStart, reason: "dng fallback")
             LLog("liveblend-dng: photo configuration offers no Bayer RAW — standard output")
             startLiveBlendStandard(every: interval, depth: depth, requestedOutputFormat: "dng")
             return
@@ -7138,6 +7354,9 @@ final class CameraController: NSObject, ObservableObject {
         // reverse. Skipped when brackets are requested — the two rapid-fire
         // mechanisms aren't combined.
         var responsiveApplied = false
+        // One more session transaction, and it rebuilds the photo connection —
+        // carried across like the two before it.
+        let focusBeforeFastCapture = captureFocusState()
         if #available(iOS 17.0, *), options.responsiveCapture, !options.bracketedRAW {
             dngRunPreviousFastCapture = (
                 zsl: photoOutput.isZeroShutterLagEnabled,
@@ -7156,6 +7375,7 @@ final class CameraController: NSObject, ObservableObject {
             }
             session.commitConfiguration()
         }
+        restoreFocusState(focusBeforeFastCapture, reason: "dng fast capture")
         let bracketMax = Int(photoOutput.maxBracketedCapturePhotoCount)
         LLog("liveblend-dng: capture options responsive=\(responsiveApplied) burst=\(options.burstScheduling) bracketed=\(options.bracketedRAW) bracketMax=\(bracketMax)")
         // Lock the RAW orientation for the run, after both configuration
@@ -7173,6 +7393,7 @@ final class CameraController: NSObject, ObservableObject {
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         } catch {
             LLog("liveblend-dng: could not create temp directory: \(error)")
+            abandonCarriedFocusIfUnowned()
             publishLiveBlendStartFailure(interval: interval, depth: depth)
             return
         }
