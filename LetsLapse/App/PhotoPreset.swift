@@ -291,7 +291,10 @@ enum PhotoGrader {
             asShotTint: frame.asShotTint,
             longEdge: Double(max(frame.texture.width, frame.texture.height)))
         let renderer = engine.makeRenderer(grade.recipe, reference: reference)
-        let output = try renderer.apply(to: frame.texture)
+        // Every consumer of this path quantises to 8 bits (preview CGImages,
+        // JPEG export), so the engine adds its TPDF dither here; the blend
+        // path dithers in its own encode kernel instead.
+        let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
         return try decoder.cgImage(from: output)
     }
 
@@ -415,7 +418,11 @@ enum PhotoGrader {
             out = PhotoPreset.vibrance(out, amount: adjustments.vibrance)
         }
 
-        if adjustments.clarity != 0, let filter = CIFilter(name: "CIUnsharpMask") {
+        // Positive only on this legacy path: the engine's clarity is ±detail
+        // gain over its guided-filter base, which CIUnsharpMask cannot mimic
+        // for the smoothing direction — video sees no effect below 0 until it
+        // moves onto the engine.
+        if adjustments.clarity > 0, let filter = CIFilter(name: "CIUnsharpMask") {
             let longest = max(baseExtent.width, baseExtent.height)
             filter.setValue(out, forKey: kCIInputImageKey)
             filter.setValue(clarityRadius * max(longest, 1) / clarityReferenceEdge,

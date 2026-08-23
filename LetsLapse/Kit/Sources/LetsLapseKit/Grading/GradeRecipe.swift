@@ -29,7 +29,8 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     public var vibrance: Float = 0
     /// Uniform chroma gain. −1…+1.
     public var saturation: Float = 0
-    /// Large-radius local contrast, halo-limited. 0…1.
+    /// Local contrast as detail-layer gain over the guided-filter base:
+    /// positive adds punch, negative smooths. Halo-limited. −1…+1.
     public var clarity: Float = 0
     /// Darkens the corners. 0…1.
     public var vignette: Float = 0
@@ -42,7 +43,11 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
 
     /// Bumped whenever the engine's math changes so render caches keyed on
     /// recipes self-invalidate across engine revisions.
-    public static let engineVersion = 1
+    ///
+    /// 2: local tone — shadows/highlights keyed on the guided-filter base,
+    ///    clarity as ±detail gain, chroma-protected deep-shadow lifts,
+    ///    clip-targeted highlight desaturation.
+    public static let engineVersion = 2
 
     /// A short, stable string identifying this grade for cache keys.
     public var cacheToken: String {

@@ -9,17 +9,25 @@ import simd
 /// DNG's above-1.0 highlight headroom intact:
 ///
 ///   white balance (Bradford 3×3) → exposure (2^EV)
+///     → local tone in log₂ luminance: shadows / highlights / clarity keyed
+///       on an edge-aware neighbourhood BASE (guided filter, computed by the
+///       kernel at quarter resolution) — this is what lets Shadows reach only
+///       the dark regions and Highlights only the bright ones, at
+///       Lightroom-class strengths, without inverting any global curve
 ///     → highlight recovery on the luminance, in linear (Reinhard above a
-///       knee — a per-pixel function of the pixel's own value, so halos are
-///       impossible by construction)
+///       knee)
 ///     → the tone LUT on gamma-encoded luminance (contrast, shadows,
 ///       highlights-lift, whites, blacks — built monotone by construction)
-///     → luminance-ratio application (hue-preserving) with controlled
-///       highlight desaturation
-///     → vibrance + saturation → clamp.
+///     → luminance-ratio application (hue-preserving), with the chroma of
+///       hard-lifted deep shadows steered toward the neighbourhood chroma so
+///       sensor colour noise doesn't render as saturated blotches
+///     → clip-targeted highlight desaturation → vibrance + saturation → clamp.
 ///
-/// Clarity and vignette are separate spatial passes in the kernel file; they
-/// have no CPU mirror because they aren't per-pixel functions.
+/// The spatial inputs (base, neighbourhood chroma) are textures on the GPU;
+/// `evaluate` takes them as explicit parameters so the parity tests can pin
+/// the kernel to this file. Every local term vanishes at slider zero, so a
+/// neutral render is untouched by all of this. Vignette stays a separate
+/// pass with no CPU mirror.
 public enum ToneMath {
     // MARK: - Constants
 
@@ -50,12 +58,77 @@ public enum ToneMath {
     static let desatStrength: Float = 0.5
     static let vibranceStrength: Float = 0.9
     static let saturationStrength: Float = 0.8
-    /// The shadows slider's linear-domain half: a rolled-off gain that lifts
-    /// deep shadows up to ~1 EV at +100 while leaving highlights alone —
-    /// the encoded-domain bump alone is capped too low (by its monotonicity
-    /// bound) to reach Lightroom-strength lifts.
-    static let shadowLinearStrength: Float = 0.9
-    static let shadowSigma: Float = 0.16
+    // MARK: - Local tone constants
+    //
+    // The base-keyed stage. `base` is an edge-aware low-frequency estimate of
+    // the post-WB/exposure log₂ luminance (guided filter at quarter
+    // resolution); keying the tonal gain on the *neighbourhood* instead of the
+    // pixel is what the monotonicity bound above cannot give a global curve:
+    // two pixels with the same value move differently in different regions,
+    // so Shadows can lift a dark courtyard by stops while a dark speck in the
+    // sky stays put — and no transfer function ever inverts.
+
+    /// EV moved in the deepest zones at shadows ±1. The encoded-domain bump
+    /// stays on top for midtone shaping, so the total reach is
+    /// Lightroom-class.
+    static let shadowLocalEV: Float = 2.6
+    /// Sigmoid centre/width (in stops below diffuse white) of the shadow
+    /// weight over the base.
+    static let shadowLocalPivot: Float = -3.0
+    static let shadowLocalSoft: Float = 1.6
+    /// The weight's toe: it rolls back off toward the sensor's noise floor,
+    /// because a region ten-plus stops down holds no signal to reveal — the
+    /// honest render of true black is black, and lifting it only paints the
+    /// noise floor across the frame (measured on frame-00001's silhouettes:
+    /// raw linear ≈ 0.0002, chance-blue).
+    static let shadowToeLo: Float = -12
+    static let shadowToeHi: Float = -8
+    /// EV pulled out of bright zones at highlights −1 …
+    static let highlightCutEV: Float = 2.0
+    /// … and added at highlights +1 (asymmetric: boosting toward clip needs
+    /// less travel than rescuing a sky).
+    static let highlightLiftEV: Float = 1.2
+    static let highlightLocalPivot: Float = -0.8
+    static let highlightLocalSoft: Float = 0.9
+    /// Clarity as detail gain: the log-domain residual (pixel − base) scaled
+    /// by the slider, tanh-limited in stops so edges saturate the limiter
+    /// instead of ringing.
+    static let clarityDetailGain: Float = 0.9
+    static let clarityTauStops: Float = 0.6
+    /// Chroma protection: below these post-exposure luminances a hard lift
+    /// steers the pixel's chroma toward the neighbourhood chroma — the
+    /// sensor's colour noise has zero mean, so the neighbourhood is the
+    /// honest colour of a lifted deep shadow.
+    static let chromaProtectDeepY0: Float = 0.008
+    static let chromaProtectDeepY1: Float = 0.035
+    static let chromaProtectShadowScale: Float = 0.8
+    static let chromaProtectBlacksScale: Float = 1.2
+    /// The steering only trusts the neighbourhood chroma where the
+    /// neighbourhood is tonally similar to the pixel (within this many
+    /// stops); across an object edge the box average is a colour blend of
+    /// both sides, and steering toward it would paint fringes — there the
+    /// target falls back toward neutral instead.
+    static let chromaSimilaritySpanStops: Float = 1.5
+    /// And a neighbourhood sitting at the noise floor has no colour of its
+    /// own to offer — below these levels the target fades to neutral too.
+    static let chromaTrustFloorLo: Float = -11
+    static let chromaTrustFloorHi: Float = -8
+    /// A strong lift widens the protected window upward: SNR is set at
+    /// capture, so the deeper the lift reaches, the higher up the source
+    /// axis the chroma stays noise-dominated.
+    static let chromaProtectLiftWindowScale: Float = 0.5
+    /// Positive vibrance is gated off the darkest *source* luminances —
+    /// chroma SNR is fixed at capture, so a hard-lifted dusk shadow is still
+    /// noise however bright it renders, and saturating it paints blotches.
+    static let vibranceShadowGuardY0: Float = 0.012
+    static let vibranceShadowGuardY1: Float = 0.1
+    /// Guided-filter edge threshold, in stops² — luminance structure stronger
+    /// than ~√ε per window survives into the base (so the lift respects it),
+    /// texture below it stays in the detail layer.
+    static let guidedFilterEpsilon: Float = 0.6
+    /// Log-luma floor for the base computation; 2⁻¹⁴ is below every real
+    /// scene value the decoders produce.
+    static let baseLumaFloorLog2: Float = -14
 
     // MARK: - Base look
 
@@ -133,6 +206,22 @@ public enum ToneMath {
         return y + (compressed - y) * strength
     }
 
+    // MARK: - Local tone (base-keyed)
+
+    /// Weight of the shadows move at a given neighbourhood base (log₂ luma):
+    /// ≈1 deep in the shadows, rolling to ≈0 by the midtones — and back
+    /// toward 0 at the noise floor, where there is nothing to lift.
+    public static func shadowWeight(baseLog2: Float) -> Float {
+        let body = 1 / (1 + expf((baseLog2 - shadowLocalPivot) / shadowLocalSoft))
+        return body * smoothstep(shadowToeLo, shadowToeHi, baseLog2)
+    }
+
+    /// Weight of the highlights move: ≈1 in the brightest zones, ≈0 by the
+    /// midtones — the mirror of `shadowWeight`.
+    public static func highlightWeight(baseLog2: Float) -> Float {
+        1 / (1 + expf(-(baseLog2 - highlightLocalPivot) / highlightLocalSoft))
+    }
+
     // MARK: - Tone curve / LUT
 
     /// The Bernstein-basis bumps: C∞, pinned to zero value *and* slope at both
@@ -206,36 +295,93 @@ public enum ToneMath {
     /// The whole per-pixel pipeline, mirroring the GPU kernel exactly. Used by
     /// the parity tests and by nothing else — production pixels go through
     /// Metal.
+    ///
+    /// `baseLog2` is the neighbourhood base the kernel reads from its guided
+    /// filter texture; `smoothed` is the neighbourhood-averaged post-WB
+    /// linear RGB it reads for chroma protection. Both default to the pixel's
+    /// own values — exactly what the spatial passes yield on a flat region,
+    /// which is how the uniform-image parity test pins the full GPU path to
+    /// this function.
     public static func evaluate(
         _ rgb: SIMD3<Float>,
         recipe: GradeRecipe,
         whiteBalance: simd_float3x3,
-        lut: [Float]
+        lut: [Float],
+        baseLog2: Float? = nil,
+        smoothed: SIMD3<Float>? = nil
     ) -> SIMD3<Float> {
         var v = whiteBalance * rgb
         v = simd_max(v * exp2(recipe.exposure), SIMD3<Float>(repeating: 0))
 
         let y = max(simd_dot(v, lumaWeights), 1e-6)
-        let recovery = max(-recipe.highlights, 0)
-        var y1 = recoveredLuminance(y, recovery: recovery)
-        if recipe.shadows != 0 {
-            let gain = shadowLinearStrength * recipe.shadows
-            y1 *= 1 + gain * shadowSigma / (shadowSigma + y1)
+        let l = log2(max(y, exp2(baseLumaFloorLog2)))
+        let base = baseLog2 ?? l
+
+        // Local stage: EV offsets keyed on the neighbourhood base. All three
+        // terms are zero at slider zero, so neutral never touches this.
+        var shadowLiftEV: Float = 0
+        var y1 = y
+        if recipe.shadows != 0 || recipe.highlights != 0 || recipe.clarity != 0 {
+            shadowLiftEV = shadowLocalEV * recipe.shadows * shadowWeight(baseLog2: base)
+            let highlightAmp = recipe.highlights >= 0 ? highlightLiftEV : highlightCutEV
+            let highlightEV = highlightAmp * recipe.highlights * highlightWeight(baseLog2: base)
+            let gc = min(max(powf(y, encodeGamma), 0), 1)
+            let midweight = 4 * gc * (1 - gc)
+            let detail = l - base
+            let limited = clarityTauStops * tanhf(detail / clarityTauStops)
+            let clarityEV = clarityDetailGain * recipe.clarity * midweight * limited
+            y1 = y * exp2(shadowLiftEV + highlightEV + clarityEV)
         }
+
+        let recovery = max(-recipe.highlights, 0)
+        y1 = recoveredLuminance(y1, recovery: recovery)
         let g = powf(y1, encodeGamma)
         let mapped = sampleLUT(lut, at: g)
         let y2 = powf(max(mapped, 0), 1 / encodeGamma)
 
-        var out = v * (y2 / y)
-        let desat = desatStrength * max(recovery, recoveryBase) * smoothstep(0.7, 1.0, y2)
+        // Hue-preserving application — except where a hard lift meets a deep,
+        // noisy shadow: there the honest chroma is the neighbourhood's, not
+        // the pixel's.
+        var ratios = v / y
+        if shadowLiftEV > 0 || recipe.blacks > 0 {
+            let s = smoothed ?? v
+            let sy = max(simd_dot(s, lumaWeights), 1e-6)
+            let liftAmount = (exp2(max(shadowLiftEV, 0)) - 1) * chromaProtectShadowScale
+                + max(recipe.blacks, 0) * chromaProtectBlacksScale
+            let windowScale = exp2(max(shadowLiftEV, 0) * chromaProtectLiftWindowScale)
+            let deep = 1 - smoothstep(
+                chromaProtectDeepY0 * windowScale, chromaProtectDeepY1 * windowScale, y)
+            let mixAmount = min(max(liftAmount, 0), 1) * deep
+            let neighbourhoodLog = log2(max(sy, exp2(baseLumaFloorLog2)))
+            let similarity = min(max(1 - abs(l - neighbourhoodLog) / chromaSimilaritySpanStops, 0), 1)
+            let trust = similarity * smoothstep(chromaTrustFloorLo, chromaTrustFloorHi, neighbourhoodLog)
+            let target = SIMD3<Float>(repeating: 1)
+                + (s / sy - SIMD3<Float>(repeating: 1)) * trust
+            ratios = ratios + (target - ratios) * mixAmount
+        }
+        var out = ratios * y2
+
+        // Desaturation: a constant gentle floor near white (the neutral look,
+        // unchanged), plus a clip-targeted term that only engages where a
+        // channel actually runs past the display ceiling under recovery — so
+        // pulling Highlights down keeps a sunset's colour instead of greying
+        // it.
+        var desat = desatStrength * recoveryBase * smoothstep(0.7, 1.0, y2)
+        let maxPre = max(out.x, max(out.y, out.z))
+        desat += desatStrength * recovery * smoothstep(1.0, 1.3, maxPre)
+        desat = min(desat, 1)
         out = out + (SIMD3<Float>(repeating: y2) - out) * desat
 
         let maxChannel = max(out.x, max(out.y, out.z))
         let minChannel = min(out.x, min(out.y, out.z))
         let satMeasure = min(max((maxChannel - minChannel) / max(maxChannel, 1e-4), 0), 1)
-        let gain = (1 + saturationStrength * recipe.saturation)
-            * (1 + vibranceStrength * recipe.vibrance * (1 - satMeasure))
         let luma = simd_dot(out, lumaWeights)
+        var vibranceEffect = vibranceStrength * recipe.vibrance
+        if vibranceEffect > 0 {
+            vibranceEffect *= smoothstep(vibranceShadowGuardY0, vibranceShadowGuardY1, y)
+        }
+        let gain = (1 + saturationStrength * recipe.saturation)
+            * (1 + vibranceEffect * (1 - satMeasure))
         out = SIMD3<Float>(repeating: luma) + (out - SIMD3<Float>(repeating: luma)) * gain
 
         out = simd_clamp(out, SIMD3<Float>(repeating: 0), SIMD3<Float>(repeating: 1))

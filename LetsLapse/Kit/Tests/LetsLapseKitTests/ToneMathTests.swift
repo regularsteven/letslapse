@@ -151,6 +151,112 @@ final class ToneMathTests: XCTestCase {
         XCTAssertLessThan(coolWhite.x, coolWhite.z, "a negative mired offset must render cooler")
     }
 
+    // MARK: - Local tone
+
+    func testLocalWeightsPartitionTheTonalRange() {
+        // Shadows weight: a hump — full in the deep shadows, gone by the
+        // midtones, and rolled back off at the sensor's noise floor (true
+        // black must stay black; there is nothing down there to reveal).
+        XCTAssertGreaterThan(ToneMath.shadowWeight(baseLog2: -8), 0.95)
+        XCTAssertGreaterThan(ToneMath.shadowWeight(baseLog2: -6), 0.8)
+        XCTAssertLessThan(ToneMath.shadowWeight(baseLog2: 0), 0.15)
+        XCTAssertLessThan(ToneMath.shadowWeight(baseLog2: -12), 0.01)
+        // Highlights weight: the monotone mirror.
+        XCTAssertGreaterThan(ToneMath.highlightWeight(baseLog2: 0), 0.6)
+        XCTAssertLessThan(ToneMath.highlightWeight(baseLog2: -6), 0.01)
+        var previousHighlight: Float = -1
+        for step in stride(from: Float(-14), through: 2, by: 0.25) {
+            let h = ToneMath.highlightWeight(baseLog2: step)
+            XCTAssertGreaterThanOrEqual(h, previousHighlight - 1e-6)
+            previousHighlight = h
+        }
+        // The shadow hump is single-peaked: monotone up to the toe's top,
+        // monotone down after it.
+        var previous: Float = -1
+        for step in stride(from: Float(-14), through: -8, by: 0.25) {
+            let s = ToneMath.shadowWeight(baseLog2: step)
+            XCTAssertGreaterThanOrEqual(s, previous - 1e-6)
+            previous = s
+        }
+        previous = 2
+        for step in stride(from: Float(-8), through: 2, by: 0.25) {
+            let s = ToneMath.shadowWeight(baseLog2: step)
+            XCTAssertLessThanOrEqual(s, previous + 1e-6)
+            previous = s
+        }
+    }
+
+    func testShadowsLiftKeysOnTheNeighbourhoodBase() {
+        // The same dark pixel, lifted hard when its neighbourhood is dark and
+        // spared when its neighbourhood is bright — the "contained to darker
+        // regions" behaviour a global curve cannot have.
+        var recipe = GradeRecipe()
+        recipe.shadows = 1
+        let lut = ToneMath.toneLUT(for: recipe)
+        let pixel = SIMD3<Float>(repeating: 0.02)
+        let deepRegion = ToneMath.evaluate(
+            pixel, recipe: recipe, whiteBalance: matrix_identity_float3x3, lut: lut,
+            baseLog2: -6, smoothed: pixel)
+        let brightRegion = ToneMath.evaluate(
+            pixel, recipe: recipe, whiteBalance: matrix_identity_float3x3, lut: lut,
+            baseLog2: 0, smoothed: pixel)
+        XCTAssertGreaterThan(deepRegion.x, brightRegion.x * 2,
+                             "a dark pixel in a dark region must lift far more than in a bright one")
+    }
+
+    func testChromaProtectionSteersDeepLiftsTowardNeighbourhoodChroma() {
+        // A deep pixel whose colour is sensor noise (bluish) inside a
+        // neighbourhood that is actually neutral: a hard lift must render it
+        // near-neutral, not as a saturated blue blob.
+        var recipe = GradeRecipe()
+        recipe.shadows = 1
+        recipe.blacks = 0.4
+        let lut = ToneMath.toneLUT(for: recipe)
+        let noisy = SIMD3<Float>(0.001, 0.004, 0.010)
+        let neighbourhood = SIMD3<Float>(repeating: 0.005)
+
+        func saturation(_ v: SIMD3<Float>) -> Float {
+            let maxc = max(v.x, max(v.y, v.z))
+            let minc = min(v.x, min(v.y, v.z))
+            return (maxc - minc) / max(maxc, 1e-5)
+        }
+        let protected = ToneMath.evaluate(
+            noisy, recipe: recipe, whiteBalance: matrix_identity_float3x3, lut: lut,
+            baseLog2: -8, smoothed: neighbourhood)
+        let unprotected = ToneMath.evaluate(
+            noisy, recipe: recipe, whiteBalance: matrix_identity_float3x3, lut: lut,
+            baseLog2: -8, smoothed: noisy)
+        XCTAssertLessThan(saturation(protected), saturation(unprotected) * 0.4,
+                          "the neighbourhood chroma must win in a hard-lifted deep shadow")
+        // And with no lift at all, the pixel's own chroma is untouched even
+        // with a wild neighbourhood value supplied.
+        let neutralLUT = ToneMath.toneLUT(for: .neutral)
+        let untouched = ToneMath.evaluate(
+            noisy, recipe: .neutral, whiteBalance: matrix_identity_float3x3, lut: neutralLUT,
+            baseLog2: -8, smoothed: SIMD3<Float>(1, 0, 0))
+        let reference = ToneMath.evaluate(
+            noisy, recipe: .neutral, whiteBalance: matrix_identity_float3x3, lut: neutralLUT)
+        XCTAssertEqual(untouched.x, reference.x, accuracy: 1e-6)
+        XCTAssertEqual(untouched.z, reference.z, accuracy: 1e-6)
+    }
+
+    func testHighlightPullKeepsColourBelowClip() {
+        // Pulling highlights down must not grey a sunset: with no channel past
+        // the display ceiling, desaturation stays at the gentle neutral floor.
+        var recipe = GradeRecipe()
+        recipe.highlights = -1
+        let lut = ToneMath.toneLUT(for: recipe)
+        let sunset = SIMD3<Float>(0.9, 0.5, 0.2)
+        let out = ToneMath.evaluate(
+            sunset, recipe: recipe, whiteBalance: matrix_identity_float3x3, lut: lut)
+        let maxc = max(out.x, max(out.y, out.z))
+        let minc = min(out.x, min(out.y, out.z))
+        XCTAssertGreaterThan((maxc - minc) / max(maxc, 1e-5), 0.5,
+                             "a strongly coloured highlight must keep its colour under recovery")
+        XCTAssertGreaterThan(out.x, out.y)
+        XCTAssertGreaterThan(out.y, out.z)
+    }
+
     func testReferenceRecipeBehavesLikeTheLightroomEdit() {
         // The user's calibration edit: highlights −100, shadows +49,
         // whites −11, blacks +26 — loose shape checks, exact matching is the

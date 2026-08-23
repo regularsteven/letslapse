@@ -35,7 +35,8 @@ struct PhotoAdjustments: Codable, Equatable {
     var vibrance: Float
     /// Uniform chroma gain. −1…+1.
     var saturation: Float
-    /// Large-radius local contrast. 0…1.
+    /// Local contrast as detail gain: positive adds punch, negative smooths.
+    /// −1…+1.
     var clarity: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
@@ -66,7 +67,7 @@ struct PhotoAdjustments: Codable, Equatable {
     static let tintRange: ClosedRange<Float> = -1...1
     static let vibranceRange: ClosedRange<Float> = -1...1
     static let saturationRange: ClosedRange<Float> = -1...1
-    static let clarityRange: ClosedRange<Float> = 0...1
+    static let clarityRange: ClosedRange<Float> = -1...1
     static let vignetteRange: ClosedRange<Float> = 0...1
 
     /// The engine-side recipe these adjustments describe, optionally layered
@@ -83,7 +84,7 @@ struct PhotoAdjustments: Codable, Equatable {
         recipe.tint = min(max(base.tint + tint, -1), 1)
         recipe.vibrance = min(max(base.vibrance + vibrance, -1), 1)
         recipe.saturation = min(max(base.saturation + saturation, -1), 1)
-        recipe.clarity = min(max(base.clarity + clarity, 0), 1)
+        recipe.clarity = min(max(base.clarity + clarity, -1), 1)
         recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
         return recipe
     }
