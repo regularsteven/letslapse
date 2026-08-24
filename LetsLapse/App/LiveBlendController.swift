@@ -277,6 +277,12 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// `capture_log.json` — the 2026-08-23 flat/non-flat A/B was
         /// undiagnosable because the old path neither applied nor logged it.
         var captureFlat: Bool = false
+        /// Whether this run writes the `frames.timestamps` sidecar — one line
+        /// per output file as it lands, flushed immediately, so the finished
+        /// project's time axis survives a crash exactly as its frames do.
+        /// False on Holy Grail runs: the ramp already owns that file and
+        /// appends richer entries (scene EV) per window from CameraController.
+        var writesFrameTimestamps: Bool = true
 
         /// What readouts show before the first window resolves: the fixed
         /// count, or 0 (unlimited/unresolved) for the adaptive depths.
@@ -398,6 +404,10 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var frameURLs: [URL] = []
     /// One entry per written output frame, for `capture_log.json`. blendQueue.
     private var sessionFrameLog: [CaptureExposureLog.Entry] = []
+    /// The `frames.timestamps` twin of the entry above — appended beside each
+    /// written file, live, where the exposure log lands only at close. nil
+    /// when the configuration hands the sidecar to somebody else. blendQueue.
+    private let timestampWriter: FrameTimestampWriter?
     /// The shoot's recorded issue trail for `capture_log.json`. blendQueue.
     private var sessionIssues: [CaptureExposureLog.Issue] = []
     /// Last thermal state an issue was recorded against, so transitions are
@@ -432,6 +442,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
         self.configuration = configuration
         self.blender = PixelBufferBlender(core: core, linearLight: true)
+        self.timestampWriter = configuration.writesFrameTimestamps
+            ? FrameTimestampWriter(directory: configuration.outputDirectory)
+            : nil
         self.window = WindowRecord(
             index: 0, startSeconds: 0,
             intervalSeconds: configuration.intervalSeconds)
@@ -895,6 +908,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                     capturedAt: record.exposure?.capturedAt ?? Date(),
                     blendCount: entry.capturedFrames,
                     window: CaptureExposureLog.WindowPerformance(entry: entry)))
+                timestampWriter?.append(FrameTimestamps.Entry(
+                    frame: frameURLs.count - 1,
+                    captureTime: record.exposure?.capturedAt ?? Date(),
+                    shutter: record.exposure?.exposureDuration ?? 0,
+                    iso: record.exposure?.iso ?? 0))
                 outputIndex += 1
                 completedOutputs += 1
                 if entry.capturedFrames == 1 {
@@ -1052,6 +1070,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             finalThermalState: LiveBlendController.thermalStateName(),
             discarded: discard)
         rewriteLog()
+        // Release the sidecar's handle before the discard branch below can
+        // delete the directory out from under it.
+        timestampWriter?.close()
 
         let result: LiveBlendCaptureResult?
         if discard || frameURLs.isEmpty {

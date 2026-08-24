@@ -250,6 +250,13 @@ final class CameraController: NSObject, ObservableObject {
     private var intervalFrameCap: Int?
     private var intervalFramesRequested = 0
     private var intervalActive = false
+    /// The per-frame capture sidecar for runs on the plain photo-output timer:
+    /// EVERY interval-style shoot writes `frames.timestamps` now, not just the
+    /// ramped ones, so a finished project always knows its own pacing. The
+    /// blend pipelines write their own (see
+    /// `LiveBlendController.Configuration.writesFrameTimestamps`); Holy Grail
+    /// and Scanner keep their richer writers below. sessionQueue-confined.
+    private var intervalWriter: FrameTimestampWriter?
     // Holy Grail — the auto-ramping interval shoot. All sessionQueue-confined.
     // `holyGrailEngine` is the exposure policy (a pure struct in the Kit);
     // `holyGrailWriter` appends the per-frame sidecar; `holyGrailPending`
@@ -1218,6 +1225,10 @@ final class CameraController: NSObject, ObservableObject {
             // frames are Incomplete Captures' business, not a finished project.
             if self.intervalActive {
                 self.intervalActive = false
+                // Close, never delete: the frames and their sidecar are
+                // Incomplete Captures' material now.
+                self.intervalWriter?.close()
+                self.intervalWriter = nil
                 self.releaseRunFocusLock()
                 DispatchQueue.main.async { self.isIntervalRunning = false }
             }
@@ -5360,6 +5371,7 @@ final class CameraController: NSObject, ObservableObject {
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             self.photoDirectory = directory
             self.photoURLs = []
+            self.intervalWriter = FrameTimestampWriter(directory: directory)
             self.intervalFrameCap = frameCap
             self.intervalFramesRequested = 0
             self.intervalActive = true
@@ -5440,6 +5452,10 @@ final class CameraController: NSObject, ObservableObject {
         let wasHolyGrail = self.holyGrailActive
         self.endHolyGrailIfActive()
         self.releaseRunFocusLock()
+        // Closed before the finish handler runs: registration copies the
+        // sidecar from beside the frames, and it must be complete by then.
+        self.intervalWriter?.close()
+        self.intervalWriter = nil
         let urls = self.photoURLs
         CaptureSessionLogger.shared.log(
             "capture_end",
@@ -7286,7 +7302,10 @@ final class CameraController: NSObject, ObservableObject {
                 // A live-blend run is a stills run (Interval or Photo), so it
                 // reads the stills scope — Video's Log choice says nothing
                 // about whether these JPEGs want the flat grade.
-                captureFlat: FlatCapture.isEnabled(.stills))
+                captureFlat: FlatCapture.isEnabled(.stills),
+                // Holy Grail owns the sidecar on ramped runs — the ramp
+                // appends richer entries (scene EV) per window.
+                writesFrameTimestamps: !self.holyGrailRequestedForRun)
 
             let controller: LiveBlendController
             do {
@@ -7519,7 +7538,10 @@ final class CameraController: NSObject, ObservableObject {
                       let location = LocationService.shared.latestLocation else { return nil }
                 return (location.coordinate.latitude, location.coordinate.longitude,
                         location.altitude, location.timestamp)
-            })
+            },
+            // Holy Grail owns the sidecar on ramped runs — the ramp appends
+            // richer entries (scene EV) per window.
+            writesFrameTimestamps: !holyGrailRequestedForRun)
         let controller = LiveBlendRawController(
             configuration: configuration,
             photoOutput: photoOutput,
@@ -7916,6 +7938,21 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                 String(format: "frame-%05d.jpg", self.photoURLs.count))
             if self.writeCapturedPhoto(data, to: url) {
                 self.photoURLs.append(url)
+                // One sidecar line per still that exists. macOS AVFoundation
+                // has no exposure introspection — the stamp still carries the
+                // clock, which is what the axis is built from.
+                #if os(iOS)
+                let shutter = self.videoDevice?.exposureDuration.seconds ?? 0
+                let iso = Double(self.videoDevice?.iso ?? 0)
+                #else
+                let shutter = 0.0
+                let iso = 0.0
+                #endif
+                self.intervalWriter?.append(FrameTimestamps.Entry(
+                    frame: self.photoURLs.count - 1,
+                    captureTime: Date(),
+                    shutter: shutter,
+                    iso: iso))
                 let count = self.photoURLs.count
                 DispatchQueue.main.async { self.photoCount = count }
                 // Photo-mode frame cap: the timer stops scheduling once the

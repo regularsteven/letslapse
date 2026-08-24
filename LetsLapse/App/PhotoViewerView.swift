@@ -171,10 +171,18 @@ struct PhotoViewerView: View {
         return frames[frameIndex(at: position)]
     }
 
+    /// The shoot's time axis — the Kit component the warp timeline's stills
+    /// lane shares, so "which frame is at this position" has exactly one
+    /// definition (docs/interval-adjust-unification.md).
+    private var frameAxis: FrameAxis {
+        FrameAxis(
+            frameCount: frames.count,
+            elapsedSeconds: frameSeconds.isEmpty ? nil : frameSeconds,
+            uniformDuration: capture?.sourceDurationSeconds)
+    }
+
     private func frameIndex(at position: Double) -> Int {
-        guard frames.count > 1 else { return 0 }
-        let index = Int((Double(frames.count - 1) * min(max(position, 0), 1)).rounded())
-        return min(max(index, 0), frames.count - 1)
+        frameAxis.index(atPosition: position)
     }
 
     /// The axis: elapsed capture time when the shoot wrote a clock, and frame
@@ -294,9 +302,8 @@ struct PhotoViewerView: View {
                 // ignored rather than guessed at — the axis falls back to frame
                 // numbers, which are at least true.
                 frameSeconds = await Task.detached(priority: .utility) {
-                    FrameTimestamps.load(besideFrames: sources)
-                        .flatMap { $0.entries.count == sources.count ? $0.elapsedSeconds : nil }
-                        ?? []
+                    FrameTimestamps.load(besideFrames: sources)?
+                        .elapsedSeconds(coveringExactly: sources.count) ?? []
                 }.value
             }
             loaded = true

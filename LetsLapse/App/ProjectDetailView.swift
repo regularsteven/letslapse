@@ -1096,11 +1096,17 @@ struct ProjectDetailView: View {
             return nil
         }
         var parts: [String] = []
-        if let width = capture.sourceWidth, let height = capture.sourceHeight {
-            parts.append(AppModel.CaptureProject.resolutionLabel(width: width, height: height))
-        }
-        if let fps = capture.sourceFPS {
-            parts.append("\(Int(fps.rounded())) fps")
+        // Video only for now: stills projects carry probed dimensions too
+        // (the warp-unification enablers), but their badge deliberately stays
+        // "Interval" until the unified Adjust screen ships — a look change
+        // here is a design-sync unit, not a probe side-effect.
+        if capture.kind == .video {
+            if let width = capture.sourceWidth, let height = capture.sourceHeight {
+                parts.append(AppModel.CaptureProject.resolutionLabel(width: width, height: height))
+            }
+            if let fps = capture.sourceFPS {
+                parts.append("\(Int(fps.rounded())) fps")
+            }
         }
         if parts.isEmpty {
             parts.append(capture.kind == .photos ? "Interval" : "Video")

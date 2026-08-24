@@ -1,6 +1,9 @@
 # Giving interval shoots the video "New blended clip" screen
 
-**Raised:** 2026-08-24 (Steven) · **Status:** assessment — no code changed.
+**Raised:** 2026-08-24 (Steven) · **Status:** Phases 1 and 2 implemented
+2026-08-24 (phase 2 code-first per Steven — SVG mirrors follow sign-off).
+See the phasing section for what landed and what each later phase still
+needs. Phases 3–4 open; each starts with the design-sync question.
 
 The ask: the video-capture configure screen (warp timeline, speed stretches,
 ramps, punch-in reframe, canvas, fps/estimate card) should serve interval
@@ -78,13 +81,58 @@ bar, estimate card, and fps menu carry over unchanged.
 
 ## Suggested phasing (when this becomes a job)
 
-1. **Enablers, invisible:** write `frames.timestamps` on *every* interval run;
-   probe stills dimensions + derive duration at registration; stills preview
-   scrubber component (lift from PhotoViewerView).
-2. **The timeline:** interval axis (sidecar seconds, uniform fallback),
-   interval speed vocabulary, `customWindows` into ImageStacker. This absorbs
-   the blend slider; True-light and tail-frame exclusion move into the
-   Advanced sheet.
+1. **Enablers, invisible — DONE 2026-08-24:** every interval-style run writes
+   `frames.timestamps` (plain photo-timer runs via `intervalWriter` in
+   `CameraController`; blend runs via `writesFrameTimestamps` in both blend
+   controllers' configurations — off for Holy Grail, whose ramp owns the file;
+   Scanner untouched). Stills projects get `sourceWidth/Height` (oriented,
+   metadata-only) and a sidecar-derived `sourceDurationSeconds` from
+   `AppModel.refreshStillsMetadata` — at registration, at `.lapse` import, and
+   in a one-shot `loadLibrary` catch-up gated on missing dimensions. The
+   shared axis is `FrameAxis` in the Kit (tested; the photo editor's scrubber
+   now maps through it) with `FrameTimestamps.elapsedSeconds(coveringExactly:)`
+   as the one coverage gate, and `StillsPreviewLoader` staged beside
+   `WarpPreviewLoader` for the timeline to adopt. Kept invisible on purpose:
+   `formatBadge` and the Adjust header stay kind-gated, so the new fields
+   change no screen until phase 2 chooses to. One behavioural effect is
+   deliberate: fresh plain-interval blends now lay out on the real capture
+   clock (`ImageStacker` already honoured a covering sidecar); even pacing
+   maps to the constant layout, uneven pacing now renders honestly.
+2. **The timeline — DONE 2026-08-24 (code-first; SVGs after sign-off):**
+   interval shoots get the real warp timeline in the interval vocabulary —
+   a stretch's "speed" is its blend depth (photos per output frame, labelled
+   "5:1"), which is the old whole-shoot BLEND slider absorbed as chips
+   (1:1 crisp … 8:1, custom sheet to the frame count). The pieces:
+   - **Axis**: `AppModel.stillsFrameAxis()` (cached `FrameAxis` — sidecar
+     seconds / uniform span / frame units; `healWarpAxis` uniform-rescales a
+     saved timeline whose axis has since been probed). `warpVocabulary`
+     routes every label in `WarpTimelineView` (clock vs "N fr", `depthLabel`/
+     `depthWord`, amber shading = depth 1, seam pills suppressed — interval
+     seams are steps by construction).
+   - **Compiler**: `IntervalWarp.compile` in the Kit (frame-exact walk:
+     window depth = the stretch its first frame falls in; trivial timeline ≡
+     `WindowSchedule.make`, tested). Presentation times are per-stretch
+     proportional on the capture clock — a depth change re-paces the clip
+     while phase 1's honest layout survives inside each stretch, and an
+     unedited timeline renders bit-identically to the pre-timeline path.
+   - **Render**: `stackSequence`/`stackSequenceLinear` take
+     `customWindows`/`customWindowTimes` (validated to cover the inputs;
+     compiled schedules own their pacing — the sidecar never re-stretches an
+     authored warp). The job compiles against the KEPT frames, so tail
+     exclusions hold their moments. The warp rides the blend recipe; keyframed
+     grades were already source-anchored in the stacker, so they track.
+   - **Screen**: stills Adjust = source card, tail banner, timeline + depth
+     chips, "One long exposure" mode row (the whole-shoot stack), unified
+     estimate card ("303 photos → 101 frames", before/after bar), Advanced
+     (True-light + excluded-frames; Ramp/Trim stay video vocabulary — the
+     Advanced ramp is deliberately NOT honoured for stills). Wide layout now
+     serves stills too (preview pane beside the timeline).
+   - **Verified**: Kit tests (8 `IntervalWarp` cases + suite), all three
+     platform builds, and a headless Mac E2E on the real library
+     (`LL_ADJUST=stills` + `LL_STRETCH="0=3"` + `LL_ADJUST_CREATE=1`):
+     303-photo sidecar shoot → 101 frames, 4.04s @ 25fps, "timed from
+     capture", warp in the recipe. Screenshots: Mac wide + iPhone narrow at
+     depths 1 and 5.
 3. **Spatial + grade:** reframe/canvas on stills renders; grade-map
    unification; codec chooser on both stills paths.
 4. **Retire the `.photos` branch** — after Scanner captures are diverted to

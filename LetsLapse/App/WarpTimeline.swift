@@ -252,6 +252,33 @@ struct WarpTimeline: Codable, Equatable {
         let whole = Int(t.rounded())
         return "\(whole / 60):" + String(format: "%02d", whole % 60)
     }
+
+    // MARK: - Interval vocabulary
+
+    /// The interval timeline's speed label: over stills a stretch's "speed"
+    /// is its blend depth — photos per output frame — and "5:1" says exactly
+    /// that, where the video vocabulary's "5×" would read as a rate.
+    static func depthLabel(_ v: Double) -> String {
+        "\(max(1, Int(v.rounded()))):1"
+    }
+
+    /// The character word for a depth — Crisp↔Long exposure, the poles the
+    /// old BLEND slider named at its ends. The bands are cut so each of the
+    /// canonical chips (1, 2, 3, 5, 8) lands on its own word.
+    static func depthWord(_ v: Double) -> String {
+        let depth = max(1, Int(v.rounded()))
+        if depth == 1 { return "crisp" }
+        if depth == 2 { return "soft" }
+        if depth <= 4 { return "silky" }
+        if depth <= 7 { return "long exposure" }
+        return "streaks"
+    }
+
+    /// "812 fr" — the axis label for a shoot that never recorded a clock,
+    /// where counting frames is honest and inventing seconds isn't.
+    static func frameLabel(_ t: Double) -> String {
+        "\(max(0, Int(t.rounded()))) fr"
+    }
 }
 
 // MARK: - Compiler

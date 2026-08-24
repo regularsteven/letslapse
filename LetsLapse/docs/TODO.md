@@ -39,16 +39,52 @@ pre-existing gap).
 ### Interval shoots get the video "New blended clip" screen
 
 **Detail:** [interval-adjust-unification.md](interval-adjust-unification.md) ·
-**Raised:** 2026-08-24 · **Assessment done — job not started**
+**Raised:** 2026-08-24 · **Phases 1–2 implemented 2026-08-24 — phases 3–4 open, phase-2 sign-off pending**
 
-Steven wants the rich video configure screen (warp timeline, ramps, reframe,
-canvas, fps card) for interval shoots, and the restricted variant phased out.
-Assessment: no risk to video paths, but not a screen swap — stills sources
-lack a time axis (basic interval shoots write no `frames.timestamps` at all),
-the preview loader is movie-only, the stackers take no compiled schedule, and
-the speed floor inverts for timelapse footage. Also corrects a premise: Photo
-captures never reach this screen — the restricted branch serves Interval and
-Scanner. Phasing in the doc; each UI phase is its own design-sync unit.
+*Phase 2 (2026-08-24, code-first per Steven): interval shoots now get the
+real warp timeline — per-stretch **blend depths** ("5:1" chips, custom to the
+frame count) absorbing the old slider, the capture-clock axis (frame-count
+fallback), the "One long exposure" mode row, the unified estimate card, and
+wide layouts. `IntervalWarp` compiles the schedule in the Kit (trivial
+timeline ≡ the old constant schedule, per-stretch clock retiming);
+`stackSequence`/`stackSequenceLinear` take `customWindows`. Verified: Kit
+tests, three platform builds, headless Mac E2E on the real library (303
+photos → 101 frames @ depth 3, timed from capture, warp in the recipe), Mac
+wide + iPhone narrow screenshots via the new `LL_ADJUST=stills` /
+`LL_ADJUST_CREATE=1` hooks. Owed: Steven's sign-off on the built UI, then
+the SVG mirrors (`adjust.photos.portrait.svg` marked stale in the iOS INDEX;
+iPadOS/macOS have no adjust SVGs — pre-existing gap), and a device pass.*
+
+*Shipped on `ios-app`: every interval-style run now writes `frames.timestamps`
+(plain photo-timer runs in `CameraController`; blend runs in both blend
+controllers, off for Holy Grail where the ramp owns the file); stills projects
+get probed `sourceWidth/Height` and a sidecar-derived `sourceDurationSeconds`
+at registration, import, and a one-shot launch catch-up; and the shared stills
+axis exists as `FrameAxis` in the Kit (photo editor lifted onto it,
+`StillsPreviewLoader` staged beside `WarpPreviewLoader` for phase 2).
+Deliberately invisible: badge/header lines are kind-gated so the new fields
+change no screen. Side effect by design: fresh plain-interval blends now lay
+out on the real capture clock (`ImageStacker` already honoured a covering
+sidecar) — even pacing maps to the constant layout, so only genuinely uneven
+shoots read differently, which is the sidecar's whole point.*
+
+Verified 2026-08-24: Kit tests (13 new `FrameAxis` cases) and iOS-sim, macOS
+and device builds all pass; the stills probe ran against the real Mac library
+— 47/48 stills projects gained oriented dimensions (the 48th has its frames
+missing on disk, correctly left nil), and exactly the 32 sidecar-backed
+projects gained durations with none invented and all 14 video projects
+untouched. Still owed for phase 1: one live interval run confirming
+`frames.timestamps` lands in a fresh project's `source/` — the phase-1 build
+is **already installed on the iPhone 12 Pro**; the phone was locked at bench
+time, so unlock it and run
+`./remote_probe <code> "setIntervalMode:basic,setFramesPerBlend:1,setIntervalSeconds#1,wait@1,startRecording,poll@2x6,stopRecording"`
+(and once more at `setFramesPerBlend:3` for the blend pipeline).
+
+Then phases 3–4 — spatial unification (reframe/canvas on stills renders,
+codec chooser on both stills paths; grade maps turned out already unified:
+the stacker's grade hook was source-anchored all along), then retiring the
+`.photos` branch once Scanner is diverted to its own configure surface. Each
+UI phase starts with the design-sync question.
 
 ### Field notes ↔ engine issue trail tie-in
 

@@ -73,6 +73,12 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         /// baked into every DNG that window writes. Primitives, not a
         /// CLLocation, so the value can cross into the Kit's DNG authoring.
         var gpsProvider: (() -> (latitude: Double, longitude: Double, altitude: Double, timestamp: Date)?)? = nil
+        /// Whether this run writes the `frames.timestamps` sidecar — one line
+        /// per output file as it lands, flushed immediately, so the finished
+        /// project's time axis survives a crash exactly as its frames do.
+        /// False on Holy Grail runs: the ramp already owns that file and
+        /// appends richer entries (scene EV) per window from CameraController.
+        var writesFrameTimestamps: Bool = true
 
         /// What readouts show before the first window resolves: the fixed
         /// count, or 0 (unlimited/unresolved) for the adaptive depths.
@@ -176,6 +182,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// Every capture this run has landed, for the per-capture sidecar.
     private var captureIndex = 0
     private var exposureWriter: CaptureExposureWriter?
+    /// The `frames.timestamps` twin of the exposure sidecar — appended beside
+    /// each written OUTPUT file (poses of the finished sequence, not raw
+    /// captures), so the project's time axis lands live. workQueue.
+    private var timestampWriter: FrameTimestampWriter?
     /// One entry per written output frame, for `capture_log.json`.
     private var sessionFrameLog: [CaptureExposureLog.Entry] = []
     private var runStartedAt = Date()
@@ -289,6 +299,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             self.runStartedAt = Date()
             self.exposureWriter = CaptureExposureWriter(
                 directory: self.configuration.outputDirectory)
+            self.timestampWriter = self.configuration.writesFrameTimestamps
+                ? FrameTimestampWriter(directory: self.configuration.outputDirectory)
+                : nil
             self.openWindowState()
             LLog("liveblend-dng: start interval=\(self.configuration.intervalSeconds)s depth=\(self.configuration.blendDepth.token) raw=\(self.configuration.rawPixelFormat) log=\(self.configuration.logURL.path)")
             self.rewriteLog()
@@ -939,6 +952,11 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 blendCount: entry.capturedFrames,
                 strategy: decision,
                 window: CaptureExposureLog.WindowPerformance(entry: entry)))
+            timestampWriter?.append(FrameTimestamps.Entry(
+                frame: frameURLs.count - 1,
+                captureTime: exposure.capturedAt ?? Date(),
+                shutter: exposure.exposureDuration ?? 0,
+                iso: exposure.iso ?? 0))
         }
         if entry.starvedBackpressure {
             // Neither a failure (the camera did nothing wrong) nor a success
@@ -1324,6 +1342,10 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         rewriteLog()
         exposureWriter?.close()
         exposureWriter = nil
+        // Released before the discard branch below can delete the directory
+        // out from under it.
+        timestampWriter?.close()
+        timestampWriter = nil
 
         let result: LiveBlendCaptureResult?
         if discard || frameURLs.isEmpty {

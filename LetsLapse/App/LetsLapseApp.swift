@@ -610,16 +610,26 @@ struct ContentView: View {
                 }
             }
         }
-        // LL_ADJUST=latest|demo — open the newest video capture on the Adjust
-        // screen; `demo` wraps it in a fabricated two-moment sequence (the
-        // design's 8:16 sample) so the warp timeline shows structure without
-        // needing a real burst shoot on the simulator. LL_STRETCH
-        // ("1=0.25,3=15") then pins warp stretch speeds (×-real-time) for
-        // variant screenshots.
+        // LL_ADJUST=latest|demo|stills — open a capture on the Adjust screen:
+        // the newest video capture, `demo`'s fabricated two-moment sequence
+        // (the design's 8:16 sample), or the newest interval shoot whose
+        // frames are on disk — the interval warp timeline's screenshot and
+        // render hook. LL_STRETCH ("1=0.25,3=15") then pins warp stretch
+        // speeds (×-real-time for video, blend depths for stills) for variant
+        // screenshots, and LL_ADJUST_CREATE=1 presses Create — the reframe
+        // hook's render-check pattern, for checking the finished clip without
+        // a tappable UI.
         if let hook = environment["LL_ADJUST"] {
             if hook == "demo" {
                 model.debugOpenAdjustDemo()
-            } else if let capture = model.captures.first(where: { $0.kind == .video }) {
+            } else if hook == "stills", let capture = model.captures.first(where: { candidate in
+                candidate.kind == .photos && !candidate.isPhotoCapture
+                    && !model.isScannerProject(candidate)
+                    && model.sourceFrameURLs(for: candidate).first
+                        .map { FileManager.default.fileExists(atPath: $0.path) } == true
+            }) {
+                model.openCapture(capture)
+            } else if hook != "stills", let capture = model.captures.first(where: { $0.kind == .video }) {
                 model.openCapture(capture)
             }
             if let overrides = environment["LL_STRETCH"] {
@@ -628,6 +638,9 @@ struct ContentView: View {
             // LL_CANVAS=9:16 — pin the Adjust canvas for variant screenshots.
             if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {
                 model.blendCanvasRatio = ratio
+            }
+            if environment["LL_ADJUST_CREATE"] == "1" {
+                model.startProcessing()
             }
         }
         // LL_REFRAME=latest — open the newest video capture in the blended-

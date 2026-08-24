@@ -1304,6 +1304,8 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
         ProjectThumbnailCache.shared.invalidate(urls: removed)
         invalidateScannerCache(for: capture.id)
+        // The frame count and the sidecar both changed under the cached axis.
+        stillsAxisCache.removeValue(forKey: capture.id)
     }
 
     /// Drops what `isScannerProject` remembers about a project, after anything
@@ -2272,10 +2274,13 @@ final class AppModel: ObservableObject {
             : .constant(constantWindow)
     }
 
-    /// For a photo source, how many output frames the current blend depth
-    /// yields — each window of `photoBlendDepth` stills becomes one frame.
+    /// For a photo source, how many output frames the current settings yield.
+    /// The compiled interval timeline is the answer wherever it exists; the
+    /// constant-depth arithmetic covers what it can't schedule (a single
+    /// still, the whole-shoot stack).
     var photoOutputFrameCount: Int? {
         guard let capture = currentCapture, capture.kind == .photos else { return nil }
+        if let compiled = compiledIntervalWarp() { return compiled.outputFrames }
         let count = capture.sourceMediaCount
         guard count > 0 else { return nil }
         return WindowSchedule.make(totalInputFrames: count, ramp: .constant(photoBlendDepth)).count
@@ -2316,6 +2321,13 @@ final class AppModel: ObservableObject {
     /// including every seam's ease. `speed` gives the legacy whole-clip
     /// hypothetical (the Result screen's "try N×" suggestion).
     func estimatedOutputSeconds(speed: Int? = nil) -> Double? {
+        // Stills: the compiled interval schedule is exact, and there is no
+        // legacy whole-clip hypothetical to fall back to.
+        if case .photos = source {
+            guard speed == nil, let compiled = compiledIntervalWarp(),
+                  compiled.outputFrames > 0 else { return nil }
+            return Double(compiled.outputFrames) / Double(max(1, outputFPS))
+        }
         guard source?.isVideo == true else { return nil }
         if speed == nil, !useRamp, let compiled = compiledWarp(), compiled.outputFrames > 0 {
             return compiled.outputSeconds
@@ -2333,6 +2345,58 @@ final class AppModel: ObservableObject {
     }
 
     // MARK: - Warp timeline
+
+    /// Which vocabulary the Adjust timeline speaks for the current source: a
+    /// movie's ×-real-time speeds, or an interval shoot's blend depths
+    /// (photos per output frame) over the capture clock.
+    enum WarpVocabulary: Equatable {
+        case video
+        /// `hasClock` distinguishes a real capture-seconds axis from the
+        /// frame-count fallback, which is what the axis labels key on.
+        case interval(hasClock: Bool)
+    }
+
+    var warpVocabulary: WarpVocabulary {
+        if case .photos = source {
+            return .interval(hasClock: stillsFrameAxis()?.hasClock ?? false)
+        }
+        return .video
+    }
+
+    /// The stills shoot's time axis, cached per capture: elapsed capture
+    /// seconds where a covering `frames.timestamps` exists, else uniform over
+    /// the probed span, else frame units (span = the frame count). Answered
+    /// synchronously because the timeline's body asks per redraw; the read
+    /// behind the cache is one NDJSON sidecar, once — the same bargain
+    /// `isScannerProject` strikes.
+    private var stillsAxisCache: [UUID: FrameAxis] = [:]
+    func stillsFrameAxis() -> FrameAxis? {
+        guard case .photos(let urls) = source, let capture = currentCapture,
+              urls.count > 1 else { return nil }
+        if let cached = stillsAxisCache[capture.id] { return cached }
+        let elapsed = FrameTimestamps.load(besideFrames: urls)?
+            .elapsedSeconds(coveringExactly: urls.count)
+        let axis = FrameAxis(
+            frameCount: urls.count,
+            elapsedSeconds: elapsed,
+            uniformDuration: capture.sourceDurationSeconds ?? Double(urls.count))
+        stillsAxisCache[capture.id] = axis
+        return axis
+    }
+
+    /// What "Reset" returns a stretch's speed to: the video project speed, or
+    /// the interval shoot's baseline depth.
+    var warpResetSpeed: Double {
+        if case .photos = source { return Double(max(1, photoBlendDepth)) }
+        return Double(max(1, constantWindow))
+    }
+
+    /// Per-stretch output-frame shares from whichever compiler serves the
+    /// current source — what the timeline bar draws its widths from.
+    func warpStretchOutputFrames() -> [Int]? {
+        if case .photos = source { return compiledIntervalWarp()?.stretchWindows }
+        return compiledWarp()?.stretchFrames
+    }
 
     /// The recorded shape of the capture, for seeding the warp — moments and
     /// base runs in order. One whole-clip stretch for continuous footage.
@@ -2371,6 +2435,19 @@ final class AppModel: ObservableObject {
     /// boundary. Idempotent: once totals agree the timeline passes through
     /// untouched.
     private func healWarpAxis(_ timeline: WarpTimeline) -> WarpTimeline {
+        // Stills: a saved timeline can predate its axis — the metadata probe
+        // may have upgraded a frame-count axis to real capture seconds since
+        // the blend that stored it was made. A uniform rescale lands every
+        // boundary on the same fraction of the shoot it was authored at.
+        if case .photos = source {
+            guard let span = stillsFrameAxis()?.span, span > 0,
+                  timeline.sourceSeconds > 0.01,
+                  abs(timeline.sourceSeconds - span) > span * 0.001 else { return timeline }
+            var healed = timeline
+            let scale = span / timeline.sourceSeconds
+            healed.bounds = timeline.bounds.map { $0 * scale }
+            return healed
+        }
         guard case .liveSequence(let live) = source, live.sequence.mode == .ramp,
               let probed = currentCapture?.sourceSegmentSeconds, !probed.isEmpty,
               timeline.sourceSeconds > 0.01 else { return timeline }
@@ -2554,6 +2631,13 @@ final class AppModel: ObservableObject {
     /// and the seams inherit the project's slow-motion ramp, borrowing from the
     /// moment's side exactly as the old stitch ramp lived inside the burst.
     private func seededWarp() -> WarpTimeline {
+        // Stills: one stretch spanning the shoot's axis at the baseline depth
+        // — the whole-shoot BLEND slider, restated as a timeline.
+        if case .photos = source {
+            return WarpTimeline(
+                sourceSeconds: stillsFrameAxis()?.span ?? 0,
+                speed: Double(max(1, photoBlendDepth)))
+        }
         let stretches = blendStretches()
         let baseSpeed = Double(max(1, constantWindow))
         guard stretches.count > 1 else {
@@ -2740,6 +2824,12 @@ final class AppModel: ObservableObject {
             return (url, max(0, time))
         case .video(let url):
             return (url, max(0, time))
+        case .photos(let urls):
+            // The still on screen at this axis moment — the frame the loader
+            // decodes whole, so the seconds half carries nothing.
+            guard let axis = stillsFrameAxis(), !urls.isEmpty else { return nil }
+            let index = min(max(0, axis.index(atSecond: time)), urls.count - 1)
+            return (urls[index], 0)
         default:
             return nil
         }
@@ -2807,6 +2897,47 @@ final class AppModel: ObservableObject {
             segmentSeconds: currentCapture?.sourceSegmentSeconds,
             segmentFPS: currentCapture?.sourceSegmentFPS,
             value: compiled)
+        return compiled
+    }
+
+    /// Everything the interval compile depends on — the same bargain as the
+    /// video memo above: the estimate card and the bar ask per body
+    /// evaluation, and walking thousands of frames each time is real work.
+    private struct CompiledIntervalMemo {
+        var timeline: WarpTimeline
+        var outputFPS: Int
+        var captureID: UUID?
+        var frameCount: Int
+        var value: IntervalWarp.Compiled?
+    }
+    private var compiledIntervalMemo: CompiledIntervalMemo?
+
+    /// The interval timeline compiled into the stacker's window schedule —
+    /// what a stills render will do and what its estimate reports. nil for
+    /// video sources, single stills, and the whole-shoot single-image stack
+    /// (which has no sequence to schedule). The Advanced ramp is deliberately
+    /// not consulted: it is video vocabulary, and for stills the timeline IS
+    /// the depth control.
+    func compiledIntervalWarp() -> IntervalWarp.Compiled? {
+        guard case .photos(let urls) = source, !photosProduceSingleImage,
+              let axis = stillsFrameAxis() else { return nil }
+        let timeline = activeWarp()
+        if let memo = compiledIntervalMemo,
+           memo.timeline == timeline,
+           memo.outputFPS == outputFPS,
+           memo.captureID == currentCaptureID,
+           memo.frameCount == urls.count {
+            return memo.value
+        }
+        let compiled = IntervalWarp.compile(
+            frameSeconds: (0..<axis.frameCount).map { axis.second(atIndex: $0) },
+            hasClock: axis.hasClock,
+            bounds: timeline.bounds,
+            depths: timeline.speeds,
+            outputFPS: Double(max(1, outputFPS)))
+        compiledIntervalMemo = CompiledIntervalMemo(
+            timeline: timeline, outputFPS: outputFPS,
+            captureID: currentCaptureID, frameCount: urls.count, value: compiled)
         return compiled
     }
 
@@ -3471,6 +3602,24 @@ final class AppModel: ObservableObject {
                                 ? stamps.elapsedSeconds(forOrders: keptOrders)
                                 : nil
                         }
+                    // The interval timeline, compiled against exactly the
+                    // frames this render feeds: kept frames keep their own
+                    // axis moments, so an excluded tail can't slide a stretch
+                    // boundary onto different photographs. nil (no axis, or
+                    // the whole-shoot stack below) falls back to the legacy
+                    // constant-depth schedule, which an untouched timeline
+                    // reproduces exactly anyway.
+                    let intervalCompiled: IntervalWarp.Compiled? = {
+                        guard photoDepth < filteredURLs.count,
+                              let axis = self.stillsFrameAxis() else { return nil }
+                        let timeline = self.activeWarp()
+                        return IntervalWarp.compile(
+                            frameSeconds: keptOrders.map { axis.second(atIndex: $0) },
+                            hasClock: axis.hasClock,
+                            bounds: timeline.bounds,
+                            depths: timeline.speeds,
+                            outputFPS: fps)
+                    }()
                     // Stills bake their grade frame by frame inside the blend,
                     // so no separate grade band exists on this path.
                     self.beginProgressPlan(.make(
@@ -3488,6 +3637,8 @@ final class AppModel: ObservableObject {
                         output = try await self.blendPhotosSequence(
                             urls: filteredURLs, ramp: .constant(photoDepth), fps: fps,
                             linear: linear, grade: grade, frameTimes: frameTimes,
+                            customWindows: intervalCompiled?.windows,
+                            customWindowTimes: intervalCompiled?.presentationSeconds,
                             profile: self.blendProfileOverride ?? self.defaultBlendProfile)
                     }
                 }
@@ -4727,6 +4878,8 @@ final class AppModel: ObservableObject {
         linear: Bool,
         grade: PhotoGrade = .identity,
         frameTimes: [Double]? = nil,
+        customWindows: [Int]? = nil,
+        customWindowTimes: [Double]? = nil,
         profile: VideoEncodePolicy.Profile = .h264High8Bit
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
@@ -4749,6 +4902,8 @@ final class AppModel: ObservableObject {
                     linearLight: false,
                     outputURL: output,
                     frameTimes: frameTimes,
+                    customWindows: customWindows,
+                    customWindowTimes: customWindowTimes,
                     loadFrame: Self.gradedFrameLoader(grade, over: urls),
                     progress: progress)
             }
@@ -4762,6 +4917,8 @@ final class AppModel: ObservableObject {
                 outputFPS: fps,
                 outputURL: output,
                 frameTimes: frameTimes,
+                customWindows: customWindows,
+                customWindowTimes: customWindowTimes,
                 profile: profile,
                 decodeLinear: support.decode,
                 outputGrade: support.hook,
@@ -4771,7 +4928,7 @@ final class AppModel: ObservableObject {
         if profile == .hevcMain10 {
             summary += " · 10-bit HEVC"
         }
-        if frameTimes != nil {
+        if customWindows != nil ? customWindowTimes != nil : frameTimes != nil {
             summary += " · timed from capture"
         }
         if !grade.isIdentity {
@@ -4914,7 +5071,10 @@ final class AppModel: ObservableObject {
             inputFrames: nil,
             outputFrames: nil,
             sourceCodec: source?.isVideo == true ? blendSourceCodec?.rawValue : nil,
-            warp: compiledWarp() != nil ? activeWarp() : nil,
+            // The timeline travels with the blend on both source kinds, so a
+            // re-edit starts from exactly what rendered. The single-image
+            // stack schedules nothing and records nothing.
+            warp: compiledWarp() != nil || compiledIntervalWarp() != nil ? activeWarp() : nil,
             // Gated like `warp`: the reframe only renders through the compiled
             // path, so a ramp render must not record a punch it never baked.
             reframe: compiledWarp() != nil ? reframe : nil,
@@ -5054,9 +5214,10 @@ final class AppModel: ObservableObject {
 
         captures.insert(capture, at: 0)
         try persistLibrary()
-        if capture.kind == .video {
-            Task { [weak self] in
-                await self?.refreshVideoMetadata(for: capture.id)
+        Task { [weak self] in
+            switch capture.kind {
+            case .video: await self?.refreshVideoMetadata(for: capture.id)
+            case .photos: await self?.refreshStillsMetadata(for: capture.id)
             }
         }
         autoTagIfEnabled(capture)
@@ -5212,6 +5373,16 @@ final class AppModel: ObservableObject {
                     || capture.sourceSegmentFPS == nil) {
                 Task { [weak self] in
                     await self?.refreshVideoMetadata(for: capture.id)
+                }
+            }
+            // One-shot catch-up for stills projects from before they were
+            // probed at all. Gated on dimensions — always derivable, so this
+            // settles in one pass — with the capture span filled in the same
+            // pass wherever a covering sidecar exists.
+            for capture in captures
+            where capture.kind == .photos && capture.sourceWidth == nil {
+                Task { [weak self] in
+                    await self?.refreshStillsMetadata(for: capture.id)
                 }
             }
         } catch {
@@ -5435,6 +5606,46 @@ final class AppModel: ObservableObject {
             captures[index].sourceHeight = height
         }
         try? persistLibrary()
+    }
+
+    /// The stills counterpart of `refreshVideoMetadata`: what a photo-kind
+    /// project can know about itself after the fact — dimensions from the
+    /// first frame's metadata (oriented, no pixel decode), and, where the
+    /// shoot wrote a covering `frames.timestamps`, the real capture span as
+    /// `sourceDurationSeconds`. Enablers for the warp timeline's stills lane
+    /// (docs/interval-adjust-unification.md); nothing user-facing shows them
+    /// for stills yet — the badge and header lines stay kind-gated until that
+    /// screen exists.
+    private func refreshStillsMetadata(for captureID: UUID) async {
+        guard let capture = captures.first(where: { $0.id == captureID }),
+              capture.kind == .photos else { return }
+        let urls = sourceFrameURLs(for: capture)
+        guard let first = urls.first else { return }
+        let probed = await Task.detached(priority: .utility) {
+            (size: MediaGeometry.stillDisplaySize(url: first),
+             elapsed: FrameTimestamps.load(besideFrames: urls)?
+                .elapsedSeconds(coveringExactly: urls.count))
+        }.value
+        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        var changed = false
+        if let size = probed.size, size.width > 0, size.height > 0 {
+            let width = Int(size.width.rounded())
+            let height = Int(size.height.rounded())
+            if captures[index].sourceWidth != width || captures[index].sourceHeight != height {
+                captures[index].sourceWidth = width
+                captures[index].sourceHeight = height
+                changed = true
+            }
+        }
+        // A single photo's span is 0 and a sidecar that doesn't cover the
+        // frames is nil — both leave the field alone rather than inventing a
+        // duration.
+        if let span = probed.elapsed?.last, span > 0,
+           captures[index].sourceDurationSeconds != span {
+            captures[index].sourceDurationSeconds = span
+            changed = true
+        }
+        if changed { try? persistLibrary() }
     }
 
     // MARK: - Clip conversion
@@ -6171,6 +6382,15 @@ final class AppModel: ObservableObject {
             captures.insert(capture, at: 0)
             blends.append(contentsOf: importedBlends)
             try persistLibrary()
+            // A stills project from a device that predates their probing
+            // arrives without its dimensions/span — fill them now rather than
+            // waiting for the next launch's catch-up pass.
+            if capture.kind == .photos, capture.sourceWidth == nil {
+                let importedID = capture.id
+                Task { [weak self] in
+                    await self?.refreshStillsMetadata(for: importedID)
+                }
+            }
             finishArchiveImport()
             // Land on the project itself rather than opening a blend flow over
             // it: importing is "here is the thing", not "start editing it".

@@ -47,7 +47,7 @@ struct AdjustView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let isWide = proxy.size.width > 560 && model.source?.isVideo == true
+            let isWide = proxy.size.width > 560
             VStack(spacing: 0) {
                 FlowHeader(title: "New blended clip", onBack: { model.reset() }) {
                     if model.source?.isVideo == true {
@@ -57,10 +57,16 @@ struct AdjustView: View {
 
                 ScrollView {
                     if isWide {
-                        wideLayout
-                            .padding(.horizontal, 16)
-                            .padding(.top, 8)
-                            .padding(.bottom, 16)
+                        Group {
+                            if model.source?.isVideo == true {
+                                wideLayout
+                            } else {
+                                wideStillsLayout
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 16)
                     } else {
                         VStack(spacing: 14) {
                             if model.source?.isVideo == true {
@@ -73,7 +79,15 @@ struct AdjustView: View {
                             } else {
                                 sourceCard
                                 tailFrameBanner
-                                stackCard
+                                if model.photosProduceSingleImage {
+                                    stackModeRow
+                                } else {
+                                    warpCard(inlineThumbnail: true)
+                                    chipsRow
+                                    stackModeRow
+                                }
+                                estimateCard
+                                advancedRow
                             }
 
                             errorLine
@@ -141,6 +155,37 @@ struct AdjustView: View {
                 .frame(width: 320)
             }
             blendFromSection
+            advancedRow
+            errorLine
+        }
+    }
+
+    /// iPad / Mac / iPhone landscape for an interval shoot: the timeline
+    /// beside the preview, same shell as the video layout — minus the lanes
+    /// stills don't have yet (reframe and canvas are phase 3 of the
+    /// unification; Blend-from codecs are video-only).
+    private var wideStillsLayout: some View {
+        VStack(spacing: 14) {
+            sourceCard
+            tailFrameBanner
+            HStack(alignment: .top, spacing: 14) {
+                VStack(spacing: 14) {
+                    if model.photosProduceSingleImage {
+                        stackModeRow
+                    } else {
+                        warpCard(inlineThumbnail: false)
+                        chipsRow
+                        stackModeRow
+                    }
+                }
+                .frame(maxWidth: .infinity)
+
+                VStack(spacing: 14) {
+                    widePreviewPane
+                    estimateCard
+                }
+                .frame(width: 320)
+            }
             advancedRow
             errorLine
         }
@@ -295,7 +340,11 @@ struct AdjustView: View {
     private var sourceDetailLine: String {
         guard let capture = model.currentCapture else { return "—" }
         var parts: [String] = []
-        if let duration = capture.sourceDurationSeconds {
+        // Video only for now: stills projects carry a probed capture span too
+        // (the warp-unification enablers), but this header deliberately keeps
+        // its shape until the unified Adjust screen ships — a look change
+        // here is a design-sync unit, not a probe side-effect.
+        if capture.kind == .video, let duration = capture.sourceDurationSeconds {
             parts.append(DurationFormatter.recordingTime(from: duration) + " min")
         }
         parts.append(capture.formatLine)
@@ -382,13 +431,27 @@ struct AdjustView: View {
             "Punch-in reframe, \(reframeLaneOpen ? "expanded" : "collapsed")")
     }
 
+    /// The interval chip set: the depths the old BLEND slider's travel was
+    /// really used for, with the value sheet covering everything between and
+    /// beyond.
+    private static let intervalDepthChips: [Double] = [1, 2, 3, 5, 8]
+
     /// Speed chips always edit the selected stretch — there is no separate
-    /// "base" any more.
+    /// "base" any more. A movie's chips are ×-real-time speeds gated by its
+    /// footage; an interval shoot's are blend depths — the whole-shoot BLEND
+    /// slider absorbed into the timeline, one value per stretch.
     private var chipsRow: some View {
         let timeline = model.activeWarp()
         let index = min(selectedStretch, max(0, timeline.stretchCount - 1))
         let current = timeline.speeds.indices.contains(index) ? timeline.speeds[index] : 1
-        let chips = speedChips(forStretchFPS: model.warpStretchFPS(index))
+        let isInterval = model.source?.isVideo != true
+        let chips: [(speed: Double, label: String, word: String)] = isInterval
+            ? Self.intervalDepthChips.map {
+                ($0, WarpTimeline.depthLabel($0), WarpTimeline.depthWord($0))
+            }
+            : speedChips(forStretchFPS: model.warpStretchFPS(index)).map {
+                ($0.speed, WarpTimeline.speedLabel($0.speed), $0.word)
+            }
         return VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 ForEach(chips, id: \.speed) { chip in
@@ -397,7 +460,7 @@ struct AdjustView: View {
                         model.updateWarp { $0.setSpeed(chip.speed, for: index) }
                     } label: {
                         VStack(spacing: 1) {
-                            Text(WarpTimeline.speedLabel(chip.speed))
+                            Text(chip.label)
                                 .font(.system(size: 14, weight: .bold))
                                 .foregroundStyle(active ? LL.amber : .primary)
                             Text(chip.word)
@@ -433,11 +496,13 @@ struct AdjustView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text("Every stretch is speedable — no separate \u{201C}base\u{201D}. Hold a stretch for Remove · Split · Reset.")
+            Text(isInterval
+                ? "Every stretch has its own blend depth — photos per frame. Hold a stretch for Remove · Split · Reset."
+                : "Every stretch is speedable — no separate \u{201C}base\u{201D}. Hold a stretch for Remove · Split · Reset.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
-            if model.useRamp {
+            if !isInterval, model.useRamp {
                 Text("Speed ramp \(model.rampStart)×→\(model.rampEnd)× is on — editing the timeline turns it off. Edit it in Advanced."
                     + (model.reframe?.isEmpty == false
                         ? " The punch-in reframe won't render while the ramp is on."
@@ -551,6 +616,17 @@ struct AdjustView: View {
             .padding(.top, 2)
             .padding(.bottom, 10)
 
+            // The stills accounting the old stack card carried: what the
+            // photos become.
+            if model.source?.isVideo != true {
+                Text(model.photosProduceSingleImage
+                    ? "\(model.currentCapture?.sourceMediaCount ?? 0) photos → one still"
+                    : "\(model.currentCapture?.sourceMediaCount ?? 0) photos → \(model.photoOutputFrameCount ?? 0) frames")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .padding(.bottom, 8)
+            }
+
             if let sourceSeconds = model.currentCapture?.sourceDurationSeconds,
                let outputSeconds = model.estimatedOutputSeconds(), sourceSeconds > 0 {
                 BeforeAfterBar(
@@ -571,20 +647,30 @@ struct AdjustView: View {
     }
 
     private var estimatePhrase: String {
-        if model.useRamp {
+        let isVideo = model.source?.isVideo == true
+        if isVideo, model.useRamp {
             return "· \(model.rampStart)×→\(model.rampEnd)× ramp"
+        }
+        if !isVideo, model.photosProduceSingleImage {
+            return "· long exposure"
         }
         let timeline = model.activeWarp()
         if timeline.stretchCount > 1 {
             return "· \(timeline.stretchCount) stretches"
+        }
+        if !isVideo {
+            return "· \(WarpTimeline.depthWord(timeline.speeds.first ?? Double(model.photoBlendDepth)))"
         }
         let speed = timeline.speeds.first ?? Double(model.constantWindow)
         return "· \(WarpTimeline.speedWord(speed))"
     }
 
     private var estimateHeadline: String {
+        if model.source?.isVideo != true, model.photosProduceSingleImage {
+            return "One photo"
+        }
         guard let seconds = model.estimatedOutputSeconds() else { return "— seconds" }
-        let approx = model.useRamp ? "≈ " : ""
+        let approx = model.source?.isVideo == true && model.useRamp ? "≈ " : ""
         if seconds < 9.95 {
             return approx + String(format: "%.1f seconds", seconds)
         }
@@ -592,8 +678,16 @@ struct AdjustView: View {
     }
 
     private var blurExplainer: String {
-        if model.useRamp {
+        let isVideo = model.source?.isVideo == true
+        if isVideo, model.useRamp {
             return "The window ramps from \(model.rampStart) to \(model.rampEnd) frames per output frame across the clip."
+        }
+        if !isVideo {
+            if model.photosProduceSingleImage {
+                let count = model.currentCapture?.sourceMediaCount ?? 0
+                return "All \(count) photos blend into one silky still — the classic stacked long exposure, with noise dropping by roughly the square root of the frame count."
+            }
+            return "Never a trim — every photo lands in the clip. A stretch's depth is how many photos average into each frame: 1:1 is crisp, deeper is a rolling long exposure."
         }
         return "Time-warp, never a trim — every source frame lands in the clip; blur follows speed through each ease."
     }
@@ -619,102 +713,43 @@ struct AdjustView: View {
 
     // MARK: - Photos stack
 
-    private var stackCard: some View {
+    /// The whole-shoot stack — the classic single long exposure — offered as
+    /// a mode switch rather than the old slider's top notch. On, it takes the
+    /// timeline's place entirely: one output photo has no schedule to edit.
+    private var stackModeRow: some View {
         let photoCount = model.currentCapture?.sourceMediaCount ?? 0
-        let frameCount = model.photoOutputFrameCount ?? 0
-        let depth = model.photoBlendDepth
-        let singleImage = model.photosProduceSingleImage
-        let noBlend = depth <= 1
-        return VStack(alignment: .leading, spacing: 12) {
-            Text(stackTitle(singleImage: singleImage, noBlend: noBlend))
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(.white)
-            Text(stackBlurb(photoCount: photoCount, depth: depth, singleImage: singleImage, noBlend: noBlend))
-                .font(.system(size: 12.5))
-                .foregroundStyle(.white.opacity(0.6))
-
-            VStack(alignment: .leading, spacing: 6) {
-                HStack(alignment: .firstTextBaseline) {
-                    Text("Blend depth")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Spacer()
-                    Text(depthLabel(photoCount: photoCount, depth: depth, singleImage: singleImage, noBlend: noBlend))
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(LL.amber)
-                }
-                Slider(
-                    value: Binding(
-                        get: { Double(model.photoBlendDepth) },
-                        set: { model.photoBlendDepth = max(1, Int($0.rounded())) }
-                    ),
-                    in: 1...Double(max(2, photoCount)),
-                    step: 1
-                )
-                .tint(LL.amber)
-                HStack {
-                    Text("Crisp")
-                    Spacer()
-                    Text("Long exposure")
-                }
-                .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.35))
+        let on = model.photosProduceSingleImage
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                model.photoBlendDepth = on ? 1 : max(2, photoCount)
             }
-            .padding(.top, 4)
-
-            HStack(alignment: .firstTextBaseline, spacing: 6) {
-                if singleImage {
-                    Text("\(photoCount) photos → one still")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                } else {
-                    Text("\(photoCount) photos → \(frameCount) frames")
-                        .font(.system(size: 13.5, weight: .semibold))
-                        .foregroundStyle(.white)
-                    Text("· \(String(format: "%.1fs", Double(frameCount) / Double(max(1, model.outputFPS)))) at \(model.outputFPS) fps")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.45))
-                }
-            }
-
-            Toggle(isOn: $model.linearLight) {
+        } label: {
+            HStack {
+                Image(systemName: "square.3.layers.3d.down.right")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LL.accent)
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("True-light blending")
-                        .font(.system(size: 15))
-                        .foregroundStyle(.white)
-                    Text("Blends in linear light — smoother highlights")
+                    Text("One long exposure")
+                        .font(.system(size: 15.5))
+                        .foregroundStyle(.primary)
+                    Text(on
+                        ? "All \(photoCount) photos stack into a single still"
+                        : "Stack every photo into a single still instead of a clip")
                         .font(.system(size: 11.5))
-                        .foregroundStyle(.white.opacity(0.5))
+                        .foregroundStyle(.secondary)
                 }
+                Spacer()
+                Text(on ? "On" : "Off")
+                    .font(.system(size: 12))
+                    .foregroundStyle(on ? LL.accentDeep : .secondary)
             }
-            .tint(.green)
-            .padding(.top, 2)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(LL.ink, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-    }
-
-    private func stackTitle(singleImage: Bool, noBlend: Bool) -> String {
-        if singleImage { return "One long exposure" }
-        if noBlend { return "A crisp timelapse" }
-        return "A blended timelapse"
-    }
-
-    private func stackBlurb(photoCount: Int, depth: Int, singleImage: Bool, noBlend: Bool) -> String {
-        if singleImage {
-            return "All \(photoCount) photos blend into a single silky still — the classic stacked long exposure, with noise dropping by roughly the square root of the frame count."
-        }
-        if noBlend {
-            return "Your \(photoCount) photos play back in order, one per frame — a straight timelapse with no blur."
-        }
-        return "Every \(depth) photos average into one frame — a rolling long exposure that carries motion blur through the whole sequence."
-    }
-
-    private func depthLabel(photoCount: Int, depth: Int, singleImage: Bool, noBlend: Bool) -> String {
-        if singleImage { return "all \(photoCount) → one still" }
-        if noBlend { return "no blend" }
-        return "\(depth) photos → 1 frame"
+        .buttonStyle(.plain)
+        .llCard()
+        .accessibilityLabel("One long exposure, \(on ? "on" : "off")")
     }
 
     // MARK: - Advanced
@@ -744,11 +779,20 @@ struct AdjustView: View {
     }
 
     private var advancedSummary: String {
+        let isVideo = model.source?.isVideo == true
         var active: [String] = []
-        if model.useRamp { active.append("Ramp on") }
-        if model.trimVideoEnds { active.append("Trim on") }
+        if isVideo {
+            if model.useRamp { active.append("Ramp on") }
+            if model.trimVideoEnds { active.append("Trim on") }
+        }
         if model.linearLight { active.append("True-light") }
-        return active.isEmpty ? "Ramp · Trim · True-light" : active.joined(separator: " · ")
+        if !isVideo, !model.excludedFrameIndices.isEmpty {
+            active.append("\(model.excludedFrameIndices.count) excluded")
+        }
+        if active.isEmpty {
+            return isVideo ? "Ramp · Trim · True-light" : "True-light · Excluded frames"
+        }
+        return active.joined(separator: " · ")
     }
 
     // MARK: - CTA
@@ -954,37 +998,41 @@ struct AdvancedOptionsSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Toggle("Ramp the speed across the clip", isOn: $model.useRamp)
-                    if model.useRamp {
-                        Stepper("Start: \(model.rampStart)×", value: $model.rampStart, in: SpeedMath.range)
-                        Stepper("End: \(model.rampEnd)×", value: $model.rampEnd, in: SpeedMath.range)
-                        Picker("Curve", selection: $model.curve) {
-                            ForEach(BlendCurve.allCases, id: \.self) { curve in
-                                Text(curve.rawValue).tag(curve)
+                // The ramp and the trim are video vocabulary: for stills the
+                // timeline IS the depth control, and a warp is never a trim.
+                if model.source?.isVideo == true {
+                    Section {
+                        Toggle("Ramp the speed across the clip", isOn: $model.useRamp)
+                        if model.useRamp {
+                            Stepper("Start: \(model.rampStart)×", value: $model.rampStart, in: SpeedMath.range)
+                            Stepper("End: \(model.rampEnd)×", value: $model.rampEnd, in: SpeedMath.range)
+                            Picker("Curve", selection: $model.curve) {
+                                ForEach(BlendCurve.allCases, id: \.self) { curve in
+                                    Text(curve.rawValue).tag(curve)
+                                }
                             }
                         }
+                    } header: {
+                        Text("Speed ramp")
+                    } footer: {
+                        Text("The blend window moves between two speeds over the length of the clip. The warp timeline takes over as soon as you edit it.")
                     }
-                } header: {
-                    Text("Speed ramp")
-                } footer: {
-                    Text("The blend window moves between two speeds over the length of the clip. The warp timeline takes over as soon as you edit it.")
-                }
 
-                Section {
-                    Toggle("Trim video ends", isOn: $model.trimVideoEnds)
-                    if model.trimVideoEnds {
-                        Stepper(
-                            "Cut \(model.trimHeadTailSeconds, specifier: "%.1f")s from start and end",
-                            value: $model.trimHeadTailSeconds,
-                            in: 0.1...30,
-                            step: 0.5
-                        )
+                    Section {
+                        Toggle("Trim video ends", isOn: $model.trimVideoEnds)
+                        if model.trimVideoEnds {
+                            Stepper(
+                                "Cut \(model.trimHeadTailSeconds, specifier: "%.1f")s from start and end",
+                                value: $model.trimHeadTailSeconds,
+                                in: 0.1...30,
+                                step: 0.5
+                            )
+                        }
+                    } header: {
+                        Text("Trim")
+                    } footer: {
+                        Text("Removes the same duration from the beginning and end before blending.")
                     }
-                } header: {
-                    Text("Trim")
-                } footer: {
-                    Text("Removes the same duration from the beginning and end before blending.")
                 }
 
                 Section {
@@ -998,6 +1046,25 @@ struct AdvancedOptionsSheet: View {
                     }
                 } header: {
                     Text("Blending")
+                }
+
+                if model.source?.isVideo != true {
+                    Section {
+                        if model.excludedFrameIndices.isEmpty {
+                            Text("Every photo is included in the blend.")
+                                .foregroundStyle(.secondary)
+                        } else {
+                            HStack {
+                                Text("\(model.excludedFrameIndices.count) shaky tail \(model.excludedFrameIndices.count == 1 ? "frame" : "frames") excluded")
+                                Spacer()
+                                Button("Keep all") { model.excludedFrameIndices = [] }
+                            }
+                        }
+                    } header: {
+                        Text("Excluded frames")
+                    } footer: {
+                        Text("Tail-frame review drops the flagged shaky frames from the blend. The photos stay on disk either way.")
+                    }
                 }
             }
             .navigationTitle("Advanced")
@@ -1018,24 +1085,36 @@ struct AdvancedOptionsSheet: View {
 
 // MARK: - Custom speed sheet
 
-/// Free speed values for the selected stretch — anything the chips don't
-/// offer, 1×–240×. Slow motion below 1× stays on the ¼× chip.
+/// Free values for the selected stretch — anything the chips don't offer.
+/// Video: 1×–240× speeds (slow motion below 1× stays on the ¼× chip).
+/// Interval: any blend depth up to the whole shoot's frame count.
 struct CustomSpeedSheet: View {
     @EnvironmentObject var model: AppModel
     @Environment(\.dismiss) private var dismiss
     var stretch: Int = 0
 
+    private var isInterval: Bool { model.source?.isVideo != true }
+    private var valueRange: ClosedRange<Int> {
+        isInterval
+            ? 1...max(2, model.currentCapture?.sourceMediaCount ?? SpeedMath.range.upperBound)
+            : SpeedMath.range
+    }
+
     var body: some View {
         NavigationStack {
             Form {
                 Section {
-                    Stepper("Speed: \(customSpeed.wrappedValue)×", value: customSpeed, in: SpeedMath.range)
+                    Stepper(
+                        isInterval
+                            ? "Depth: \(customSpeed.wrappedValue):1"
+                            : "Speed: \(customSpeed.wrappedValue)×",
+                        value: customSpeed, in: valueRange)
                     Slider(
                         value: Binding(
                             get: { Double(customSpeed.wrappedValue) },
                             set: { customSpeed.wrappedValue = Int($0.rounded()) }
                         ),
-                        in: Double(SpeedMath.range.lowerBound)...Double(SpeedMath.range.upperBound),
+                        in: Double(valueRange.lowerBound)...Double(valueRange.upperBound),
                         step: 1
                     )
                 } header: {
@@ -1043,10 +1122,12 @@ struct CustomSpeedSheet: View {
                         Text("Stretch \(min(stretch, model.activeWarp().stretchCount - 1) + 1)")
                     }
                 } footer: {
-                    Text("\(customSpeed.wrappedValue)× real time\(estimateSuffix).")
+                    Text(isInterval
+                        ? "\(customSpeed.wrappedValue) photos average into each frame\(estimateSuffix)."
+                        : "\(customSpeed.wrappedValue)× real time\(estimateSuffix).")
                 }
             }
-            .navigationTitle("Custom speed")
+            .navigationTitle(isInterval ? "Custom blend depth" : "Custom speed")
             .onDisappear { model.endWarpCoalescing() }
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

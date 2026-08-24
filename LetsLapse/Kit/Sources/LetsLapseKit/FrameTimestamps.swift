@@ -152,6 +152,14 @@ public struct FrameTimestamps: Equatable, Sendable {
         }
     }
 
+    /// The elapsed-seconds axis, but only when this sidecar describes exactly
+    /// `count` frames — the coverage gate every reader applies before trusting
+    /// a sidecar that may belong to a filtered or foreign set. One helper so
+    /// the gate has one definition.
+    public func elapsedSeconds(coveringExactly count: Int) -> [Double]? {
+        entries.count == count ? elapsedSeconds : nil
+    }
+
     /// Elapsed seconds for a subset of the shoot, picked by capture order —
     /// what the app needs when tail-frame review has dropped some frames from
     /// the blend but the sidecar still describes the whole run.

@@ -1,11 +1,21 @@
 import SwiftUI
 import AVFoundation
+import ImageIO
 #if canImport(UIKit)
 import UIKit
 #endif
 
-/// Loads the playhead's frame — the nearest keyframe, decoded once per URL —
-/// for the warp timeline's floating thumbnail and the wide layout's preview.
+/// Loads the playhead's frame for the warp timeline's floating thumbnail and
+/// the wide layout's preview — from a movie (the nearest keyframe, decoded
+/// once per URL) or, for an interval shoot, from the still itself. One
+/// loader for both lanes, so the timeline, the punch canvas and the wide
+/// pane never care which kind of source is under the playhead.
+///
+/// Stills decode through ImageIO's thumbnailer (orientation applied, bounded
+/// pixels), and the last few are kept because a scrub lingers around
+/// neighbouring frames in a way a movie's keyframe generator already
+/// absorbs. DNG frames have no preview IFD, so each ask is a full RAW pass —
+/// the debounce is what keeps that affordable.
 @MainActor
 final class WarpPreviewLoader: ObservableObject {
     @Published var image: CGImage?
@@ -15,12 +25,21 @@ final class WarpPreviewLoader: ObservableObject {
     /// 90ms suits a knob drag; the guided scrub runs tighter so a hover feels
     /// attached to the pointer.
     private let debounceNanos: UInt64
+    /// Most-recent still decodes, oldest evicted first.
+    private var stillCache: [URL: CGImage] = [:]
+    private var stillCacheOrder: [URL] = []
+    private static let stillCacheLimit = 8
+    private static let movieExtensions: Set<String> = ["mov", "mp4", "m4v"]
 
     init(debounceMilliseconds: UInt64 = 90) {
         debounceNanos = debounceMilliseconds * 1_000_000
     }
 
     func load(url: URL, seconds: Double) {
+        guard Self.movieExtensions.contains(url.pathExtension.lowercased()) else {
+            loadStill(url: url)
+            return
+        }
         task?.cancel()
         let generator = generators[url] ?? {
             let g = AVAssetImageGenerator(asset: AVURLAsset(url: url))
@@ -43,6 +62,47 @@ final class WarpPreviewLoader: ObservableObject {
             guard !Task.isCancelled, let image else { return }
             self?.image = image
         }
+    }
+
+    private func loadStill(url: URL) {
+        task?.cancel()
+        if let hit = stillCache[url] {
+            image = hit
+            return
+        }
+        task = Task { [weak self, debounceNanos] in
+            try? await Task.sleep(nanoseconds: debounceNanos)
+            guard !Task.isCancelled else { return }
+            let decoded = await Task.detached(priority: .userInitiated) {
+                Self.decodeStill(url: url)
+            }.value
+            guard !Task.isCancelled, let decoded else { return }
+            self?.rememberStill(decoded, for: url)
+            self?.image = decoded
+        }
+    }
+
+    private func rememberStill(_ image: CGImage, for url: URL) {
+        stillCache[url] = image
+        stillCacheOrder.removeAll { $0 == url }
+        stillCacheOrder.append(url)
+        while stillCacheOrder.count > Self.stillCacheLimit, let oldest = stillCacheOrder.first {
+            stillCacheOrder.removeFirst()
+            stillCache.removeValue(forKey: oldest)
+        }
+    }
+
+    /// Bounded, orientation-applied decode — the same 1024px budget the movie
+    /// generator gets.
+    private nonisolated static func decodeStill(url: URL) -> CGImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: 1024,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
 }
 
@@ -155,6 +215,39 @@ struct WarpTimelineView: View {
     @State private var toast: TimelineToast?
 
     private var timeline: WarpTimeline { model.activeWarp() }
+
+    // MARK: - Vocabulary
+
+    /// What this timeline's numbers mean: a movie's ×-real-time speeds, or an
+    /// interval shoot's blend depths over the capture clock. Every label
+    /// routes through the helpers below so the two vocabularies can't mix.
+    private var vocabulary: AppModel.WarpVocabulary { model.warpVocabulary }
+    private var isInterval: Bool {
+        if case .interval = vocabulary { return true }
+        return false
+    }
+
+    private func speedText(_ speed: Double) -> String {
+        isInterval ? WarpTimeline.depthLabel(speed) : WarpTimeline.speedLabel(speed)
+    }
+
+    private func speedWordText(_ speed: Double) -> String {
+        isInterval ? WarpTimeline.depthWord(speed) : WarpTimeline.speedWord(speed)
+    }
+
+    /// A moment on the source axis: the clock where one exists, frame counts
+    /// where the shoot never recorded one.
+    private func axisText(_ time: Double) -> String {
+        if case .interval(hasClock: false) = vocabulary { return WarpTimeline.frameLabel(time) }
+        return WarpTimeline.clock(time)
+    }
+
+    /// The amber "worth looking at" shading: slow motion on a movie, the
+    /// crisp every-photo stretches on an interval shoot.
+    private func isSlow(_ speed: Double) -> Bool {
+        isInterval ? speed <= 1.0001 : speed < 10
+    }
+
     private var total: Double { max(0.001, timeline.sourceSeconds) }
     private var visibleStart: Double { min(max(0, zoomStart ?? 0), total) }
     private var visibleEnd: Double { min(zoomEnd ?? total, total) }
@@ -340,7 +433,7 @@ struct WarpTimelineView: View {
                         zoomEnd = nil
                     }
                 } label: {
-                    Text("Fit \(WarpTimeline.clock(total))")
+                    Text("Fit \(axisText(total))")
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(LL.amber)
                         .padding(.horizontal, 8)
@@ -456,9 +549,9 @@ struct WarpTimelineView: View {
     /// "2:41" while the playhead is visible; "◀ 2:41" / "2:41 ▶" when it sits
     /// beyond the zoomed window, pointing the way back.
     private var thumbnailBadge: String {
-        if playhead < visibleStart { return "◀ \(WarpTimeline.clock(playhead))" }
-        if playhead > visibleEnd { return "\(WarpTimeline.clock(playhead)) ▶" }
-        return WarpTimeline.clock(playhead)
+        if playhead < visibleStart { return "◀ \(axisText(playhead))" }
+        if playhead > visibleEnd { return "\(axisText(playhead)) ▶" }
+        return axisText(playhead)
     }
 
     // MARK: - Output-time mapping
@@ -470,11 +563,11 @@ struct WarpTimelineView: View {
     /// source).
     private var effectiveSpeeds: [Double] {
         let speeds = timeline.speeds
-        guard let compiled = model.compiledWarp(),
-              compiled.stretchFrames.count == speeds.count else { return speeds }
+        guard let stretchFrames = model.warpStretchOutputFrames(),
+              stretchFrames.count == speeds.count else { return speeds }
         let outFps = Double(max(1, model.outputFPS))
         return speeds.indices.map { index in
-            let frames = compiled.stretchFrames[index]
+            let frames = stretchFrames[index]
             guard frames > 0 else { return speeds[index] }
             return timeline.length(of: index) / (Double(frames) / outFps)
         }
@@ -601,8 +694,12 @@ struct WarpTimelineView: View {
             }
 
             // Seam pills — drawn BEFORE the handles so a handle's enlarged hit
-            // area wins where the two overlap at a selected boundary.
-            seamPills(width: width)
+            // area wins where the two overlap at a selected boundary. Interval
+            // timelines have none to show: depth is an integer per window, so
+            // every seam is a step by construction (see `IntervalWarp`).
+            if !isInterval {
+                seamPills(width: width)
+            }
 
             // Resize handles for the selected stretch.
             if selectedStretch < timeline.stretchCount {
@@ -671,7 +768,7 @@ struct WarpTimelineView: View {
                 }
                 .onEnded { _ in playheadDragBase = nil }
         )
-        .accessibilityLabel("Playhead, \(WarpTimeline.clock(playhead))")
+        .accessibilityLabel("Playhead, \(axisText(playhead))")
     }
 
     /// The zoomed window has scrolled past the playhead — show where it went
@@ -696,12 +793,12 @@ struct WarpTimelineView: View {
         }
         .buttonStyle(.plain)
         .offset(x: leading ? -8 : width - 36, y: 11)
-        .accessibilityLabel("Playhead at \(WarpTimeline.clock(playhead)), tap to recenter")
+        .accessibilityLabel("Playhead at \(axisText(playhead)), tap to recenter")
     }
 
     private func stretchTile(_ index: Int, width: CGFloat) -> some View {
         let speed = timeline.speeds[index]
-        let slow = speed < 10
+        let slow = isSlow(speed)
         let selected = index == selectedStretch
         let clippedStart = max(timeline.bounds[index], visibleStart)
         let clippedEnd = min(timeline.bounds[index + 1], visibleEnd)
@@ -720,7 +817,7 @@ struct WarpTimelineView: View {
             }
             .overlay(alignment: .bottom) {
                 if width >= 30 {
-                    Text(WarpTimeline.speedLabel(speed))
+                    Text(speedText(speed))
                         .font(.system(size: 10, weight: .bold))
                         .foregroundStyle(slow ? LL.amber : .white)
                         .padding(.horizontal, 6)
@@ -748,7 +845,7 @@ struct WarpTimelineView: View {
                         menuStretch = nil
                     }
             )
-            .accessibilityLabel("Stretch \(index + 1), \(WarpTimeline.speedLabel(speed)) \(WarpTimeline.speedWord(speed))")
+            .accessibilityLabel("Stretch \(index + 1), \(speedText(speed)) \(speedWordText(speed))")
             .accessibilityAddTraits(selected ? .isSelected : [])
         return platformStretchActions(tile, index: index)
     }
@@ -777,9 +874,9 @@ struct WarpTimelineView: View {
                 Label("Split here", systemImage: "scissors")
             }
             Button {
-                model.updateWarp { $0.setSpeed(Double(max(1, model.constantWindow)), for: index) }
+                model.updateWarp { $0.setSpeed(model.warpResetSpeed, for: index) }
             } label: {
-                Label("Reset speed", systemImage: "gauge")
+                Label(isInterval ? "Reset blend" : "Reset speed", systemImage: "gauge")
             }
         }
         #else
@@ -821,8 +918,8 @@ struct WarpTimelineView: View {
                 }
             }
             Divider()
-            menuRow("Reset speed", color: .primary) {
-                model.updateWarp { $0.setSpeed(Double(max(1, model.constantWindow)), for: index) }
+            menuRow(isInterval ? "Reset blend" : "Reset speed", color: .primary) {
+                model.updateWarp { $0.setSpeed(model.warpResetSpeed, for: index) }
             }
         }
         .frame(width: 200)
@@ -1060,8 +1157,8 @@ struct WarpTimelineView: View {
         return HStack(spacing: 8) {
             Text(
                 "Stretch \(index + 1) of \(timeline.stretchCount) · "
-                + "\(WarpTimeline.clock(range.lowerBound))–\(WarpTimeline.clock(range.upperBound)) · "
-                + "\(WarpTimeline.speedLabel(speed)) \(WarpTimeline.speedWord(speed)) → "
+                + "\(axisText(range.lowerBound))–\(axisText(range.upperBound)) · "
+                + "\(speedText(speed)) \(speedWordText(speed)) → "
                 + "\(SpeedMath.clipLengthCompact(output)) of the clip")
                 .font(.system(size: 12))
                 .foregroundStyle(.primary)
@@ -1183,7 +1280,7 @@ struct WarpTimelineView: View {
             )
         }
         .frame(height: 16)
-        .accessibilityLabel("Timeline overview, showing \(WarpTimeline.clock(visibleStart)) to \(WarpTimeline.clock(visibleEnd))")
+        .accessibilityLabel("Timeline overview, showing \(axisText(visibleStart)) to \(axisText(visibleEnd))")
     }
 
     // MARK: - Gestures
@@ -1231,9 +1328,15 @@ struct WarpTimelineView: View {
                 guard pinchBase == nil, !dragSawPinch, let range = nominating else { return }
                 guard range.upperBound - range.lowerBound >= WarpTimeline.minimumNomination else {
                     WarpHaptics.warning()
+                    let minimum: String = {
+                        if case .interval(hasClock: false) = vocabulary {
+                            return "\(Int(WarpTimeline.minimumNomination)) frames"
+                        }
+                        return "\(Int(WarpTimeline.minimumNomination))s"
+                    }()
                     withAnimation(.easeInOut(duration: 0.2)) {
                         toast = TimelineToast(
-                            message: "Too short — drag past \(Int(WarpTimeline.minimumNomination))s, or zoom in",
+                            message: "Too short — drag past \(minimum), or zoom in",
                             showsUndo: false)
                     }
                     return
@@ -1244,7 +1347,9 @@ struct WarpTimelineView: View {
                             selectedStretch = created
                         }
                     }
-                    toast = TimelineToast(message: "Added 1× stretch", showsUndo: true)
+                    // A carve is always a 1-valued stretch: real time on a
+                    // movie, every-photo crisp on an interval shoot.
+                    toast = TimelineToast(message: "Added \(speedText(1)) stretch", showsUndo: true)
                 }
                 WarpHaptics.success()
             }
@@ -1353,7 +1458,7 @@ struct WarpTimelineView: View {
         // Land on the first slow stretch — the thing worth looking at — else
         // the middle of the clip.
         let timeline = timeline
-        if let slow = timeline.speeds.firstIndex(where: { $0 < 10 }), timeline.stretchCount > 1 {
+        if let slow = timeline.speeds.firstIndex(where: isSlow), timeline.stretchCount > 1 {
             playhead = (timeline.bounds[slow] + timeline.bounds[slow + 1]) / 2
             selectedStretch = slow
         } else {

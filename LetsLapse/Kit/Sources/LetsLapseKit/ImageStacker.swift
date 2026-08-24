@@ -210,6 +210,23 @@ public final class ImageStacker {
         }
     }
 
+    /// The window schedule a render runs: the caller's compiled windows when
+    /// given — validated to consume exactly the input frames, because a
+    /// schedule compiled against a different frame list would silently
+    /// mis-window everything after the first drift — else the ramp's own.
+    private func resolvedSchedule(
+        imageURLs: [URL], ramp: BlendRamp, customWindows: [Int]?
+    ) throws -> [Int] {
+        guard let customWindows else {
+            return WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
+        }
+        guard customWindows.allSatisfy({ $0 >= 1 }),
+              customWindows.reduce(0, +) == imageURLs.count else {
+            throw LapseError.writerFailed("window schedule doesn't match the input frames")
+        }
+        return customWindows
+    }
+
     public func stackSequence(
         imageURLs: [URL],
         ramp: BlendRamp,
@@ -217,17 +234,26 @@ public final class ImageStacker {
         linearLight: Bool = true,
         outputURL: URL,
         frameTimes: [Double]? = nil,
+        customWindows: [Int]? = nil,
+        customWindowTimes: [Double]? = nil,
         loadFrame: ((URL) throws -> CGImage)? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
             throw LapseError.writerFailed("a timelapse needs at least two photos")
         }
-        let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
+        let schedule = try resolvedSchedule(
+            imageURLs: imageURLs, ramp: ramp, customWindows: customWindows)
         guard !schedule.isEmpty else { throw LapseError.noInputFrames }
 
-        let windowStartTimes = windowPresentationTimes(
-            imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
+        // A compiled schedule owns its pacing outright: its times when it
+        // brought them, the constant layout when it didn't. The sidecar must
+        // not re-stretch an authored warp — that's what the compiler's
+        // per-stretch layout already accounted for.
+        let windowStartTimes = customWindows != nil
+            ? customWindowTimes
+            : windowPresentationTimes(
+                imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
 
         let load: (URL) throws -> CGImage = { url in
             try loadFrame?(url) ?? ImageStacker.loadImage(at: url)
@@ -375,6 +401,8 @@ public final class ImageStacker {
         outputFPS: Double,
         outputURL: URL,
         frameTimes: [Double]? = nil,
+        customWindows: [Int]? = nil,
+        customWindowTimes: [Double]? = nil,
         profile: VideoEncodePolicy.Profile = .h264High8Bit,
         decodeLinear: (URL) throws -> MTLTexture,
         /// The grade, applied once per OUTPUT frame after the average. The
@@ -388,10 +416,14 @@ public final class ImageStacker {
         guard imageURLs.count >= 2 else {
             throw LapseError.writerFailed("a timelapse needs at least two photos")
         }
-        let schedule = WindowSchedule.make(totalInputFrames: imageURLs.count, ramp: ramp)
+        let schedule = try resolvedSchedule(
+            imageURLs: imageURLs, ramp: ramp, customWindows: customWindows)
         guard !schedule.isEmpty else { throw LapseError.noInputFrames }
-        let windowStartTimes = windowPresentationTimes(
-            imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
+        // Same rule as `stackSequence`: a compiled schedule owns its pacing.
+        let windowStartTimes = customWindows != nil
+            ? customWindowTimes
+            : windowPresentationTimes(
+                imageURLs: imageURLs, frameTimes: frameTimes, schedule: schedule, outputFPS: outputFPS)
 
         let firstTexture = try decodeLinear(imageURLs[0])
         let width = firstTexture.width
