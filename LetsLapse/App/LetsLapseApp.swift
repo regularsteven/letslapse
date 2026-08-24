@@ -24,6 +24,12 @@ struct LetsLapseApp: App {
         // later launch can know it was abandoned.
         ImportStaging.sweepOrphans()
 
+        // Capture Flat used to be one bool for the whole app; it is now stored
+        // per capture scope (stills / video). Seed both from the old value
+        // before any view can read one — `@AppStorage` has no fallback key, so
+        // an unseeded scope would show the toggle off for someone who had it on.
+        FlatCapture.migrateIfNeeded()
+
         #if DEBUG
         // LL_RESET_CAPS=1 — drop the cached device capability matrix before
         // anything can read it, so a tester can force a fresh format probe

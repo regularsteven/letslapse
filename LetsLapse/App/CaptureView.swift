@@ -20,7 +20,22 @@ struct CaptureView: View {
     /// "Capture Flat" — a flat/log capture profile. Drives Apple Log for video
     /// (via `camera.appleLogEnabled`) and a save-time grade for JPEG stills
     /// (read in `CameraController`'s write path). See the format sheet.
-    @AppStorage(FlatCapture.storageKey) private var captureFlat = false
+    ///
+    /// Stored per capture scope, not once: Video's Flat switches the sensor
+    /// into Log (a whole other format and file size) while the still modes'
+    /// Flat is a save-time JPEG grade, and flat-stills/sharp-video is a normal
+    /// setup. Both scopes are held here — `@AppStorage` binds one fixed key,
+    /// so the mode-dependent answer is computed rather than keyed.
+    @AppStorage(FlatCapture.storageKey(for: FlatCapture.Scope.stills))
+    private var stillsFlat = false
+    @AppStorage(FlatCapture.storageKey(for: FlatCapture.Scope.video))
+    private var videoFlat = false
+    /// Flat as it applies to the mode currently on screen. Which scope a mode
+    /// belongs to is `FlatCapture`'s call, so Photo and Interval sharing one
+    /// answer is stated in exactly one place.
+    private var captureFlat: Bool {
+        FlatCapture.scope(for: mode) == .video ? videoFlat : stillsFlat
+    }
     @Environment(\.dismiss) private var dismiss
     #if os(iOS)
     @ObservedObject private var watchRemote = WatchRemoteControlReceiver.shared
@@ -448,6 +463,10 @@ struct CaptureView: View {
             revalidateSafeDepth()
         }
         // Capture Flat drives Apple Log for video; re-sync when it's toggled.
+        // `captureFlat` is the mode's own scope, so this also fires on a mode
+        // switch that changes the answer — which is exactly when Log has to be
+        // re-derived, and why leaving Flat armed in Photo can no longer put a
+        // Video run into Log behind the user's back.
         .onChange(of: captureFlat) { _ in
             syncAppleLog()
         }
@@ -4770,7 +4789,15 @@ private struct FormatSheet: View {
     @ObservedObject private var resolutionPrefs = ResolutionPreferences.shared
     @Binding var mode: CaptureMode
     @Binding var sequenceMode: LiveCaptureSequence.Mode
-    @AppStorage(FlatCapture.storageKey) private var captureFlat = false
+    /// Capture Flat, per scope — see `FlatCapture.Scope`. The sheet edits the
+    /// scope its `mode` belongs to and leaves the other one alone.
+    @AppStorage(FlatCapture.storageKey(for: FlatCapture.Scope.stills))
+    private var stillsFlat = false
+    @AppStorage(FlatCapture.storageKey(for: FlatCapture.Scope.video))
+    private var videoFlat = false
+    private var captureFlatBinding: Binding<Bool> {
+        FlatCapture.scope(for: mode) == .video ? $videoFlat : $stillsFlat
+    }
     @Environment(\.dismiss) private var dismiss
     #if os(macOS)
     @ObservedObject private var cameraDevices = CameraDevices.shared
@@ -4973,7 +5000,7 @@ private struct FormatSheet: View {
 
                 if showsCaptureFlat {
                     Section {
-                        Toggle(isOn: $captureFlat) {
+                        Toggle(isOn: captureFlatBinding) {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text("Capture Flat")
                                 Text("Optimised for post-production editing")

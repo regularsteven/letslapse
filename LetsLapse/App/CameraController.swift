@@ -2337,10 +2337,25 @@ final class CameraController: NSObject, ObservableObject {
             ?? resolutions[0]
         let rateSet = supportedRates[resolution] ?? [30]
         let frameRates = Array(rateSet).sorted()
-        let desiredFrameRate = preferredFrameRate ?? selectedFrameRate
+        // The base rate is remembered PER LENS, keyed on the lens a run would
+        // actually shoot on — the same `listDevice` the menus above describe.
+        // An explicit ask (a menu pick, a Watch or remote command) still wins:
+        // the store is what to fall back to, not an override.
+        let lensScope = RecordingSettingsStore.lensScope(
+            deviceKey: DeviceCapabilityMatrix.deviceKey(for: listDevice),
+            stop: currentStop)
+        let desiredFrameRate = preferredFrameRate
+            ?? RecordingSettingsStore.frameRate(forLens: lensScope)
+            ?? selectedFrameRate
         let frameRate = frameRates.contains(desiredFrameRate)
             ? desiredFrameRate
             : nearestFrameRate(to: desiredFrameRate, in: frameRates)
+        // Did the hardware take the ask as given, or did the clamp lower it?
+        // Only an honoured rate is a preference worth storing. A clamped one is
+        // this lens's ceiling talking, and writing it back is what let a 60 fps
+        // telephoto reach across and overwrite the wide's 120 — the stored 120
+        // now survives the visit and comes back when the wide does.
+        let frameRateWasHonoured = frameRate == desiredFrameRate
         // The burst menu is the matrix's answer, not "everything faster":
         // a faster format on a different optic (or codec) would reframe the
         // clip at the segment boundary. Asked of `listDevice` — the same lens
@@ -2368,10 +2383,13 @@ final class CameraController: NSObject, ObservableObject {
         _ = applyCaptureFormat(resolution: resolution, fps: frameRate)
         RecordingSettingsStore.save(
             resolution: resolution,
-            frameRate: frameRate,
+            frameRate: frameRateWasHonoured ? frameRate : nil,
             rampFrameRate: rampFrameRate,
             rampResolution: burstResolution
         )
+        if frameRateWasHonoured {
+            RecordingSettingsStore.save(frameRate: frameRate, forLens: lensScope)
+        }
         // Can THIS selection shoot Apple Log? The matrix's Log-required pass
         // answers per resolution + rate, which is the honest footer: a
         // Log-capable phone still has no Log at, say, 4032×3024 — and there
@@ -7204,7 +7222,10 @@ final class CameraController: NSObject, ObservableObject {
                           let location = LocationService.shared.latestLocation else { return nil }
                     return location.exifGPSDictionary()
                 },
-                captureFlat: UserDefaults.standard.bool(forKey: FlatCapture.storageKey))
+                // A live-blend run is a stills run (Interval or Photo), so it
+                // reads the stills scope — Video's Log choice says nothing
+                // about whether these JPEGs want the flat grade.
+                captureFlat: FlatCapture.isEnabled(.stills))
 
             let controller: LiveBlendController
             do {
@@ -7658,7 +7679,7 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
     /// this stayed false, so Capture Flat silently did nothing at all
     /// (verified against a 2026-08-14 shoot: bt709 tags, unlifted blacks).
     private var shouldSoftwareFlattenVideo: Bool {
-        guard UserDefaults.standard.bool(forKey: FlatCapture.storageKey) else { return false }
+        guard FlatCapture.isEnabled(.video) else { return false }
         return !(videoDevice.map(activeColorSpaceIsAppleLog) ?? false)
     }
 
@@ -7680,8 +7701,7 @@ extension CameraController: AVCaptureFileOutputRecordingDelegate {
             // runs before both.
             if self.activeSequence != nil, self.activeSequence?.appleLog == nil,
                let device = self.videoDevice {
-                self.activeSequence?.captureFlat =
-                    UserDefaults.standard.bool(forKey: FlatCapture.storageKey)
+                self.activeSequence?.captureFlat = FlatCapture.isEnabled(.video)
                 self.activeSequence?.appleLog = self.activeColorSpaceIsAppleLog(device)
             }
             self.activeSegmentRecordedStartAt = stampedAt
@@ -7779,7 +7799,7 @@ extension CameraController {
         // "Capture Flat": bake a low-contrast, desaturated grade into the JPEG
         // at save time (GPS carried along). On failure, fall through to writing
         // the original encoded bytes unmodified.
-        if UserDefaults.standard.bool(forKey: FlatCapture.storageKey),
+        if FlatCapture.isEnabled(.stills),
            FlatCapture.write(jpegData: data, to: url, gps: gpsDictionary) {
             return true
         }
@@ -8056,8 +8076,70 @@ enum RecordingSettingsStore {
             isProRes: UserDefaults.standard.bool(forKey: resolutionProResKey))
     }
 
+    /// The last base rate applied anywhere. Still the value a launch seeds
+    /// itself from — `restoreRememberedSettings()` runs before the session has
+    /// configured, so no lens is known yet — and the value a lens that has
+    /// never been visited inherits. Written only when the hardware honoured
+    /// the ask; see `save(frameRate:)`'s note.
     static var frameRate: Int? {
         UserDefaults.standard.object(forKey: frameRateKey) as? Int
+    }
+
+    // MARK: Per-lens settings
+
+    /// The scope a lens's own settings are remembered under.
+    ///
+    /// A base frame rate is a property of the *lens*, not of the app: on a
+    /// 16 Pro the wide shoots 4K120 and the 5× tele tops out at 60, and the
+    /// tele's limit is not a statement about what the user wants from the wide.
+    ///
+    /// `deviceKey` separates the physical cameras (and, on macOS, whole
+    /// webcams, which is where "lens" means "camera"). The stop id separates
+    /// the stops that share one camera — 1× and the 2× sensor crop are both the
+    /// wide, and they do not advertise the same formats.
+    static func lensScope(deviceKey: String, stop: DerivedOpticsStop?) -> String {
+        "\(deviceKey)~\(stop?.id ?? "default")"
+    }
+
+    /// Registry of every scope written, so `clear()` can reach them. Scoped
+    /// keys are open-ended by construction (a new device brings new lenses),
+    /// which is the one thing a fixed key list can't handle.
+    private static let lensScopesKey = "captureSettings.lensScopes"
+
+    private static func lensFrameRateKey(_ scope: String) -> String {
+        "captureSettings.\(scope).frameRate"
+    }
+
+    /// This lens's remembered base rate, falling back to the pre-scope global.
+    ///
+    /// That fallback *is* the migration: rather than trying to enumerate
+    /// lenses that only exist once a session has configured, an unwritten scope
+    /// simply answers with the last honoured rate — so an upgrading user finds
+    /// every lens set to what the single key held, and nothing is lost.
+    static func frameRate(forLens scope: String) -> Int? {
+        // "Remember recording settings" off means off on the way in as well as
+        // on the way out — `clear()` empties these keys, but a read that
+        // outlives a stale one shouldn't quietly reinstate it either.
+        guard isEnabled else { return nil }
+        return UserDefaults.standard.object(forKey: lensFrameRateKey(scope)) as? Int ?? frameRate
+    }
+
+    /// Remember `frameRate` for one lens.
+    ///
+    /// Callers must only pass a rate the hardware actually honoured. A rate
+    /// that had to be clamped down describes this lens's *limits*, not the
+    /// user's preference, and persisting it is precisely the bug this scoping
+    /// exists to kill — writing the clamp back to a shared key is how a 60 fps
+    /// telephoto used to overwrite the wide's 120 (2026-08-23).
+    static func save(frameRate: Int, forLens scope: String) {
+        guard isEnabled else { return }
+        let defaults = UserDefaults.standard
+        defaults.set(frameRate, forKey: lensFrameRateKey(scope))
+        var scopes = defaults.stringArray(forKey: lensScopesKey) ?? []
+        if !scopes.contains(scope) {
+            scopes.append(scope)
+            defaults.set(scopes.sorted(), forKey: lensScopesKey)
+        }
     }
 
     static var rampFrameRate: Int? {
@@ -8104,5 +8186,12 @@ enum RecordingSettingsStore {
         ] {
             defaults.removeObject(forKey: key)
         }
+        // The per-lens rates are part of the same remembered snapshot, so they
+        // go with it — otherwise turning the setting off and on again would
+        // resurrect the old lens rates the flat keys had just been cleared of.
+        for scope in defaults.stringArray(forKey: lensScopesKey) ?? [] {
+            defaults.removeObject(forKey: lensFrameRateKey(scope))
+        }
+        defaults.removeObject(forKey: lensScopesKey)
     }
 }

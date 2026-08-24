@@ -665,9 +665,61 @@ enum PhotoGrader {
 /// saturation and contrast. (Video captures flatness a different way, via
 /// Apple Log at the sensor; this covers the JPEG still path.)
 enum FlatCapture {
-    /// `@AppStorage`/`UserDefaults` key shared by the toggle and the capture
-    /// paths that read it.
+    /// The original single key: one Capture Flat for the whole app. Retained as
+    /// the seed every scope inherits from (so an existing install keeps its
+    /// choice) and as the read-time fallback for a scope nobody has written
+    /// yet. The capture paths read a *scope*, never this.
     static let storageKey = "capture.captureFlat"
+
+    /// What "Flat" means depends entirely on what is being captured, and the
+    /// two answers are independent choices:
+    ///
+    /// - **Video** switches the sensor into Apple Log (or bakes `VideoFlatten`
+    ///   in on hardware without it). That is a different format and a very
+    ///   different file — armed by accident it is simply the wrong deliverable.
+    /// - **Photo / Interval** get a low-saturation, low-contrast JPEG profile
+    ///   applied at save time. Nothing about the capture changes.
+    ///
+    /// Flat on for stills and off for video is a routine setup, so one global
+    /// bool could not express it. Photo and Interval share a scope — same
+    /// format, same grade — exactly as `ResolutionPreferences.Domain` does.
+    enum Scope: String, CaseIterable {
+        case stills
+        case video
+    }
+
+    static func scope(for mode: CaptureMode) -> Scope {
+        mode == .video ? .video : .stills
+    }
+
+    static func storageKey(for scope: Scope) -> String {
+        "captureSettings.\(scope.rawValue).flatEnabled"
+    }
+
+    /// One scope's toggle, falling back to the pre-scope global for a scope
+    /// that has never been written. Belt-and-braces alongside
+    /// `migrateIfNeeded()`, which seeds the same value eagerly — `@AppStorage`
+    /// cannot fall back to another key, so the seed is what the *toggle* needs
+    /// and this is what every non-view reader gets for free.
+    static func isEnabled(_ scope: Scope, in defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: storageKey(for: scope)) as? Bool
+            ?? defaults.bool(forKey: storageKey)
+    }
+
+    private static let migrationKey = "captureSettings.flatEnabled.migrated"
+
+    /// Seed both scopes from the single global toggle, once. An upgrading user
+    /// who shot flat keeps shooting flat on both sides until they say
+    /// otherwise; from then on the two move independently. Idempotent, and it
+    /// never overwrites a scope that already holds a value.
+    static func migrateIfNeeded(_ defaults: UserDefaults = .standard) {
+        guard !defaults.bool(forKey: migrationKey) else { return }
+        let legacy = defaults.bool(forKey: storageKey)
+        for scope in Scope.allCases where defaults.object(forKey: storageKey(for: scope)) == nil {
+            defaults.set(legacy, forKey: storageKey(for: scope))
+        }
+        defaults.set(true, forKey: migrationKey)
+    }
 
     /// GPU-backed and thread-safe; the capture delegate runs off the main queue.
     private static let context = CIContext(options: [.useSoftwareRenderer: false])
