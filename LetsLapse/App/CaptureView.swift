@@ -281,6 +281,11 @@ struct CaptureView: View {
     /// capture screen carries this at all.
     @State private var headroom: CaptureHeadroom.Reading?
     @State private var headroomSampledAt: Date?
+    /// Device heat at Record time. A run opened at critical is where lens
+    /// excursions were observed (Praha 2026-08-23) — the user gets told
+    /// BEFORE the shoot is spent, not in the log after. Refreshed on the
+    /// screen's own tick; never blocks anything (bench runs hot by design).
+    @State private var thermalState = ProcessInfo.processInfo.thermalState
     /// Free space when the run in progress started, and the shape it is
     /// shooting — the pair a finished run is measured from, and the only
     /// reason this screen knows what a frame of anything really weighs.
@@ -405,6 +410,7 @@ struct CaptureView: View {
         .onChange(of: model.blends.count) { _ in refreshRecentCapture() }
         .onReceive(tick) { date in
             now = date
+            thermalState = ProcessInfo.processInfo.thermalState
             checkTarget()
             // Cheap on every tick — it re-prices the space it already knows
             // about, and only goes to the disk every `headroomSampleSeconds`.
@@ -1405,6 +1411,7 @@ struct CaptureView: View {
     private var portraitControls: some View {
         VStack(spacing: 13) {
             remoteLinkChip
+            thermalWarningChip()
             if testRig.phase != .idle {
                 testCardChip
             }
@@ -1495,6 +1502,12 @@ struct CaptureView: View {
                     .fixedSize()
                     .scaleEffect(0.85)
                     .padding(.top, 10)
+                // Same narrow-rail treatment; the compact form carries the
+                // heat word, the full sentence lives in portrait.
+                thermalWarningChip(compact: true)
+                    .fixedSize()
+                    .scaleEffect(0.85)
+                    .padding(.top, 6)
                 // Lower-left corner, same as portrait.
                 recentCaptureButton
                     .padding(.top, 14)
@@ -2167,6 +2180,41 @@ struct CaptureView: View {
             RemoteLinkChip(listener: listener)
         }
         #endif
+    }
+
+    // MARK: - Thermal warning chip
+
+    /// Pre-flight heat warning, shown while idle at serious or critical.
+    /// Warn-only by decision (2026-08-24): Record always works — the bench
+    /// runs devices hot on purpose, and a block would fight it. At critical
+    /// the wording names the real stake: the lens stabiliser can glitch and
+    /// jump the framing mid-stack (Praha 2026-08-23). During a run the
+    /// diagnostics readout already carries thermal pressure.
+    @ViewBuilder
+    private func thermalWarningChip(compact: Bool = false) -> some View {
+        if !isCapturing, thermalState == .serious || thermalState == .critical {
+            let critical = thermalState == .critical
+            HStack(spacing: 6) {
+                Image(systemName: "thermometer.high")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(critical ? Color.red : LL.amber)
+                Text(compact
+                    ? (critical ? "Hot — cool down" : "Warm")
+                    : (critical
+                        ? "Device hot — framing can glitch. Let it cool first."
+                        : "Device warm — long shoots may throttle"))
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
+            .accessibilityLabel(critical
+                ? "Device hot. Framing can glitch. Let it cool before a long shoot."
+                : "Device warm. Long shoots may throttle.")
+        }
     }
 
     // MARK: - Test-card rig chip

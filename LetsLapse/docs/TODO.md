@@ -11,6 +11,58 @@ live inline.
 
 ## Open
 
+### Framing-glitch hardening + Project Field Notes — device verification pending
+
+**Raised:** 2026-08-24 · **Implemented 2026-08-24 — device verification pending**
+
+*Shipped on `ios-app`: the frame-alignment gate (`FrameAlignmentGate` in the
+Kit, wired into `LiveBlendController`; rejects confidently-displaced frames
+before they ghost a stacked window — the Praha 2026-08-23 OIS-sag events,
+measured at ~63 px vertical at thermal critical), honest per-window
+`rejectedByAlignment` stats plus a machine `issues[]` trail in
+`capture_log.json` (thermal, framing glitches, constituent hand-offs, end
+reason), run-scoped constituent-switch locking, the idle thermal warning chip,
+and the full Field Notes flow (audio/issue/text notes per project in `notes/`,
+both entry points, on-device speech review). Kit tests + sim E2E pass.*
+
+Still owed before this leaves the list: **(a)** bench repro on the 12 Pro —
+heat to critical with back-to-back runs, tripod on a static scene, expect gate
+rejections logged and clean output; and a nominal-thermal control run with
+**zero** false rejections (the gate must never thin a healthy shoot);
+**(b)** a `.lapse` export→import round trip carrying `notes/` (the import
+allowlist fix); **(c)** the spoken-memo → transcript-prompt path on a real
+device (sim lacks on-device recognition); **(d)** SVG mirrors after UI
+sign-off — capture-screen thermal chip, project-detail notes rows, the
+field-note flow screens (no iPadOS/macOS project-detail SVGs exist at all —
+pre-existing gap).
+
+### Interval shoots get the video "New blended clip" screen
+
+**Detail:** [interval-adjust-unification.md](interval-adjust-unification.md) ·
+**Raised:** 2026-08-24 · **Assessment done — job not started**
+
+Steven wants the rich video configure screen (warp timeline, ramps, reframe,
+canvas, fps card) for interval shoots, and the restricted variant phased out.
+Assessment: no risk to video paths, but not a screen swap — stills sources
+lack a time axis (basic interval shoots write no `frames.timestamps` at all),
+the preview loader is movie-only, the stackers take no compiled schedule, and
+the speed floor inverts for timelapse footage. Also corrects a premise: Photo
+captures never reach this screen — the restricted branch serves Interval and
+Scanner. Phasing in the doc; each UI phase is its own design-sync unit.
+
+### Field notes ↔ engine issue trail tie-in
+
+**Raised:** 2026-08-24 · **Not started** · small
+
+`capture_log.json` now records machine-detected issues (`framingGlitch`,
+`thermal`, …) and Field Notes lets the user log the same vocabulary by hand
+("Jumped frame(s)"). Two natural joints, deliberately not built yet: a
+finished run whose log carries alignment/thermal issues could pre-tick the
+matching Log Issue labels on the New-blended-clip screen, and the project's
+notes list could surface the engine's own issue trail alongside the
+hand-written notes. Design question first: whether machine entries live in the
+same list or a separate "what the engine saw" section.
+
 ### JPEG Holy Grail locks white balance, and writes no EXIF
 
 **Detail:** [jpeg-holygrail-wb-brief.md](jpeg-holygrail-wb-brief.md) ·

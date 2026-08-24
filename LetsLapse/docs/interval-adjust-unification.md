@@ -1,0 +1,95 @@
+# Giving interval shoots the video "New blended clip" screen
+
+**Raised:** 2026-08-24 (Steven) · **Status:** assessment — no code changed.
+
+The ask: the video-capture configure screen (warp timeline, speed stretches,
+ramps, punch-in reframe, canvas, fps/estimate card) should serve interval
+shoots too, and the restricted interval variant should eventually retire.
+
+## One premise to correct first
+
+> "It's used on the Photo capture, so that should remain."
+
+**Photo captures never reach this screen.** Photo mode returns before
+`setSource` ([CaptureView.swift:869-885](../App/CaptureView.swift)) and photo
+projects are routed to `photoActions` in project detail
+([ProjectDetailView.swift:444-451](../App/ProjectDetailView.swift)); the
+Projects list hides the "+" tile for them too. The restricted branch's real
+consumers today are **Interval and Scanner** captures. So the phase-out
+question is not "Photo still needs it" — it is "what must the rich screen
+absorb from it before the `.photos` branch can go", and "where does Scanner
+get diverted to".
+
+## Verdict
+
+**No risk to the video paths — every change is additive on the stills side —
+but this is not a screen swap; it is a real project.** The screen fork is the
+visible tip of a source-model fork: `.photos` sources have no duration, no
+fps, no pixel dimensions, no AVAsset, and (for basic interval shoots) no
+timestamps sidecar at all. The good news: the underlying unification is
+conceptually clean, because **the warp timeline's window schedule and interval
+blend depth are the same idea** — frames-per-output-frame — so the rich UI
+can absorb the restricted screen's controls rather than losing them.
+
+## What actually blocks it today (all measured, file:line)
+
+1. **No time axis.** `blendStretches()` returns `[]` for `.photos` and
+   `sourceDurationSeconds` is never set for stills → a zero-length warp
+   timeline ([AppModel.swift:2339-2361, 5372-5373](../App/AppModel.swift)).
+   Worse: **a basic `Interval · JPEG` shoot writes no `frames.timestamps` at
+   all** — only Holy Grail and Scanner runs write the sidecar
+   ([CameraController.swift:5809](../App/CameraController.swift)) — so those
+   projects have frame counts only.
+2. **The preview loader is movie-only.** `WarpPreviewLoader` is
+   `AVAssetImageGenerator` over `AVURLAsset`
+   ([WarpTimelineView.swift:10-47](../App/WarpTimelineView.swift)). A stills
+   twin exists in embryo: `PhotoViewerView`'s coarse-ladder scrubber already
+   maps position→frame index and even switches its axis to elapsed capture
+   seconds from the sidecar ([PhotoViewerView.swift:158-299](../App/PhotoViewerView.swift)).
+3. **The stackers don't take a compiled schedule.** Neither
+   `ImageStacker.stackSequence` variant accepts `customWindows`; both build
+   their own `WindowSchedule` internally
+   ([ImageStacker.swift:222, 391](../Kit/Sources/LetsLapseKit/ImageStacker.swift)).
+   The compiled shape (`WarpCompiler.Compiled.schedules`) matches the internal
+   one, so the plumbing is small — but a stills `SourceRegion` concept has to
+   exist first.
+4. **Speed semantics invert.** `WarpCompiler` floors speed at one source frame
+   per output frame (`floorSpeed = outFps / regionFps`,
+   [WarpTimeline.swift:355-361](../App/WarpTimeline.swift)). Interval footage
+   at 1 frame / 3 s against 25 fps output has a 75× floor — every chip below
+   75× is unrenderable in the compiler's current terms. The timeline needs an
+   interval vocabulary (frames-per-output = blend depth; "slower" = shallower
+   stacks, "faster" = deeper/skipped), which is exactly how the restricted
+   screen's blend slider should be absorbed.
+5. **Geometry + grading are derivable but absent**: `sourceWidth/Height`
+   never probed for stills (canvas/reframe need it); keyframed grades ride a
+   per-index map on stills vs `GradeSourceMap` from `frameSourceTimes` on
+   video — reconcilable once a compile exists. The gamma stills path also
+   hardcodes H.264 ([ImageStacker.swift:248-249](../Kit/Sources/LetsLapseKit/ImageStacker.swift));
+   only the linear path honours the codec chooser.
+
+## What transfers for free
+
+The video-only tail passes gate on `output.kind == .video`, and a stills blend
+already **produces** a `.mp4` `ProcessingOutput` — so reframe bake and canvas
+crop are structurally reusable the moment the inputs resolve
+([AppModel.swift:3342-3359, 3508, 3562](../App/AppModel.swift)). The bottom
+bar, estimate card, and fps menu carry over unchanged.
+
+## Suggested phasing (when this becomes a job)
+
+1. **Enablers, invisible:** write `frames.timestamps` on *every* interval run;
+   probe stills dimensions + derive duration at registration; stills preview
+   scrubber component (lift from PhotoViewerView).
+2. **The timeline:** interval axis (sidecar seconds, uniform fallback),
+   interval speed vocabulary, `customWindows` into ImageStacker. This absorbs
+   the blend slider; True-light and tail-frame exclusion move into the
+   Advanced sheet.
+3. **Spatial + grade:** reframe/canvas on stills renders; grade-map
+   unification; codec chooser on both stills paths.
+4. **Retire the `.photos` branch** — after Scanner captures are diverted to
+   their own configure surface (they already have their own detail screen and
+   export path).
+
+Each UI phase is a design-sync unit (design-first vs app-first to be asked at
+the start, per [design/README.md](design/README.md)).

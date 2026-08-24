@@ -47,6 +47,13 @@ struct ProjectDetailView: View {
     @State private var isRotating = false
     @State private var rotateFailure: String?
     @State private var isBrowsingOriginals = false
+    /// Field notes: the project's saved notes (newest first), the "+ Field
+    /// note" flow sheet, inline audio playback, and the per-note delete
+    /// confirmation.
+    @State private var fieldNotes: [FieldNote] = []
+    @State private var showFieldNoteFlow = false
+    @StateObject private var notePlayer = FieldNotePlayer()
+    @State private var fieldNoteToDelete: FieldNote?
     /// Save-to-Photos progress, tracked separately for the photo asset and
     /// the originals row so one export doesn't repaint the other.
     private enum AssetSaveState: Equatable {
@@ -194,12 +201,42 @@ struct ProjectDetailView: View {
                 #endif
             }
         }
+        .sheet(isPresented: $showFieldNoteFlow) {
+            if let capture {
+                FieldNoteFlowView(
+                    capture: capture,
+                    onClose: { showFieldNoteFlow = false },
+                    onSaved: { fieldNotes = model.fieldNotes(for: capture) }
+                )
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
+        .confirmationDialog(
+            "Delete this field note?",
+            isPresented: Binding(
+                get: { fieldNoteToDelete != nil },
+                set: { if !$0 { fieldNoteToDelete = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Delete note", role: .destructive) {
+                guard let note = fieldNoteToDelete, let capture else { return }
+                if notePlayer.playingNoteID == note.id { notePlayer.stop() }
+                model.deleteFieldNote(note, from: capture)
+                fieldNotes = model.fieldNotes(for: capture)
+            }
+            Button("Cancel", role: .cancel) { fieldNoteToDelete = nil }
+        }
         .task(id: storageToken) {
             guard let capture else { return }
             if let bytes = await model.storageBytes(for: capture) {
                 storageBytes = bytes
             }
+            fieldNotes = model.fieldNotes(for: capture)
         }
+        .onDisappear { notePlayer.stop() }
         #if DEBUG
         // `LL_VIEWER=1` opens the editor straight away and
         // `LL_VIEWER=expanded` opens it with the preview dragged down to its
@@ -845,6 +882,24 @@ struct ProjectDetailView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // Field notes live under Storage (spec: Project Field Notes),
+            // newest first, each individually deletable; audio plays inline.
+            ForEach(fieldNotes) { note in
+                fieldNoteRow(note, in: capture)
+            }
+
+            Button {
+                showFieldNoteFlow = true
+            } label: {
+                LLRow(title: "+ Field note") {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
             Button {
                 confirmingProjectDelete = true
             } label: {
@@ -856,6 +911,75 @@ struct ProjectDetailView: View {
             .buttonStyle(.plain)
         }
         .llCard()
+    }
+
+    // MARK: - Field notes
+
+    /// One saved note: type, timestamp, preview; audio rows carry duration
+    /// and an inline play control.
+    private func fieldNoteRow(_ note: FieldNote, in capture: AppModel.CaptureProject) -> some View {
+        VStack(spacing: 0) {
+            HStack(spacing: 12) {
+                Image(systemName: fieldNoteIcon(note.kind))
+                    .font(.system(size: 15))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 20)
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 6) {
+                        Text(note.createdAt.formatted(date: .abbreviated, time: .shortened))
+                            .font(.system(size: 13, weight: .medium))
+                        if note.kind == .audio, let seconds = note.durationSeconds {
+                            Text(String(format: "%d:%02d", Int(seconds) / 60, Int(seconds) % 60))
+                                .font(.system(size: 12).monospacedDigit())
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    if let preview = note.previewText, !preview.isEmpty {
+                        Text(preview)
+                            .font(.system(size: 12.5))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                }
+                Spacer(minLength: 8)
+                if note.kind == .audio,
+                   let url = model.fieldNoteAudioURL(for: note, in: capture) {
+                    Button {
+                        notePlayer.toggle(note: note, url: url)
+                    } label: {
+                        Image(systemName: notePlayer.playingNoteID == note.id
+                            ? "stop.circle.fill" : "play.circle.fill")
+                            .font(.system(size: 22))
+                            .foregroundStyle(LL.accent)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(notePlayer.playingNoteID == note.id
+                        ? "Stop playback" : "Play audio note")
+                }
+                Button {
+                    fieldNoteToDelete = note
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Delete note")
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+
+            Divider()
+                .padding(.leading, 16)
+        }
+    }
+
+    private func fieldNoteIcon(_ kind: FieldNote.Kind) -> String {
+        switch kind {
+        case .audio: return "waveform"
+        case .issue: return "exclamationmark.triangle"
+        case .text: return "square.and.pencil"
+        }
     }
 
     // MARK: - Auto rename & tag

@@ -12,6 +12,9 @@ struct AdjustView: View {
     @Environment(\.undoManager) private var undoManager
     @State private var showAdvanced = false
     @State private var showCustomSpeed = false
+    /// The "+ Field note" flow, attached to the capture this screen is
+    /// configuring — same component as the project screen's entry point.
+    @State private var showFieldNoteFlow = false
     /// The stretch the chips edit, as an index into the warp timeline.
     @State private var selectedStretch = 0
     /// "Blend from" choices, probed once per capture. Deciding them stats
@@ -785,14 +788,41 @@ struct AdjustView: View {
                 .fixedSize()
             }
 
-            Text("Your original is kept — you can always make another blended clip.")
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 10) {
+                Text("Your original is kept — you can always make another blended clip.")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+
+                // Capture what just happened while it's fresh — a bug, an
+                // observation, ambient sound — without leaving the flow. The
+                // shoot is already registered, so the note lands on a real
+                // project. Same component as the project screen's entry.
+                if model.currentCapture != nil {
+                    Button {
+                        showFieldNoteFlow = true
+                    } label: {
+                        Text("+ Field note")
+                            .font(.system(size: 11.5, weight: .medium))
+                            .foregroundStyle(LL.accent)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(.horizontal, 16)
         .padding(.top, 10)
         .padding(.bottom, 12)
         .background(LL.screenBackground)
+        .sheet(isPresented: $showFieldNoteFlow) {
+            if let capture = model.currentCapture {
+                FieldNoteFlowView(
+                    capture: capture,
+                    onClose: { showFieldNoteFlow = false })
+                #if os(macOS)
+                .frame(minWidth: 520, minHeight: 480)
+                #endif
+            }
+        }
     }
 
     /// A Scanner capture is a **set of angles**, not a sequence: it exists to

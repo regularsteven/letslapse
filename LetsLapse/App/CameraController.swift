@@ -1756,10 +1756,71 @@ final class CameraController: NSObject, ObservableObject {
             + " conditions=\(device.primaryConstituentDeviceRestrictedSwitchingBehaviorConditions.rawValue)")
         constituentObservation = device.observe(
             \.activePrimaryConstituent, options: [.initial, .new]
-        ) { device, _ in
+        ) { [weak self] device, _ in
             let name = device.activePrimaryConstituent?.deviceType.rawValue
                 .replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") ?? "none"
-            LLog("optics: constituent → \(name) (zoom \(String(format: "%.2f", device.videoZoomFactor)))")
+            let zoom = String(format: "%.2f", device.videoZoomFactor)
+            LLog("optics: constituent → \(name) (zoom \(zoom))")
+            // A hand-off during a stacked run is a framing hazard — put it in
+            // the shoot's own issue trail, not just the console. (KVO arrives
+            // on an arbitrary queue; sessionQueue owns the controller ref.)
+            guard let self else { return }
+            self.sessionQueue.async {
+                self.liveBlendController?.noteExternalIssue(
+                    kind: "constituentSwitch", severity: "warning",
+                    detail: "\(name) at zoom \(zoom)")
+            }
+        }
+    }
+
+    /// The virtual device's switching behaviour before a stacked run locked
+    /// it, for restore at run end. sessionQueue-confined.
+    private var constituentSwitchRestore: (
+        behavior: AVCaptureDevice.PrimaryConstituentDeviceSwitchingBehavior,
+        conditions: AVCaptureDevice.PrimaryConstituentDeviceRestrictedSwitchingBehaviorConditions)?
+
+    /// Pins the virtual device to its current physical constituent for the
+    /// duration of a stacked run. Blend runs sit exactly on the ultra-wide↔
+    /// wide switchover factor (display 1× = raw 2.0) with switching on the
+    /// system default, so a silent mid-run hand-off is a standing framing
+    /// hazard for a pipeline that averages frames. Ruled out as the Praha
+    /// 2026-08-23 cause (the shifted frames kept the wide's aperture), but
+    /// the same class of artifact. sessionQueue-confined.
+    private func lockConstituentSwitchingForRun() {
+        guard let device = videoDevice, device.isVirtualDevice,
+              device.primaryConstituentDeviceSwitchingBehavior != .unsupported,
+              constituentSwitchRestore == nil else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            constituentSwitchRestore = (
+                device.primaryConstituentDeviceSwitchingBehavior,
+                device.primaryConstituentDeviceRestrictedSwitchingBehaviorConditions)
+            device.setPrimaryConstituentDeviceSwitchingBehavior(
+                .locked, restrictedSwitchingBehaviorConditions: [])
+            let active = device.activePrimaryConstituent?.deviceType.rawValue
+                .replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") ?? "none"
+            LLog("optics: constituent switching locked to \(active) for the run")
+        } catch {
+            constituentSwitchRestore = nil
+            LLog("optics: could not lock constituent switching — \(error.localizedDescription)")
+        }
+    }
+
+    /// Undoes `lockConstituentSwitchingForRun`. sessionQueue-confined.
+    private func restoreConstituentSwitchingAfterRun() {
+        guard let restore = constituentSwitchRestore else { return }
+        constituentSwitchRestore = nil
+        guard let device = videoDevice, device.isVirtualDevice,
+              restore.behavior != .unsupported else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            device.setPrimaryConstituentDeviceSwitchingBehavior(
+                restore.behavior, restrictedSwitchingBehaviorConditions: restore.conditions)
+            LLog("optics: constituent switching restored after the run")
+        } catch {
+            LLog("optics: could not restore constituent switching — \(error.localizedDescription)")
         }
     }
     #endif
@@ -7267,6 +7328,7 @@ final class CameraController: NSObject, ObservableObject {
                     self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
                     #if os(iOS)
                     self.endHolyGrailIfActive()
+                    self.restoreConstituentSwitchingAfterRun()
                     #endif
                     self.releaseRunFocusLock()
                 }
@@ -7290,6 +7352,12 @@ final class CameraController: NSObject, ObservableObject {
             // shutter press and stays stopped. No input swap here, so there is
             // nothing to settle first.
             self.lockFocusForRun(deviceChanged: false)
+            #if os(iOS)
+            // And the lens itself stops too: no silent constituent hand-offs
+            // while frames are being averaged. (The DNG path already runs on
+            // a pinned physical device; this path stays on the virtual one.)
+            self.lockConstituentSwitchingForRun()
+            #endif
             output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
             controller.start()
             DispatchQueue.main.async {

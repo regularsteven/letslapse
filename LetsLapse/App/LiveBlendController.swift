@@ -139,6 +139,12 @@ struct LiveBlendSessionLog: Codable {
         /// Ramped runs (DNG path): worst commanded-vs-delivered exposure
         /// divergence among this window's frames, in stops.
         var exposureDivergenceStops: Double? = nil
+        /// Alignment-gate readings for this window (video path) — frames
+        /// refused for confidently-displaced framing, the largest measured
+        /// shift, and whether the gate adopted a persistent new framing.
+        var rejectedByAlignment: Int? = nil
+        var peakAlignmentShiftPixels: Double? = nil
+        var alignmentReanchored: Bool? = nil
     }
 
     struct Summary: Codable {
@@ -185,7 +191,9 @@ extension CaptureExposureLog.WindowPerformance {
             actualIntervalSeconds: entry.actualIntervalSeconds,
             intervalSeconds: entry.requestedIntervalSeconds,
             fileBytes: entry.fileBytes,
-            exposureDivergenceStops: entry.exposureDivergenceStops)
+            exposureDivergenceStops: entry.exposureDivergenceStops,
+            rejectedByAlignment: entry.rejectedByAlignment,
+            peakAlignmentShiftPixels: entry.peakAlignmentShiftPixels)
     }
 }
 
@@ -360,8 +368,19 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// opened. The video tap's frames carry no EXIF of their own, so this
         /// is the whole exposure record for the output the window produces.
         var exposure: DNGAuthor.DNGExposure? = nil
+        /// Alignment-gate tallies. `rejectedByAlignment` counts reject
+        /// verdicts; on a single-frame window the flagged frame is still
+        /// used (never starve a depth-1 window), which the log's blend
+        /// depth makes legible.
+        var rejectedByAlignment = 0
+        var peakAlignmentShiftPixels: Double? = nil
+        var alignmentReanchored = false
     }
 
+    /// Refuses confidently-displaced frames before they ghost the stack
+    /// (2026-08-23: OIS sag at thermal critical shifted frames ~63 px
+    /// mid-window; the engine's own records were spotless). videoQueue.
+    private let alignmentGate = FrameAlignmentGate()
     private var selecting = false
     private var finishRequested = false
     private var sessionStartPTS: Double?
@@ -379,6 +398,18 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var frameURLs: [URL] = []
     /// One entry per written output frame, for `capture_log.json`. blendQueue.
     private var sessionFrameLog: [CaptureExposureLog.Entry] = []
+    /// The shoot's recorded issue trail for `capture_log.json`. blendQueue.
+    private var sessionIssues: [CaptureExposureLog.Issue] = []
+    /// Last thermal state an issue was recorded against, so transitions are
+    /// recorded once each. blendQueue.
+    private var issuedThermalState: String?
+    /// Why the run ended, for the travelling log — parity with the DNG path
+    /// (the 2026-08-22 sunrise stops were undiagnosable without it).
+    /// Written on videoQueue before the finish hops queues.
+    private var endReason: String?
+    /// Windows that closed with nothing usable arrived (camera went quiet) —
+    /// the travelling log's `starvedWindows`. blendQueue.
+    private var emptyWindows = 0
     private let runStartedAt = Date()
     private var outputIndex = 0
     private var completedOutputs = 0
@@ -453,10 +484,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// is false — a scheduled "stop at N" wants exactly N) and hands the run
     /// over; discard drops queued work, deletes the temp frames, and never
     /// fires the result. All are safe to call more than once.
-    func requestStop(discard: Bool, keepPartial: Bool = true) {
+    func requestStop(discard: Bool, keepPartial: Bool = true, reason: String = "user") {
         videoQueue.async {
             guard !self.finishRequested else { return }
             self.finishRequested = true
+            self.endReason = reason
             self.selecting = false
             self.watchdog?.cancel()
             self.watchdog = nil
@@ -530,6 +562,26 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
                 window.bufferFailures += 1
                 return
+            }
+            // Framing integrity. A frame whose framing has confidently moved
+            // (lens excursion, knocked rig) must not be averaged into the
+            // stack, where it doubles every edge. Costs well under a
+            // millisecond per selected frame; low-confidence readings always
+            // pass. A single-frame window keeps its flagged frame — a
+            // displaced output beats no output — and the log says so.
+            let alignment = alignmentGate.evaluate(pixelBuffer)
+            if alignment.measured {
+                window.peakAlignmentShiftPixels = max(
+                    window.peakAlignmentShiftPixels ?? 0, alignment.shiftMagnitudePixels)
+            }
+            if !alignment.accepted {
+                window.rejectedByAlignment += 1
+                if window.rejectedByAlignment == 1 {
+                    LLog(String(format: "liveblend: alignment gate — frame displaced (%+.0f, %+.0f)px conf %.2f%@",
+                                alignment.dxPixels, alignment.dyPixels, alignment.confidence,
+                                window.frameTarget == 1 ? ", kept (single-frame window)" : ", rejected"))
+                }
+                if window.frameTarget != 1 { return }
             }
             window.frameTimes.append(t)
             // Cheap scene measurement for the ramp, taken from the frame the
@@ -670,7 +722,12 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// Pre-anchor (no frame ever seen) windows report dead time without
     /// advancing the PTS grid, which only exists once a frame arrives.
     private func closeCurrentWindow() {
-        let record = window
+        var record = window
+        let alignmentSummary = alignmentGate.windowClosed()
+        record.alignmentReanchored = alignmentSummary.reanchored
+        if alignmentSummary.reanchored {
+            LLog("liveblend: alignment gate re-anchored — framing moved and stayed")
+        }
         let enqueuedUptime = ProcessInfo.processInfo.systemUptime
         let expectedGeneration = generation.withLock { $0 }
         blendQueue.async {
@@ -746,6 +803,16 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             partial: record.partial)
         entry.thermalStateAtStart = record.thermalStateAtStart
         accumulateFailuresThisWindow = 0
+        if record.rejectedByAlignment > 0 {
+            entry.rejectedByAlignment = record.rejectedByAlignment
+        }
+        // Sub-4 px is ordinary OIS wander — stamping it on every window would
+        // just bloat the document (the schema's flags-only-when-true rule).
+        if let peak = record.peakAlignmentShiftPixels, peak > 4 || record.rejectedByAlignment > 0 {
+            entry.peakAlignmentShiftPixels = peak
+        }
+        if record.alignmentReanchored { entry.alignmentReanchored = true }
+        recordIssues(for: entry, record: record)
 
         // Commanded-vs-delivered honesty guard, matching the DNG path. This
         // pipeline holds one exposure per window, so the comparison is per
@@ -781,6 +848,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             blender.discardWindow()
             entry.failed = true
             failedOutputs += 1
+            emptyWindows += 1
         } else {
             do {
                 let blendStart = ProcessInfo.processInfo.systemUptime
@@ -889,7 +957,67 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
 
         if consecutiveProcessingFailures >= 3 {
             LLog("liveblend: three consecutive processing failures, stopping")
-            requestStop(discard: false)
+            requestStop(discard: false, reason: "consecutiveProcessingFailures")
+        }
+    }
+
+    /// Appends this window's contribution to the shoot's issue trail —
+    /// thermal state changes (recorded once per transition), gate rejections,
+    /// and gate re-anchors. blendQueue.
+    private func recordIssues(for entry: LiveBlendSessionLog.OutputEntry, record: WindowRecord) {
+        func thermalSeverity(_ name: String) -> String {
+            switch name {
+            case "critical": return "problem"
+            case "serious": return "warning"
+            default: return "info"
+            }
+        }
+        let thermalNow = entry.thermalStateAtStart ?? entry.thermalState
+        if issuedThermalState == nil {
+            // Starting hot is itself the finding — the Praha run opened at
+            // critical, which is when lens excursions were observed.
+            if thermalNow == "serious" || thermalNow == "critical" {
+                sessionIssues.append(.init(
+                    at: Date(), windowIndex: entry.index,
+                    kind: "thermal", severity: thermalSeverity(thermalNow),
+                    detail: "run started at \(thermalNow)"))
+            }
+            issuedThermalState = thermalNow
+        } else if let previous = issuedThermalState, previous != thermalNow {
+            sessionIssues.append(.init(
+                at: Date(), windowIndex: entry.index,
+                kind: "thermal", severity: thermalSeverity(thermalNow),
+                detail: "\(previous) → \(thermalNow)"))
+            issuedThermalState = thermalNow
+        }
+
+        if record.rejectedByAlignment > 0 {
+            let peak = record.peakAlignmentShiftPixels ?? 0
+            let kept = record.frameTarget == 1
+            sessionIssues.append(.init(
+                at: Date(), windowIndex: entry.index,
+                kind: "framingGlitch", severity: "warning",
+                detail: kept
+                    ? String(format: "displaced frame kept (single-frame window), shift %.0f px", peak)
+                    : String(format: "rejected %d of %d frames, peak shift %.0f px",
+                             record.rejectedByAlignment,
+                             record.rejectedByAlignment + record.frameTimes.count, peak)))
+        }
+        if record.alignmentReanchored {
+            sessionIssues.append(.init(
+                at: Date(), windowIndex: entry.index,
+                kind: "framingChanged", severity: "warning",
+                detail: "framing moved and stayed — new baseline adopted"))
+        }
+    }
+
+    /// Records an issue observed outside this controller (the camera layer:
+    /// a constituent hand-off, a session interruption). Safe from any queue.
+    func noteExternalIssue(kind: String, severity: String, detail: String? = nil) {
+        blendQueue.async {
+            self.sessionIssues.append(.init(
+                at: Date(), windowIndex: self.outputIndex,
+                kind: kind, severity: severity, detail: detail))
         }
     }
 
@@ -955,9 +1083,17 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 captureWidth: configuration.captureWidth,
                 captureHeight: configuration.captureHeight,
                 intervalSeconds: log.header.requestedIntervalSeconds,
+                // End-of-run accounting the DNG path has always carried and
+                // this path silently omitted — failed and starved windows
+                // write no frame entries, so without these the travelling
+                // log cannot show a shortfall at all.
+                endReason: endReason ?? "user",
+                failedWindows: failedOutputs > 0 ? failedOutputs : nil,
+                starvedWindows: emptyWindows > 0 ? emptyWindows : nil,
                 startedAt: runStartedAt,
                 endedAt: Date(),
-                frames: sessionFrameLog)
+                frames: sessionFrameLog,
+                issues: sessionIssues.isEmpty ? nil : sessionIssues)
             if CaptureExposureLog.write(
                 session, toDirectory: configuration.outputDirectory) == nil {
                 LLog("liveblend: could not write \(CaptureExposureLog.sessionFileName)")

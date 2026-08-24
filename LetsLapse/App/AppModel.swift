@@ -3106,6 +3106,12 @@ final class AppModel: ObservableObject {
     /// folder that can hold a hundred 19 MB DNGs.
     private var projectStorageBytes: [UUID: Int64] = [:]
 
+    /// Drops one project's cached size — for paths that change a folder's
+    /// contents without persisting the library (field notes today).
+    func invalidateStorageCache(for id: UUID) {
+        projectStorageBytes[id] = nil
+    }
+
     /// Walks the whole library — every project folder and every cache item — so
     /// it goes through the bounded queue and gives up when the screen that asked
     /// for it closes. Returns nil in that case.
@@ -3118,6 +3124,11 @@ final class AppModel: ObservableObject {
             if let folders = try? fileManager.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
                 for folder in folders where (try? folder.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true {
                     storage.originalsBytes += Self.directorySize(folder.appendingPathComponent("source"))
+                    // Field notes count with the originals: captured material
+                    // that belongs to the project, typically kilobytes — not
+                    // worth a fourth legend category, but the library total
+                    // must keep matching the per-project (whole-folder) sizes.
+                    storage.originalsBytes += Self.directorySize(folder.appendingPathComponent("notes"))
                     storage.versionsBytes += Self.directorySize(folder.appendingPathComponent("blends"))
                 }
             }
@@ -6129,7 +6140,9 @@ final class AppModel: ObservableObject {
             capture.importedFromID = originID
             let destination = captureFolderURL(for: newID)
             try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-            for subfolder in ["source", "blends"] {
+            // Anything not named here is silently dropped at import — a new
+            // project subfolder must join this list or it doesn't travel.
+            for subfolder in ["source", "blends", "notes"] {
                 let extracted = staging.appendingPathComponent(subfolder)
                 if FileManager.default.fileExists(atPath: extracted.path) {
                     try FileManager.default.moveItem(at: extracted, to: destination.appendingPathComponent(subfolder))

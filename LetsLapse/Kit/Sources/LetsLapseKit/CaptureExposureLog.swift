@@ -68,6 +68,15 @@ public struct CaptureExposureLog {
         /// the guard the 2026-08-20 field test lacked, when command and
         /// delivery drifted ~6 stops apart in silence.
         public var exposureDivergenceStops: Double?
+        /// Frames the alignment gate refused to stack because their framing
+        /// had confidently moved (2026-08-23: OIS sag at thermal critical
+        /// ghosted stacked windows). On a single-frame window the flagged
+        /// frame is kept — starving beats nothing — so at depth 1 this counts
+        /// displaced frames that ARE in the output.
+        public var rejectedByAlignment: Int?
+        /// Largest framing shift the gate measured this window, in pixels,
+        /// accepted frames included — wander this stays under is honest.
+        public var peakAlignmentShiftPixels: Double?
 
         /// Stops between a delivered exposure and the commanded one:
         /// |log2((actualISO·actualDuration) / (targetISO·targetDuration))|.
@@ -98,7 +107,9 @@ public struct CaptureExposureLog {
             actualIntervalSeconds: Double? = nil,
             intervalSeconds: Double? = nil,
             fileBytes: Int? = nil,
-            exposureDivergenceStops: Double? = nil
+            exposureDivergenceStops: Double? = nil,
+            rejectedByAlignment: Int? = nil,
+            peakAlignmentShiftPixels: Double? = nil
         ) {
             self.requestedFrames = requestedFrames
             self.missed = missed
@@ -117,6 +128,36 @@ public struct CaptureExposureLog {
             self.intervalSeconds = intervalSeconds
             self.fileBytes = fileBytes
             self.exposureDivergenceStops = exposureDivergenceStops
+            self.rejectedByAlignment = rejectedByAlignment
+            self.peakAlignmentShiftPixels = peakAlignmentShiftPixels
+        }
+    }
+
+    /// One thing that went wrong (or notably happened) during a shoot — the
+    /// machine-recorded issue trail that travels with the project. Kinds are
+    /// open strings so a new engine can record before every reader learns the
+    /// word; current vocabulary: `thermal` (state at start / transitions),
+    /// `framingGlitch` (alignment gate rejected frames), `framingChanged`
+    /// (gate re-anchored — a real reframe), `constituentSwitch` (the virtual
+    /// camera changed its active physical lens mid-run).
+    public struct Issue: Codable, Equatable, Sendable {
+        public var at: Date
+        /// The blend window it happened in, where one applies.
+        public var windowIndex: Int?
+        public var kind: String
+        /// "info" | "warning" | "problem".
+        public var severity: String
+        public var detail: String?
+
+        public init(
+            at: Date, windowIndex: Int? = nil,
+            kind: String, severity: String, detail: String? = nil
+        ) {
+            self.at = at
+            self.windowIndex = windowIndex
+            self.kind = kind
+            self.severity = severity
+            self.detail = detail
         }
     }
 
@@ -223,6 +264,9 @@ public struct CaptureExposureLog {
         public var startedAt: Date?
         public var endedAt: Date?
         public var frames: [Entry]
+        /// The shoot's recorded issue trail, oldest first. Absent (not empty)
+        /// on clean runs and in logs from before it existed.
+        public var issues: [Issue]?
 
         public init(
             sessionID: String,
@@ -241,7 +285,8 @@ public struct CaptureExposureLog {
             starvedWindows: Int? = nil,
             startedAt: Date? = nil,
             endedAt: Date? = nil,
-            frames: [Entry] = []
+            frames: [Entry] = [],
+            issues: [Issue]? = nil
         ) {
             self.sessionID = sessionID
             self.deviceModel = deviceModel
@@ -260,6 +305,7 @@ public struct CaptureExposureLog {
             self.startedAt = startedAt
             self.endedAt = endedAt
             self.frames = frames
+            self.issues = issues
         }
     }
 
