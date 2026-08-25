@@ -11,6 +11,11 @@ struct ProjectsView: View {
     @State private var previewItem: MediaPreviewItem?
     @State private var deleteFailure: String?
     @State private var filter: CaptureFilter = .all
+    /// Settings ▸ Advanced ▸ Layout. With the Scans tab off, scanner runs have
+    /// nowhere else to be listed, so this list takes them in behind its own
+    /// Scans filter.
+    @AppStorage(LayoutSettings.scansMenuKey) private var scansMenuEnabled = true
+    @AppStorage(LayoutSettings.projectCountsKey) private var showsCounts = false
     /// Typed words and tag chips, together — the two narrow the same list and share one
     /// empty state, so they are one value rather than two pieces of view state.
     @State private var query = SceneQuery.empty
@@ -27,12 +32,15 @@ struct ProjectsView: View {
                     .listRowInsets(EdgeInsets(top: 7, leading: 16, bottom: 0, trailing: 16))
 
                 Group {
-                    // Scans are excluded outright — a scanner run is a document
-                    // and lives in its own tab. The exclusion IS the design;
-                    // there is no scanner card variant here. The project itself
-                    // is still reachable, from that tab's "View as timelapse".
-                    let library = model.libraryCaptures
-                    let visible = library.filtered(by: filter).matching(query)
+                    // With the Scans tab on, scans are excluded outright — a
+                    // scanner run is a document and lives in its own tab, and
+                    // the project itself is still reachable from that tab's
+                    // "View as timelapse". With the tab off they come back
+                    // here, because otherwise nothing lists them.
+                    let library = sourceCaptures
+                    let visible = library
+                        .filtered(by: filter, isScan: model.isScannerProject)
+                        .matching(query)
                     if library.isEmpty {
                         emptyState
                     } else if visible.isEmpty {
@@ -90,6 +98,12 @@ struct ProjectsView: View {
                 ProjectMediaPreviewSheet(item: item)
             }
         }
+        // The Scans filter can vanish under the selection — the tab it defers
+        // to came back. Fall back to All rather than leave a selection nothing
+        // in the bar points at.
+        .onChange(of: listsScans) { lists in
+            if !lists, filter == .scans { filter = .all }
+        }
         .onAppear { consumeDetailRequest(model.requestedProjectDetailID) }
         .onReceive(model.$requestedProjectDetailID) { requested in
             consumeDetailRequest(requested)
@@ -116,7 +130,7 @@ struct ProjectsView: View {
 
             // Same segmented filter the Gallery grid uses, so the two tabs
             // narrow a library the same way.
-            if model.libraryCaptures.isEmpty {
+            if sourceCaptures.isEmpty {
                 // Nothing to filter — stand in for the bar's bottom padding so
                 // the empty-state card doesn't butt against the title.
                 Color.clear.frame(height: 8)
@@ -124,9 +138,12 @@ struct ProjectsView: View {
                 SceneSearchField(text: $query.text)
                     .padding(.top, 10)
 
-                CaptureFilterBar(selection: $filter)
+                CaptureFilterBar(
+                    selection: $filter,
+                    filters: availableFilters,
+                    counts: showsCounts ? filterCounts : nil)
 
-                let tags = model.libraryCaptures.presentSceneTags
+                let tags = sourceCaptures.presentSceneTags
                 if !tags.isEmpty {
                     // Bleeds past the row's trailing inset so a long chip row
                     // scrolls out to the screen edge rather than stopping short.
@@ -134,6 +151,32 @@ struct ProjectsView: View {
                         .padding(.bottom, 8)
                 }
             }
+        }
+    }
+
+    /// What this list is built from: the scan-free library, or everything —
+    /// whichever the Layout setting leaves without another home.
+    private var sourceCaptures: [AppModel.CaptureProject] {
+        listsScans ? model.captures : model.libraryCaptures
+    }
+
+    /// Scans belong to this list exactly when they have no tab of their own.
+    /// Deliberately not conditional on any scan existing: an empty Scans filter
+    /// says where scans would be, which is the point of moving them here.
+    private var listsScans: Bool { !scansMenuEnabled }
+
+    private var availableFilters: [CaptureFilter] {
+        listsScans ? CaptureFilter.allCases : CaptureFilter.withoutScans
+    }
+
+    /// How many projects each filter would show, counted after the search has
+    /// had its say so the numbers agree with what tapping one produces.
+    private var filterCounts: [CaptureFilter: Int] {
+        let searched = sourceCaptures.matching(query)
+        return availableFilters.reduce(into: [:]) { counts, filter in
+            counts[filter] = searched
+                .filter { filter.matches($0, isScan: model.isScannerProject($0)) }
+                .count
         }
     }
 

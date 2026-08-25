@@ -1057,6 +1057,14 @@ final class AppModel: ObservableObject {
         captures.filter(isScannerProject)
     }
 
+    /// Cheap "is there anything in the Scans tab" — the tab bar asks this on
+    /// every redraw (it is half of whether the tab is drawn at all; the Layout
+    /// setting is the other half), and it stops at the first scan rather than
+    /// building a list.
+    var hasScanSessions: Bool {
+        captures.contains(where: isScannerProject)
+    }
+
     /// Everything that is not a scan: what Projects and Gallery list.
     var libraryCaptures: [CaptureProject] {
         captures.filter { !isScannerProject($0) }

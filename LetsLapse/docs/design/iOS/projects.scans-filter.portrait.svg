@@ -1,6 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Projects · portrait</title>
-  <desc>Mirrors App/ProjectsView.swift (header, ProjectCard) + App/CaptureFilterBar.swift (CaptureFilterBar) + App/SceneSearch.swift (SceneSearchField, SceneTagChips, SceneTagLine): manual large title, scene search field, the shared segmented capture filter (All · Photos · Interval · Video) and the subject-tag chip row share one list row — 15pt above the title, 10pt above the 34pt search capsule, 8pt above and below the filter bar, chips flush after it with 8pt below, first card at 238. Search matches a project's name, its subject tags (raw and labelled) and the free-form elements the on-device analysis named; chips narrow to projects carrying EVERY selected tag. Both are hidden while the library is empty, and the chip row is drawn only from tags that actually exist in the library. One card per original with an always-visible blended-clip thumbnail strip and a dashed "+" new-blended-clip tile; photo captures are one asset, so no strip. A VIDEO project's card carries a second 12pt secondary line under its format line — the shoot's source composition: "N source clips" (imports read "1 source clip"), and, when the sequence sidecar records burst segments above the base rate, "· N bursts at R fps" (one burst: "1 burst at…"; mixed burst rates collapse to a range, "120–240 fps"). The line is video-kind only and costs those cards 16pt: interval cards already carry their count in the format line ("Interval · N photos" — bursts can't exist there), and Photo-mode cards stay ONE asset (no counts; their burst frames are stacking material, owned by project detail). An analysed project carries a tag line under its size line (up to 3 chips, then "+N") — without it the chips would filter by something invisible; an unanalysed project's card keeps its original height. A project tagged by the silent Apple Vision pass at capture time ends that same tag line with a 10pt sparkles glyph (accent at 70%, 6pt gap) — it marks "the app guessed this" rather than "you agreed to this", and disappears once an Auto rename &amp; tag proposal is applied; being inside the tag line, it adds no height. Swipe-to-delete on cards; context menu for preview/new blended clip/details/delete. Card rows hang their 14pt rhythm below them (listRowInsets top 0 / bottom 14).</desc>
+  <title>iOS · Projects · Scans filter + counts · portrait</title>
+  <desc>Mirrors App/ProjectsView.swift + App/CaptureFilterBar.swift in the two states Settings ▸ Advanced ▸ Layout can put them in — projects.portrait.svg is the same screen with both switched the other way, and every other detail (search field, tag chips, card anatomy, 14pt card rhythm) is unchanged from it.
+
+ENABLE SCANS MENU = OFF. The Scans tab leaves the tab bar (five tabs, 66pt each — see the bar at the foot of this file) and scanner runs come back into this list, which otherwise excludes them outright. They arrive with a filter of their own, Scans, sitting between Photos and Interval because that is where a scan sits: stills, but not a timelapse. The filter is offered whenever the tab is off, even at zero scans — an empty Scans filter is how the screen says where scans would be. A scan's card is an ordinary ProjectCard (its subtitle reads "Scan · N frames"), and tapping it opens ProjectDetailView, which already has a Scanner body: frames and Export first, the blend path one secondary button.
+
+DISPLAY COUNT IN PROJECTS = ON. Each segment carries how many projects it holds, counted AFTER the search field and tag chips have had their say, so the number always matches what tapping it produces. Written as a bare number ("All 6"), not in brackets: a segmented control truncates rather than shrinks and ignores any font SwiftUI hands it, and five segments on a 393pt iPhone leave about 64pt each — which "Interval (0)" overruns and "Interval 0" does not.
+
+Both switches are independent; this file draws them together because they share one bar. Their defaults are the other way round: Scans menu ON (so the tab exists once a scan does), counts OFF.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -36,14 +42,19 @@
         <text x="54" y="145" font-size="15" fill="#8A8A90">Search projects</text>
       </g>
 
-      <!-- segmented filter — shared CaptureFilterBar, same geometry as Gallery -->
+      <!-- segmented filter — shared CaptureFilterBar, carrying the Scans
+           segment (Layout ▸ Enable Scans menu OFF) and per-segment counts
+           (Layout ▸ Display count in Projects ON). Five equal segments of
+           71.4pt inside the same 361pt track; the selection capsule keeps
+           its 2pt inset. -->
       <g id="filter">
         <rect x="16" y="164" width="361" height="32" rx="9" fill="#E3E3E8"/>
-        <rect x="18" y="166" width="87" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
-        <text x="61" y="184" font-size="13" class="sb" fill="#000" text-anchor="middle">All</text>
-        <text x="151" y="184" font-size="13" fill="#000" text-anchor="middle">Photos</text>
-        <text x="241" y="184" font-size="13" fill="#000" text-anchor="middle">Interval</text>
-        <text x="331" y="184" font-size="13" fill="#000" text-anchor="middle">Video</text>
+        <rect x="18" y="166" width="69.4" height="28" rx="7" fill="#FFF" filter="url(#soft)"/>
+        <text x="53.7" y="184" font-size="13" class="sb" fill="#000" text-anchor="middle">All 6</text>
+        <text x="125.1" y="184" font-size="13" fill="#000" text-anchor="middle">Photos 1</text>
+        <text x="196.5" y="184" font-size="13" fill="#000" text-anchor="middle">Scans 3</text>
+        <text x="267.9" y="184" font-size="13" fill="#000" text-anchor="middle">Interval 0</text>
+        <text x="339.3" y="184" font-size="13" fill="#000" text-anchor="middle">Video 2</text>
       </g>
 
       <!-- subject-tag chips — SceneTagChips. Drawn only from tags present in
@@ -103,41 +114,27 @@
         </g>
       </g>
 
-      <!-- card 2: interval project with 1 blended clip — 14pt below card 1.
-           NO source line: its count already lives in the format line
-           ("Interval · 184 photos", matching the thumbnail badge), and interval
-           shoots cannot carry bursts. -->
-      <g id="card-interval-project">
-        <rect x="16" y="446" width="361" height="178" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="458" width="86" height="64" rx="8" fill="#4A3B2E"/>
-        <circle cx="60" cy="480" r="8" fill="#FFD9A0" opacity="0.8"/>
-        <polygon points="30,506 62,490 94,504 116,496 116,522 30,522" fill="#2E2419"/>
-        <rect x="48" y="504" width="64" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="80" y="515" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">184 photos</text>
-        <text x="128" y="475" font-size="16" class="b" fill="#000">Interval — harbour dusk</text>
-        <text x="128" y="492" font-size="12" fill="#6D6D72">Interval · 184 photos · yesterday</text>
-        <text x="128" y="510" font-size="12" class="sb" fill="#C36A00">1 blended clip · 3.1 GB</text>
-        <g id="tag-line-2" data-component="SceneTagLine">
-          <rect x="128" y="516" width="44" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
-          <text x="150" y="528" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Water</text>
-          <rect x="177" y="516" width="42" height="18" rx="9" fill="#C36A00" fill-opacity="0.13"/>
-          <text x="198" y="528" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Urban</text>
-          <!-- tagged automatically: this project's tags came from the silent Apple
-               Vision pass at capture time, not from a run the user confirmed.
-               10pt sparkles, accent at 70%, 6pt after the last chip, inside the
-               tag line — so it costs the card no height. Comes off the moment an
-               Auto rename & tag proposal is applied. -->
-          <g data-symbol="sparkles" opacity="0.7" fill="#C36A00">
-            <path d="M229 518 l1.6 3.6 3.6 1.6 -3.6 1.6 -1.6 3.6 -1.6 -3.6 -3.6 -1.6 3.6 -1.6 z"/>
-            <path d="M236 524.5 l0.9 2 2 0.9 -2 0.9 -0.9 2 -0.9 -2 -2 -0.9 2 -0.9 z"/>
-          </g>
+      <!-- card 2: a scanner run, listed here only because the Scans tab is
+           off. Ordinary ProjectCard anatomy — "Scan · N frames" in the format
+           line, no tag line (scans are not analysed), 146pt tall: 64pt thumb,
+           then the blended-clip strip holding just its dashed "+" tile. -->
+      <g id="card-scan-project">
+        <rect x="16" y="446" width="361" height="146" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="458" width="86" height="64" rx="8" fill="#2B2B2E"/>
+        <rect x="44" y="462" width="58" height="56" rx="3" fill="#F4F1EA"/>
+        <g stroke="#8A8A90" stroke-width="1.4" stroke-linecap="round" opacity="0.75">
+          <path d="M50 472 h46 M50 478 h46 M50 484 h46 M50 490 h46 M50 496 h30"/>
         </g>
-        <g id="version-strip-2">
-          <rect x="30" y="548" width="96" height="54" rx="9" fill="#463522"/>
-          <rect x="34" y="584" width="52" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="60" y="594" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
-          <rect x="134" y="548" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <path d="M161 567 v16 M153 575 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+        <rect x="44" y="504" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="70" y="515" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">8 photos</text>
+        <text x="128" y="475" font-size="16" class="b" fill="#000">Scan 22 Aug at 14:25</text>
+        <text x="128" y="492" font-size="12" fill="#6D6D72">Scan · 8 frames · 3 days ago</text>
+        <text x="128" y="510" font-size="12" class="sb" fill="#6D6D72">549 KB</text>
+        <!-- no blended clips yet, so the strip is the dashed "+" tile alone —
+             a scan is still a project, and the blend path stays open. -->
+        <g id="version-strip-scan">
+          <rect x="30" y="530" width="54" height="54" rx="9" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <path d="M57 549 v16 M49 557 h16" stroke="#C36A00" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
         </g>
       </g>
 
@@ -146,14 +143,14 @@
            ONE asset: no source count, no burst-frame count (that material is
            owned by project detail's "Frames behind this photo"). -->
       <g id="card-photo-project">
-        <rect x="16" y="638" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="650" width="86" height="64" rx="8" fill="#26303C"/>
-        <ellipse cx="73" cy="676" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
-        <rect x="60" y="696" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
-        <text x="86" y="707" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
-        <text x="128" y="667" font-size="16" class="b" fill="#000">Long exposure — falls</text>
-        <text x="128" y="684" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
-        <text x="128" y="702" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
+        <rect x="16" y="606" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="618" width="86" height="64" rx="8" fill="#26303C"/>
+        <ellipse cx="73" cy="644" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
+        <rect x="60" y="664" width="52" height="15" rx="7.5" fill="#000" opacity="0.5"/>
+        <text x="86" y="675" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">Photo</text>
+        <text x="128" y="635" font-size="16" class="b" fill="#000">Long exposure — falls</text>
+        <text x="128" y="652" font-size="12" fill="#6D6D72">Photo · 12MP · 3 hours ago</text>
+        <text x="128" y="670" font-size="12" class="sb" fill="#6D6D72">48 MB</text>
       </g>
 
       <!-- floating tab bar (Projects selected) -->
@@ -189,6 +186,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + SceneSearchField + CaptureFilterBar + SceneTagChips) · ProjectCard incl. source/burst line + SceneTagLine · blended-clip strip · dashed new-blended-clip tile</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · Scans filter + counts · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">Layout ▸ Scans menu OFF, counts ON — five counted segments, scans listed as ordinary cards</text>
 </svg>

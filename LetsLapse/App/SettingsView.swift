@@ -11,6 +11,7 @@ import UniformTypeIdentifiers
 /// Screens Settings can push. Value-based so ContentView can own the
 /// navigation path and pop it when the Settings tab is reselected.
 enum SettingsDestination: String, Hashable {
+    case layout
     case largeOriginals
     case performance
     case diagnostics
@@ -107,6 +108,7 @@ struct SettingsView: View {
         .background(LL.screenBackground)
         .navigationDestination(for: SettingsDestination.self) { destination in
             switch destination {
+            case .layout: LayoutSettingsView()
             case .largeOriginals: LargeOriginalsView()
             case .performance: PerformanceSettingsView()
             case .diagnostics: DiagnosticsView()
@@ -763,6 +765,16 @@ struct SettingsView: View {
 
     private var advancedCard: some View {
         VStack(spacing: 0) {
+            NavigationLink(value: SettingsDestination.layout) {
+                LLRow(title: "Layout", subtitle: "Which tabs and filters the app shows") {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
             #if os(iOS)
             LLRow(
                 title: "Allow remote access",
@@ -1082,6 +1094,49 @@ private struct LargeOriginalsView: View {
 }
 
 // MARK: - Performance
+
+// MARK: - Layout
+
+/// What the shell shows. Everything here is about where things are listed, not
+/// about what the engine does with them — which is why the Scans switch turns a
+/// tab into a filter rather than turning scanning off.
+private struct LayoutSettingsView: View {
+    @EnvironmentObject var model: AppModel
+    @AppStorage(LayoutSettings.scansMenuKey) private var scansMenuEnabled = true
+    @AppStorage(LayoutSettings.projectCountsKey) private var showsCounts = false
+
+    var body: some View {
+        Form {
+            Section {
+                Toggle("Enable Scans menu", isOn: $scansMenuEnabled)
+            } footer: {
+                Text(scansFooter)
+            }
+
+            Section {
+                Toggle("Display count in Projects", isOn: $showsCounts)
+            } footer: {
+                Text("Spells out how many projects each filter holds — “All 292”, “Photos 18”. The counts follow the search, so they always match what tapping a filter shows.")
+            }
+        }
+        .navigationTitle("Layout")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+    }
+
+    /// Says which of the two halves of the rule is currently keeping the tab
+    /// off screen — the setting, or an empty library — because "on but not
+    /// showing" is otherwise indistinguishable from a bug.
+    private var scansFooter: String {
+        guard scansMenuEnabled else {
+            return "Scans are listed in Projects instead, behind their own filter between Photos and Interval."
+        }
+        return model.hasScanSessions
+            ? "The Scans tab is in the tab bar. Turn this off to list scans in Projects instead, behind their own filter."
+            : "The Scans tab appears in the tab bar as soon as you have a scan. Turn this off to list scans in Projects instead, behind their own filter."
+    }
+}
 
 private struct PerformanceSettingsView: View {
     @EnvironmentObject var model: AppModel

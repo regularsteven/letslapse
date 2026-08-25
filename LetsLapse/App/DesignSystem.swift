@@ -271,6 +271,14 @@ enum LLTab: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// The bar's tabs, in order, for a shell that may or may not be showing
+    /// Scans. `allCases` stays the full set — Scans is only ever hidden from
+    /// the *bar*, never removed from the hierarchy, so a finished scan can
+    /// still be opened on its own screen while nothing lists it.
+    static func visible(scans: Bool) -> [LLTab] {
+        scans ? allCases : allCases.filter { $0 != .scans }
+    }
+
     var title: String {
         switch self {
         case .create: return "Create"
@@ -299,6 +307,10 @@ enum LLTab: String, CaseIterable, Identifiable {
 /// can pop that tab back to its root.
 struct FloatingTabBar: View {
     @Binding var selection: LLTab
+    /// Which tabs the bar draws. Not always every case: Scans earns its slot
+    /// (see `LLTab.visible(scans:)`), and the bar's own metrics follow the
+    /// count it is handed rather than the count that exists.
+    var tabs: [LLTab] = LLTab.allCases
     var onReselect: (LLTab) -> Void = { _ in }
     /// When a flow screen fronts the selected tab (the guided builder inside
     /// Create on macOS), highlighting that tab claims the user is on its home
@@ -312,7 +324,7 @@ struct FloatingTabBar: View {
     /// "Collections" no longer fits at 10.5pt, which is the whole cost of the
     /// sixth tab: the label drops to 9.5pt and the icon with it.
     private var tabWidth: CGFloat {
-        switch LLTab.allCases.count {
+        switch tabs.count {
         case 6...: return 58
         case 5: return 66
         default: return 92
@@ -326,7 +338,7 @@ struct FloatingTabBar: View {
 
     var body: some View {
         HStack(spacing: 4) {
-            ForEach(LLTab.allCases) { tab in
+            ForEach(tabs) { tab in
                 let isSelected = tab == selection && showsSelection
                 Button {
                     if isSelected {

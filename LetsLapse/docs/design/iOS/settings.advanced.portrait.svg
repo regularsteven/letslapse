@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · scrolled to Advanced · portrait</title>
-  <desc>Mirrors App/SettingsView.swift scrolled to the end of the list: the Storage card cut by the top edge (free space first, then the library breakdown) (library bar + legend, Review large originals, Clear cache) and the full Advanced card — Allow remote access (off by default; drawn for the first time in this pass, having been missing from the mirror since 2026-08-13), Custom frame rate, Blend learning, Auto blend strategy, Performance, Diagnostics and Incomplete Captures. Auto blend strategy is the field-test selector for BLEND=Auto's decision logic on DNG shoots (Zone / Latitude / Lumen, a menu like the Creative defaults rows); whichever is chosen, every Auto run logs all three strategies' proposals per window into capture_log.json, and the choice is per-device on purpose — a comparison shoot sets one strategy on each device. The last row exists only while orphaned capture logs do: CaptureSessionLogger deletes a session's log when the capture screen closes normally, so a surviving log means the app died with the camera open, and the row's trailing number is CaptureSessionLogger.orphanedLogs.count. With no orphans the row is absent and Diagnostics is the card's last row (no divider under it). Tapping opens the Incomplete Captures sheet — settings.incomplete-captures.portrait.svg. The list's trailing 96pt spacer is what leaves the last row clear of the floating tab bar, which floats over the scroll.</desc>
+  <desc>Mirrors App/SettingsView.swift scrolled to the end of the list: the Storage card cut by the top edge (free space first, then the library breakdown) (library bar + legend, Review large originals, Clear cache) and the full Advanced card — Layout, Allow remote access (off by default; drawn for the first time in this pass, having been missing from the mirror since 2026-08-13), Custom frame rate, Blend learning, Auto blend strategy, Performance, Diagnostics and Incomplete Captures. Layout is the first row and the only one about the shell rather than the engine: which tabs and filters the app shows (Enable Scans menu, Display count in Projects — settings.layout.portrait.svg). Auto blend strategy is the field-test selector for BLEND=Auto's decision logic on DNG shoots (Zone / Latitude / Lumen, a menu like the Creative defaults rows); whichever is chosen, every Auto run logs all three strategies' proposals per window into capture_log.json, and the choice is per-device on purpose — a comparison shoot sets one strategy on each device. The last row exists only while orphaned capture logs do: CaptureSessionLogger deletes a session's log when the capture screen closes normally, so a surviving log means the app died with the camera open, and the row's trailing number is CaptureSessionLogger.orphanedLogs.count. With no orphans the row is absent and Diagnostics is the card's last row (no divider under it). Tapping opens the Incomplete Captures sheet — settings.incomplete-captures.portrait.svg. The list's trailing 96pt spacer is what leaves the last row clear of the floating tab bar, which floats over the scroll.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
@@ -23,13 +23,13 @@
 
       <!-- scrolled content (the screen has no nav bar; content scrolls under the status bar) -->
       <g clip-path="url(#scroll)">
-        <!-- the Advanced card grew two rows since this mock's last truthful
-             scroll position (Allow remote access, previously missing from
-             the mirror entirely, and the new Auto blend strategy), so the
-             fully scrolled position sits 149pt deeper: Location and
-             On-device AI are out of view and the Storage card is the one
-             cut by the top edge, its section header clipped away -->
-        <g transform="translate(0,-149)">
+        <!-- the Advanced card has grown three rows since this mock's last
+             truthful scroll position (Allow remote access, previously missing
+             from the mirror entirely; Auto blend strategy; and now Layout at
+             the top), so the fully scrolled position sits 211pt deeper:
+             Location and On-device AI are out of view and the Storage card is
+             the one cut by the top edge, its section header clipped away -->
+        <g transform="translate(0,-211)">
 
         <!-- storage -->
         <text x="20" y="190" class="hdr">STORAGE</text>
@@ -60,65 +60,73 @@
         <!-- advanced -->
         <text x="20" y="432" class="hdr">ADVANCED</text>
         <g id="advanced-card">
-          <rect x="16" y="440" width="361" height="465" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <rect x="16" y="440" width="361" height="527" rx="16" fill="#FFF" filter="url(#soft)"/>
+
+          <!-- layout — first row of the card, and the only one about the shell
+               rather than the engine: which tabs and filters the app shows.
+               Pushes settings.layout.portrait.svg -->
+          <text x="32" y="466" class="ttl">Layout</text>
+          <text x="32" y="481" class="sub">Which tabs and filters the app shows</text>
+          <path d="M363 470 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="502" x2="377" y2="502" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- allow remote access — iOS only, off by default (opt-in: it
                advertises the device on the local network). Three subtitle
                lines: the real copy doesn't fit two at this column width -->
           <g id="allow-remote-access-row">
-            <text x="32" y="466" class="ttl">Allow remote access</text>
-            <text x="32" y="481" class="sub">Lets a Mac on the same Wi-Fi control this camera. Only while</text>
-            <text x="32" y="494" class="sub">the capture screen is open, and only after entering the</text>
-            <text x="32" y="507" class="sub">pairing code shown there</text>
-            <rect x="316" y="456" width="51" height="31" rx="15.5" fill="#E4E4E9"/>
-            <circle cx="331.5" cy="471.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+            <text x="32" y="528" class="ttl">Allow remote access</text>
+            <text x="32" y="543" class="sub">Lets a Mac on the same Wi-Fi control this camera. Only while</text>
+            <text x="32" y="556" class="sub">the capture screen is open, and only after entering the</text>
+            <text x="32" y="569" class="sub">pairing code shown there</text>
+            <rect x="316" y="518" width="51" height="31" rx="15.5" fill="#E4E4E9"/>
+            <circle cx="331.5" cy="533.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
           </g>
-          <line x1="32" y1="521" x2="377" y2="521" stroke="#000" stroke-opacity="0.08"/>
+          <line x1="32" y1="583" x2="377" y2="583" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- custom frame rate -->
-          <text x="32" y="547" class="ttl">Custom frame rate</text>
-          <text x="32" y="562" class="sub">Adds an extra rate to capture's frame-rate options whenever</text>
-          <text x="32" y="575" class="sub">the camera supports it</text>
-          <text x="335" y="547" font-size="15" fill="#C6C6CB" text-anchor="end">Off</text>
-          <text x="361" y="547" font-size="15" class="sec" text-anchor="end">fps</text>
-          <line x1="32" y1="589" x2="377" y2="589" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="609" class="ttl">Custom frame rate</text>
+          <text x="32" y="624" class="sub">Adds an extra rate to capture's frame-rate options whenever</text>
+          <text x="32" y="637" class="sub">the camera supports it</text>
+          <text x="335" y="609" font-size="15" fill="#C6C6CB" text-anchor="end">Off</text>
+          <text x="361" y="609" font-size="15" class="sec" text-anchor="end">fps</text>
+          <line x1="32" y1="651" x2="377" y2="651" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- blend learning -->
-          <text x="32" y="615" class="ttl">Blend learning</text>
-          <text x="32" y="630" class="sub">What Psycho intervals have taught Safe mode on this device</text>
-          <path d="M363 619 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
-          <line x1="32" y1="651" x2="377" y2="651" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="677" class="ttl">Blend learning</text>
+          <text x="32" y="692" class="sub">What Psycho intervals have taught Safe mode on this device</text>
+          <path d="M363 681 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="713" x2="377" y2="713" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- auto blend strategy — field-test selector, a menu like the
                Creative defaults rows; per-device, stamped into capture_log -->
           <g id="auto-blend-strategy-row">
-            <text x="32" y="677" class="ttl">Auto blend strategy</text>
-            <text x="32" y="692" class="sub">Field test: how BLEND Auto picks its depth on DNG shoots.</text>
-            <text x="32" y="705" class="sub">Every run logs what all three would have chosen</text>
-            <text x="351" y="677" font-size="15" class="sec" text-anchor="end">Zone</text>
-            <path d="M359 667 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+            <text x="32" y="739" class="ttl">Auto blend strategy</text>
+            <text x="32" y="754" class="sub">Field test: how BLEND Auto picks its depth on DNG shoots.</text>
+            <text x="32" y="767" class="sub">Every run logs what all three would have chosen</text>
+            <text x="351" y="739" font-size="15" class="sec" text-anchor="end">Zone</text>
+            <path d="M359 729 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
           </g>
-          <line x1="32" y1="719" x2="377" y2="719" stroke="#000" stroke-opacity="0.08"/>
-
-          <!-- performance -->
-          <text x="32" y="745" class="ttl">Performance</text>
-          <text x="32" y="760" class="sub">CPU workers, GPU batches</text>
-          <path d="M363 749 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
           <line x1="32" y1="781" x2="377" y2="781" stroke="#000" stroke-opacity="0.08"/>
 
-          <!-- diagnostics -->
-          <text x="32" y="807" class="ttl">Diagnostics</text>
-          <text x="32" y="822" class="sub">Job folders, processing logs</text>
+          <!-- performance -->
+          <text x="32" y="807" class="ttl">Performance</text>
+          <text x="32" y="822" class="sub">CPU workers, GPU batches</text>
           <path d="M363 811 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
-          <!-- this divider exists only while the Incomplete Captures row below does -->
           <line x1="32" y1="843" x2="377" y2="843" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- diagnostics -->
+          <text x="32" y="869" class="ttl">Diagnostics</text>
+          <text x="32" y="884" class="sub">Job folders, processing logs</text>
+          <path d="M363 873 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <!-- this divider exists only while the Incomplete Captures row below does -->
+          <line x1="32" y1="905" x2="377" y2="905" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- incomplete captures — present only when orphaned logs exist -->
           <g id="incomplete-captures-row">
-            <text x="32" y="869" class="ttl">Incomplete Captures</text>
-            <text x="32" y="884" class="sub">Logs from shoots that ended in a crash or force-quit</text>
-            <text x="355" y="869" font-size="15" class="sec" text-anchor="end">2</text>
-            <path d="M363 873 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+            <text x="32" y="931" class="ttl">Incomplete Captures</text>
+            <text x="32" y="946" class="sub">Logs from shoots that ended in a crash or force-quit</text>
+            <text x="355" y="931" font-size="15" class="sec" text-anchor="end">2</text>
+            <path d="M363 935 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
           </g>
         </g>
         </g>
@@ -126,32 +134,28 @@
 
       <!-- floating tab bar (Settings selected) — floats over the scroll -->
       <g id="tab-bar">
-        <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
-        <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
         <g id="tab-create" fill="none" stroke="#8E8E93">
-          <g transform="translate(41.5 776) scale(0.7273) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
-          <text x="41.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
         </g>
         <g id="tab-gallery" fill="none" stroke="#8E8E93">
-          <g transform="translate(103.5 776) scale(0.7273) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
-          <text x="103.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
-        </g>
-        <g id="tab-scans" fill="none" stroke="#8E8E93">
-          <g transform="translate(165.5 776) scale(0.7273) translate(-11 -11)"><path d="M4 7 V4 h3 M15 4 h3 v3 M18 15 v3 h-3 M7 18 H4 v-3" stroke-width="2.34" stroke-linecap="round" data-symbol="doc.viewfinder"/><rect x="6.5" y="6.5" width="9" height="9" rx="1.6" stroke-width="2.34"/></g>
-          <text x="165.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Scans</text>
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
         </g>
         <g id="tab-projects" fill="none" stroke="#8E8E93">
-          <g transform="translate(227.5 776) scale(0.7273) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
-          <text x="227.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
         </g>
         <g id="tab-collections" fill="none" stroke="#8E8E93">
-          <g transform="translate(289.5 776) scale(0.7273) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
-          <text x="289.5" y="800" font-size="9.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
         </g>
-        <rect x="322.5" y="761" width="58" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <rect x="303.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
         <g id="tab-settings" fill="none" stroke="#C36A00">
-          <g transform="translate(351.5 776) scale(0.7273) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
-          <text x="351.5" y="800" font-size="9.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Settings</text>
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Settings</text>
         </g>
       </g>
 
@@ -162,5 +166,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings (scrolled to Advanced) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — storageCard · advancedCard (incl. Allow remote access, Auto blend strategy + the Incomplete Captures row)</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — storageCard · advancedCard (Layout, Allow remote access, Auto blend strategy, Incomplete Captures)</text>
 </svg>

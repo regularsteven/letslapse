@@ -180,14 +180,23 @@ struct LetsLapseApp: App {
     }
 }
 
-/// Six tabs — Create, Gallery, Scans, Projects, Collections, Settings — with
-/// the blended-clip flow (Adjust → Processing → Result) laid over them whenever
-/// a job is active. Collections is a placeholder while its UX is designed; it
+/// Five or six tabs — Create, Gallery, [Scans], Projects, Collections,
+/// Settings — with the blended-clip flow (Adjust → Processing → Result) laid
+/// over them whenever a job is active. Collections is a placeholder while its UX is designed; it
 /// took the parked Music spike's slot (MusicView stays in the codebase). Scans
 /// sits between the two library tabs and is the *only* place a scanner run is
 /// listed: Projects and Gallery exclude them.
+///
+/// Scans is conditional (`visibleTabs`): scanning is not a primary use case, so
+/// the tab appears once the library holds a scan and can be turned off outright
+/// in Settings ▸ Advanced ▸ Layout — which hands scanner runs to the Projects
+/// list instead. Hidden from the bar is not gone from the hierarchy: the tab
+/// stays selectable in code so a finished scan can still open its own screen.
 struct ContentView: View {
     @EnvironmentObject var model: AppModel
+    /// Settings ▸ Advanced ▸ Layout. Read here rather than off the model so the
+    /// bar rebuilds the moment the toggle moves.
+    @AppStorage(LayoutSettings.scansMenuKey) private var scansMenuEnabled = true
     @State private var selectedTab: LLTab = .create
     @State private var galleryPath: [UUID] = []
     @State private var scansPath: [UUID] = []
@@ -201,6 +210,12 @@ struct ContentView: View {
     /// Cold-launch only, for free: `ContentView` is not rebuilt when the app
     /// returns from the background, so a warm resume never re-arms the splash.
     @State private var showLaunch = LaunchAnimationView.shouldPlayOnLaunch
+    #if DEBUG
+    /// Raised by the `LL_SCANS*` screenshot hooks: they stage the Scans tab in
+    /// states — an empty library above all — where the bar would rightly leave
+    /// it out, and a screenshot of the tab needs the tab.
+    @State private var forcesScansTab = false
+    #endif
     #if os(macOS)
     #if DEBUG
     /// Used only by `applyUIPreviewHooks` to front the remote window for a
@@ -227,7 +242,10 @@ struct ContentView: View {
             if model.stage == .home {
                 VStack {
                     Spacer()
-                    FloatingTabBar(selection: $selectedTab, onReselect: handleReselect)
+                    FloatingTabBar(
+                        selection: $selectedTab,
+                        tabs: visibleTabs,
+                        onReselect: handleReselect)
                         .padding(.bottom, 6)
                 }
                 .transition(.opacity)
@@ -292,6 +310,13 @@ struct ContentView: View {
             // same update lands before its `navigationDestination` is registered — so it is
             // silently dropped. Push on the next turn, when the stack exists.
             DispatchQueue.main.async { settingsPath = [requested] }
+        }
+        // Turning the Scans tab off while standing on it: its contents have
+        // just moved into the Projects list, so follow them there rather than
+        // leave the screen showing with nothing in the bar pointing at it.
+        .onChange(of: scansMenuEnabled) { enabled in
+            guard !enabled, selectedTab == .scans else { return }
+            selectedTab = .projects
         }
         #if os(iOS)
         // Selecting the Create tab opens the camera straight away — the Create
@@ -464,7 +489,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -491,6 +516,22 @@ struct ContentView: View {
             openWindow(id: "remote")
         }
         #endif
+        // `LL_LAYOUT=noscans,counts` — Settings ▸ Advanced ▸ Layout, staged.
+        // Written into the defaults the toggles themselves read, so the whole
+        // app (tab bar, Projects filter bar) sees the same switch a tap makes.
+        if let hook = environment["LL_LAYOUT"] {
+            let parts = hook.split(separator: ",").map(String.init)
+            UserDefaults.standard.set(
+                !parts.contains("noscans"), forKey: LayoutSettings.scansMenuKey)
+            UserDefaults.standard.set(
+                parts.contains("counts"), forKey: LayoutSettings.projectCountsKey)
+        }
+        // Any Scanner hook wants the tab in the bar as well as on screen —
+        // `LL_SCANS_EMPTY` in particular stages a library with no scans in it,
+        // which is exactly the case the bar now hides the tab for.
+        if environment.keys.contains(where: { $0.hasPrefix("LL_SCANS") }) {
+            forcesScansTab = true
+        }
         switch environment["LL_TAB"] {
         case "projects": selectedTab = .projects
         case "gallery": selectedTab = .gallery
@@ -828,6 +869,7 @@ struct ContentView: View {
 
             FloatingTabBar(
                 selection: $selectedTab,
+                tabs: visibleTabs,
                 onReselect: handleReselect,
                 // While the guided flow fronts the Create tab, no tab is
                 // "where you are" — highlighting Create would claim its home
@@ -892,6 +934,24 @@ struct ContentView: View {
         }
     }
     #endif
+
+    /// Whether the Scans tab is in the bar right now: allowed by the Layout
+    /// setting AND earned by the library holding at least one scan — or simply
+    /// being the tab you are standing on. Deleting your last scan empties the
+    /// screen you are looking at; it should not also pull the screen out from
+    /// under you. The tab drops out of the bar when you next leave it.
+    private var showsScansTab: Bool {
+        #if DEBUG
+        if forcesScansTab { return true }
+        #endif
+        return scansMenuEnabled && (model.hasScanSessions || selectedTab == .scans)
+    }
+
+    /// What the tab bar draws. The hierarchy below it is unchanged either way —
+    /// only the bar's own list shrinks.
+    private var visibleTabs: [LLTab] {
+        LLTab.visible(scans: showsScansTab)
+    }
 
     /// Tab taps: switching tabs keeps each stack where it was, so the first
     /// tap back to a tab restores the screen you left; tapping the tab you're
