@@ -198,8 +198,7 @@ final class ProjectThumbnailCache: ObservableObject {
 /// `MediaWorkQueue`, never on the main actor or the cooperative pool.
 enum DiskThumbnailStore {
     private static var directory: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("LetsLapse/Thumbnails", isDirectory: true)
+        StorageRoot.current.appendingPathComponent("Thumbnails", isDirectory: true)
     }
 
     /// Cache identity of a source file: its path plus modification date, so

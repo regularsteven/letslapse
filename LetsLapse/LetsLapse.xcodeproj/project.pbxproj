@@ -424,8 +424,8 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots when Record audio is on in Settings, and when you record an audio field note on a project.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LetsLapse transcribes audio field notes on this device, so a spoken memo can also be saved as a written note. Nothing leaves your device.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LetsLapse transcribes audio field notes on this device, so a spoken memo can also be saved as a written note. Nothing leaves your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
@@ -476,8 +476,8 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "LetsLapse uses the local network so a Mac on the same Wi-Fi can act as a remote for this camera.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "LetsLapse uses your location to geotag photos and video captures.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "LetsLapse records sound with video shoots when Record audio is on in Settings, and when you record an audio field note on a project.";
-				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LetsLapse transcribes audio field notes on this device, so a spoken memo can also be saved as a written note. Nothing leaves your device.";
 				INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription = "LetsLapse saves blended videos and stacked images to your photo library.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "LetsLapse transcribes audio field notes on this device, so a spoken memo can also be saved as a written note. Nothing leaves your device.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";

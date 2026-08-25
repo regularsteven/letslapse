@@ -34,12 +34,9 @@ final class CustomPresetStore: ObservableObject {
     private let fileURL: URL
 
     init(fileURL: URL? = nil) {
-        // Sits next to the project library in the app's own Application Support
-        // folder, matching where AppModel keeps everything else.
-        self.fileURL = fileURL ?? FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("LetsLapse", isDirectory: true)
-            .appendingPathComponent("custom_presets.json")
+        // Sits next to the project library in the app's storage root, matching
+        // where AppModel keeps everything else.
+        self.fileURL = fileURL ?? StorageRoot.current.appendingPathComponent("custom_presets.json")
         load()
     }
 

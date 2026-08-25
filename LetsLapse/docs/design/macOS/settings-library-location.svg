@@ -1,0 +1,129 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Settings · library location · move confirm · 760×680</title>
+  <desc>Mirrors App/SettingsView.swift (libraryLocationRows + StorageLocationSheet) over App/StorageLocation.swift (StorageRoot, StorageMover) — macOS ONLY, the whole feature is #if os(macOS): iOS storage is the sandbox and has nowhere else to be. THE ROWS (drawn on the backdrop, mid-Storage-card between the byte figures and "Review large originals"): "Library location" shows the CURRENT resolved root ~-abbreviated with a state-carrying subtitle — on the default it invites nominating another drive; on a custom root it is just the path; when the nominated root was unreachable at launch it says so and how to get back. Its Change… button (bordered, like the card's other buttons; disabled while model.stage == .processing — never move the floor under a running render) opens a folder picker (.fileImporter, UTType.folder). A second accent row appears only off-default: "Move back to the default location" (same flow, destination = default), replaced by "Keep using the default location" when the launch fell back — that one just clears the setting (StorageRoot.forgetCustomPath), because the session already runs on the default. WHAT A PICK MEANS is decided before anything is offered (StorageRoot.check): alreadyCurrent / insideCurrent / notWritable (a REAL write probe — POSIX bits don't answer for a read-only mount) / collision (a same-named item that is not a library — refuse rather than merge; the alert also names interrupted-move leftovers) are plain alerts, never this sheet. A folder holding Projects/library.json offers ADOPT (variant, desc-only: title "Use this library?", primary "Switch to This Library", prose warns it may not match the current library and that the current one stays unchanged — commit + relaunch screen, no copying). An empty folder offers THE MOVE DRAWN HERE. The sheet is blocking (interactiveDismissDisabled) like the import sheet and for the same reason: the copy owns the disk. THE MOVE IS A COPY — the old library is NEVER deleted (a mover that deletes originals has to be perfect; one that doesn't only has to be honest), which the prose says outright. It carries the known top-level items only (Projects, Collections, Thumbnails, CaptureLogs, Logs, blend-profiles.json, custom_presets.json — StorageRoot.libraryItemNames), so nominating a drive's own root never drags unrelated folders along on a later move back; hidden files are skipped. Free space is checked against the walked byte total (+1 GB) before the first copy; cancel and failure remove exactly the top-level items the move created. The "about 148,2 GB" figure is Settings' own walked originals+clips total (cache lives in temp and stays behind). ON SUCCESS the mover commits the path (UserDefaults "storage.libraryRootPath"; choosing the default CLEARS the key) and the sheet flips to the relaunch screen (variant, desc-only: externaldrive.fill.badge.checkmark, title "Relaunch to finish", prose "anything new still lands at the previous location" + delete-the-old-copy-in-Finder guidance, primary "Relaunch LetsLapse" — which DISMISSES THE SHEET FIRST and terminates 0.4 s later, because NSApp.terminate sent while a sheet is presented is silently swallowed (found in the field 2026-08-25: the press spawned the relaunch helper and the app just stayed up; reproduced via AX press, fixed same day) — AppRelaunch spawns a shell that waits for this pid to exit before `open`ing the bundle so the new instance can't race the single-window scene, and exits hard after 1.5 s if terminate is still refused — secondary "Not Yet"). FAILURE (desc-only: red exclamationmark.triangle.fill, "Couldn't move the library", reason, Close) covers the free-space refusal and per-file copy errors. THE LOCATION APPLIES ON RELAUNCH by design: `StorageRoot.current` resolves ONCE per process because AppModel's loaded library and the two path-latching singletons (CustomPresetStore, BlendProfileStore) cannot survive a mid-session root swap. A nominated root unreachable at launch (drive unplugged) falls back to the default for the session, KEEPS the setting, and says so in a launch alert (LetsLapseApp, macOS block) plus the row subtitle. Screenshot hooks: LL_TAB=settings LL_STORAGE=move|adopt|moving|done|failed stage this sheet with demo values, nothing on disk touched. Progress variant drawn in settings-library-location.moving.svg. Verified against the running Mac app 2026-08-25 (all five staged states + the real card with the library's true 140,47 GB / 22,41 GB free figures); the copy engine itself proven by a standalone harness over the real StorageLocation.swift (move, adopt detection, collision, read-only refusal, unreachable-root fallback).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Settings</text>
+    </g>
+
+    <!-- Settings scrolled to the Storage card — the card the rows live in,
+         with the library's real proportions (originals dominate, then cache,
+         a sliver of blended clips). -->
+    <g id="behind">
+      <text x="36" y="86" font-size="12" letter-spacing="0.6" class="sb" fill="#6D6D72">STORAGE</text>
+      <rect x="36" y="96" width="728" height="268" rx="12" fill="#FFFFFF"/>
+
+      <text x="52" y="124" font-size="16" fill="#000">Free at the library location</text>
+      <text x="748" y="124" font-size="15" class="sb mono" text-anchor="end" fill="#6D6D72">22,41 GB</text>
+      <line x1="52" y1="138" x2="748" y2="138" stroke="#000" stroke-opacity="0.08"/>
+
+      <text x="52" y="162" font-size="16" fill="#000">LetsLapse library</text>
+      <text x="748" y="162" font-size="15" class="mono" text-anchor="end" fill="#6D6D72">140,47 GB</text>
+      <g id="storage-bar">
+        <rect x="52" y="172" width="696" height="8" rx="4" fill="#6D6D72" fill-opacity="0.25"/>
+        <rect x="52" y="172" width="565" height="8" rx="4" fill="#C36A00"/>
+        <rect x="617" y="172" width="13" height="8" fill="#FFB340"/>
+      </g>
+      <circle cx="56" cy="192" r="3.5" fill="#C36A00"/>
+      <text x="63" y="196" font-size="11" fill="#6D6D72">Originals 114,09 GB</text>
+      <circle cx="172" cy="192" r="3.5" fill="#FFB340"/>
+      <text x="179" y="196" font-size="11" fill="#6D6D72">Blended clips 2,56 GB</text>
+      <circle cx="298" cy="192" r="3.5" fill="#6D6D72" fill-opacity="0.35"/>
+      <text x="305" y="196" font-size="11" fill="#6D6D72">Cache 23,82 GB</text>
+      <line x1="52" y1="208" x2="748" y2="208" stroke="#000" stroke-opacity="0.08"/>
+
+      <!-- The new rows. Subtitle is the default-location wording; a custom
+           root shows just the path, an unreachable one the fallback notice. -->
+      <g id="row-library-location">
+        <text x="52" y="232" font-size="16" fill="#000">Library location</text>
+        <text x="52" y="248" font-size="11.5" fill="#6D6D72">~/Library/Application Support/LetsLapse — the default. Nominate a folder on another drive to keep the library there instead.</text>
+        <rect x="672" y="222" width="76" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+        <text x="710" y="238" font-size="13" text-anchor="middle" fill="#000">Change…</text>
+        <line x1="52" y1="260" x2="748" y2="260" stroke="#000" stroke-opacity="0.08"/>
+      </g>
+
+      <g id="row-large-originals">
+        <text x="52" y="284" font-size="16" fill="#000">Review large originals</text>
+        <text x="742" y="284" font-size="13" class="sb" text-anchor="end" fill="#B5B5BA" data-symbol="chevron.right">›</text>
+        <line x1="52" y1="298" x2="748" y2="298" stroke="#000" stroke-opacity="0.08"/>
+      </g>
+      <text x="52" y="326" font-size="16" fill="#C36A00">Clear cache (23,82 GB)</text>
+
+      <text x="36" y="392" font-size="12" letter-spacing="0.6" class="sb" fill="#6D6D72">ADVANCED</text>
+      <rect x="36" y="402" width="728" height="220" rx="12" fill="#FFFFFF"/>
+      <text x="52" y="430" font-size="16" fill="#000">Custom frame rate</text>
+      <text x="52" y="446" font-size="11.5" fill="#6D6D72">Adds an extra rate to capture's frame-rate options whenever the camera supports it</text>
+      <line x1="52" y1="458" x2="748" y2="458" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="482" font-size="16" fill="#000">Blend learning</text>
+      <text x="52" y="498" font-size="11.5" fill="#6D6D72">What Psycho intervals have taught Safe mode on this device</text>
+      <line x1="52" y1="510" x2="748" y2="510" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="534" font-size="16" fill="#000">Performance</text>
+      <text x="52" y="550" font-size="11.5" fill="#6D6D72">CPU workers, GPU batches</text>
+      <line x1="52" y1="562" x2="748" y2="562" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="586" font-size="16" fill="#000">Diagnostics</text>
+      <text x="52" y="602" font-size="11.5" fill="#6D6D72">Job folders, processing logs</text>
+
+      <g id="tabbar">
+        <rect x="226" y="638" width="348" height="46" rx="23" fill="#FFFFFF"/>
+        <text x="255" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Create</text>
+        <text x="313" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Gallery</text>
+        <text x="371" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Scans</text>
+        <text x="429" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Projects</text>
+        <text x="487" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Collections</text>
+        <rect x="516" y="646" width="52" height="30" rx="15" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="542" y="672" font-size="8.5" class="sb" text-anchor="middle" fill="#C36A00">Settings</text>
+      </g>
+    </g>
+
+    <!-- The sheet dims its parent window, as any macOS sheet does. -->
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7" fill-opacity="0.62"/>
+
+    <g id="sheet">
+      <rect x="210" y="170" width="380" height="380" rx="12" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+
+      <!-- externaldrive.fill, 30pt, LL.accent -->
+      <g id="icon" transform="translate(400 215)" data-symbol="externaldrive.fill">
+        <rect x="-17" y="-11" width="34" height="22" rx="5" fill="#C36A00"/>
+        <rect x="-17" y="3" width="34" height="8" rx="4" fill="#A65900"/>
+        <circle cx="10" cy="7" r="1.6" fill="#F2F2F7"/>
+      </g>
+
+      <text x="400" y="259" font-size="19" class="sb" text-anchor="middle" fill="#000">Move library?</text>
+      <text x="400" y="281" font-size="14" text-anchor="middle" fill="#6D6D72">/Volumes/letslapse</text>
+
+      <!-- The confirm prose: the size, what rides along, the relaunch, and the
+           nothing-is-deleted promise. -->
+      <g id="prose" font-size="13" text-anchor="middle" fill="#6D6D72">
+        <text x="400" y="311">Your library — about 148,2 GB of projects,</text>
+        <text x="400" y="327">thumbnails and capture logs — is copied to this</text>
+        <text x="400" y="343">folder, and LetsLapse relaunches to use it there.</text>
+        <text x="400" y="359">Nothing is deleted: the current copy stays at ~/</text>
+        <text x="400" y="375">Library/Application Support/LetsLapse until you</text>
+        <text x="400" y="391">remove it yourself in Finder.</text>
+      </g>
+
+      <!-- LLPrimaryButtonStyle (⏎) over LLSecondaryButtonStyle, inset 24. -->
+      <rect x="234" y="416" width="332" height="50" rx="12" fill="#C36A00"/>
+      <text x="400" y="447" font-size="16" class="b" text-anchor="middle" fill="#FFFFFF">Move Library</text>
+      <rect x="234" y="476" width="332" height="50" rx="12" fill="#FFFFFF"/>
+      <text x="400" y="507" font-size="16" class="b" text-anchor="middle" fill="#C36A00">Cancel</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="722" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Settings · library location · move confirm · 760×680 pt window</text>
+  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/SettingsView.swift (libraryLocationRows + StorageLocationSheet) + App/StorageLocation.swift — adopt / relaunch / failed states desc-only; progress in settings-library-location.moving.svg</text>
+</svg>

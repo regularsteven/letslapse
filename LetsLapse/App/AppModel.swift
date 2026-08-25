@@ -5510,8 +5510,7 @@ final class AppModel: ObservableObject {
     }
 
     private var applicationSupportURL: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("LetsLapse", isDirectory: true)
+        StorageRoot.current
     }
 
     private var legacyApplicationSupportURL: URL {
@@ -5521,12 +5520,15 @@ final class AppModel: ObservableObject {
     }
 
     private func migrateLegacyApplicationSupportFolderIfNeeded() throws {
+        // Against the DEFAULT location on purpose: the legacy folder predates
+        // custom locations entirely, and moving it onto a nominated external
+        // root would be a cross-volume copy dressed up as a rename.
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: legacyApplicationSupportURL.path),
-              !fileManager.fileExists(atPath: applicationSupportURL.path)
+              !fileManager.fileExists(atPath: StorageRoot.defaultRootURL.path)
         else { return }
 
-        try fileManager.moveItem(at: legacyApplicationSupportURL, to: applicationSupportURL)
+        try fileManager.moveItem(at: legacyApplicationSupportURL, to: StorageRoot.defaultRootURL)
     }
 
     private var projectsRootURL: URL {

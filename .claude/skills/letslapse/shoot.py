@@ -27,6 +27,7 @@ the run before the shutter, and each phase is separately reportable.
 from __future__ import annotations
 
 import argparse
+import concurrent.futures
 import json
 import os
 import re
@@ -34,6 +35,7 @@ import signal
 import shutil
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import uuid
@@ -1329,12 +1331,18 @@ def pull_device_library(identifier, alias):
     # yesterday's data — which is exactly how a disconnected phone looked
     # like a phone with no new shoots on it.
     target.unlink(missing_ok=True)
-    result = subprocess.run(
-        ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
-         "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
-         "--user", "mobile", "--source", f"{DEVICE_LIBRARY}/Projects/library.json",
-         "--destination", str(target)],
-        capture_output=True, text=True, timeout=300)
+    try:
+        result = subprocess.run(
+            ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+             "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+             "--user", "mobile", "--source", f"{DEVICE_LIBRARY}/Projects/library.json",
+             "--destination", str(target)],
+            capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        die(f"pulling {alias}'s project index timed out after 5 minutes",
+            "a Wi-Fi-paired device is slow, and another large transfer on the "
+            "same link starves it entirely — let that finish (or plug the "
+            "device in over USB) and re-run")
     if not target.exists():
         detail = (result.stdout + result.stderr).strip()
         hint = "is the device connected and unlocked?"
@@ -1398,6 +1406,55 @@ def describe(stamp, capture):
             f"{len(capture.get('sourceFileNames') or []):>5} files")
 
 
+def device_project_listing(identifier, device_id):
+    """Every file in one project, from the device's own file service:
+    {relativePath: size}. The authoritative manifest a copy is checked
+    against — the index's sourceFileNames does not list sidecars or blends."""
+    out = Path(tempfile.mkstemp(suffix=".json")[1])
+    try:
+        proc = subprocess.run(
+            ["xcrun", "devicectl", "device", "info", "files", "--device", identifier,
+             "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+             "--username", "mobile",
+             "--subdirectory", f"{DEVICE_LIBRARY}/Projects/{device_id}",
+             "--json-output", str(out)],
+            capture_output=True, text=True, timeout=300)
+        if proc.returncode != 0:
+            return None
+        data = json.loads(out.read_text())
+        return {f["relativePath"]: f["metadata"]["size"]
+                for f in data["result"]["files"]
+                if not f.get("resources", {}).get("isDirectory")}
+    except Exception:
+        return None
+    finally:
+        out.unlink(missing_ok=True)
+
+
+def fetch_project_files(identifier, device_id, destination, relative_paths):
+    """Per-file pulls — slower than the folder copy but each one verifiable."""
+    def pull(rel):
+        target = destination / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        for _ in range(2):
+            proc = subprocess.run(
+                ["xcrun", "devicectl", "device", "copy", "from", "--device", identifier,
+                 "--domain-type", "appDataContainer", "--domain-identifier", BUNDLE_ID,
+                 "--user", "mobile",
+                 "--source", f"{DEVICE_LIBRARY}/Projects/{device_id}/{rel}",
+                 # Must be a FILE path: a directory destination is a silent no-op.
+                 "--destination", str(target)],
+                capture_output=True, text=True, timeout=600)
+            if proc.returncode == 0 and target.exists():
+                return
+    done = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
+        for _ in pool.map(pull, relative_paths):
+            done += 1
+            if done % 100 == 0 or done == len(relative_paths):
+                print(f"      {done}/{len(relative_paths)}")
+
+
 def import_capture(identifier, alias, capture, logs_only):
     """Copy one project's folder over and register it in this Mac's library."""
     device_id = capture["id"]
@@ -1432,6 +1489,33 @@ def import_capture(identifier, alias, capture, logs_only):
         for item in root.iterdir():
             shutil.move(str(item), str(destination / item.name))
         shutil.rmtree(staging, ignore_errors=True)
+
+        # devicectl's whole-folder copy can drop MOST of a large directory and
+        # still exit 0 — measured 2026-08-25: 46 of 2757 files from a 2h JPEG
+        # shoot, no error output. Never trust it: check every file the device
+        # itself lists, pull stragglers one by one, and refuse to register a
+        # shoot that is still short.
+        manifest = device_project_listing(identifier, device_id)
+        if manifest is None:
+            # No listing to verify against — fall back to the index's claim.
+            manifest = {n: None for n in (capture.get("sourceFileNames") or [])}
+
+        def short(rel, size):
+            local = destination / rel
+            return (not local.exists()
+                    or (size is not None and local.stat().st_size != size))
+
+        missing = [rel for rel, size in manifest.items() if short(rel, size)]
+        if missing:
+            print(f"    folder copy delivered {len(manifest) - len(missing)} of "
+                  f"{len(manifest)} files — fetching the rest individually")
+            fetch_project_files(identifier, device_id, destination, missing)
+        still = [rel for rel, size in manifest.items() if short(rel, size)]
+        if still:
+            print(f"    ✗ {len(still)} of {len(manifest)} files never arrived — "
+                  "NOT registering this shoot", file=sys.stderr)
+            shutil.rmtree(destination, ignore_errors=True)
+            return None, None
 
     entry = dict(capture)
     entry["id"] = local_id
@@ -1486,21 +1570,29 @@ def cmd_import(args):
     print(f"\nimporting {len(fresh)} shoot(s)"
           + (" (logs only)" if args.logs_only else " — frames included, this is the slow part"))
     imported = []
+    failed = 0
     for stamp, capture in fresh:
         print(f"  {describe(stamp, capture)}")
         entry, destination = import_capture(identifier, row["alias"], capture, args.logs_only)
+        if entry is None:
+            failed += 1
+            continue
         size = sum(f.stat().st_size for f in destination.rglob("*") if f.is_file())
         print(f"    → {destination.name}  ({size / 1e9:.2f} GB)")
         imported.append(entry)
 
-    # Write the index LAST: a half-written library.json is the one failure
-    # that would cost projects that are already on disk here.
-    existing.setdefault("captures", []).extend(imported)
-    backup = LIBRARY / "Projects" / "library.json.bak"
-    shutil.copy2(LIBRARY / "Projects" / "library.json", backup)
-    (LIBRARY / "Projects" / "library.json").write_text(json.dumps(existing, indent=2))
-    print(f"\nregistered {len(imported)} shoot(s) — previous index saved as {backup.name}")
-    print("open LetsLapse on this Mac to see them")
+    if imported:
+        # Write the index LAST: a half-written library.json is the one failure
+        # that would cost projects that are already on disk here.
+        existing.setdefault("captures", []).extend(imported)
+        backup = LIBRARY / "Projects" / "library.json.bak"
+        shutil.copy2(LIBRARY / "Projects" / "library.json", backup)
+        (LIBRARY / "Projects" / "library.json").write_text(json.dumps(existing, indent=2))
+        print(f"\nregistered {len(imported)} shoot(s) — previous index saved as {backup.name}")
+        print("open LetsLapse on this Mac to see them")
+    if failed:
+        die(f"{failed} shoot(s) did not survive the copy and were not registered",
+            "re-run the same import — shoots that made it over are skipped automatically")
 
 
 # ---------------------------------------------------------------- args

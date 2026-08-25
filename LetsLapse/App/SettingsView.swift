@@ -5,6 +5,7 @@ import LetsLapseKit
 import UIKit
 #else
 import AppKit
+import UniformTypeIdentifiers
 #endif
 
 /// Screens Settings can push. Value-based so ContentView can own the
@@ -49,6 +50,12 @@ struct SettingsView: View {
     #endif
     #if os(macOS)
     @State private var cameraAuthorizationStatus = CameraPrivacySettings.authorizationStatus
+    @State private var showLocationPicker = false
+    @State private var locationChange: StorageLocationChangeRequest?
+    @State private var locationError: String?
+    /// Bumped after writes to `StorageRoot`'s stored setting, which SwiftUI
+    /// can't observe on its own, so the location rows re-read it.
+    @State private var locationRefresh = 0
     #endif
 
     var body: some View {
@@ -122,7 +129,37 @@ struct SettingsView: View {
         .sheet(isPresented: $showIncompleteCaptures) {
             IncompleteCapturesView()
         }
+        #if os(macOS)
+        .fileImporter(
+            isPresented: $showLocationPicker,
+            allowedContentTypes: [.folder],
+            allowsMultipleSelection: false
+        ) { result in
+            if case .success(let urls) = result, let url = urls.first {
+                handlePickedLocation(url)
+            }
+        }
+        .sheet(item: $locationChange) { request in
+            StorageLocationSheet(request: request)
+        }
+        .alert(
+            "Can't use that folder",
+            isPresented: Binding(get: { locationError != nil }, set: { if !$0 { locationError = nil } })
+        ) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(locationError ?? "")
+        }
+        #endif
         .task {
+            #if os(macOS) && DEBUG
+            // LL_STORAGE=move|adopt|moving|done|failed — stage the library-
+            // location sheet in one state for screenshots. Nothing on disk is
+            // touched; pair with LL_TAB=settings.
+            if let hook = ProcessInfo.processInfo.environment["LL_STORAGE"] {
+                stageStoragePreview(hook)
+            }
+            #endif
             // Re-scan on every visit: a session that crashed since launch
             // leaves its log behind the moment the app comes back.
             CaptureSessionLogger.shared.scanForOrphanedLogs()
@@ -494,8 +531,15 @@ struct SettingsView: View {
                 // the same number the capture screen's headroom chip is
                 // costing frames against (see `CaptureHeadroom`).
                 HStack {
+                    // On the Mac the library can live on any volume, so name
+                    // the thing actually being measured.
+                    #if os(macOS)
+                    Text("Free at the library location")
+                        .font(.system(size: 16))
+                    #else
                     Text("Free on this device")
                         .font(.system(size: 16))
+                    #endif
                     Spacer()
                     Text(freeBytes.map { LLFormat.bytes($0) } ?? "…")
                         .font(.system(size: 15, weight: .semibold))
@@ -526,6 +570,10 @@ struct SettingsView: View {
             .padding(.vertical, 13)
 
             Divider().padding(.leading, 16)
+
+            #if os(macOS)
+            libraryLocationRows
+            #endif
 
             NavigationLink(value: SettingsDestination.largeOriginals) {
                 LLRow(title: "Review large originals") {
@@ -588,6 +636,128 @@ struct SettingsView: View {
             isClearingCache = false
         }
     }
+
+    // MARK: - Library location (macOS)
+
+    #if os(macOS)
+    /// Where the library lives, and the door to moving it. A location change
+    /// applies on relaunch (see `StorageRoot`), so every path out of these
+    /// rows ends in an explicit Relaunch rather than a silent switch.
+    @ViewBuilder
+    private var libraryLocationRows: some View {
+        let _ = locationRefresh
+        LLRow(title: "Library location", subtitle: libraryLocationSubtitle) {
+            Button("Change…") { showLocationPicker = true }
+                .buttonStyle(.bordered)
+                .tint(.green)
+                // Never move the floor out from under a running render.
+                .disabled(model.stage == .processing)
+        }
+        if StorageRoot.customRootUnavailable {
+            Button {
+                StorageRoot.forgetCustomPath()
+                locationRefresh += 1
+            } label: {
+                LLRow(
+                    title: "Keep using the default location",
+                    subtitle: "Forgets the unreachable location. The library there isn't touched — nominate it again any time.",
+                    titleColor: LL.accent
+                ) { EmptyView() }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        } else if StorageRoot.customPath != nil {
+            Button {
+                handlePickedLocation(StorageRoot.defaultRootURL)
+            } label: {
+                LLRow(title: "Move back to the default location", titleColor: LL.accent) {
+                    EmptyView()
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .disabled(model.stage == .processing)
+        }
+    }
+
+    private var libraryLocationSubtitle: String {
+        if StorageRoot.customRootUnavailable, let custom = StorageRoot.customPath {
+            return "\(custom) isn't reachable — using \(abbreviated(StorageRoot.current.path)) for this "
+                + "session. Reconnect the drive and relaunch to get back to it."
+        }
+        if StorageRoot.customPath == nil {
+            return "\(abbreviated(StorageRoot.current.path)) — the default. Nominate a folder on "
+                + "another drive to keep the library there instead."
+        }
+        return abbreviated(StorageRoot.current.path)
+    }
+
+    private func abbreviated(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+    }
+
+    /// One gate for both doors — the folder panel and "move back to default".
+    /// `check` decides whether the pick means adopting a library already
+    /// there, moving ours in, or a refusal with a reason.
+    private func handlePickedLocation(_ url: URL) {
+        // fileImporter hands back security-scoped URLs. The Mac build is not
+        // sandboxed so this is a no-op today, but balancing it costs nothing
+        // and keeps the flow correct if the sandbox ever lands.
+        let didAccess = url.startAccessingSecurityScopedResource()
+        defer {
+            if didAccess { url.stopAccessingSecurityScopedResource() }
+        }
+        // The move is the whole library, not just projects — thumbnails and
+        // logs ride along — but cache lives in temp and stays behind, so the
+        // walked originals+clips total is the honest "about" figure.
+        let sizeHint = storage.map { $0.originalsBytes + $0.versionsBytes }
+        switch StorageRoot.check(destination: url) {
+        case .alreadyCurrent:
+            locationError = "That's already where the library is."
+        case .insideCurrent:
+            locationError = "That folder is inside the current library. Choose one outside it."
+        case .notWritable:
+            locationError = "LetsLapse can't write there. Check the drive isn't read-only and try again."
+        case .collision(let name):
+            locationError = "That folder already contains “\(name)” without being a LetsLapse "
+                + "library, so moving there would mix the two. Choose an empty folder — or, if a "
+                + "previous move was interrupted, delete its leftovers there first."
+        case .adopt:
+            locationChange = StorageLocationChangeRequest(
+                mode: .adopt, destination: url, librarySizeHint: sizeHint)
+        case .move:
+            locationChange = StorageLocationChangeRequest(
+                mode: .move, destination: url, librarySizeHint: sizeHint)
+        }
+    }
+
+    #if DEBUG
+    /// LL_STORAGE — stage the location sheet for screenshots, no disk touched.
+    private func stageStoragePreview(_ hook: String) {
+        var staged: StorageMover.Phase?
+        switch hook {
+        case "moving":
+            staged = .copying(
+                copiedBytes: 96_500_000_000, totalBytes: 148_200_000_000,
+                itemName: "IMG_0412.dng")
+        case "done":
+            staged = .done
+        case "failed":
+            staged = .failed(
+                "Not enough space there. The library is 148.2 GB and only 96.5 GB is free at "
+                    + "that location.")
+        default:
+            break
+        }
+        locationChange = StorageLocationChangeRequest(
+            mode: hook == "adopt" ? .adopt : .move,
+            destination: URL(fileURLWithPath: "/Volumes/letslapse"),
+            librarySizeHint: 148_200_000_000,
+            stagedPhase: staged)
+    }
+    #endif
+    #endif
 
     // MARK: - Advanced
 
@@ -1289,3 +1459,281 @@ private struct DiagnosticsView: View {
         #endif
     }
 }
+
+// MARK: - Library location (macOS)
+
+#if os(macOS)
+
+/// What Settings decided a picked folder means, handed to the sheet. Built
+/// only after `StorageRoot.check` cleared the pick, so the sheet never has to
+/// re-litigate whether the destination is usable.
+struct StorageLocationChangeRequest: Identifiable {
+    enum Mode {
+        /// Copy the library into the folder, then relaunch.
+        case move
+        /// The folder already holds a library — switch to it, no copying.
+        case adopt
+    }
+
+    let id = UUID()
+    let mode: Mode
+    let destination: URL
+    /// Settings' walked total when it had one — the confirm screen's "about"
+    /// figure. The mover measures exactly before copying regardless.
+    let librarySizeHint: Int64?
+    /// LL_STORAGE screenshot hook only: open with the mover pre-staged.
+    var stagedPhase: StorageMover.Phase?
+}
+
+/// Blocking, like the import sheet and for the same reason: the copy owns the
+/// disk for minutes. Every exit is explicit — Cancel cleans up after itself,
+/// and both finished states end on Relaunch because the new location only
+/// takes effect on the next launch (see `StorageRoot`).
+struct StorageLocationSheet: View {
+    let request: StorageLocationChangeRequest
+
+    @Environment(\.dismiss) private var dismiss
+    @StateObject private var mover = StorageMover()
+    /// Adopt commits without copying — flips straight to the relaunch screen.
+    @State private var committed = false
+
+    private var showsRelaunch: Bool { committed || mover.phase == .done }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            Image(systemName: icon)
+                .font(.system(size: 30))
+                .foregroundStyle(isFailure ? Color.red : LL.accent)
+                .padding(.top, 30)
+
+            Text(title)
+                .font(.system(size: 19, weight: .semibold))
+                .padding(.top, 14)
+
+            Text(shownPath(request.destination.path))
+                .font(.system(size: 14))
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+                .truncationMode(.middle)
+                .multilineTextAlignment(.center)
+                .padding(.top, 3)
+                .padding(.horizontal, 24)
+
+            middle
+
+            Spacer(minLength: 20)
+
+            buttons
+        }
+        .padding(.horizontal, 24)
+        .padding(.bottom, 24)
+        .frame(width: 380)
+        .frame(minHeight: 320)
+        .background(LL.screenBackground)
+        .interactiveDismissDisabled()
+        .onAppear {
+            #if DEBUG
+            if let staged = request.stagedPhase {
+                mover.stagePreview(staged)
+            }
+            #endif
+        }
+    }
+
+    // MARK: - States
+
+    @ViewBuilder
+    private var middle: some View {
+        if showsRelaunch {
+            prose(relaunchProse)
+        } else {
+            switch mover.phase {
+            case .idle:
+                prose(confirmProse)
+            case .preparing:
+                ProgressView()
+                    .progressViewStyle(.linear)
+                    .tint(LL.accent)
+                    .padding(.top, 22)
+                    .padding(.horizontal, 24)
+                caption("Sizing up the library…")
+            case .copying(let copied, let total, let item):
+                bar(copied: copied, total: total)
+                    .padding(.top, 22)
+                    .padding(.horizontal, 24)
+                caption("\(LLFormat.bytes(copied)) of \(LLFormat.bytes(total))")
+                if !item.isEmpty {
+                    Text(item)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                        .padding(.top, 3)
+                        .padding(.horizontal, 24)
+                }
+            case .failed(let reason):
+                prose(reason)
+            case .done:
+                // `showsRelaunch` owns this state.
+                EmptyView()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var buttons: some View {
+        if showsRelaunch {
+            VStack(spacing: 10) {
+                Button("Relaunch LetsLapse") {
+                    // Dismiss BEFORE terminating: NSApp.terminate sent while
+                    // the sheet is still presented is silently swallowed
+                    // (reproduced 2026-08-25 — the action fired and spawned
+                    // the relaunch helper, and the app just stayed up).
+                    // Closing the sheet and terminating on the next turn lets
+                    // terminate land; relaunchNow carries a hard-exit
+                    // fallback for anything else that swallows it.
+                    dismiss()
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        AppRelaunch.relaunchNow()
+                    }
+                }
+                .buttonStyle(LLPrimaryButtonStyle())
+                .keyboardShortcut(.defaultAction)
+                Button("Not Yet") { dismiss() }
+                    .buttonStyle(LLSecondaryButtonStyle())
+            }
+        } else {
+            switch mover.phase {
+            case .idle:
+                VStack(spacing: 10) {
+                    Button(request.mode == .move ? "Move Library" : "Switch to This Library") {
+                        switch request.mode {
+                        case .move:
+                            mover.begin(destination: request.destination)
+                        case .adopt:
+                            StorageRoot.commit(destination: request.destination)
+                            LLog("storage: adopted library at \(request.destination.path); active from next launch")
+                            committed = true
+                        }
+                    }
+                    .buttonStyle(LLPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+
+                    Button("Cancel") { dismiss() }
+                        .buttonStyle(LLSecondaryButtonStyle())
+                        .keyboardShortcut(.cancelAction)
+                }
+            case .preparing, .copying:
+                Button("Cancel") {
+                    mover.cancel()
+                    dismiss()
+                }
+                .buttonStyle(LLSecondaryButtonStyle())
+                .keyboardShortcut(.cancelAction)
+            case .failed:
+                Button("Close") { dismiss() }
+                    .buttonStyle(LLPrimaryButtonStyle())
+                    .keyboardShortcut(.defaultAction)
+            case .done:
+                EmptyView()
+            }
+        }
+    }
+
+    // MARK: - Copy
+
+    private var isFailure: Bool {
+        if case .failed = mover.phase { return true }
+        return false
+    }
+
+    private var icon: String {
+        if isFailure { return "exclamationmark.triangle.fill" }
+        if showsRelaunch { return "externaldrive.fill.badge.checkmark" }
+        return "externaldrive.fill"
+    }
+
+    private var title: String {
+        if showsRelaunch { return "Relaunch to finish" }
+        switch mover.phase {
+        case .idle:
+            return request.mode == .move ? "Move library?" : "Use this library?"
+        case .preparing, .copying:
+            return "Moving library"
+        case .failed:
+            return "Couldn't move the library"
+        case .done:
+            return "Relaunch to finish"
+        }
+    }
+
+    private var confirmProse: String {
+        let from = shownPath(StorageRoot.current.path)
+        switch request.mode {
+        case .move:
+            let size = request.librarySizeHint.map { "about \(LLFormat.bytes($0)) of " } ?? ""
+            return "Your library — \(size)projects, thumbnails and capture logs — is copied to "
+                + "this folder, and LetsLapse relaunches to use it there. Nothing is deleted: the "
+                + "current copy stays at \(from) until you remove it yourself in Finder."
+        case .adopt:
+            return "This folder already holds a LetsLapse library, and LetsLapse switches to it "
+                + "on relaunch. It may not match the library you're using now. The current one "
+                + "stays at \(from), unchanged — to move it instead, clear the old library out of "
+                + "this folder first."
+        }
+    }
+
+    private var relaunchProse: String {
+        switch request.mode {
+        case .move:
+            return "The library has been copied. Until the relaunch, anything new still lands at "
+                + "the previous location — relaunch now, and delete the old copy in Finder once "
+                + "you've checked the new one."
+        case .adopt:
+            return "LetsLapse opens this library on its next launch. Until then it keeps using "
+                + "the previous location."
+        }
+    }
+
+    private func shownPath(_ path: String) -> String {
+        let home = NSHomeDirectory()
+        return path.hasPrefix(home) ? "~" + path.dropFirst(home.count) : path
+    }
+
+    private func prose(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 13))
+            .foregroundStyle(.secondary)
+            .multilineTextAlignment(.center)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.top, 16)
+            .padding(.horizontal, 12)
+    }
+
+    private func caption(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12.5).monospacedDigit())
+            .foregroundStyle(.secondary)
+            .padding(.top, 8)
+    }
+
+    /// Drawn rather than `ProgressView(value:)` for the same reason the import
+    /// sheet draws its own: the system linear bar fills in control grey on
+    /// macOS whatever the tint says.
+    private func bar(copied: Int64, total: Int64) -> some View {
+        let fraction = total > 0 ? Double(copied) / Double(total) : 0
+        return GeometryReader { geometry in
+            ZStack(alignment: .leading) {
+                Capsule()
+                    .fill(Color.primary.opacity(0.12))
+                Capsule()
+                    .fill(LL.accent)
+                    .frame(width: max(0, geometry.size.width * fraction))
+            }
+        }
+        .frame(height: 6)
+        .animation(.easeOut(duration: 0.25), value: fraction)
+    }
+}
+
+#endif

@@ -153,10 +153,6 @@ final class BlendProfileStore {
     }
 
     static func defaultFileURL() -> URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("LetsLapse", isDirectory: true)
-            .appendingPathComponent("blend-profiles.json")
+        StorageRoot.current.appendingPathComponent("blend-profiles.json")
     }
 }

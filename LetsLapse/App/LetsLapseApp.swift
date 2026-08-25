@@ -209,6 +209,9 @@ struct ContentView: View {
     @Environment(\.openWindow) private var openWindow
     #endif
     @State private var lastStage: AppModel.Stage = .home
+    /// Raised once at launch when a nominated library location couldn't be
+    /// reached and the session fell back to the default (see `StorageRoot`).
+    @State private var showStorageFallbackAlert = false
     #endif
 
     var body: some View {
@@ -338,6 +341,20 @@ struct ContentView: View {
                 selectedTab = .create
             }
             lastStage = newStage
+        }
+        // Say so up front when the session isn't on the nominated library:
+        // otherwise a detached drive just looks like every project vanished.
+        .onAppear {
+            showStorageFallbackAlert = StorageRoot.customRootUnavailable
+        }
+        .alert("Library location unavailable", isPresented: $showStorageFallbackAlert) {
+            Button("OK") {}
+        } message: {
+            Text(
+                "LetsLapse keeps its library at \(StorageRoot.customPath ?? "its nominated location"), "
+                    + "which can't be reached right now — the drive may not be connected. Using the "
+                    + "default location for this session; reconnect the drive and relaunch to get back "
+                    + "to your library. Settings ▸ Storage has the details.")
         }
         #endif
         .tint(LL.accent)

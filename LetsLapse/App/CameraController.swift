@@ -7697,10 +7697,7 @@ final class CameraController: NSObject, ObservableObject {
         let formatter = DateFormatter()
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd-HHmmss"
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        let logsDirectory = base
-            .appendingPathComponent("LetsLapse", isDirectory: true)
+        let logsDirectory = StorageRoot.current
             .appendingPathComponent("Logs", isDirectory: true)
         try? FileManager.default.createDirectory(at: logsDirectory, withIntermediateDirectories: true)
         return logsDirectory.appendingPathComponent("liveblend-\(formatter.string(from: Date())).json")

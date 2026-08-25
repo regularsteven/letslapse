@@ -122,11 +122,7 @@ final class CaptureSessionLogger: ObservableObject {
     /// experiment logs, and deliberately NOT in `tmp` — the whole point is to
     /// still be there after the crash that ended the session.
     static var directory: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
-            ?? FileManager.default.temporaryDirectory
-        return base
-            .appendingPathComponent("LetsLapse", isDirectory: true)
-            .appendingPathComponent("CaptureLogs", isDirectory: true)
+        StorageRoot.current.appendingPathComponent("CaptureLogs", isDirectory: true)
     }
 
     // MARK: - Writing

@@ -548,10 +548,11 @@ Debug and technical detail is deliberately quarantined in Settings, away from th
 
 ### 4.13 Persistence
 
-Everything lives in Application Support, JSON-manifested, human-inspectable:
+Everything lives under one storage root, JSON-manifested, human-inspectable. The root is `Application Support/LetsLapse` by default; **on macOS it is relocatable** — Settings ▸ Storage ▸ Library location nominates any folder (an external drive, typically), resolved once per launch by `StorageRoot` in `App/StorageLocation.swift`, with a copy-based move flow and a session fallback to the default when the nominated volume isn't mounted. Every path below is relative to that root; a new *top-level* item added here must also join `StorageRoot.libraryItemNames` or the move flow will leave it behind. (iOS always uses the sandbox default.)
 
 ```
-Application Support/LetsLapse/
+<storage root>/                      # Application Support/LetsLapse by default
+├── CaptureLogs/                     # crash-surviving per-shoot session logs (Settings ▸ Incomplete Captures)
 ├── Projects/
 │   ├── library.json                 # LibraryManifest: [CaptureProject] + [BlendProject] + [LapseCollection]
 │   └── <captureUUID>/

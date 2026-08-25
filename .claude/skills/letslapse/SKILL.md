@@ -168,6 +168,19 @@ convention the app's archive import uses.
 The previous index is copied to `library.json.bak` before every write, and the
 index is written last — after the frames have landed.
 
+**Every import is verified against the device's own file listing** (via
+`devicectl device info files`), not the index's claim: files the folder copy
+dropped are re-fetched one by one, and a shoot that stays short is NOT
+registered — the command says so and exits non-zero. This exists because
+devicectl's whole-folder copy over a **Wi-Fi pairing** dies mid-transfer
+(socket closed, POSIX 60) nondeterministically — measured 46 and then 1,883
+of 2,757 files on the same 2.7 GB project — and used to exit 0 anyway.
+Devices resolve over Wi-Fi whenever no cable is plugged in (`devicectl list
+devices` says `available (paired)`; USB says `connected`), so a cabled device
+is 10× faster **and** its bulk copy actually finishes. One big transfer also
+starves every other devicectl call on the same Wi-Fi — sequence imports, never
+parallelise them.
+
 ---
 
 ## Fleet shoots — several cameras, one sky

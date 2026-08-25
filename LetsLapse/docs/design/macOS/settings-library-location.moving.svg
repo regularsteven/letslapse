@@ -1,0 +1,92 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Settings · library location · moving · 760×680</title>
+  <desc>Mirrors App/SettingsView.swift (StorageLocationSheet, the .copying phase) over App/StorageLocation.swift (StorageMover). The progress state of the library move drawn in settings-library-location.svg — that file's desc carries the whole flow; this one is the shape of the wait. The bar is HAND-DRAWN like the import sheet's and for the same reason: the system linear ProgressView(value:) fills in control grey on macOS whatever the tint says. Progress is BYTES, not files — the mover plans the whole copy first (every file with its size), so the caption's denominator is the real total and the free-space check ran against it before the first byte moved. The third line names the file currently copying (11pt tertiary, middle-truncated): DNG libraries stream thousands of small files through it, but a single multi-gigabyte ProRes original holds the bar still for as long as it takes — the filename is what says the sheet is not hung. Progress updates are throttled to ~5/s on the main actor. Cancel stops between files, removes exactly the top-level items this move created at the destination, and dismisses — the setting is untouched and the session continues on the current root. The preparing moment before the plan exists shows an indeterminate system linear bar (accent) captioned "Sizing up the library…", desc-only. Staged for screenshots with LL_TAB=settings LL_STORAGE=moving (96,5 of 148,2 GB, IMG_0412.dng — the values drawn here); verified against the running Mac app 2026-08-25.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Settings</text>
+    </g>
+
+    <!-- Same Storage-card backdrop as the confirm file, abbreviated: the
+         sheet's dimming makes anything behind it set dressing. -->
+    <g id="behind">
+      <text x="36" y="86" font-size="12" letter-spacing="0.6" class="sb" fill="#6D6D72">STORAGE</text>
+      <rect x="36" y="96" width="728" height="268" rx="12" fill="#FFFFFF"/>
+      <text x="52" y="124" font-size="16" fill="#000">Free at the library location</text>
+      <text x="748" y="124" font-size="15" class="sb mono" text-anchor="end" fill="#6D6D72">22,41 GB</text>
+      <line x1="52" y1="138" x2="748" y2="138" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="162" font-size="16" fill="#000">LetsLapse library</text>
+      <text x="748" y="162" font-size="15" class="mono" text-anchor="end" fill="#6D6D72">140,47 GB</text>
+      <rect x="52" y="172" width="696" height="8" rx="4" fill="#6D6D72" fill-opacity="0.25"/>
+      <rect x="52" y="172" width="565" height="8" rx="4" fill="#C36A00"/>
+      <rect x="617" y="172" width="13" height="8" fill="#FFB340"/>
+      <line x1="52" y1="208" x2="748" y2="208" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="232" font-size="16" fill="#000">Library location</text>
+      <text x="52" y="248" font-size="11.5" fill="#6D6D72">~/Library/Application Support/LetsLapse — the default. Nominate a folder on another drive to keep the library there instead.</text>
+      <rect x="672" y="222" width="76" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+      <text x="710" y="238" font-size="13" text-anchor="middle" fill="#000">Change…</text>
+      <line x1="52" y1="260" x2="748" y2="260" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="284" font-size="16" fill="#000">Review large originals</text>
+      <text x="742" y="284" font-size="13" class="sb" text-anchor="end" fill="#B5B5BA" data-symbol="chevron.right">›</text>
+      <line x1="52" y1="298" x2="748" y2="298" stroke="#000" stroke-opacity="0.08"/>
+      <text x="52" y="326" font-size="16" fill="#C36A00">Clear cache (23,82 GB)</text>
+
+      <g id="tabbar">
+        <rect x="226" y="638" width="348" height="46" rx="23" fill="#FFFFFF"/>
+        <text x="255" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Create</text>
+        <text x="313" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Gallery</text>
+        <text x="371" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Scans</text>
+        <text x="429" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Projects</text>
+        <text x="487" y="672" font-size="8.5" text-anchor="middle" fill="#6D6D72">Collections</text>
+        <rect x="516" y="646" width="52" height="30" rx="15" fill="#C36A00" fill-opacity="0.12"/>
+        <text x="542" y="672" font-size="8.5" class="sb" text-anchor="middle" fill="#C36A00">Settings</text>
+      </g>
+    </g>
+
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7" fill-opacity="0.62"/>
+
+    <g id="sheet">
+      <rect x="210" y="200" width="380" height="320" rx="12" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+
+      <!-- externaldrive.fill, 30pt, LL.accent -->
+      <g id="icon" transform="translate(400 245)" data-symbol="externaldrive.fill">
+        <rect x="-17" y="-11" width="34" height="22" rx="5" fill="#C36A00"/>
+        <rect x="-17" y="3" width="34" height="8" rx="4" fill="#A65900"/>
+        <circle cx="10" cy="7" r="1.6" fill="#F2F2F7"/>
+      </g>
+
+      <text x="400" y="289" font-size="19" class="sb" text-anchor="middle" fill="#000">Moving library</text>
+      <text x="400" y="311" font-size="14" text-anchor="middle" fill="#6D6D72">/Volumes/letslapse</text>
+
+      <!-- 6pt capsule; track Color.primary 12%, fill LL.accent. Inset 48 each
+           side: the VStack's own 24 plus the bar's 24. 65% here. -->
+      <g id="bar">
+        <rect x="258" y="339" width="284" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
+        <rect x="258" y="339" width="185" height="6" rx="3" fill="#C36A00"/>
+      </g>
+      <text x="400" y="363" font-size="12.5" class="mono" text-anchor="middle" fill="#6D6D72">96,5 GB of 148,2 GB</text>
+      <text x="400" y="381" font-size="11" text-anchor="middle" fill="#B5B5BA">IMG_0412.dng</text>
+
+      <!-- LLSecondaryButtonStyle, ⎋. Stops between files, removes what this
+           move created, leaves the setting untouched. -->
+      <rect x="234" y="446" width="332" height="50" rx="12" fill="#FFFFFF"/>
+      <text x="400" y="477" font-size="16" class="b" text-anchor="middle" fill="#C36A00">Cancel</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="760" height="680" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="400" y="722" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Settings · library location · moving · 760×680 pt window</text>
+  <text x="400" y="740" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/SettingsView.swift (StorageLocationSheet .copying) — preparing state desc-only; the flow's home file is settings-library-location.svg</text>
+</svg>
