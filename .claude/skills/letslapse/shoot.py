@@ -389,6 +389,7 @@ def resolve_code(args):
 INTERESTING = [
     ("captureMode", "mode"), ("formatLine", "format"), ("intervalMode", "MODE"),
     ("intervalAuto", "auto"), ("intervalSeconds", "every"), ("blendDepth", "blend"),
+    ("dimDuringShoot", "dim"),
     ("blendStrategy", "strategy"), ("baseFPS", "base fps"), ("rampFPS", "burst fps"),
     ("sequenceMode", "sequence"), ("captureCount", "count"),
     ("recordingState", "recording"), ("cameraActive", "camera"),
@@ -501,6 +502,8 @@ def build_settings(args, body):
             steps.append(f"setBaseFPS#{args.base_fps}")
         if args.burst_fps:
             steps.append(f"setBurstFPS#{args.burst_fps}")
+    if getattr(args, "dim", None):
+        steps.append(f"setDimDuringShoot#{1 if args.dim == 'on' else 0}")
     return steps
 
 
@@ -932,14 +935,18 @@ def wait_until(epoch, why):
 
 # --- arms ----------------------------------------------------------------
 
-def parse_arm(text):
-    """'ipad-m1:lumen' → (row, strategy)."""
+def parse_arm(text, require_strategy=True):
+    """'ipad-m1:lumen' → (row, strategy). A bare 'ipad-m1' → (row, None),
+    allowed when blend depth is not auto (no strategy runs then)."""
     alias, _, strategy = text.partition(":")
     row = registry_entry(alias)
     strategy = (strategy or "").strip().lower()
+    if not strategy and not require_strategy:
+        return row, None
     if strategy not in STRATEGIES:
         die(f"arm {text!r} needs a strategy",
-            f"write <device>:<strategy>, one of {', '.join(STRATEGIES)}")
+            f"write <device>:<strategy>, one of {', '.join(STRATEGIES)} "
+            f"(a bare <device> is allowed only with a non-auto --blend)")
     return row, strategy
 
 
@@ -1016,14 +1023,17 @@ def refusals(pairs):
             if frame["body"].get("status") not in ACCEPTED]
 
 
-def fleet_settings(strategy, every):
-    """Holy Grail, Auto blend depth, one strategy — the comparison preset.
+def fleet_settings(strategy, every, blend="auto", dim=None):
+    """Holy Grail, one blend depth, optionally one strategy.
 
-    Auto blend DEPTH is the thing under test and stays on. Auto INTERVAL is
-    off by default and is a flag, because it makes Zone and Latitude
-    non-comparable: Zone smooths over 3 SAMPLES and Latitude over a 20-SECOND
-    EMA, so a repaced interval stretches one strategy's memory and not the
-    other's.
+    The strategy-comparison preset is blend=auto (depth is the thing under
+    test) plus one strategy per arm. Auto INTERVAL is off by default and is a
+    flag, because it makes Zone and Latitude non-comparable: Zone smooths
+    over 3 SAMPLES and Latitude over a 20-SECOND EMA, so a repaced interval
+    stretches one strategy's memory and not the other's.
+
+    A non-auto blend (psycho/safe/fixed) turns the fleet into a load or
+    thermal bench: the strategy is irrelevant then and no arm needs one.
     """
     steps = ["setIntervalMode:holyGrail"]
     if str(every).lower() == "auto":
@@ -1031,8 +1041,11 @@ def fleet_settings(strategy, every):
     else:
         steps.append("setAutoInterval#0")
         steps.append(f"setIntervalSeconds#{float(every)}")
-    steps.append("setFramesPerBlend:auto")
-    steps.append(f"setBlendStrategy:{strategy}")
+    steps.append(f"setFramesPerBlend:{blend_token(blend)}")
+    if strategy:
+        steps.append(f"setBlendStrategy:{strategy}")
+    if dim is not None:
+        steps.append(f"setDimDuringShoot#{1 if dim else 0}")
     return steps
 
 
@@ -1111,7 +1124,17 @@ def cmd_fleet(args):
 
     registry = load_registry()
     site = registry.get("site", {})
-    arms = [parse_arm(text) for text in args.arm]
+    blend = str(getattr(args, "blend", "auto")).lower()
+    if blend != "auto" and blend not in BLEND_ADAPTIVE:
+        try:
+            if int(blend) not in BLEND_FIXED:
+                raise ValueError
+        except ValueError:
+            die(f"--blend must be auto, psycho, safe, or one of {BLEND_FIXED}",
+                "the phone refuses anything else outright")
+    if args.expect_format is None:
+        args.expect_format = ["DNG"] if blend == "auto" else []
+    arms = [parse_arm(text, require_strategy=(blend == "auto")) for text in args.arm]
     seen = [row["alias"] for row, _ in arms]
     if len(set(seen)) != len(seen):
         die("the same device appears twice", "one strategy per device per session")
@@ -1127,13 +1150,16 @@ def cmd_fleet(args):
     requested = parse_at(args.at, site)
 
     print(f"fleet: {len(arms)} arm(s), {duration / 60:.0f} min each, "
-          f"every {args.every}s")
+          f"every {args.every}s, blend {blend}")
     for row, strategy in arms:
-        print(f"  {row['alias']:<12} {row['marketingName']:<28} {strategy}")
-    strategies = {s for _, s in arms}
-    if len(strategies) == 1:
+        print(f"  {row['alias']:<12} {row['marketingName']:<28} "
+              f"{strategy or f'blend={blend}'}")
+    strategies = {s for _, s in arms if s}
+    if len(strategies) == 1 and blend == "auto":
         print(f"  → control session: all arms on {strategies.pop()}, which "
               f"measures device-to-device variance with strategy held constant")
+    elif blend != "auto":
+        print(f"  → load bench: every arm at blend {blend}, no strategy in play")
 
     # Everything from here until the fleet is recording can abort — a locked
     # device, a refused setting. Release whatever was already launched rather
@@ -1165,7 +1191,8 @@ def cmd_fleet(args):
                 die(f"{alias}: no state came back",
                     "capture screen open? is the LetsLapse Mac app holding the link?")
             preflight(body)
-            script = fleet_settings(strategy, args.every) + ["wait@2", "state"]
+            dim = {"on": True, "off": False}.get(getattr(args, "dim", None) or "")
+            script = fleet_settings(strategy, args.every, blend, dim) + ["wait@2", "state"]
             pairs, applied = send_script(alias, code, ",".join(script),
                                          timeout=150, echo=args.echo)
             refused = refusals(pairs)
@@ -1173,9 +1200,15 @@ def cmd_fleet(args):
                 die(f"{alias} refused: " + ", ".join(f"{l} ({m})" for l, m in refused),
                     "a value outside what the phone allows is rejected, not coerced. "
                     "Nothing was started.")
-            if applied.get("blendStrategy") != strategy:
+            if strategy and applied.get("blendStrategy") != strategy:
                 die(f"{alias}: strategy reads {applied.get('blendStrategy')!r}, "
                     f"asked for {strategy!r}", "nothing was started")
+            if blend != "auto":
+                # The device may publish the wire token or the dial name —
+                # print the read-back rather than guessing its vocabulary;
+                # the pulled capture_log's blendMode is the hard check.
+                print(f"  {alias:<12} blend dial reads "
+                      f"{applied.get('blendDepth')!r} (asked {blend})")
             check_format(applied, args)
             if args.dry_run:
                 print(f"  {alias:<12} settings verified (--dry-run, no shutter)")
@@ -1188,7 +1221,8 @@ def cmd_fleet(args):
                 die(f"{alias}: scheduleStart was refused ({refused[0][1]})",
                     "the epoch has already passed — arming took longer than budgeted. "
                     "Nothing is recording; re-run.")
-            print(f"  {alias:<12} armed for {clock(start)}  [{strategy}]")
+            print(f"  {alias:<12} armed for {clock(start)}  "
+                  f"[{strategy or f'blend={blend}'}]")
             armed.append((row, strategy, identifier, code))
 
     except BaseException:
@@ -1257,6 +1291,7 @@ def cmd_fleet(args):
         "startedAt": time.strftime("%Y-%m-%dT%H:%M:%S", time.localtime(start)),
         "durationMinutes": duration / 60,
         "intervalSeconds": args.every,
+        "blend": blend,
         "site": site.get("name"),
         "arms": [],
     }
@@ -1640,6 +1675,9 @@ def main():
     p.add_argument("--every", default="2",
                    help=f"Interval spacing: auto, or one of {INTERVAL_EVERY}")
     p.add_argument("--strategy", choices=STRATEGIES, help="Auto-blend decision logic")
+    p.add_argument("--dim", choices=["on", "off"],
+                   help="set 'Dim screen during shoot' before firing "
+                        "(display-only; accepted mid-run too)")
     p.add_argument("--base-fps", type=int, help="Video base rate (must be in availableBaseFPS)")
     p.add_argument("--burst-fps", type=int, help="Video burst rate (must be in availableBurstFPS)")
     p.add_argument("--sequence", choices=SEQUENCE_MODES, help="bursts ramp the rate, or mark")
@@ -1663,11 +1701,23 @@ def main():
                    help=f"fixed spacing, one of {INTERVAL_EVERY}, or 'auto' "
                         f"(see the caveat in SKILL.md). 10 s is the mixed-fleet "
                         f"default: the 12 Pro's blend+author median ran 3.35-9.05 s.")
+    p.add_argument("--blend", default="auto",
+                   help=f"auto (strategy comparison, arms need :strategy), "
+                        f"psycho/safe, or one of {BLEND_FIXED}. Non-auto turns "
+                        f"the fleet into a load/thermal bench; arms may then be "
+                        f"bare device aliases.")
+    p.add_argument("--dim", choices=["on", "off"],
+                   help="set 'Dim screen during shoot' on every arm before "
+                        "firing (display-only; works mid-run too). Omit to "
+                        "leave each device's setting alone.")
     p.add_argument("--watch", type=float, metavar="SECONDS",
                    help="poll every arm this often during the run")
     p.add_argument("--expect-format", action="append", metavar="TOKEN",
-                   default=["DNG"],
-                   help="substring that must appear in formatLine (default DNG)")
+                   default=None,
+                   help="substring that must appear in formatLine. Default: DNG "
+                        "for strategy sessions (blend auto), nothing otherwise. "
+                        "(argparse appends to a list default, so the default is "
+                        "applied in code, not here.)")
     p.add_argument("--out", help="collection directory (default: a stamped one)")
     p.add_argument("--wait", type=float, default=60, help="seconds to wait for each code")
     p.add_argument("--dry-run", action="store_true",

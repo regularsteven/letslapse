@@ -5499,7 +5499,19 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailLimits = limits
         let seed = HolyGrailRampEngine.ExposureTarget(
             shutterSeconds: device.exposureDuration.seconds, iso: device.iso)
-        holyGrailEngine = HolyGrailRampEngine(seed: seed, limits: limits)
+        var engine = HolyGrailRampEngine(seed: seed, limits: limits)
+        // The 2026-08-25 fixes, on for every Dynamic run. Anchor drift walks
+        // the seed rendering onto the device AE's own opinion at 1/20 stop a
+        // window (the frozen anchor turned a 2 h dawn 6.1 stops dark); the
+        // gate stops the servo flip-flopping between the ISP's coarse
+        // short-shutter latch states (13 oscillation events, same dawn).
+        // Values from the bench diagnosis; the test-card scripted ramp is
+        // the tuning rig.
+        engine.anchorDriftPerStep = 0.05
+        engine.deadbandStops = 0.12
+        engine.dwellSteps = 3
+        engine.reversalRefractorySteps = 10
+        holyGrailEngine = engine
     }
 
     /// sessionQueue-confined. The envelope the ramp may move inside.
@@ -5570,7 +5582,24 @@ final class CameraController: NSObject, ObservableObject {
                 + log2(max(luma, 1e-6) / Self.holyGrailReferenceLuma)
         }
 
-        holyGrailEngine?.advance(measuredEV: measuredEV, limits: limits)
+        // The device AE's own opinion of the scene — absolute, bias-inclusive
+        // and available even under custom exposure. This is the reference the
+        // anchor drifts toward; without a reading the anchor simply holds.
+        var aeSceneEV: Double?
+        if let device = videoDevice {
+            let offset = Double(device.exposureTargetOffset)
+            let readShutter = shutter > 0 ? shutter : device.exposureDuration.seconds
+            let readISO = iso > 0 ? iso : Double(device.iso)
+            if offset.isFinite, readShutter > 0, readISO > 0 {
+                aeSceneEV = HolyGrailMetering.sceneEV100(
+                    shutterSeconds: readShutter, iso: Float(readISO),
+                    aperture: limits.aperture, exposureTargetOffset: offset)
+            }
+        }
+        holyGrailEngine?.advance(measuredEV: measuredEV, limits: limits, aeSceneEV: aeSceneEV)
+        if let gap = holyGrailEngine?.aeGapEV, abs(gap) > 0.5, frame % 100 == 0 {
+            LLog(String(format: "holygrail: anchor drifting — aim sits %+.2f stops off AE", gap))
+        }
 
         holyGrailWriter?.append(FrameTimestamps.Entry(
             frame: frame,

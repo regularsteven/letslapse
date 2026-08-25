@@ -143,6 +143,35 @@ public struct HolyGrailRampEngine: Equatable {
     /// leaves a plain EMA.
     public var trendSmoothing: Double
 
+    // MARK: Anti-oscillation (the 2026-08-25 limit-cycle fix)
+
+    /// Wanted moves smaller than this are held rather than commanded. At the
+    /// short-shutter end the ISP only latches coarse discrete exposure states
+    /// (0.18–0.37 stops apart on the iPad Air M1), the correct exposure sits
+    /// between two of them, and a servo with no deadband flip-flops every
+    /// window — 13 oscillation events in one dawn. The deadband absorbs the
+    /// residual error of sitting on a latched state; a *moving* scene
+    /// accumulates past it and still ramps.
+    public var deadbandStops: Double = 0
+    /// A move must want the same direction this many consecutive steps before
+    /// the first command is issued — Steven's "confidence before committing".
+    /// Zero commits immediately (legacy).
+    public var dwellSteps: Int = 0
+    /// After a committed move, the opposite direction is refused for this
+    /// many steps (a passing car's headlights can't ring the exposure), so
+    /// the fastest possible oscillation is slower than the eye integrates.
+    /// Bypassed, like the dwell, when the error is `dwellBypassStops` big.
+    public var reversalRefractorySteps: Int = 0
+    /// Errors at least this large step immediately — a light switch still
+    /// ramps promptly no matter how much confidence the small moves need.
+    public var dwellBypassStops: Double = 1.0
+
+    private var pendingDirection: Int = 0
+    private var pendingCount: Int = 0
+    private var committedDirection: Int = 0
+    /// Saturating (a 3 s cadence would need 95 years to reach the cap).
+    private var stepsSinceCommit: Int = 1_000_000_000
+
     /// Whether the first measurement is taken as *the* correct exposure for
     /// the seed, rather than as an absolute EV to be believed.
     ///
@@ -165,6 +194,37 @@ public struct HolyGrailRampEngine: Equatable {
     /// The offset folded out of every measurement, learned from the first
     /// one. Nil until then (or when anchoring is off).
     public private(set) var calibration: Double?
+
+    // MARK: Anchor drift (the 2026-08-25 dark-dawn fix)
+
+    /// How fast the anchor may drift toward the device AE's own opinion, in
+    /// stops per step. Zero freezes the anchor (the pre-2026-08-25 behavior).
+    ///
+    /// The frozen anchor is what turned a 2 h 17 m sunrise 6.1 stops dark:
+    /// device AE renders pre-dawn ~3.5 stops darker (against mid-grey) than
+    /// it renders daylight, the anchor forbade that rendering change, and the
+    /// luma meter's crush multiplied the error ×1.75. Dynamic mode's contract
+    /// is that a shoot *ends* where AE would meter the ending scene — so the
+    /// anchor drifts there, slowly enough to be invisible frame-to-frame
+    /// (1/20 stop per window ≈ 1 stop per hour at 3 s) and referenced to an
+    /// absolute opinion, which also cancels the meter's non-invariance.
+    ///
+    /// Stability against the 2026-08-15 runaway class is by construction:
+    /// this is a rate-capped outer loop an order of magnitude slower than the
+    /// servo it trims, its per-step authority is `anchorDriftPerStep` no
+    /// matter how wrong the anchor is, and it only acts on a smoothed,
+    /// deadbanded disagreement.
+    public var anchorDriftPerStep: Double = 0
+    /// Disagreements smaller than this never move the anchor — AE breathing
+    /// and metering noise stay out of the exposure record.
+    public var anchorDriftDeadband: Double = 0.25
+    /// EMA weight on the newest AE-vs-aim disagreement.
+    public var anchorDriftSmoothing: Double = 0.1
+    /// The smoothed disagreement between where the ramp aims and where the
+    /// device AE thinks the scene is (aim − AE, stops). Diagnostic:
+    /// `measuredEV − appliedEV` told the 2026-08-25 story; this is the same
+    /// number available live.
+    public private(set) var aeGapEV: Double?
 
     /// Seeds the ramp from an exposure the camera is already delivering —
     /// in practice the live AE values read off the device the instant before
@@ -203,8 +263,18 @@ public struct HolyGrailRampEngine: Equatable {
     /// moonless landscape is negative. `CameraController` derives it from the
     /// EXIF APEX brightness of the frame just captured, falling back to the
     /// device's own metering offset.
+    /// `aeSceneEV` is the device AE's own absolute opinion of the scene (EV at
+    /// ISO 100, from `HolyGrailMetering.sceneEV100(shutterSeconds:iso:aperture:
+    /// exposureTargetOffset:)`). Optional: without it the anchor holds exactly
+    /// as before; with it (and `anchorDriftPerStep > 0`) the anchor drifts
+    /// toward AE's rendering, which is what makes a two-hour dawn end at the
+    /// exposure a fresh shoot would open on. On a device path where the ±EV
+    /// control drives `setExposureTargetBias`, AE's opinion is bias-inclusive
+    /// — the drift converges on the rendering the operator dialed.
     @discardableResult
-    public mutating func advance(measuredEV: Double, limits: HardwareLimits) -> ExposureTarget {
+    public mutating func advance(
+        measuredEV: Double, limits: HardwareLimits, aeSceneEV: Double? = nil
+    ) -> ExposureTarget {
         guard measuredEV.isFinite else { return currentTarget }
 
         recentEV.append(measuredEV)
@@ -229,6 +299,7 @@ public struct HolyGrailRampEngine: Equatable {
             }
         }
         smoothedEV = smoothed
+        driftAnchor(toward: aeSceneEV, smoothed: smoothed)
 
         let wantedGain = Self.requiredGain(
             sceneEV100: aimEV(from: smoothed) - bias, aperture: limits.aperture)
@@ -236,12 +307,89 @@ public struct HolyGrailRampEngine: Equatable {
         // Rate-limit in stops of total exposure — the one place flicker is
         // won or lost.
         let wantedStops = log2(max(wantedGain, 1e-9)) - log2(currentGain)
-        let allowedStops = min(max(wantedStops, -stopsPerStep), stopsPerStep)
-        let steppedGain = currentGain * exp2(allowedStops)
-
-        currentTarget = Self.split(gain: steppedGain, limits: limits)
         frameCount += 1
+        guard let allowedStops = gatedStep(wantedStops: wantedStops) else {
+            return currentTarget
+        }
+        currentTarget = Self.split(gain: currentGain * exp2(allowedStops), limits: limits)
         return currentTarget
+    }
+
+    /// The slow outer loop: close the standing disagreement between where the
+    /// ramp aims and where the device AE believes the scene is, a twentieth
+    /// of a stop at a time. See `anchorDriftPerStep` for why and for the
+    /// stability argument.
+    private mutating func driftAnchor(toward aeSceneEV: Double?, smoothed: Double) {
+        guard anchorDriftPerStep > 0, anchorsToSeedExposure,
+              calibration != nil, let aeSceneEV, aeSceneEV.isFinite else { return }
+        // aim = smoothed − calibration. A positive gap means the ramp is
+        // exposing for a brighter scene than AE believes — rendering the
+        // frame darker than AE would — so closing it means RAISING the
+        // calibration (which lowers the aim and adds gain).
+        let gap = (smoothed - (calibration ?? 0)) - aeSceneEV
+        let smoothedGap: Double
+        if let previous = aeGapEV {
+            smoothedGap = previous + anchorDriftSmoothing * (gap - previous)
+        } else {
+            smoothedGap = gap
+        }
+        aeGapEV = smoothedGap
+        guard abs(smoothedGap) > anchorDriftDeadband else { return }
+        calibration = (calibration ?? 0)
+            + min(max(smoothedGap, -anchorDriftPerStep), anchorDriftPerStep)
+    }
+
+    /// The anti-oscillation gate: the rate-limited stops to apply, or nil to
+    /// hold this step. With every gate parameter at zero this is exactly the
+    /// legacy behavior.
+    private mutating func gatedStep(wantedStops: Double) -> Double? {
+        let allowed = min(max(wantedStops, -stopsPerStep), stopsPerStep)
+        let gated = deadbandStops > 0 || dwellSteps > 0 || reversalRefractorySteps > 0
+        guard gated else { return allowed }
+        stepsSinceCommit = min(stepsSinceCommit + 1, 1_000_000_000)
+        let magnitude = abs(wantedStops)
+        let direction = wantedStops > 0 ? 1 : (wantedStops < 0 ? -1 : 0)
+        // A big error steps immediately — confidence is for the small moves.
+        if magnitude >= dwellBypassStops {
+            noteStep(in: direction)
+            return allowed
+        }
+        // Inside the deadband the servo is *settled*: sitting on a latched
+        // ISP state whose residual error can never be commanded away. Any
+        // future move starts from scratch.
+        if magnitude < deadbandStops || direction == 0 {
+            pendingDirection = 0
+            pendingCount = 0
+            committedDirection = 0
+            return nil
+        }
+        // An established ramp keeps stepping at full rate — dwell gates
+        // entry into movement, never a ramp already agreed on.
+        if direction == committedDirection {
+            noteStep(in: direction)
+            return allowed
+        }
+        // Reversing shortly after a step is the limit cycle's signature —
+        // the step itself perturbed the quantizer. Refuse it for a while.
+        if committedDirection != 0, stepsSinceCommit <= reversalRefractorySteps {
+            return nil
+        }
+        if direction == pendingDirection {
+            pendingCount += 1
+        } else {
+            pendingDirection = direction
+            pendingCount = 1
+        }
+        guard pendingCount >= max(dwellSteps, 1) else { return nil }
+        noteStep(in: direction)
+        return allowed
+    }
+
+    private mutating func noteStep(in direction: Int) {
+        committedDirection = direction
+        pendingDirection = 0
+        pendingCount = 0
+        stepsSinceCommit = 0
     }
 
     /// The EV the ramp actually aims at: the smoothed measurement plus the

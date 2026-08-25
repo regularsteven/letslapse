@@ -682,6 +682,7 @@ struct WatchControlView: View {
             // either way, and tab one's room now goes to the two controls that
             // act on the moment in front of you.
             exposureLockRow
+            dimScreenRow
             Spacer(minLength: 0)
         }
         .padding(.horizontal, RemoteMetric.gutter)
@@ -1056,6 +1057,20 @@ struct WatchControlView: View {
             } else {
                 remote.lockExposure()
             }
+        }
+    }
+
+    /// The phone floors its display while a shoot runs (thermal budget on the
+    /// OLED phones). Display-only on the phone, so this is the one setter
+    /// that works mid-run — flip it from the wrist without touching the rig.
+    private var dimScreenRow: some View {
+        RemoteToggleRow(
+            title: "Dim Screen",
+            isOn: remote.dimDuringShoot,
+            enabled: !remote.isSending && remote.isReachable,
+            isPending: remote.pendingCommand == .setDimDuringShoot
+        ) {
+            remote.setDimDuringShoot(!remote.dimDuringShoot)
         }
     }
 

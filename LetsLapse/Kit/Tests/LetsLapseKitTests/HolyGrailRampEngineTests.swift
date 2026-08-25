@@ -445,4 +445,153 @@ final class HolyGrailRampEngineTests: XCTestCase {
         let was = HolyGrailRampEngine.lightGain(shutterSeconds: 1.0 / 60, iso: 400)
         XCTAssertEqual(was / wanted, 2, accuracy: 1e-6)
     }
+
+    // MARK: - Anchor drift (the 2026-08-25 dark-dawn fix)
+
+    /// The shipping drift configuration on top of an anchored engine.
+    private func driftingEngine(shutter: Double, iso: Float) -> HolyGrailRampEngine {
+        var engine = anchoredEngine(shutter: shutter, iso: iso)
+        engine.anchorDriftPerStep = 0.05
+        return engine
+    }
+
+    /// A perfectly exposure-invariant luma meter for the loop simulations:
+    /// whatever gain the engine runs, the measurement reports the true scene.
+    private func invariantMeasurement(trueEV: Double) -> Double { trueEV }
+
+    /// The 2026-08-25 failure, reproduced and fixed: an anchor seeded 3 stops
+    /// under AE's rendering walks onto AE's opinion at the capped rate, and
+    /// the exposure ends where a fresh shoot would open.
+    func testTheAnchorDriftsOntoAEsOpinionAtTheCappedRate() {
+        let trueEV = 11.0
+        // Seed the camera 3 stops darker than AE would choose for this scene.
+        let aeGain = HolyGrailRampEngine.requiredGain(sceneEV100: trueEV, aperture: 1.78)
+        let seedGain = aeGain / 8
+        var engine = driftingEngine(shutter: seedGain / (54.0 / 100), iso: 54)
+        var previousCalibration: Double?
+        for _ in 0..<400 {
+            engine.advance(
+                measuredEV: invariantMeasurement(trueEV: trueEV),
+                limits: wide, aeSceneEV: trueEV)
+            if let previous = previousCalibration, let now = engine.calibration {
+                XCTAssertLessThanOrEqual(
+                    abs(now - previous), engine.anchorDriftPerStep + 1e-9,
+                    "the drift must never exceed its per-step cap")
+            }
+            previousCalibration = engine.calibration
+        }
+        // Converged: the exposure sits within the drift deadband (plus one
+        // rate-limited step of slack) of what AE would choose.
+        let gap = abs(log2(engine.currentTarget.lightGain / aeGain))
+        XCTAssertLessThanOrEqual(gap, engine.anchorDriftDeadband + 0.34,
+                                 "a drifted ramp ends where AE would meter")
+        XCTAssertNotNil(engine.aeGapEV)
+    }
+
+    func testSmallAEDisagreementsNeverMoveTheAnchor() {
+        let trueEV = 11.0
+        let aeGain = HolyGrailRampEngine.requiredGain(sceneEV100: trueEV, aperture: 1.78)
+        // Seeded only 0.2 stops off AE — inside the drift deadband.
+        var engine = driftingEngine(shutter: (aeGain / exp2(0.2)) / (54.0 / 100), iso: 54)
+        engine.advance(measuredEV: trueEV, limits: wide, aeSceneEV: trueEV)
+        let learned = engine.calibration
+        for _ in 0..<100 {
+            engine.advance(measuredEV: trueEV, limits: wide, aeSceneEV: trueEV)
+        }
+        XCTAssertEqual(engine.calibration, learned,
+                       "AE breathing inside the deadband must not walk the anchor")
+    }
+
+    func testWithoutAnAEOpinionTheAnchorStaysFrozen() {
+        var engine = driftingEngine(shutter: 1.0 / 200, iso: 54)
+        engine.advance(measuredEV: 10.1, limits: wide)
+        let learned = engine.calibration
+        for _ in 0..<100 { engine.advance(measuredEV: 10.1, limits: wide) }
+        XCTAssertEqual(engine.calibration, learned)
+    }
+
+    // MARK: - Anti-oscillation gate (the 2026-08-25 limit-cycle fix)
+
+    /// The shipping gate on an absolute-EV engine with no smoothing lag, so a
+    /// fed measurement maps directly to a wanted move.
+    private func gatedEngine(shutter: Double, iso: Float) -> HolyGrailRampEngine {
+        var engine = HolyGrailRampEngine(
+            seed: .init(shutterSeconds: shutter, iso: iso), limits: wide,
+            smoothing: 1.0, anchorsToSeedExposure: false)
+        engine.deadbandStops = 0.12
+        engine.dwellSteps = 3
+        engine.reversalRefractorySteps = 10
+        return engine
+    }
+
+    /// The measured signature of the 2026-08-25 iPad run: the wanted move
+    /// flips sign every window at sub-quarter-stop amplitude. The gate must
+    /// hold the target perfectly still.
+    func testAlternatingSmallErrorsNeverMoveTheTarget() {
+        var engine = gatedEngine(shutter: 1.0 / 1000, iso: 54)
+        let anchor = HolyGrailRampEngine.sceneEV100(
+            forGain: engine.currentTarget.lightGain, aperture: 1.78)
+        let seed = engine.currentTarget.lightGain
+        for step in 0..<200 {
+            let error = step.isMultiple(of: 2) ? 0.11 : -0.11
+            engine.advance(measuredEV: anchor + error, limits: wide)
+            XCTAssertEqual(engine.currentTarget.lightGain, seed,
+                           accuracy: seed * 1e-9,
+                           "a sub-deadband alternation is the limit cycle — hold")
+        }
+    }
+
+    /// A genuine change larger than the deadband still ramps — after the
+    /// dwell has seen it persist.
+    func testAPersistentChangeRampsAfterTheDwell() {
+        var engine = gatedEngine(shutter: 1.0 / 1000, iso: 54)
+        let anchor = HolyGrailRampEngine.sceneEV100(
+            forGain: engine.currentTarget.lightGain, aperture: 1.78)
+        let seed = engine.currentTarget.lightGain
+        // 0.6 stops darker, persistently (below the 1-stop bypass).
+        for step in 1...20 {
+            engine.advance(measuredEV: anchor - 0.6, limits: wide)
+            if step < 3 {
+                XCTAssertEqual(engine.currentTarget.lightGain, seed,
+                               accuracy: seed * 1e-9,
+                               "dwell: no commitment on step \(step)")
+            }
+        }
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / seed), 0.6,
+                       accuracy: 0.05, "after the dwell the ramp tracks fully")
+    }
+
+    func testAReversalWaitsOutTheRefractoryPeriod() {
+        var engine = gatedEngine(shutter: 1.0 / 1000, iso: 54)
+        let anchor = HolyGrailRampEngine.sceneEV100(
+            forGain: engine.currentTarget.lightGain, aperture: 1.78)
+        // Establish a gain-raising ramp and flip MID-COMMITMENT — the limit
+        // cycle's own move: the step just taken is what perturbed the
+        // quantizer, and the flip arrives on the very next window.
+        for _ in 0..<4 { engine.advance(measuredEV: anchor - 0.9, limits: wide) }
+        let committed = engine.currentTarget.lightGain
+        XCTAssertGreaterThan(committed, engine.currentTarget.lightGain * 0.99)
+        // The measured light now claims 0.3 brighter than the anchor — a
+        // sub-emergency reversal. Refused for the whole refractory period.
+        for _ in 0..<10 {
+            engine.advance(measuredEV: anchor + 0.3, limits: wide)
+            XCTAssertGreaterThanOrEqual(engine.currentTarget.lightGain, committed * 0.999,
+                                        "no reversal inside the refractory period")
+        }
+        // …and then followed, once patience and dwell are both served.
+        for _ in 0..<20 { engine.advance(measuredEV: anchor + 0.3, limits: wide) }
+        XCTAssertLessThan(engine.currentTarget.lightGain, committed * 0.9,
+                          "a persistent reversal is eventually followed")
+    }
+
+    func testAnEmergencyErrorBypassesTheDwell() {
+        var engine = gatedEngine(shutter: 1.0 / 1000, iso: 54)
+        let anchor = HolyGrailRampEngine.sceneEV100(
+            forGain: engine.currentTarget.lightGain, aperture: 1.78)
+        let seed = engine.currentTarget.lightGain
+        engine.advance(measuredEV: anchor - 2.0, limits: wide)
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / seed), 1.0 / 3.0,
+                       accuracy: 0.01,
+                       "a big error steps immediately, at the rate limit")
+    }
 }

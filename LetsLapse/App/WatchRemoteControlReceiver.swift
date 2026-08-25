@@ -211,6 +211,17 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     /// The pending "stop at…" mirrored to the Watch; all-nil clears it.
+    /// Mirror of Settings ▸ Advanced ▸ "Dim screen during shoot", so the
+    /// Watch toggle and a scripted A/B can read the truth back.
+    private var dimDuringShoot = true
+
+    @MainActor
+    func setDimDuringShoot(_ on: Bool) {
+        guard dimDuringShoot != on else { return }
+        dimDuringShoot = on
+        publishState()
+    }
+
     @MainActor
     func setScheduledStopContext(unit: ScheduledStopUnit?, deadline: Date?, targetCount: Int?) {
         let changed = self.stopAtUnit != unit
@@ -535,6 +546,7 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
         // onDisappear, so the handler alone would keep saying ready forever.
         payload[WatchMessageKey.cameraActive] = commandHandler != nil && isAppActive
         payload[WatchMessageKey.phoneAppState] = isAppActive ? "active" : "background"
+        payload[WatchMessageKey.dimDuringShoot] = dimDuringShoot
         if let formatLine {
             payload[WatchMessageKey.formatLine] = formatLine
         }

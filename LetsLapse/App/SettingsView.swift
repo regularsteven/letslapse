@@ -37,6 +37,7 @@ struct SettingsView: View {
     /// Field-test selector for BLEND=Auto's decision logic (DNG path).
     /// Stored as the raw strategy id; stamped into every run's capture log.
     @AppStorage(BlendStrategyID.defaultsKey) private var blendStrategy = BlendStrategyID.zone.rawValue
+    @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
     @State private var storage: AppModel.LibraryStorage?
     /// Room left on the volume the library lives on — the number that decides
     /// whether the next shoot fits, which the library's own total never could.
@@ -838,6 +839,13 @@ struct SettingsView: View {
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+            }
+
+            LLRow(
+                title: "Dim screen during shoot",
+                subtitle: "Floors the display while a shoot runs — tap to peek. The panel is a real share of the thermal budget on OLED phones"
+            ) {
+                Toggle("", isOn: $dimScreenDuringShoot)
             }
             #endif
 

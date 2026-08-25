@@ -44,6 +44,7 @@ enum WatchMessageKey {
     static let plannedSpeed = "plannedSpeed"
     static let outputFPS = "outputFPS"
     static let isExposureLocked = "isExposureLocked"
+    static let dimDuringShoot = "dimDuringShoot"
     static let lockedISO = "lockedISO"
     static let lockedShutter = "lockedShutter"
     static let lockedLensPosition = "lockedLensPosition"

@@ -68,6 +68,11 @@ enum WatchCaptureCommand: String {
     case setSequenceMode
     case scheduleStop
     case cancelScheduledStop
+    /// Settings ▸ Advanced ▸ "Dim screen during shoot", from a distance.
+    /// Display-only — the panel is a real slice of the thermal budget on the
+    /// OLED phones — so unlike the capture setters this is accepted mid-run:
+    /// flipping it live on a bench arm is exactly the A/B it exists for.
+    case setDimDuringShoot
     /// Bring the camera back without touching the phone. Presents the capture
     /// screen over whatever is showing — including a setup flow, which stays
     /// underneath and intact. Deliberately refused while a blend is running:
@@ -112,7 +117,7 @@ extension WatchCaptureCommand {
              .setBlendStrategy, .scheduleStart,
              .setIntervalMode, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
-             .scheduleStop, .cancelScheduledStop,
+             .scheduleStop, .cancelScheduledStop, .setDimDuringShoot,
              .armCamera, .cancelExport:
             return true
         }
@@ -159,6 +164,8 @@ extension WatchCaptureCommand {
             return "The export is still running."
         case .toggleMark:
             return "No mark was placed."
+        case .setDimDuringShoot:
+            return "Screen dimming is unchanged."
         case .setISO, .setLensPosition, .state, .previewFrame:
             return nil
         }

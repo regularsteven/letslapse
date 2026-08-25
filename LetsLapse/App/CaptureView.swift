@@ -48,6 +48,11 @@ struct CaptureView: View {
     /// idle Video preview for the test card, then runs its script hands-free.
     @StateObject private var testRig = TestCardRigController()
 
+    /// Settings ▸ Advanced ▸ "Dim screen during shoot" — display-only, so the
+    /// Watch and the remote may flip it even mid-run (`setDimDuringShoot`).
+    @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
+    @StateObject private var shootDimmer = ShootScreenDimmer()
+
     @State private var mode: CaptureMode
     @State private var sequenceMode: LiveCaptureSequence.Mode
     @State private var interval: Double = 2
@@ -649,6 +654,19 @@ struct CaptureView: View {
     /// Orientation and the Watch-link mirrors — iOS only, bar the one shared recording hook.
     var body: some View {
         scheduling
+        .modifier(ShootDimming(
+            dimmer: shootDimmer,
+            engage: shootDimmerShouldEngage,
+            setting: dimScreenDuringShoot,
+            syncRemote: { on in
+                // The Watch/remote mirror is iOS-only; the Mac has no panel
+                // worth dimming and no watch link to tell.
+                #if os(iOS)
+                watchRemote.setDimDuringShoot(on)
+                #else
+                _ = on
+                #endif
+            }))
         #if os(iOS)
         .onReceive(NotificationCenter.default.publisher(for: UIDevice.orientationDidChangeNotification)) { _ in
             // Refresh the orientation the grid overlay sizes against, and nudge
@@ -3616,6 +3634,13 @@ struct CaptureView: View {
         camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
     }
 
+    /// Dim only the long runs (interval, blend, video). Photo-mode runs ride
+    /// the same blend engine but last seconds — a black flash there would
+    /// read as a fault, and Photo's thermal cost is nil anyway.
+    private var shootDimmerShouldEngage: Bool {
+        dimScreenDuringShoot && isCapturing && mode != .photo
+    }
+
     /// Mirror the mode onto the camera for the session log — "Bulb" is Photo
     /// with the open-ended dial armed, and reads as its own mode in a log.
     /// The arguments exist because SwiftUI's `onChange` hands over the new
@@ -4500,6 +4525,14 @@ struct CaptureView: View {
                   let token = payload[WatchMessageKey.blendStrategy] as? String,
                   let strategy = BlendStrategyID(rawValue: token) else { return false }
             UserDefaults.standard.set(strategy.rawValue, forKey: BlendStrategyID.defaultsKey)
+            return true
+        case .setDimDuringShoot:
+            // Display-only, so unlike the capture setters this lands mid-run
+            // too: the defaults write flows back through `@AppStorage`, which
+            // re-evaluates the dimmer and republishes the Watch context —
+            // flipping it live on a bench arm is the thermal A/B.
+            guard let value else { return false }
+            UserDefaults.standard.set(value >= 0.5, forKey: ShootScreenDimmer.defaultsKey)
             return true
         case .setBurstFPS:
             // Live mid-shoot, unlike the other setters: changing what the NEXT

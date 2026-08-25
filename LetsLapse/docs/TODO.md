@@ -11,7 +11,155 @@ live inline.
 
 ## Open
 
-### Framing-glitch hardening + Project Field Notes — device verification pending
+### Dim-screen-during-shoot: mirrors, Watch verification, and the composed A/B
+
+**Detail:** [fieldtests/2026-08-25-thermal-bench.md](fieldtests/2026-08-25-thermal-bench.md) ·
+**Raised:** 2026-08-25 · **Implemented 2026-08-25 (code-first per Steven) — mirrors + follow-ups owed**
+
+*Shipped on `ios-app`: Settings ▸ Advanced ▸ "Dim screen during shoot" (ON by
+default), `ShootScreenDimmer` (brightness floor + black cover + tap-to-peek +
+restore on stop/exit/background; one `ShootDimming` modifier because
+CaptureView's body sits at the type-checker's budget), Watch toggle in the
+recording controls page, wire command `setDimDuringShoot` (the one setter
+accepted mid-run, by design), `dimDuringShoot` in the state frame, and
+`--dim on|off` in shoot.py run+fleet. Bench-verified: the A/B where dim-ON
+completed a 20-min psycho arm the matched dim-OFF control could not
+(12 Pro, veto at T+18.2).* Owed before this leaves the list: **(a)** SVG
+mirrors after sign-off — settings.advanced + the watch controls page;
+**(b)** Watch-side verification on the real wrist (toggle round-trip,
+pending states); **(c)** repeat the A/B under the monitor test card's
+constant light (today's evening pair carries an ambient confound the
+result survived but shouldn't have to); **(d)** the composed test: Safe +
+dim vs psycho + dim on the 12 Pro — Safe attacks the floor load, dim the
+OS margin, and the field default should be whichever pair holds a 2-hour
+run.
+
+### The 12 Pro locks whenever LetsLapse dies hot — and Never doesn't matter
+
+**Raised:** 2026-08-25 · **Not started**
+
+Observed ≥6× today (5 thermal vetoes + one post-collection console-detach
+kill after a *clean* arm): whenever the app dies on a hot device the phone
+ends up locked, despite Auto-Lock → Never, and a locked device refuses
+`devicectl` launches — an unattended rig that dies stays dead AND
+unreachable. Steven's correlation: it never locks otherwise; once woken it
+stays awake. Mechanism unpinned. Discriminating test queued: hand-launched
+short shoot + normal exit (cool, then hot) vs devicectl-launched ditto —
+separates "dev-tools launch" from "app death" from "hot at death". Whatever
+the mechanism, the suspension-lifecycle job (below) should treat
+"post-outage device may be LOCKED" as a first-class state in its recovery
+design, and the field checklist gains: physical access is the only cure.
+
+### `collect_arm` can hand back the previous run's capture log
+
+**Raised:** 2026-08-25 · **Not started** · small
+
+`shoot.py`'s `collect_arm` pulls the newest `capture_log.json` on the
+device; an arm that died mid-run registers no project, so the pull silently
+returns the *previous* run's log as if it were this one — bit twice today
+(Phase A returned the morning field log; the dim-OFF control returned the
+dim-ON arm's log, nearly inverting the A/B verdict). Fix: parse the pulled
+log's `startedAt` and require it inside the arm's window; otherwise report
+"no capture log from THIS run — the arm died; see the liveblend experiment
+log" (which the same collection already pulls and which is the honest death
+record).
+
+### Holy Grail ramp servo limit-cycles against the ISP's exposure quantization
+
+**Detail:** [fieldtests/2026-08-25-dawn-scheduled.md](fieldtests/2026-08-25-dawn-scheduled.md) §2 ·
+**Raised:** 2026-08-25 · **Implemented 2026-08-25 evening — bench validation owed**
+
+*Shipped in `HolyGrailRampEngine`: deadband (0.12 stop) + 3-window dwell +
+10-window reversal refractory + 1-stop emergency bypass, on for every
+Dynamic run, zero-parameters = bit-identical legacy (33 legacy tests
+untouched, 4 new gate tests). Worst case at the coarsest latch region is a
+~40 s sub-visible breathing instead of per-window flicker. Owed: the
+test-card scripted-ramp run through the short-shutter region, gated by
+`source_flicker_report.py`, then a real dawn arm and one DNG confirmation
+arm.*
+
+The 2026-08-25 iPad dawn run carries 13 oscillation events (up-down-up
+exposure pumping, ~0.09–0.16 stops per flip): at short shutters the ISP only
+latches coarse discrete exposure states (0.18–0.37 stops apart at the ISO 18 /
+sub-200 µs end), the wanted exposure sits between two of them, and
+`HolyGrailRampEngine.advance` has no deadband, no hysteresis and a one-window
+measurement delay — so the servo flips between the two latched states every
+window. Fix in the Kit: commit a move only past a deadband (~1/6 stop) that
+has persisted K≈3 consecutive windows in one direction (dwell), hysteresis
+sized above the local actuation quantization, an emergency bypass for >~1-stop
+errors. Unit tests: synthetic quantized actuator under a slow ramp → monotone
+steps, zero steady-state toggles; constant scene stays a no-op. Verify on the
+monitor test card's scripted brightness ramp, then a real dawn arm. Gate
+before/after with `tools/source_flicker_report.py`. Policy-only change — no
+bracket construction or device-write path touched, so DNG capture is
+structurally unaffected; run one DNG arm to confirm.
+
+### Dynamic (holy grail) runs must end where AE would meter the ending scene
+
+**Detail:** [fieldtests/2026-08-25-dawn-scheduled.md](fieldtests/2026-08-25-dawn-scheduled.md) §1 ·
+**Raised:** 2026-08-25 · **Implemented 2026-08-25 evening — bench validation owed**
+
+*Shipped: the anchor drifts toward the device AE's own absolute opinion
+(`exposureTargetOffset`-derived `aeSceneEV`, bias-inclusive) at a hard cap
+of 1/20 stop per window with a 0.25-stop deadband and its own EMA — an
+outer loop an order of magnitude slower than the servo, so the 2026-08-15
+runaway class is excluded by construction; the absolute reference also
+cancels the luma meter's ×1.75 crush amplification. Engine: shared, so DNG
+and JPEG paths both fix at once; without an AE reading the anchor holds as
+before (3 new Kit tests; `holygrail: anchor drifting` LLog when the gap
+exceeds half a stop). Owed: the test-card dark→bright scripted ramp ending
+within ~1/3 stop of a fresh-AE control, then a real dawn.*
+
+The frozen-anchor dark run: `anchorsToSeedExposure` locks the seed frame's
+rendering for the whole run, so a 2 h 17 m sunrise ended 6.1 stops darker than
+the same scene's fresh-anchor exposure (control shoot 1b), amplified 1.75× by
+the whole-frame mean-luma meter's non-invariance (residual loop gain 0.43).
+Two-part fix: (a) let the anchor drift slowly (~1/20 stop/window cap) toward
+consistency with the device's live AE opinion (`exposureTargetOffset`), so the
+run converges on AE's rendering without frame-visible steps — designed against
+the 2026-08-15 positive-feedback runaway (drift gain far below unity, Kit
+regression `testAConstantSceneNeverMovesTheRamp` plus a drift-converges test;
+(b) make the meter clip-aware (trimmed/percentile luma) to cut the residual
+gain. Needs the test-card bench (scriptable light curve) for closed-loop
+validation before a dawn. Diagnostic that found it: `measuredEV − appliedEV`
+flat at −2.81 all run. Related: the scene-referred-meter note in the JPEG WB
+brief.
+
+### A suspended shoot must die honestly or resume deliberately — never zombie
+
+**Detail:** [fieldtests/2026-08-25-dawn-scheduled.md](fieldtests/2026-08-25-dawn-scheduled.md) §3 ·
+**Raised:** 2026-08-25 · **Not started**
+
+iPhone 12 Pro, unthrottled 3 s: thermal critical at +16 min, iOS forced the
+cool-down lock at ~+32 min, the app suspended for ~103 minutes (proven by
+`procMs` 285 s across a 108-min wall gap), and the run neither ended nor
+resumed — window advancement is frame-driven and the watchdog clock pauses in
+sleep. On wake the backlog close-storm fed `consecutiveProcessingFailures`,
+which killed the run one second after it had just delivered a good frame, and
+the resumed camera was silently back in plain AE (frame 635). Work: detect
+the outage (interruption notifications + wall-vs-monotonic gap at wake) →
+`issues[]` entry with the real reason and gap; backlog catch-up windows never
+count toward the kill guard; on wake either re-assert the ramp's custom
+exposure or end as `endReason: systemPressure`; author EXIF DateTimeOriginal
+from `capturedAt` so late-written windows carry capture time (rides the JPEG
+EXIF job). Mirror in both blend controllers. Plus prevention: thermal input
+to the AIMD ceiling (step down at serious, floor at critical) and the planned
+starvation repace, so unthrottled degrades instead of summiting into the OS
+veto; scheduled unattended shoots should warn on (or default away from)
+unthrottled on OIS-class phones.
+
+### Pin digital stabilization off on tap connections, and log it
+
+**Raised:** 2026-08-25 · **Not started** · small
+
+The 2026-08-25 investigation re-confirmed the interval/blend frames can never
+be digitally stabilized today (only `movieOutput` ever gets a stabilization
+mode; data-output connections default off) — but that guarantee is implicit.
+Set `preferredVideoStabilizationMode = .off` explicitly on the liveBlend /
+test-card / framing tap connections where supported and record it once in the
+session log, so the next tripod-jump investigation (they recur: Praha
+2026-08-23, dawn 2026-08-25 — both were OIS hardware sag at thermal critical,
+which has no API off-switch) starts from a logged fact instead of a code read.
 
 **Raised:** 2026-08-24 · **Implemented 2026-08-24 — device verification pending**
 

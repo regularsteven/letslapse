@@ -89,6 +89,7 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// EVERY is pacing itself. `intervalSeconds` then reports what the pacing
     /// has *arrived at*, not what anyone chose, so the remote labels it "Auto".
     @Published private(set) var intervalAuto = false
+    @Published private(set) var dimDuringShoot = true
     /// Whichever MODE readout is live, nil when neither is. See
     /// `WatchMessageKey`'s notes: absent means "no such run", never "zeroed".
     @Published private(set) var holyGrail: HolyGrailReadout?
@@ -305,6 +306,11 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
     /// refusal surfaces as a banner instead of a control that did nothing.
     func setAutoInterval(_ auto: Bool) {
         send(.setAutoInterval, value: auto ? 1 : 0)
+    }
+
+    /// Display-only on the phone, so the one setter that works mid-run.
+    func setDimDuringShoot(_ on: Bool) {
+        send(.setDimDuringShoot, value: on ? 1 : 0)
     }
 
     /// Scanner only: throw away the pose just captured, without ending the run.
@@ -692,6 +698,11 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         case .setAutoInterval:
             if let value = sent[WatchMessageKey.value] as? Double {
                 intervalAuto = value != 0
+            }
+            playHaptic(.click)
+        case .setDimDuringShoot:
+            if let value = sent[WatchMessageKey.value] as? Double {
+                dimDuringShoot = value != 0
             }
             playHaptic(.click)
         case .deleteLastFrame:
@@ -1197,6 +1208,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
         // rather than snapping a live Scanner run back to Off.
         if let token = payload[WatchMessageKey.intervalMode] as? String {
             intervalMode = IntervalCaptureMode(token: token)
+        }
+        if let dim = payload[WatchMessageKey.dimDuringShoot] as? Bool {
+            dimDuringShoot = dim
         }
         if let auto = payload[WatchMessageKey.intervalAuto] as? Bool {
             intervalAuto = auto
