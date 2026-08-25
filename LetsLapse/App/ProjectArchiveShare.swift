@@ -18,9 +18,36 @@ extension View {
     /// Presents the produced archive: what it's called, how big it came out,
     /// and the system share sheet to send it somewhere.
     func exportedArchiveSheet(_ archive: Binding<ExportedArchive?>) -> some View {
-        sheet(item: archive) { produced in
-            ExportedArchiveSheet(archive: produced) { archive.wrappedValue = nil }
+        modifier(ExportedArchiveSheetModifier(archive: archive))
+    }
+}
+
+/// Wraps the sheet so the `.lapse` file can be deleted when it closes.
+///
+/// `exportProject` builds the archive in `tmp/` — a byte-for-byte second copy
+/// of the whole project, which nothing removed: export a 4 GB shoot three times
+/// and the app was sitting on 12 GB the user could neither see nor clear. It is
+/// deleted on dismissal rather than after the `ShareLink`, because the share is
+/// the *reason* the file exists and the sheet can share more than once; closing
+/// the sheet is the moment the file stops being needed.
+///
+/// The URL is remembered separately because `sheet(item:onDismiss:)` fires its
+/// dismissal closure after the binding has already gone nil.
+private struct ExportedArchiveSheetModifier: ViewModifier {
+    @Binding var archive: ExportedArchive?
+    @State private var presentedURL: URL?
+
+    func body(content: Content) -> some View {
+        content.sheet(item: $archive, onDismiss: discardArchive) { produced in
+            ExportedArchiveSheet(archive: produced) { archive = nil }
+                .onAppear { presentedURL = produced.url }
         }
+    }
+
+    private func discardArchive() {
+        guard let url = presentedURL else { return }
+        presentedURL = nil
+        try? FileManager.default.removeItem(at: url)
     }
 }
 

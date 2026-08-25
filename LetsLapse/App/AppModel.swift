@@ -3309,11 +3309,44 @@ final class AppModel: ObservableObject {
         }.value
     }
 
+    /// Every name the app itself puts in `tmp/`. This list IS the contract for
+    /// both "Clear cache" and the storage figure — a staging prefix missing here
+    /// is a folder the user is charged for and can never clear, so it must be
+    /// kept in step with the `temporaryDirectory.appendingPathComponent` calls
+    /// in `CameraController` (`live-capture-`, `interval-`, `scanner-`,
+    /// `liveblend-`, `liveblend-dng-`), `CreateView` (`import-`) and
+    /// `MediaPickers` (`picked-`).
     nonisolated private static func isCacheItem(_ url: URL) -> Bool {
         let name = url.lastPathComponent.lowercased()
         return name.hasPrefix("letslapse") || name.hasPrefix(".letslapse")
             || name.hasPrefix("live-capture") || name.hasPrefix("picked-")
             || name.hasPrefix("import-")
+            // `liveblend-` covers `liveblend-dng-` too.
+            || name.hasPrefix("liveblend-") || name.hasPrefix("interval-")
+            || name.hasPrefix("scanner-")
+    }
+
+    /// Removes the `tmp/` staging folder a just-registered capture came out of.
+    ///
+    /// Registration *copies* into `Projects/<uuid>/source/`, so until this runs
+    /// every shoot exists twice on disk — once in the project and once as a
+    /// ghost in `tmp/` that nothing ever revisits. Callers pass any file from
+    /// the staging set; the folder is derived from it.
+    ///
+    /// Deliberately narrow, because the same registration paths also take files
+    /// the user still owns (a Photos pick, a security-scoped file dropped on the
+    /// Mac app, an `LL_SEED` path): the folder is only deleted when it is a
+    /// *directory*, sitting *directly* in `tmp/`, whose name is one this app
+    /// writes. Anything else — including `tmp/` itself — is left alone.
+    nonisolated private static func discardStagingFolder(containing url: URL) {
+        let staging = url.deletingLastPathComponent().standardizedFileURL
+        let temporary = FileManager.default.temporaryDirectory.standardizedFileURL
+        guard staging.deletingLastPathComponent().path == temporary.path,
+              isCacheItem(staging) else { return }
+        var isDirectory: ObjCBool = false
+        guard FileManager.default.fileExists(atPath: staging.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else { return }
+        try? FileManager.default.removeItem(at: staging)
     }
 
     nonisolated static func directorySize(_ url: URL) -> Int64 {
@@ -5214,6 +5247,17 @@ final class AppModel: ObservableObject {
 
         captures.insert(capture, at: 0)
         try persistLibrary()
+        // The project owns the material now — and only now, with the manifest
+        // written. Everything downstream re-resolves through `source(for:)`, so
+        // the staging copy is dead weight from this line on.
+        switch source {
+        case .video(let url):
+            Self.discardStagingFolder(containing: url)
+        case .photos(let urls):
+            if let first = urls.first { Self.discardStagingFolder(containing: first) }
+        case .liveSequence:
+            break  // returned above, through registerSequenceCapture.
+        }
         Task { [weak self] in
             switch capture.kind {
             case .video: await self?.refreshVideoMetadata(for: capture.id)
@@ -5295,6 +5339,14 @@ final class AppModel: ObservableObject {
 
         captures.insert(capture, at: 0)
         try persistLibrary()
+        // Same as `registerCapture`: the segments and their `sequence.json` are
+        // in the project folder and the manifest is on disk, so the staging run
+        // in `tmp/` is now a duplicate of a multi-gigabyte shoot.
+        if let first = result.segmentURLs.first {
+            Self.discardStagingFolder(containing: first)
+        } else {
+            Self.discardStagingFolder(containing: result.metadataURL)
+        }
         Task { [weak self] in
             await self?.refreshVideoMetadata(for: capture.id)
         }
