@@ -259,6 +259,34 @@ final class AppModel: ObservableObject {
             sourceFileNames.filter { !$0.hasSuffix(".json") }.count
         }
 
+        /// The file types this project's source assets are written in,
+        /// uppercased and de-duplicated in first-seen order: ["DNG"], ["JPG"],
+        /// ["MOV"], or more than one for a mixed import. Sidecars are not
+        /// frames and never count. Read it through
+        /// `AppModel.sourceFormatSummary(for:)`, which pairs it with the flat
+        /// flag the file names can't carry.
+        var sourceFormatLabels: [String] {
+            var labels: [String] = []
+            for name in sourceFileNames where !name.hasSuffix(".json") {
+                let ext = (name as NSString).pathExtension.uppercased()
+                guard !ext.isEmpty else { continue }
+                let label = Self.sourceFormatLabel(for: ext)
+                if !labels.contains(label) { labels.append(label) }
+            }
+            return labels
+        }
+
+        /// One spelling per file type, so a library holding both `.jpg` and
+        /// `.jpeg` frames doesn't wear a two-format pill for one format.
+        static func sourceFormatLabel(for ext: String) -> String {
+            switch ext {
+            case "JPEG": return "JPG"
+            case "TIFF": return "TIF"
+            case "QUICKTIME": return "MOV"
+            default: return ext
+            }
+        }
+
         /// A one-tap Photo-mode capture: a single photo. With Blend Off the
         /// captured frame is the photo itself; with blend on, the burst was
         /// auto-blended into one image at capture time. Either way the
@@ -3373,6 +3401,74 @@ final class AppModel: ObservableObject {
         guard let summary else { return nil }
         burstSummaryCache[capture.id] = summary
         return summary
+    }
+
+    // MARK: - Source format
+
+    /// What a project's source assets ARE: the file type they were written in,
+    /// and whether the shoot asked for a flat/log profile. Both halves are
+    /// invisible in every other line the card shows — "Interval · 214 photos"
+    /// says nothing about DNG vs JPG, and nothing at all says a run was shot
+    /// flat, which is the difference between footage that is ready to look at
+    /// and footage that still wants a grade.
+    struct SourceFormatSummary: Equatable {
+        /// Uppercased file types, first-seen order: ["DNG"], ["JPG"], ["MOV"],
+        /// or more than one for a mixed import.
+        var formats: [String]
+        /// Capture Flat was on for this run — for video, either the request or
+        /// the Apple Log that actually engaged.
+        var flat: Bool
+
+        /// "DNG" / "MOV · FLAT"; nil when the project's files carry no
+        /// extension at all, which is the only case with nothing to say.
+        var label: String? {
+            guard !formats.isEmpty else { return nil }
+            return (formats + (flat ? ["FLAT"] : [])).joined(separator: " · ")
+        }
+    }
+
+    /// Summaries already read this session. A source folder's file types and
+    /// its capture sidecars are written once at registration and never edited,
+    /// so an entry is good for as long as the app runs.
+    private var sourceFormatCache: [UUID: SourceFormatSummary] = [:]
+
+    /// The Projects card's format pill. The formats come straight off the
+    /// project's own file list; only the flat flag costs a disk read, so the
+    /// whole thing rides the same off-main queue as the other per-card walks.
+    /// Returns nil only when the read was cancelled (the row scrolled away).
+    func sourceFormatSummary(for capture: CaptureProject) async -> SourceFormatSummary? {
+        if let known = sourceFormatCache[capture.id] { return known }
+        let formats = capture.sourceFormatLabels
+        let folder = captureFolderURL(for: capture.id)
+        let summary = await MediaWorkQueue.shared.run { () -> SourceFormatSummary in
+            SourceFormatSummary(formats: formats, flat: Self.capturedFlat(inProjectFolder: folder))
+        }
+        guard let summary else { return nil }
+        sourceFormatCache[capture.id] = summary
+        return summary
+    }
+
+    /// Whether the shoot behind a project folder was captured flat, read from
+    /// whichever sidecar its capture path writes: stills record the toggle in
+    /// `capture_log.json`, video records both the request and whether Apple Log
+    /// engaged in `sequence.json`. False for imports and for anything captured
+    /// before either field existed — the pill says FLAT only when a sidecar
+    /// says so outright.
+    nonisolated private static func capturedFlat(inProjectFolder root: URL) -> Bool {
+        let source = root.appendingPathComponent("source", isDirectory: true)
+        let logURL = source.appendingPathComponent(CaptureExposureLog.sessionFileName)
+        if let session = try? CaptureExposureLog.loadSession(from: logURL) {
+            return session.captureFlat == true
+        }
+        let sequenceURL = source.appendingPathComponent("sequence.json")
+        if let data = try? Data(contentsOf: sequenceURL) {
+            let decoder = JSONDecoder()
+            decoder.dateDecodingStrategy = .iso8601
+            if let sequence = try? decoder.decode(LiveCaptureSequence.self, from: data) {
+                return sequence.captureFlat == true || sequence.appleLog == true
+            }
+        }
+        return false
     }
 
     // MARK: - Storage

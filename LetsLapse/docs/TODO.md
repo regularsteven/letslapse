@@ -11,6 +11,47 @@ live inline.
 
 ## Open
 
+### Import a project from another device (local network)
+
+**Detail:** [project-transfer-plan.md](project-transfer-plan.md) ·
+**Raised:** 2026-08-27 · **Planned, not started** · *revised 2026-08-27 —
+payload strategy, resume, AirDrop/USB*
+
+Move a ~1–20 GB project device-to-device over the local network with no
+intermediate file on either side: iPhone/iPad serve behind a six-digit code,
+Mac/iPhone/iPad pull. A new `_letslapse-library._tcp` listener, deliberately
+separate from `CaptureRemoteListener` (different lifetime, different grant —
+serving the whole library is not the same act as driving the shutter), and a
+typed length-prefixed frame format carrying JSON control beside raw payload.
+
+**The payload is files, not an archive.** lzfse over DNG/ProRes saves close to
+nothing, so the compression pass buys a rounding error and costs heat on a
+thermally marginal phone — while file-by-file makes the transfer **resumable**
+with the filesystem as its own ledger (stage into `Incoming/<projectID>/`,
+`.part` until complete, reconnect with the set you already hold). A sequential
+Apple Archive stream has no "start at entry N", so an interruption at 90% throws
+away 90%; that is the trade this reverses. Phase 0 measures the real compression
+ratio on Steven's own footage to confirm it before committing.
+
+**Prerequisite for everything else:** the app has no central busy flag — capture
+lives in `CameraController`, blending in `AppModel.stage`, and both archive
+exports in view-local `@State` — so a `LibraryActivity` registry lands first.
+Two smaller traps already identified: `"Incoming"` must join
+`StorageLocation.libraryItemNames` or a storage move strands a half-finished
+12 GB transfer, and the `["source","blends","notes"]` install allowlist must
+become one shared constant or untransferable bytes get sent and then deleted.
+
+**AirDrop already works** via the share sheet and needs no work — with the
+caveat that it materialises the whole `.lapse` to temp first (peak disk ≈ 2×,
+though `exportProject` refuses cleanly when there is no room). **USB is free**:
+listening on all interfaces means a cabled iPhone is found by the Mac's browser
+with no protocol change — the only work is a picker label, and what interface
+type a tethered device reports is a hardware check, not an assumption.
+
+Phased iOS-serve → Mac-import first, iOS import second, Mac serve last. UI is
+unstarted and needs the design-first/app-first question asked before any of it
+is drawn.
+
 ### Holy Grail ramp actuation: bench verification on both pipelines
 
 **Detail:** [holygrail-ramp-actuation.md](holygrail-ramp-actuation.md) ·

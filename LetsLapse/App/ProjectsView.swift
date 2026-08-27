@@ -305,6 +305,7 @@ private struct ProjectCard: View {
 
     @State private var projectBytes: Int64?
     @State private var burstSummary: AppModel.BurstClipSummary?
+    @State private var sourceFormat: AppModel.SourceFormatSummary?
 
     var body: some View {
         let versions = model.blends(for: capture)
@@ -338,12 +339,33 @@ private struct ProjectCard: View {
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
-                        Text(versionsLine(count: versions.count))
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(
-                                versions.isEmpty || capture.isPhotoCapture
-                                    ? Color.secondary : LL.accent)
-                            .padding(.top, 2)
+                        HStack(spacing: 7) {
+                            Text(versionsLine(count: versions.count))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundStyle(
+                                    versions.isEmpty || capture.isPhotoCapture
+                                        ? Color.secondary : LL.accent)
+                                // One line, like every other line of the
+                                // stack — the pill beside it must not be able
+                                // to wrap "1 blended clip · 21 MB" in half.
+                                // It shrinks a hair rather than truncating in
+                                // the one case that is genuinely tight: a
+                                // blended project wearing a FLAT pill too.
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.85)
+                            // What the source assets actually are — stills or
+                            // footage, in what file type, shot flat or not.
+                            // Absent until the sidecar read lands, and absent
+                            // for good on a project whose files have no
+                            // extension to read.
+                            if let format = sourceFormat, !format.formats.isEmpty {
+                                SourceFormatPill(
+                                    summary: format,
+                                    isStills: capture.kind == .photos)
+                                    .fixedSize()
+                            }
+                        }
+                        .padding(.top, 2)
 
                         // Only on analysed projects, so an untagged library's
                         // cards keep exactly the height they always had.
@@ -372,8 +394,10 @@ private struct ProjectCard: View {
             }
             .buttonStyle(.plain)
 
-            // A photo is one asset — no version strip, nothing to add.
-            if !capture.isPhotoCapture {
+            // A photo is one asset, and an unblended project has an empty
+            // strip: blending starts inside the project (and from the context
+            // menu), never from a button sitting in everybody's list.
+            if !capture.isPhotoCapture, !versions.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 8) {
                         ForEach(versions) { blend in
@@ -390,23 +414,6 @@ private struct ProjectCard: View {
                             }
                             .buttonStyle(.plain)
                         }
-
-                        Button(action: onNewVersion) {
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(
-                                    Color.primary.opacity(0.18),
-                                    style: StrokeStyle(lineWidth: 1.5, dash: [5, 4])
-                                )
-                                .frame(width: versions.isEmpty ? 96 : 54, height: 54)
-                                .overlay {
-                                    Image(systemName: "plus")
-                                        .font(.system(size: 18, weight: .medium))
-                                        .foregroundStyle(LL.accent)
-                                }
-                                .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel("New blended clip")
                     }
                     .padding(.horizontal, 14)
                     .padding(.bottom, 12)
@@ -452,6 +459,12 @@ private struct ProjectCard: View {
             // nil is a cancelled read — keep the line's current tail.
             if let summary = await model.burstClipSummary(for: capture) {
                 burstSummary = summary
+            }
+        }
+        .task(id: capture.id) {
+            // nil is a cancelled read — keep whatever pill is already up.
+            if let summary = await model.sourceFormatSummary(for: capture) {
+                sourceFormat = summary
             }
         }
     }
@@ -500,5 +513,40 @@ private struct ProjectCard: View {
         case 1: return size.map { "1 blended clip · \($0)" } ?? "1 blended clip"
         default: return size.map { "\(count) blended clips · \($0)" } ?? "\(count) blended clips"
         }
+    }
+}
+
+/// "▣ DNG" · "▶ MOV FLAT" — what a project's SOURCE is, in one glance: stills
+/// or footage (the icon), the file type they were written in (the text), and
+/// whether the shoot was captured flat.
+///
+/// FLAT is tinted rather than set in the same grey as the rest, because it is
+/// the one part that changes what the media LOOKS like — everything else in
+/// the pill only describes it.
+private struct SourceFormatPill: View {
+    var summary: AppModel.SourceFormatSummary
+    var isStills: Bool
+
+    var body: some View {
+        HStack(spacing: 3.5) {
+            Image(systemName: isStills ? "photo" : "video")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Text(summary.formats.joined(separator: " · "))
+                .font(.system(size: 10, weight: .heavy))
+                .foregroundStyle(.secondary)
+            if summary.flat {
+                Text("FLAT")
+                    .font(.system(size: 10, weight: .heavy))
+                    .foregroundStyle(LL.accent)
+            }
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(Color.primary.opacity(0.06), in: Capsule())
+        .overlay(Capsule().strokeBorder(Color.primary.opacity(0.08)))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(
+            "\(isStills ? "Source photos" : "Source video"): \(summary.label ?? "")")
     }
 }
