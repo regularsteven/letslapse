@@ -205,6 +205,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// workQueue.
     private var windowExposureDivergenceMax: Double = 0
     private var lastDivergenceLogged: Double = 0
+    /// One "the ramp commanded nothing" report per session — the condition is a
+    /// property of the run, not of a frame.
+    private var issuedRampSilence = false
     /// Windows handed to `processingQueue` whose commit hasn't landed yet.
     /// Backpressure: ≥2 pauses new captures so frame Data can't pile up.
     private var pendingProcessingWindows = 0
@@ -763,7 +766,18 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // divergence is the actuation chain failing — the class of bug that
         // silently cost the 2026-08-20 field test two sunset runs — so it is
         // logged loudly and stamped into the window's capture_log record.
-        if let target = configuration.rampExposure?(),
+        //
+        // A nil target on a ramped run is the extreme of the same failure: the
+        // ramp commanded nothing, the brackets fell back to AE, and until this
+        // branch existed that case skipped the comparison entirely and read as
+        // a clean run.
+        let rampTarget = configuration.rampExposure?()
+        if configuration.rampExposure != nil, rampTarget == nil, !issuedRampSilence {
+            issuedRampSilence = true
+            LLog("liveblend-dng: RAMP NOT DRIVING — no commanded exposure; this run is "
+                 + "AE-exposed and bracketed off AE, and the ramp readout is advisory")
+        }
+        if let target = rampTarget,
            let iso = exposure.iso, let duration = exposure.exposureDuration,
            let divergence = CaptureExposureLog.WindowPerformance.exposureDivergenceStops(
                actualISO: iso, actualDuration: duration,

@@ -429,6 +429,10 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     private var accumulateFailuresThisWindow = 0
     /// Rate-limits the divergence log to one line per half-stop of change.
     private var lastDivergenceLogged: Double = 0
+    /// One "the ramp commanded nothing" report per session — the condition is
+    /// a property of the run, not of a window, so repeating it every window
+    /// would bury the log it is meant to make readable.
+    private var issuedRampSilence = false
     private var consecutiveProcessingFailures = 0
     private var lastCompletionUptime: Double?
     private var peakProcessingSeconds = 0.0
@@ -833,7 +837,22 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         // same one, and on this path it is silent by construction: the AE
         // makes up a clamped shutter with ISO, so the picture looks right
         // while the ramp's model is stops away from the sensor.
-        if let target = configuration.rampExposure?(),
+        //
+        // A ramped run whose provider hands back nil is the same failure at its
+        // most extreme — the ramp commanded *nothing*, so the sensor is on AE —
+        // and it used to be the one case this guard could not see, because a
+        // nil target skipped the whole comparison. Silence now costs an issue.
+        let rampTarget = configuration.rampExposure?()
+        if configuration.rampExposure != nil, rampTarget == nil, !issuedRampSilence {
+            issuedRampSilence = true
+            sessionIssues.append(.init(
+                at: Date(), windowIndex: entry.index,
+                kind: "ramp", severity: "problem",
+                detail: "ramp commanded nothing — exposure is AE-driven"))
+            LLog("liveblend: RAMP NOT DRIVING — no commanded exposure at window "
+                 + "\(entry.index); this run is AE-exposed and the ramp readout is advisory")
+        }
+        if let target = rampTarget,
            let delivered = record.exposure,
            let deliveredISO = delivered.iso,
            let deliveredDuration = delivered.exposureDuration,

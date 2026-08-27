@@ -308,13 +308,18 @@ final class CameraController: NSObject, ObservableObject {
     #endif
     /// How long the seeded exposure needs to take effect before the run's first
     /// frame is worth capturing. Set by `seedHolyGrailRamp` and consumed once by
-    /// `afterHolyGrailSeedSettles`; zero when the seed barely moved the device,
-    /// which is every daylight run. sessionQueue-confined.
+    /// `afterHolyGrailSeedSettles`; zero when the seed barely moved the device
+    /// (every daylight run) and the write landed first time.
+    /// sessionQueue-confined.
     ///
     /// Not iOS-only so the two blend-run start paths can hold the delay without
     /// each carrying a platform branch — on macOS it is always zero, because
     /// there is no ramp to seed.
     private var holyGrailSeedSettleSeconds: TimeInterval = 0
+    /// Whether the seed write was refused at arm time and is owed one more
+    /// attempt when the hold above elapses. Consumed by
+    /// `retryHolyGrailSeedIfNeeded`. sessionQueue-confined.
+    private var holyGrailSeedNeedsRetry = false
     #if os(iOS)
     // Scanner — the motion-triggered interval shoot. All sessionQueue-confined
     // except the tap itself, which owns its own queue.
@@ -5548,7 +5553,13 @@ final class CameraController: NSObject, ObservableObject {
     private func afterHolyGrailSeedSettles(_ work: @escaping () -> Void) {
         let wait = holyGrailSeedSettleSeconds
         holyGrailSeedSettleSeconds = 0
-        guard wait > 0 else { work(); return }
+        guard wait > 0 else {
+            #if os(iOS)
+            retryHolyGrailSeedIfNeeded()
+            #endif
+            work()
+            return
+        }
         LLog(String(format: "holygrail: holding %.2fs for the seeded exposure to latch", wait))
         sessionQueue.asyncAfter(deadline: .now() + wait) { [weak self] in
             guard let self else { return }
@@ -5556,6 +5567,9 @@ final class CameraController: NSObject, ObservableObject {
                 LLog("holygrail: seed hold abandoned — the run ended inside it")
                 return
             }
+            #if os(iOS)
+            self.retryHolyGrailSeedIfNeeded()
+            #endif
             work()
         }
     }
@@ -5584,6 +5598,7 @@ final class CameraController: NSObject, ObservableObject {
             holyGrailEngine = nil
             holyGrailLimits = nil
             holyGrailSeedSettleSeconds = 0
+            holyGrailSeedNeedsRetry = false
             return
         }
         let limits = holyGrailHardwareLimits(for: device, interval: interval)
@@ -5894,10 +5909,42 @@ final class CameraController: NSObject, ObservableObject {
     }
     #endif
 
-    private func applyHolyGrailExposure() {
-        guard let device = videoDevice, let target = holyGrailEngine?.currentTarget,
-              device.isExposureModeSupported(.custom)
-        else { return }
+    /// Why a write of the ramp's exposure did or did not reach the camera.
+    ///
+    /// Every path out of `applyHolyGrailExposure` names itself, because a
+    /// silent early return there is how a whole run shoots on AE while the
+    /// readout claims a ramp: on the 2026-08-26 bench every JPEG Dynamic run
+    /// logged a ramp, drove nothing, and said so nowhere — the engine's target
+    /// and the delivered frames finished 4.3 stops apart.
+    private enum HolyGrailApplyOutcome: Equatable {
+        case applied
+        case noDevice
+        case noTarget
+        case customExposureUnsupported
+        case lockFailed(String)
+
+        /// Why not, phrased for the log. Nil when the write landed.
+        var failureReason: String? {
+            switch self {
+            case .applied:
+                return nil
+            case .noDevice:
+                return "no capture device"
+            case .noTarget:
+                return "the ramp has no target"
+            case .customExposureUnsupported:
+                return "this camera does not accept a custom exposure right now"
+            case .lockFailed(let message):
+                return "lockForConfiguration failed — \(message)"
+            }
+        }
+    }
+
+    @discardableResult
+    private func applyHolyGrailExposure() -> HolyGrailApplyOutcome {
+        guard let device = videoDevice else { return .noDevice }
+        guard let target = holyGrailEngine?.currentTarget else { return .noTarget }
+        guard device.isExposureModeSupported(.custom) else { return .customExposureUnsupported }
         // Clamp to the format's REAL envelope before writing: an out-of-range
         // duration or ISO makes `setExposureModeCustom` throw an ObjC
         // exception (not a Swift error), and the 2026-08-20 field test's
@@ -5919,7 +5966,6 @@ final class CameraController: NSObject, ObservableObject {
                 asked %.4fs ISO %.0f, applying %.4fs ISO %.0f
                 """, target.shutter.seconds, Double(target.iso), duration.seconds, Double(iso)))
         }
-        var applied = false
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
@@ -5939,17 +5985,31 @@ final class CameraController: NSObject, ObservableObject {
                 #endif
             }
             device.setExposureModeCustom(duration: duration, iso: iso, completionHandler: nil)
-            applied = true
         } catch {
-            LLog("holygrail: lockForConfiguration failed — \(error.localizedDescription)")
+            return .lockFailed(error.localizedDescription)
         }
-        if applied {
-            // Outside the device-lock scope (no nested locks): what the
-            // bracket path keys on, and what the honesty guard compares
-            // delivered frames against. Only what was actually written —
-            // a failed apply must not move the reference.
-            holyGrailAppliedExposure.set((duration: duration, iso: iso))
+        // Outside the device-lock scope (no nested locks): what the bracket
+        // path keys on, and what the honesty guard compares delivered frames
+        // against. Only what was actually written — a failed apply must not
+        // move the reference.
+        holyGrailAppliedExposure.set((duration: duration, iso: iso))
+        return .applied
+    }
+
+    /// sessionQueue-confined. One bounded second attempt at the seed write, for
+    /// the case where the camera was not ready to take a custom exposure at arm
+    /// time. Runs when the settle hold elapses, so it costs nothing when the
+    /// first write already landed — and whichever way it goes, it says so.
+    private func retryHolyGrailSeedIfNeeded() {
+        guard holyGrailSeedNeedsRetry else { return }
+        holyGrailSeedNeedsRetry = false
+        let reason = applyHolyGrailExposure().failureReason
+        guard let reason else {
+            LLog("holygrail: seed exposure applied on retry")
+            return
         }
+        LLog("holygrail: WARNING — the ramp is NOT driving this camera (\(reason)). "
+             + "This run will shoot on AE; the ramp readout is advisory only.")
     }
 
     /// Starts the ramp alongside a Live Blend run, so a holy-grail shoot can
@@ -5980,12 +6040,16 @@ final class CameraController: NSObject, ObservableObject {
             DispatchQueue.main.async { self.activeIntervalSeconds = opening }
         }
         seedHolyGrailRamp(interval: interval)
-        applyHolyGrailExposure()
-        if let device = videoDevice, !device.isExposureModeSupported(.custom) {
-            // The ramp cannot actuate at all here — say so at arm time
-            // instead of shooting a run whose brackets silently fall back
-            // to a frozen AE (the 2026-08-20 failure shape).
-            LLog("holygrail: WARNING — this camera does not support custom exposure; the ramp cannot drive it")
+        // The apply's own answer is the only report of whether the ramp can
+        // actuate — this used to re-ask `isExposureModeSupported(.custom)`
+        // separately, which said the right thing while the write that shared
+        // the predicate returned silently and the run shot on AE anyway.
+        if let reason = applyHolyGrailExposure().failureReason {
+            LLog("holygrail: the seed exposure did not reach the camera (\(reason))"
+                 + " — retrying once before the first frame")
+            holyGrailSeedNeedsRetry = true
+            holyGrailSeedSettleSeconds = max(holyGrailSeedSettleSeconds,
+                                             Self.holyGrailSettleSeconds)
         }
         publishHolyGrailState()
         LLog("holygrail: blending ramp armed, every \(interval)s\(autoInterval ? " (auto)" : "")"
@@ -6022,6 +6086,12 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailAutoIntervalSeconds = nil
         DispatchQueue.main.async { self.activeIntervalSeconds = nil }
         holyGrailAppliedExposure.set(nil)
+        // Both belong to the run that is ending, and a hold that outlives it
+        // has nothing left to latch — clear them before the `holyGrailActive`
+        // gate, so a run torn down before it ever armed cannot leave the next
+        // one holding or retrying.
+        holyGrailSeedSettleSeconds = 0
+        holyGrailSeedNeedsRetry = false
         guard holyGrailActive else { return }
         holyGrailActive = false
         holyGrailPending = false
@@ -7475,10 +7545,6 @@ final class CameraController: NSObject, ObservableObject {
                             index: index, measurement: luma.map { .luma($0) })
                     }
                 }
-                self.beginHolyGrailForBlendRun(
-                    interval: interval, directory: directory,
-                    autoInterval: self.holyGrailAutoRequestedForRun,
-                    rawPipeline: false)
             }
             #endif
             controller.onDiagnostics = { [weak self] snapshot in
@@ -7524,6 +7590,26 @@ final class CameraController: NSObject, ObservableObject {
             // while frames are being averaged. (The DNG path already runs on
             // a pinned physical device; this path stays on the virtual one.)
             self.lockConstituentSwitchingForRun()
+            // The ramp arms HERE, after the pin — not up with its callback.
+            //
+            // Arming before it meant every JPEG Dynamic run on the 2026-08-26
+            // bench reported a ramp and drove nothing: the device refused the
+            // custom exposure, the seed write returned silently,
+            // `holyGrailAppliedExposure` stayed nil, and with no commanded
+            // target the controller's divergence guard had nothing to compare —
+            // so the engine and the sensor finished 4.3 stops apart with the
+            // logs clean. The refusal correlates with the virtual back camera
+            // still having constituent switching unlocked, which is why the
+            // arm moved here; that mechanism is a hypothesis, not a measurement
+            // (docs/holygrail-ramp-actuation.md), so it is deliberately not the
+            // only defence — `retryHolyGrailSeedIfNeeded` re-attempts once, and
+            // a nil commanded target is now itself a reported fault.
+            if self.holyGrailRequestedForRun {
+                self.beginHolyGrailForBlendRun(
+                    interval: interval, directory: directory,
+                    autoInterval: self.holyGrailAutoRequestedForRun,
+                    rawPipeline: false)
+            }
             #endif
             output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
             self.afterHolyGrailSeedSettles { [weak self] in
@@ -7758,10 +7844,14 @@ final class CameraController: NSObject, ObservableObject {
                                 ProcessInfo.processInfo.systemUptime - started))
                     self.startCapabilityReprofiling(rawPixelFormat: rawFormat, interval: interval)
                     // The probe shot ten frames after the seed was written, so
-                    // it has long outlasted any settle — but the delay still
-                    // has to be consumed, or the next run inherits it.
+                    // it has long outlasted any settle — drop the hold, but
+                    // still go through the helper so a refused seed gets its
+                    // retry and the delay cannot be inherited by the next run.
                     self.holyGrailSeedSettleSeconds = 0
-                    controller.start()
+                    self.afterHolyGrailSeedSettles { [weak self] in
+                        guard let self, self.liveBlendRawController === controller else { return }
+                        controller.start()
+                    }
                 }
             }
         } else {

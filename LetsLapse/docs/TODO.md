@@ -11,6 +11,30 @@ live inline.
 
 ## Open
 
+### Holy Grail ramp actuation: bench verification on both pipelines
+
+**Detail:** [holygrail-ramp-actuation.md](holygrail-ramp-actuation.md) ·
+**Raised:** 2026-08-27 · **Code landed 2026-08-27 — verification owed**
+
+*Shipped on `ios-app`: the JPEG live-blend path now arms the ramp AFTER
+`lockConstituentSwitchingForRun()` rather than ~1.3 s before it;
+`applyHolyGrailExposure()` returns a named outcome instead of three unlogged
+early returns, with one bounded retry folded into the existing settle hold;
+and both blend controllers now report a ramped run whose commanded exposure is
+nil (`RAMP NOT DRIVING`, plus `kind: "ramp"` in the `issues[]` trail on the
+JPEG side).* The bug: three consecutive Dynamic runs on the 16 Pro logged a
+ramp and drove nothing — engine target and delivered frames finished 4.3 stops
+apart with `EXPOSURE DIVERGENCE` appearing zero times, because a nil commanded
+target skipped the guard that was supposed to catch exactly this. Owed before
+this leaves the list: **(a)** a bench run on each pipeline (JPEG, then DNG
+output enabled) against the pass conditions in the brief — in particular
+frame 0's ISO/shutter within a quarter stop of frames 1–3, which is the
+regression test for the original purple frame; **(b)** confirm or kill the
+hypothesis that a virtual device with constituent switching unlocked is what
+refuses `.custom` — the fix does not depend on it, but the next person's
+mental model does; **(c)** the product call on whether a run whose ramp cannot
+actuate should refuse to start rather than only saying so in the log.
+
 ### Dim-screen-during-shoot: mirrors, Watch verification, and the composed A/B
 
 **Detail:** [fieldtests/2026-08-25-thermal-bench.md](fieldtests/2026-08-25-thermal-bench.md) ·
