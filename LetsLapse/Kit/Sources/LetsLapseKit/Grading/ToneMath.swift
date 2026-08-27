@@ -137,6 +137,10 @@ public enum ToneMath {
     static let sharpenSigmaFraction: Float = 1.0 / 4032.0
     static let sharpenStrength: Float = 1.3
     static let sharpenTau: Float = 0.05
+    /// Sharpening's edge mask: the local luma step — Sobel magnitude in the
+    /// encoded domain — at which a pixel counts as an edge and earns the full
+    /// amount. Only consulted once the Masking sub-slider leaves 0.
+    static let sharpenEdgeThreshold: Float = 0.08
     /// Texture sigma — 8 px at 4032.
     static let textureSigmaFraction: Float = 0.002
     static let textureStrength: Float = 0.6
@@ -148,13 +152,52 @@ public enum ToneMath {
     /// cobblestone scale.
     static let colorNoiseStrength: Float = 0.9
     static let colorNoiseBlurSigmaMax: Float = 10
-    /// Luminance noise reduction: bilateral spatial footprint (pixels) and
-    /// the range gate in encoded luma — the base range catches quantisation
-    /// grain, the scaled part opens with the slider.
+    /// Luminance noise reduction: the frequency split's base-layer Gaussian
+    /// footprint (pixels) *at the reference long edge*. Grain is a pixel-scale
+    /// thing, so the footprint scales with the render — otherwise a 2000 px
+    /// preview gets twice the relative reach of the 4032 px export it is
+    /// standing in for, and the preview lies about how much detail the file is
+    /// losing.
+    static let noiseReferenceLongEdge: Float = 4032
     static let noiseSpatialSigma: Float = 1.4
     static let noiseSpatialRadius: Int = 3
-    static let noiseRangeBase: Float = 0.015
-    static let noiseRangeScale: Float = 0.1
+    /// Below about ⅔ of a pixel a Gaussian has no neighbour left to average,
+    /// so the scaling stops here rather than turning NR into a silent no-op
+    /// on the smallest previews and thumbnails.
+    static let noiseSpatialSigmaFloor: Float = 0.7
+    /// The soft threshold the detail residual is shrunk against, in encoded
+    /// luma, at full amount and Detail 0 — roughly 30/255, about as far as a
+    /// fine layer can be cut before coarse structure starts to notice. The
+    /// amount scales it and the Detail sub-slider walks it back, so the
+    /// neutral 0.5 sits at 60% of this.
+    static let frequencySplitMaxThreshold: Float = 0.12
+    /// How much of that threshold the Detail sub-slider can take away at 1 —
+    /// Detail is a *preservation* control, so at the top of its travel only a
+    /// fifth of the knee is left and fine structure comes through nearly
+    /// untouched.
+    static let frequencySplitDetailReach: Float = 0.8
+    /// How far the soft threshold backs off on an edge. The shrink cannot tell
+    /// fine structure sitting on an edge from grain sitting on it, so the knee
+    /// is scaled down where the base layer is steep: at a full edge a tenth of
+    /// it is left and the residuals pass, while flat regions — where all the
+    /// fine layer holds is grain — keep the whole knee.
+    static let frequencySplitEdgeProtect: Float = 0.9
+    /// Where an edge is fully an edge, as a per-pixel gradient of the *base*
+    /// layer in encoded luma. Smoothing spreads a step of height h over σ, so
+    /// its peak slope is about h/(σ√2π) — a hard edge lands near 0.08–0.2 and
+    /// a soft one near 0.02–0.04. Measured on a night frame at NR 70: at 0.05
+    /// the ramp reaches too far down into gently-shaded flats and hands back
+    /// grain for edge contrast it could have had anyway; 0.08 keeps more edge
+    /// (92% of the un-denoised Laplacian energy against 88%) *and* less flat
+    /// grain, so the wider knee is not a trade.
+    static let frequencySplitEdgeKnee: Float = 0.08
+    /// Chroma noise reduction: the Cb/Cr Gaussian's tap radius (pixels) at
+    /// `noiseReferenceLongEdge`, scaled to the render the same way luma NR's
+    /// is. Colour mottle is coarser than luma grain, so the footprint is
+    /// wider than the bilateral's — and the cap is there because the pass is
+    /// O(radius²) per pixel and a 48 MP file would otherwise ask for 441 taps.
+    static let chromaNoiseSpatialRadius: Float = 5
+    static let chromaNoiseRadiusCap: Int = 8
     /// A strong lift widens the protected window upward: SNR is set at
     /// capture, so the deeper the lift reaches, the higher up the source
     /// axis the chroma stays noise-dominated.
@@ -475,7 +518,7 @@ public enum ToneMath {
     /// A white point in XYZ (Y = 1) for an illuminant temperature, with the
     /// tint slider as a green–magenta offset off the locus (positive tint =
     /// magenta = less green = lower y).
-    static func whitePointXYZ(kelvin: Double, tint: Double) -> SIMD3<Double> {
+    public static func whitePointXYZ(kelvin: Double, tint: Double) -> SIMD3<Double> {
         var xy = planckianXY(kelvin: kelvin)
         xy.y = min(max(xy.y - 0.05 * tint, 0.01), 0.9)
         return SIMD3<Double>(xy.x / xy.y, 1, (1 - xy.x - xy.y) / xy.y)
@@ -526,5 +569,58 @@ public enum ToneMath {
             SIMD3<Float>(full.columns.0),
             SIMD3<Float>(full.columns.1),
             SIMD3<Float>(full.columns.2))
+    }
+
+    /// The white-balance 3×3 for one file, under a chosen decode path.
+    ///
+    /// The four paths differ in *where* the balance happens, so only two of
+    /// them return a matrix at all:
+    ///
+    /// - `.bradfordAdaptation` — the existing `whiteBalanceMatrix`, unchanged.
+    /// - `.forwardMatrix` — the same insertion point, but the matrix is a
+    ///   von Kries gain in the camera's own channels, conjugated into Display
+    ///   P3 through the DNG's forward matrix. Falls back to Bradford when the
+    ///   file has no usable calibration (a JPEG, or a DNG without a colour
+    ///   matrix), because a missing tag is not a reason to render unbalanced.
+    /// - `.cirawFilter` — identity. `LinearFrameDecoder` has already applied
+    ///   the balance inside the raw converter, in camera space ahead of
+    ///   Apple's profile; applying it again here would double it.
+    /// - `.dcpProfile` — identity for the same reason plus one more: it is a
+    ///   scaffold, and `GradeRenderer` degrades it to `.bradfordAdaptation`
+    ///   before it ever reaches this function.
+    ///
+    /// `url` is optional because not every graded texture came from a file on
+    /// disk — the blend path grades an accumulated buffer. A nil URL takes the
+    /// Bradford branch, which needs nothing but the reference.
+    public static func wbMatrix(
+        forDNG url: URL?,
+        recipe: GradeRecipe,
+        reference: GradeReference,
+        path: RawDecodePath
+    ) -> simd_float3x3 {
+        switch path {
+        case .bradfordAdaptation:
+            return whiteBalanceMatrix(recipe: recipe, reference: reference)
+
+        case .forwardMatrix:
+            guard recipe.temperatureMired != 0 || recipe.tint != 0 else {
+                return matrix_identity_float3x3
+            }
+            guard let url,
+                  let calibration = try? ForwardMatrixDecoder.cachedCalibration(for: url) else {
+                return whiteBalanceMatrix(recipe: recipe, reference: reference)
+            }
+            let asShotK = Float(min(max(reference.asShotTemperatureK, 1667), 25000))
+            let asShotMired = 1e6 / asShotK
+            let declaredMired = min(max(asShotMired - recipe.temperatureMired, 40), 600)
+            return ForwardMatrixDecoder.whiteBalanceMatrix(
+                calibration,
+                declaredK: 1e6 / declaredMired,
+                declaredTint: recipe.tint,
+                asShotK: asShotK)
+
+        case .cirawFilter, .dcpProfile:
+            return matrix_identity_float3x3
+        }
     }
 }

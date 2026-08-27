@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Interval grading viewer · keyframed · landscape</title>
-  <desc>Mirrors App/PhotoViewerView.swift's wide branch (available width ≥ 500pt: iPhone landscape, the iPad sheet, a widened Mac window) with App/GradeTimelineView.swift in it. The scrubber belongs to the MEDIA, so it takes the media pane's width rather than the rail's — which keeps the rail identical to the photo editor's (same chips, same panel, same Save as Preset) and the whole photo/interval difference to exactly one component. The media gives up the strip's 54pt of height; the rail is unchanged. There is still no preview-size handle here — the handle belongs to the stacked layout, where media height and control room compete for the same axis; the rail gives up width instead. The strip runs on its compact metrics (26pt control and track, 20pt playhead, 10pt end labels), so it is the same component at a tighter size rather than a second drawing of it. Drawn in the SNAPPED state: the playhead is standing exactly on the middle moment at 1:09:41, which swells to 15pt and takes a white ring inside a #C36A00 halo. While it holds, the sliders in the rail edit THAT moment — the readouts and the diamonds beside Temp, Exposure and Highlights are that moment's values, not the clip's. See project-photo.viewer.keyframes.portrait.svg for the model, the states and the panel treatment; this file specifies placement only.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift's wide branch (available width ≥ 500pt: iPhone landscape, the iPad sheet, a widened Mac window) with App/GradeTimelineView.swift in it. The scrubber belongs to the MEDIA, so it takes the media pane's width rather than the rail's — which keeps the rail identical to the photo editor's (same chips, same panel, same Save as Preset) and the whole photo/interval difference to exactly one component. The media gives up the strip's 54pt of height; the rail is unchanged. There is still no preview-size handle here — the handle belongs to the stacked layout, where media height and control room compete for the same axis; the rail gives up width instead. The strip runs on its compact metrics (26pt control and track, 20pt playhead, 10pt end labels, 26pt frame-step discs 6pt apart), so it is the same component at a tighter size rather than a second drawing of it. The steps take their width out of the track, so the media pane's width is unchanged and the two end labels still sit at the track's own ends. Drawn in the SNAPPED state: the playhead is standing exactly on the middle moment at 1:09:41, which swells to 15pt and takes a white ring inside a #C36A00 halo. While it holds, the sliders in the rail edit THAT moment — the readouts and the diamonds beside Temp, Exposure and Highlights are that moment's values, not the clip's. See project-photo.viewer.keyframes.portrait.svg for the model, the states and the panel treatment; this file specifies placement only.</desc>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="864" height="405" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
@@ -25,16 +25,21 @@
     <text x="106" y="325.5" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 60 frames</text>
     <circle cx="114.0" cy="364.0" r="13.0" fill="#1C1C1E"/>
     <path d="M110.5 357.5 L120.0 364.0 L110.5 370.5 Z" fill="#FFB340"/>
-    <rect x="139" y="362.5" width="378.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
-    <rect x="334.1" y="354.0" width="3" height="20" rx="1.5" fill="#FFFFFF"/>
-    <circle cx="176.8" cy="364.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
-    <circle cx="335.6" cy="364.0" r="8.75" fill="none" stroke="#C36A00" stroke-width="1.5"/>
-    <circle cx="335.6" cy="364.0" r="6.5" fill="#FFB340" stroke="#FFF" stroke-width="2"/>
-    <circle cx="464.1" cy="364.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
-    <rect x="306.2" y="335.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
-    <text x="335.6" y="346.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">1:09:41</text>
+    <rect x="139" y="362.5" width="314.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
+    <rect x="300.8" y="354.0" width="3" height="20" rx="1.5" fill="#FFFFFF"/>
+    <circle cx="170.4" cy="364.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <circle cx="302.3" cy="364.0" r="8.75" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+    <circle cx="302.3" cy="364.0" r="6.5" fill="#FFB340" stroke="#FFF" stroke-width="2"/>
+    <circle cx="409.1" cy="364.0" r="4.5" fill="#FFB340" stroke="#C36A00" stroke-width="2"/>
+    <rect x="272.9" y="335.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
+    <text x="302.3" y="346.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">1:09:41</text>
     <text x="139.0" y="389.0" font-size="10" fill="#8E8E93">0:00:00</text>
-    <text x="517.0" y="389.0" text-anchor="end" font-size="10" fill="#8E8E93">2:14:00</text>
+    <text x="453.0" y="389.0" text-anchor="end" font-size="10" fill="#8E8E93">2:14:00</text>
+    <!-- one-frame steps, compact metrics: 26pt discs, 6pt apart -->
+    <circle cx="472.0" cy="364.0" r="13.0" fill="#1C1C1E"/>
+    <path d="M474.8 358.5 L469.2 364.0 L474.8 369.5" fill="none" stroke="#FFB340" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="504.0" cy="364.0" r="13.0" fill="#1C1C1E"/>
+    <path d="M501.2 358.5 L506.8 364.0 L501.2 369.5" fill="none" stroke="#FFB340" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
     <rect x="535" y="24" width="1" height="393" fill="#FFF" opacity="0.15"/>
     <text x="552" y="50" font-size="13" class="sb" fill="#8E8E93">Preset</text>
     <rect x="604" y="38" width="68" height="23" rx="11.5" fill="#FFF" opacity="0.08"/>

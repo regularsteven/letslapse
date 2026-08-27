@@ -305,6 +305,17 @@ final class CameraController: NSObject, ObservableObject {
     /// `HolyGrailAutoInterval.isMeaningfulChange`). Nil when EVERY is a fixed
     /// value — Auto is the only mode that re-paces. sessionQueue-confined.
     private var holyGrailAutoIntervalSeconds: Double?
+    #endif
+    /// How long the seeded exposure needs to take effect before the run's first
+    /// frame is worth capturing. Set by `seedHolyGrailRamp` and consumed once by
+    /// `afterHolyGrailSeedSettles`; zero when the seed barely moved the device,
+    /// which is every daylight run. sessionQueue-confined.
+    ///
+    /// Not iOS-only so the two blend-run start paths can hold the delay without
+    /// each carrying a platform branch — on macOS it is always zero, because
+    /// there is no ramp to seed.
+    private var holyGrailSeedSettleSeconds: TimeInterval = 0
+    #if os(iOS)
     // Scanner — the motion-triggered interval shoot. All sessionQueue-confined
     // except the tap itself, which owns its own queue.
     private var scannerEngine: ScannerEngine?
@@ -3938,6 +3949,40 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// sessionQueue-confined. Blocks until AE and AWB have settled on `device`,
+    /// or until `timeout` seconds have elapsed — whichever comes first.
+    ///
+    /// Called only when the user hasn't locked exposure manually: a manual lock
+    /// owns the sensor already, so there is nothing to wait for. The guard is
+    /// the caller's responsibility.
+    ///
+    /// Modelled on `awaitFocusSettle`. The first interval frame is the worst
+    /// place for AE/AWB to still be hunting — a bad exposure baked into frame 0
+    /// of a timelapse can't be un-cooked. Dark/high-ISO scenes are the worst
+    /// case: the metering loop takes longer to converge when the signal is weak.
+    #if os(iOS)
+    private func awaitExposureSettle(
+        on device: AVCaptureDevice,
+        timeout: TimeInterval = 2.0
+    ) {
+        let deadline = Date().addingTimeInterval(timeout)
+        var logged = false
+        while (device.isAdjustingExposure || device.isAdjustingWhiteBalance),
+              Date() < deadline {
+            if !logged {
+                LLog("exposure: AE/AWB still settling at run start — waiting up to \(timeout)s")
+                logged = true
+            }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        if device.isAdjustingExposure || device.isAdjustingWhiteBalance {
+            LLog(String(format: "exposure: still settling after %.1fs — shooting anyway", timeout))
+        } else if logged {
+            LLog("exposure: settled — firing first interval frame")
+        }
+    }
+    #endif
+
     /// sessionQueue-confined. The lens position to re-assert on `device`, or nil
     /// when nothing comparable has been measured on it.
     private func heldLensPosition(for device: AVCaptureDevice) -> Float? {
@@ -5366,6 +5411,18 @@ final class CameraController: NSObject, ObservableObject {
             // An interval shoot is the least forgiving of the three — a hunt
             // three frames in is baked into the finished timelapse for good.
             self.lockFocusForRun(deviceChanged: false)
+            // Wait for AE/AWB to converge before the first shutter: the timer
+            // fires at .now() so frame 0 is otherwise shot with whatever
+            // exposure the sensor happened to be outputting at the press. Dark
+            // scenes (high ISO, slow shutter) take the longest to converge —
+            // exactly the scenes where a bad first frame is most visible.
+            // Skip the wait when the user owns the exposure lock: they set it
+            // exactly where they want it, and there's nothing for AE to do.
+            #if os(iOS)
+            if !self.exposureLocked, let device = self.videoDevice {
+                self.awaitExposureSettle(on: device)
+            }
+            #endif
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("interval-\(Int(Date().timeIntervalSince1970))")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -5470,6 +5527,39 @@ final class CameraController: NSObject, ObservableObject {
         }
     }
 
+    /// sessionQueue-confined. Runs `work` once the ramp's seeded exposure has
+    /// had time to take effect — immediately when the seed did not move the
+    /// device far enough to matter, which is the common case.
+    ///
+    /// The delay exists because the seed is now a *re-split* of what AE was
+    /// delivering rather than a copy of it (see `seedHolyGrailRamp`): in the
+    /// dark it can swap 1/17 s ISO 3200 for 0.7 s ISO 270, and firing the first
+    /// shutter into that transition would trade one preview-shaped frame for
+    /// one half-latched frame. The delay is consumed here, so a run that never
+    /// reaches this point cannot leave it armed for the next one.
+    ///
+    /// A non-zero hold is only ever a Holy Grail one, so `holyGrailActive` is
+    /// what says the run is still there when it elapses. It has to be checked:
+    /// a screen exit or a session reconfiguration inside the hold tears the run
+    /// down, and starting a controller that has already finished leaves it
+    /// firing into a stopped session for as long as the screen is up
+    /// (`window N captured=0/1 … Capture failed`, forever). Observed on the
+    /// 2026-08-26 bench before this guard existed.
+    private func afterHolyGrailSeedSettles(_ work: @escaping () -> Void) {
+        let wait = holyGrailSeedSettleSeconds
+        holyGrailSeedSettleSeconds = 0
+        guard wait > 0 else { work(); return }
+        LLog(String(format: "holygrail: holding %.2fs for the seeded exposure to latch", wait))
+        sessionQueue.asyncAfter(deadline: .now() + wait) { [weak self] in
+            guard let self else { return }
+            guard self.holyGrailActive else {
+                LLog("holygrail: seed hold abandoned — the run ended inside it")
+                return
+            }
+            work()
+        }
+    }
+
     // MARK: - Holy Grail (auto-ramping interval)
 
     // iOS/iPadOS only, and not by omission: the ramp needs a numeric exposure
@@ -5493,12 +5583,41 @@ final class CameraController: NSObject, ObservableObject {
         guard let device = videoDevice else {
             holyGrailEngine = nil
             holyGrailLimits = nil
+            holyGrailSeedSettleSeconds = 0
             return
         }
         let limits = holyGrailHardwareLimits(for: device, interval: interval)
         holyGrailLimits = limits
-        let seed = HolyGrailRampEngine.ExposureTarget(
+        let metered = HolyGrailRampEngine.ExposureTarget(
             shutterSeconds: device.exposureDuration.seconds, iso: device.iso)
+        // AE's *exposure* is right; AE's *split* is not ours to inherit.
+        //
+        // What the device is delivering here is metered for the live preview,
+        // whose shutter can never be longer than one preview frame — 1/17 s on
+        // the photo configuration. In daylight that costs nothing (AE is
+        // nowhere near the ceiling), but in the dark AE has to buy the whole
+        // exposure in ISO: the 2026-08-23 Prague run opened at 1/17 s ISO 3200
+        // and settled on 1 s ISO 320 two frames later. Same light gain, ten
+        // times the noise — and at ISO 3200 the clipped black floor lifts the
+        // blue channel hardest (blue carries the largest white-balance gain),
+        // so frame 0 of that shoot renders violet while every frame after it is
+        // clean. Re-splitting the same gain through the run's own shutter-first
+        // policy puts the first frame on the exposure the ramp would have
+        // chosen anyway, instead of leaving one preview-shaped frame at the
+        // head of every dark shoot.
+        let seed = HolyGrailRampEngine.split(gain: metered.lightGain, limits: limits)
+        let seedMoveStops = abs(log2(max(seed.shutterSeconds, 1e-6)
+                                      / max(metered.shutterSeconds, 1e-6)))
+        if seedMoveStops > 0.17 {
+            LLog(String(format: """
+                holygrail: re-split the AE seed — metered %.4fs ISO %.0f, \
+                seeding %.4fs ISO %.0f (same gain, %.1f stops off the shutter)
+                """, metered.shutterSeconds, Double(metered.iso),
+                seed.shutterSeconds, Double(seed.iso), seedMoveStops))
+        }
+        // A move this big needs the ISP to catch up before the shutter fires;
+        // anything smaller is inside the noise of an ordinary window step.
+        holyGrailSeedSettleSeconds = seedMoveStops > 0.5 ? Self.holyGrailSettleSeconds : 0
         var engine = HolyGrailRampEngine(seed: seed, limits: limits)
         // The 2026-08-25 fixes, on for every Dynamic run. Anchor drift walks
         // the seed rendering onto the device AE's own opinion at 1/20 stop a
@@ -7407,7 +7526,10 @@ final class CameraController: NSObject, ObservableObject {
             self.lockConstituentSwitchingForRun()
             #endif
             output.setSampleBufferDelegate(controller, queue: controller.videoQueue)
-            controller.start()
+            self.afterHolyGrailSeedSettles { [weak self] in
+                guard let self, self.liveBlendController === controller else { return }
+                controller.start()
+            }
             DispatchQueue.main.async {
                 self.captureRunStartedAt = Date()
                 self.isLiveBlendRunning = true
@@ -7635,11 +7757,18 @@ final class CameraController: NSObject, ObservableObject {
                     LLog(String(format: "liveblend-dng: auto profiling took %.2fs",
                                 ProcessInfo.processInfo.systemUptime - started))
                     self.startCapabilityReprofiling(rawPixelFormat: rawFormat, interval: interval)
+                    // The probe shot ten frames after the seed was written, so
+                    // it has long outlasted any settle — but the delay still
+                    // has to be consumed, or the next run inherits it.
+                    self.holyGrailSeedSettleSeconds = 0
                     controller.start()
                 }
             }
         } else {
-            controller.start()
+            afterHolyGrailSeedSettles { [weak self] in
+                guard let self, self.liveBlendRawController === controller else { return }
+                controller.start()
+            }
         }
         DispatchQueue.main.async {
             self.captureRunStartedAt = Date()

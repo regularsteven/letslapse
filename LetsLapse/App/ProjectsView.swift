@@ -255,7 +255,7 @@ struct ProjectsView: View {
         guard let url else { return }
         previewItem = MediaPreviewItem(
             title: capture.displayTitle,
-            subtitle: capture.formatLine,
+            subtitle: model.formatLine(for: capture),
             url: url,
             kind: model.mediaKind(for: capture)
         )
@@ -325,7 +325,7 @@ private struct ProjectCard: View {
                             .font(.system(size: 16, weight: .bold))
                             .foregroundStyle(.primary)
                             .lineLimit(1)
-                        Text("\(capture.formatLine) · \(capture.createdAt.formatted(.relative(presentation: .named)))")
+                        Text("\(model.formatLine(for: capture)) · \(capture.createdAt.formatted(.relative(presentation: .named)))")
                             .font(.system(size: 12))
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
@@ -457,9 +457,10 @@ private struct ProjectCard: View {
     }
 
     /// A photo project's tile is the photo itself; everything else shows its
-    /// source media.
+    /// source media — an interval shoot skipping any opening frames the user
+    /// nominated as bad.
     private var thumbnailURL: URL? {
-        capture.isPhotoCapture ? model.heroImageURL(for: capture) : model.mediaURL(for: capture)
+        model.thumbnailURL(for: capture)
     }
 
     /// "4 source clips · 2 bursts at 120 fps": the clip count is knowable
@@ -477,7 +478,10 @@ private struct ProjectCard: View {
             return "Photo"
         }
         if capture.kind == .photos {
-            return "\(capture.sourceMediaCount) photos"
+            // What the shoot has left to show, not what is on disk — a project
+            // hiding two bad frames badges 248, and the viewer it opens has
+            // exactly 248 places to stand.
+            return "\(model.effectiveFrameCount(for: capture)) photos"
         }
         if let duration = capture.sourceDurationSeconds {
             return DurationFormatter.recordingTime(from: duration)

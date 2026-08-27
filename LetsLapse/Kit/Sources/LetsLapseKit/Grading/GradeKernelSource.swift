@@ -16,6 +16,9 @@ import Foundation
 ///   guidedResolve   — base = mean(a)·l + mean(b): the edge-aware base layer.
 ///   gradeTone       — the whole per-pixel pipeline, sampling base +
 ///                     neighbourhood chroma.
+///   applyLumaNoise  — frequency split on encoded luma: Gaussian base kept
+///                     whole, soft-thresholded detail residual.
+///   applyChromaNR   — spatial-only Gaussian on Cb/Cr, Y carried through.
 ///   applyVignette   — unchanged.
 ///   finalizeDither  — TPDF dither at 1/255, for 8-bit destinations only.
 enum GradeKernelSource {
@@ -46,6 +49,24 @@ enum GradeKernelSource {
     constant float kVibranceGuardY0 = 0.012;
     constant float kVibranceGuardY1 = 0.1;
     constant float kBaseLumaFloorLog2 = -14.0;
+    constant float kSharpenEdgeThreshold = 0.08;
+    constant float kFrequencySplitMaxThreshold = 0.12;
+    constant float kFrequencySplitDetailReach = 0.8;
+    constant float kFrequencySplitEdgeProtect = 0.9;
+    constant float kFrequencySplitEdgeKnee = 0.08;
+
+    // Chroma NR works in BT.709 YCbCr — the standard full-range matrix and its
+    // exact inverse, so amount 0 round-trips to the value it started with.
+    constant float3 kRec709Luma = float3(0.2126, 0.7152, 0.0722);
+    constant float kCbScale = 1.0 / 1.8556;
+    constant float kCrScale = 1.0 / 1.5748;
+    constant float kCrToR = 1.5748;
+    constant float kCbToG = -0.187324;
+    constant float kCrToG = -0.468124;
+    constant float kCbToB = 1.8556;
+    /// The chroma Gaussian's sigma as a fraction of its tap radius — the
+    /// window reaches 2σ, which is where the weights stop mattering.
+    constant float kChromaNRSigmaScale = 0.5;
 
     struct GradeParams {
         float3x3 wb;             // white-balance matrix, Display P3
@@ -346,9 +367,16 @@ enum GradeKernelSource {
 
     struct DetailParams {
         float amount;   // signed detail gain
-        float tau;      // tanh limiter, encoded domain
+        float tau;      // tanh limiter, encoded domain; luma NR reads it as
+                        // the Detail slider raw (0…1 detail preservation)
         float sigma;    // Gaussian sigma at the blur's resolution
+        float mask;     // sharpen only: how far the edge mask gates `amount`
         int   radius;   // tap radius
+    };
+
+    struct ColorNoiseParams {
+        float amount;   // 0 = pass-through, 1 = take the neighbourhood mean
+        int   radius;   // tap radius, already scaled to the render
     };
 
     // Half-resolution encoded luma of the graded image — the texture band's
@@ -403,10 +431,31 @@ enum GradeKernelSource {
         destination.write(float4(outv, 1.0), gid);
     }
 
-    // Luminance noise reduction: a small bilateral on encoded luma. The
-    // range gate opens with the slider, so grain within it averages away
-    // while anything resembling an edge keeps its value; luma-ratio
-    // application leaves chroma to the colour-noise control.
+    // Luminance noise reduction: a frequency split on encoded luma.
+    //
+    // A bilateral — which is what this pass used to be — attacks every pixel
+    // inside its range gate with the same force, so pushing it hard blurs
+    // across whole structures and the picture goes to watercolour. The split
+    // instead separates encoded luma into a spatial-only Gaussian *base* (the
+    // coarse structure) and a *detail* residual (fine grain plus edges), and
+    // only ever touches the detail. Coarse structure therefore survives at any
+    // amount; what collapses is the fine layer, which is where grain lives.
+    //
+    // There is no range gate, and none is wanted. Edge selectivity mostly falls
+    // out of the split for free: on an edge the local average is pulled toward
+    // the blend of both sides, so `detail` is large there, clears the soft
+    // threshold, and comes through nearly intact. What the split does NOT get
+    // for free is the fine structure *riding on* an edge, whose residual is
+    // small and gets shrunk like grain — so the threshold is additionally
+    // modulated by the base layer's own gradient (see below).
+    //
+    // `amount` sets both how far the shrink is mixed in and how big the
+    // threshold gets; `tau` carries the Detail sub-slider raw (0…1, 0.5
+    // neutral) as detail *preservation* — higher keeps more of the fine layer,
+    // matching what Lightroom's Detail slider does. `sigma`/`radius` arrive
+    // already scaled to the render, so a preview smooths the same picture as
+    // the export. Luma-ratio application leaves chroma to the colour-noise
+    // control.
     kernel void applyLumaNoise(
         texture2d<float, access::read> graded [[texture(0)]],
         texture2d<float, access::write> destination [[texture(1)]],
@@ -421,25 +470,115 @@ enum GradeKernelSource {
         float y = max(dot(v, kLuma), 1e-6);
         float g = pow(y, 1.0 / 2.2);
         float twoSigmaSq = 2.0 * p.sigma * p.sigma;
-        float twoRangeSq = 2.0 * p.tau * p.tau;
         float sum = 0.0;
         float weightSum = 0.0;
+        float gxSum = 0.0;
+        float gySum = 0.0;
         for (int dy = -p.radius; dy <= p.radius; dy++) {
             for (int dx = -p.radius; dx <= p.radius; dx++) {
                 int2 coordinate = clamp(int2(gid) + int2(dx, dy), int2(0), limit);
                 float yTap = max(dot(graded.read(uint2(coordinate)).rgb, kLuma), 0.0);
+                float w = exp(-float(dx * dx + dy * dy) / twoSigmaSq);
                 float gTap = pow(yTap, 1.0 / 2.2);
-                float d = gTap - g;
-                float w = exp(-float(dx * dx + dy * dy) / twoSigmaSq)
-                    * exp(-(d * d) / twoRangeSq);
                 sum += w * gTap;
+                weightSum += w;
+                // Derivative-of-Gaussian, accumulated from the taps the base
+                // layer is already reading: ∂/∂x (w * g) = ((dx/σ²) w) * g, so
+                // the base's own gradient costs two multiply-adds per tap and
+                // not one extra texture read. Taking the gradient of the BASE
+                // rather than of `g` is the point — the base is smooth, so
+                // grain cannot fake an edge and turn its own denoising off.
+                gxSum += w * float(dx) * gTap;
+                gySum += w * float(dy) * gTap;
+            }
+        }
+        float base = sum / weightSum;
+        float detail = g - base;
+        // Soft threshold (wavelet shrinkage): everything under the knee goes to
+        // zero, everything over it keeps its excess, so the transition is
+        // gradual rather than a hard gate that would leave its own texture.
+        float keep = clamp(p.tau, 0.0, 1.0);
+        float threshold = p.amount * kFrequencySplitMaxThreshold
+            * (1.0 - kFrequencySplitDetailReach * keep);
+        // Edge-aware threshold. The split already lets a *step* through — the
+        // cross-edge average makes `detail` large there — but the fine
+        // structure riding on and beside that step is small, and the shrink
+        // subtracts from it exactly as if it were grain, which is where the
+        // few percent of edge contrast went. So the knee itself backs off
+        // where the base layer is steep: flat regions keep the full threshold
+        // and denoise at full strength, edges keep a tenth of it and pass
+        // their residuals through nearly intact.
+        //
+        // The magnitude is a per-pixel slope of the base, in encoded luma.
+        // Smoothing spreads a step of height h over σ, so its peak slope is
+        // about h/(σ√2π) — a hard edge lands around 0.08–0.2 and a soft one
+        // around 0.02–0.04, which is what the knee is placed against.
+        float invSigmaSq = 1.0 / max(p.sigma * p.sigma, 1e-6);
+        float gx = gxSum * invSigmaSq / weightSum;
+        float gy = gySum * invSigmaSq / weightSum;
+        float baseMag = sqrt(gx * gx + gy * gy);
+        float edgeWeight = smoothstep(0.0, kFrequencySplitEdgeKnee, baseMag)
+            * kFrequencySplitEdgeProtect;
+        threshold *= 1.0 - edgeWeight;
+        float shrunk = sign(detail) * max(abs(detail) - threshold, 0.0);
+        float g2 = base + mix(detail, shrunk, p.amount);
+        float ratio = pow(max(g2, 0.0), 2.2) / y;
+        float3 outv = clamp(v * ratio, 0.0, 1.0);
+        outv = select(outv, float3(0.0), isnan(outv));
+        destination.write(float4(outv, 1.0), gid);
+    }
+
+    // Chroma noise reduction: a spatial-only Gaussian on Cb/Cr, luma untouched.
+    //
+    // Colour noise is the mottle a pushed sensor paints over everything —
+    // purple haze in the shadows, green/magenta speckle across flat surfaces —
+    // and unlike luma grain it carries no structure worth protecting, so the
+    // weights key on distance alone. A range gate here would be actively
+    // wrong: the blotches ARE the large chroma excursions a bilateral would
+    // preserve. Y comes through untouched, so every edge and every bit of fine
+    // detail the luma passes shaped survives the pass unchanged.
+    kernel void applyChromaNR(
+        texture2d<float, access::read> graded [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        constant ColorNoiseParams &p [[buffer(0)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        float3 v = graded.read(gid).rgb;
+        if (p.amount <= 0.0) {
+            // Neutral costs nothing and rounds nothing — the pass-through is
+            // the source bits, not a YCbCr round trip that lands near them.
+            destination.write(float4(v, 1.0), gid);
+            return;
+        }
+        int2 limit = int2(graded.get_width() - 1, graded.get_height() - 1);
+        float sigma = max(float(p.radius) * kChromaNRSigmaScale, 0.5);
+        float twoSigmaSq = 2.0 * sigma * sigma;
+        float y = dot(v, kRec709Luma);
+        float cb = (v.b - y) * kCbScale;
+        float cr = (v.r - y) * kCrScale;
+        float2 sum = float2(0.0);
+        float weightSum = 0.0;
+        for (int dy = -p.radius; dy <= p.radius; dy++) {
+            for (int dx = -p.radius; dx <= p.radius; dx++) {
+                int2 coordinate = clamp(int2(gid) + int2(dx, dy), int2(0), limit);
+                float3 tap = graded.read(uint2(coordinate)).rgb;
+                float yTap = dot(tap, kRec709Luma);
+                float w = exp(-float(dx * dx + dy * dy) / twoSigmaSq);
+                sum += w * float2((tap.b - yTap) * kCbScale, (tap.r - yTap) * kCrScale);
                 weightSum += w;
             }
         }
-        float smoothed = sum / weightSum;
-        float g2 = mix(g, smoothed, p.amount);
-        float ratio = pow(max(g2, 0.0), 2.2) / y;
-        float3 outv = clamp(v * ratio, 0.0, 1.0);
+        float2 mean = sum / weightSum;
+        float cb2 = mix(mean.x, cb, 1.0 - p.amount);
+        float cr2 = mix(mean.y, cr, 1.0 - p.amount);
+        float3 outv = float3(
+            y + kCrToR * cr2,
+            y + kCbToG * cb2 + kCrToG * cr2,
+            y + kCbToB * cb2);
+        outv = clamp(outv, 0.0, 1.0);
         outv = select(outv, float3(0.0), isnan(outv));
         destination.write(float4(outv, 1.0), gid);
     }
@@ -447,6 +586,12 @@ enum GradeKernelSource {
     // Capture sharpening: small-radius unsharp on encoded luma, computed
     // inline (the radius never exceeds 3). The tanh limiter keeps strong
     // edges from ringing; luma-only application leaves chroma noise alone.
+    //
+    // `mask` is Lightroom's Masking: the local Sobel magnitude decides how
+    // much of `amount` a pixel earns, so a sky or a flat wall — where all an
+    // unsharp mask can do is amplify grain — keeps its smoothness while the
+    // edges beside it sharpen fully. At mask 0 every pixel earns all of it,
+    // which is the behaviour that shipped before the control existed.
     kernel void applySharpen(
         texture2d<float, access::read> graded [[texture(0)]],
         texture2d<float, access::write> destination [[texture(1)]],
@@ -474,7 +619,28 @@ enum GradeKernelSource {
         float g = pow(y, 1.0 / 2.2);
         float blurredLuma = sum / weightSum;
         float limited = p.tau * tanh((g - blurredLuma) / p.tau);
-        float g2 = g + p.amount * limited;
+        float gain = p.amount;
+        if (p.mask > 0.0) {
+            // Sobel over the 3x3 neighbourhood, normalised so the magnitude
+            // reads as the luma step across the pixel rather than as eight
+            // summed taps — which is what makes the threshold a number
+            // somebody can reason about.
+            float gx = 0.0;
+            float gy = 0.0;
+            for (int dy = -1; dy <= 1; dy++) {
+                for (int dx = -1; dx <= 1; dx++) {
+                    int2 coordinate = clamp(int2(gid) + int2(dx, dy), int2(0), limit);
+                    float yTap = max(dot(graded.read(uint2(coordinate)).rgb, kLuma), 0.0);
+                    float gTap = pow(yTap, 1.0 / 2.2);
+                    gx += gTap * float(dx) * (dy == 0 ? 2.0 : 1.0);
+                    gy += gTap * float(dy) * (dx == 0 ? 2.0 : 1.0);
+                }
+            }
+            float gradMag = length(float2(gx, gy)) * 0.25;
+            float edge = smoothstep(0.0, kSharpenEdgeThreshold, gradMag);
+            gain *= mix(1.0, edge, p.mask);
+        }
+        float g2 = g + gain * limited;
         float ratio = pow(max(g2, 0.0), 2.2) / y;
         float3 outv = clamp(v * ratio, 0.0, 1.0);
         outv = select(outv, float3(0.0), isnan(outv));
@@ -529,6 +695,201 @@ enum GradeKernelSource {
         float noise = (r1 + r2 - 1.0) * p.amplitude;
         float3 outv = clamp(source.read(gid).rgb + noise, 0.0, 1.0);
         destination.write(float4(outv, 1.0), gid);
+    }
+    """
+
+    /// The Adobe DCP hue/sat and look tables, as a decode-time pass.
+    ///
+    /// Kept as its own source string rather than folded into `source` above
+    /// because it runs at a different point in the app: `source` is compiled
+    /// once by `GradeCore` for the grade graph, while this pass belongs to the
+    /// *decode* — `LinearFrameDecoder` applies it to the freshly decoded frame
+    /// before any grading happens, so a DCP-decoded frame is just a frame by
+    /// the time the grade engine sees it. Compiling the whole grade source a
+    /// second time in the decoder to reach one kernel would be the alternative.
+    ///
+    /// ## What this pass is for
+    ///
+    /// The other three decode paths differ only in *which 3×3 goes where*. A
+    /// 3×3 is one linear map applied identically to every pixel, so none of
+    /// them can move a hue differently in the shadows than in the highlights —
+    /// and that difference is exactly the gap against Lightroom. Adobe's
+    /// profiles carry it as two sampled 3-D tables in HSV, which is what this
+    /// kernel evaluates.
+    ///
+    /// ## Working space
+    ///
+    /// The tables are defined on ProPhoto RGB, not on XYZ. That distinction is
+    /// load-bearing rather than pedantic: hue and saturation are RGB-relative
+    /// quantities, and taking `max`/`min` across XYZ's X, Y and Z — which are
+    /// not colour primaries and are not even the same kind of quantity as each
+    /// other — produces an angle with no relation to the one Adobe sampled.
+    /// So the pass converts P3 → XYZ(D50) → ProPhoto, works there, and
+    /// converts back.
+    static let dcpSource = """
+    #include <metal_stdlib>
+    using namespace metal;
+
+    struct DCPParams {
+        float3x3 toWorking;     // linear P3 -> ProPhoto RGB (through XYZ D50)
+        float3x3 fromWorking;   // and back
+        uint3 hueSatDims;       // [hue, sat, value] divisions
+        uint3 lookDims;
+        uint  hasHueSat;
+        uint  hasLook;
+    };
+
+    // dng_sdk's RGB->HSV: hue runs 0..6 rather than 0..1 or 0..360, because
+    // that is the scale the profile's degree-valued hue shifts are converted
+    // onto (degrees / 60).
+    static inline float3 dcpRGBtoHSV(float3 rgb)
+    {
+        float mx = max(rgb.r, max(rgb.g, rgb.b));
+        float mn = min(rgb.r, min(rgb.g, rgb.b));
+        float range = mx - mn;
+        float v = mx;
+        float s = (mx > 0.0f) ? (range / mx) : 0.0f;
+        float h = 0.0f;
+        if (range > 0.0f) {
+            if (mx == rgb.r)      { h = (rgb.g - rgb.b) / range; }
+            else if (mx == rgb.g) { h = 2.0f + (rgb.b - rgb.r) / range; }
+            else                  { h = 4.0f + (rgb.r - rgb.g) / range; }
+            if (h < 0.0f) { h += 6.0f; }
+        }
+        return float3(h, s, v);
+    }
+
+    static inline float3 dcpHSVtoRGB(float3 hsv)
+    {
+        float v = hsv.z;
+        float s = clamp(hsv.y, 0.0f, 1.0f);
+        if (s <= 0.0f) { return float3(v, v, v); }
+        float h = hsv.x;
+        h = h - 6.0f * floor(h * (1.0f / 6.0f));   // wrap into [0, 6)
+        int i = int(h);
+        float f = h - float(i);
+        float p = v * (1.0f - s);
+        float q = v * (1.0f - s * f);
+        float t = v * (1.0f - s * (1.0f - f));
+        switch (i) {
+            case 0:  return float3(v, t, p);
+            case 1:  return float3(q, v, p);
+            case 2:  return float3(p, v, t);
+            case 3:  return float3(p, q, v);
+            case 4:  return float3(t, p, v);
+            default: return float3(v, p, q);
+        }
+    }
+
+    // Trilinear fetch from a DNG hue/sat table.
+    //
+    // Axis order is value-outer, hue-middle, saturation-inner — the reverse of
+    // the order the dimension triple lists them in. See `DCPTableIndex`.
+    //
+    // The hue axis is periodic and its last cell wraps to its first, so it has
+    // `hueDivisions` intervals rather than `hueDivisions - 1`. Saturation and
+    // value are clamped axes with one fewer interval than cells. Treating hue
+    // like the other two leaves a seam at red.
+    static inline float3 dcpSample(
+        device const float3 *table, uint3 dims, float3 hsv)
+    {
+        int hDim = int(dims.x), sDim = int(dims.y), vDim = int(dims.z);
+
+        float hScale = (hDim < 2) ? 0.0f : float(hDim) / 6.0f;
+        float sScale = float(max(sDim - 1, 0));
+        float vScale = float(max(vDim - 1, 0));
+
+        // Hue: wrapping.
+        float hf = hsv.x * hScale;
+        int h0 = int(floor(hf));
+        float hFract = hf - float(h0);
+        int h1;
+        if (hDim < 2) {
+            h0 = 0; h1 = 0; hFract = 0.0f;
+        } else {
+            h0 = ((h0 % hDim) + hDim) % hDim;
+            h1 = h0 + 1;
+            if (h1 >= hDim) { h1 = 0; }
+        }
+
+        // Saturation: clamped. Input saturation is already 0..1.
+        float sf = min(clamp(hsv.y, 0.0f, 1.0f) * sScale, sScale);
+        int s0 = (sDim < 2) ? 0 : min(int(sf), sDim - 2);
+        float sFract = (sDim < 2) ? 0.0f : sf - float(s0);
+        int s1 = (sDim < 2) ? 0 : s0 + 1;
+
+        // Value: clamped. Scene-linear value can exceed 1 (the decoder keeps
+        // the file's highlight headroom), so the *index* saturates at the top
+        // cell while the value itself is left alone.
+        float vf = min(max(hsv.z, 0.0f) * vScale, vScale);
+        int v0 = (vDim < 2) ? 0 : min(int(vf), vDim - 2);
+        float vFract = (vDim < 2) ? 0.0f : vf - float(v0);
+        int v1 = (vDim < 2) ? 0 : v0 + 1;
+
+        int hStride = sDim;
+        int vStride = hDim * sDim;
+
+        float3 c000 = table[v0 * vStride + h0 * hStride + s0];
+        float3 c001 = table[v0 * vStride + h0 * hStride + s1];
+        float3 c010 = table[v0 * vStride + h1 * hStride + s0];
+        float3 c011 = table[v0 * vStride + h1 * hStride + s1];
+        float3 c100 = table[v1 * vStride + h0 * hStride + s0];
+        float3 c101 = table[v1 * vStride + h0 * hStride + s1];
+        float3 c110 = table[v1 * vStride + h1 * hStride + s0];
+        float3 c111 = table[v1 * vStride + h1 * hStride + s1];
+
+        float3 c00 = mix(c000, c001, sFract);
+        float3 c01 = mix(c010, c011, sFract);
+        float3 c10 = mix(c100, c101, sFract);
+        float3 c11 = mix(c110, c111, sFract);
+        float3 c0 = mix(c00, c01, hFract);
+        float3 c1 = mix(c10, c11, hFract);
+        return mix(c0, c1, vFract);
+    }
+
+    // Apply one table's deltas. Hue shift is additive and in degrees;
+    // saturation and value scales are multiplicative.
+    //
+    // Saturation is clamped to 1 as dng_sdk does. Value deliberately is not:
+    // dng_sdk clamps it because its pipeline is display-referred by this
+    // point, whereas this one is scene-linear with the DNG's above-1.0
+    // headroom still intact, and clamping here would flatten every highlight
+    // the decoder went out of its way to preserve.
+    static inline float3 dcpApply(float3 hsv, float3 delta)
+    {
+        return float3(
+            hsv.x + delta.x * (1.0f / 60.0f),
+            clamp(hsv.y * delta.y, 0.0f, 1.0f),
+            hsv.z * delta.z);
+    }
+
+    kernel void applyDCPLookTable(
+        texture2d<float, access::read> source [[texture(0)]],
+        texture2d<float, access::write> destination [[texture(1)]],
+        constant DCPParams &p [[buffer(0)]],
+        device const float3 *hueSatTable [[buffer(1)]],
+        device const float3 *lookTable [[buffer(2)]],
+        uint2 gid [[thread_position_in_grid]])
+    {
+        if (gid.x >= destination.get_width() || gid.y >= destination.get_height()) {
+            return;
+        }
+        float4 texel = source.read(gid);
+
+        // Negative components are legal in extended-range P3 and meaningless
+        // to a max/min hue angle, so the working copy is clamped at zero.
+        float3 working = max(p.toWorking * texel.rgb, 0.0f);
+        float3 hsv = dcpRGBtoHSV(working);
+
+        if (p.hasHueSat != 0u) {
+            hsv = dcpApply(hsv, dcpSample(hueSatTable, p.hueSatDims, hsv));
+        }
+        if (p.hasLook != 0u) {
+            hsv = dcpApply(hsv, dcpSample(lookTable, p.lookDims, hsv));
+        }
+
+        float3 mapped = p.fromWorking * dcpHSVtoRGB(hsv);
+        destination.write(float4(mapped, texel.a), gid);
     }
     """
 }

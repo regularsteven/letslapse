@@ -159,6 +159,18 @@ final class ProjectThumbnailCache: ObservableObject {
         generation += 1
     }
 
+    /// Drop every in-memory thumbnail. The companion to clearing the disk tier
+    /// (Settings ▸ Clear cache): without it the grids keep showing images whose
+    /// JPEGs have just been deleted, so a cache clear looks like it did nothing
+    /// until the next launch — which is how a bad thumbnail can outlive the fix
+    /// that was supposed to remove it.
+    func invalidateAll() {
+        cache.removeAllObjects()
+        aspects.removeAll()
+        failedKeys.removeAll()
+        generation += 1
+    }
+
     /// Let every remembered failure retry. Called when the conditions that make
     /// a decode fail spuriously have changed — a memory warning has been dealt
     /// with, or the app has come back to the foreground.
@@ -197,8 +209,33 @@ final class ProjectThumbnailCache: ObservableObject {
 /// asset. Every call here is synchronous and blocking — callers run it on
 /// `MediaWorkQueue`, never on the main actor or the cooperative pool.
 enum DiskThumbnailStore {
-    private static var directory: URL {
+    /// Where the JPEGs live. Not private: the storage card counts this folder
+    /// and "Clear cache" empties it, and both need to name the same place.
+    static var directory: URL {
         StorageRoot.current.appendingPathComponent("Thumbnails", isDirectory: true)
+    }
+
+    /// Deletes every stored thumbnail. Returns the bytes freed.
+    ///
+    /// Purely reproducible — each file regenerates from its source on the next
+    /// request — so this is the definition of a cache item, and it is the one
+    /// the user reaches for when a thumbnail is visibly wrong. `generatorVersion`
+    /// covers the case where *we* know the output changed; this covers the case
+    /// where only the user does.
+    @discardableResult
+    static func clear() -> Int64 {
+        let fileManager = FileManager.default
+        let folder = directory
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: [.totalFileAllocatedSizeKey, .fileSizeKey])
+        else { return 0 }
+        var freed: Int64 = 0
+        for file in files {
+            let values = try? file.resourceValues(forKeys: [.totalFileAllocatedSizeKey, .fileSizeKey])
+            let size = Int64(values?.totalFileAllocatedSize ?? values?.fileSize ?? 0)
+            if (try? fileManager.removeItem(at: file)) != nil { freed += size }
+        }
+        return freed
     }
 
     /// Cache identity of a source file: its path plus modification date, so
@@ -210,12 +247,20 @@ enum DiskThumbnailStore {
     /// every cached thumbnail at once and cost a full-library regeneration
     /// storm on the next launch (a burst of "can't open …Thumbnails/….jpg"
     /// in the log, and a device busy decoding for minutes).
+    /// Bumped when the generator's *output* changes, so the stored JPEGs
+    /// self-invalidate. Version 2: raw files decode through `CIRAWFilter`
+    /// instead of ImageIO, which on iOS was persisting the file's embedded
+    /// preview — a 189×252 blob for a 12 MP frame — under the key of a
+    /// full-size thumbnail. Without the bump those survive the fix on disk,
+    /// which is precisely how the bug outlived two rebuilds.
+    private static let generatorVersion = 2
+
     static func key(for url: URL) -> String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970
         let home = NSHomeDirectory()
         let path = url.path.hasPrefix(home) ? String(url.path.dropFirst(home.count)) : url.path
-        return "\(path)|\(modified.map { String($0) } ?? "missing")"
+        return "v\(generatorVersion)|\(path)|\(modified.map { String($0) } ?? "missing")"
     }
 
     static func read(_ key: String) -> CGImage? {

@@ -285,12 +285,10 @@ enum PhotoGrader {
             let longEdge = sourceLongEdge(url: url)
             if longEdge > 0 { scale = min(1, Float(maxDimension) / Float(longEdge)) }
         }
-        let frame = try decodedFrame(url: url, scale: scale, decoder: decoder)
-        let reference = GradeReference(
-            asShotTemperatureK: frame.asShotTemperatureK,
-            asShotTint: frame.asShotTint,
-            longEdge: Double(max(frame.texture.width, frame.texture.height)))
-        let renderer = engine.makeRenderer(grade.recipe, reference: reference)
+        let frame = try decodedFrame(
+            url: url, scale: scale, decoder: decoder, recipe: grade.recipe)
+        noteBalanceFallback(decoder, url: url)
+        let renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
         // Every consumer of this path quantises to 8 bits (preview CGImages,
         // JPEG export), so the engine adds its TPDF dither here; the blend
         // path dithers in its own encode kernel instead.
@@ -298,17 +296,161 @@ enum PhotoGrader {
         return try decoder.cgImage(from: output)
     }
 
-    private static func decodedFrame(
-        url: URL, scale: Float, decoder: LinearFrameDecoder
+    // MARK: - Pixel peeping
+    //
+    // Every render above decodes at preview scale — 2000 px on the long edge —
+    // which is the right trade for a picture drawn to fit a screen and the
+    // wrong one for the two controls that work on single pixels. At fit scale
+    // noise reduction and sharpening are invisible whatever they are set to, so
+    // the editor zooms, and what it zooms into has to be the real thing rather
+    // than an upscale of the preview. That is what this path is: the full
+    // frame decoded once, and only the part you are looking at graded.
+
+    /// A graded piece of a source at its own resolution.
+    struct DetailPatch {
+        let image: CGImage
+        /// Which part of the source it covers, normalised 0…1 with a top-left
+        /// origin — how the caller registers it over the fitted preview.
+        let region: CGRect
+    }
+
+    /// The full-resolution frame the patches are cut from. One at a time: a
+    /// 12 MP half-float frame is ~100 MB, which is worth holding while somebody
+    /// drags a noise slider and nothing like worth holding afterwards — so the
+    /// editor calls `releaseDetailFrame()` on its way out of pixel-peep mode.
+    private static let detailLock = NSLock()
+    private static var heldDetailFrame: (key: String, frame: LinearFrameDecoder.Frame)?
+
+    /// Grades one region of `url` at the source's own resolution.
+    ///
+    /// `center` is normalised (0…1, top-left origin) and `pixelSize` is asked
+    /// for in source pixels; both are clamped to the frame. The patch is cut
+    /// with a margin and trimmed back afterwards, so the spatial passes have
+    /// neighbours to work with and the returned pixels carry no edge of their
+    /// own — and it is graded against the whole frame's long edge, so the
+    /// noise reduction and sharpening in it are the ones the export will bake.
+    static func renderDetail(
+        url: URL, preset: PhotoPreset, adjustments: PhotoAdjustments,
+        center: CGPoint, pixelSize: CGSize
+    ) -> DetailPatch? {
+        guard let decoder = linearDecoder, let engine = gradeEngine else { return nil }
+        do {
+            let grade = PhotoGrade(preset: preset, adjustments: adjustments)
+            let frame = try detailFrame(url: url, decoder: decoder, recipe: grade.recipe)
+            noteBalanceFallback(decoder, url: url)
+            let source = CGSize(width: frame.texture.width, height: frame.texture.height)
+            guard source.width > 0, source.height > 0 else { return nil }
+            let width = min(max(pixelSize.width.rounded(), 16), source.width)
+            let height = min(max(pixelSize.height.rounded(), 16), source.height)
+            let originX = min(max((center.x * source.width - width / 2).rounded(), 0),
+                              source.width - width)
+            let originY = min(max((center.y * source.height - height / 2).rounded(), 0),
+                              source.height - height)
+            let wanted = CGRect(x: originX, y: originY, width: width, height: height)
+            let padded = wanted.insetBy(dx: -detailMargin, dy: -detailMargin)
+                .intersection(CGRect(origin: .zero, size: source))
+
+            let cropped = try decoder.crop(frame.texture, to: padded)
+            // Graded against the WHOLE frame's long edge, not the patch's, so
+            // the noise reduction and sharpening in it are the ones the export
+            // will bake (see `GradeRenderer.encode`).
+            let renderer = engine.makeRenderer(grade.recipe, reference: frame.reference(
+                longEdge: Double(max(source.width, source.height))))
+            let output = try renderer.apply(to: cropped, ditherFor8Bit: true)
+            let rendered = try decoder.cgImage(from: output)
+            // Back to the region actually asked for — the margin was only ever
+            // there to feed the blurs.
+            let trimmed = rendered.cropping(to: CGRect(
+                x: wanted.minX - padded.minX, y: wanted.minY - padded.minY,
+                width: width, height: height)) ?? rendered
+            return DetailPatch(
+                image: trimmed,
+                region: CGRect(x: originX / source.width, y: originY / source.height,
+                               width: width / source.width, height: height / source.height))
+        } catch {
+            MediaWorkQueue.note(
+                "detail render failed for \(url.lastPathComponent): \(error.localizedDescription)",
+                isError: true)
+            return nil
+        }
+    }
+
+    /// Neighbours for the spatial passes, in source pixels. Comfortably past
+    /// the widest footprint any of them reaches at full resolution (the noise
+    /// bilateral's radius clamps at 6, sharpen's at 3).
+    private static let detailMargin: CGFloat = 24
+
+    /// Drops the held full-resolution frame. Called when the editor leaves
+    /// pixel-peep mode or closes; harmless at any other time.
+    static func releaseDetailFrame() {
+        detailLock.lock()
+        heldDetailFrame = nil
+        detailLock.unlock()
+    }
+
+    /// Says so, once per distinct reason, when `.cirawFilter` could not
+    /// declare its illuminant and the balance fell back to Bradford.
+    ///
+    /// The path is a comparison feature: a frame that quietly rendered through
+    /// a *different* path than the one the picker shows would make every
+    /// comparison drawn from it wrong. Once per reason rather than per render,
+    /// because a scrub asks sixty times a second.
+    private static var notedBalanceFallbacks: Set<String> = []
+    private static func noteBalanceFallback(_ decoder: LinearFrameDecoder, url: URL) {
+        guard let reason = decoder.lastConverterBalanceFallbackReason else { return }
+        guard notedBalanceFallbacks.insert(reason).inserted else { return }
+        MediaWorkQueue.note(
+            "grade: \(RawDecodePath.cirawFilter.rawValue) fell back to "
+            + "\(RawDecodePath.bradfordAdaptation.rawValue) white balance — \(reason)",
+            isError: true)
+    }
+
+    /// What a decoded frame depends on beyond the file and the scale.
+    ///
+    /// The decode path is always part of it — switching paths must not hand
+    /// back the previous path's pixels. Under `.cirawFilter` the recipe's white
+    /// balance is *also* part of it, because that path applies temperature and
+    /// tint inside the raw converter rather than as a matrix afterwards. That
+    /// is the price of the path: a temperature drag re-decodes instead of
+    /// re-running the kernel on a cached texture.
+    private static func decodeToken(path: RawDecodePath, recipe: GradeRecipe) -> String {
+        guard path == .cirawFilter else { return path.rawValue }
+        return String(format: "%@|%.3f|%.4f", path.rawValue, recipe.temperatureMired, recipe.tint)
+    }
+
+    private static func detailFrame(
+        url: URL, decoder: LinearFrameDecoder, recipe: GradeRecipe
     ) throws -> LinearFrameDecoder.Frame {
-        // Full-resolution decodes are one-shot exports; caching one would
-        // evict every preview for no gain.
-        guard scale < 1 else { return try decoder.decode(url: url, scale: scale) }
+        let path = RawDecodePath.current
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
-        let key = "\(url.path)|\(modified)|\(String(format: "%.3f", scale))" as NSString
+        let key = "\(url.path)|\(modified)|\(decodeToken(path: path, recipe: recipe))"
+        // The decode happens under the lock, not around it: the loupe and the
+        // zoomed picture ask at the same moment, and two full-sensor decodes
+        // racing each other is 200 MB of the same pixels.
+        detailLock.lock()
+        defer { detailLock.unlock() }
+        if let held = heldDetailFrame, held.key == key { return held.frame }
+        let frame = try decoder.decode(url: url, scale: 1, path: path, recipe: recipe)
+        heldDetailFrame = (key, frame)
+        return frame
+    }
+
+    private static func decodedFrame(
+        url: URL, scale: Float, decoder: LinearFrameDecoder, recipe: GradeRecipe
+    ) throws -> LinearFrameDecoder.Frame {
+        let path = RawDecodePath.current
+        // Full-resolution decodes are one-shot exports; caching one would
+        // evict every preview for no gain.
+        guard scale < 1 else {
+            return try decoder.decode(url: url, scale: scale, path: path, recipe: recipe)
+        }
+        let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate?.timeIntervalSince1970 ?? 0
+        let key = "\(url.path)|\(modified)|\(String(format: "%.3f", scale))"
+            + "|\(decodeToken(path: path, recipe: recipe))" as NSString
         if let boxed = decodedCache.object(forKey: key) { return boxed.frame }
-        let frame = try decoder.decode(url: url, scale: scale)
+        let frame = try decoder.decode(url: url, scale: scale, path: path, recipe: recipe)
         decodedCache.setObject(
             FrameBox(frame), forKey: key,
             cost: frame.texture.width * frame.texture.height * 8)
@@ -556,13 +698,26 @@ enum PhotoGrader {
             var step = -1
         }
         let box = RendererBox()
+        // Read once, not per frame: a shoot must not change decode path halfway
+        // through because somebody opened Settings while a blend was running.
+        //
+        // A keyframed grade is forced back to the default path. `.cirawFilter`
+        // bakes white balance at DECODE time, and this path decodes each source
+        // frame exactly once while the renderer re-stages across the clip — so
+        // a keyframed temperature ramp would be silently flattened to whatever
+        // the base recipe said. Losing the ramp is worse than losing the
+        // comparison, and the single-frame editor still exercises the path.
+        var path = RawDecodePath.current
+        if path == .cirawFilter, grade.isKeyframed {
+            path = .bradfordAdaptation
+            MediaWorkQueue.note(
+                "blend: keyframed grade — decoding via \(path.rawValue) "
+                + "(\(RawDecodePath.cirawFilter.rawValue) bakes white balance at decode time)")
+        }
         let decode: (URL) throws -> MTLTexture = { url in
-            let frame = try decoder.decode(url: url)
+            let frame = try decoder.decode(url: url, path: path, recipe: grade.recipe)
             if box.renderer == nil {
-                box.renderer = engine.makeRenderer(grade.recipe, reference: GradeReference(
-                    asShotTemperatureK: frame.asShotTemperatureK,
-                    asShotTint: frame.asShotTint,
-                    longEdge: Double(max(frame.texture.width, frame.texture.height))))
+                box.renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
                 box.step = 0
             }
             return frame.texture
@@ -654,8 +809,10 @@ enum PhotoGrader {
             .contentModificationDate?.timeIntervalSince1970 ?? 0
         let size = maxDimension.map { String(Int($0)) } ?? "full"
         // The engine version is in the key so cached renders self-invalidate
-        // whenever the engine's math changes.
-        return "e\(GradeRecipe.engineVersion)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)|\(size)" as NSString
+        // whenever the engine's math changes — and the decode path is in it for
+        // the same reason: flipping the toggle changes the pixels, so a cached
+        // render from the previous path must not survive the switch.
+        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)|\(size)" as NSString
     }
 }
 

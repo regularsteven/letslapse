@@ -38,6 +38,8 @@ struct SettingsView: View {
     /// Stored as the raw strategy id; stamped into every run's capture log.
     @AppStorage(BlendStrategyID.defaultsKey) private var blendStrategy = BlendStrategyID.zone.rawValue
     @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
+    @AppStorage(RawDecodeSettings.storageKey)
+    private var rawDecodePath = RawDecodePath.bradfordAdaptation.rawValue
     @State private var storage: AppModel.LibraryStorage?
     /// Room left on the volume the library lives on — the number that decides
     /// whether the next shoot fits, which the library's own total never could.
@@ -848,6 +850,42 @@ struct SettingsView: View {
                 Toggle("", isOn: $dimScreenDuringShoot)
             }
             #endif
+
+            // Field test, like the blend-strategy row above it: four ways to
+            // get a DNG into the grade engine, so they can be compared on real
+            // frames. Every case is listed — one that this machine cannot run
+            // is labelled with the reason rather than hidden, because a
+            // comparison that silently drops an option reads as a bug.
+            //
+            // "Adobe DCP" is the one that can be unavailable: its profiles
+            // ship with Lightroom rather than with this app, so the row is
+            // live on a Mac that has them and greyed everywhere else. It is
+            // also the only path that changes an untouched render — the other
+            // three differ solely in how they realise a temperature move.
+            LLRow(
+                title: "Raw decode path",
+                subtitle: "Field test: how a DNG is rendered before grading. Changing this re-renders every preview"
+            ) {
+                Menu {
+                    ForEach(RawDecodeSettings.allPaths, id: \.rawValue) { path in
+                        Button {
+                            RawDecodePath.current = path
+                            rawDecodePath = path.rawValue
+                        } label: {
+                            if path.rawValue == rawDecodePath {
+                                Label(RawDecodeSettings.label(for: path), systemImage: "checkmark")
+                            } else {
+                                Text(RawDecodeSettings.label(for: path))
+                            }
+                        }
+                        .disabled(!RawDecodePathRegistry.isAvailable(path))
+                    }
+                } label: {
+                    menuValueLabel(RawDecodePath.current.displayName)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
 
             NavigationLink(value: SettingsDestination.performance) {
                 LLRow(title: "Performance", subtitle: "CPU workers, GPU batches") {

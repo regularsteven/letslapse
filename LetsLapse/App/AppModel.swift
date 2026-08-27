@@ -215,6 +215,22 @@ final class AppModel: ObservableObject {
         /// Nil for every scan registered before this existed; read it through
         /// `AppModel.scannerPaper(for:)`, which falls back to the live setting.
         var scannerPaper: String?
+        /// Source file names the user has nominated as bad and wants excluded
+        /// from every blend. Nil (absent) and empty mean the same thing — no
+        /// nominations. Stored as file names rather than indices so a partial
+        /// re-import or sort doesn't silently reassign an exclusion to the
+        /// wrong frame. Optional for backward-compat: projects saved before
+        /// nomination existed decode cleanly with no excluded frames.
+        var nominatedBadFrameNames: [String]?
+        /// Whether the frames nominated above are hidden from the viewer and
+        /// from the counts this project advertises. Three states, not two: nil
+        /// means nobody has answered, and resolves to ON wherever there is
+        /// something to hide — a user who has just marked a frame bad wants it
+        /// gone, and a project with no nominations has nothing to hide either
+        /// way. Read it through `AppModel.effectiveHideBadFrames(for:)`.
+        /// Optional for backward-compat: projects saved before the toggle
+        /// existed decode cleanly and land on that same default.
+        var hideBadFrames: Bool?
 
         /// A Scanner shoot, said outright by the project itself. The stored
         /// field first; the display string second, which catches every Scanner
@@ -271,7 +287,14 @@ final class AppModel: ObservableObject {
         }
 
         /// "Video · 1080p · 24 fps" / "Interval · 214 photos"
-        var formatLine: String {
+        ///
+        /// The count is every source frame on disk. Anywhere the project is
+        /// being *presented* — the library card, the project screen's badge —
+        /// go through `AppModel.formatLine(for:)` instead, which counts what
+        /// the user can actually see once hidden frames are taken off.
+        var formatLine: String { formatLine(photoCount: sourceMediaCount) }
+
+        func formatLine(photoCount: Int) -> String {
             switch kind {
             case .video:
                 var parts = ["Video"]
@@ -288,8 +311,8 @@ final class AppModel: ObservableObject {
                 // And a Scanner set is not an interval shoot: nothing about it
                 // was paced by a timer, and its frames are poses rather than
                 // photos of a scene.
-                if isScannerCapture { return "Scan · \(sourceMediaCount) frames" }
-                return "Interval · \(sourceMediaCount) photos"
+                if isScannerCapture { return "Scan · \(photoCount) frames" }
+                return "Interval · \(photoCount) photos"
             }
         }
 
@@ -1016,6 +1039,128 @@ final class AppModel: ObservableObject {
         return capture.sourceFileNames
             .filter { !$0.hasSuffix(".json") }
             .map { root.appendingPathComponent($0) }
+    }
+
+    /// The frame that stands for a photo-kind capture when it is shown as a
+    /// still: the first source frame the user has NOT nominated as bad. A shoot
+    /// whose opening frames are the ones the user threw away shouldn't keep
+    /// advertising itself with them. Falls back to the first frame when every
+    /// frame is nominated, because a tile with no picture is worse than a tile
+    /// with a bad one.
+    func thumbnailFrameURL(for capture: CaptureProject) -> URL? {
+        let frames = sourceFrameURLs(for: capture)
+        guard let first = frames.first else { return nil }
+        let nominated = nominatedBadFrameNames(for: capture)
+        guard !nominated.isEmpty else { return first }
+        return frames.first { !nominated.contains($0.lastPathComponent) } ?? first
+    }
+
+    /// What a project shows as its hero or its list tile. A video capture is its
+    /// source movie and a Photo-mode capture is its one photo (both unchanged);
+    /// an interval shoot is `thumbnailFrameURL(for:)` rather than a flat frame 0.
+    /// `mediaURL` still gates the answer, so a project with a missing source
+    /// file goes on rendering as the placeholder instead of a broken image.
+    func thumbnailURL(for capture: CaptureProject) -> URL? {
+        if capture.isPhotoCapture { return heroImageURL(for: capture) }
+        guard let media = mediaURL(for: capture) else { return nil }
+        guard capture.kind == .photos else { return media }
+        return thumbnailFrameURL(for: capture) ?? media
+    }
+
+    // MARK: - Frame nomination (persistent per-project bad-frame exclusion)
+
+    /// The set of source file names the user has marked as bad on `capture`.
+    func nominatedBadFrameNames(for capture: CaptureProject) -> Set<String> {
+        Set(capture.nominatedBadFrameNames ?? [])
+    }
+
+    /// Whether a specific source file name is currently marked bad.
+    func isFrameNominated(_ fileName: String, in capture: CaptureProject) -> Bool {
+        capture.nominatedBadFrameNames?.contains(fileName) ?? false
+    }
+
+    /// Toggle the nomination on `fileName` inside `capture`. Persists the
+    /// change immediately. Does nothing and returns if the project isn't found.
+    func toggleFrameNomination(fileName: String, in captureID: UUID) {
+        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        var names = Set(captures[index].nominatedBadFrameNames ?? [])
+        if names.contains(fileName) {
+            names.remove(fileName)
+        } else {
+            names.insert(fileName)
+        }
+        captures[index].nominatedBadFrameNames = names.isEmpty ? nil : Array(names).sorted()
+        try? persistLibrary()
+    }
+
+    /// The integer frame indices (into `sourceFrameURLs`) that the user has
+    /// nominated as bad. Used to seed `excludedFrameIndices` when the user
+    /// opens a project for blending.
+    func nominatedExcludedIndices(for capture: CaptureProject) -> Set<Int> {
+        let badNames = nominatedBadFrameNames(for: capture)
+        guard !badNames.isEmpty else { return [] }
+        let names = capture.sourceFileNames.filter { !$0.hasSuffix(".json") }
+        // sourceFileNames carry a "source/" prefix; nominations store bare file
+        // names (lastPathComponent). Strip before comparing so the lookup fires.
+        return Set(names.indices.filter {
+            badNames.contains(URL(fileURLWithPath: names[$0]).lastPathComponent)
+        })
+    }
+
+    // MARK: - Hiding nominated frames
+
+    /// Whether this project's bad frames are currently hidden from the viewer
+    /// and from the counts it advertises.
+    ///
+    /// A project with no nominations is never hiding anything, whatever the
+    /// stored flag says — that is what keeps the toggle off screen until there
+    /// is something for it to do. Otherwise the stored answer, defaulting to
+    /// ON: marking a frame bad and then still having to scrub past it is not
+    /// what the nomination was for.
+    func effectiveHideBadFrames(for capture: CaptureProject) -> Bool {
+        guard !(capture.nominatedBadFrameNames ?? []).isEmpty else { return false }
+        return capture.hideBadFrames ?? true
+    }
+
+    /// Sets the toggle on one project and persists it. Stored per project
+    /// rather than as a global preference: hiding is a judgement about *these*
+    /// frames, and a shoot with two ruined frames and one with fifty deserve
+    /// separate answers.
+    func setHideBadFrames(_ value: Bool, for captureID: UUID) {
+        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        guard captures[index].hideBadFrames != value else { return }
+        captures[index].hideBadFrames = value
+        try? persistLibrary()
+    }
+
+    /// How many frames this project has *to show* — its source frames less the
+    /// hidden ones. The number every count in the library is written from, so a
+    /// shoot whose two ruined frames are hidden reads 248 rather than 250.
+    ///
+    /// Derived by filtering rather than by subtracting the nomination count: a
+    /// nomination whose file has since been deleted would otherwise take a
+    /// frame off the total twice.
+    func effectiveFrameCount(for capture: CaptureProject) -> Int {
+        let names = capture.sourceFileNames.filter { !$0.hasSuffix(".json") }
+        guard effectiveHideBadFrames(for: capture) else { return names.count }
+        let bad = nominatedBadFrameNames(for: capture)
+        return names.filter { !bad.contains(URL(fileURLWithPath: $0).lastPathComponent) }.count
+    }
+
+    /// The source frames a screen should walk, in capture order — the whole
+    /// shoot, or everything the user hasn't thrown away. The viewer's scrubber
+    /// and its frame steps run on this rather than on `sourceFrameURLs`.
+    func visibleFrameURLs(for capture: CaptureProject) -> [URL] {
+        let all = sourceFrameURLs(for: capture)
+        guard effectiveHideBadFrames(for: capture) else { return all }
+        let bad = nominatedBadFrameNames(for: capture)
+        return all.filter { !bad.contains($0.lastPathComponent) }
+    }
+
+    /// `CaptureProject.formatLine` counted the way the user sees it — the one
+    /// every presentation surface should call.
+    func formatLine(for capture: CaptureProject) -> String {
+        capture.formatLine(photoCount: effectiveFrameCount(for: capture))
     }
 
     // MARK: - Scanner projects
@@ -2169,7 +2314,9 @@ final class AppModel: ObservableObject {
             guidedBuilderFocused = false
             exportShortEdge = nil
             clearWarpHistory()
-            excludedFrameIndices = []
+            // Seed from the project's persistent frame nominations so the
+            // user doesn't have to re-exclude them each blend session.
+            excludedFrameIndices = nominatedExcludedIndices(for: capture)
             tailFramesToExclude = 0
             totalIntervalFrames = 0
             resultBlendID = nil
@@ -2203,7 +2350,8 @@ final class AppModel: ObservableObject {
             guidedBuilderFocused = false
             exportShortEdge = nil
             clearWarpHistory()
-            excludedFrameIndices = []
+            // Seed from the project's persistent frame nominations.
+            excludedFrameIndices = nominatedExcludedIndices(for: capture)
             tailFramesToExclude = 0
             totalIntervalFrames = 0
             resultBlendID = blend.id
@@ -3276,6 +3424,12 @@ final class AppModel: ObservableObject {
                     storage.cacheBytes += Self.directorySize(item)
                 }
             }
+            // Thumbnails are a cache in every sense — one JPEG per source
+            // asset, regenerated on demand — and on a big library they are the
+            // largest one. They were invisible here (and unclearable) until
+            // 2026-08-26, so the card charged the user for bytes no button in
+            // the app could free.
+            storage.cacheBytes += Self.directorySize(DiskThumbnailStore.directory)
             return storage
         }
     }
@@ -3294,13 +3448,18 @@ final class AppModel: ObservableObject {
     }
 
     /// Deletes reproducible temp files (imports, live-capture staging, blend
-    /// scratch). Returns the number of bytes freed.
+    /// scratch) and the thumbnail store. Returns the number of bytes freed.
+    ///
+    /// The thumbnails are here because this button is what a user presses when
+    /// a picture is visibly wrong, and until 2026-08-26 it was the one cache it
+    /// did not touch — so a bad tile survived pressing it, survived a relaunch,
+    /// and survived the fix that generated it correctly.
     @discardableResult
     func clearCache() async -> Int64 {
         let temporary = FileManager.default.temporaryDirectory
-        return await Task.detached(priority: .utility) {
+        let freed = await Task.detached(priority: .utility) {
             let fileManager = FileManager.default
-            var freed: Int64 = 0
+            var freed: Int64 = DiskThumbnailStore.clear()
             guard let items = try? fileManager.contentsOfDirectory(at: temporary, includingPropertiesForKeys: nil) else {
                 return freed
             }
@@ -3315,6 +3474,10 @@ final class AppModel: ObservableObject {
             }
             return freed
         }.value
+        // The memory tier holds copies of what was just deleted; leaving it
+        // would make the clear invisible until the next launch.
+        ProjectThumbnailCache.shared.invalidateAll()
+        return freed
     }
 
     /// Every name the app itself puts in `tmp/`. This list IS the contract for

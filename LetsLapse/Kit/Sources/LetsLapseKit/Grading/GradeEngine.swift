@@ -17,6 +17,7 @@ final class GradeCore: @unchecked Sendable {
     let textureApplyPipeline: MTLComputePipelineState
     let sharpenPipeline: MTLComputePipelineState
     let lumaNoisePipeline: MTLComputePipelineState
+    let chromaNoisePipeline: MTLComputePipelineState
     let blurHorizontal4Pipeline: MTLComputePipelineState
     let blurVertical4Pipeline: MTLComputePipelineState
     let vignettePipeline: MTLComputePipelineState
@@ -49,6 +50,7 @@ final class GradeCore: @unchecked Sendable {
         self.textureApplyPipeline = try pipeline("applyTexture")
         self.sharpenPipeline = try pipeline("applySharpen")
         self.lumaNoisePipeline = try pipeline("applyLumaNoise")
+        self.chromaNoisePipeline = try pipeline("applyChromaNR")
         self.blurHorizontal4Pipeline = try pipeline("blurHorizontal4")
         self.blurVertical4Pipeline = try pipeline("blurVertical4")
         self.vignettePipeline = try pipeline("applyVignette")
@@ -131,6 +133,13 @@ public final class GradeRenderer {
         var amount: Float
         var tau: Float
         var sigma: Float
+        var mask: Float = 0
+        var radius: Int32
+    }
+
+    /// Mirror of the Metal `ColorNoiseParams` struct — layouts must match.
+    private struct GPUColorNoiseParams {
+        var amount: Float
         var radius: Int32
     }
 
@@ -191,7 +200,12 @@ public final class GradeRenderer {
         let usesBase = recipe.shadows != 0 || recipe.highlights != 0 || recipe.clarity != 0
         let highlightAmp = recipe.highlights >= 0
             ? ToneMath.highlightLiftEV : ToneMath.highlightCutEV
-        let wb = ToneMath.whiteBalanceMatrix(recipe: recipe, reference: reference)
+        // Which matrix — and whether there is one at all — is the decode path's
+        // decision; `.cirawFilter` already balanced the pixels inside the raw
+        // converter and gets identity here.
+        let wb = ToneMath.wbMatrix(
+            forDNG: reference.sourceURL, recipe: recipe,
+            reference: reference, path: reference.decodePath)
         let white = wb * SIMD3<Float>(repeating: 1)
         let wbNeutral = white / max(simd_dot(white, ToneMath.lumaWeights), 1e-6)
         return GPUGradeParams(
@@ -232,6 +246,22 @@ public final class GradeRenderer {
             throw LapseError.gpuSetupFailed("grade scratch unavailable")
         }
 
+        // How far the spatial passes reach, relative to this texture.
+        //
+        // Every footprint below is a fraction of the picture's longest edge, so
+        // a preview and its export smooth and sharpen the same picture. That
+        // works while the texture *is* the picture. It stops working the moment
+        // a caller grades a crop of one — the editor's 1:1 view and its detail
+        // loupe both do — because a 560 px patch would then get a 560 px
+        // picture's footprints and lie about the noise reduction it is there to
+        // show. `reference.longEdge` is the whole picture's edge, so the ratio
+        // below puts the crop back on the finished frame's scale. Unset (0) —
+        // every whole-frame caller and every test — leaves the arithmetic
+        // exactly as it was.
+        let footprintScale = reference.longEdge > 0
+            ? Float(reference.longEdge) / Float(max(source.width, source.height))
+            : 1
+
         let usesBase = params.usesBase != 0
         let needsQuarter = usesBase || params.chromaProtect != 0 || params.colorNoise > 0
         var gradeParams = params
@@ -254,7 +284,7 @@ public final class GradeRenderer {
             // resolve. Sigma follows the image so a preview and an export get
             // the same look.
             let longEdge = Float(max(quarter.width, quarter.height))
-            let sigma = max(longEdge * 0.025, 1)
+            let sigma = max(longEdge * 0.025 * footprintScale, 1)
             var blurParams = GPUBlurParams(
                 sigma: sigma,
                 radius: Int32(min(max(Int(sigma * 2.5), 1), 128)))
@@ -348,12 +378,22 @@ public final class GradeRenderer {
 
         if recipe.noiseReduction > 0 {
             // Luma NR runs before texture and sharpen, so neither amplifies
-            // the grain it is meant to remove.
+            // the grain it is meant to remove. The footprint is anchored to
+            // the reference long edge and scaled to this render, so a preview
+            // and its export smooth the same picture — here it sets the width
+            // of the frequency split's base layer rather than a blur radius.
+            // `tau` carries the Detail sub-slider through raw: the kernel's
+            // soft threshold owns the mapping into encoded luma, so there is
+            // no range gate left to pre-scale.
+            let longEdge = Float(max(source.width, source.height))
+            let scale = longEdge * footprintScale / ToneMath.noiseReferenceLongEdge
+            let sigma = max(ToneMath.noiseSpatialSigma * scale, ToneMath.noiseSpatialSigmaFloor)
+            let radius = min(max(Int((Float(ToneMath.noiseSpatialRadius) * scale).rounded()), 1), 6)
             var noiseParams = GPUDetailParams(
                 amount: recipe.noiseReduction,
-                tau: ToneMath.noiseRangeBase + ToneMath.noiseRangeScale * recipe.noiseReduction,
-                sigma: ToneMath.noiseSpatialSigma,
-                radius: Int32(ToneMath.noiseSpatialRadius))
+                tau: min(max(recipe.noiseDetail, 0), 1),
+                sigma: sigma,
+                radius: Int32(radius))
             guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
                 throw LapseError.gpuSetupFailed("could not encode the noise pass")
             }
@@ -365,11 +405,40 @@ public final class GradeRenderer {
             swap(&current, &spare)
         }
 
+        if recipe.colorNoise > 0 {
+            // Chroma NR sits beside luma NR and ahead of texture/sharpen: both
+            // of those are luma-only, so the order between them is free, and
+            // keeping the two noise passes together means the picture the
+            // detail band sees is already denoised. Same reference-anchored
+            // scaling as luma NR — the footprint is a fraction of the finished
+            // frame, not of whatever crop this call happens to be grading —
+            // with a floor of 2 (a 5×5 window, the smallest that averages
+            // anything on a thumbnail) and a ceiling that keeps the O(r²) tap
+            // count sane on the largest sensors.
+            let longEdge = Float(max(source.width, source.height))
+            let scale = longEdge * footprintScale / ToneMath.noiseReferenceLongEdge
+            let radius = min(
+                max(Int((ToneMath.chromaNoiseSpatialRadius * scale).rounded()), 2),
+                ToneMath.chromaNoiseRadiusCap)
+            var chromaParams = GPUColorNoiseParams(
+                amount: min(max(recipe.colorNoise, 0), 1),
+                radius: Int32(radius))
+            guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
+                throw LapseError.gpuSetupFailed("could not encode the chroma noise pass")
+            }
+            encoder.setTexture(current, index: 0)
+            encoder.setTexture(spare, index: 1)
+            encoder.setBytes(&chromaParams, length: MemoryLayout<GPUColorNoiseParams>.stride, index: 0)
+            core.dispatch(core.chromaNoisePipeline, encoder: encoder, width: source.width, height: source.height)
+            encoder.endEncoding()
+            swap(&current, &spare)
+        }
+
         if recipe.texture != 0, let halfLumaA, let halfLumaB {
             // Mid-frequency band: blur half-res encoded luma at sigma
             // proportional to the image, then add the tanh-limited residual.
             let halfLong = Float(max(halfLumaA.width, halfLumaA.height))
-            let sigma = max(halfLong * ToneMath.textureSigmaFraction, 1)
+            let sigma = max(halfLong * ToneMath.textureSigmaFraction * footprintScale, 1)
             var blurParams = GPUBlurParams(
                 sigma: sigma,
                 radius: Int32(min(max(Int(sigma * 2.5), 1), 128)))
@@ -421,11 +490,12 @@ public final class GradeRenderer {
             // Capture sharpen: inline small-radius unsharp, resolution-anchored
             // so a preview and an export carry the same acutance.
             let longEdge = Float(max(source.width, source.height))
-            let sigma = max(longEdge * ToneMath.sharpenSigmaFraction, 0.4)
+            let sigma = max(longEdge * ToneMath.sharpenSigmaFraction * footprintScale, 0.4)
             var sharpenParams = GPUDetailParams(
                 amount: ToneMath.sharpenStrength * recipe.sharpen,
                 tau: ToneMath.sharpenTau,
                 sigma: sigma,
+                mask: min(max(recipe.sharpenMasking, 0), 1),
                 radius: Int32(min(max(Int((sigma * 2.5).rounded(.up)), 1), 3)))
             guard let encoder = commandBuffer.makeComputeCommandEncoder() else {
                 throw LapseError.gpuSetupFailed("could not encode the sharpen pass")

@@ -4,8 +4,10 @@ import Foundation
 /// engine renders. This is the *engine's* model — the app's `PhotoAdjustments`
 /// (UI ranges, persistence, legacy migration) converts into it.
 ///
-/// Every field's neutral value is 0, so `neutral` is a constant and a caller
-/// can skip the whole render when nothing would change a pixel.
+/// Every field's neutral value is 0 bar `noiseDetail`, which is a two-sided
+/// control centred at 0.5 (and means nothing at all while its parent slider
+/// sits at 0). `neutral` is still a constant, so a caller can skip the whole
+/// render when nothing would change a pixel.
 public struct GradeRecipe: Codable, Equatable, Sendable {
     /// Exposure in EV stops. −5…+5.
     public var exposure: Float = 0
@@ -39,13 +41,27 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// Capture sharpening — small-radius luma acutance, the counterpart of
     /// Lightroom's always-on Detail-panel sharpen. 0…1.
     public var sharpen: Float = 0
-    /// Luminance noise reduction — edge-preserving (bilateral) smoothing of
-    /// fine luma grain. 0…1.
+    /// How far the sharpen amount is gated by local edge energy — Lightroom's
+    /// Masking. 0 sharpens every pixel equally (what the engine always did);
+    /// 1 leaves flat areas alone and spends the whole amount on edges. 0…1.
+    public var sharpenMasking: Float = 0
+    /// Luminance noise reduction — a frequency split on encoded luma: the
+    /// Gaussian base layer is never touched, only the fine residual riding on
+    /// it is shrunk, so coarse structure survives any setting. 0…1.
     public var noiseReduction: Float = 0
+    /// How much of the fine layer survives the shrink, independent of the
+    /// amount: 0 takes the whole residual down to the base, 1 leaves all but
+    /// the smallest fluctuations standing. A *preservation* control, the
+    /// direction Lightroom's Detail slider runs. Two-sided, neutral 0.5.
+    public var noiseDetail: Float = 0.5
     /// Colour noise reduction — steers chroma toward the tonally-similar
     /// neighbourhood, which is where the mottling in pushed dark scenes
     /// lives. 0…1.
     public var colorNoiseReduction: Float = 0
+    /// Chroma noise reduction — a spatial Gaussian on Cb/Cr with luma left
+    /// alone, which is what dissolves purple shadow haze and colour speckle
+    /// without costing any detail. 0…1.
+    public var colorNoise: Float = 0
     /// Darkens the corners. 0…1.
     public var vignette: Float = 0
 
@@ -61,7 +77,15 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// 2: local tone — shadows/highlights keyed on the guided-filter base,
     ///    clarity as ±detail gain, chroma-protected deep-shadow lifts,
     ///    clip-targeted highlight desaturation.
-    public static let engineVersion = 2
+    /// 3: detail stage — luma NR's spatial footprint scales with the render
+    ///    instead of being fixed in pixels, its range gate splits off into
+    ///    `noiseDetail`, and sharpening gains an edge mask.
+    /// 4: chroma NR — a YCbCr pass that smooths Cb/Cr on spatial distance
+    ///    alone and carries Y through untouched.
+    /// 5: luma NR — the bilateral becomes a frequency split (Gaussian base
+    ///    kept whole, soft-thresholded detail residual), and `noiseDetail`
+    ///    inverts from a range gate into a preservation control.
+    public static let engineVersion = 5
 
     /// A short, stable string identifying this grade for cache keys.
     public var cacheToken: String {
@@ -69,7 +93,8 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
         let values: [Float] = [
             exposure, contrast, highlights, shadows, whites, blacks,
             temperatureMired, tint, vibrance, saturation, clarity, vignette,
-            texture, sharpen, noiseReduction, colorNoiseReduction,
+            texture, sharpen, sharpenMasking, noiseReduction, noiseDetail,
+            colorNoiseReduction, colorNoise,
         ]
         let joined = values.map { String(format: "%.4f", $0) }.joined(separator: ",")
         return "e\(Self.engineVersion)|\(joined)"
@@ -87,10 +112,29 @@ public struct GradeReference: Sendable {
     /// The rendered image's longest edge in pixels — clarity and vignette
     /// scale from it so a preview and an export get the same look.
     public var longEdge: Double
+    /// The file the texture was decoded from, when there is one. Only the
+    /// `.forwardMatrix` decode path reads it — that path builds its
+    /// white-balance matrix out of the DNG's own calibration tags, so it needs
+    /// to get back to the bytes. Nil for textures with no file behind them
+    /// (the blend path grades an accumulated buffer), which is why the whole
+    /// thing degrades to Bradford rather than failing.
+    public var sourceURL: URL?
+    /// Which decode path produced the texture and should shape the
+    /// white-balance matrix. Defaults to `.bradfordAdaptation` so every
+    /// existing call site keeps exactly the behaviour it had.
+    public var decodePath: RawDecodePath
 
-    public init(asShotTemperatureK: Double = 6500, asShotTint: Double = 0, longEdge: Double = 0) {
+    public init(
+        asShotTemperatureK: Double = 6500,
+        asShotTint: Double = 0,
+        longEdge: Double = 0,
+        sourceURL: URL? = nil,
+        decodePath: RawDecodePath = .bradfordAdaptation
+    ) {
         self.asShotTemperatureK = asShotTemperatureK
         self.asShotTint = asShotTint
         self.longEdge = longEdge
+        self.sourceURL = sourceURL
+        self.decodePath = decodePath
     }
 }

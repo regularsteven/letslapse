@@ -25,7 +25,8 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     let knownKeys = [
         "exposure", "contrast", "highlights", "shadows", "whites", "blacks",
         "temperature", "tint", "vibrance", "saturation", "clarity", "vignette",
-        "texture", "sharpen", "noise", "colornoise",
+        "texture", "sharpen", "masking", "noise", "noisedetail", "colornoise",
+        "chromanoise",
     ]
     for key in values.keys where !knownKeys.contains(key) {
         fail("unknown recipe key '\(key)' — choose from: \(knownKeys.joined(separator: ", "))")
@@ -44,8 +45,16 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     recipe.clarity = scaled("clarity")
     recipe.texture = scaled("texture")
     recipe.sharpen = scaled("sharpen")
+    recipe.sharpenMasking = scaled("masking")
     recipe.noiseReduction = scaled("noise")
+    // Centred at 50, so an omitted key has to mean the middle of the travel
+    // rather than the 0 every other slider defaults to.
+    recipe.noiseDetail = Float(values["noisedetail"] ?? 50) / 100
     recipe.colorNoiseReduction = scaled("colornoise")
+    // `colornoise` was already the neighbourhood-steer control's key, so the
+    // Cb/Cr pass takes its own rather than quietly changing what an existing
+    // command line means.
+    recipe.colorNoise = scaled("chromanoise")
     recipe.vignette = scaled("vignette")
     return recipe
 }
@@ -53,29 +62,29 @@ func parseRecipe(json: String) throws -> GradeRecipe {
 /// `lapse grade <in> --recipe '<json>' --out <path>` — the grading engine end
 /// to end on one frame: linear decode → tone kernel → Display P3 JPEG. This
 /// is the permanent regression rig for the engine's look.
-func runGradeRender(url: URL, recipeJSON: String, outPath: String, scale: Float) throws {
+func runGradeRender(
+    url: URL, recipeJSON: String, outPath: String, scale: Float, quality: Double = 0.95
+) throws {
     let recipe = try parseRecipe(json: recipeJSON)
+    let path = RawDecodePath.current
     let decoder = try LinearFrameDecoder()
     let started = Date()
-    let frame = try decoder.decode(url: url, scale: scale)
+    let frame = try decoder.decode(url: url, scale: scale, path: path, recipe: recipe)
     let decodeSeconds = Date().timeIntervalSince(started)
 
-    let reference = GradeReference(
-        asShotTemperatureK: frame.asShotTemperatureK,
-        asShotTint: frame.asShotTint,
-        longEdge: Double(max(frame.texture.width, frame.texture.height)))
+    let reference = frame.reference()
     let engine = try GradeEngine(device: decoder.device)
     let renderer = engine.makeRenderer(recipe, reference: reference)
     let gradeStarted = Date()
     let output = try renderer.apply(to: frame.texture)
     let gradeSeconds = Date().timeIntervalSince(gradeStarted)
 
-    let data = try decoder.jpegData(from: output)
+    let data = try decoder.jpegData(from: output, quality: quality)
     let outputURL = URL(fileURLWithPath: outPath)
     try data.write(to: outputURL)
     print("graded \(frame.texture.width)x\(frame.texture.height) "
-        + String(format: "(decode %.2fs, grade %.3fs, as-shot %.0f K)",
-                 decodeSeconds, gradeSeconds, frame.asShotTemperatureK))
+        + String(format: "(decode %.2fs, grade %.3fs, as-shot %.0f K, path %@)",
+                 decodeSeconds, gradeSeconds, frame.asShotTemperatureK, path.rawValue))
     print(outputURL.path)
 }
 
@@ -89,16 +98,14 @@ func runStackSequence(
 ) throws {
     let profile: VideoEncodePolicy.Profile = profileName == "hevc10" ? .hevcMain10 : .h264High8Bit
     let recipe = try recipeJSON.map { try parseRecipe(json: $0) } ?? GradeRecipe()
+    let path = RawDecodePath.current
     let decoder = try LinearFrameDecoder()
     let engine = try GradeEngine(device: decoder.device)
     var renderer: GradeRenderer?
     let decode: (URL) throws -> MTLTexture = { url in
-        let frame = try decoder.decode(url: url)
+        let frame = try decoder.decode(url: url, path: path, recipe: recipe)
         if renderer == nil {
-            renderer = engine.makeRenderer(recipe, reference: GradeReference(
-                asShotTemperatureK: frame.asShotTemperatureK,
-                asShotTint: frame.asShotTint,
-                longEdge: Double(max(frame.texture.width, frame.texture.height))))
+            renderer = engine.makeRenderer(recipe, reference: frame.reference())
         }
         return frame.texture
     }

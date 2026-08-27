@@ -11,6 +11,7 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     case exposure, contrast, highlights, shadows, whites, blacks
     case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
     case texture, sharpen, noiseReduction, colorNoiseReduction
+    case sharpenMasking, noiseDetail, colorNoise
 
     var keyPath: WritableKeyPath<PhotoAdjustments, Float> {
         switch self {
@@ -27,11 +28,19 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .clarity: return \.clarity
         case .texture: return \.texture
         case .sharpen: return \.sharpen
+        case .sharpenMasking: return \.sharpenMasking
         case .noiseReduction: return \.noiseReduction
+        case .noiseDetail: return \.noiseDetail
         case .colorNoiseReduction: return \.colorNoiseReduction
+        case .colorNoise: return \.colorNoise
         case .vignetteIntensity: return \.vignetteIntensity
         }
     }
+
+    /// The value that means "this control is saying nothing" — 0 for every
+    /// field but the two-sided `noiseDetail`, whose no-op is mid-travel. Every
+    /// reset goes through here rather than writing a zero.
+    var neutralValue: Float { PhotoAdjustments.neutral[keyPath: keyPath] }
 
     var range: ClosedRange<Float> {
         switch self {
@@ -48,8 +57,11 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .clarity: return PhotoAdjustments.clarityRange
         case .texture: return PhotoAdjustments.textureRange
         case .sharpen: return PhotoAdjustments.sharpenRange
+        case .sharpenMasking: return PhotoAdjustments.sharpenMaskingRange
         case .noiseReduction: return PhotoAdjustments.noiseReductionRange
+        case .noiseDetail: return PhotoAdjustments.noiseDetailRange
         case .colorNoiseReduction: return PhotoAdjustments.colorNoiseReductionRange
+        case .colorNoise: return PhotoAdjustments.colorNoiseRange
         case .vignetteIntensity: return PhotoAdjustments.vignetteRange
         }
     }
@@ -295,7 +307,7 @@ struct GradeTimeline: Codable, Equatable, Sendable {
             // Between keyframes there is no single moment to reset — the value
             // here is two other moments' business.
             guard keyframes.isEmpty else { return .none }
-            baseline[keyPath: field.keyPath] = 0
+            baseline[keyPath: field.keyPath] = field.neutralValue
             return .baseline
         }
         // What this moment would say about the property if it weren't here.

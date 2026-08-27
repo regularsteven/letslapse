@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Interval grading viewer · first run · portrait</title>
-  <desc>Mirrors App/PhotoViewerView.swift for an interval shoot that has never been graded at a second moment — the state every interval project starts in, and the one the concept is designed to be invisible from. No dots, no coach mark, and the word “keyframe” nowhere on screen: the sliders behave exactly as they do on a photo, and an edit made here grades the WHOLE clip. Staged by LL_KEYFRAMES=empty over LL_VIEWER=1. The only new thing is the strip itself, and it is quiet: rail, playhead at the head, and the elapsed-capture-time labels that say how long the shoot ran. Scrubbing it changes which frame is on screen and nothing else. THE LEAP happens on the first edit made at a SECOND position, and it is never a mode switch: the grade already made becomes a moment where it was authored (GradeTimeline.baselineAnchor), the new edit becomes a moment where the playhead is now, and two dots animate in. That is the entire announcement — see project-photo.viewer.keyframes.portrait.svg for what the screen becomes.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift for an interval shoot that has never been graded at a second moment — the state every interval project starts in, and the one the concept is designed to be invisible from. No dots, no coach mark, and the word “keyframe” nowhere on screen: the sliders behave exactly as they do on a photo, and an edit made here grades the WHOLE clip. Staged by LL_KEYFRAMES=empty over LL_VIEWER=1. The only new thing is the strip itself, and it is quiet: rail, playhead at the head, and the elapsed-capture-time labels that say how long the shoot ran. Scrubbing it changes which frame is on screen and nothing else — as do the two one-frame steps after the track, which are how a particular frame of a long shoot is actually reached (geometry and states in project-photo.viewer.keyframes.portrait.svg); with the playhead at the head, ‹ is disabled. THE LEAP happens on the first edit made at a SECOND position, and it is never a mode switch: the grade already made becomes a moment where it was authored (GradeTimeline.baselineAnchor), the new edit becomes a moment where the playhead is now, and two dots animate in. That is the entire announcement — see project-photo.viewer.keyframes.portrait.svg for what the screen becomes.</desc>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
@@ -25,12 +25,17 @@
     <text x="47" y="361.5" font-size="11" class="sb" fill="#FFF">INTERVAL · 2 h 14 min · 60 frames</text>
     <circle cx="55.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
     <path d="M51.5 398.5 L61.0 405.0 L51.5 411.5 Z" fill="#FFB340"/>
-    <rect x="82" y="403.5" width="319.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
+    <rect x="82" y="403.5" width="243.0" height="3" rx="1.5" fill="#FFFFFF" opacity="0.18"/>
     <rect x="80.5" y="394.0" width="3" height="22" rx="1.5" fill="#FFFFFF"/>
-    <rect x="74.9" y="374.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
-    <text x="104.3" y="385.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">0:00:00</text>
+    <rect x="69.6" y="374.0" width="58.8" height="16" rx="8" fill="#2B2B2E" opacity="0.9"/>
+    <text x="99.0" y="385.5" text-anchor="middle" font-size="10" class="sb" fill="#FFF">0:00:00</text>
     <text x="82.0" y="432.0" font-size="10.5" fill="#8E8E93">0:00:00</text>
-    <text x="401.0" y="432.0" text-anchor="end" font-size="10.5" fill="#8E8E93">2:14:00</text>
+    <text x="325.0" y="432.0" text-anchor="end" font-size="10.5" fill="#8E8E93">2:14:00</text>
+    <!-- one-frame steps; the playhead is at the head here, so ‹ is disabled -->
+    <circle cx="348.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
+    <path d="M351.2 399.0 L344.8 405.0 L351.2 411.0" fill="none" stroke="#8E8E93" stroke-width="2.2" opacity="0.45" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="386.0" cy="405.0" r="15.0" fill="#1C1C1E"/>
+    <path d="M382.8 399.0 L389.2 405.0 L382.8 411.0" fill="none" stroke="#FFB340" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
     <rect x="202.5" y="448.5" width="36" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
     <text x="40" y="491" font-size="13" class="sb" fill="#8E8E93">Preset</text>
     <rect x="92" y="479" width="76" height="23" rx="11.5" fill="#FFB340" opacity="1"/>

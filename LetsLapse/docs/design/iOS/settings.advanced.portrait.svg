@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Settings · scrolled to Advanced · portrait</title>
-  <desc>Mirrors App/SettingsView.swift scrolled to the end of the list: the Storage card cut by the top edge (free space first, then the library breakdown) (library bar + legend, Review large originals, Clear cache) and the full Advanced card — Layout, Allow remote access (off by default; drawn for the first time in this pass, having been missing from the mirror since 2026-08-13), Custom frame rate, Blend learning, Auto blend strategy, Performance, Diagnostics and Incomplete Captures. Layout is the first row and the only one about the shell rather than the engine: which tabs and filters the app shows (Enable Scans menu, Display count in Projects — settings.layout.portrait.svg). Auto blend strategy is the field-test selector for BLEND=Auto's decision logic on DNG shoots (Zone / Latitude / Lumen, a menu like the Creative defaults rows); whichever is chosen, every Auto run logs all three strategies' proposals per window into capture_log.json, and the choice is per-device on purpose — a comparison shoot sets one strategy on each device. The last row exists only while orphaned capture logs do: CaptureSessionLogger deletes a session's log when the capture screen closes normally, so a surviving log means the app died with the camera open, and the row's trailing number is CaptureSessionLogger.orphanedLogs.count. With no orphans the row is absent and Diagnostics is the card's last row (no divider under it). Tapping opens the Incomplete Captures sheet — settings.incomplete-captures.portrait.svg. The list's trailing 96pt spacer is what leaves the last row clear of the floating tab bar, which floats over the scroll.</desc>
+  <desc>Mirrors App/SettingsView.swift scrolled to the end of the list. The Advanced card is now tall enough that the end of the list is all Advanced — the Storage card has left the viewport entirely at this scroll depth, and the ADVANCED section header sits just under the status bar. Rows: Layout, Allow remote access (off by default), Custom frame rate, Blend learning, Auto blend strategy, Dim screen during shoot, Raw decode path, Performance, Diagnostics and Incomplete Captures. Layout is the first row and the only one about the shell rather than the engine: which tabs and filters the app shows (Enable Scans menu, Display count in Projects — settings.layout.portrait.svg). Auto blend strategy is the field-test selector for BLEND=Auto's decision logic on DNG shoots (Zone / Latitude / Lumen, a menu like the Creative defaults rows); whichever is chosen, every Auto run logs all three strategies' proposals per window into capture_log.json, and the choice is per-device on purpose — a comparison shoot sets one strategy on each device. Dim screen during shoot (iOS only, ON by default) shipped with the thermal work and is drawn here for the first time. Raw decode path is the second field-test selector and takes the same menu shape as Auto blend strategy: it chooses how a DNG is rendered before grading — Bradford (default: white balance as a 3×3 in linear Display P3, after Apple's camera profile), Forward matrix (the same insertion point, but the matrix comes from the DNG's own calibration tags), Core Image RAW (white balance inside the raw converter, in camera space before the profile — Lightroom's ordering), and Adobe DCP (Core Image RAW's ordering plus the camera's Adobe profile look table). The first three are all arguments about which 3×3 goes where, so they render identically while temperature and tint sit at zero and none of them can change an untouched project. Adobe DCP is the exception on both counts, and the row's copy no longer claims otherwise: a look table moves hue differently at different brightnesses — which is the whole reason it exists, and the one thing no 3×3 can imitate — so it applies whatever the sliders say and does change an untouched render. Changing any of them invalidates every cached preview. Adobe DCP is also the only case that can be unavailable, and on iPhone it always is: the profiles ship with Lightroom/Camera Raw and there is no /Library/Application Support/Adobe on a phone, so the row is permanently listed-but-disabled here (it is live on a Mac that has them, which is where the field test runs). It now carries the reason — "Adobe camera profiles are not installed. They ship with Lightroom or Camera Raw" — rather than a bare "(unavailable)", so a greyed row is not read as an unfinished feature. That label is inside the menu, which no file in this folder draws for either field-test row. The last row exists only while orphaned capture logs do: CaptureSessionLogger deletes a session's log when the capture screen closes normally, so a surviving log means the app died with the camera open, and the row's trailing number is CaptureSessionLogger.orphanedLogs.count. With no orphans the row is absent and Diagnostics is the card's last row (no divider under it). Tapping opens the Incomplete Captures sheet — settings.incomplete-captures.portrait.svg. The list's trailing 96pt spacer is what leaves the last row clear of the floating tab bar, which floats over the scroll.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
@@ -23,13 +23,14 @@
 
       <!-- scrolled content (the screen has no nav bar; content scrolls under the status bar) -->
       <g clip-path="url(#scroll)">
-        <!-- the Advanced card has grown three rows since this mock's last
-             truthful scroll position (Allow remote access, previously missing
-             from the mirror entirely; Auto blend strategy; and now Layout at
-             the top), so the fully scrolled position sits 211pt deeper:
-             Location and On-device AI are out of view and the Storage card is
-             the one cut by the top edge, its section header clipped away -->
-        <g transform="translate(0,-211)">
+        <!-- the Advanced card has grown two more rows since the last pass
+             (Dim screen during shoot, which shipped with the thermal work and
+             never reached this mirror; and Raw decode path), so the fully
+             scrolled position sits 347pt deeper. At that depth the Storage
+             card has left the viewport entirely — the card is now tall enough
+             that the end of the list is all Advanced, with its section header
+             sitting just under the status bar -->
+        <g transform="translate(0,-347)">
 
         <!-- storage -->
         <text x="20" y="190" class="hdr">STORAGE</text>
@@ -60,7 +61,7 @@
         <!-- advanced -->
         <text x="20" y="432" class="hdr">ADVANCED</text>
         <g id="advanced-card">
-          <rect x="16" y="440" width="361" height="527" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <rect x="16" y="440" width="361" height="663" rx="16" fill="#FFF" filter="url(#soft)"/>
 
           <!-- layout — first row of the card, and the only one about the shell
                rather than the engine: which tabs and filters the app shows.
@@ -108,25 +109,64 @@
           </g>
           <line x1="32" y1="781" x2="377" y2="781" stroke="#000" stroke-opacity="0.08"/>
 
+          <!-- dim screen during shoot — iOS only, ON by default. Shipped with
+               the thermal work; drawn here for the first time -->
+          <g id="dim-screen-row">
+            <text x="32" y="807" class="ttl">Dim screen during shoot</text>
+            <!-- first line stops short of the toggle at x=316; the second has
+                 the full column width because nothing sits beside it -->
+            <text x="32" y="822" class="sub">Floors the display while a shoot runs — tap to peek.</text>
+            <text x="32" y="835" class="sub">The panel is a real share of the thermal budget on OLED phones</text>
+            <rect x="316" y="797" width="51" height="31" rx="15.5" fill="#34C759"/>
+            <circle cx="351.5" cy="812.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          </g>
+          <line x1="32" y1="849" x2="377" y2="849" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- raw decode path — field-test selector, the same menu shape as
+               Auto blend strategy above it. Four cases: Bradford (default),
+               Forward matrix, Core Image RAW, Adobe DCP.
+               On THIS platform the DCP case is always listed and always
+               disabled: its profiles ship with Lightroom/Camera Raw and there
+               is no /Library/Application Support/Adobe on a phone, so
+               RawDecodePathRegistry.isAvailable(.dcpProfile) is false on iOS by
+               construction rather than by build setting. It is listed anyway
+               because a comparison that silently drops an option reads as a
+               bug — and it now carries the reason ("Adobe camera profiles are
+               not installed. They ship with Lightroom or Camera Raw") in place
+               of the bare "(unavailable)" it used to wear, so a greyed row is
+               not mistaken for an unfinished feature. That label lives inside
+               the menu, which this file does not draw — see INDEX.md.
+               The subtitle changed with the same work: the row no longer only
+               chooses WHERE white balance lands, because the DCP case also
+               applies the camera profile's look table -->
+          <g id="raw-decode-path-row">
+            <text x="32" y="875" class="ttl">Raw decode path</text>
+            <text x="32" y="890" class="sub">Field test: how a DNG is rendered before grading.</text>
+            <text x="32" y="903" class="sub">Changing this re-renders every preview</text>
+            <text x="351" y="875" font-size="15" class="sec" text-anchor="end">Bradford (default)</text>
+            <path d="M359 865 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+          </g>
+          <line x1="32" y1="917" x2="377" y2="917" stroke="#000" stroke-opacity="0.08"/>
+
           <!-- performance -->
-          <text x="32" y="807" class="ttl">Performance</text>
-          <text x="32" y="822" class="sub">CPU workers, GPU batches</text>
-          <path d="M363 811 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
-          <line x1="32" y1="843" x2="377" y2="843" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="943" class="ttl">Performance</text>
+          <text x="32" y="958" class="sub">CPU workers, GPU batches</text>
+          <path d="M363 947 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="979" x2="377" y2="979" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- diagnostics -->
-          <text x="32" y="869" class="ttl">Diagnostics</text>
-          <text x="32" y="884" class="sub">Job folders, processing logs</text>
-          <path d="M363 873 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <text x="32" y="1005" class="ttl">Diagnostics</text>
+          <text x="32" y="1020" class="sub">Job folders, processing logs</text>
+          <path d="M363 1009 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
           <!-- this divider exists only while the Incomplete Captures row below does -->
-          <line x1="32" y1="905" x2="377" y2="905" stroke="#000" stroke-opacity="0.08"/>
+          <line x1="32" y1="1041" x2="377" y2="1041" stroke="#000" stroke-opacity="0.08"/>
 
           <!-- incomplete captures — present only when orphaned logs exist -->
           <g id="incomplete-captures-row">
-            <text x="32" y="931" class="ttl">Incomplete Captures</text>
-            <text x="32" y="946" class="sub">Logs from shoots that ended in a crash or force-quit</text>
-            <text x="355" y="931" font-size="15" class="sec" text-anchor="end">2</text>
-            <path d="M363 935 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+            <text x="32" y="1067" class="ttl">Incomplete Captures</text>
+            <text x="32" y="1082" class="sub">Logs from shoots that ended in a crash or force-quit</text>
+            <text x="355" y="1067" font-size="15" class="sec" text-anchor="end">2</text>
+            <path d="M363 1071 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
           </g>
         </g>
         </g>
@@ -166,5 +206,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings (scrolled to Advanced) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift — storageCard · advancedCard (Layout, Allow remote access, Auto blend strategy, Incomplete Captures)</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift · advancedCard · 10 rows</text>
 </svg>

@@ -43,22 +43,40 @@ struct PhotoAdjustments: Codable, Equatable {
     var texture: Float
     /// Capture sharpening: small-radius luma acutance. 0…1.
     var sharpen: Float
-    /// Luminance noise reduction: edge-preserving smoothing of fine grain.
-    /// 0…1.
+    /// How far sharpening is held back where there is no edge to sharpen —
+    /// Lightroom's Masking. 0…1, neutral 0 (sharpen everything equally).
+    var sharpenMasking: Float
+    /// Luminance noise reduction: a frequency split that shrinks fine grain
+    /// and leaves the coarse structure under it alone. 0…1.
     var noiseReduction: Float
+    /// How much of that fine layer survives the shrink, separate from the
+    /// amount — up keeps more. 0…1, neutral 0.5, and inert while
+    /// `noiseReduction` is 0.
+    var noiseDetail: Float
     /// Colour noise reduction: dissolves chroma mottling in pushed dark
     /// scenes; the smoothing reach grows with the slider. 0…1.
     var colorNoiseReduction: Float
+    /// Chroma noise reduction: a spatial Gaussian on Cb/Cr with luma left
+    /// alone — purple shadow haze and colour speckle go, detail stays. 0…1.
+    var colorNoise: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
 
-    /// Every slider at its no-op value — the preset alone, ungarnished.
+    /// Every slider at its no-op value — the preset alone, ungarnished. Every
+    /// field is 0 except `noiseDetail`, whose no-op is the middle of its
+    /// travel — so anything resetting one control asks
+    /// `PhotoAdjustmentField.neutralValue` rather than writing a zero.
     static var neutral: PhotoAdjustments {
         .init(exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0,
               blacks: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0,
-              clarity: 0, texture: 0, sharpen: 0, noiseReduction: 0,
-              colorNoiseReduction: 0, vignetteIntensity: 0)
+              clarity: 0, texture: 0, sharpen: 0, sharpenMasking: 0,
+              noiseReduction: 0, noiseDetail: neutralNoiseDetail,
+              colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0)
     }
+
+    /// The middle of the Detail sub-slider's travel — the gate width the
+    /// engine used before the control existed.
+    static let neutralNoiseDetail: Float = 0.5
 
     /// True when nothing here would change a pixel, so the grader can skip the
     /// whole chain (and the export can save the original bytes untouched).
@@ -82,8 +100,11 @@ struct PhotoAdjustments: Codable, Equatable {
     static let clarityRange: ClosedRange<Float> = -1...1
     static let textureRange: ClosedRange<Float> = -1...1
     static let sharpenRange: ClosedRange<Float> = 0...1
+    static let sharpenMaskingRange: ClosedRange<Float> = 0...1
     static let noiseReductionRange: ClosedRange<Float> = 0...1
+    static let noiseDetailRange: ClosedRange<Float> = 0...1
     static let colorNoiseReductionRange: ClosedRange<Float> = 0...1
+    static let colorNoiseRange: ClosedRange<Float> = 0...1
     static let vignetteRange: ClosedRange<Float> = 0...1
 
     /// The engine-side recipe these adjustments describe, optionally layered
@@ -103,8 +124,14 @@ struct PhotoAdjustments: Codable, Equatable {
         recipe.clarity = min(max(base.clarity + clarity, -1), 1)
         recipe.texture = min(max(base.texture + texture, -1), 1)
         recipe.sharpen = min(max(base.sharpen + sharpen, 0), 1)
+        recipe.sharpenMasking = min(max(base.sharpenMasking + sharpenMasking, 0), 1)
         recipe.noiseReduction = min(max(base.noiseReduction + noiseReduction, 0), 1)
+        // Centred at 0.5, so what layers onto the preset is the offset from
+        // neutral — adding the value itself would double a preset's gate.
+        recipe.noiseDetail = min(
+            max(base.noiseDetail + (noiseDetail - Self.neutralNoiseDetail), 0), 1)
         recipe.colorNoiseReduction = min(max(base.colorNoiseReduction + colorNoiseReduction, 0), 1)
+        recipe.colorNoise = min(max(base.colorNoise + colorNoise, 0), 1)
         recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
         return recipe
     }
@@ -113,10 +140,12 @@ struct PhotoAdjustments: Codable, Equatable {
     var cacheToken: String {
         guard !isNeutral else { return "n" }
         return String(
-            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
+            format: "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%.3f,%.3f,%.3f,%.3f,"
+                + "%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f",
             exposure, contrast, highlights, shadows, whites, blacks,
             temperature, tint, vibrance, saturation, clarity, vignetteIntensity,
-            texture, sharpen, noiseReduction, colorNoiseReduction)
+            texture, sharpen, sharpenMasking, noiseReduction, noiseDetail,
+            colorNoiseReduction, colorNoise)
     }
 
     // MARK: - Codable
@@ -129,8 +158,11 @@ struct PhotoAdjustments: Codable, Equatable {
     init(exposure: Float, contrast: Float, highlights: Float, shadows: Float,
          whites: Float, blacks: Float, temperature: Float, tint: Float,
          vibrance: Float, saturation: Float, clarity: Float, texture: Float = 0,
-         sharpen: Float = 0, noiseReduction: Float = 0,
-         colorNoiseReduction: Float = 0, vignetteIntensity: Float) {
+         sharpen: Float = 0, sharpenMasking: Float = 0,
+         noiseReduction: Float = 0,
+         noiseDetail: Float = PhotoAdjustments.neutralNoiseDetail,
+         colorNoiseReduction: Float = 0, colorNoise: Float = 0,
+         vignetteIntensity: Float) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -144,8 +176,11 @@ struct PhotoAdjustments: Codable, Equatable {
         self.clarity = clarity
         self.texture = texture
         self.sharpen = sharpen
+        self.sharpenMasking = sharpenMasking
         self.noiseReduction = noiseReduction
+        self.noiseDetail = noiseDetail
         self.colorNoiseReduction = colorNoiseReduction
+        self.colorNoise = colorNoise
         self.vignetteIntensity = vignetteIntensity
     }
 
@@ -153,7 +188,8 @@ struct PhotoAdjustments: Codable, Equatable {
         case version = "v"
         case exposure, contrast, highlights, shadows, whites, blacks
         case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
-        case texture, sharpen, noiseReduction, colorNoiseReduction
+        case texture, sharpen, noiseReduction, colorNoiseReduction, colorNoise
+        case sharpenMasking, noiseDetail
         case whiteBalance  // v1 only; never written by v2
     }
 
@@ -185,8 +221,8 @@ struct PhotoAdjustments: Codable, Equatable {
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let version = try container.decodeIfPresent(Int.self, forKey: .version) ?? 1
-        func field(_ key: CodingKeys) -> Float {
-            (try? container.decodeIfPresent(Float.self, forKey: key)) ?? 0
+        func field(_ key: CodingKeys, default fallback: Float = 0) -> Float {
+            (try? container.decodeIfPresent(Float.self, forKey: key)) ?? fallback
         }
         if version >= 2 {
             self.init(
@@ -196,8 +232,13 @@ struct PhotoAdjustments: Codable, Equatable {
                 temperature: field(.temperature), tint: field(.tint),
                 vibrance: field(.vibrance), saturation: field(.saturation),
                 clarity: field(.clarity), texture: field(.texture),
-                sharpen: field(.sharpen), noiseReduction: field(.noiseReduction),
+                sharpen: field(.sharpen), sharpenMasking: field(.sharpenMasking),
+                noiseReduction: field(.noiseReduction),
+                // A payload written before the sub-slider existed carries the
+                // gate the engine had then, which is the middle of its travel.
+                noiseDetail: field(.noiseDetail, default: Self.neutralNoiseDetail),
                 colorNoiseReduction: field(.colorNoiseReduction),
+                colorNoise: field(.colorNoise),
                 vignetteIntensity: field(.vignetteIntensity))
             return
         }
@@ -241,8 +282,11 @@ struct PhotoAdjustments: Codable, Equatable {
         try container.encode(clarity, forKey: .clarity)
         try container.encode(texture, forKey: .texture)
         try container.encode(sharpen, forKey: .sharpen)
+        try container.encode(sharpenMasking, forKey: .sharpenMasking)
         try container.encode(noiseReduction, forKey: .noiseReduction)
+        try container.encode(noiseDetail, forKey: .noiseDetail)
         try container.encode(colorNoiseReduction, forKey: .colorNoiseReduction)
+        try container.encode(colorNoise, forKey: .colorNoise)
         try container.encode(vignetteIntensity, forKey: .vignetteIntensity)
     }
 }

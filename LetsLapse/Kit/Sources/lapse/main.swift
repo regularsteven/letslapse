@@ -35,6 +35,10 @@ USAGE:
                             (exposure is EV; temperature is a mired offset)
       --out PATH            Write the graded Display P3 JPEG here
       --scale N             Decode scale, 1 = full resolution (default 1)
+      --quality N           JPEG quality 1…100 (default 95)
+      --decode-path NAME    Raw decode pipeline: bradford | forwardmatrix |
+                            ciraw | dcp (default bradford). Sets the same
+                            switch the app's Settings picker writes.
       --probe               Instead of grading: report linear max/mean and
                             headroom for the RAW and ImageIO decode paths
 
@@ -200,6 +204,19 @@ do {
         let recipeJSON = takeOption(["--recipe"])
         let outPath = takeOption(["--out", "-o"])
         let scale = Float(takeOption(["--scale"]) ?? "1") ?? 1
+        let quality = Double(takeOption(["--quality"]) ?? "95") ?? 95
+        if let decodePath = takeOption(["--decode-path"]) {
+            guard let path = RawDecodePath(rawValue: decodePath.lowercased()) else {
+                fail("--decode-path is one of: "
+                    + RawDecodePath.allCases.map(\.rawValue).joined(separator: ", "))
+            }
+            guard RawDecodePathRegistry.isAvailable(path) else {
+                fail("--decode-path \(path.rawValue) is not implemented in this build "
+                    + "(available: "
+                    + RawDecodePathRegistry.available.map(\.rawValue).joined(separator: ", ") + ")")
+            }
+            RawDecodePath.current = path
+        }
         guard args.count == 1 else { fail("grade needs exactly one input image") }
         let inputURL = URL(fileURLWithPath: args[0])
         if probe {
@@ -208,7 +225,9 @@ do {
             guard let recipeJSON, let outPath else {
                 fail("grade needs --recipe '<json>' and --out <path> (or --probe)")
             }
-            try runGradeRender(url: inputURL, recipeJSON: recipeJSON, outPath: outPath, scale: scale)
+            try runGradeRender(
+                url: inputURL, recipeJSON: recipeJSON, outPath: outPath, scale: scale,
+                quality: min(max(quality, 1), 100) / 100)
         }
 
     case "stackseq":

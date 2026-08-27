@@ -1,5 +1,6 @@
 import AVFoundation
 import AVKit
+import CoreImage
 import ImageIO
 import SwiftUI
 
@@ -216,22 +217,13 @@ enum ProjectThumbnailGenerator {
         }
     }
 
-    /// A screen-sized decode for the full-screen preview. Goes through the
-    /// thumbnail API rather than `CGImageSourceCreateImageAtIndex` for two
-    /// reasons: it applies the EXIF/TIFF orientation (a raw index-0 decode
-    /// draws the app's DNG captures sideways), and it bounds memory — a
-    /// full-resolution RAW decode is ~50 MB where 2560 px is plenty for any
-    /// display.
+    /// A screen-sized decode for the full-screen preview. Bounded rather than
+    /// full-resolution — a whole-sensor RAW decode is ~50 MB where 2560 px is
+    /// plenty for any display — and orientation-corrected, because an
+    /// uncorrected decode draws the app's DNG captures sideways.
     static func displayImage(at url: URL) async -> CGImage? {
         let image = await MediaWorkQueue.shared.run { () -> CGImage? in
-            guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
-            let options: [CFString: Any] = [
-                kCGImageSourceCreateThumbnailFromImageAlways: true,
-                kCGImageSourceCreateThumbnailWithTransform: true,
-                kCGImageSourceShouldCacheImmediately: true,
-                kCGImageSourceThumbnailMaxPixelSize: 2560,
-            ]
-            return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+            sizedImage(for: url, maxPixelSize: 2560)
         }
         // Outer nil is a cancelled load, inner nil a failed decode.
         guard let decoded = image else { return nil }
@@ -257,6 +249,38 @@ enum ProjectThumbnailGenerator {
     /// to run at frame rate — 480 px is a tile and 2560 px is too slow to hold
     /// 12 fps on a phone.
     static func imageThumbnail(for url: URL, maxPixelSize: Int) -> CGImage? {
+        sizedImage(for: url, maxPixelSize: maxPixelSize)
+    }
+
+    /// Every ungraded still decode in the app, at a bounded size — and the one
+    /// place that knows RAW cannot go through ImageIO.
+    ///
+    /// **`CGImageSourceCreateThumbnailAtIndex` does not decode a DNG on iOS.**
+    /// Measured on iOS 26, both an app ProRAW capture and an app-authored blend
+    /// DNG: asked for 2560 px, ImageIO hands back the file's *embedded
+    /// preview* — 189×252 for a 4032×3024 ProRAW frame — tagged sRGB, with the
+    /// preview's own rendering rather than the camera profile's, and
+    /// `kCGImageSourceCreateThumbnailFromImageAlways` does not change it. The
+    /// same call on macOS returns the full decode in Display P3, which is why
+    /// this was invisible in every Mac check. A file whose embedded preview is
+    /// missing or unrendered is worse than blurry: what gets drawn is close to
+    /// the raw plane, and raw sensor data before white balance reads heavy
+    /// violet.
+    ///
+    /// `CIRAWFilter` decodes correctly on both platforms — measured identical
+    /// to the macOS ImageIO result to three decimals — honours `orientation`
+    /// itself, and takes a `scaleFactor`, so the size bound costs nothing. It
+    /// is also already the app's raw decoder everywhere else
+    /// (`LinearFrameDecoder`), so this stops the thumbnail tier being the one
+    /// surface that saw a different picture from the grading engine.
+    ///
+    /// Boost is left at its default 1.0 on purpose. These are *ungraded*
+    /// previews and should look as captured; `LinearFrameDecoder` asks for 0
+    /// only because the grade engine's own base curve supplies that look.
+    static func sizedImage(for url: URL, maxPixelSize: Int) -> CGImage? {
+        if isRAW(url), let decoded = rawImage(for: url, maxPixelSize: maxPixelSize) {
+            return decoded
+        }
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -266,4 +290,29 @@ enum ProjectThumbnailGenerator {
         ]
         return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
     }
+
+    /// The same test `LinearFrameDecoder` uses, so the two decoders cannot
+    /// disagree about what a raw file is.
+    static func isRAW(_ url: URL) -> Bool {
+        ["dng", "raw"].contains(url.pathExtension.lowercased())
+    }
+
+    /// A bounded, oriented, Display P3 decode of a raw file. Nil when
+    /// `CIRAWFilter` cannot open it, so the ImageIO path stays the fallback
+    /// rather than the picture disappearing.
+    private static func rawImage(for url: URL, maxPixelSize: Int) -> CGImage? {
+        guard let raw = CIRAWFilter(imageURL: url) else { return nil }
+        let native = max(raw.nativeSize.width, raw.nativeSize.height)
+        if native > 0 {
+            raw.scaleFactor = Float(min(1, Double(maxPixelSize) / native))
+        }
+        guard let image = raw.outputImage,
+              let displayP3 = CGColorSpace(name: CGColorSpace.displayP3) else { return nil }
+        return rawContext.createCGImage(
+            image, from: image.extent, format: .RGBA8, colorSpace: displayP3)
+    }
+
+    /// One context for every raw thumbnail. Building a `CIContext` is
+    /// expensive and these renders are stateless; the grid decodes hundreds.
+    private static let rawContext = CIContext(options: [.cacheIntermediates: false])
 }

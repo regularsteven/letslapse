@@ -55,6 +55,27 @@ final class FrameAxisTests: XCTestCase {
         XCTAssertEqual(axis.index(atPosition: 0.5), 1)
     }
 
+    /// The contract the photo editor's one-frame step buttons stand on: a frame
+    /// index turned back into a 0…1 position — `Double(index) / (count - 1)` —
+    /// lands on exactly that frame again, on a clock axis as much as a uniform
+    /// one. Without this a step of one would sometimes land two frames on, or
+    /// on the frame it started from, on a long shoot.
+    func testAnIndexRoundTripsThroughItsPosition() {
+        for count in [2, 3, 60, 250, 999] {
+            let axis = FrameAxis(frameCount: count, uniformDuration: 3600)
+            for index in 0..<count {
+                let position = Double(index) / Double(count - 1)
+                XCTAssertEqual(axis.index(atPosition: position), index,
+                               "frame \(index) of \(count)")
+            }
+        }
+        // The uneven capture clock must not bend it either.
+        let clocked = FrameAxis(frameCount: 4, elapsedSeconds: [0, 1, 2, 900])
+        for index in 0..<4 {
+            XCTAssertEqual(clocked.index(atPosition: Double(index) / 3), index)
+        }
+    }
+
     func testASingleFrameAlwaysAnswersZero() {
         let axis = FrameAxis(frameCount: 1, elapsedSeconds: [0], uniformDuration: 10)
         XCTAssertEqual(axis.index(atPosition: 0.9), 0)

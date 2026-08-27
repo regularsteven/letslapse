@@ -336,6 +336,122 @@ final class GradeEngineTests: XCTestCase {
                           "negative texture must smooth the mid band")
     }
 
+    /// Sharpen's Masking sub-slider: at 0 every pixel earns the full amount
+    /// (the behaviour that shipped before the control existed); at 1 a flat,
+    /// grainy field keeps its smoothness while the edge beside it still
+    /// sharpens.
+    func testSharpenMaskingSparesFlatAreasAndKeepsEdges() throws {
+        let engine = try GradeEngine()
+        let width = 256, height = 64
+        var generator = SeededGenerator(seed: 11)
+
+        // Left half 0.3, right half 0.6 — a hard step — with fine grain on
+        // both, which is exactly what an unsharp mask has no business
+        // amplifying.
+        var pixels = [Float16]()
+        pixels.reserveCapacity(width * height * 4)
+        for _ in 0..<height {
+            for x in 0..<width {
+                let base: Float = x < width / 2 ? 0.3 : 0.6
+                let grain = Float.random(in: -0.006...0.006, using: &generator)
+                let v = Float16(max(base + grain, 0))
+                pixels.append(contentsOf: [v, v, v, 1])
+            }
+        }
+        let texture = try makeTexture(engine, pixels: pixels, width: width, height: height)
+
+        func stats(_ recipe: GradeRecipe) throws -> (grain: Float, edgeJump: Float) {
+            let output = readBack(
+                try engine.makeRenderer(recipe, reference: GradeReference()).apply(to: texture))
+            let row = height / 2
+            var values = [Float]()
+            for x in (width / 2 + 24)..<(width - 16) {
+                values.append(Float(output[(row * width + x) * 4]))
+            }
+            let mean = values.reduce(0, +) / Float(values.count)
+            let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(values.count)
+            let left = Float(output[(row * width + width / 2 - 1) * 4])
+            let right = Float(output[(row * width + width / 2) * 4])
+            return (sqrt(variance), right - left)
+        }
+
+        var unmasked = GradeRecipe()
+        unmasked.sharpen = 1
+        var masked = unmasked
+        masked.sharpenMasking = 1
+
+        let plain = try stats(.neutral)
+        let open = try stats(unmasked)
+        let gated = try stats(masked)
+
+        XCTAssertGreaterThan(open.grain, plain.grain * 1.1,
+                             "unmasked sharpening amplifies grain — the reason Masking exists")
+        XCTAssertLessThan(gated.grain - plain.grain, (open.grain - plain.grain) * 0.5,
+                          "full masking must take back most of the grain sharpening added")
+        XCTAssertGreaterThan(gated.edgeJump, open.edgeJump * 0.99,
+                             "full masking must leave the edge fully sharpened")
+    }
+
+    /// Luma NR's Detail sub-slider: it moves the split's soft threshold on its
+    /// own, so the same amount can strip the fine layer bare or leave most of
+    /// it standing. It is a *preservation* control — Detail up keeps more,
+    /// which is the direction Lightroom's slider runs.
+    func testNoiseDetailPreservesFineStructure() throws {
+        let engine = try GradeEngine()
+        let width = 256, height = 64
+        var generator = SeededGenerator(seed: 13)
+
+        // A coarse fine-layer — ±0.10 linear at 0.5 is about ±0.07 encoded —
+        // rather than plausible sensor grain, because the split's knee is wide:
+        // at full amount it runs 0.024…0.12 encoded, and anything grain-sized
+        // is erased at every Detail setting. See the working point below.
+        var pixels = [Float16]()
+        pixels.reserveCapacity(width * height * 4)
+        for _ in 0..<height {
+            for _ in 0..<width {
+                let v = Float16(max(0.5 + Float.random(in: -0.10...0.10, using: &generator), 0))
+                pixels.append(contentsOf: [v, v, v, 1])
+            }
+        }
+        let texture = try makeTexture(engine, pixels: pixels, width: width, height: height)
+
+        func grain(_ detail: Float, amount: Float = 1) throws -> Float {
+            var recipe = GradeRecipe()
+            recipe.noiseReduction = amount
+            recipe.noiseDetail = detail
+            let output = readBack(
+                try engine.makeRenderer(recipe, reference: GradeReference()).apply(to: texture))
+            let row = height / 2
+            var values = [Float]()
+            for x in 16..<(width - 16) {
+                values.append(Float(output[(row * width + x) * 4]))
+            }
+            let mean = values.reduce(0, +) / Float(values.count)
+            let variance = values.reduce(0) { $0 + ($1 - mean) * ($1 - mean) } / Float(values.count)
+            return sqrt(variance)
+        }
+
+        let untouched = try grain(0.5, amount: 0)
+
+        // Full amount is the floor of the split, not a place to read Detail:
+        // the mix takes the shrunk layer whole, and the knee is wider than any
+        // fine layer worth keeping, so the picture lands on its base.
+        XCTAssertLessThan(try grain(0.5), untouched * 0.5,
+                          "full luma NR must take the fine layer down to the base")
+
+        // Detail is read at a working amount, where the mix still carries some
+        // of the original residual and the knee decides how much of the rest
+        // comes with it.
+        let stripped = try grain(0, amount: 0.5)
+        let preserved = try grain(1, amount: 0.5)
+        XCTAssertLessThan(stripped, untouched * 0.75,
+                          "Detail 0 must shrink the whole fine layer away")
+        XCTAssertGreaterThan(preserved, stripped * 1.12,
+                             "Detail 1 must leave structure the same amount otherwise erases")
+        XCTAssertLessThan(preserved, untouched,
+                          "Detail 1 still denoises — it is not a bypass")
+    }
+
     // MARK: - Locality
 
     /// The point of engine v2: Shadows must reach the dark *region* and spare
@@ -476,5 +592,77 @@ final class GradeEngineTests: XCTestCase {
                        "dither must not shift the mean")
         XCTAssertLessThanOrEqual(maxDelta, 1.0 / 255.0 + 1e-3, "dither must stay within one LSB")
         XCTAssertGreaterThan(distinct.count, 4, "dither must actually vary the output")
+    }
+
+    // MARK: - Cropped renders
+
+    /// The editor's pixel-peep path grades a *piece* of a frame — the 1:1 view
+    /// renders the visible region, the detail loupe a 280pt square — and the
+    /// whole point of it is that what you judge there is what the export
+    /// bakes. That only holds if the spatial passes reach as far in the crop as
+    /// they do in the whole picture, which is what `GradeReference.longEdge`
+    /// now anchors. Without it the crop gets a small picture's footprints and
+    /// quietly under-smooths and under-sharpens.
+    func testCropAnchoredToTheWholeFrameMatchesTheWholeFrame() throws {
+        let engine = try GradeEngine()
+        // Big enough to matter: every detail footprint is a fraction of a 4032
+        // px frame with a floor under it, so at thumbnail sizes they all clamp
+        // to the same values and the anchor has nothing to prove.
+        let width = 2048, height = 1536
+        // Noise is the point: this is the signal noise reduction and sharpen
+        // act on, and the one a wrongly-sized footprint gets visibly wrong.
+        let pixels = randomPixels(width: width, height: height, upTo: 0.6, seed: 0xC0FFEE)
+        let whole = try makeTexture(engine, pixels: pixels, width: width, height: height)
+
+        var recipe = GradeRecipe()
+        recipe.noiseReduction = 0.8
+        recipe.noiseDetail = 0.5
+        recipe.sharpen = 0.6
+        recipe.texture = 0.4
+
+        let reference = GradeReference(longEdge: Double(max(width, height)))
+        let full = readBack(try engine.makeRenderer(recipe, reference: reference).apply(to: whole))
+
+        // The crop the editor would cut, margin included. An even origin so the
+        // half-resolution grid the texture band works on lines up with the
+        // whole frame's.
+        let origin = 512, side = 320
+        let decoder = try LinearFrameDecoder(device: engine.device)
+        let cropped = try decoder.crop(
+            whole, to: CGRect(x: origin, y: origin, width: side, height: side))
+        XCTAssertEqual(cropped.width, side)
+        XCTAssertEqual(cropped.height, side)
+        let patch = readBack(try engine.makeRenderer(recipe, reference: reference).apply(to: cropped))
+
+        // Compare the interior only: the crop's own edge pixels have no
+        // neighbours, which is exactly why `renderDetail` cuts with a margin
+        // and trims it off again.
+        let margin = 32
+        var worst: Float = 0
+        for y in margin..<(side - margin) {
+            for x in margin..<(side - margin) {
+                let here = (y * side + x) * 4
+                let there = ((origin + y) * width + origin + x) * 4
+                for channel in 0..<3 {
+                    worst = max(worst, abs(Float(patch[here + channel]) - Float(full[there + channel])))
+                }
+            }
+        }
+        XCTAssertLessThan(worst, 0.02, "an anchored crop must grade like the whole frame")
+
+        // And the anchor is doing the work: unset, the same crop is graded for
+        // a 192 px picture and comes out measurably different.
+        let unanchored = readBack(
+            try engine.makeRenderer(recipe, reference: GradeReference()).apply(to: cropped))
+        var drift: Float = 0
+        for y in margin..<(side - margin) {
+            for x in margin..<(side - margin) {
+                let here = (y * side + x) * 4
+                let there = ((origin + y) * width + origin + x) * 4
+                drift = max(drift, abs(Float(unanchored[here]) - Float(full[there])))
+            }
+        }
+        XCTAssertGreaterThan(drift, 10 * max(worst, 0.001),
+                             "the reference long edge must change the footprints")
     }
 }

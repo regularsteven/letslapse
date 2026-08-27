@@ -619,9 +619,10 @@ struct ProjectDetailView: View {
     #endif
 
     /// What the hero shows: for a photo capture, the photo itself; otherwise
-    /// the source media.
+    /// the source media — an interval shoot's hero skipping the frames the user
+    /// nominated as bad.
     private func heroMediaURL(for capture: AppModel.CaptureProject) -> URL? {
-        capture.isPhotoCapture ? model.heroImageURL(for: capture) : model.mediaURL(for: capture)
+        model.thumbnailURL(for: capture)
     }
 
     private func sourceClipsSection(for capture: AppModel.CaptureProject, clipNames: [String]) -> some View {
@@ -724,8 +725,13 @@ struct ProjectDetailView: View {
 
     private func originalsSubtitle(for capture: AppModel.CaptureProject) -> String {
         if case .failed(let message) = originalsSaveState { return message }
-        let count = capture.sourceMediaCount
-        return capture.isPhotoCapture ? "\(count) frames" : "\(count) photos"
+        let count = model.effectiveFrameCount(for: capture)
+        let line = capture.isPhotoCapture ? "\(count) frames" : "\(count) photos"
+        // This row's own controls — "Save all to Photos", "View all photos" —
+        // reach every file on disk, hidden ones included, so the hidden count
+        // is named here rather than left as a discrepancy the grid reveals.
+        let hidden = capture.sourceMediaCount - count
+        return hidden > 0 ? "\(line) · \(hidden) hidden" : line
     }
 
     @ViewBuilder private func originalsControl(for capture: AppModel.CaptureProject) -> some View {
@@ -1077,7 +1083,7 @@ struct ProjectDetailView: View {
             return "PHOTO"
         }
         if capture.kind == .photos {
-            return "ORIGINAL · \(capture.sourceMediaCount) photos"
+            return "ORIGINAL · \(model.effectiveFrameCount(for: capture)) photos"
         }
         if let duration = capture.sourceDurationSeconds {
             return "ORIGINAL · \(DurationFormatter.recordingTime(from: duration))"
@@ -1527,7 +1533,8 @@ private struct ProjectHeroPane: View {
 
     /// The frame the grade is previewed on.
     ///
-    /// An interval project previews its **first source frame**, not its hero:
+    /// An interval project previews its **first usable source frame** (frames
+    /// nominated as bad are skipped), not its hero:
     /// once it has a stacked image version that version becomes the hero, and it
     /// is a finished render that already carries whatever grade produced it —
     /// grading it again on screen would show the grade twice.
@@ -1539,7 +1546,7 @@ private struct ProjectHeroPane: View {
             if capture.isPhotoCapture {
                 return model.heroImageURL(for: capture).map(Preview.still)
             }
-            return model.sourceFrameURLs(for: capture).first.map(Preview.still)
+            return model.thumbnailFrameURL(for: capture).map(Preview.still)
         }
     }
 

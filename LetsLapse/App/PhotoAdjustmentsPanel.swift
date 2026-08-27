@@ -38,6 +38,12 @@ struct PhotoAdjustmentsPanel: View {
     /// Same, for "Reset adjustments": with keyframes there is a timeline to
     /// clear as well as values to neutralise.
     var onResetAll: (() -> Void)?
+    /// Told when a control is grabbed and when it is let go. The photo editor
+    /// uses it to float a 1:1 detail loupe over the picture while one of the
+    /// pixel-level controls — Sharpen, Noise Reduction, Color Noise — is
+    /// moving, because those are exactly the controls whose effect a
+    /// fit-to-screen preview cannot show.
+    var onFieldEditing: ((PhotoAdjustmentField, Bool) -> Void)?
 
     enum PanelSection: String, CaseIterable, Identifiable {
         case whiteBalance = "White Balance"
@@ -143,7 +149,11 @@ struct PhotoAdjustmentsPanel: View {
             slider("Vignette", field: .vignetteIntensity)
         case .detail:
             slider("Sharpen", field: .sharpen)
+            slider("Masking", field: .sharpenMasking, indented: true)
             slider("Noise Reduction", field: .noiseReduction)
+            slider("Color Noise", field: .colorNoise)
+            slider("Detail", field: .noiseDetail, indented: true,
+                   readout: unsignedReadout)
             slider("Color Noise", field: .colorNoiseReduction)
         }
     }
@@ -222,24 +232,31 @@ struct PhotoAdjustmentsPanel: View {
 
     // MARK: - Sliders
 
+    /// One control. `indented` marks a sub-slider — a control that qualifies
+    /// the one above it rather than standing on its own (Masking under
+    /// Sharpen, Detail under Noise Reduction), so it steps in and drops a
+    /// point of type size instead of claiming a row of its own.
     private func slider(
         _ label: String,
         field: PhotoAdjustmentField,
+        indented: Bool = false,
         readout: ((Float) -> String)? = nil
     ) -> some View {
         let value = $adjustments[dynamicMember: field.keyPath]
         let isKeyframed = keyframedFields.contains(field)
+        let neutral = field.neutralValue
         return VStack(spacing: 2) {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 13.5))
+                    .font(.system(size: indented ? 12.5 : 13.5))
                     .foregroundStyle(.secondary)
                 if isKeyframed { keyframeDiamond }
                 Spacer()
                 Text((readout ?? defaultReadout)(value.wrappedValue))
                     .font(.system(size: 12.5, weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(readoutStyle(value.wrappedValue, isKeyframed: isKeyframed))
+                    .foregroundStyle(readoutStyle(
+                        value.wrappedValue, neutral: neutral, isKeyframed: isKeyframed))
             }
             .contentShape(Rectangle())
             // Double-tap (double-click on the Mac) a label to reset just that
@@ -250,21 +267,24 @@ struct PhotoAdjustmentsPanel: View {
                 if let onResetField {
                     onResetField(field)
                 } else {
-                    value.wrappedValue = 0
+                    value.wrappedValue = neutral
                 }
             }
-            Slider(value: value, in: field.range)
+            Slider(value: value, in: field.range) { editing in
+                onFieldEditing?(field, editing)
+            }
                 .tint(accent)
                 .accessibilityLabel(isKeyframed ? "\(label), keyframed" : label)
         }
+        .padding(.leading, indented ? 14 : 0)
     }
 
-    private func readoutStyle(_ value: Float, isKeyframed: Bool) -> Color {
+    private func readoutStyle(_ value: Float, neutral: Float, isKeyframed: Bool) -> Color {
         // Accent whenever the property travels — the readout is then a value at
         // *this moment*, not a value for the clip, and that is worth saying
         // even when the number under the playhead happens to be neutral.
         if isKeyframed { return accent }
-        return value == 0 ? Color.secondary : Color.primary
+        return value == neutral ? Color.secondary : Color.primary
     }
 
     /// Treatment `1e-A`: the smallest new mark that could carry the idea, and
@@ -285,6 +305,12 @@ struct PhotoAdjustmentsPanel: View {
     /// from every other editor, rather than the -1…1 the engine takes.
     private func defaultReadout(_ value: Float) -> String {
         value == 0 ? "0" : String(format: "%+.0f", value * 100)
+    }
+
+    /// For a control centred mid-travel, where a signed readout would print
+    /// "+50" for a slider that is doing nothing. 0…100, unsigned.
+    private func unsignedReadout(_ value: Float) -> String {
+        String(format: "%.0f", value * 100)
     }
 
     private func exposureReadout(_ value: Float) -> String {
@@ -316,8 +342,14 @@ struct PhotoAdjustmentsPanel: View {
             return adjustments.texture == 0 && adjustments.clarity == 0
                 && adjustments.vignetteIntensity == 0
         case .detail:
+            // The sub-sliders count too: the dot means "this section holds a
+            // value", and a moved Masking is a value even while the Sharpen
+            // it qualifies is parked at 0.
             return adjustments.sharpen == 0 && adjustments.noiseReduction == 0
                 && adjustments.colorNoiseReduction == 0
+                && adjustments.colorNoise == 0
+                && adjustments.sharpenMasking == 0
+                && adjustments.noiseDetail == PhotoAdjustments.neutralNoiseDetail
         }
     }
 
@@ -329,7 +361,9 @@ struct PhotoAdjustmentsPanel: View {
         case .light: return [.exposure, .contrast, .highlights, .shadows, .whites, .blacks]
         case .color: return [.vibrance, .saturation]
         case .effects: return [.texture, .clarity, .vignetteIntensity]
-        case .detail: return [.sharpen, .noiseReduction, .colorNoiseReduction]
+        case .detail:
+            return [.sharpen, .sharpenMasking, .noiseReduction, .noiseDetail,
+                    .colorNoiseReduction, .colorNoise]
         }
     }
 
@@ -358,8 +392,11 @@ struct PhotoAdjustmentsPanel: View {
             adjustments.vignetteIntensity = 0
         case .detail:
             adjustments.sharpen = 0
+            adjustments.sharpenMasking = 0
             adjustments.noiseReduction = 0
+            adjustments.noiseDetail = PhotoAdjustments.neutralNoiseDetail
             adjustments.colorNoiseReduction = 0
+            adjustments.colorNoise = 0
         }
     }
 
