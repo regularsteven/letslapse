@@ -29,6 +29,15 @@ USAGE:
 
   lapse info <video>                            Print duration / fps / frame estimate
 
+  lapse slice <blended-clip> [options]          Time-slice a finished blended clip
+      -o PATH               Write the sliced animation here (mp4)
+      --poster PATH         Write the full-source poster here (png)
+      --segments N          Band count (default 24)
+      --lag N               Frames of lag per band (default 2)
+      --newest EDGE         left | right | top | bottom — the edge holding the
+                            newest band (default left; top/bottom = horizontal)
+      --codec NAME          h264 | hevc | prores | jpeg (default h264)
+
   lapse grade <image> [options]                 Grade one frame through the tone engine
       --recipe JSON         Slider values, Lightroom-style ±100 numbers, e.g.
                             '{"highlights":-100,"shadows":49,"vibrance":53}'
@@ -198,6 +207,43 @@ do {
         print("fps: \(String(format: "%.2f", fps))")
         print("size: \(Int(size.width))x\(Int(size.height))")
         print("frames (estimated): \(frames)")
+
+    case "slice":
+        let outputPath = takeOption(["-o", "--output"])
+        let posterPath = takeOption(["--poster"])
+        let segments = Int(takeOption(["--segments"]) ?? "24") ?? 0
+        let lag = Int(takeOption(["--lag"]) ?? "2") ?? 0
+        let newestName = takeOption(["--newest"]) ?? "left"
+        let codecName = takeOption(["--codec"]) ?? "h264"
+        guard args.count == 1 else { fail("slice needs exactly one input clip (got \(args.count))") }
+        guard outputPath != nil || posterPath != nil else {
+            fail("slice needs -o <animation> and/or --poster <image>")
+        }
+        guard segments >= 2 else { fail("--segments needs an integer ≥ 2") }
+        guard lag >= 1 else { fail("--lag needs a positive integer") }
+        guard let newest = TimeSliceEdge(rawValue: newestName) else {
+            fail("unknown edge '\(newestName)' — choose from: \(TimeSliceEdge.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        guard let codec = OutputCodec(rawValue: codecName) else {
+            fail("unknown codec '\(codecName)' — choose from: \(OutputCodec.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        let settings = TimeSliceSettings(newestEdge: newest, segments: segments, offsetFrames: lag)
+        let input = URL(fileURLWithPath: args[0])
+        let provider = try await AssetFrameProvider(url: input)
+        let renderer = TimeSliceRenderer()
+        let started = Date()
+        let result = try renderer.render(
+            provider: provider, settings: settings,
+            animationURL: outputPath.map { URL(fileURLWithPath: $0) },
+            posterURL: posterPath.map { URL(fileURLWithPath: $0) },
+            codec: codec, progress: progressToStderr)
+        let elapsed = Date().timeIntervalSince(started)
+        print("\(settings.displayName): \(result.masterFrames) master frames → "
+            + "\(result.outputFrames) sliced frames"
+            + (result.wrotePoster ? " + poster" : "")
+            + " (\(result.width)x\(result.height)) in \(String(format: "%.1f", elapsed))s")
+        if let outputPath { print(URL(fileURLWithPath: outputPath).path) }
+        if let posterPath { print(URL(fileURLWithPath: posterPath).path) }
 
     case "grade":
         let probe = takeFlag(["--probe"])

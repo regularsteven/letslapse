@@ -12,6 +12,7 @@ public enum LapseError: Error, LocalizedError {
     case noInputFrames
     case imageLoadFailed(URL)
     case imageEncodeFailed(String)
+    case timeSliceInvalid(String)
     case cancelled
 
     public var errorDescription: String? {
@@ -38,6 +39,8 @@ public enum LapseError: Error, LocalizedError {
             return "Could not load image at \(url.path)."
         case .imageEncodeFailed(let why):
             return "Could not encode output image: \(why)"
+        case .timeSliceInvalid(let why):
+            return "Time slicing refused: \(why)"
         case .cancelled:
             return "The blend was cancelled."
         }

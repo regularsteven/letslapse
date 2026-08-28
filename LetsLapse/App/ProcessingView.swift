@@ -150,6 +150,8 @@ struct ProcessingView: View {
             return "Combining \(clips) clips..."
         case .grading:
             return "Applying the colour grade..."
+        case .slicing:
+            return "Time slicing..."
         case .saving:
             return "Almost done"
         }

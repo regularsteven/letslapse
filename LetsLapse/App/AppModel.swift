@@ -401,6 +401,10 @@ final class AppModel: ObservableObject {
         /// 0.5 = centred) — the guided builder's repositioned crop. Absent for
         /// clips rendered before the crop could move, which were all centred.
         var canvasOffset: Double?
+        /// The time-slicing recipe this output was rendered with — set only on
+        /// the sliced animation and the poster, never on the regular clip a
+        /// sliced run keeps alongside them. Absent everywhere else.
+        var timeSlice: TimeSliceSettings?
 
         /// "ProRes" / "H.264" / "HEVC" for display, when recorded.
         var sourceCodecLabel: String? {
@@ -425,6 +429,7 @@ final class AppModel: ObservableObject {
                 }
                 return "\(timing)\(trim)"
             case .image:
+                if timeSlice != nil { return "Time-slice poster" }
                 return linearLight ? "Linear-light stack" : "Stack"
             }
         }
@@ -456,8 +461,13 @@ final class AppModel: ObservableObject {
             return Double(outputFrames) / Double(outputFPS)
         }
 
-        /// The thumbnail badge: "100× · 2.2s" / "Long exposure"
+        /// The thumbnail badge: "100× · 2.2s" / "Long exposure" / "Sliced · 24 bands"
         var badgeLabel: String {
+            if let timeSlice {
+                return kind == .image
+                    ? "Time-slice poster"
+                    : "Sliced · \(timeSlice.segments) bands"
+            }
             if kind == .image { return "Long exposure" }
             if let outputSeconds {
                 return "\(speedLabel) · \(SpeedMath.clipLengthCompact(outputSeconds))"
@@ -628,6 +638,7 @@ final class AppModel: ObservableObject {
         case blending(clip: Int, of: Int)
         case combining(clips: Int)
         case grading
+        case slicing
         case saving
     }
 
@@ -635,7 +646,7 @@ final class AppModel: ObservableObject {
         switch processingPhase {
         case .preparing: return .preparing
         case .blending: return .blending
-        case .combining, .grading: return .encoding
+        case .combining, .grading, .slicing: return .encoding
         case .saving: return .saving
         }
     }
@@ -803,6 +814,9 @@ final class AppModel: ObservableObject {
     /// surface only for now; capture-specific, so opening another project
     /// clears it.
     @Published var exportShortEdge: Int?
+    /// The time-slicing recipe for the next Create run; nil = off. Reset with
+    /// the other Adjust state, rehydrated by `openBlend` from a sliced clip.
+    @Published var timeSlice: TimeSliceSettings?
 
     /// Blend depth for interval-stills output, kept separate from the video
     /// `constantWindow` (whose default is a fast video speed). 1 = a crisp
@@ -2368,6 +2382,7 @@ final class AppModel: ObservableObject {
         reframeLaneFocused = false
         guidedBuilderFocused = false
         exportShortEdge = nil
+        timeSlice = nil
         clearWarpHistory()
         excludedFrameIndices = []
         tailFramesToExclude = 0
@@ -2409,6 +2424,7 @@ final class AppModel: ObservableObject {
             reframeLaneFocused = false
             guidedBuilderFocused = false
             exportShortEdge = nil
+            timeSlice = nil
             clearWarpHistory()
             // Seed from the project's persistent frame nominations so the
             // user doesn't have to re-exclude them each blend session.
@@ -2445,6 +2461,9 @@ final class AppModel: ObservableObject {
             reframeLaneFocused = false
             guidedBuilderFocused = false
             exportShortEdge = nil
+            // A sliced clip re-opens with its slicing recipe armed; anything
+            // else starts with slicing off.
+            timeSlice = blend.timeSlice
             clearWarpHistory()
             // Seed from the project's persistent frame nominations.
             excludedFrameIndices = nominatedExcludedIndices(for: capture)
@@ -3784,6 +3803,9 @@ final class AppModel: ObservableObject {
         if let gradeBand = activeProgressPlan?.gradeBand, band.upperBound <= gradeBand.lowerBound {
             pendingStages += 1
         }
+        if let sliceBand = activeProgressPlan?.sliceBand, band.upperBound <= sliceBand.lowerBound {
+            pendingStages += 1
+        }
         remaining += 2 * Double(pendingStages)
         processingETADate = Date().addingTimeInterval(remaining)
     }
@@ -3932,6 +3954,19 @@ final class AppModel: ObservableObject {
         // The reframe, the crop and the grade are all tail passes over the
         // finished clip; the plan reserves its tail band when any will run.
         let hasTailPass = willBakeGrade || cropCanvas != nil || reframeTrack != nil
+        // The time-slicing recipe, resolved with the other job inputs. It runs
+        // as the LAST tail pass (docs/time-slicing.md §2) — over the finished,
+        // verified clip — so a single image (the whole-shoot stack) can't
+        // slice and the gate below is on the output kind.
+        let sliceSettings = timeSlice
+        let sliceCodec: OutputCodec =
+            (blendProfileOverride ?? defaultBlendProfile) == .hevcMain10 ? .hevc : .h264
+        // The poster inherits the first source frame's EXIF/GPS on stills
+        // sources, the same carryover the whole-shoot stack does.
+        let posterSourceURL: URL? = {
+            guard case .photos(let urls) = source else { return nil }
+            return urls.first
+        }()
         beginActivity(.blending)
         blendTask = Task { [weak self] in
             // Every exit from this task — success, cancel, throw — passes here,
@@ -3945,7 +3980,8 @@ final class AppModel: ObservableObject {
                 case .video(let url):
                     self.beginProgressPlan(.make(
                         clipFrames: [Int((self.estimatedInputFrames ?? 1).rounded())],
-                        hasStitch: false, hasGrade: hasTailPass))
+                        hasStitch: false, hasGrade: hasTailPass,
+                        hasSlice: sliceSettings != nil))
                     self.processingPhase = .blending(clip: 1, of: 1)
                     output = try await self.blendVideo(
                         url: url, ramp: ramp, fps: fps, linear: linear,
@@ -3954,7 +3990,8 @@ final class AppModel: ObservableObject {
                 case .liveSequence(let liveSource):
                     output = try await self.blendLiveSequence(
                         liveSource, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                        willBakeGrade: hasTailPass, warpSchedules: warpCompiled?.schedules,
+                        willBakeGrade: hasTailPass, willSlice: sliceSettings != nil,
+                        warpSchedules: warpCompiled?.schedules,
                         normalization: normalization)
                 case .photos(let urls):
                     // Tail-frame review drops the flagged shaky frames from the
@@ -3996,7 +4033,8 @@ final class AppModel: ObservableObject {
                     // Stills bake their grade frame by frame inside the blend,
                     // so no separate grade band exists on this path.
                     self.beginProgressPlan(.make(
-                        clipFrames: [filteredURLs.count], hasStitch: false, hasGrade: false))
+                        clipFrames: [filteredURLs.count], hasStitch: false, hasGrade: false,
+                        hasSlice: sliceSettings != nil && photoDepth < filteredURLs.count))
                     self.processingPhase = .blending(clip: 1, of: 1)
                     if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
@@ -4161,13 +4199,13 @@ final class AppModel: ObservableObject {
                         try? FileManager.default.removeItem(at: ungraded)
                     }
                 }
-                self.processingPhase = .saving
-                self.processingETADate = nil
                 // The file, not the plan. Everything above this line is
                 // arithmetic — a schedule's frame count carried through the
                 // stitch and the tail passes untouched by any of them. Read the
                 // clip back before it is filed, so a stage that retimed it fails
                 // the render instead of relabelling it (project B0E3269D).
+                // Verified before slicing, so the slicer only ever consumes a
+                // clip that proved its frame count.
                 if output.kind == .video {
                     let measured = try await RenderVerifier.verify(
                         output.url,
@@ -4182,8 +4220,125 @@ final class AppModel: ObservableObject {
                     // already exists to reconcile that.
                     output.outputFrames = measured.frameCount
                 }
-                let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
-                self.apply(output, from: blend)
+                if let sliceSettings, output.kind == .video {
+                    // Time slicing — deliberately the LAST tail pass
+                    // (docs/time-slicing.md §2): geometry and grade are baked
+                    // into the file above, so every band carries its own
+                    // moment's look. The pass's core is synchronous CPU/IO
+                    // work, so it runs detached, with Cancel bridged onto the
+                    // renderer's own flag.
+                    self.processingPhase = .slicing
+                    self.statusMessage = "Time slicing into \(sliceSettings.segments) bands..."
+                    self.tailPhaseStartedAt = Date()
+                    self.processingETADate = nil
+                    let sliceBand = self.activeProgressPlan?.sliceBand
+                    let masterURL = output.url
+                    let temp = FileManager.default.temporaryDirectory
+                    let animationURL = sliceSettings.output.wantsAnimation
+                        ? temp.appendingPathComponent("LetsLapse-slice-\(UUID().uuidString).mp4")
+                        : nil
+                    let posterURL = sliceSettings.output.wantsImage
+                        ? temp.appendingPathComponent("LetsLapse-slice-\(UUID().uuidString).png")
+                        : nil
+                    let renderer = TimeSliceRenderer()
+                    let reportSlice: @Sendable (Double) -> Void = { [weak self] fraction in
+                        Task { @MainActor in
+                            guard let self, let sliceBand else { return }
+                            self.reportTailProgress(band: sliceBand, fraction: fraction)
+                        }
+                    }
+                    let sliceTask = Task.detached(priority: .userInitiated) {
+                        // The provider's exact frame count reads every
+                        // compressed sample — off the main actor with the
+                        // render itself.
+                        let provider = try await AssetFrameProvider(url: masterURL)
+                        return try renderer.render(
+                            provider: provider, settings: sliceSettings,
+                            animationURL: animationURL, posterURL: posterURL,
+                            codec: sliceCodec,
+                            posterMetadata: posterSourceURL.flatMap {
+                                ImageExporter.carryoverMetadata(from: $0)
+                            },
+                            progress: reportSlice)
+                    }
+                    let sliceResult = try await withTaskCancellationHandler {
+                        try await sliceTask.value
+                    } onCancel: {
+                        renderer.cancel()
+                    }
+                    if let sliceBand {
+                        self.reportTailProgress(band: sliceBand, fraction: 1)
+                    }
+                    self.processingPhase = .saving
+                    self.processingETADate = nil
+                    // What lands in the library: the regular clip only when
+                    // asked for, then the sliced outputs — each with its own
+                    // id (storeBlend names the file after it) and with the
+                    // recipe on the sliced copies only, so re-rendering the
+                    // regular clip never re-slices.
+                    var primaryBlend: BlendProject?
+                    var primaryOutput: ProcessingOutput?
+                    if sliceSettings.includeRegularClip {
+                        let regular = try self.storeBlend(
+                            output, captureID: captureID, parameters: parameters)
+                        primaryBlend = regular
+                        primaryOutput = output
+                    }
+                    if let posterURL, sliceResult.wrotePoster {
+                        var posterParameters = parameters
+                        posterParameters.id = UUID()
+                        posterParameters.createdAt = Date()
+                        posterParameters.timeSlice = sliceSettings
+                        var posterOutput = output
+                        posterOutput.kind = .image
+                        posterOutput.url = posterURL
+                        posterOutput.image = nil
+                        posterOutput.outputFrames = nil
+                        posterOutput.summary =
+                            "\(sliceSettings.posterDisplayName) · \(sliceResult.width)×\(sliceResult.height)"
+                        let posterBlend = try self.storeBlend(
+                            posterOutput, captureID: captureID, parameters: posterParameters)
+                        primaryBlend = posterBlend
+                        primaryOutput = posterOutput
+                    }
+                    if let animationURL {
+                        var slicedParameters = parameters
+                        slicedParameters.id = UUID()
+                        slicedParameters.createdAt = Date()
+                        slicedParameters.timeSlice = sliceSettings
+                        var slicedOutput = output
+                        slicedOutput.url = animationURL
+                        slicedOutput.outputFrames = sliceResult.outputFrames
+                        slicedOutput.summary += " · \(sliceSettings.displayName)"
+                        let slicedBlend = try self.storeBlend(
+                            slicedOutput, captureID: captureID, parameters: slicedParameters)
+                        // The animation fronts the result screen when both
+                        // outputs exist — it is the thing that was asked for.
+                        primaryBlend = slicedBlend
+                        primaryOutput = slicedOutput
+                    }
+                    // Scratch: storeBlend copies, so the slice temps go now,
+                    // and the master goes with them when the regular clip
+                    // wasn't kept — but only ever our own temp files.
+                    for scratch in [animationURL, posterURL].compactMap({ $0 }) {
+                        try? FileManager.default.removeItem(at: scratch)
+                    }
+                    if !sliceSettings.includeRegularClip,
+                       masterURL.deletingLastPathComponent().standardizedFileURL
+                        == FileManager.default.temporaryDirectory.standardizedFileURL {
+                        try? FileManager.default.removeItem(at: masterURL)
+                    }
+                    guard let primaryBlend, let primaryOutput else {
+                        throw LapseError.timeSliceInvalid(
+                            "the run produced nothing to keep — no regular clip, animation or poster")
+                    }
+                    self.apply(primaryOutput, from: primaryBlend)
+                } else {
+                    self.processingPhase = .saving
+                    self.processingETADate = nil
+                    let blend = try self.storeBlend(output, captureID: captureID, parameters: parameters)
+                    self.apply(output, from: blend)
+                }
                 self.progress = 1
                 self.processingStartedAt = nil
                 self.stage = .done
@@ -4258,6 +4413,7 @@ final class AppModel: ObservableObject {
         blendSourceCodec = nil
         blendCanvasRatio = nil
         blendCanvasOffset = 0.5
+        timeSlice = nil
         source = captureSource
         currentCaptureID = capture.id
         photoBlendDepth = max(1, blendDepth)
@@ -4481,6 +4637,7 @@ final class AppModel: ObservableObject {
         linear: Bool,
         burstRamp: Double,
         willBakeGrade: Bool,
+        willSlice: Bool = false,
         warpSchedules: [[Int]]? = nil,
         normalization: SegmentNormalization? = nil
     ) async throws -> ProcessingOutput {
@@ -4489,14 +4646,15 @@ final class AppModel: ObservableObject {
         guard source.sequence.mode == .ramp else {
             return try await blendMarkerSequence(
                 source, ramp: ramp, fps: fps, linear: linear, burstRamp: burstRamp,
-                willBakeGrade: willBakeGrade, warpSchedules: warpSchedules)
+                willBakeGrade: willBakeGrade, willSlice: willSlice, warpSchedules: warpSchedules)
         }
 
         let segmentURLByName = source.resolvedByOriginalName
         let orderedSegments = source.sequence.segments.sorted { $0.index < $1.index }
         guard !orderedSegments.isEmpty else {
             let fallbackURL = source.segmentURLs[0]
-            beginProgressPlan(.make(clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade))
+            beginProgressPlan(.make(
+                clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade, hasSlice: willSlice))
             processingPhase = .blending(clip: 1, of: 1)
             return try await blendVideo(url: fallbackURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
         }
@@ -4514,7 +4672,7 @@ final class AppModel: ObservableObject {
             clipFrames: await segmentFrameEstimates(
                 orderedSegments, urlsByName: segmentURLByName,
                 baseFrameRate: source.sequence.baseFrameRate),
-            hasStitch: orderedSegments.count > 1, hasGrade: willBakeGrade)
+            hasStitch: orderedSegments.count > 1, hasGrade: willBakeGrade, hasSlice: willSlice)
         beginProgressPlan(plan)
 
         for (index, segment) in orderedSegments.enumerated() {
@@ -4701,6 +4859,7 @@ final class AppModel: ObservableObject {
         linear: Bool,
         burstRamp: Double,
         willBakeGrade: Bool,
+        willSlice: Bool = false,
         warpSchedules: [[Int]]? = nil
     ) async throws -> ProcessingOutput {
         guard let sourceURL = source.primaryVideoURL else { throw LapseError.noInputFrames }
@@ -4711,7 +4870,7 @@ final class AppModel: ObservableObject {
         if let schedule = warpSchedules?.first, !schedule.isEmpty {
             beginProgressPlan(.make(
                 clipFrames: [max(1, schedule.reduce(0, +))],
-                hasStitch: false, hasGrade: willBakeGrade))
+                hasStitch: false, hasGrade: willBakeGrade, hasSlice: willSlice))
             processingPhase = .blending(clip: 1, of: 1)
             statusMessage = "Blending the warped timeline..."
             return try await blendVideo(
@@ -4721,7 +4880,8 @@ final class AppModel: ObservableObject {
 
         let pieces = try await markerSequencePieces(for: source, sourceURL: sourceURL)
         guard !pieces.isEmpty else {
-            beginProgressPlan(.make(clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade))
+            beginProgressPlan(.make(
+                clipFrames: [1], hasStitch: false, hasGrade: willBakeGrade, hasSlice: willSlice))
             processingPhase = .blending(clip: 1, of: 1)
             return try await blendVideo(url: sourceURL, ramp: ramp, fps: fps, linear: linear, trimHeadTailSeconds: 0)
         }
@@ -4742,7 +4902,7 @@ final class AppModel: ObservableObject {
             clipFrames: pieces.map {
                 max(1, Int((($0.range.upperBound - $0.range.lowerBound) * pieceRate).rounded()))
             },
-            hasStitch: true, hasGrade: willBakeGrade)
+            hasStitch: true, hasGrade: willBakeGrade, hasSlice: willSlice)
         beginProgressPlan(plan)
 
         for (index, piece) in pieces.enumerated() {
@@ -5454,7 +5614,11 @@ final class AppModel: ObservableObject {
             // path, so a ramp render must not record a punch it never baked.
             reframe: compiledWarp() != nil ? reframe : nil,
             canvasRatio: source?.isVideo == true ? effectiveBlendCanvas().rawValue : nil,
-            canvasOffset: source?.isVideo == true ? blendCanvasOffset : nil
+            canvasOffset: source?.isVideo == true ? blendCanvasOffset : nil,
+            // Recorded only on the sliced outputs themselves — the slicing
+            // tail sets it on their copies of these parameters, so the regular
+            // clip a sliced run keeps never re-slices on re-render.
+            timeSlice: nil
         )
     }
 

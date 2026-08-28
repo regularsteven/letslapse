@@ -1,3 +1,4 @@
+import LetsLapseKit
 import SwiftUI
 
 @main
@@ -509,7 +510,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -725,6 +726,28 @@ struct ContentView: View {
             // LL_CANVAS=9:16 — pin the Adjust canvas for variant screenshots.
             if let ratio = environment["LL_CANVAS"].flatMap(CanvasRatio.init(rawValue:)) {
                 model.blendCanvasRatio = ratio
+            }
+            // LL_TIMESLICE="segs:8,lag:3,newest:left,output:both,regular:on" —
+            // arm the time-slicing recipe for this session (all keys optional;
+            // bare "1" takes every default). Set after openCapture, which
+            // clears it; pairs with LL_ADJUST_CREATE for a headless render.
+            if let hook = environment["LL_TIMESLICE"] {
+                var settings = TimeSliceSettings()
+                for pair in hook.split(separator: ",") {
+                    let parts = pair.split(separator: ":", maxSplits: 1).map(String.init)
+                    guard parts.count == 2 else { continue }
+                    switch parts[0] {
+                    case "segs": settings.segments = Int(parts[1]) ?? settings.segments
+                    case "lag": settings.offsetFrames = Int(parts[1]) ?? settings.offsetFrames
+                    case "newest":
+                        settings.newestEdge = TimeSliceEdge(rawValue: parts[1]) ?? settings.newestEdge
+                    case "output":
+                        settings.output = TimeSliceOutput(rawValue: parts[1]) ?? settings.output
+                    case "regular": settings.includeRegularClip = parts[1] != "off"
+                    default: break
+                    }
+                }
+                model.timeSlice = settings
             }
             if environment["LL_ADJUST_CREATE"] == "1" {
                 model.startProcessing()

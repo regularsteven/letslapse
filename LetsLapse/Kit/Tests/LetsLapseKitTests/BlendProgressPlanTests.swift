@@ -28,6 +28,24 @@ final class BlendProgressPlanTests: XCTestCase {
         XCTAssertEqual(plan.globalFraction(clip: 0, localFraction: -1), 0)
     }
 
+    func testSliceBandSitsBetweenTheTailAndTheSave() {
+        // Slicing squeezes everything before it and takes a real share of the
+        // bar; the save still ends at 1.0 and every boundary chains.
+        let plan = BlendProgressPlan.make(
+            clipFrames: [100], hasStitch: false, hasGrade: true, hasSlice: true)
+        let grade = try! XCTUnwrap(plan.gradeBand)
+        let slice = try! XCTUnwrap(plan.sliceBand)
+        XCTAssertEqual(grade.upperBound, slice.lowerBound)
+        XCTAssertEqual(slice.upperBound, plan.saveBand.lowerBound)
+        XCTAssertEqual(plan.saveBand.upperBound, 1.0)
+        XCTAssertGreaterThan(slice.upperBound - slice.lowerBound, 0.1,
+                             "the slice pass re-encodes the whole clip; its band must be real")
+        XCTAssertEqual(plan.tailStageCount, 3)
+
+        let plain = BlendProgressPlan.make(clipFrames: [100], hasStitch: false, hasGrade: false)
+        XCTAssertNil(plain.sliceBand, "hasSlice defaults off — existing plans are untouched")
+    }
+
     func testTailBandsChain() {
         let both = BlendProgressPlan.make(clipFrames: [10], hasStitch: true, hasGrade: true)
         XCTAssertEqual(both.stitchBand, 0.88...0.96)

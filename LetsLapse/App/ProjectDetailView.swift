@@ -1128,6 +1128,16 @@ struct ProjectDetailView: View {
     }
 
     private func versionTitle(_ blend: AppModel.BlendProject) -> String {
+        // Sliced outputs are named by their recipe (decided 2026-08-28):
+        // timeslice-vert-left-segs_24-lag_2, the poster without the lag.
+        if let timeSlice = blend.timeSlice {
+            var parts = [blend.kind == .image
+                ? timeSlice.posterDisplayName : timeSlice.displayName]
+            if let seconds = blend.outputSeconds {
+                parts.append(SpeedMath.clipLength(seconds))
+            }
+            return parts.joined(separator: " · ")
+        }
         var parts = ["Blended clip \(model.versionNumber(for: blend))", blend.speedLabel]
         if let seconds = blend.outputSeconds {
             parts.append(SpeedMath.clipLength(seconds))

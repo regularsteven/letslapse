@@ -11,6 +11,60 @@ live inline.
 
 ## Open
 
+### Time slicing — the time gradient that scrolls across the frame
+
+**Detail:** [time-slicing.md](time-slicing.md) · **Raised:** 2026-08-28 ·
+**Stages 1–4 landed 2026-08-28 (engine, orchestration, verifier, Adjust UI)
+— UI sign-off + SVG mirrors and the stage-5 processing loader open**
+
+*Stage 3 E2E on the real Mac library: one headless Create
+(`LL_ADJUST=stills LL_TIMESLICE="segs:8,lag:3,…" LL_ADJUST_CREATE=1`)
+registered three blends on the newest dawn shoot — regular clip (no recipe),
+329-frame sliced animation (350 − the 21-frame spread, exact) and poster,
+both recipe-carrying and recipe-named. `slicing` phase + progress band,
+`openBlend` rehydration, Cancel bridged to the renderer. Mirror debt for the
+sliced rows' project-detail copy rides stage 4's design pass.*
+
+*Landed: `TimeSlice.swift` + `TimeSliceRenderer.swift` in the Kit (25 tests,
+all numeric — bands measured against the commanded master frames), `lapse
+slice` in the CLI, `tools/timeslice_report.py` (independent ladder
+measurement — `TIMESLICE PASS` at exact commanded slope on rendered slices,
+INCONCLUSIVE by design on flat scenes). Real-footage E2E: the 1,587-frame
+12 MP "Blended 10 long" blend sliced in 72.6 s at 265 MB peak — flat memory
+measured true against a ~1.1 GB cycling spool. One real trap re-found:
+`FileHandle.read`'s autoreleased Data made the spool loop's memory track
+bytes read 1:1 — the transfer pump's exact bug — fixed with a per-frame
+autoreleasepool. No iOS anything touched, per the sequencing decision.*
+
+Partition the output frame into N bands, each sampling a different point on
+the source timeline (per-band frame lags), so a sunrise travels across the
+frame during playback; the single-frame variant is the whole-day-in-one-photo
+poster. Interval and Video shoots, inside `+ New blended clip`. The plan doc
+answers the brief's seven open questions from the code and overrides the brief
+twice, both load-bearing: the §4.7 "bands not frames = one frame of memory"
+claim is wrong for the animation (true only for the poster — the honest floor
+is ~half the spread, so the design is a banded ring-file spool on disk with
+flat RAM), and stage 1.5 moves from a pre-encoder tap to the **last tail pass
+over the finished blended clip** — the only point where every engine converges
+on uniform, final-geometry, grade-baked frames (mixed-resolution ramp shoots
+are per-segment sized at the tap; the Mac runner blends out of order). That
+placement also makes the parked "re-slice an existing blended clip" path the
+same code minus UI, and dissolves the burst-resolution-straddling question.
+Sliced outputs register as ordinary `BlendProject`s (animation `.video`,
+poster `.image`), so archive/transfer/storage/delete are inherited with zero
+allowlist changes. Sequencing decided 2026-08-28: **build first, macOS first**
+— engine stages verified through Kit tests, a new `lapse slice` subcommand and
+the Mac app, no iOS simulators downloaded for this job; UI later, code-first.
+Display names carry the recipe (`timeslice-vert-left-segs_24-lag_2`; width
+auto-calculated). All seven brief questions answered 2026-08-28 (offsets in
+frames · trim · full-source PNG poster · master resolution, no upscaling ·
+frame-space ramps), and the Adjust preview became the **§6a processing
+loader**: every blend run's Processing hero builds up band by band — a real
+full-source time slice of the shoot at the output's aspect, bands jumping in
+with progress — with the checklist card moved above Cancel and the cancel
+caption removed. Still open (plan §9): whether the throwaway master forces
+`hevcMain10` when "Include regular timelapse" is off.
+
 ### Import a project from another device (local network)
 
 **Detail:** [project-transfer-plan.md](project-transfer-plan.md) ·

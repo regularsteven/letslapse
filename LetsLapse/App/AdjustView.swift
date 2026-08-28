@@ -76,6 +76,7 @@ struct AdjustView: View {
                                 blendFromSection
                                 estimateCard
                                 advancedRow
+                                timeSlicingSection
                             } else {
                                 sourceCard
                                 tailFrameBanner
@@ -88,6 +89,7 @@ struct AdjustView: View {
                                 }
                                 estimateCard
                                 advancedRow
+                                timeSlicingSection
                             }
 
                             errorLine
@@ -156,6 +158,7 @@ struct AdjustView: View {
             }
             blendFromSection
             advancedRow
+            timeSlicingSection
             errorLine
         }
     }
@@ -187,6 +190,7 @@ struct AdjustView: View {
                 .frame(width: 320)
             }
             advancedRow
+            timeSlicingSection
             errorLine
         }
     }
@@ -752,6 +756,250 @@ struct AdjustView: View {
         .accessibilityLabel("One long exposure, \(on ? "on" : "off")")
     }
 
+    // MARK: - Time slicing
+
+    /// Session stash: switching the toggle off keeps the entered values for
+    /// this session (docs/time-slicing.md §3.2 of the brief).
+    @State private var timeSliceStash: TimeSliceSettings?
+
+    /// Hidden only where slicing has nothing to slice — the whole-shoot
+    /// single still. Video and interval sequences both offer it.
+    private var timeSlicingAvailable: Bool {
+        guard model.source != nil else { return false }
+        if model.source?.isVideo != true, model.photosProduceSingleImage { return false }
+        return true
+    }
+
+    @ViewBuilder private var timeSlicingSection: some View {
+        if timeSlicingAvailable {
+            VStack(spacing: 0) {
+                timeSlicingToggleRow
+                if let settings = model.timeSlice {
+                    Divider().padding(.horizontal, 16)
+                    timeSlicingControls(settings)
+                }
+            }
+            .llCard()
+        }
+    }
+
+    private var timeSlicingToggleRow: some View {
+        let on = model.timeSlice != nil
+        return Button {
+            withAnimation(.easeInOut(duration: 0.2)) {
+                if on {
+                    timeSliceStash = model.timeSlice
+                    model.timeSlice = nil
+                } else {
+                    model.timeSlice = timeSliceStash ?? TimeSliceSettings()
+                }
+            }
+        } label: {
+            HStack {
+                Image(systemName: "rectangle.split.3x1")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("Time slicing")
+                        .font(.system(size: 15.5))
+                        .foregroundStyle(.primary)
+                    Text(on
+                        ? (model.timeSlice?.displayName ?? "")
+                        : "Bands of the frame show different moments — time scrolls across the clip")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                Spacer()
+                Text(on ? "On" : "Off")
+                    .font(.system(size: 12))
+                    .foregroundStyle(on ? LL.accentDeep : .secondary)
+                Image(systemName: on ? "chevron.up" : "chevron.down")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 13)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Time slicing, \(on ? "on" : "off")")
+    }
+
+    @ViewBuilder private func timeSlicingControls(_ settings: TimeSliceSettings) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Toggle(isOn: timeSliceHorizontalBinding) {
+                Text("Horizontal bands").font(.system(size: 14))
+            }
+            HStack {
+                Text("Newest edge").font(.system(size: 14))
+                Spacer()
+                Picker("Newest edge", selection: timeSliceBinding(\.newestEdge)) {
+                    if settings.axis == .vertical {
+                        Text("Left").tag(TimeSliceEdge.left)
+                        Text("Right").tag(TimeSliceEdge.right)
+                    } else {
+                        Text("Top").tag(TimeSliceEdge.top)
+                        Text("Bottom").tag(TimeSliceEdge.bottom)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 200)
+            }
+            Stepper(value: timeSliceBinding(\.segments), in: 2...96) {
+                HStack {
+                    Text("Segments").font(.system(size: 14))
+                    Spacer()
+                    Text("\(settings.segments)")
+                        .font(.system(size: 13).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Stepper(value: timeSliceBinding(\.offsetFrames), in: 1...120) {
+                HStack {
+                    Text("Offset").font(.system(size: 14))
+                    Spacer()
+                    Text(timeSliceOffsetDetail(settings))
+                        .font(.system(size: 13).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            HStack {
+                Text("Output").font(.system(size: 14))
+                Spacer()
+                Picker("Output", selection: timeSliceBinding(\.output)) {
+                    Text("Image").tag(TimeSliceOutput.image)
+                    Text("Animation").tag(TimeSliceOutput.animation)
+                    Text("Both").tag(TimeSliceOutput.both)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 260)
+            }
+            Toggle(isOn: timeSliceBinding(\.includeRegularClip)) {
+                Text("Include regular timelapse").font(.system(size: 14))
+            }
+            timeSliceReadout(settings)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+    }
+
+    private func timeSliceBinding<T>(_ keyPath: WritableKeyPath<TimeSliceSettings, T>) -> Binding<T> {
+        Binding(
+            get: { (model.timeSlice ?? TimeSliceSettings())[keyPath: keyPath] },
+            set: { value in
+                var settings = model.timeSlice ?? TimeSliceSettings()
+                settings[keyPath: keyPath] = value
+                model.timeSlice = settings
+            })
+    }
+
+    /// The axis flip preserves which end holds the newest band: left↔top,
+    /// right↔bottom.
+    private var timeSliceHorizontalBinding: Binding<Bool> {
+        Binding(
+            get: { (model.timeSlice?.axis ?? .vertical) == .horizontal },
+            set: { horizontal in
+                var settings = model.timeSlice ?? TimeSliceSettings()
+                switch (settings.newestEdge, horizontal) {
+                case (.left, true): settings.newestEdge = .top
+                case (.right, true): settings.newestEdge = .bottom
+                case (.top, false): settings.newestEdge = .left
+                case (.bottom, false): settings.newestEdge = .right
+                default: break
+                }
+                model.timeSlice = settings
+            })
+    }
+
+    /// The master's frame count as Adjust can know it: exact for stills, the
+    /// compiled warp's count for video, the speed arithmetic otherwise.
+    private var timeSliceMasterFrames: Int? {
+        if model.source?.isVideo == true {
+            if let compiled = model.compiledWarp() { return compiled.outputFrames }
+            guard let seconds = model.estimatedOutputSeconds() else { return nil }
+            return max(1, Int((seconds * Double(model.outputFPS)).rounded()))
+        }
+        return model.photoOutputFrameCount
+    }
+
+    /// The pixel shape the bands are cut across — the canvas-cropped size for
+    /// video, the stills' own probed frame otherwise.
+    private var timeSliceOutputSize: CGSize? {
+        if model.source?.isVideo == true {
+            guard let display = model.sourceDisplaySize() else { return nil }
+            return VideoCanvasCropper.cropSize(
+                displaySize: display, canvas: model.effectiveBlendCanvas()) ?? display
+        }
+        guard let capture = model.currentCapture,
+              let width = capture.sourceWidth, let height = capture.sourceHeight,
+              width > 0, height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
+    private func timeSliceOffsetDetail(_ settings: TimeSliceSettings) -> String {
+        let frames = "\(settings.offsetFrames) \(settings.offsetFrames == 1 ? "frame" : "frames")"
+        guard let masterFrames = timeSliceMasterFrames, masterFrames > 0,
+              let duration = model.currentCapture?.sourceDurationSeconds, duration > 0
+        else { return frames }
+        let perBand = duration / Double(masterFrames) * Double(settings.offsetFrames)
+        return "\(frames) · ≈ \(timeSliceSeconds(perBand)) of capture"
+    }
+
+    /// What stops a Create outright: bands thinner than the floor, or a
+    /// spread that eats the whole clip. nil = fine.
+    private var timeSliceRefusal: String? {
+        guard timeSlicingAvailable, let settings = model.timeSlice else { return nil }
+        if let size = timeSliceOutputSize {
+            let axisLength = Int(settings.axis == .vertical ? size.width : size.height)
+            if TimeSliceGeometry.bandRanges(axisLength: axisLength, segments: settings.segments) == nil {
+                return "\(settings.segments) bands across \(axisLength) px falls under "
+                    + "\(TimeSliceGeometry.minimumBandPixels) px each — use fewer segments"
+            }
+        }
+        if settings.output.wantsAnimation, let frames = timeSliceMasterFrames,
+           TimeSliceGeometry.slicedFrameCount(
+               masterFrames: frames, maxLag: settings.maxLagFrames) < 1 {
+            return "The spread (\(settings.maxLagFrames) frames) consumes the whole clip "
+                + "(\(frames) frames) — reduce segments or offset"
+        }
+        return nil
+    }
+
+    @ViewBuilder private func timeSliceReadout(_ settings: TimeSliceSettings) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if let refusal = timeSliceRefusal {
+                Text(refusal)
+                    .foregroundStyle(.red)
+            } else if let frames = timeSliceMasterFrames {
+                let spread = settings.maxLagFrames
+                let sliced = TimeSliceGeometry.slicedFrameCount(masterFrames: frames, maxLag: spread)
+                if settings.output.wantsAnimation {
+                    let clipSeconds = model.estimatedOutputSeconds()
+                    let spreadSeconds = clipSeconds.map { $0 * Double(spread) / Double(max(1, frames)) }
+                    Text("Spread \(spread) frames"
+                        + (spreadSeconds.map { " ≈ \(timeSliceSeconds($0)) of the clip" } ?? ""))
+                    Text("Sliced clip \(sliced) frames — the spread is trimmed off the end")
+                }
+                if settings.output.wantsImage {
+                    Text("Poster: the whole shoot spread across \(settings.segments) bands")
+                }
+                if settings.output.wantsAnimation, let size = timeSliceOutputSize {
+                    let scratch = Int64(Double(settings.maxLagFrames) / 2 * size.width * size.height * 4)
+                    Text("Scratch ≈ \(ByteCountFormatter.string(fromByteCount: scratch, countStyle: .file)) while rendering")
+                }
+            }
+        }
+        .font(.system(size: 11.5))
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func timeSliceSeconds(_ seconds: Double) -> String {
+        seconds < 9.95 ? String(format: "%.1f s", seconds) : SpeedMath.clipLength(seconds)
+    }
+
     // MARK: - Advanced
 
     private var advancedRow: some View {
@@ -831,6 +1079,10 @@ struct AdjustView: View {
                 .menuStyle(.borderlessButton)
                 .fixedSize()
             }
+            // A slicing setup that can't render blocks the run here — the
+            // reason is spelled out in red inside the Time slicing section.
+            .disabled(timeSliceRefusal != nil)
+            .opacity(timeSliceRefusal != nil ? 0.5 : 1)
 
             HStack(spacing: 10) {
                 Text("Your original is kept — you can always make another blended clip.")
@@ -879,6 +1131,18 @@ struct AdjustView: View {
     }
 
     private var ctaTitle: String {
+        // Slicing renames the button to what the run will actually keep; with
+        // the regular timelapse still on, the base title gains a suffix.
+        if timeSlicingAvailable, let slice = model.timeSlice {
+            if !slice.includeRegularClip {
+                return slice.output == .image ? "Create time-slice poster" : "Create sliced clip"
+            }
+            return baseCtaTitle + " + slice"
+        }
+        return baseCtaTitle
+    }
+
+    private var baseCtaTitle: String {
         if model.source?.isVideo == true {
             if let seconds = model.estimatedOutputSeconds() {
                 return "Create \(SpeedMath.clipLength(seconds)) clip"

@@ -19,16 +19,23 @@ public struct BlendProgressPlan: Sendable, Equatable {
     public let stitchBand: ClosedRange<Double>?
     /// Band the grade-bake export fills, when a grade will be baked in.
     public let gradeBand: ClosedRange<Double>?
+    /// Band the time-slicing pass fills, when the run slices. Wider than the
+    /// other tail bands: slicing decodes and re-encodes the whole finished
+    /// clip, which is real work, not a copy.
+    public let sliceBand: ClosedRange<Double>?
     /// Band for the final save/copy; always ends at 1.0.
     public let saveBand: ClosedRange<Double>
 
     /// Stages that still need bar room after all clips finish blending
-    /// (stitch/grade plus the save itself). Used to pad the blend-phase ETA.
+    /// (stitch/grade/slice plus the save itself). Used to pad the blend-phase ETA.
     public var tailStageCount: Int {
-        (stitchBand == nil ? 0 : 1) + (gradeBand == nil ? 0 : 1) + 1
+        (stitchBand == nil ? 0 : 1) + (gradeBand == nil ? 0 : 1)
+            + (sliceBand == nil ? 0 : 1) + 1
     }
 
-    public static func make(clipFrames: [Int], hasStitch: Bool, hasGrade: Bool) -> BlendProgressPlan {
+    public static func make(
+        clipFrames: [Int], hasStitch: Bool, hasGrade: Bool, hasSlice: Bool = false
+    ) -> BlendProgressPlan {
         // A non-positive estimate means the sidecar or probe failed for that
         // clip; give it the mean weight of the known clips rather than zero
         // width or an equal fifth of the bar.
@@ -39,14 +46,24 @@ public struct BlendProgressPlan: Sendable, Equatable {
         var weights = clipFrames.map { $0 > 0 ? $0 : fallback }
         if weights.isEmpty { weights = [1] }
 
-        let blendEnd: Double
-        let stitchEnd: Double?
-        let gradeEnd: Double?
+        var blendEnd: Double
+        var stitchEnd: Double?
+        var gradeEnd: Double?
         switch (hasStitch, hasGrade) {
         case (true, true): blendEnd = 0.88; stitchEnd = 0.96; gradeEnd = 0.99
         case (true, false): blendEnd = 0.90; stitchEnd = 0.98; gradeEnd = nil
         case (false, true): blendEnd = 0.95; stitchEnd = nil; gradeEnd = 0.99
         case (false, false): blendEnd = 0.98; stitchEnd = nil; gradeEnd = nil
+        }
+        // Slicing takes its room from everything before it — a uniform
+        // squeeze keeps every earlier band's share, and the slice pass gets a
+        // real ~15% of the bar (it re-reads and re-encodes the whole clip).
+        var sliceEnd: Double?
+        if hasSlice {
+            blendEnd *= 0.86
+            stitchEnd = stitchEnd.map { $0 * 0.86 }
+            gradeEnd = gradeEnd.map { $0 * 0.86 }
+            sliceEnd = 0.99
         }
 
         let total = weights.reduce(0, +)
@@ -65,13 +82,15 @@ public struct BlendProgressPlan: Sendable, Equatable {
 
         let stitchBand = stitchEnd.map { blendEnd...$0 }
         let gradeBand = gradeEnd.map { (stitchEnd ?? blendEnd)...$0 }
-        let saveStart = gradeEnd ?? stitchEnd ?? blendEnd
+        let sliceBand = sliceEnd.map { (gradeEnd ?? stitchEnd ?? blendEnd)...$0 }
+        let saveStart = sliceEnd ?? gradeEnd ?? stitchEnd ?? blendEnd
         return BlendProgressPlan(
             clipFrames: weights,
             totalFrames: total,
             clipBands: bands,
             stitchBand: stitchBand,
             gradeBand: gradeBand,
+            sliceBand: sliceBand,
             saveBand: saveStart...1.0
         )
     }
