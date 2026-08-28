@@ -50,6 +50,43 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     /// One clip's place on the timeline. A blended clip appears at most once
     /// per collection, so the blend id doubles as the entry's identity.
     struct Entry: Identifiable, Codable, Equatable {
+        /// One clip's Ken Burns move: two framings of the crop box, animated
+        /// across the clip's time in the export. Zoom 1 is the whole crop box;
+        /// larger zooms keep a smaller window, positioned by the anchors
+        /// (0…1 across the slack the zoom opens up inside the box).
+        struct KenBurnsMove: Codable, Equatable {
+            var startZoom: Double
+            var endZoom: Double
+            var startAnchorX: Double
+            var startAnchorY: Double
+            var endAnchorX: Double
+            var endAnchorY: Double
+
+            /// The best-effort move a clip gets when Ken Burns turns on:
+            /// direction alternates (settle in, then reveal out), zoom amounts
+            /// and the zoomed framing's anchor cycle so runs of clips don't
+            /// all move the same way. Deterministic per timeline position.
+            static func bestEffort(forClipIndex index: Int) -> KenBurnsMove {
+                let zooms: [Double] = [1.22, 1.15, 1.3, 1.18]
+                let anchors: [(x: Double, y: Double)] = [
+                    (0.5, 0.5), (1.0 / 3.0, 1.0 / 3.0), (2.0 / 3.0, 1.0 / 3.0),
+                    (2.0 / 3.0, 2.0 / 3.0), (1.0 / 3.0, 2.0 / 3.0),
+                ]
+                let zoom = zooms[index % zooms.count]
+                let anchor = anchors[index % anchors.count]
+                if index.isMultiple(of: 2) {
+                    return KenBurnsMove(
+                        startZoom: 1, endZoom: zoom,
+                        startAnchorX: 0.5, startAnchorY: 0.5,
+                        endAnchorX: anchor.x, endAnchorY: anchor.y)
+                }
+                return KenBurnsMove(
+                    startZoom: zoom, endZoom: 1,
+                    startAnchorX: anchor.x, startAnchorY: anchor.y,
+                    endAnchorX: 0.5, endAnchorY: 0.5)
+            }
+        }
+
         var blendID: UUID
         /// Trim points as fractions of the clip's own duration. 0…1 with
         /// `inPoint < outPoint`; the untouched clip is 0…1 exactly.
@@ -59,12 +96,17 @@ struct LapseCollection: Identifiable, Codable, Equatable {
         /// Absent for a ratio means "use the clip's default crop" (stored on
         /// the `BlendProject`), which itself falls back to centred.
         var crops: [String: Double]
+        /// Assigned when the collection's Ken Burns turns on (and to clips
+        /// added while it is); absent on entries that predate the feature.
+        var kenBurns: KenBurnsMove?
 
-        init(blendID: UUID, inPoint: Double = 0, outPoint: Double = 1, crops: [String: Double] = [:]) {
+        init(blendID: UUID, inPoint: Double = 0, outPoint: Double = 1,
+             crops: [String: Double] = [:], kenBurns: KenBurnsMove? = nil) {
             self.blendID = blendID
             self.inPoint = inPoint
             self.outPoint = outPoint
             self.crops = crops
+            self.kenBurns = kenBurns
         }
 
         var id: UUID { blendID }
@@ -82,6 +124,29 @@ struct LapseCollection: Identifiable, Codable, Equatable {
         var recipe: String
     }
 
+    /// The Ken Burns export mode: gentle zoom/pan on every clip, with the
+    /// pacing and joining choices that make a one-tap export cut well.
+    /// Stored once configured so turning the mode off and on again keeps the
+    /// user's answers; `enabled` is the toggle.
+    struct KenBurnsSettings: Codable, Equatable {
+        var enabled: Bool
+        /// Every clip occupies the same length in the export.
+        var consistentDurations: Bool
+        /// That length, whole seconds. The UI and the export clamp it to the
+        /// shortest clip on the timeline (a clamp is never a preference —
+        /// the stored value survives the timeline changing under it).
+        var clipSeconds: Int
+        /// With consistent durations: longer clips speed up to fit. Off means
+        /// each clip contributes a `clipSeconds` window from its in point.
+        var autoAdjustSpeed: Bool
+        /// Crossfade between clips instead of a straight cut.
+        var fadeTransition: Bool
+    }
+
+    /// The crossfade length `fadeTransition` uses. One place on purpose —
+    /// this number is expected to become adjustable.
+    static let fadeSeconds = 0.5
+
     var id: UUID
     var name: String
     var createdAt: Date
@@ -89,15 +154,36 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     var ratioRaw: String?
     var entries: [Entry]
     var lastExport: ExportRecord?
+    /// nil until Ken Burns is first turned on.
+    var kenBurns: KenBurnsSettings?
 
     init(id: UUID = UUID(), name: String, createdAt: Date = Date(), ratioRaw: String? = nil,
-         entries: [Entry] = [], lastExport: ExportRecord? = nil) {
+         entries: [Entry] = [], lastExport: ExportRecord? = nil, kenBurns: KenBurnsSettings? = nil) {
         self.id = id
         self.name = name
         self.createdAt = createdAt
         self.ratioRaw = ratioRaw
         self.entries = entries
         self.lastExport = lastExport
+        self.kenBurns = kenBurns
+    }
+
+    var kenBurnsEnabled: Bool { kenBurns?.enabled == true }
+
+    /// Whether each clip's contribution is a fixed window from its in point —
+    /// the mode where the timeline's per-clip editor sets start points
+    /// instead of free trims.
+    var kenBurnsUsesWindows: Bool {
+        guard let kenBurns, kenBurns.enabled else { return false }
+        return kenBurns.consistentDurations && !kenBurns.autoAdjustSpeed
+    }
+
+    /// Every entry that predates Ken Burns (or arrived while it was off)
+    /// gets its best-effort move, keyed to its timeline position.
+    mutating func assignMissingKenBurnsMoves() {
+        for index in entries.indices where entries[index].kenBurns == nil {
+            entries[index].kenBurns = Entry.KenBurnsMove.bestEffort(forClipIndex: index)
+        }
     }
 
     var ratio: CanvasRatio? {
@@ -147,6 +233,19 @@ enum CollectionMath {
     }
 
     enum Axis { case horizontal, vertical }
+
+    /// One Ken Burns framing: the canvas-shaped window `zoom` deep into the
+    /// clip's crop box, positioned by the anchors across the slack the zoom
+    /// opens up. Zoom 1 is the crop box itself, so a move that ends at 1
+    /// always lands exactly on the framing the user's crop chose.
+    static func kenBurnsRect(base: CGRect, zoom: Double, anchorX: Double, anchorY: Double) -> CGRect {
+        let z = max(1, zoom)
+        let width = base.width / z
+        let height = base.height / z
+        let x = base.minX + (base.width - width) * min(1, max(0, anchorX))
+        let y = base.minY + (base.height - height) * min(1, max(0, anchorY))
+        return CGRect(x: x, y: y, width: width, height: height)
+    }
 
     /// Aspect-fit `aspect` into a bounding box.
     static func fit(aspect: Double, maxWidth: Double, maxHeight: Double) -> CGSize {

@@ -12,6 +12,10 @@ struct CollectionTrimView: View {
     @Environment(\.dismiss) private var dismiss
     let collectionID: UUID
     let blendID: UUID
+    /// Ken Burns' fixed-window mode: the clip contributes exactly this many
+    /// seconds, so only the start point moves — the out point rides along.
+    /// nil is the ordinary free trim.
+    var windowSeconds: Double? = nil
     /// The toast the detail screen shows after a commit.
     var onDone: (String?) -> Void
 
@@ -21,6 +25,20 @@ struct CollectionTrimView: View {
     /// The smallest range the handles can close to — 6% of the clip.
     private let minimumGap = 0.06
     private let handleWidth: CGFloat = 22
+
+    private var isWindowMode: Bool { windowSeconds != nil }
+
+    /// The window as a fraction of the clip — nil until the duration is known.
+    private var windowFraction: Double? {
+        guard let windowSeconds, fullSeconds > 0 else { return nil }
+        return min(1, windowSeconds / fullSeconds)
+    }
+
+    /// What the strip and readouts treat as the out point: derived from the
+    /// window in window mode, the dragged handle otherwise.
+    private var shownOutPoint: Double {
+        windowFraction.map { min(1, inPoint + $0) } ?? outPoint
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,7 +57,9 @@ struct CollectionTrimView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 16)
 
-            Text("Trimming retimes the whole collection — the clips after this one pull in. No gaps, ever.")
+            Text(isWindowMode
+                ? "Ken Burns plays \(windowLengthLabel) of this clip — slide the window to choose where that starts."
+                : "Trimming retimes the whole collection — the clips after this one pull in. No gaps, ever.")
                 .font(.system(size: 11.5))
                 .foregroundStyle(.white.opacity(0.45))
                 .multilineTextAlignment(.center)
@@ -47,7 +67,7 @@ struct CollectionTrimView: View {
                 .padding(.horizontal, 44)
                 .padding(.top, 22)
 
-            Button("Reset trim") {
+            Button(isWindowMode ? "Start from the beginning" : "Reset trim") {
                 inPoint = 0
                 outPoint = 1
             }
@@ -65,6 +85,9 @@ struct CollectionTrimView: View {
             if let entry = model.collection(withID: collectionID)?.entry(for: blendID) {
                 inPoint = entry.inPoint
                 outPoint = entry.outPoint
+                if isWindowMode, let fraction = windowFraction {
+                    inPoint = min(inPoint, max(0, 1 - fraction))
+                }
             }
         }
         .task {
@@ -86,7 +109,7 @@ struct CollectionTrimView: View {
                     .buttonStyle(.plain)
             }
             VStack(spacing: 1) {
-                Text("Trim")
+                Text(isWindowMode ? "Start point" : "Trim")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(clipLabel)
@@ -130,7 +153,9 @@ struct CollectionTrimView: View {
                 Text(SpeedMath.clipLengthCompact(keptSeconds))
                     .font(.system(size: 24, weight: .bold).monospacedDigit())
                     .foregroundStyle(LL.amber)
-                Text("kept of \(SpeedMath.clipLengthCompact(fullSeconds))")
+                Text(isWindowMode
+                    ? "plays of \(SpeedMath.clipLengthCompact(fullSeconds))"
+                    : "kept of \(SpeedMath.clipLengthCompact(fullSeconds))")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.45))
             }
@@ -140,7 +165,7 @@ struct CollectionTrimView: View {
                     .font(.system(size: 10, weight: .bold))
                     .kerning(1)
                     .foregroundStyle(.white.opacity(0.45))
-                Text(seconds(at: outPoint))
+                Text(seconds(at: shownOutPoint))
                     .font(.system(size: 14, weight: .semibold).monospacedDigit())
                     .foregroundStyle(.white)
             }
@@ -175,8 +200,8 @@ struct CollectionTrimView: View {
                         .frame(width: max(0, inPoint * width), height: 56)
                     Rectangle()
                         .fill(.black.opacity(0.62))
-                        .frame(width: max(0, (1 - outPoint) * width), height: 56)
-                        .offset(x: outPoint * width)
+                        .frame(width: max(0, (1 - shownOutPoint) * width), height: 56)
+                        .offset(x: shownOutPoint * width)
                 }
                 .frame(width: width, height: 56)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -184,15 +209,21 @@ struct CollectionTrimView: View {
                 // The kept range.
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
                     .strokeBorder(LL.amber, lineWidth: 2.5)
-                    .frame(width: max(0, (outPoint - inPoint) * width), height: 56)
+                    .frame(width: max(0, (shownOutPoint - inPoint) * width), height: 56)
                     .offset(x: inPoint * width)
                     .allowsHitTesting(false)
 
                 handle(chevron: "chevron.left", fraction: inPoint, width: width) { f in
-                    inPoint = min(max(0, f), outPoint - minimumGap)
+                    if let fraction = windowFraction {
+                        inPoint = min(max(0, f), max(0, 1 - fraction))
+                    } else {
+                        inPoint = min(max(0, f), outPoint - minimumGap)
+                    }
                 }
-                handle(chevron: "chevron.right", fraction: outPoint, width: width) { f in
-                    outPoint = max(min(1, f), inPoint + minimumGap)
+                if !isWindowMode {
+                    handle(chevron: "chevron.right", fraction: outPoint, width: width) { f in
+                        outPoint = max(min(1, f), inPoint + minimumGap)
+                    }
                 }
             }
             .coordinateSpace(name: "filmstrip")
@@ -233,7 +264,12 @@ struct CollectionTrimView: View {
     }
 
     private var keptSeconds: Double {
-        max(0, outPoint - inPoint) * fullSeconds
+        max(0, shownOutPoint - inPoint) * fullSeconds
+    }
+
+    /// "9s" — the fixed window, capped by the clip itself.
+    private var windowLengthLabel: String {
+        SpeedMath.clipLengthCompact(min(windowSeconds ?? 0, fullSeconds > 0 ? fullSeconds : .infinity))
     }
 
     private func seconds(at fraction: Double) -> String {
@@ -241,6 +277,14 @@ struct CollectionTrimView: View {
     }
 
     private func commit() {
+        if isWindowMode {
+            model.updateKenBurnsWindowStart(
+                blendID: blendID, in: collectionID,
+                inPoint: inPoint, windowFraction: windowFraction ?? 1)
+            dismiss()
+            onDone("Plays \(windowLengthLabel) from \(seconds(at: inPoint))")
+            return
+        }
         model.updateTrim(blendID: blendID, in: collectionID, inPoint: inPoint, outPoint: outPoint)
         let total = model.collection(withID: collectionID).map(model.collectionSeconds) ?? 0
         dismiss()

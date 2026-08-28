@@ -149,7 +149,10 @@ struct CollectionDetailView: View {
         }
         .fullscreenMedia($fullscreenRequest, model: model)
         .collectionCover(item: $trimEntry) { entry in
-            CollectionTrimView(collectionID: collectionID, blendID: entry.blendID) { message in
+            CollectionTrimView(
+                collectionID: collectionID, blendID: entry.blendID,
+                windowSeconds: kenBurnsWindowSeconds
+            ) { message in
                 toast = message
             }
             .environmentObject(model)
@@ -196,6 +199,9 @@ struct CollectionDetailView: View {
                     .foregroundStyle(.secondary)
                     .padding(.top, 6)
                     .padding(.horizontal, 4)
+
+                kenBurnsSection(collection)
+                    .padding(.top, 14)
 
                 sectionLabel(timelineHeader(collection))
                     .padding(.top, 20)
@@ -260,35 +266,42 @@ struct CollectionDetailView: View {
                     .padding(.top, 6)
                     .padding(.horizontal, 2)
 
-                sectionLabel(timelineHeader(collection))
-                    .padding(.top, 14)
-                    .padding(.bottom, 6)
-
+                // The Ken Burns card scrolls with the timeline — landscape
+                // iPhones don't have the height to pin it open.
                 ScrollView {
-                    if collection.entries.isEmpty {
-                        Button {
-                            showPicker = true
-                        } label: {
-                            VStack(spacing: 4) {
-                                Text("+ Add your first clip")
-                                    .font(.system(size: 14, weight: .semibold))
-                                    .foregroundStyle(LL.accent)
-                                Text("Blended clips from any project can join")
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 0) {
+                        kenBurnsSection(collection)
+                            .padding(.top, 12)
+
+                        sectionLabel(timelineHeader(collection))
+                            .padding(.top, 14)
+                            .padding(.bottom, 6)
+
+                        if collection.entries.isEmpty {
+                            Button {
+                                showPicker = true
+                            } label: {
+                                VStack(spacing: 4) {
+                                    Text("+ Add your first clip")
+                                        .font(.system(size: 14, weight: .semibold))
+                                        .foregroundStyle(LL.accent)
+                                    Text("Blended clips from any project can join")
+                                        .font(.system(size: 11))
+                                        .foregroundStyle(.secondary)
+                                }
+                                .frame(maxWidth: .infinity, minHeight: 90)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 14, style: .continuous)
+                                        .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                                        .foregroundStyle(Color.primary.opacity(0.18))
+                                )
                             }
-                            .frame(maxWidth: .infinity, minHeight: 90)
-                            .background(
-                                RoundedRectangle(cornerRadius: 14, style: .continuous)
-                                    .strokeBorder(style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-                                    .foregroundStyle(Color.primary.opacity(0.18))
-                            )
+                            .buttonStyle(.plain)
+                        } else {
+                            timelineCard(collection)
                         }
-                        .buttonStyle(.plain)
-                    } else {
-                        timelineCard(collection)
+                        Spacer(minLength: 8)
                     }
-                    Spacer(minLength: 8)
                 }
 
                 HStack(spacing: 8) {
@@ -521,6 +534,136 @@ struct CollectionDetailView: View {
         return "\(ratio.rawValue) — set by the first clip added. Export: \(ratio.exportLabel)."
     }
 
+    // MARK: - Ken Burns
+
+    /// The toggle under the canvas picker, growing its choices downward when
+    /// on: pacing (consistent durations → the seconds, then how clips reach
+    /// them) and the join (fade or cut). Turning it on answers everything
+    /// with best-effort defaults, so Export straight away already cuts well.
+    private func kenBurnsSection(_ collection: LapseCollection) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Toggle(isOn: kenBurnsEnabledBinding) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Ken Burns")
+                        .font(.system(size: 14.5, weight: .semibold))
+                    Text("A gentle zoom and pan across every clip on export")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(LL.accent)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 12)
+            .disabled(collection.entries.isEmpty)
+            .opacity(collection.entries.isEmpty ? 0.5 : 1)
+
+            if let kenBurns = collection.kenBurns, kenBurns.enabled, !collection.entries.isEmpty {
+                Divider()
+                    .padding(.leading, 14)
+                VStack(alignment: .leading, spacing: 14) {
+                    Toggle(isOn: kenBurnsBinding(\.consistentDurations)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Consistent durations")
+                                .font(.system(size: 14))
+                            Text(kenBurns.consistentDurations
+                                ? "Every clip plays the same length"
+                                : "Clips keep their own lengths, as shot")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .tint(LL.accent)
+
+                    if kenBurns.consistentDurations {
+                        Stepper(
+                            value: kenBurnsClipSecondsBinding,
+                            in: 1...model.kenBurnsMaxClipSeconds(collection)
+                        ) {
+                            HStack {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text("Clip duration")
+                                        .font(.system(size: 14))
+                                    Text("The shortest clip caps it at \(model.kenBurnsMaxClipSeconds(collection))s")
+                                        .font(.system(size: 11.5))
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer()
+                                Text("\(model.kenBurnsEffectiveClipSeconds(collection))s")
+                                    .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                                    .foregroundStyle(LL.accentDeep)
+                            }
+                        }
+
+                        Toggle(isOn: kenBurnsBinding(\.autoAdjustSpeed)) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Auto adjust clip speed")
+                                    .font(.system(size: 14))
+                                Text(kenBurns.autoAdjustSpeed
+                                    ? "Longer clips speed up to fit — only when required"
+                                    : "Each clip plays a \(model.kenBurnsEffectiveClipSeconds(collection))s window — set its start point from the timeline")
+                                    .font(.system(size: 11.5))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .tint(LL.accent)
+                    }
+
+                    Toggle(isOn: kenBurnsBinding(\.fadeTransition)) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Fade transition")
+                                .font(.system(size: 14))
+                            Text(kenBurns.fadeTransition
+                                ? "Clips crossfade for \(String(format: "%g", LapseCollection.fadeSeconds))s"
+                                : "Straight cuts between clips")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .tint(LL.accent)
+                }
+                .padding(.horizontal, 14)
+                .padding(.vertical, 12)
+            }
+        }
+        .llCard()
+    }
+
+    private var kenBurnsEnabledBinding: Binding<Bool> {
+        Binding(
+            get: { model.collection(withID: collectionID)?.kenBurnsEnabled == true },
+            set: { model.setKenBurnsEnabled($0, for: collectionID) })
+    }
+
+    private func kenBurnsBinding(
+        _ keyPath: WritableKeyPath<LapseCollection.KenBurnsSettings, Bool>
+    ) -> Binding<Bool> {
+        Binding(
+            get: { model.collection(withID: collectionID)?.kenBurns?[keyPath: keyPath] == true },
+            set: { value in
+                model.updateKenBurnsSettings(collectionID) { $0[keyPath: keyPath] = value }
+            })
+    }
+
+    /// Shows the effective (clamped) value; writes the preference.
+    private var kenBurnsClipSecondsBinding: Binding<Int> {
+        Binding(
+            get: {
+                guard let collection = model.collection(withID: collectionID) else { return 1 }
+                return model.kenBurnsEffectiveClipSeconds(collection)
+            },
+            set: { value in
+                model.updateKenBurnsSettings(collectionID) { $0.clipSeconds = value }
+            })
+    }
+
+    /// The trim editor's fixed-window length when Ken Burns is choosing
+    /// start points; nil keeps it the ordinary free trim.
+    private var kenBurnsWindowSeconds: Double? {
+        guard let collection = model.collection(withID: collectionID),
+              collection.kenBurnsUsesWindows else { return nil }
+        return Double(model.kenBurnsEffectiveClipSeconds(collection))
+    }
+
     // MARK: - Timeline rows
 
     private func timelineHeader(_ collection: LapseCollection) -> String {
@@ -610,7 +753,7 @@ struct CollectionDetailView: View {
                     .font(.system(size: 14.5, weight: .semibold))
                     .lineLimit(1)
                 HStack(spacing: 6) {
-                    Text(rowSubtitle(entry, blend: blend))
+                    Text(rowSubtitle(entry, blend: blend, in: collection))
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
@@ -648,7 +791,8 @@ struct CollectionDetailView: View {
                     .background(LL.accent.opacity(0.1), in: Circle())
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Trim in and out points")
+            .accessibilityLabel(collection.kenBurnsUsesWindows
+                ? "Set the clip's start point" : "Trim in and out points")
 
             Image(systemName: "line.3.horizontal")
                 .font(.system(size: 15))
@@ -751,7 +895,7 @@ struct CollectionDetailView: View {
                 .font(.system(size: 12.5))
                 .foregroundStyle(.white.opacity(0.65))
                 .padding(.top, 2)
-            Text("Trims retime the cut automatically — clips always butt together.")
+            Text(summaryFooter(collection))
                 .font(.system(size: 11.5))
                 .foregroundStyle(.white.opacity(0.45))
                 .padding(.top, 6)
@@ -760,6 +904,15 @@ struct CollectionDetailView: View {
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(LL.ink, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+    }
+
+    private func summaryFooter(_ collection: LapseCollection) -> String {
+        guard let kenBurns = collection.kenBurns, kenBurns.enabled else {
+            return "Trims retime the cut automatically — clips always butt together."
+        }
+        return kenBurns.fadeTransition
+            ? "Ken Burns moves on every clip, crossfades between them."
+            : "Ken Burns moves on every clip, straight cuts between them."
     }
 
     private func lastExportRow(_ collection: LapseCollection, last: LapseCollection.ExportRecord) -> some View {
@@ -809,8 +962,24 @@ struct CollectionDetailView: View {
         model.capture(for: blend)?.displayTitle ?? "Blended clip"
     }
 
-    private func rowSubtitle(_ entry: LapseCollection.Entry, blend: AppModel.BlendProject?) -> String {
+    private func rowSubtitle(
+        _ entry: LapseCollection.Entry, blend: AppModel.BlendProject?, in collection: LapseCollection
+    ) -> String {
         guard let blend else { return "" }
+        if let kenBurns = collection.kenBurns, kenBurns.enabled, kenBurns.consistentDurations {
+            let plays = model.entryOutputSeconds(entry, in: collection)
+            var text = "\(blend.speedLabel) · plays \(SpeedMath.clipLengthCompact(plays))"
+            if collection.kenBurnsUsesWindows, let full = model.blendDuration(for: blend), full > 0 {
+                let start = min(entry.inPoint, max(0, 1 - plays / full)) * full
+                text += start > 0.05 ? String(format: " from %.1fs", start) : " from the start"
+            } else if kenBurns.autoAdjustSpeed {
+                let kept = model.entrySeconds(entry)
+                if kept > plays + 0.05 {
+                    text += String(format: " · sped ×%.2f", kept / plays)
+                }
+            }
+            return text
+        }
         let kept = model.entrySeconds(entry)
         var text = "\(blend.speedLabel) · \(SpeedMath.clipLengthCompact(kept))"
         if entry.isTrimmed, let full = model.blendDuration(for: blend) {

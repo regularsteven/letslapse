@@ -1719,6 +1719,9 @@ final class AppModel: ObservableObject {
             }
             collection.entries.append(LapseCollection.Entry(blendID: blendID))
         }
+        // Clips joining a collection that has met Ken Burns arrive with
+        // their moves already dealt.
+        if collection.kenBurns != nil { collection.assignMissingKenBurnsMoves() }
         collections[index] = collection
         persistCollectionsQuietly()
         return setRatio
@@ -1748,6 +1751,54 @@ final class AppModel: ObservableObject {
             guard let idx = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
             collection.entries[idx].inPoint = min(max(0, inPoint), 1)
             collection.entries[idx].outPoint = min(max(0, outPoint), 1)
+        }
+    }
+
+    /// The Ken Burns window editor commits only where the clip starts; the
+    /// stored out point survives for when the mode turns off — pushed later
+    /// only if the new start would leave the plain trim inverted.
+    func updateKenBurnsWindowStart(blendID: UUID, in collectionID: UUID, inPoint: Double, windowFraction: Double) {
+        mutateCollection(collectionID) { collection in
+            guard let idx = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
+            let start = min(max(0, inPoint), 1)
+            collection.entries[idx].inPoint = start
+            collection.entries[idx].outPoint = max(
+                collection.entries[idx].outPoint,
+                min(1, start + max(0.01, windowFraction)))
+        }
+    }
+
+    /// Turning Ken Burns on for the first time answers everything with the
+    /// best-effort defaults — consistent pacing at the shortest clip's length,
+    /// speeds auto-adjusted, crossfades on — and deals every clip its move.
+    /// Turning it off keeps the settings for next time.
+    func setKenBurnsEnabled(_ enabled: Bool, for collectionID: UUID) {
+        mutateCollection(collectionID) { collection in
+            if var settings = collection.kenBurns {
+                settings.enabled = enabled
+                collection.kenBurns = settings
+            } else if enabled {
+                collection.kenBurns = LapseCollection.KenBurnsSettings(
+                    enabled: true,
+                    consistentDurations: true,
+                    clipSeconds: kenBurnsMaxClipSeconds(collection),
+                    autoAdjustSpeed: true,
+                    fadeTransition: true)
+            }
+            if enabled { collection.assignMissingKenBurnsMoves() }
+        }
+    }
+
+    /// One seam for the Ken Burns sub-controls; no-op until the mode has
+    /// been turned on once.
+    func updateKenBurnsSettings(
+        _ collectionID: UUID, _ mutate: (inout LapseCollection.KenBurnsSettings) -> Void
+    ) {
+        mutateCollection(collectionID) { collection in
+            guard var settings = collection.kenBurns else { return }
+            mutate(&settings)
+            settings.clipSeconds = max(1, settings.clipSeconds)
+            collection.kenBurns = settings
         }
     }
 
@@ -1877,9 +1928,68 @@ final class AppModel: ObservableObject {
         return entry.keptFraction * duration
     }
 
-    /// The whole timeline's length — trims retime the cut, clips butt together.
+    /// The whole timeline's length as it will export: each clip's Ken Burns
+    /// contribution when the mode is on (minus what the crossfades overlap),
+    /// else the plain butt-joined sum of kept lengths.
     func collectionSeconds(_ collection: LapseCollection) -> Double {
-        collection.entries.reduce(0) { $0 + entrySeconds($1) }
+        let outputs = collection.entries.map { entryOutputSeconds($0, in: collection) }
+            .filter { $0 > 0.01 }
+        var total = outputs.reduce(0, +)
+        if let kenBurns = collection.kenBurns, kenBurns.enabled, kenBurns.fadeTransition {
+            for index in 1..<max(1, outputs.count) {
+                total -= kenBurnsFadeSeconds(outgoing: outputs[index - 1], incoming: outputs[index])
+            }
+        }
+        return total
+    }
+
+    /// One clip's length in the export. Ken Burns' consistent mode pins it to
+    /// the target seconds (capped by what the clip can supply); otherwise the
+    /// clip keeps its trimmed length.
+    func entryOutputSeconds(_ entry: LapseCollection.Entry, in collection: LapseCollection) -> Double {
+        guard let kenBurns = collection.kenBurns, kenBurns.enabled, kenBurns.consistentDurations else {
+            return entrySeconds(entry)
+        }
+        let target = Double(kenBurnsEffectiveClipSeconds(collection))
+        guard let blend = blends.first(where: { $0.id == entry.blendID }),
+              let full = blendDuration(for: blend) else { return target }
+        if kenBurns.autoAdjustSpeed {
+            // Longer clips speed up to the target; a clip that can't fill it
+            // just plays out (only-if-required goes one way).
+            return min(target, entrySeconds(entry))
+        }
+        return min(target, full)
+    }
+
+    /// A crossfade can't outlast half of either neighbour.
+    func kenBurnsFadeSeconds(outgoing: Double, incoming: Double) -> Double {
+        max(0, min(LapseCollection.fadeSeconds, outgoing / 2, incoming / 2))
+    }
+
+    /// The longest consistent clip duration the timeline supports: the
+    /// shortest clip's length, rounded down to whole seconds. Auto-speed
+    /// compresses each clip's kept (trimmed) range, so that range is the
+    /// supply; window mode ignores the stored out point and slides a window
+    /// anywhere in the clip, so there the whole clip is. Clips whose
+    /// durations haven't probed yet don't get to drag the cap to zero.
+    func kenBurnsMaxClipSeconds(_ collection: LapseCollection) -> Int {
+        let lengths: [Double]
+        if collection.kenBurnsUsesWindows {
+            lengths = collection.entries.compactMap { entry in
+                blends.first { $0.id == entry.blendID }.flatMap(blendDuration(for:))
+            }
+        } else {
+            lengths = collection.entries.map(entrySeconds)
+        }
+        guard let shortest = lengths.filter({ $0 > 0.5 }).min() else { return 1 }
+        return max(1, Int(shortest.rounded(.down)))
+    }
+
+    /// What the export actually uses: the stored preference clamped to what
+    /// the timeline currently allows.
+    func kenBurnsEffectiveClipSeconds(_ collection: LapseCollection) -> Int {
+        guard let kenBurns = collection.kenBurns else { return kenBurnsMaxClipSeconds(collection) }
+        return min(max(1, kenBurns.clipSeconds), kenBurnsMaxClipSeconds(collection))
     }
 
     /// A clip's full duration: recorded stats first, probed as a fallback for
@@ -1923,15 +2033,33 @@ final class AppModel: ObservableObject {
     }
 
     /// Everything the render depends on, as one stable string. While the kept
-    /// render's recipe matches, exporting again is instant.
+    /// render's recipe matches, exporting again is instant. With Ken Burns off
+    /// the string is byte-identical to what it always was, so existing kept
+    /// renders stay instant across the feature arriving.
     func collectionRecipe(_ collection: LapseCollection) -> String {
-        let head = "\(collection.ratioRaw ?? "—")@\(collectionExportFPS(collection))"
+        var lead = ["\(collection.ratioRaw ?? "—")@\(collectionExportFPS(collection))"]
+        let kenBurnsOn = collection.kenBurnsEnabled
+        if kenBurnsOn, let kenBurns = collection.kenBurns {
+            lead.append(
+                "kb:cd\(kenBurns.consistentDurations ? 1 : 0)"
+                + "s\(kenBurnsEffectiveClipSeconds(collection))"
+                + "spd\(kenBurns.autoAdjustSpeed ? 1 : 0)"
+                + "f\(kenBurns.fadeTransition ? 1 : 0)")
+        }
         let parts = collection.entries.map { entry -> String in
             let crop = resolvedCropOffset(entry: entry, in: collection)
                 .map { String(format: "%.4f", $0) } ?? "fit"
-            return "\(entry.blendID.uuidString):\(String(format: "%.4f", entry.inPoint))-\(String(format: "%.4f", entry.outPoint))@\(crop)"
+            var part = "\(entry.blendID.uuidString):\(String(format: "%.4f", entry.inPoint))-\(String(format: "%.4f", entry.outPoint))@\(crop)"
+            if kenBurnsOn, let move = entry.kenBurns {
+                part += String(
+                    format: "~%.2f-%.2f@%.2f,%.2f-%.2f,%.2f",
+                    move.startZoom, move.endZoom,
+                    move.startAnchorX, move.startAnchorY,
+                    move.endAnchorX, move.endAnchorY)
+            }
+            return part
         }
-        return ([head] + parts).joined(separator: "|")
+        return (lead + parts).joined(separator: "|")
     }
 
     /// The kept render, when it still matches the collection's recipe and is

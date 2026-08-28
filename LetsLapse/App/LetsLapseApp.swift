@@ -802,15 +802,19 @@ struct ContentView: View {
                 model.blendCanvasRatio = ratio
             }
         }
-        // LL_COLLECTIONS=seed|list|detail — bring the tab front; seed demo
-        // collections from existing video blends (no-op without any); detail
-        // additionally opens the first collection's timeline.
+        // LL_COLLECTIONS=seed|list|detail|kenburns — bring the tab front; seed
+        // demo collections from existing video blends (no-op without any);
+        // detail additionally opens the first collection's timeline, kenburns
+        // opens it with Ken Burns switched on.
         if let hook = environment["LL_COLLECTIONS"] {
             selectedTab = .collections
-            if hook == "seed" || hook == "list" || hook == "detail" {
+            if hook == "seed" || hook == "list" || hook == "detail" || hook == "kenburns" {
                 model.debugSeedCollections()
             }
-            if hook == "detail", let first = model.collections.first {
+            if hook == "detail" || hook == "kenburns", let first = model.collections.first {
+                if hook == "kenburns" {
+                    model.setKenBurnsEnabled(true, for: first.id)
+                }
                 collectionsPath = [first.id]
             }
         }

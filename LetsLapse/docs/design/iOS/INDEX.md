@@ -83,12 +83,12 @@ The Collections feature (2026-08-01): an ordered set of blended clips from acros
 
 | Screen | File | Mirrors | Status |
 |---|---|---|---|
-| Timeline builder | [collection-detail.portrait.svg](collection-detail.portrait.svg) | `App/CollectionDetailView.swift` (`portraitLayout`, `previewSurface`, `ratioChips`, `timelineCard`, `clipRow`) | ✅ |
-| Timeline builder · crop on the preview | [collection-detail.crop.portrait.svg](collection-detail.crop.portrait.svg) | `App/CollectionDetailView.swift` (`cropFrame`, `commitCrop`) + summary card/export CTA below the fold | ✅ |
-| Timeline builder · wide (landscape/iPad/Mac) | [collection-detail.landscape.svg](collection-detail.landscape.svg) | `App/CollectionDetailView.swift` (`wideLayout`, >560pt) | ⚠️ drawn from code — headless sims can't rotate; pending an on-device pass |
+| Timeline builder | [collection-detail.portrait.svg](collection-detail.portrait.svg) | `App/CollectionDetailView.swift` (`portraitLayout`, `previewSurface`, `ratioChips`, `kenBurnsSection`, `timelineCard`, `clipRow`) | ⚠️ stale — Ken Burns controls landed in code 2026-08-28 (card under Canvas, KB-aware row subtitles/summary); mirror after code sign-off |
+| Timeline builder · crop on the preview | [collection-detail.crop.portrait.svg](collection-detail.crop.portrait.svg) | `App/CollectionDetailView.swift` (`cropFrame`, `commitCrop`) + summary card/export CTA below the fold | ⚠️ stale — Ken Burns controls landed in code 2026-08-28 (card under Canvas, KB-aware row subtitles/summary); mirror after code sign-off |
+| Timeline builder · wide (landscape/iPad/Mac) | [collection-detail.landscape.svg](collection-detail.landscape.svg) | `App/CollectionDetailView.swift` (`wideLayout`, >560pt; Ken Burns card + timeline now share the scroll region) | ⚠️ stale — Ken Burns 2026-08-28, and still drawn-from-code; mirror after code sign-off |
 | Name sheet | [collections.name-sheet.portrait.svg](collections.name-sheet.portrait.svg) | `App/CollectionsView.swift` (`CollectionNameSheet`) | ✅ |
 | Add clips picker | [collection-picker.portrait.svg](collection-picker.portrait.svg) | `App/CollectionClipPicker.swift` | ✅ |
-| Trim editor | [collection-trim.portrait.svg](collection-trim.portrait.svg) | `App/CollectionTrimView.swift` | ✅ |
+| Trim editor | [collection-trim.portrait.svg](collection-trim.portrait.svg) | `App/CollectionTrimView.swift` (free trim; Ken Burns window mode — fixed-length window, in-handle only, "Start point" title — needs its own state SVG) | ⚠️ stale — Ken Burns window mode landed in code 2026-08-28; mirror after code sign-off |
 | Export progress | [collection-export.portrait.svg](collection-export.portrait.svg) | `App/CollectionExportView.swift` (`CollectionExportProgressView`) + `App/CollectionExporter.swift` — shares `App/LLRigProgress.swift` with Processing (the two used to hold byte-identical copies of the ring) | ✅ |
 | Export result | [collection-export-result.portrait.svg](collection-export-result.portrait.svg) | `App/CollectionExportView.swift` (`CollectionExportResultView`) | ✅ |
 | Crop save prompt ("Save this crop?") | — | `App/CollectionDetailView.swift` (3-button alert: Replace the default / Just for {name} / Cancel; fires only when the clip's default crop exists AND another collection uses the clip) | 🟡 |
