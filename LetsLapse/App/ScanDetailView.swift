@@ -31,7 +31,12 @@ struct ScanDetailView: View {
     /// "Share project": the whole capture folder as one importable `.lapse`.
     /// A scan archives through exactly the same path a shoot does — see
     /// `AppModel.exportProject` and `App/ProjectArchiveShare.swift`.
-    @State private var isExportingArchive = false
+    /// Read off the model, not held here — see `ProjectDetailView`: an export
+    /// has to be visible to the transfer server, and view-local state isn't.
+    private var isExportingArchive: Bool {
+        guard let capture else { return false }
+        return model.activeLibraryActivities.contains(.exportingArchive(capture.id))
+    }
     @State private var exportedArchive: ExportedArchive?
     @State private var exportFailure: String?
     @State private var confirmingDelete = false
@@ -713,9 +718,9 @@ struct ScanDetailView: View {
     /// this tab from `captureMode`.
     private func exportArchive() {
         guard let capture else { return }
-        isExportingArchive = true
+        model.beginActivity(.exportingArchive(capture.id))
         Task { @MainActor in
-            defer { isExportingArchive = false }
+            defer { model.endActivity(.exportingArchive(capture.id)) }
             do {
                 exportedArchive = ExportedArchive(url: try await model.exportProject(capture))
             } catch {

@@ -34,6 +34,10 @@ struct SettingsView: View {
     /// accepts start/stop commands, so it is opt-in rather than something the
     /// camera does because the build supports it.
     @AppStorage(CaptureRemoteListener.enabledKey) private var allowRemoteAccess = false
+    /// Also off by default, and a different grant from the one above: this
+    /// serves the whole library, not the shutter. Every platform that has a
+    /// library can offer it, Macs included (Phase 3).
+    @AppStorage(ProjectTransferServer.enabledKey) private var allowLibrarySharing = false
     /// Field-test selector for BLEND=Auto's decision logic (DNG path).
     /// Stored as the raw strategy id; stamped into every run's capture log.
     @AppStorage(BlendStrategyID.defaultsKey) private var blendStrategy = BlendStrategyID.zone.rawValue
@@ -787,7 +791,23 @@ struct SettingsView: View {
                     .labelsHidden()
                     .tint(.green)
             }
+
             #endif
+
+            // A separate grant from the camera remote above on purpose:
+            // driving this device's shutter and reading every project on it
+            // are different things to hand a stranger on the network. The
+            // subtitle says the part that matters — the code is not
+            // per-project. Not iOS-only: a Mac serves its library the same way
+            // (Phase 3), which is how a project gets from here to an iPad.
+            LLRow(
+                title: "Share projects with nearby devices",
+                subtitle: "Shows a pairing code in Projects so another device on the same network can copy projects from here. Anyone with the code can copy every project on this device"
+            ) {
+                Toggle("", isOn: $allowLibrarySharing)
+                    .labelsHidden()
+                    .tint(.green)
+            }
 
             LLRow(
                 title: "Custom frame rate",

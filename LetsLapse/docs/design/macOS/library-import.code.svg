@@ -1,0 +1,49 @@
+<svg viewBox="0 0 500 590" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Import from Device · pairing code · 460×520</title>
+  <desc>Mirrors Remote/ImportWindow.swift (enteringCode / connecting phases) over Shared/ProjectTransferClient.swift and Shared/CaptureRemotePairing.swift. The six digits shown in Projects on the serving device (iOS/projects.sharing.portrait.svg) are typed here. The code is never the key: it is stretched with HKDF-SHA256 into a TLS-PSK, under a PURPOSE-SCOPED salt ("com.regularsteven.letslapse.transfer.v1") so a code minted for the camera remote cannot be replayed against the library and vice versa — CaptureRemotePairing.derivedKey/parameters take the salt as a defaulted argument, leaving the capture link's wire behaviour bit-identical. The same call also asks for transfer-shaped TCP: keepalive 20/3/5 instead of the control link's 5/2/2, because 5/2/2 tears down a healthy forty-minute pull the moment a congested network stalls it, and Nagle is left ON since bulk chunks fill segments by themselves. THE TRAP THIS SCREEN IS BUILT AROUND: a wrong code never fails the client. It surfaces as -9846 bad MAC on the SERVER's first read and this side sits in .preparing forever — verified again for this link on 2026-08-27, and previously for the camera remote. So the client runs LocalNetworkTransport's 8-second timeout verbatim and reports "Incorrect code — try again" rather than leaving a window that does nothing. The last line is not decoration: one code opens the whole library, not the project you were looking at, and the serving side says the same thing. Connecting state (drawn as a variant of this file's own button): the field disables, the button reads "Pairing…" and a small spinner sits beside it. Verified 2026-08-27; staged with LL_TRANSFER=&lt;6-digit code&gt;, which types the real code rather than bypassing it.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="460" height="520" rx="11"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="460" height="520" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="460" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="250" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Import from Device</text>
+    </g>
+
+    <g id="header">
+      <g data-symbol="arrow.down.circle" transform="translate(41,72)">
+        <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="54" y="70" font-size="13" class="b" fill="#000">iPhone 17 Pro</text>
+      <text x="54" y="84" font-size="10" fill="#6D6D72">Enter the pairing code</text>
+      <!-- Back returns to the browse list and drops the connection -->
+      <text x="466" y="74" font-size="10.5" text-anchor="end" fill="#0A6FD8">Back</text>
+      <line x1="20" y1="95" x2="480" y2="95" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+
+    <g id="pair">
+      <text x="34" y="122" font-size="13" class="b" fill="#000">Pairing code</text>
+      <text x="34" y="146" font-size="10.5" fill="#6D6D72">Shown in Projects on iPhone 17 Pro, while sharing is on.</text>
+
+      <!-- .roundedBorder field, 100pt wide, 15pt tabular digits -->
+      <rect x="34" y="160" width="100" height="22" rx="5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
+      <text x="44" y="176" font-size="15" class="mono" fill="#B4B4BA">000000</text>
+
+      <!-- default push button; disabled until six digits are in -->
+      <rect x="142" y="160" width="72" height="22" rx="5" fill="#FBFBFD" stroke="#000" stroke-opacity="0.14"/>
+      <text x="178" y="175" font-size="12" text-anchor="middle" fill="#8A8A8E">Connect</text>
+
+      <text x="34" y="206" font-size="10" fill="#6D6D72">The code grants access to every project on that device, not just one.</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="460" height="520" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="250" y="562" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Import from Device · pairing code · 460×520 pt window</text>
+  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift — "Pairing…" and the 8s wrong-code timeout are desc-only</text>
+</svg>

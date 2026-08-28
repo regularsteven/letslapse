@@ -36,7 +36,14 @@ struct ProjectDetailView: View {
     @State private var confirmingProjectDelete = false
     @State private var versionPendingDelete: AppModel.BlendProject?
     @State private var deletionFailure: String?
-    @State private var isExportingArchive = false
+    /// Read off the model rather than held here. An export owns the disk for
+    /// minutes and a project-transfer server on the same device has to know
+    /// about it — view-local `@State` was invisible to everything outside this
+    /// screen, which is precisely the problem `LibraryActivity` exists to fix.
+    private var isExportingArchive: Bool {
+        guard let capture else { return false }
+        return model.activeLibraryActivities.contains(.exportingArchive(capture.id))
+    }
     /// See `App/ProjectArchiveShare.swift` — the produced `.lapse` and its sheet
     /// are shared with `ScanDetailView`.
     @State private var exportedArchive: ExportedArchive?
@@ -1306,9 +1313,9 @@ struct ProjectDetailView: View {
     }
 
     private func exportArchive(_ capture: AppModel.CaptureProject) {
-        isExportingArchive = true
+        model.beginActivity(.exportingArchive(capture.id))
         Task { @MainActor in
-            defer { isExportingArchive = false }
+            defer { model.endActivity(.exportingArchive(capture.id)) }
             do {
                 let url = try await model.exportProject(capture)
                 exportedArchive = ExportedArchive(url: url)

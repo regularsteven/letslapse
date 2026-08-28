@@ -1,0 +1,165 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Create · import source chooser · portrait</title>
+  <desc>Mirrors App/CreateView.swift — the source chooser behind "Import a LetsLapse project…". That row used to open the Files picker directly; it now asks, because a project can arrive two ways and both are the same act. "From a file…" is the unchanged `fileImporter` over `.lapseProject`; "From another device…" opens ProjectTransferImportView as a sheet (library-import.browse.portrait.svg) and pulls a project straight off another device on the network with no `.lapse` written on either side. macOS shows the identical two choices from the identical row — the only difference is that it opens its own Window rather than a sheet, since a Mac has windows and a phone does not. Drawn as an iOS action sheet: title, the explanatory message, two actions, and a detached Cancel. The screen behind is create-home.portrait.svg unchanged.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <linearGradient id="art1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#293B52"/><stop offset="0.5" stop-color="#6B8FBF"/><stop offset="1" stop-color="#293B52"/></linearGradient>
+    <linearGradient id="art2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#121C2B"/><stop offset="1" stop-color="#26406B"/></linearGradient>
+    <linearGradient id="art3" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#54331C"/><stop offset="0.45" stop-color="#C98C4F"/><stop offset="0.7" stop-color="#F0C794"/><stop offset="1" stop-color="#54331C"/></linearGradient>
+    <linearGradient id="art4" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#E8E3DB"/><stop offset="1" stop-color="#DBD6C9"/></linearGradient>
+    <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#A1C7FF" stop-opacity="0.55"/><stop offset="1" stop-color="#A1C7FF" stop-opacity="0"/></radialGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- header -->
+      <text x="20" y="101" font-size="34" class="b" fill="#000">Create</text>
+      <text x="20" y="121" font-size="13.5" fill="#6D6D72">What do you want to make?</text>
+
+      <!-- effect cards 2×2 -->
+      <g id="effect-cards">
+        <g id="card-smooth-timelapse">
+          <rect x="16" y="134" width="174.5" height="169" rx="18" fill="#FFF" filter="url(#soft)"/>
+          <rect x="30" y="148" width="146.5" height="86" rx="12" fill="url(#art1)"/>
+          <rect x="26" y="184" width="154" height="3" rx="1.5" fill="#FFF" opacity="0.6"/>
+          <rect x="26" y="192" width="154" height="2" rx="1" fill="#FFDB96" opacity="0.6"/>
+          <text x="30" y="258" font-size="14.5" class="b" fill="#000">Smooth timelapse</text>
+          <text x="30" y="274" font-size="11.5" fill="#6D6D72">Hours become seconds,</text>
+          <text x="30" y="288" font-size="11.5" fill="#6D6D72">motion melts into streaks</text>
+        </g>
+        <g id="card-long-exposure">
+          <rect x="202.5" y="134" width="174.5" height="169" rx="18" fill="#FFF" filter="url(#soft)"/>
+          <rect x="216.5" y="148" width="146.5" height="86" rx="12" fill="url(#art2)"/>
+          <ellipse cx="272" cy="178" rx="45" ry="20" fill="url(#glow)"/>
+          <text x="216.5" y="258" font-size="14.5" class="b" fill="#000">Long exposure</text>
+          <text x="216.5" y="274" font-size="11.5" fill="#6D6D72">Interval photos into a time-</text>
+          <text x="216.5" y="288" font-size="11.5" fill="#6D6D72">lapse, or one long exposure</text>
+        </g>
+        <g id="card-speed-ramp">
+          <rect x="16" y="315" width="174.5" height="169" rx="18" fill="#FFF" filter="url(#soft)"/>
+          <rect x="30" y="329" width="146.5" height="86" rx="12" fill="url(#art3)"/>
+          <text x="30" y="439" font-size="14.5" class="b" fill="#000">Speed ramp</text>
+          <text x="30" y="455" font-size="11.5" fill="#6D6D72">Speed rises or falls</text>
+          <text x="30" y="469" font-size="11.5" fill="#6D6D72">across the clip</text>
+        </g>
+        <g id="card-custom-blend">
+          <rect x="202.5" y="315" width="174.5" height="169" rx="18" fill="#FFF" filter="url(#soft)"/>
+          <rect x="216.5" y="329" width="146.5" height="86" rx="12" fill="url(#art4)"/>
+          <g data-symbol="slider.horizontal.3" stroke="#8A8578" stroke-width="2" stroke-linecap="round">
+            <path d="M272 362 h36 M272 372 h36 M272 382 h36"/>
+            <circle cx="282" cy="362" r="3.5" fill="#8A8578" stroke="none"/>
+            <circle cx="298" cy="372" r="3.5" fill="#8A8578" stroke="none"/>
+            <circle cx="288" cy="382" r="3.5" fill="#8A8578" stroke="none"/>
+          </g>
+          <text x="216.5" y="439" font-size="14.5" class="b" fill="#000">Custom blend</text>
+          <text x="216.5" y="455" font-size="11.5" fill="#6D6D72">Every dial, no presets</text>
+        </g>
+      </g>
+
+      <!-- source rows card -->
+      <g id="source-rows">
+        <rect x="16" y="500" width="361" height="205" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <g id="row-record-now">
+          <rect x="32" y="511" width="30" height="30" rx="8" fill="#C36A00"/>
+          <circle cx="47" cy="526" r="8" fill="none" stroke="#FFF" stroke-width="1.8" data-symbol="record.circle"/><circle cx="47" cy="526" r="3.4" fill="#FFF"/>
+          <text x="74" y="531" font-size="16" class="sb" fill="#000">Record now</text>
+          <path d="M363 519 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        </g>
+        <line x1="74" y1="551" x2="377" y2="551" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-import-video">
+          <rect x="32" y="562" width="30" height="30" rx="8" fill="#5980A8"/>
+          <g data-symbol="film" stroke="#FFF" stroke-width="1.6" fill="none"><rect x="40" y="570" width="14" height="14" rx="2"/><path d="M43.5 570 v14 M50.5 570 v14 M40 577 h14"/></g>
+          <text x="74" y="582" font-size="16" fill="#000">Import a video</text>
+          <path d="M363 570 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
+        <line x1="74" y1="602" x2="377" y2="602" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-import-photos">
+          <rect x="32" y="613" width="30" height="30" rx="8" fill="#7A6B9C"/>
+          <g data-symbol="photo.stack" stroke="#FFF" stroke-width="1.6" fill="none"><rect x="40" y="622" width="13" height="10" rx="2"/><path d="M42 619.5 h11.5 a2 2 0 0 1 2 2 V629"/></g>
+          <text x="74" y="633" font-size="16" fill="#000">Import photos to stack</text>
+          <path d="M363 621 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
+        <line x1="74" y1="653" x2="377" y2="653" stroke="#000" stroke-opacity="0.08"/>
+        <g id="row-import-project">
+          <rect x="32" y="664" width="30" height="30" rx="8" fill="#8F7352"/>
+          <g data-symbol="shippingbox" stroke="#FFF" stroke-width="1.6" fill="none" stroke-linejoin="round"><path d="M47 670 l8 4 v8 l-8 4 -8 -4 v-8 z M39 674 l8 4 8 -4 M47 678 v8"/></g>
+          <text x="74" y="684" font-size="16" fill="#000">Import a LetsLapse project…</text>
+          <path d="M363 672 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
+      </g>
+
+      <!-- floating tab bar (Create selected) -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <rect x="23.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-create" fill="none" stroke="#C36A00">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#C36A00" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g id="tab-settings" fill="none" stroke="#8E8E93">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+
+      <!-- IMPORT SOURCE CHOOSER — .confirmationDialog on the "Import a
+           LetsLapse project…" row. Both answers are "import a project", so
+           they sit behind one row rather than as two entries whose titles
+           would have to explain the difference. macOS shows the same two
+           choices; only the presentation differs (an alert there, this action
+           sheet here). "From another device…" opens
+           library-import.browse.portrait.svg; "From a file…" is the
+           `fileImporter` this row has always opened. -->
+      <g id="import-source-dialog">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.28"/>
+        <g id="sheet">
+          <rect x="8" y="574" width="377" height="164" rx="14" fill="#F7F7F8" fill-opacity="0.96"/>
+          <text x="196.5" y="600" font-size="13" class="sb" text-anchor="middle" fill="#3C3C43" fill-opacity="0.7">Import a LetsLapse project</text>
+          <text x="196.5" y="618" font-size="12" text-anchor="middle" fill="#3C3C43" fill-opacity="0.6">A .lapse archive from Files or a disk, or a</text>
+          <text x="196.5" y="633" font-size="12" text-anchor="middle" fill="#3C3C43" fill-opacity="0.6">project copied straight off another device</text>
+          <text x="196.5" y="648" font-size="12" text-anchor="middle" fill="#3C3C43" fill-opacity="0.6">on this network.</text>
+          <line x1="8" y1="660" x2="385" y2="660" stroke="#000" stroke-opacity="0.12"/>
+          <text x="196.5" y="683" font-size="20" text-anchor="middle" fill="#007AFF">From a file…</text>
+          <line x1="8" y1="699" x2="385" y2="699" stroke="#000" stroke-opacity="0.12"/>
+          <text x="196.5" y="722" font-size="20" text-anchor="middle" fill="#007AFF">From another device…</text>
+        </g>
+        <rect x="8" y="748" width="377" height="56" rx="14" fill="#FFFFFF" fill-opacity="0.97"/>
+        <text x="196.5" y="783" font-size="20" class="sb" text-anchor="middle" fill="#007AFF">Cancel</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create · import source chooser · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — the .confirmationDialog behind "Import a LetsLapse project…"</text>
+</svg>

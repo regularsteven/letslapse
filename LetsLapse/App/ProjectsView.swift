@@ -19,6 +19,14 @@ struct ProjectsView: View {
     /// Typed words and tag chips, together — the two narrow the same list and share one
     /// empty state, so they are one value rather than two pieces of view state.
     @State private var query = SceneQuery.empty
+    /// Serving this library to another device. Owned here rather than by the
+    /// model so it lives exactly as long as the Projects tab does — which is
+    /// the whole session, since a `@StateObject` on a tab survives switching
+    /// away from it. That is deliberate: an in-flight transfer must not die
+    /// because somebody looked at Settings.
+    @StateObject private var transferServer = ProjectTransferServer()
+    @AppStorage(ProjectTransferServer.enabledKey) private var sharingEnabled = false
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -108,6 +116,41 @@ struct ProjectsView: View {
         .onReceive(model.$requestedProjectDetailID) { requested in
             consumeDetailRequest(requested)
         }
+        .onAppear {
+            transferServer.attach(model: model)
+            if sharingEnabled { transferServer.start() }
+        }
+        // Turning the setting off has to take the live listener with it —
+        // otherwise the device goes on advertising until the app is relaunched,
+        // which is precisely the "a code left advertising on a phone in a bag"
+        // failure this feature has to design out.
+        .onChange(of: sharingEnabled) { enabled in
+            if enabled {
+                transferServer.attach(model: model)
+                transferServer.start()
+            } else {
+                transferServer.stop()
+            }
+        }
+        // iOS suspends network activity in the background anyway; standing the
+        // listener down makes that honest rather than silent. A cable does not
+        // buy background time either, so this holds over USB too.
+        //
+        // macOS has no equivalent — switching apps never backgrounds a Mac
+        // scene — so there the stand-down is `ProjectTransferServer.idleTimeout`
+        // instead: 15 minutes with nobody connected and the listener stops
+        // itself, because a Mac left advertising its whole library while
+        // nobody is sitting at it is exactly the failure to design out.
+        #if os(iOS)
+        .onChange(of: scenePhase) { phase in
+            guard sharingEnabled else { return }
+            if phase == .background {
+                transferServer.stop()
+            } else if phase == .active, !transferServer.isRunning {
+                transferServer.start()
+            }
+        }
+        #endif
     }
 
     /// The Gallery's `VStack(spacing: 0)` header, reproduced as a single list
@@ -127,6 +170,20 @@ struct ProjectsView: View {
                 .padding(.leading, 4)
                 .padding(.trailing, 4)
                 .padding(.top, 8)
+
+            // Nothing at all when the server is off: a row saying "not
+            // sharing" would be a permanent reminder of a feature most
+            // sessions never touch. On a Mac this chip carries more weight —
+            // there is no scene-phase stand-down there, so it is the only
+            // visible sign the machine is advertising.
+            if transferServer.isRunning {
+                ProjectSharingChip(server: transferServer) {
+                    sharingEnabled = false
+                    transferServer.stop()
+                }
+                .padding(.top, 10)
+                .padding(.horizontal, 4)
+            }
 
             // Same segmented filter the Gallery grid uses, so the two tabs
             // narrow a library the same way.

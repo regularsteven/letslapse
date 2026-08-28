@@ -1,0 +1,53 @@
+<svg viewBox="0 0 500 590" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Import from Device · browsing · 460×520</title>
+  <desc>Mirrors Remote/ImportWindow.swift (browse phase) over Shared/ProjectTransferClient.swift. Phase 1 of the project-transfer feature: a whole project — 1 to 20 GB of DNGs, ProRes and notes — moved off a phone or an iPad onto this Mac over the local network, with no `.lapse` archive written on either side. Its OWN `Window` scene (id "import", File ▸ Import from Device…, ⌘⇧I), not a section in RemoteWindow: that window is pinned to 208×248 pt because Watch layout parity is its entire reason for existing, and a project list with sizes and a progress bar cannot live in a Watch canvas without wrecking the thing it exists to protect. `Window` rather than `WindowGroup` for the same reason the main window is one: the serving listener holds a SINGLE peer and replaces it on any new connection, so two import windows on one Mac would tear each other down. The browser is NWBrowser over `_letslapse-xfer._tcp` — a different service from the camera remote's `_letslapse-remote._tcp`, because serving a library and driving a shutter are different grants with different lifetimes, and a client browsing for one must never find the other. Plain NWParameters with includePeerToPeer and NO interface restriction, which is what makes a USB-tethered device appear here with no second transport and no extra code. The row's caption is model · project count (from the TXT record, so it can be said before anybody types a code) · and the interface, but ONLY when the answer is unambiguous: a device advertising on several interfaces at once cannot be labelled honestly, and how a tethered iOS device reports its InterfaceType is a device check rather than something to assume — so one interface gets "Wi-Fi" or "Cable" and anything else says nothing. `tools/transfer_probe.swift` prints the raw list for that check. A denied Local Network permission is called out in place of the empty state, because otherwise it is indistinguishable from "no devices on this network" — the single most confusing failure this link has. Verified 2026-08-27 against a simulator serving its library; staged with LL_TRANSFER=1 (the window is behind ⌘⇧I, which no headless run can press).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="460" height="520" rx="11"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="460" height="520" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="460" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="250" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Import from Device</text>
+    </g>
+
+    <!-- header: 14pt horizontal, 10pt vertical. The headline says where in the
+         flow you are rather than repeating the title bar. -->
+    <g id="header">
+      <g data-symbol="arrow.down.circle" transform="translate(41,72)">
+        <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="54" y="70" font-size="13" class="b" fill="#000">Choose a device</text>
+      <text x="54" y="84" font-size="10" fill="#6D6D72">On this network</text>
+      <line x1="20" y1="95" x2="480" y2="95" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+
+    <!-- one row per discovered device; 14pt inset, 8pt corner, cardBackground -->
+    <g id="device-row">
+      <rect x="34" y="117" width="432" height="43" rx="8" fill="#FFFFFF"/>
+      <g data-symbol="iphone" transform="translate(47,138)">
+        <rect x="-5" y="-8.5" width="10" height="17" rx="2" fill="none" stroke="#8A8A8E" stroke-width="1.4"/>
+        <path d="M-1.6 -6.4 h3.2" stroke="#8A8A8E" stroke-width="1.2" stroke-linecap="round"/>
+      </g>
+      <text x="65" y="134" font-size="13" fill="#000">iPhone 17 Pro</text>
+      <text x="65" y="148" font-size="10" fill="#6D6D72">iPhone · 2 projects · Wi-Fi</text>
+      <path d="M452 132 l5 6 -5 6" stroke="#C6C6CB" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+    </g>
+
+    <!-- EMPTY STATE (desc-only, replaces the rows above): a small spinner and
+         "Looking for devices…", then "No devices found — open LetsLapse on
+         another device and enable sharing in Settings ▸ Advanced."
+         BROWSE FAILURE (desc-only): an orange exclamationmark.triangle label
+         carrying the NWBrowser error, then "Check System Settings ▸ Privacy &
+         Security ▸ Local Network." -->
+  </g>
+
+  <rect x="20" y="20" width="460" height="520" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="250" y="562" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Import from Device · browsing · 460×520 pt window</text>
+  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift — empty and Local-Network-denied states desc-only</text>
+</svg>

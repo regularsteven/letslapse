@@ -34,6 +34,7 @@ enum StorageRoot {
     /// added here, or a later move leaves it behind.
     static let libraryItemNames = [
         "Projects", "Collections", "Thumbnails", "CaptureLogs", "Logs",
+        "Incoming",
         "blend-profiles.json", "custom_presets.json",
     ]
 
@@ -87,6 +88,30 @@ enum StorageRoot {
     #else
     static var current: URL { defaultRootURL }
     #endif
+
+    /// Where a project arriving over the network is assembled before it becomes
+    /// a project.
+    ///
+    /// Inside the library root, NOT in `temporaryDirectory`, for two reasons.
+    /// A partial transfer has to outlive the connection, the window and the app
+    /// — `ImportStaging` sweeps anything untouched for 15 minutes, which is
+    /// right for an archive being unpacked and fatal for 12 GB somebody is
+    /// half-way through rescuing off a phone. And being on the same volume as
+    /// the library is what makes the install a rename rather than a copy, which
+    /// is what keeps peak disk at 1× the project instead of 2×.
+    ///
+    /// `"Incoming"` is in `libraryItemNames` (macOS) so a storage-location
+    /// change carries it: a half-finished transfer stranded on the old volume
+    /// is exactly the silent failure that list exists to prevent.
+    static var incomingRootURL: URL {
+        current.appendingPathComponent("Incoming", isDirectory: true)
+    }
+
+    /// Keyed by the SOURCE project's id, so a resumed pull of the same project
+    /// finds the tree it left behind.
+    static func incomingURL(for captureID: UUID) -> URL {
+        incomingRootURL.appendingPathComponent(captureID.uuidString, isDirectory: true)
+    }
 }
 
 #if os(macOS)

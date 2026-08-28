@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Import from device · browsing · portrait</title>
+  <desc>Mirrors App/ProjectTransferImportView.swift (browse phase) over Shared/ProjectTransferClient.swift, presented as a sheet from CreateView's "Import a LetsLapse project…" row (create-home.import-source.portrait.svg). ONE view serves every platform that can import — the Mac hosts the same thing in a Window (macOS/library-import.browse.svg) — because the job is identical; the differences are only the ones the platforms genuinely have. On iOS that is: a sheet has no title bar, so it carries its own ✕; the pairing field gets the number pad; and the primary actions take LLPrimaryButtonStyle rather than a default push button. Browsing is NWBrowser over `_letslapse-xfer._tcp`, plain NWParameters with includePeerToPeer and NO interface restriction — the same browser finds a device over Wi-Fi, over peer-to-peer, and over a cable, which is what makes USB free. Each row is name, model, project count (from the TXT record, so it can be said before anybody types a code) and — only when the answer is unambiguous — how it was reached: a device advertising on several interfaces at once cannot be labelled honestly, and a tethered iPhone reports wiredEthernet AND wifi (measured 2026-08-27), so it says nothing rather than guessing. The glyph follows the model, so an iPad reads as an iPad. EMPTY STATE, drawn here beneath the rows in its own right: a spinner, "Looking for devices…", and "Open LetsLapse on the other device, go to Projects, and turn on sharing in Settings ▸ Advanced" — which names every step the other end needs. PERMISSION REFUSED (desc-only): "Let LetsLapse find your devices", the plain-English explanation, and an "Open Local Network Settings" button that deep-links to this app's own Settings page; the browser rebuilds itself every 2 s while refused, so granting the permission fills this list in by itself — NWBrowser never recovers from .failed, and before that loop existed the sheet had to be closed and reopened. Verified on the simulator and on an iPad Air M3 against a serving iPhone, and against a serving Mac (2026-08-28) — every device now both serves and imports.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#3A3A3F"/>
+    <g transform="translate(24,24)">
+
+      <!-- the Create screen behind, dimmed: a page sheet leaves a sliver -->
+      <rect x="0" y="0" width="393" height="852" fill="#F2F2F7"/>
+      <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+
+      <!-- the sheet itself: full-height page sheet, 10pt corner, inset 10 -->
+      <g id="sheet">
+        <path d="M0 862 L0 20 a10 10 0 0 1 10 -10 L383 10 a10 10 0 0 1 10 10 L393 862 Z" fill="#F2F2F7"/>
+
+        <!-- status bar sits over the sheet at this presentation height -->
+        <g id="status-bar" fill="#000">
+          <text x="56" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+          <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+          <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+        </g>
+
+        <!-- header: 14pt horizontal, 10pt vertical. The headline says where in
+             the flow you are; the sheet has no title bar to repeat. -->
+        <g id="header">
+          <g data-symbol="arrow.down.circle" transform="translate(29,80)">
+            <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+            <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <text x="44" y="78" font-size="17" class="b" fill="#000">Choose a device</text>
+          <text x="44" y="93" font-size="12" fill="#6D6D72">On this network</text>
+          <!-- a sheet has no title bar, so it carries its own way out -->
+          <g data-symbol="xmark.circle.fill" transform="translate(369,80)">
+            <circle cx="0" cy="0" r="10" fill="#8A8A8E" fill-opacity="0.45"/>
+            <path d="M-3.6 -3.6 L3.6 3.6 M3.6 -3.6 L-3.6 3.6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <line x1="0" y1="104" x2="393" y2="104" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <!-- one row per discovered device; 14pt inset, 8pt corner, 6pt gaps -->
+        <g id="device-rows">
+          <g id="row-1">
+            <rect x="14" y="118" width="365" height="50" rx="8" fill="#FFFFFF"/>
+            <g data-symbol="ipad" transform="translate(32,143)">
+              <rect x="-6.5" y="-8.5" width="13" height="17" rx="2" fill="none" stroke="#8A8A8E" stroke-width="1.4"/>
+            </g>
+            <text x="50" y="139" font-size="16" fill="#000">Steven’s iPad</text>
+            <text x="50" y="155" font-size="11.5" fill="#6D6D72">iPad · 12 projects · Wi-Fi</text>
+            <path d="M362 137 l5 6 -5 6" stroke="#C6C6CB" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <g id="row-2">
+            <rect x="14" y="174" width="365" height="50" rx="8" fill="#FFFFFF"/>
+            <g data-symbol="iphone" transform="translate(32,199)">
+              <rect x="-5" y="-8.5" width="10" height="17" rx="2" fill="none" stroke="#8A8A8E" stroke-width="1.4"/>
+              <path d="M-1.6 -6.4 h3.2" stroke="#8A8A8E" stroke-width="1.2" stroke-linecap="round"/>
+            </g>
+            <text x="50" y="195" font-size="16" fill="#000">Steven’s iPhone</text>
+            <text x="50" y="211" font-size="11.5" fill="#6D6D72">iPhone · 293 projects</text>
+            <path d="M362 193 l5 6 -5 6" stroke="#C6C6CB" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+        </g>
+
+        <!-- the search never stops: the same loop that heals a refused
+             permission also covers a Wi-Fi change, so this line stays up while
+             devices are already listed -->
+        <g id="still-looking">
+          <g transform="translate(22,244)" stroke="#8A8A90" stroke-width="1.6" fill="none" data-symbol="ProgressView">
+            <path d="M0 -7 a7 7 0 0 1 6.1 3.5" stroke-linecap="round"/>
+            <path d="M6.1 3.5 a7 7 0 0 1 -12.2 0" stroke-linecap="round" stroke-opacity="0.35"/>
+            <path d="M-6.1 3.5 a7 7 0 0 1 6.1 -10.5" stroke-linecap="round" stroke-opacity="0.6"/>
+          </g>
+          <text x="38" y="249" font-size="15" fill="#000">Looking for devices…</text>
+          <text x="14" y="270" font-size="12" fill="#6D6D72">Open LetsLapse on the other device, go to Projects, and</text>
+          <text x="14" y="285" font-size="12" fill="#6D6D72">turn on sharing in Settings ▸ Advanced.</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Import from device · browsing · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectTransferImportView.swift — permission-refused state desc-only</text>
+</svg>

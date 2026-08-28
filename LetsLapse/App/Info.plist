@@ -42,6 +42,10 @@
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_letslapse-remote._tcp</string>
+		<!-- Serving the library to another device. A separate service from the
+		     camera remote on purpose: different lifetime, different grant, and
+		     a client browsing for one must never find the other. -->
+		<string>_letslapse-xfer._tcp</string>
 	</array>
 
 	<!-- Export compliance, answered in the binary so every TestFlight upload

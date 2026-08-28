@@ -58,6 +58,17 @@ struct CreateView: View {
     @Binding var captureIntent: CaptureIntent
     @State private var isImporting = false
     @State private var importingProject = false
+    /// "Import a LetsLapse project…" asks where from before it does anything —
+    /// a `.lapse` file, or straight off another device over the network. Both
+    /// answers are "import a project", so they belong behind one row rather
+    /// than as two entries that would have to explain the difference in their
+    /// titles.
+    @State private var choosingImportSource = false
+    #if os(iOS)
+    @State private var showDeviceImport = false
+    #else
+    @Environment(\.openWindow) private var openWindow
+    #endif
     #if os(iOS)
     @State private var videoItem: PhotosPickerItem?
     @State private var photoItems: [PhotosPickerItem] = []
@@ -139,9 +150,19 @@ struct CreateView: View {
         #endif
         #if DEBUG
         .onAppear {
-            if ProcessInfo.processInfo.environment["LL_CAPTURE"] == "1" {
+            let environment = ProcessInfo.processInfo.environment
+            if environment["LL_CAPTURE"] == "1" {
                 showCapture = true
             }
+            #if os(iOS)
+            // `LL_TRANSFER` — the device-import sheet, which is otherwise two
+            // taps into Create and so unreachable from a headless run. On
+            // macOS the same variable opens the window from `LetsLapseApp`;
+            // here it has to be the screen that owns the sheet.
+            if let hook = environment["LL_TRANSFER"], hook != "0" {
+                showDeviceImport = true
+            }
+            #endif
         }
         #endif
         .capturePresentation(isPresented: $showCapture, intent: captureIntent)
@@ -161,6 +182,10 @@ struct CreateView: View {
             if case .success(let url) = result {
                 model.openArchive(at: url)
             }
+        }
+        .sheet(isPresented: $showDeviceImport) {
+            ProjectTransferImportView()
+                .environmentObject(model)
         }
         #else
         .fileImporter(isPresented: $importingVideo, allowedContentTypes: Self.videoContentTypes) { result in
@@ -231,7 +256,7 @@ struct CreateView: View {
 
     private var importProjectRow: some View {
         Button {
-            importingProject = true
+            choosingImportSource = true
         } label: {
             SourceRow(
                 icon: "shippingbox",
@@ -240,6 +265,28 @@ struct CreateView: View {
             )
         }
         .buttonStyle(.plain)
+        .confirmationDialog(
+            "Import a LetsLapse project",
+            isPresented: $choosingImportSource,
+            titleVisibility: .visible
+        ) {
+            Button("From a file…") { importingProject = true }
+            Button("From another device…") { startDeviceImport() }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A .lapse archive from Files or a disk, or a project copied straight off another device on this network.")
+        }
+    }
+
+    /// The network import. A sheet on iOS and iPadOS, which have no windows;
+    /// the Mac's own `Window` scene (also behind File ▸ Import from Device…),
+    /// which can sit beside the library while it runs.
+    private func startDeviceImport() {
+        #if os(iOS)
+        showDeviceImport = true
+        #else
+        openWindow(id: "import")
+        #endif
     }
 
     @ViewBuilder

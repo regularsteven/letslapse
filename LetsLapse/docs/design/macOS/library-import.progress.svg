@@ -1,0 +1,54 @@
+<svg viewBox="0 0 500 590" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Import from Device · copying · 460×520</title>
+  <desc>Mirrors Remote/ImportWindow.swift (transferring phase) over Shared/ProjectTransferClient.swift (PTLink) and Shared/ProjectTransferServer.swift (the send pump). The payload is FILE BY FILE, not an archive stream: `project.json` (generated in memory on the serving device, so it never touches its disk) then `source/`, `blends/` and `notes/` in name order, each announced by a control frame and followed by up to 4 MB data frames. Name order is not cosmetic — it makes the pull prefix-shaped, so a percentage means the same thing after a reconnect as before. Both numbers are uncompressed, and nothing on this path is compressed, so unlike App/ProjectImport.swift's bar — whose denominator is an archive's compressed size, hence "of about" — this one is simply the truth. The file line is the frame currently open, truncated from the HEAD so the leaf name stays readable. Bytes land in `&lt;StorageRoot&gt;/Incoming/&lt;source project id&gt;/` as `&lt;name&gt;.part` and are renamed on completion: the rename IS the commit, so a truncated file can never be mistaken for a whole one. That folder is inside the library root, not in temporaryDirectory — ImportStaging sweeps anything untouched for 15 minutes, which is right for an archive being unpacked and fatal for 12 GB somebody is half-way through rescuing off a phone — and being on the same volume as the library is what makes the install a rename rather than a copy, holding peak disk at 1× the project instead of 2×. "Incoming" is in StorageRoot.libraryItemNames so a storage-location change carries it. Cancel sends a cancel frame; the server stops between chunks, the link discards its staged tree on its own queue, and the connection stays usable for a second attempt. The line about nothing joining the library until every file lands is literally true and is the reason cancelling is never destructive. Backpressure is the detail that decides whether this ships: disk reads far outrun a phone's Wi-Fi and NWConnection.send queues without bound, so the pump blocks on a counting semaphore capped at four in-flight chunks. TERMINAL STATES: library-import.done.svg; failure (desc-only) is an orange exclamationmark.triangle.fill, "Couldn't import", the server's sentence verbatim, and a "Try again" default button. Verified 2026-08-27 end to end — a project moved simulator→Mac and every file matched the manifest byte for byte (tools/transfer_probe.swift reports the same check headlessly).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="460" height="520" rx="11"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="460" height="520" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="460" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="250" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Import from Device</text>
+    </g>
+
+    <!-- Back is withheld while a pull is running: the only ways out are Cancel
+         and closing the window, both of which tidy up after themselves -->
+    <g id="header">
+      <g data-symbol="arrow.down.circle" transform="translate(41,72)">
+        <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="54" y="70" font-size="13" class="b" fill="#000">iPhone 17 Pro</text>
+      <text x="54" y="84" font-size="10" fill="#6D6D72">Copying</text>
+      <line x1="20" y1="95" x2="480" y2="95" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+
+    <g id="progress">
+      <text x="34" y="122" font-size="13" class="b" fill="#000">Copying project</text>
+
+      <!-- hand-drawn 6pt capsule: the system linear ProgressView fills in
+           control grey on macOS whatever the tint says -->
+      <rect x="34" y="140" width="432" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
+      <rect x="34" y="140" width="182" height="6" rx="3" fill="#C36A00"/>
+
+      <text x="34" y="166" font-size="12" class="mono" fill="#6D6D72">5,23 GB of 12,4 GB</text>
+      <text x="34" y="184" font-size="10" class="mono" fill="#000" fill-opacity="0.35">source/frame-00487.dng</text>
+
+      <text x="34" y="212" font-size="10" fill="#6D6D72">Nothing joins your library until every file has landed, so stopping here</text>
+      <text x="34" y="225" font-size="10" fill="#6D6D72">leaves no half-project behind.</text>
+    </g>
+
+    <g id="footer">
+      <rect x="404" y="496" width="62" height="22" rx="5" fill="#FBFBFD" stroke="#000" stroke-opacity="0.14"/>
+      <text x="435" y="511" font-size="12" text-anchor="middle" fill="#000">Cancel</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="460" height="520" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="250" y="562" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Import from Device · copying · 460×520 pt window</text>
+  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift — installing / failed desc-only; success in library-import.done.svg</text>
+</svg>

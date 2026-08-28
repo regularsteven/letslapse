@@ -29,15 +29,22 @@ enum CaptureRemotePairing {
         return digest.prefix(6).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static let salt = Data("com.regularsteven.letslapse.remote.v1".utf8)
+    /// The camera remote's salt, and the default everywhere — every existing
+    /// call site keeps its wire behaviour bit-identical.
+    static let captureRemoteSalt = "com.regularsteven.letslapse.remote.v1"
     private static let info = Data("tls-psk".utf8)
 
     /// HKDF-SHA256 over the code. Both ends derive this independently; it never
     /// crosses the network.
-    static func derivedKey(code: String) -> Data {
+    ///
+    /// `salt` scopes the key to one purpose. A second channel on the same LAN
+    /// — the library transfer — derives a different PSK from the same six
+    /// digits, so a code minted for one cannot be replayed against the other
+    /// even if it is read off a screen and typed into the wrong field.
+    static func derivedKey(code: String, salt: String = captureRemoteSalt) -> Data {
         let key = HKDF<SHA256>.deriveKey(
             inputKeyMaterial: SymmetricKey(data: Data(code.utf8)),
-            salt: salt,
+            salt: Data(salt.utf8),
             info: info,
             outputByteCount: 32)
         return key.withUnsafeBytes { Data($0) }
@@ -51,10 +58,19 @@ enum CaptureRemotePairing {
     /// on the first read rather than as a clean handshake failure, so callers
     /// must treat a read error during setup as "wrong code", not "network
     /// glitch".
-    static func parameters(code: String) -> NWParameters {
+    /// `salt` and `identity` scope the handshake to a purpose — see
+    /// `derivedKey`. `bulkTransfer` swaps the control link's twitchy keepalive
+    /// for one a 40-minute file pull over congested 2.4 GHz can survive, and
+    /// leaves Nagle on (bulk chunks fill segments by themselves).
+    static func parameters(
+        code: String,
+        salt: String = captureRemoteSalt,
+        identity: String = "letslapse-remote",
+        bulkTransfer: Bool = false
+    ) -> NWParameters {
         let tls = NWProtocolTLS.Options()
-        let keyData = derivedKey(code: code)
-        let identityData = Data("letslapse-remote".utf8)
+        let keyData = derivedKey(code: code, salt: salt)
+        let identityData = Data(identity.utf8)
         let keyDD = keyData.withUnsafeBytes { DispatchData(bytes: $0) }
         let identityDD = identityData.withUnsafeBytes { DispatchData(bytes: $0) }
         sec_protocol_options_add_pre_shared_key(
@@ -68,14 +84,22 @@ enum CaptureRemotePairing {
             tls.securityProtocolOptions, .TLSv12)
 
         let tcp = NWProtocolTCP.Options()
-        // A window-mounted iPad that drops off Wi-Fi should surface as
-        // unreachable promptly, rather than leaving the Mac showing a live
-        // link to nothing.
         tcp.enableKeepalive = true
-        tcp.keepaliveIdle = 5
-        tcp.keepaliveCount = 2
-        tcp.keepaliveInterval = 2
-        tcp.noDelay = true
+        if bulkTransfer {
+            // Right for a control link, wrong for bulk: 5/2/2 tears down a
+            // healthy transfer the moment a congested network stalls it.
+            tcp.keepaliveIdle = 20
+            tcp.keepaliveCount = 3
+            tcp.keepaliveInterval = 5
+        } else {
+            // A window-mounted iPad that drops off Wi-Fi should surface as
+            // unreachable promptly, rather than leaving the Mac showing a live
+            // link to nothing.
+            tcp.keepaliveIdle = 5
+            tcp.keepaliveCount = 2
+            tcp.keepaliveInterval = 2
+            tcp.noDelay = true
+        }
 
         return NWParameters(tls: tls, tcp: tcp)
     }

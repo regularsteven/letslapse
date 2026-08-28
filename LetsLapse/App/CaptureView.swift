@@ -784,6 +784,12 @@ struct CaptureView: View {
     // MARK: - Lifecycle
 
     private func configureOnAppear() {
+        // The capture bracket, and the same cross-object convention the watch
+        // command handler uses below: `CameraController` holds no reference to
+        // the model, and a shoot's real extent is exactly as long as this
+        // screen is up. A project transfer refuses to start while this is
+        // registered, and one already in flight aborts — a shoot always wins.
+        model.beginActivity(.capture)
         // Count the mode the screen opened in as last-used: effect cards set
         // it explicitly, and the plain entry resolved to the remembered mode
         // anyway, so re-saving is a no-op there.
@@ -1254,6 +1260,7 @@ struct CaptureView: View {
     }
 
     private func cleanUpOnDisappear() {
+        model.endActivity(.capture)
         // Standby's alarms belong to this screen. The schedule itself is
         // deliberately left standing — closing the capture screen is not
         // cancelling the shoot, and re-opening it re-arms from the stored

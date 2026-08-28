@@ -14,8 +14,112 @@ live inline.
 ### Import a project from another device (local network)
 
 **Detail:** [project-transfer-plan.md](project-transfer-plan.md) ·
-**Raised:** 2026-08-27 · **Planned, not started** · *revised 2026-08-27 —
-payload strategy, resume, AirDrop/USB*
+**Raised:** 2026-08-27 · **Phases 1–3 landed, all uncommitted** ·
+*revised 2026-08-27 — payload strategy, resume, AirDrop/USB*
+
+**Phase 3 landed 2026-08-28 — every direction now works.** `ProjectTransferServer`
+widened to `#if !os(watchOS)`, so a Mac offers its library through the same
+listener, the same chip in the same Projects header, and the same Settings ▸
+Advanced opt-in. Device identity is `Host.current().localizedName` on macOS
+(`UIDevice` on iOS) and the model string picks the picker's glyph.
+
+**The one genuinely different piece is the stand-down.** iOS gets one free —
+the app backgrounds and the listener stops — but a Mac scene never backgrounds,
+so an armed Mac would advertise its whole library until the app quit. The rule
+is `ProjectTransferServer.idleTimeout`: 15 minutes with nobody connected and it
+stops itself, the clock reset by anything meaning a human is still present
+(arming, a peer connecting, a transfer finishing). It applies on iOS too — a
+good second rule there, just not the only one.
+
+**Verified 2026-08-28, iPad Air M3 ← this Mac:** "Blended 10 long" — 5.91 GB,
+1,588 source files plus its blended clip — installed into the iPad's library.
+Peak serving footprint 223 MB, ack window bounded at 33 MB.
+
+**Serving throughput on a Mac is bounded by wherever the library lives**, and
+this was demonstrated the hard way: on the old USB drive (**692 KB/s raw**) the
+pump managed 0.7 MB/s with its window sitting at 1–6 MB of 32 — starved by disk,
+not throttled by protocol. On the SSD that replaced it the window runs full
+(27–33 MB) and the bottleneck moves to the receiving device's Wi-Fi. Worth
+knowing before anyone reads a slow Mac→iOS transfer as a network problem: check
+the window depth first — low means disk, full means wire.
+
+**Phase 2 landed 2026-08-28.** The import client is now every platform that has
+a library, not just the Mac: `ProjectTransferClient` widened to
+`#if !os(watchOS)`, and the whole flow moved into one shared
+`App/ProjectTransferImportView.swift` that macOS hosts in its `Window` and iOS
+and iPadOS present as a sheet. Create's **"Import a LetsLapse project…"** row is
+now the single door on both platforms — it asks *From a file…* or *From another
+device…*, which keeps `.lapse` import where it has always been and gives the
+network path a home that isn't a menu bar. Also in: a free-space refusal checked
+before a byte moves (and flagged on the project row itself, which matters far
+more on a 128 GB phone than on a Mac), and `LL_TRANSFER` as an iOS launch hook.
+
+**Verified 2026-08-28, iPad Air M3 ← iPhone 12 Pro over Wi-Fi:** "Long psycho
+i12", 7.33 GB across 2,869 files, installed into the iPad's library with
+`Incoming/` swept clean afterwards; the serving phone's footprint peaked at
+78 MB and the ack window never exceeded 28 MB against its 32 MB bound.
+Throughput ranged 14 MB/s down to 1 MB/s and back as Wi-Fi and the 12 Pro's
+thermals varied — flat memory throughout, so that is the wire, not the engine.
+
+**Mac→iOS is Phase 3 above, and now works.**
+
+**What Phase 1 shipped**, verified end to end (a project moved simulator→Mac
+and every file matched the manifest byte for byte, and again through the real
+Import window): `AppModel.LibraryActivity` and all its registration sites ·
+`Shared/ProjectTransferProtocol.swift` (typed 1+4-byte framing, control /
+data / cancel) · `ProjectTransferServer` (iOS) · `ProjectTransferClient` +
+`Remote/ImportWindow.swift` (macOS) · `"Incoming"` in `libraryItemNames` ·
+`ProjectArchive.transferableSubfolders` · the `importProject` split into
+`installStagedProject` · `tools/transfer_probe.swift` · the SVG mirrors.
+
+**Two deliberate departures from this plan, both narrowing:** the service is
+`_letslapse-xfer._tcp` and the salt `…transfer.v1` (the plan says
+`_letslapse-library._tcp` / `…library.v1`); and **`requestTransfer` carries no
+`have` set, so there is no resume** — a dropped pull discards its partial tree
+rather than stranding gigabytes nobody can spend. Resume is §4 and needs the
+vocabulary to grow the `have` list; `Incoming/` already has the right shape,
+the right home and the 24-hour launch sweep for it.
+
+**Device-verified 2026-08-27 on the iPhone 16 Pro over USB:** an 11 GB project
+(612 files) moved byte-for-byte in 267 s at 41 MB/s with the app's peak
+footprint at **90 MB**; a client killed at 25% aborts the server in 0.7 s and
+leaves it serving normally; 293 projects list in ~0.4 s; the real Mac Import
+window completed a phone→Mac import end to end. The device run found three
+bugs a simulator structurally cannot (§3's semaphore recipe doesn't bound
+anything, `FileHandle.read`'s autorelease made memory track bytes read 1:1, and
+a cabled device's two-interface race broke newest-wins) — all fixed, all
+written up in the plan doc's header.
+
+**macOS Local Network permission, learned the hard way 2026-08-27.** It is
+granted per COPY of the app, keyed on the binary rather than the bundle id, so
+every build from a new location becomes a new grantee and the Settings list
+fills with identical LetsLapse rows — all switched on, none of them the one
+running. Two consequences now handled in code: `NWBrowser` never recovers from
+`.failed`, so the Import window rebuilds it every 2 s and picks up a
+newly-granted permission on its own (it used to need a close and reopen); and
+the refusal screen names the running copy's path, offers Show in Finder, and
+opens Settings via the `privacy-localnetwork` anchor. **`tccutil reset
+LocalNetwork` does nothing** — Local Network is not a TCC service on macOS
+(`kTCCServiceLocalNetwork` is absent from `tccd`), so there is no CLI reset and
+stale rows can only be left to age out. Running one copy from one fixed
+location is what stops them accumulating.
+
+**Thumbnail coverage — fixed 2026-08-28.** Tiles no longer ride with the list.
+Each row asks for its own as it appears (`requestThumbnail` → `PTThumbnailReply`)
+and the serving device GENERATES one when its cache has none, persisting it
+under the same key the local grids read — so it costs one decode ever, and the
+local Gallery gets it for free. That is the §2 design, and it fixes the real
+problem: the old eager path was capped not by its 3 MB budget but by coverage,
+because `DiskThumbnailStore` only holds a tile for an asset some grid has
+actually drawn. Measured on this Mac: **79 of 79 rows drawn**, 1.5 MB of tiles,
+10.3 s on the first pass and instant on the second; visually confirmed on the
+Mac's picker against a serving iPad, including three projects that had arrived
+by transfer minutes earlier and had never been drawn locally.
+
+**Still owed:** iPad→Mac (every Mac-side run so far has been from an iPhone).
+Settings ▸ Incomplete Transfers is not built: with no resume there is nothing
+to resume, and the sweep reclaims the disk. Resume itself (the `have` set) is
+the remaining §4 work.
 
 Move a ~1–20 GB project device-to-device over the local network with no
 intermediate file on either side: iPhone/iPad serve behind a six-digit code,
@@ -48,9 +152,12 @@ listening on all interfaces means a cabled iPhone is found by the Mac's browser
 with no protocol change — the only work is a picker label, and what interface
 type a tethered device reports is a hardware check, not an assumption.
 
-Phased iOS-serve → Mac-import first, iOS import second, Mac serve last. UI is
-unstarted and needs the design-first/app-first question asked before any of it
-is drawn.
+Phased iOS-serve → Mac-import (**done**), iOS import (**done**), Mac serve
+(**done**). Both phases' UI was built app-first at Steven's direction and mirrored
+in the same unit of work: `iOS/projects.sharing.portrait.svg`,
+`iOS/settings.advanced.portrait.svg`, `iOS/create-home.import-source.portrait.svg`,
+`iOS/library-import.browse|progress.portrait.svg` and the five
+`macOS/library-import.*.svg` files.
 
 ### Holy Grail ramp actuation: bench verification on both pipelines
 

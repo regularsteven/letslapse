@@ -654,6 +654,74 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - Library activity
+
+    /// What the app is doing that a *second* consumer of the library needs to
+    /// know about.
+    ///
+    /// There was no flag to read. Capture lived on the capture screen, blending
+    /// was `stage == .processing`, and archive export was `@State` inside two
+    /// detail views — three of them invisible to anything outside the screen
+    /// that owned them. The project-transfer server has to answer "is it safe to
+    /// read 20 GB off this disk right now?" before it says yes to a pull, and
+    /// that question has exactly one honest answer only if every long job
+    /// registers in one place.
+    ///
+    /// Registration is a bracket and nothing more: no job's behaviour changes,
+    /// and nothing reads this except the server (and, in time, the browse row
+    /// that greys a busy device before anybody pairs with it).
+    enum LibraryActivity: Hashable {
+        case capture
+        case blending
+        /// One per in-flight export, keyed by project — two detail screens can
+        /// be exporting at once and each has to end its own.
+        case exportingArchive(UUID)
+        case importingArchive
+        /// A transfer being served right now. Registered so a render or an
+        /// export started on this device can see it: reading 20 GB off the disk
+        /// under a blend makes both look broken.
+        case servingTransfer
+
+        /// What the other device is told. Sentences, because the client shows
+        /// this verbatim and "busy" on its own explains nothing.
+        var sentence: String {
+            switch self {
+            case .capture: return "That device is shooting right now."
+            case .blending: return "That device is rendering a blend."
+            case .exportingArchive: return "That device is exporting a project."
+            case .importingArchive: return "That device is importing a project."
+            case .servingTransfer: return "That device is already sending a project."
+            }
+        }
+    }
+
+    @Published private(set) var activeLibraryActivities: Set<LibraryActivity> = []
+
+    func beginActivity(_ activity: LibraryActivity) {
+        activeLibraryActivities.insert(activity)
+    }
+
+    func endActivity(_ activity: LibraryActivity) {
+        activeLibraryActivities.remove(activity)
+    }
+
+    var isLibraryBusy: Bool { !activeLibraryActivities.isEmpty }
+
+    /// Why a transfer can't start, or nil when one can. A transfer already in
+    /// flight is not a reason on its own — the server has its own one-at-a-time
+    /// rule and a better sentence for it.
+    var transferBlockReason: String? {
+        let blocking = activeLibraryActivities.subtracting([.servingTransfer])
+        guard !blocking.isEmpty else { return nil }
+        // Ordered rather than `first`: a Set has no order, and the sentence the
+        // human reads shouldn't depend on hash seeding. Capture wins — it is
+        // the one job losing which costs a shoot.
+        if blocking.contains(.capture) { return LibraryActivity.capture.sentence }
+        if blocking.contains(.blending) { return LibraryActivity.blending.sentence }
+        if blocking.contains(.importingArchive) { return LibraryActivity.importingArchive.sentence }
+        return blocking.first?.sentence
+    }
+
     @Published var stage: Stage = .home
     @Published var source: Source?
     @Published var errorMessage: String?
@@ -3864,7 +3932,12 @@ final class AppModel: ObservableObject {
         // The reframe, the crop and the grade are all tail passes over the
         // finished clip; the plan reserves its tail band when any will run.
         let hasTailPass = willBakeGrade || cropCanvas != nil || reframeTrack != nil
+        beginActivity(.blending)
         blendTask = Task { [weak self] in
+            // Every exit from this task — success, cancel, throw — passes here,
+            // which is the only way a bracket around a job with this many
+            // failure paths stays honest.
+            defer { self?.endActivity(.blending) }
             do {
                 guard let self else { return }
                 var output: ProcessingOutput
@@ -4216,7 +4289,9 @@ final class AppModel: ObservableObject {
 
         let captureID = capture.id
         let parameters = currentBlendParameters()
+        beginActivity(.blending)
         blendTask = Task { [weak self] in
+            defer { self?.endActivity(.blending) }
             do {
                 guard let self else { return }
                 // Fold every captured frame into one long exposure — the same
@@ -6441,6 +6516,11 @@ final class AppModel: ObservableObject {
     /// inside `importProject`, not abandoned.
     private var duplicateImportDecision: CheckedContinuation<Bool, Never>?
 
+    /// True while a received transfer is being installed. Together with
+    /// `archiveImport != nil` this is the one-install-at-a-time gate — two
+    /// writers of `library.json` is the failure worth spending a flag on.
+    private var isInstallingIncoming = false
+
     enum ExportError: LocalizedError {
         case insufficientStorage(available: Int64, needed: Int64)
 
@@ -6583,6 +6663,8 @@ final class AppModel: ObservableObject {
         defer {
             if scoped { pickedURL.stopAccessingSecurityScopedResource() }
         }
+        beginActivity(.importingArchive)
+        defer { endActivity(.importingArchive) }
         let staging = ImportStaging.makeURL()
         defer { try? FileManager.default.removeItem(at: staging) }
 
@@ -6635,82 +6717,11 @@ final class AppModel: ObservableObject {
             }.value
             archiveImport?.phase = .installing
 
-            let manifestURL = staging.appendingPathComponent("project.json")
-            guard FileManager.default.fileExists(atPath: manifestURL.path) else {
-                throw ProjectArchiveError.notAProjectArchive
-            }
-            let decoder = JSONDecoder()
-            decoder.dateDecodingStrategy = .iso8601
-            let manifest = try decoder.decode(ProjectArchiveManifest.self, from: Data(contentsOf: manifestURL))
-            guard manifest.formatVersion == 1 else {
-                throw ProjectArchiveError.unsupportedVersion(manifest.formatVersion)
-            }
-
-            // Asked here, after unpacking, rather than before: the id that
-            // identifies the archive lives in `project.json` *inside* it, and
-            // finding that without a full pass would mean decompressing the
-            // whole stream a second time on every import to spare the rare
-            // re-import. The staged tree waits on disk while the question is
-            // open, and is deleted with the rest if the answer is no.
-            let originID = manifest.capture.id
-            if let existing = existingImport(of: originID) {
-                archiveImport?.phase = .duplicate(existingName: existing.name ?? existing.originalName)
-                let importAgain = await withCheckedContinuation { continuation in
-                    duplicateImportDecision = continuation
-                }
-                guard importAgain else {
-                    finishArchiveImport()
-                    show(existing)
-                    return
-                }
-                archiveImport?.phase = .installing
-            }
-
-            var capture = manifest.capture
-            let newID = UUID()
-            capture.id = newID
-            capture.importedFromID = originID
-            let destination = captureFolderURL(for: newID)
-            try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
-            // Anything not named here is silently dropped at import — a new
-            // project subfolder must join this list or it doesn't travel.
-            for subfolder in ["source", "blends", "notes"] {
-                let extracted = staging.appendingPathComponent(subfolder)
-                if FileManager.default.fileExists(atPath: extracted.path) {
-                    try FileManager.default.moveItem(at: extracted, to: destination.appendingPathComponent(subfolder))
-                }
-            }
-
-            var importedBlends: [BlendProject] = []
-            for blendEntry in manifest.blends {
-                var blend = blendEntry
-                let extractedFile = destination.appendingPathComponent(blend.outputFileName)
-                guard FileManager.default.fileExists(atPath: extractedFile.path) else { continue }
-                let newBlendID = UUID()
-                let fileExtension = (blend.outputFileName as NSString).pathExtension
-                let newFileName = "blends/\(newBlendID.uuidString).\(fileExtension)"
-                do {
-                    try FileManager.default.moveItem(at: extractedFile, to: destination.appendingPathComponent(newFileName))
-                } catch {
-                    continue
-                }
-                blend.id = newBlendID
-                blend.captureID = newID
-                blend.outputFileName = newFileName
-                importedBlends.append(blend)
-            }
-
-            captures.insert(capture, at: 0)
-            blends.append(contentsOf: importedBlends)
-            try persistLibrary()
-            // A stills project from a device that predates their probing
-            // arrives without its dimensions/span — fill them now rather than
-            // waiting for the next launch's catch-up pass.
-            if capture.kind == .photos, capture.sourceWidth == nil {
-                let importedID = capture.id
-                Task { [weak self] in
-                    await self?.refreshStillsMetadata(for: importedID)
-                }
+            guard let capture = try await installStagedProject(at: staging) else {
+                // The human chose the copy they already have; `install` has
+                // opened it for them.
+                finishArchiveImport()
+                return
             }
             finishArchiveImport()
             // Land on the project itself rather than opening a blend flow over
@@ -6726,6 +6737,267 @@ final class AppModel: ObservableObject {
             // double-click import can happen with no LetsLapse window in front
             // of the human, and a banner on the Create screen would go unread.
             archiveImport?.phase = .failed(error.localizedDescription)
+        }
+    }
+
+    /// Turns an unpacked project tree into a project in this library.
+    ///
+    /// Source-agnostic on purpose: the tree can have come out of a `.lapse`
+    /// archive or off the network file by file, and from here on the two are
+    /// the same job — read the manifest, ask the duplicate question, mint fresh
+    /// UUIDs (folder names and lookups key on them, so reusing the originals
+    /// would collide with re-imports or with the source device's own library),
+    /// move the three subfolders, re-key the blends, persist.
+    ///
+    /// `staging` must sit on the same volume as the library: every move here is
+    /// a rename, which is what keeps peak disk at 1× the project rather than 2×.
+    ///
+    /// Returns nil when the human answered the duplicate question with "open
+    /// the one I have" — that project has been opened for them and nothing was
+    /// added. `originalCaptureID` overrides the id the tree is deduplicated
+    /// against; nil takes it from the manifest, which is what an archive does.
+    @discardableResult
+    private func installStagedProject(
+        at staging: URL,
+        originalCaptureID: UUID? = nil
+    ) async throws -> CaptureProject? {
+        let manifestURL = staging.appendingPathComponent("project.json")
+        guard FileManager.default.fileExists(atPath: manifestURL.path) else {
+            throw ProjectArchiveError.notAProjectArchive
+        }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let manifest = try decoder.decode(ProjectArchiveManifest.self, from: Data(contentsOf: manifestURL))
+        guard manifest.formatVersion == 1 else {
+            throw ProjectArchiveError.unsupportedVersion(manifest.formatVersion)
+        }
+
+        // Asked here, after the tree has landed, rather than before: the id
+        // that identifies an archive lives in `project.json` *inside* it, and
+        // finding that without a full pass would mean decompressing the whole
+        // stream a second time on every import to spare the rare re-import. The
+        // staged tree waits on disk while the question is open, and is deleted
+        // with the rest if the answer is no.
+        let originID = originalCaptureID ?? manifest.capture.id
+        if let existing = existingImport(of: originID) {
+            archiveImport?.phase = .duplicate(existingName: existing.name ?? existing.originalName)
+            let importAgain = await withCheckedContinuation { continuation in
+                duplicateImportDecision = continuation
+            }
+            guard importAgain else {
+                show(existing)
+                return nil
+            }
+            archiveImport?.phase = .installing
+        }
+
+        var capture = manifest.capture
+        let newID = UUID()
+        capture.id = newID
+        capture.importedFromID = originID
+        let destination = captureFolderURL(for: newID)
+        try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
+        // Anything not named here is silently dropped at import — a new
+        // project subfolder must join this list or it doesn't travel. The
+        // transfer's file enumerator reads the SAME constant, so a subfolder
+        // that misses it doesn't waste an hour on the wire either.
+        for subfolder in ProjectArchive.transferableSubfolders {
+            let extracted = staging.appendingPathComponent(subfolder)
+            if FileManager.default.fileExists(atPath: extracted.path) {
+                try FileManager.default.moveItem(at: extracted, to: destination.appendingPathComponent(subfolder))
+            }
+        }
+
+        var importedBlends: [BlendProject] = []
+        for blendEntry in manifest.blends {
+            var blend = blendEntry
+            let extractedFile = destination.appendingPathComponent(blend.outputFileName)
+            guard FileManager.default.fileExists(atPath: extractedFile.path) else { continue }
+            let newBlendID = UUID()
+            let fileExtension = (blend.outputFileName as NSString).pathExtension
+            let newFileName = "blends/\(newBlendID.uuidString).\(fileExtension)"
+            do {
+                try FileManager.default.moveItem(at: extractedFile, to: destination.appendingPathComponent(newFileName))
+            } catch {
+                continue
+            }
+            blend.id = newBlendID
+            blend.captureID = newID
+            blend.outputFileName = newFileName
+            importedBlends.append(blend)
+        }
+
+        captures.insert(capture, at: 0)
+        blends.append(contentsOf: importedBlends)
+        try persistLibrary()
+        // A stills project from a device that predates their probing arrives
+        // without its dimensions/span — fill them now rather than waiting for
+        // the next launch's catch-up pass.
+        if capture.kind == .photos, capture.sourceWidth == nil {
+            let importedID = capture.id
+            Task { [weak self] in
+                await self?.refreshStillsMetadata(for: importedID)
+            }
+        }
+        return capture
+    }
+
+    // MARK: - Project transfer
+
+    /// What the transfer server offers, one row per project in the library.
+    ///
+    /// Sizing 40 projects walks 40 directory trees, so it happens off the main
+    /// actor and the caller caches the result. Thumbnails are read straight out
+    /// of the disk cache and are nil when it holds none: on iOS a captured DNG
+    /// has no preview IFD, so generating one costs a full RAW decode, and a
+    /// picker row is not worth that on the phone that is about to send 16 GB.
+    func projectTransferCatalogue() async -> [PTProjectInfo] {
+        let rows: [(capture: CaptureProject, folder: URL)] = captures.map {
+            ($0, captureFolderURL(for: $0.id))
+        }
+        return await Task.detached(priority: .utility) { () -> [PTProjectInfo] in
+            rows.map { row in
+                PTProjectInfo(
+                    captureID: row.capture.id,
+                    name: row.capture.name ?? row.capture.originalName,
+                    createdAt: row.capture.createdAt,
+                    frameCount: row.capture.sourceMediaCount,
+                    totalBytes: AppModel.directorySize(row.folder))
+            }
+        }.value
+    }
+
+    /// One project's picker tile, for the row the other device is looking at.
+    ///
+    /// Generated if the disk cache has none — which, on a real library, is most
+    /// of them: `DiskThumbnailStore` only holds a tile for an asset some grid
+    /// has actually drawn, so a 293-project phone had 62. Doing this eagerly for
+    /// the whole catalogue was never an option (an iOS DNG has no preview IFD,
+    /// so each miss is a full RAW decode), but doing it for the handful of rows
+    /// on screen is exactly the bargain the Gallery already makes — and the
+    /// result is persisted, so the second look is free and the local grids get
+    /// it for nothing too.
+    func projectTransferThumbnail(for captureID: UUID) async -> Data? {
+        guard let capture = captures.first(where: { $0.id == captureID }),
+              let source = thumbnailURL(for: capture) else { return nil }
+        let kind: MediaKind = capture.kind == .video ? .video : .image
+        return await Task.detached(priority: .utility) { () -> Data? in
+            // Cached already? Hand it straight over, shrunk to tile size.
+            if let cached = DiskThumbnailStore.storedData(for: source, maxPixelSize: 320) {
+                return cached
+            }
+            guard let generated = ProjectThumbnailGenerator.thumbnail(for: source, kind: kind)
+            else { return nil }
+            // Persist under the same key the local grids read, so this decode
+            // is paid once for the whole app rather than once per request.
+            DiskThumbnailStore.write(generated, forKey: DiskThumbnailStore.key(for: source))
+            return DiskThumbnailStore.jpegData(from: generated, maxPixelSize: 320)
+        }.value
+    }
+
+    /// The folder holding a project's files, or nil when the library has no
+    /// such project — which is what a client asking for one deleted between the
+    /// list and the request gets told.
+    func projectTransferFolderURL(for captureID: UUID) -> URL? {
+        guard captures.contains(where: { $0.id == captureID }) else { return nil }
+        return captureFolderURL(for: captureID)
+    }
+
+    /// The `project.json` a receiving device installs from — the same manifest
+    /// `exportProject` writes into a `.lapse`, built in memory because on this
+    /// path it never touches the sending device's disk.
+    func projectTransferManifestData(for captureID: UUID) throws -> Data? {
+        guard let capture = captures.first(where: { $0.id == captureID }) else { return nil }
+        let manifest = ProjectArchiveManifest(capture: capture, blends: blends(for: capture))
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        return try encoder.encode(manifest)
+    }
+
+    /// Somewhere for an incoming project to land — cleared, not merged into.
+    ///
+    /// Phase 1's vocabulary carries no `have` set, so there is no way to tell a
+    /// whole file left by an earlier attempt from a stale one, and a stale file
+    /// that happened to match a size would install silently wrong. When resume
+    /// lands (the plan's §4) this becomes the reconciliation point.
+    @discardableResult
+    nonisolated static func stageIncoming(captureID: UUID) throws -> URL {
+        let url = StorageRoot.incomingURL(for: captureID)
+        try? FileManager.default.removeItem(at: url)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    /// Publishes a fully-received tree as a project and clears its staging
+    /// folder. Nothing reaches the library until every file has landed, so a
+    /// dropped transfer leaves a resumable partial rather than a broken project.
+    @discardableResult
+    func commitIncoming(captureID: UUID) async throws -> CaptureProject? {
+        // One install at a time. A `.lapse` double-clicked in Finder while a
+        // transfer finishes would otherwise have both writing `library.json`,
+        // and both showing their progress through the same sheet.
+        while archiveImport != nil || isInstallingIncoming {
+            try await Task.sleep(nanoseconds: 300_000_000)
+        }
+        isInstallingIncoming = true
+        defer { isInstallingIncoming = false }
+
+        let staging = StorageRoot.incomingURL(for: captureID)
+        beginActivity(.importingArchive)
+        defer { endActivity(.importingArchive) }
+        // Borrowing the archive sheet for the install phase: it is seconds of
+        // renames, and it is also where the duplicate question lives — a
+        // transfer of a project this library already holds has to ask the same
+        // question, with the same two answers.
+        let progress = ArchiveImport(
+            url: staging,
+            name: staging.lastPathComponent,
+            archiveBytes: 0)
+        archiveImport = progress
+        archiveImport?.phase = .installing
+        defer {
+            if archiveImport?.id == progress.id, archiveImport?.isFailed != true {
+                archiveImport = nil
+            }
+        }
+
+        let capture = try await installStagedProject(at: staging, originalCaptureID: captureID)
+        // Whatever the answer, the staging tree is done: install moved the
+        // subfolders out of it, and what is left is `project.json` and empties.
+        try? FileManager.default.removeItem(at: staging)
+        if let capture { show(capture) }
+        return capture
+    }
+
+    /// Drops an incoming tree without installing it, freeing its disk.
+    nonisolated static func discardIncoming(captureID: UUID) {
+        try? FileManager.default.removeItem(at: StorageRoot.incomingURL(for: captureID))
+    }
+
+    /// Interrupted transfers nobody came back for. Called at launch.
+    ///
+    /// 24 hours rather than immediately: a partial tree is the only thing that
+    /// makes a resume possible, and an app that deletes it on the next launch
+    /// turns "reconnect and carry on" back into "start the 16 GB again".
+    /// Deliberately conservative in the other direction too — a live transfer
+    /// touches its tree constantly, so anything a day old is nobody's.
+    nonisolated static func cleanStaleIncoming(olderThan age: TimeInterval = 24 * 60 * 60) {
+        DispatchQueue.global(qos: .utility).async {
+            let fileManager = FileManager.default
+            guard let entries = try? fileManager.contentsOfDirectory(
+                at: StorageRoot.incomingRootURL,
+                includingPropertiesForKeys: [.contentModificationDateKey, .isDirectoryKey])
+            else { return }
+            for entry in entries {
+                let values = try? entry.resourceValues(
+                    forKeys: [.contentModificationDateKey, .isDirectoryKey])
+                guard values?.isDirectory == true else { continue }
+                let modified = values?.contentModificationDate ?? .distantPast
+                guard Date().timeIntervalSince(modified) > age else { continue }
+                LLog("transfer: sweeping abandoned incoming \(entry.lastPathComponent)")
+                try? fileManager.removeItem(at: entry)
+            }
         }
     }
 

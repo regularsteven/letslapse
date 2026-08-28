@@ -24,6 +24,12 @@ struct LetsLapseApp: App {
         // later launch can know it was abandoned.
         ImportStaging.sweepOrphans()
 
+        // And the network's own staging tree. A day rather than 15 minutes:
+        // a partial transfer is the only thing that makes a resume possible,
+        // and it can legitimately outlive several launches while somebody is
+        // half-way through rescuing a shoot off a phone.
+        AppModel.cleanStaleIncoming()
+
         // Capture Flat used to be one bool for the whole app; it is now stored
         // per capture scope (stills / video). Seed both from the old value
         // before any view can read one — `@AppStorage` has no fallback key, so
@@ -118,7 +124,10 @@ struct LetsLapseApp: App {
             root
         }
         .defaultSize(width: 760, height: 680)
-        .commands { CameraCommands() }
+        .commands {
+            CameraCommands()
+            LibraryImportCommands()
+        }
         #else
         WindowGroup {
             root
@@ -147,6 +156,17 @@ struct LetsLapseApp: App {
         // the mirror drift off-spec, which is the one thing it must not do.
         .windowResizability(.contentSize)
         .keyboardShortcut("r", modifiers: [.command, .shift])
+
+        // Pulling a project off a phone or an iPad. `Window`, not
+        // `WindowGroup`: there is one library to import into, and a second copy
+        // would just fight the first over the connection — the serving listener
+        // holds a single peer and replaces it on any new connection, so two
+        // import windows on one Mac tear each other down.
+        Window("Import from Device", id: "import") {
+            ImportWindow()
+                .environmentObject(model)
+        }
+        .defaultSize(width: 460, height: 520)
 
         // The grading viewer opens as its own window on the Mac — macOS sheets
         // are fixed-size, and an editor wants free resizing and full screen.
@@ -489,7 +509,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -514,6 +534,15 @@ struct ContentView: View {
             openWindow(id: "remote")
         } else if let code = environment["LL_REMOTE_CONNECT"], code.count == 6 {
             openWindow(id: "remote")
+        }
+        // `LL_TRANSFER=1` — the Import from Device window, same reasoning as
+        // the remote hooks above: it is behind ⌘⇧I and no headless run can
+        // press that. It stages nothing; the window browses for real, which is
+        // the point — the screenshot has to be of the actual browse state.
+        // `LL_TRANSFER=<6-digit code>` goes further and pairs with the first
+        // device found; see `ImportWindow.autoRunIfRequested`.
+        if let hook = environment["LL_TRANSFER"], hook != "0" {
+            openWindow(id: "import")
         }
         #endif
         // `LL_LAYOUT=noscans,counts` — Settings ▸ Advanced ▸ Layout, staged.

@@ -1,0 +1,80 @@
+<svg viewBox="0 0 500 590" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Import from Device · project list · 460×520</title>
+  <desc>Mirrors Remote/ImportWindow.swift (selectingProject phase) over Shared/ProjectTransferProtocol.swift (PTListReply / PTProjectInfo). One row per project on the paired device, newest first, as the serving side ordered them. The list is ALWAYS answered whatever that device is doing — it is kilobytes, and a client that cannot see the list has no idea why it cannot; it is `requestTransfer` that gets refused, with the reason as a sentence ("That device is shooting right now.") rather than a bare "busy". The reply is re-walked on every request rather than served from an arm-time cache: a shoot finished since the code was minted is exactly the project somebody is here to fetch. The byte figure is the project folder's true, uncompressed size — the payload path is file-by-file with no compression, so this is also exactly what will cross the wire, which is why the progress bar downstream needs no "about". Thumbnails do NOT travel with this list. They used to, and on a real library that was wrong twice over: the whole catalogue is one control frame, so images had to share a budget; and the serving device only holds a cached tile for assets some grid has actually drawn, so most rows arrived blank anyway (measured on a 293-project phone: 62 of 293). Each row now asks for its own tile as it appears (`requestThumbnail` → `PTThumbnailReply`), and the serving device GENERATES one if the cache has none — a full RAW decode for a DNG, which is unthinkable for a whole catalogue and exactly the bargain the local Gallery already makes for the handful of rows on screen. The result is persisted under the same cache key the local grids read, so the second look is free and those grids get it for nothing too. Measured on this Mac (2026-08-28): 79 of 79 rows drawn, 1.5 MB of tiles, 10.3 s on the first pass and instant on the second. A row whose project has no drawable source keeps the placeholder (row 3) and is not asked for again. Selecting a row arms the Import button; the footer states what the pull will cost before it starts. EMPTY LIBRARY (desc-only): "No projects on that device / Nothing to import yet." Verified 2026-08-27 end to end against a simulator serving its library.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="460" height="520" rx="11"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="460" height="520" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="460" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="250" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Import from Device</text>
+    </g>
+
+    <g id="header">
+      <g data-symbol="arrow.down.circle" transform="translate(41,72)">
+        <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="54" y="70" font-size="13" class="b" fill="#000">iPhone 17 Pro</text>
+      <text x="54" y="84" font-size="10" fill="#6D6D72">3 projects</text>
+      <text x="466" y="74" font-size="10.5" text-anchor="end" fill="#0A6FD8">Back</text>
+      <line x1="20" y1="95" x2="480" y2="95" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+
+    <!-- LazyVStack, 6pt gaps, 14pt inset; each row 8pt padding, 8pt corner -->
+    <g id="rows">
+      <!-- selected: 1.5pt accent border + checkmark.circle.fill -->
+      <g id="row-1">
+        <rect x="34" y="109" width="432" height="56" rx="8" fill="#FFFFFF"/>
+        <rect x="34.75" y="109.75" width="430.5" height="54.5" rx="7.25" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+        <rect x="42" y="117" width="54" height="40" rx="5" fill="#7C8B99"/>
+        <path d="M42 145 l14 -12 12 10 10 -8 18 14 v3 a5 5 0 0 1 -5 5 h-44 a5 5 0 0 1 -5 -5 z" fill="#5C6B79"/>
+        <circle cx="62" cy="128" r="5" fill="#E4C68A"/>
+        <text x="106" y="133" font-size="13" fill="#000">Sunset over harbour</text>
+        <text x="106" y="147" font-size="10" fill="#6D6D72">26 Aug 2026 at 19:04 · 1,184 frames · 12,4 GB</text>
+        <g data-symbol="checkmark.circle.fill" transform="translate(452,137)">
+          <circle cx="0" cy="0" r="7.5" fill="#C36A00"/>
+          <path d="M-3.4 0.2 L-1 2.6 L3.6 -2.6" fill="none" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </g>
+      </g>
+
+      <g id="row-2">
+        <rect x="34" y="171" width="432" height="56" rx="8" fill="#FFFFFF"/>
+        <rect x="42" y="179" width="54" height="40" rx="5" fill="#6E6E74"/>
+        <rect x="42" y="203" width="54" height="16" fill="#57575D"/>
+        <text x="106" y="195" font-size="13" fill="#000">Tram morning</text>
+        <text x="106" y="209" font-size="10" fill="#6D6D72">25 Aug 2026 at 07:12 · 3 frames · 2,05 GB</text>
+      </g>
+
+      <!-- no cached thumbnail on the serving device: the placeholder is the
+           honest answer, not a reason to pay a RAW decode over there -->
+      <g id="row-3">
+        <rect x="34" y="233" width="432" height="56" rx="8" fill="#FFFFFF"/>
+        <rect x="42" y="241" width="54" height="40" rx="5" fill="#000" fill-opacity="0.08"/>
+        <g data-symbol="photo" transform="translate(69,261)" fill="none" stroke="#B4B4BA" stroke-width="1.4">
+          <rect x="-7" y="-5.5" width="14" height="11" rx="2"/>
+          <path d="M-5 3 l4 -4 3 3 3 -3 4 4" stroke-linejoin="round"/>
+        </g>
+        <text x="106" y="257" font-size="13" fill="#000">Overheat 1</text>
+        <text x="106" y="271" font-size="10" fill="#6D6D72">24 Aug 2026 at 16:41 · 612 frames · 5,9 GB</text>
+      </g>
+    </g>
+
+    <!-- footer: what this pull will cost, then the default action -->
+    <g id="footer">
+      <line x1="20" y1="486" x2="480" y2="486" stroke="#000" stroke-opacity="0.10"/>
+      <text x="34" y="507" font-size="10.5" fill="#6D6D72">12,4 GB to copy</text>
+      <rect x="404" y="496" width="62" height="22" rx="5" fill="#0A6FD8"/>
+      <text x="435" y="511" font-size="12" class="sb" text-anchor="middle" fill="#FFFFFF">Import</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="460" height="520" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="250" y="562" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Import from Device · project list · 460×520 pt window</text>
+  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift over PTListReply — empty-library state desc-only</text>
+</svg>

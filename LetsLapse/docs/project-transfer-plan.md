@@ -1,7 +1,106 @@
 # Import a project from another device — implementation plan
 
-**Status:** planned, not started · **Raised:** 2026-08-27 ·
+**Status:** **Phase 1 implemented 2026-08-27** (iOS serves → Mac imports);
+Phases 2–3 open · **Raised:** 2026-08-27 ·
 **Revised:** 2026-08-27 (payload strategy, resume, AirDrop/USB) · Branch `ios-app`
+
+> **What the implementation actually did, where it differs from this document.**
+> The plan below is unedited; these are the departures, all of them narrowings.
+>
+> - **Service and salt.** `_letslapse-xfer._tcp` and
+>   `com.regularsteven.letslapse.transfer.v1`, not `_letslapse-library._tcp` /
+>   `…library.v1` (§2). Purpose-scoping is intact; only the strings differ.
+> - **No resume in Phase 1.** `requestTransfer` carries no `have` set (§3), so
+>   §4's reconciliation does not exist yet and a dropped pull discards its
+>   partial tree rather than leaving disk nobody can spend. Everything the
+>   resume needs is in place around it: `Incoming/<sourceProjectID>/` inside the
+>   library root, `.part`-then-rename as the commit, `"Incoming"` in
+>   `libraryItemNames`, and a 24-hour launch sweep. **Settings ▸ Incomplete
+>   Transfers is therefore not built** — with nothing to resume, the row would
+>   only ever offer Discard, which the sweep already does.
+> - **Frame types.** Three, not four: `control` (0x01), `data` (0x02),
+>   `cancel` (0x03). `fileEnd` and `blob` are unnecessary once the manifest
+>   travels whole in `transferReady` and thumbnails ride inside the list reply
+>   (budgeted to 3 MB, dropping rather than overflowing the control cap).
+> - **`LibraryActivity`** shipped with five cases — capture, blending,
+>   exportingArchive(UUID), importingArchive, servingTransfer — not the seven of
+>   §5; collection export and the storage move are not yet bracketed.
+> - **Serving is `#if os(iOS)`**, not Shared-and-platform-neutral (§2's last
+>   subsection anticipated the Mac's serving UI landing in Phase 3; its listener
+>   is scoped the same way until then).
+> - **`.capture` is bracketed in `CaptureView`** (`configureOnAppear` /
+>   `cleanUpOnDisappear`), as §5's table says, rather than in
+>   `CameraController` — which holds no reference to the model.
+>
+> ### §3's backpressure recipe is wrong, and only a device says so
+>
+> **`NWConnection.send`'s `.contentProcessed` completion is not a drain
+> signal.** It fires when the framework has TAKEN the bytes, so the counting
+> semaphore §3 prescribes bounds concurrent *send calls* and nothing else. It
+> also brought two hazards of its own, both of which fired here:
+>
+> - A drain that took its permits without handing them back **killed the app on
+>   every completed transfer** — libdispatch traps (`EXC_BREAKPOINT` in
+>   `_dispatch_semaphore_dispose`) on disposing a semaphore below its initial
+>   value. On the client this looked like the connection closing one frame short
+>   of `transferDone`, i.e. like a protocol bug.
+> - An unbounded `wait()` **parked the pump forever** when a killed peer left
+>   send completions that never fired, and `pumpQueue` is serial — so every
+>   later transfer logged "serving N files" and then sent nothing at all.
+>
+> The semaphore is gone. **A windowed ack replaces it**: the client sends a
+> cumulative `ack` every 8 MB (and once more when it has everything), and the
+> server never runs more than 32 MB ahead of bytes the client has *written to
+> disk*. That is real end-to-end flow control, it does not depend on unproven
+> transport semantics, and it costs about five small frames a second. It also
+> replaces the drain: `transferDone` now waits for every byte to be acked,
+> which is a stronger guarantee than the old one.
+>
+> ### The bug the backpressure was hiding
+>
+> **`FileHandle.read` autoreleases, and the pump is one long-running
+> synchronous block** — so its implicit autorelease pool never drains and every
+> 4 MB chunk of a 12 GB project is held until the last one lands. Measured on
+> the iPhone 16 Pro: `phys_footprint` tracked bytes read one for one (5.16 GB
+> read, 5233 MB resident), then memory pressure collapsed flash reads from
+> 972 MB/s to 0.3 MB/s — which from the client is indistinguishable from a
+> network problem. `autoreleasepool` per chunk fixes it. Proved with
+> `LL_TRANSFER_SINK=null`: with `connection.send` never called at all the growth
+> was identical, which ruled the send queue out.
+>
+> **A simulator cannot show either of these** — the payloads are kilobytes and
+> the memory is the Mac's. §8's Phase 0 item 3 ("does backpressure hold? push
+> 2 GB between two Macs and watch RSS") would have missed it for the same
+> reason: it has to be the phone, and it has to be gigabytes.
+>
+> ### Two more device-only findings
+>
+> - **A cabled iPhone is on Wi-Fi *and* USB at once**, so one client connection
+>   races both interfaces and the listener sees TWO inbound connections
+>   milliseconds apart. §2's newest-wins rule (inherited from
+>   `CaptureRemoteListener`) then kills one at random, and half the time it is
+>   the one the client settled on — an intermittent connect-then-close, only on
+>   a cabled device. Fixed by promoting a newcomer on `.ready` rather than on
+>   arrival, which keeps newest-wins without the race.
+> - **§6's interface question is answered:** a USB-tethered iPhone 16 Pro
+>   reports `wiredEthernet` (twice) alongside `wifi`. Because it is genuinely on
+>   both, the picker shows no label at all — which is the designed behaviour,
+>   and `transfer_probe` prints the raw list for anyone who needs it.
+>
+> ### Verified 2026-08-27, on Steven's iPhone 16 Pro over USB
+>
+> | | |
+> | --- | --- |
+> | 11 GB project (612 files, 603 DNGs + blends) | byte-for-byte, 267 s, **41 MB/s sustained** |
+> | Peak app footprint over that transfer | **90 MB** (was 5+ GB) |
+> | Ack window depth | 34 MB max against a 32 MB bound |
+> | Client killed at 25% | server aborts in 0.7 s and serves complete transfers immediately after |
+> | Library listing | 293 projects in ~0.4 s, 5/5 consecutive runs |
+> | Real Mac Import window | phone → Mac, installed, "Import complete" |
+> | Wrong code | `-9846 bad MAC` on the server, client reports it on the 8 s timeout |
+>
+> **Still owed:** a Wi-Fi-only run of the same size (every run above had the
+> cable available), and iPad→Mac.
 
 Move a whole project (~1–20 GB for a real shoot) from one LetsLapse to another
 over the local network, with no intermediate file written on either device and

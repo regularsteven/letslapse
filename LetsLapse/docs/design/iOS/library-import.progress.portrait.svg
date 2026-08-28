@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Import from device · copying · portrait</title>
+  <desc>Mirrors App/ProjectTransferImportView.swift (transferring phase) over Shared/ProjectTransferClient.swift. The payload is file by file — `project.json` (generated in memory on the serving device, so it never touches its disk) then `source/`, `blends/` and `notes/` in name order — landing in &lt;StorageRoot&gt;/Incoming/&lt;source project id&gt;/ as `&lt;name&gt;.part` and renamed on completion: the rename IS the commit, so a truncated file can never be mistaken for a whole one. Both byte counts are uncompressed and nothing on this path is compressed, so unlike App/ProjectImport.swift's bar — whose denominator is an archive's compressed size, hence "of about" — this one is simply the truth. The file line is the frame currently open, truncated from the HEAD so the leaf name stays readable. THE IOS-ONLY LINE is "Keep LetsLapse open": iOS suspends network activity in the background, so that is the platform rule rather than advice, and the sentence after it is what makes the rule survivable — nothing joins the library until every file has landed, so being interrupted costs the transfer and nothing else. macOS says only the second half (macOS/library-import.progress.svg). Flow control is a windowed ack: the client acks cumulative bytes every 8 MB and the server never runs more than 32 MB ahead of what has been written to disk — the send completion is NOT a drain signal, and a semaphore built on it let a whole project buffer into memory. Measured iPad Air M3 ← iPhone over Wi-Fi (2026-08-28): serving footprint flat at 69 MB across a 7.3 GB / 2,869-file project. Cancel sends a cancel frame, the server stops between chunks, and the staged tree is discarded — there is no resume in this phase, so a partial is disk nobody could spend. TERMINAL STATES, desc-only: "Import complete — “name” was added to your library" with Import another / Done (macOS/library-import.done.svg draws it); and "Couldn't import" with the server's sentence verbatim and Try again — including the storage refusal, which is checked BEFORE a byte moves and is also flagged on the project row itself, because on a 128 GB phone that is the common case rather than the edge one.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#3A3A3F"/>
+    <g transform="translate(24,24)">
+      <rect x="0" y="0" width="393" height="852" fill="#F2F2F7"/>
+      <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+
+      <g id="sheet">
+        <path d="M0 862 L0 20 a10 10 0 0 1 10 -10 L383 10 a10 10 0 0 1 10 10 L393 862 Z" fill="#F2F2F7"/>
+
+        <g id="status-bar" fill="#000">
+          <text x="56" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+          <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+          <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+        </g>
+
+        <!-- No ✕ and no Back mid-transfer: the only exit is Cancel, which
+             tidies up after itself. -->
+        <g id="header">
+          <g data-symbol="arrow.down.circle" transform="translate(29,80)">
+            <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+            <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <text x="44" y="78" font-size="17" class="b" fill="#000">Steven’s iPhone</text>
+          <text x="44" y="93" font-size="12" fill="#6D6D72">Copying</text>
+          <line x1="0" y1="104" x2="393" y2="104" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <g id="progress">
+          <text x="14" y="132" font-size="17" class="b" fill="#000">Copying project</text>
+
+          <!-- hand-drawn 6pt capsule, LL.accent on primary-12% -->
+          <rect x="14" y="150" width="365" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
+          <rect x="14" y="150" width="212" height="6" rx="3" fill="#C36A00"/>
+
+          <text x="14" y="178" font-size="12" class="mono" fill="#6D6D72">4,25 GB of 7,33 GB</text>
+          <text x="14" y="196" font-size="11" class="mono" fill="#000" fill-opacity="0.35">source/frame-01642.jpg</text>
+
+          <text x="14" y="226" font-size="12" fill="#6D6D72">Keep LetsLapse open — iOS pauses transfers in the</text>
+          <text x="14" y="241" font-size="12" fill="#6D6D72">background. Nothing joins your library until every file has</text>
+          <text x="14" y="256" font-size="12" fill="#6D6D72">landed, so stopping leaves no half-project behind.</text>
+        </g>
+
+        <!-- Cancel sits bottom-trailing, clear of the home indicator -->
+        <g id="footer">
+          <rect x="299" y="790" width="80" height="34" rx="8" fill="#FFFFFF"/>
+          <text x="339" y="812" font-size="15" text-anchor="middle" fill="#000">Cancel</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Import from device · copying · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectTransferImportView.swift — code entry, project list, done and failed are desc-only</text>
+</svg>

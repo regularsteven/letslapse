@@ -1,0 +1,54 @@
+<svg viewBox="0 0 500 590" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Import from Device · complete · 460×520</title>
+  <desc>Mirrors Remote/ImportWindow.swift (done phase) over AppModel.commitIncoming. Reached when the server's `transferDone` frame lands, which it only sends after every chunk has been accepted by the connection. The install itself is the source-agnostic half of the archive importer, lifted out for this: AppModel.installStagedProject reads the staged tree's `project.json`, asks the duplicate question if the library already holds this project (matched on the manifest id against project ids AND CaptureProject.importedFromID), mints fresh UUIDs for the capture and every blend — folder names and lookups key on them, so reusing the originals would collide with the source device's own library — renames `source/`, `blends/` and `notes/` into place, re-keys the blends and writes library.json. Because the staging folder is on the library's own volume, all of that is renames rather than copies. Whichever tree it came from, a `.lapse` archive or the network, it is the same job from here — the two paths differ only in how the tree got there. Installs are serialised against the archive importer (one writer of library.json, and the duplicate question has one home: the existing import sheet, which is why it is borrowed for the few seconds this takes). "Import another" returns to the browse list keeping the link; "Done" (⏎) closes the window, and closing it disconnects and stops browsing — an in-flight pull would otherwise keep a phone's radio and this Mac's disk busy with nowhere to report it. THE TRANSFER NEVER DELETED ANYTHING ON THE OTHER DEVICE: it is a copy, in both directions, always. The serving side is read-only by construction — someone who wants the space back deletes the project themselves, on the device, having seen it arrive. Verified 2026-08-27: this is a screenshot of a real project moving simulator→Mac and landing in the library.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="460" height="520" rx="11"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="460" height="520" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="460" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="250" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Import from Device</text>
+    </g>
+
+    <g id="header">
+      <g data-symbol="arrow.down.circle" transform="translate(41,72)">
+        <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+        <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="54" y="70" font-size="13" class="b" fill="#000">iPhone 17 Pro</text>
+      <text x="54" y="84" font-size="10" fill="#6D6D72">Done</text>
+      <text x="466" y="74" font-size="10.5" text-anchor="end" fill="#0A6FD8">Back</text>
+      <line x1="20" y1="95" x2="480" y2="95" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+
+    <!-- centred block, 28pt glyph in confirm green -->
+    <g id="result">
+      <g data-symbol="checkmark.circle.fill" transform="translate(250,275)">
+        <circle cx="0" cy="0" r="14" fill="#34C759"/>
+        <path d="M-6.2 0.4 L-1.8 4.8 L6.6 -4.6" fill="none" stroke="#FFF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+      </g>
+      <text x="250" y="315" font-size="13" class="b" text-anchor="middle" fill="#000">Import complete</text>
+      <text x="250" y="333" font-size="10.5" text-anchor="middle" fill="#6D6D72">“Sunset over harbour” was added to your library.</text>
+    </g>
+
+    <!-- INSTALLING (desc-only, the phase just before this one): the accent
+         shippingbox.fill, "Adding it to your library…", "Renaming the received
+         files into place. This is quick." and a small spinner. -->
+
+    <g id="footer">
+      <rect x="306" y="496" width="98" height="22" rx="5" fill="#FBFBFD" stroke="#000" stroke-opacity="0.14"/>
+      <text x="355" y="511" font-size="12" text-anchor="middle" fill="#000">Import another</text>
+      <rect x="412" y="496" width="54" height="22" rx="5" fill="#0A6FD8"/>
+      <text x="439" y="511" font-size="12" class="sb" text-anchor="middle" fill="#FFFFFF">Done</text>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="460" height="520" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="250" y="562" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Import from Device · complete · 460×520 pt window</text>
+  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift over AppModel.commitIncoming — installing phase desc-only</text>
+</svg>

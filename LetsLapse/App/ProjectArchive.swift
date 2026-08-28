@@ -29,6 +29,17 @@ enum ProjectArchiveError: LocalizedError {
 enum ProjectArchive {
     static let fileExtension = "lapse"
 
+    /// The project subfolders that travel — the ONE definition, read by the
+    /// installer (`AppModel.installStagedProject`) and by the transfer's file
+    /// enumerator (`ProjectTransferServer`).
+    ///
+    /// Anything outside this list is silently dropped at install. Before this
+    /// was one constant that was merely a comment's worth of coupling; with a
+    /// network path it is worse — a subfolder that misses the list would be
+    /// sent over the wire, for however many minutes that takes, and then
+    /// deleted on arrival. A new project subfolder must be added here.
+    static let transferableSubfolders = ["source", "blends", "notes"]
+
     static func write(contentsOf directory: URL, to archiveURL: URL) throws {
         try DirectoryArchive.write(contentsOf: directory, to: archiveURL)
     }

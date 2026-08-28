@@ -286,6 +286,54 @@ enum DiskThumbnailStore {
         }
     }
 
+    /// The stored tile for a source asset, or nil when nothing is cached yet.
+    /// Deliberately never GENERATES — the caller decides whether a miss is
+    /// worth a decode (`AppModel.projectTransferThumbnail` does, for the rows
+    /// actually on screen).
+    ///
+    /// `maxPixelSize` re-encodes on the way out, which matters because the
+    /// transfer's picker tile travels in a control frame: the cache's own tiles
+    /// are ~50 KB, and at 320 px they are a few KB.
+    static func storedData(for url: URL, maxPixelSize: Int? = nil) -> Data? {
+        let file = fileURL(for: key(for: url))
+        guard let maxPixelSize else { return try? Data(contentsOf: file) }
+        guard let source = CGImageSourceCreateWithURL(file as CFURL, nil),
+              let scaled = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+              ] as CFDictionary)
+        else { return nil }
+        return encodeJPEG(scaled)
+    }
+
+    /// A `CGImage` as tile-sized JPEG bytes — the wire form of a picker tile.
+    static func jpegData(from image: CGImage, maxPixelSize: Int) -> Data? {
+        // Round-trip through a JPEG so the shrink uses Image I/O's sampling
+        // rather than a hand-rolled redraw; a freshly generated thumbnail is
+        // already small, so this is cheap.
+        guard let full = encodeJPEG(image) else { return nil }
+        guard let source = CGImageSourceCreateWithData(full as CFData, nil),
+              let scaled = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+              ] as CFDictionary)
+        else { return full }
+        return encodeJPEG(scaled)
+    }
+
+    private static func encodeJPEG(_ image: CGImage) -> Data? {
+        let data = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(
+            data, UTType.jpeg.identifier as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(
+            destination, image,
+            [kCGImageDestinationLossyCompressionQuality: 0.7] as CFDictionary)
+        guard CGImageDestinationFinalize(destination) else { return nil }
+        return data as Data
+    }
+
     private static func fileURL(for key: String) -> URL {
         let digest = SHA256.hash(data: Data(key.utf8))
         let name = digest.map { String(format: "%02x", $0) }.joined()
