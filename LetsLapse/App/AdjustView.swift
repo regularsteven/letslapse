@@ -791,7 +791,10 @@ struct AdjustView: View {
                     timeSliceStash = model.timeSlice
                     model.timeSlice = nil
                 } else {
-                    model.timeSlice = timeSliceStash ?? TimeSliceSettings()
+                    // Fresh arming seeds the lag from a 25% spread of THIS
+                    // clip — the 2026-08-28 review finding: an absolute frame
+                    // default collapses to seams on a long shoot.
+                    model.timeSlice = timeSliceStash ?? seededTimeSlice()
                 }
             }
         } label: {
@@ -831,9 +834,11 @@ struct AdjustView: View {
                 Text("Horizontal bands").font(.system(size: 14))
             }
             HStack {
-                Text("Newest edge").font(.system(size: 14))
+                // Reading order: the first band holds the earliest moment
+                // (the 2026-08-28 review's convention, both output modes).
+                Text("Time starts").font(.system(size: 14))
                 Spacer()
-                Picker("Newest edge", selection: timeSliceBinding(\.newestEdge)) {
+                Picker("Time starts", selection: timeSliceEarliestBinding) {
                     if settings.axis == .vertical {
                         Text("Left").tag(TimeSliceEdge.left)
                         Text("Right").tag(TimeSliceEdge.right)
@@ -855,13 +860,29 @@ struct AdjustView: View {
                         .foregroundStyle(.secondary)
                 }
             }
-            Stepper(value: timeSliceBinding(\.offsetFrames), in: 1...120) {
-                HStack {
-                    Text("Offset").font(.system(size: 14))
-                    Spacer()
-                    Text(timeSliceOffsetDetail(settings))
-                        .font(.system(size: 13).monospacedDigit())
-                        .foregroundStyle(.secondary)
+            // The primary temporal control is the spread as a share of the
+            // clip — the per-band lag is derived and read out alongside.
+            // Raw frames remain the stored recipe and the fallback control
+            // when the clip's length isn't known yet.
+            if timeSliceMasterFrames != nil {
+                Stepper(value: timeSliceSpreadPercentBinding, in: 2...95, step: 5) {
+                    HStack {
+                        Text("Spread").font(.system(size: 14))
+                        Spacer()
+                        Text(timeSliceSpreadDetail(settings))
+                            .font(.system(size: 13).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } else {
+                Stepper(value: timeSliceBinding(\.offsetFrames), in: 1...120) {
+                    HStack {
+                        Text("Offset").font(.system(size: 14))
+                        Spacer()
+                        Text(timeSliceOffsetDetail(settings))
+                            .font(.system(size: 13).monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
                 }
             }
             HStack {
@@ -893,6 +914,72 @@ struct AdjustView: View {
                 settings[keyPath: keyPath] = value
                 model.timeSlice = settings
             })
+    }
+
+    /// Seeds a fresh recipe with the lag a ~25% spread of this clip needs —
+    /// scale-aware where the absolute default wasn't.
+    private func seededTimeSlice() -> TimeSliceSettings {
+        var settings = TimeSliceSettings()
+        if let frames = timeSliceMasterFrames, frames > 0 {
+            settings.offsetFrames = TimeSliceGeometry.offsetFrames(
+                spreadFraction: 0.25, masterFrames: frames, segments: settings.segments)
+        }
+        return settings
+    }
+
+    /// The UI speaks reading order (where time STARTS); the model stores the
+    /// newest edge. They are opposite ends of the same axis.
+    private var timeSliceEarliestBinding: Binding<TimeSliceEdge> {
+        func opposite(_ edge: TimeSliceEdge) -> TimeSliceEdge {
+            switch edge {
+            case .left: return .right
+            case .right: return .left
+            case .top: return .bottom
+            case .bottom: return .top
+            }
+        }
+        return Binding(
+            get: { opposite((model.timeSlice ?? TimeSliceSettings()).newestEdge) },
+            set: { earliest in
+                var settings = model.timeSlice ?? TimeSliceSettings()
+                settings.newestEdge = opposite(earliest)
+                model.timeSlice = settings
+            })
+    }
+
+    private var timeSliceSpreadPercentBinding: Binding<Int> {
+        Binding(
+            get: {
+                guard let settings = model.timeSlice,
+                      let frames = timeSliceMasterFrames, frames > 0 else { return 25 }
+                let fraction = TimeSliceGeometry.spreadFraction(
+                    offsetFrames: settings.offsetFrames, masterFrames: frames,
+                    segments: settings.segments)
+                return max(1, Int((fraction * 100).rounded()))
+            },
+            set: { percent in
+                guard var settings = model.timeSlice,
+                      let frames = timeSliceMasterFrames, frames > 0 else { return }
+                settings.offsetFrames = TimeSliceGeometry.offsetFrames(
+                    spreadFraction: Double(percent) / 100, masterFrames: frames,
+                    segments: settings.segments)
+                model.timeSlice = settings
+            })
+    }
+
+    private func timeSliceSpreadDetail(_ settings: TimeSliceSettings) -> String {
+        guard let frames = timeSliceMasterFrames, frames > 0 else {
+            return timeSliceOffsetDetail(settings)
+        }
+        let fraction = TimeSliceGeometry.spreadFraction(
+            offsetFrames: settings.offsetFrames, masterFrames: frames, segments: settings.segments)
+        var parts = ["\(Int((fraction * 100).rounded()))% of the clip",
+                     "lag \(settings.offsetFrames) \(settings.offsetFrames == 1 ? "frame" : "frames")"]
+        if let duration = model.currentCapture?.sourceDurationSeconds, duration > 0 {
+            let perBand = duration / Double(frames) * Double(settings.offsetFrames)
+            parts.append("≈ \(timeSliceSeconds(perBand)) of capture")
+        }
+        return parts.joined(separator: " · ")
     }
 
     /// The axis flip preserves which end holds the newest band: left↔top,
@@ -976,10 +1063,18 @@ struct AdjustView: View {
                 let spread = settings.maxLagFrames
                 let sliced = TimeSliceGeometry.slicedFrameCount(masterFrames: frames, maxLag: spread)
                 if settings.output.wantsAnimation {
+                    let fraction = Double(spread) / Double(max(1, frames))
                     let clipSeconds = model.estimatedOutputSeconds()
-                    let spreadSeconds = clipSeconds.map { $0 * Double(spread) / Double(max(1, frames)) }
-                    Text("Spread \(spread) frames"
-                        + (spreadSeconds.map { " ≈ \(timeSliceSeconds($0)) of the clip" } ?? ""))
+                    let spreadSeconds = clipSeconds.map { $0 * fraction }
+                    Text("Spread \(spread) frames · \(Int((fraction * 100).rounded()))% of the clip"
+                        + (spreadSeconds.map { " ≈ \(timeSliceSeconds($0))" } ?? ""))
+                    if fraction < 0.05 {
+                        // Under this line the bands sample near-identical
+                        // moments and the output is seam artifacts, not an
+                        // effect (2026-08-28 test-output review).
+                        Text("Under 5% spread the bands read as seams, not moments — raise the spread")
+                            .foregroundStyle(.orange)
+                    }
                     Text("Sliced clip \(sliced) frames — the spread is trimmed off the end")
                 }
                 if settings.output.wantsImage {

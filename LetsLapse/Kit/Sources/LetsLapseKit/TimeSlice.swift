@@ -84,7 +84,13 @@ public struct TimeSliceSettings: Codable, Equatable, Sendable {
     public var maxLagFrames: Int { (max(2, segments) - 1) * max(1, offsetFrames) }
 
     public init(
-        newestEdge: TimeSliceEdge = .left,
+        // Default flipped 2026-08-28 (test-output review): the first band in
+        // reading order holds the EARLIEST time — day at the left / top,
+        // night arriving at the far edge — so the time gradient opposes the
+        // sky's own luminance gradient instead of collapsing into it. This
+        // deliberately deviates from the reference clip, which ran
+        // newest-left; Direction remains the override.
+        newestEdge: TimeSliceEdge = .right,
         segments: Int = 24,
         offsetFrames: Int = 2,
         featherPixels: Int = 0,
@@ -203,6 +209,27 @@ public enum TimeSliceGeometry {
     /// and the render must refuse.
     public static func slicedFrameCount(masterFrames: Int, maxLag: Int) -> Int {
         max(0, masterFrames - max(0, maxLag))
+    }
+
+    /// The spread expressed as a fraction of the clip — the number a person
+    /// can actually reason about (the reference clip ran ~28%; under ~5% the
+    /// bands stop reading as different times and the output is seams, not an
+    /// effect — the 2026-08-28 test-output finding). The recipe still stores
+    /// integer frames; these are the UI's exact two-way mapping.
+    public static func offsetFrames(
+        spreadFraction: Double, masterFrames: Int, segments: Int
+    ) -> Int {
+        let steps = max(1, max(2, segments) - 1)
+        let targetFrames = max(0, spreadFraction) * Double(max(1, masterFrames))
+        return max(1, Int((targetFrames / Double(steps)).rounded()))
+    }
+
+    public static func spreadFraction(
+        offsetFrames: Int, masterFrames: Int, segments: Int
+    ) -> Double {
+        guard masterFrames > 0 else { return 0 }
+        let steps = max(1, max(2, segments) - 1)
+        return Double(max(1, offsetFrames) * steps) / Double(masterFrames)
     }
 
     /// The poster's master indices: the bands spread evenly over the ENTIRE

@@ -14,8 +14,19 @@ live inline.
 ### Time slicing — the time gradient that scrolls across the frame
 
 **Detail:** [time-slicing.md](time-slicing.md) · **Raised:** 2026-08-28 ·
-**Stages 1–4 landed 2026-08-28 (engine, orchestration, verifier, Adjust UI)
-— UI sign-off + SVG mirrors and the stage-5 processing loader open**
+**Stages 1–4 landed 2026-08-28 (engine, orchestration, verifier, Adjust UI),
+plus the same-day first-output review round (plan §7a) — UI sign-off + SVG
+mirrors, the stage-5 processing loader, then feathered edges (promoted) open**
+
+*Review round: reading order flipped to earliest-first (default
+`newestEdge` .right/.bottom, UI control "Time starts"); the primary temporal
+control became **Spread as % of the clip** (seeded ~25%, amber under 5%,
+frames stay the stored recipe via exact two-way `TimeSliceGeometry`
+mapping); the "1/10-resolution animation" and "units bug" findings dissolved
+on probing — the registered files are full 12 MP and the sampler shifted
+exactly the commanded 30 frames (the reviewed .mov was a transcode; the
+sub-frame lag was luma-measurement degeneracy, which also forced an
+overlap-floor + first-difference fix into `timeslice_report.py`).*
 
 *Stage 3 E2E on the real Mac library: one headless Create
 (`LL_ADJUST=stills LL_TIMESLICE="segs:8,lag:3,…" LL_ADJUST_CREATE=1`)

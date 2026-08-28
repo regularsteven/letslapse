@@ -67,7 +67,15 @@ def band_means(path: str, segments: int, horizontal: bool, scale_width: int) -> 
 def measured_lag(reference: np.ndarray, candidate: np.ndarray, max_shift: int) -> tuple[int, float]:
     """Signed shift (in frames) at which `candidate` best matches `reference` —
     positive means the band lags the reference band, negative that it leads
-    (the reference is variance-ranked, so it can sit anywhere on the ladder)."""
+    (the reference is variance-ranked, so it can sit anywhere on the ladder).
+
+    Correlates FIRST DIFFERENCES and requires the overlap to keep at least
+    half the series: a smooth monotonic ramp (a plain sunset) otherwise
+    correlates near 1.0 at absurd shifts over tiny overlaps, which is exactly
+    how the first field audit went wrong."""
+    reference = np.diff(reference)
+    candidate = np.diff(candidate)
+    minimum_overlap = max(16, len(reference) // 2)
     best_shift, best_score = 0, -2.0
     for shift in range(-max_shift, max_shift + 1):
         if shift >= 0:
@@ -76,7 +84,7 @@ def measured_lag(reference: np.ndarray, candidate: np.ndarray, max_shift: int) -
         else:
             a = reference[-shift:]
             b = candidate[: len(candidate) + shift]
-        if len(a) < 8:
+        if len(a) < minimum_overlap:
             continue
         a = a - a.mean()
         b = b - b.mean()
@@ -110,7 +118,9 @@ def main() -> None:
     variances = [float(series[:, band].var()) for band in order]
     reference_position = int(np.argmax(variances))
     reference = series[:, order[reference_position]]
-    max_shift = min(frames - 8, max(8, 4 * args.lag * (args.segments - 1)))
+    # Search to twice the commanded spread, never past half the series — the
+    # overlap floor in measured_lag needs the other half to stay meaningful.
+    max_shift = min(frames // 2, max(8, 2 * args.lag * (args.segments - 1)))
 
     lags, scores = [], []
     for band in order:

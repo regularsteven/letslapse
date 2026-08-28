@@ -490,11 +490,58 @@ parked re-slice path, exercised early).
 
 ---
 
-## 8. Deferred (unchanged from the brief, plus what §2 makes cheap)
+## 7a. First real-output review (2026-08-28, Steven) — and what it changed
+
+Steven measured the first in-app outputs (Vltava sunset, 602 photos, 16
+bands × lag 2, horizontal, Both). Three findings, two of them fixed the same
+day, one dissolved on inspection:
+
+1. **"Spread ~25× too small — offset applied in source frames" — the
+   mechanism was wrong, the judgment right.** The registered animation is
+   572 frames = 602 − 30: the sampler shifted by exactly the commanded 30
+   master frames (and at depth 1:1 source frames ARE output frames, so the
+   proposed units bug could not produce the observation; the sub-frame lag
+   measurement was the luma-ladder degeneracy on a slow monotonic sunset —
+   the same degeneracy `timeslice_report.py` refuses to grade). The real
+   defect: an **absolute frame default doesn't scale** — 30/602 = 5% spread
+   vs the reference clip's 28%, and under ~5% the bands sample near-identical
+   moments, leaving seam artifacts with no payoff. **Fixed as recommended:**
+   the UI's primary temporal control is now **Spread as % of the clip**
+   (fresh arming seeds ~25%; the lag in frames is derived, read out
+   alongside, and remains the stored recipe so renders stay deterministic);
+   the readout warns in amber under 5%. `TimeSliceGeometry.offsetFrames
+   (spreadFraction:)` / `spreadFraction(offsetFrames:)` are the exact
+   two-way mapping, unit-tested.
+2. **Reading order flipped (both modes):** the first band in reading order
+   now holds the EARLIEST moment — default `newestEdge` is `.right`
+   (vertical) / `.bottom` (horizontal), so day sits at the left/top and
+   night arrives at the far edge, opposing the sky's own luminance gradient
+   instead of collapsing into it. Deliberate deviation from the reference
+   clip (which ran newest-left); the UI control is now **"Time starts"**
+   (earliest edge) and Direction remains the override. The name token still
+   records the NEWEST edge — defaults now read `timeslice-vert-right-…`.
+3. **"Animation is 1/10 resolution, 26.09 fps" — dissolved.** The reviewed
+   `letslapse_export.mov` was a downstream transcode: the registered blend
+   is **4032×3024, full 12 MP, identical to the poster**, VFR on the capture
+   clock at nominal 24 fps (avg ≈ 25.2 — a CFR exporter shows oddball
+   averages). The reviewed file even had the band axis transposed relative
+   to the registered one. Judge slicing from the files in `blends/`.
+
+Also from the review: the poster's full-source spread and the exact linear
+ladder were independently confirmed (~38.9 source frames/band over 16
+bands); the temp-master cleanup was field-proven (his run had *Include
+regular timelapse* off — no master registered, none left behind); and
+**feathered edges move up the queue** — hard boundaries crossing a skyline
+read as 25–38-level luma steps, which is inherent, so feathering is the next
+engine feature after the stage-5 loader rather than "later".
 
 - Re-slice an existing blended clip (§2.2 of the brief): the engine ships it in
   all but UI — a project-detail entry point + provider over a stored blend.
-- Feathered edges; eased/exponential ladders (a new array); non-uniform band
+- **Feathered edges — promoted by the §7a review**: next engine feature after
+  the stage-5 loader. Hard boundaries crossing a skyline read as 25–38-level
+  luma steps on real footage; that is inherent to hard cuts and is the
+  effect's weakest read.
+- Eased/exponential ladders (a new array); non-uniform band
   widths, radial/angular maps; the greyscale displacement generalisation.
 - Extend-into-unused-source end policy for trimmed video sources.
 - watchOS: untouched by design.

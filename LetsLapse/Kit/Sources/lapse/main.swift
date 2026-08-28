@@ -35,7 +35,8 @@ USAGE:
       --segments N          Band count (default 24)
       --lag N               Frames of lag per band (default 2)
       --newest EDGE         left | right | top | bottom — the edge holding the
-                            newest band (default left; top/bottom = horizontal)
+                            newest band (default right, so time starts at the
+                            left; top/bottom = horizontal)
       --codec NAME          h264 | hevc | prores | jpeg (default h264)
 
   lapse grade <image> [options]                 Grade one frame through the tone engine
@@ -213,7 +214,7 @@ do {
         let posterPath = takeOption(["--poster"])
         let segments = Int(takeOption(["--segments"]) ?? "24") ?? 0
         let lag = Int(takeOption(["--lag"]) ?? "2") ?? 0
-        let newestName = takeOption(["--newest"]) ?? "left"
+        let newestName = takeOption(["--newest"]) ?? TimeSliceSettings().newestEdge.rawValue
         let codecName = takeOption(["--codec"]) ?? "h264"
         guard args.count == 1 else { fail("slice needs exactly one input clip (got \(args.count))") }
         guard outputPath != nil || posterPath != nil else {

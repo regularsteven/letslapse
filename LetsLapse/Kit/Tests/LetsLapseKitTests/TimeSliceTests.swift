@@ -123,13 +123,45 @@ final class TimeSliceTests: XCTestCase {
 
     func testDisplayNamesCarryTheKeyAttributes() {
         // Decided 2026-08-28: timeslice-{vert|horiz}-{edge}-segs_{n}-lag_{n};
-        // width never appears, the poster drops the lag.
-        XCTAssertEqual(TimeSliceSettings().displayName, "timeslice-vert-left-segs_24-lag_2")
+        // width never appears, the poster drops the lag. The edge token names
+        // the NEWEST edge — default .right since the same-day review flipped
+        // reading order to earliest-first.
+        XCTAssertEqual(TimeSliceSettings().displayName, "timeslice-vert-right-segs_24-lag_2")
         XCTAssertEqual(
             TimeSliceSettings(newestEdge: .top, segments: 12, offsetFrames: 3).displayName,
             "timeslice-horiz-top-segs_12-lag_3"
         )
-        XCTAssertEqual(TimeSliceSettings().posterDisplayName, "timeslice-poster-vert-left-segs_24")
+        XCTAssertEqual(TimeSliceSettings().posterDisplayName, "timeslice-poster-vert-right-segs_24")
+    }
+
+    func testDefaultReadingOrderStartsAtTheEarliestTime() {
+        // 2026-08-28 review: the first band in reading order holds the
+        // earliest moment — so the default newest edge is the trailing one,
+        // and the geometric lags DESCEND across the frame (leftmost band =
+        // biggest lag = oldest).
+        let settings = TimeSliceSettings()
+        XCTAssertEqual(settings.newestEdge, .right)
+        let ladder = TimeSliceGeometry.lagLadder(segments: 4, offsetFrames: 2)
+        XCTAssertEqual(
+            TimeSliceGeometry.bandLags(ladder: ladder, newestEdge: settings.newestEdge),
+            [6, 4, 2, 0])
+    }
+
+    func testSpreadFractionMapsBothWaysExactly() {
+        // 25% of a 602-frame clip across 16 bands → lag 10; and back.
+        let lag = TimeSliceGeometry.offsetFrames(spreadFraction: 0.25, masterFrames: 602, segments: 16)
+        XCTAssertEqual(lag, 10)
+        let fraction = TimeSliceGeometry.spreadFraction(offsetFrames: 10, masterFrames: 602, segments: 16)
+        XCTAssertEqual(fraction, 150.0 / 602.0, accuracy: 0.0001)
+        // The defaults that shipped the seams finding: 16 × 2 on 602 = 5%.
+        XCTAssertEqual(
+            TimeSliceGeometry.spreadFraction(offsetFrames: 2, masterFrames: 602, segments: 16),
+            0.0498, accuracy: 0.001)
+        XCTAssertEqual(
+            TimeSliceGeometry.offsetFrames(spreadFraction: 0.0, masterFrames: 100, segments: 8),
+            1, "the lag floor is one frame")
+        XCTAssertEqual(
+            TimeSliceGeometry.spreadFraction(offsetFrames: 5, masterFrames: 0, segments: 8), 0)
     }
 
     func testSettingsRoundTripThroughJSON() throws {
@@ -159,7 +191,7 @@ final class TimeSliceTests: XCTestCase {
     func testUnknownFutureTokensDecodeToDefaultsNotErrors() throws {
         let future = Data(#"{"newestEdge": "spiral", "distribution": "easeInOut", "output": "hologram"}"#.utf8)
         let decoded = try JSONDecoder().decode(TimeSliceSettings.self, from: future)
-        XCTAssertEqual(decoded.newestEdge, .left)
+        XCTAssertEqual(decoded.newestEdge, .right)
         XCTAssertEqual(decoded.distribution, .linear)
         XCTAssertEqual(decoded.output, .both)
     }
