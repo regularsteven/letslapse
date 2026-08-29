@@ -1721,7 +1721,7 @@ final class AppModel: ObservableObject {
         }
         // Clips joining a collection that has met Ken Burns arrive with
         // their moves already dealt.
-        if collection.kenBurns != nil { collection.assignMissingKenBurnsMoves() }
+        if collection.kenBurns != nil { dealKenBurnsMoves(&collection) }
         collections[index] = collection
         persistCollectionsQuietly()
         return setRatio
@@ -1785,7 +1785,68 @@ final class AppModel: ObservableObject {
                     autoAdjustSpeed: true,
                     fadeTransition: true)
             }
-            if enabled { collection.assignMissingKenBurnsMoves() }
+            if enabled { dealKenBurnsMoves(&collection) }
+        }
+    }
+
+    /// Every entry without a move gets its best-effort default, seeded from
+    /// its timeline position and its crop. Custom moves are never touched.
+    private func dealKenBurnsMoves(_ collection: inout LapseCollection) {
+        for index in collection.entries.indices where collection.entries[index].kenBurns == nil {
+            collection.entries[index].kenBurns = CollectionMath.kenBurnsDefaultMove(
+                forClipIndex: index,
+                base: kenBurnsUnitBase(entry: collection.entries[index], in: collection))
+        }
+    }
+
+    /// What zoom 1 means for this entry: the largest canvas-shaped window
+    /// over the clip, sitting where the resolved crop puts it.
+    func kenBurnsUnitBase(entry: LapseCollection.Entry, in collection: LapseCollection) -> CGRect {
+        let aspect = blends.first(where: { $0.id == entry.blendID }).map(blendAspect) ?? 16.0 / 9.0
+        return CollectionMath.kenBurnsUnitBase(
+            clipAspect: aspect,
+            canvasAspect: collection.ratio?.aspect ?? 16.0 / 9.0,
+            offset: resolvedCropOffset(entry: entry, in: collection) ?? 0.5)
+    }
+
+    /// The move the export and the editor act on: the stored one, else the
+    /// entry's dealt default (same derivation, so the recipe stays honest).
+    func kenBurnsResolvedMove(entry: LapseCollection.Entry, in collection: LapseCollection) -> LapseCollection.Entry.KenBurnsMove {
+        if let move = entry.kenBurns { return move }
+        let index = collection.entries.firstIndex { $0.blendID == entry.blendID } ?? 0
+        return CollectionMath.kenBurnsDefaultMove(
+            forClipIndex: index, base: kenBurnsUnitBase(entry: entry, in: collection))
+    }
+
+    /// One end of a clip's move, edited by hand on the preview — clamped
+    /// through the same invariants everything else reads through, and marked
+    /// custom so defaults never overwrite it.
+    func setKenBurnsFraming(
+        blendID: UUID, in collectionID: UUID, end: KenBurnsMoveEnd,
+        framing: LapseCollection.Entry.KenBurnsFraming
+    ) {
+        mutateCollection(collectionID) { collection in
+            guard let idx = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
+            let entry = collection.entries[idx]
+            var move = kenBurnsResolvedMove(entry: entry, in: collection)
+            let clamped = CollectionMath.clampedKenBurnsFraming(
+                base: kenBurnsUnitBase(entry: entry, in: collection), framing: framing)
+            switch end {
+            case .start: move.start = clamped
+            case .end: move.end = clamped
+            }
+            move.isCustom = true
+            collection.entries[idx].kenBurns = move
+        }
+    }
+
+    /// Back to the dealt default for this clip's position on the timeline.
+    func resetKenBurnsMove(blendID: UUID, in collectionID: UUID) {
+        mutateCollection(collectionID) { collection in
+            guard let idx = collection.entries.firstIndex(where: { $0.blendID == blendID }) else { return }
+            collection.entries[idx].kenBurns = CollectionMath.kenBurnsDefaultMove(
+                forClipIndex: idx,
+                base: kenBurnsUnitBase(entry: collection.entries[idx], in: collection))
         }
     }
 
@@ -2050,12 +2111,12 @@ final class AppModel: ObservableObject {
             let crop = resolvedCropOffset(entry: entry, in: collection)
                 .map { String(format: "%.4f", $0) } ?? "fit"
             var part = "\(entry.blendID.uuidString):\(String(format: "%.4f", entry.inPoint))-\(String(format: "%.4f", entry.outPoint))@\(crop)"
-            if kenBurnsOn, let move = entry.kenBurns {
+            if kenBurnsOn {
+                let move = kenBurnsResolvedMove(entry: entry, in: collection)
                 part += String(
-                    format: "~%.2f-%.2f@%.2f,%.2f-%.2f,%.2f",
-                    move.startZoom, move.endZoom,
-                    move.startAnchorX, move.startAnchorY,
-                    move.endAnchorX, move.endAnchorY)
+                    format: "~%.3f,%.3f,%.3f>%.3f,%.3f,%.3f",
+                    move.start.zoom, move.start.centerX, move.start.centerY,
+                    move.end.zoom, move.end.centerX, move.end.centerY)
             }
             return part
         }

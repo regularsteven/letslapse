@@ -50,41 +50,25 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     /// One clip's place on the timeline. A blended clip appears at most once
     /// per collection, so the blend id doubles as the entry's identity.
     struct Entry: Identifiable, Codable, Equatable {
-        /// One clip's Ken Burns move: two framings of the crop box, animated
-        /// across the clip's time in the export. Zoom 1 is the whole crop box;
-        /// larger zooms keep a smaller window, positioned by the anchors
-        /// (0…1 across the slack the zoom opens up inside the box).
-        struct KenBurnsMove: Codable, Equatable {
-            var startZoom: Double
-            var endZoom: Double
-            var startAnchorX: Double
-            var startAnchorY: Double
-            var endAnchorX: Double
-            var endAnchorY: Double
+        /// One framing of a Ken Burns move: a canvas-shaped window over the
+        /// clip. Zoom 1 is the largest such window the clip offers; larger
+        /// zooms tighten it. The centre is in unit clip coordinates, so a
+        /// framing can sit anywhere the clip has room — not only inside the
+        /// current crop box — and survives resolution and ratio changes.
+        struct KenBurnsFraming: Codable, Equatable {
+            var zoom: Double
+            var centerX: Double
+            var centerY: Double
+        }
 
-            /// The best-effort move a clip gets when Ken Burns turns on:
-            /// direction alternates (settle in, then reveal out), zoom amounts
-            /// and the zoomed framing's anchor cycle so runs of clips don't
-            /// all move the same way. Deterministic per timeline position.
-            static func bestEffort(forClipIndex index: Int) -> KenBurnsMove {
-                let zooms: [Double] = [1.22, 1.15, 1.3, 1.18]
-                let anchors: [(x: Double, y: Double)] = [
-                    (0.5, 0.5), (1.0 / 3.0, 1.0 / 3.0), (2.0 / 3.0, 1.0 / 3.0),
-                    (2.0 / 3.0, 2.0 / 3.0), (1.0 / 3.0, 2.0 / 3.0),
-                ]
-                let zoom = zooms[index % zooms.count]
-                let anchor = anchors[index % anchors.count]
-                if index.isMultiple(of: 2) {
-                    return KenBurnsMove(
-                        startZoom: 1, endZoom: zoom,
-                        startAnchorX: 0.5, startAnchorY: 0.5,
-                        endAnchorX: anchor.x, endAnchorY: anchor.y)
-                }
-                return KenBurnsMove(
-                    startZoom: zoom, endZoom: 1,
-                    startAnchorX: anchor.x, startAnchorY: anchor.y,
-                    endAnchorX: 0.5, endAnchorY: 0.5)
-            }
+        /// One clip's Ken Burns move: the start and end framings the export
+        /// animates between. `isCustom` flips the first time a human edits a
+        /// framing — it gates the row badge and the Reset affordance, and a
+        /// custom move is never overwritten by re-dealing defaults.
+        struct KenBurnsMove: Codable, Equatable {
+            var start: KenBurnsFraming
+            var end: KenBurnsFraming
+            var isCustom: Bool
         }
 
         var blendID: UUID
@@ -107,6 +91,19 @@ struct LapseCollection: Identifiable, Codable, Equatable {
             self.outPoint = outPoint
             self.crops = crops
             self.kenBurns = kenBurns
+        }
+
+        /// A move that doesn't decode (a dev build's earlier shape) is
+        /// dropped, never fatal — the library must always load, and a
+        /// missing move just gets re-dealt its defaults. Encoding stays
+        /// synthesized.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            blendID = try container.decode(UUID.self, forKey: .blendID)
+            inPoint = try container.decode(Double.self, forKey: .inPoint)
+            outPoint = try container.decode(Double.self, forKey: .outPoint)
+            crops = try container.decode([String: Double].self, forKey: .crops)
+            kenBurns = (try? container.decodeIfPresent(KenBurnsMove.self, forKey: .kenBurns)) ?? nil
         }
 
         var id: UUID { blendID }
@@ -178,14 +175,6 @@ struct LapseCollection: Identifiable, Codable, Equatable {
         return kenBurns.consistentDurations && !kenBurns.autoAdjustSpeed
     }
 
-    /// Every entry that predates Ken Burns (or arrived while it was off)
-    /// gets its best-effort move, keyed to its timeline position.
-    mutating func assignMissingKenBurnsMoves() {
-        for index in entries.indices where entries[index].kenBurns == nil {
-            entries[index].kenBurns = Entry.KenBurnsMove.bestEffort(forClipIndex: index)
-        }
-    }
-
     var ratio: CanvasRatio? {
         get { ratioRaw.flatMap(CanvasRatio.init(rawValue:)) }
         set { ratioRaw = newValue?.rawValue }
@@ -198,6 +187,12 @@ struct LapseCollection: Identifiable, Codable, Equatable {
     var clipCountLabel: String {
         entries.count == 1 ? "1 clip" : "\(entries.count) clips"
     }
+}
+
+/// Which framing of a clip's Ken Burns move is being addressed.
+enum KenBurnsMoveEnd: String, CaseIterable {
+    case start
+    case end
 }
 
 // MARK: - Timeline math
@@ -234,17 +229,78 @@ enum CollectionMath {
 
     enum Axis { case horizontal, vertical }
 
-    /// One Ken Burns framing: the canvas-shaped window `zoom` deep into the
-    /// clip's crop box, positioned by the anchors across the slack the zoom
-    /// opens up. Zoom 1 is the crop box itself, so a move that ends at 1
-    /// always lands exactly on the framing the user's crop chose.
-    static func kenBurnsRect(base: CGRect, zoom: Double, anchorX: Double, anchorY: Double) -> CGRect {
-        let z = max(1, zoom)
-        let width = base.width / z
-        let height = base.height / z
-        let x = base.minX + (base.width - width) * min(1, max(0, anchorX))
-        let y = base.minY + (base.height - height) * min(1, max(0, anchorY))
-        return CGRect(x: x, y: y, width: width, height: height)
+    /// The deepest a Ken Burns framing can pinch.
+    static let kenBurnsMaxZoom = 4.0
+
+    /// The largest canvas-shaped window the clip offers, as fractions of the
+    /// clip (unit clip coordinates), positioned along its free axis by the
+    /// crop offset. This is what zoom 1 means, and where dealt defaults sit.
+    static func kenBurnsUnitBase(clipAspect: Double, canvasAspect: Double, offset: Double) -> CGRect {
+        guard clipAspect > 0, canvasAspect > 0 else { return CGRect(x: 0, y: 0, width: 1, height: 1) }
+        let width = min(1, canvasAspect / clipAspect)
+        let height = min(1, clipAspect / canvasAspect)
+        let clamped = min(1, max(0, offset))
+        return CGRect(
+            x: width < 1 ? clamped * (1 - width) : 0,
+            y: height < 1 ? clamped * (1 - height) : 0,
+            width: width, height: height)
+    }
+
+    /// A framing's window in unit clip coordinates: the base window tightened
+    /// by the zoom, centred where the framing says — pulled back inside the
+    /// clip when the centre would push it over an edge.
+    static func kenBurnsUnitRect(base: CGRect, framing: LapseCollection.Entry.KenBurnsFraming) -> CGRect {
+        let clamped = clampedKenBurnsFraming(base: base, framing: framing)
+        let width = base.width / clamped.zoom
+        let height = base.height / clamped.zoom
+        return CGRect(
+            x: clamped.centerX - width / 2, y: clamped.centerY - height / 2,
+            width: width, height: height)
+    }
+
+    /// The invariants every framing write and read goes through: zoom within
+    /// 1…max, centre such that the window stays inside the clip.
+    static func clampedKenBurnsFraming(
+        base: CGRect, framing: LapseCollection.Entry.KenBurnsFraming
+    ) -> LapseCollection.Entry.KenBurnsFraming {
+        let zoom = min(kenBurnsMaxZoom, max(1, framing.zoom))
+        let width = base.width / zoom
+        let height = base.height / zoom
+        return LapseCollection.Entry.KenBurnsFraming(
+            zoom: zoom,
+            centerX: min(1 - width / 2, max(width / 2, framing.centerX)),
+            centerY: min(1 - height / 2, max(height / 2, framing.centerY)))
+    }
+
+    /// The best-effort move a clip is dealt when Ken Burns turns on — the
+    /// defaults every clip starts from. Direction alternates (settle in,
+    /// then reveal out), zoom amounts and the zoomed framing's position
+    /// cycle so runs of clips don't all move the same way; the zoomed
+    /// framing stays inside the crop box the base describes, so defaults
+    /// respect the crop the user positioned. Deterministic per timeline
+    /// position.
+    static func kenBurnsDefaultMove(forClipIndex index: Int, base: CGRect) -> LapseCollection.Entry.KenBurnsMove {
+        let zooms: [Double] = [1.22, 1.15, 1.3, 1.18]
+        let anchors: [(x: Double, y: Double)] = [
+            (0.5, 0.5), (1.0 / 3.0, 1.0 / 3.0), (2.0 / 3.0, 1.0 / 3.0),
+            (2.0 / 3.0, 2.0 / 3.0), (1.0 / 3.0, 2.0 / 3.0),
+        ]
+        let zoom = zooms[index % zooms.count]
+        let anchor = anchors[index % anchors.count]
+
+        let wide = LapseCollection.Entry.KenBurnsFraming(
+            zoom: 1, centerX: base.midX, centerY: base.midY)
+        // The zoomed window, anchored across the slack it opens inside base.
+        let width = base.width / zoom
+        let height = base.height / zoom
+        let tight = clampedKenBurnsFraming(base: base, framing: LapseCollection.Entry.KenBurnsFraming(
+            zoom: zoom,
+            centerX: base.minX + anchor.x * (base.width - width) + width / 2,
+            centerY: base.minY + anchor.y * (base.height - height) + height / 2))
+
+        return index.isMultiple(of: 2)
+            ? LapseCollection.Entry.KenBurnsMove(start: wide, end: tight, isCustom: false)
+            : LapseCollection.Entry.KenBurnsMove(start: tight, end: wide, isCustom: false)
     }
 
     /// Aspect-fit `aspect` into a bounding box.

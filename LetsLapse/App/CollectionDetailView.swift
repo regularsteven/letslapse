@@ -21,6 +21,13 @@ struct CollectionDetailView: View {
     @State private var cropDrag: CropDrag?
     @State private var cropPrompt: CropPrompt?
 
+    /// Which framing of the selected clip's Ken Burns move the preview edits.
+    @State private var kenBurnsEnd: KenBurnsMoveEnd = .start
+    /// The framing in flight under a finger — the model commits on release.
+    @State private var moveEdit: MoveEdit?
+    /// A pinch owns the framing while it lasts; the frame drag stands down.
+    @State private var pinchActive = false
+
     @State private var reorder: ReorderState?
 
     @State private var showPicker = false
@@ -34,6 +41,13 @@ struct CollectionDetailView: View {
     private struct CropDrag: Equatable {
         var blendID: UUID
         var offset: Double
+        var moved = false
+    }
+
+    private struct MoveEdit: Equatable {
+        var blendID: UUID
+        var end: KenBurnsMoveEnd
+        var framing: LapseCollection.Entry.KenBurnsFraming
         var moved = false
     }
 
@@ -93,6 +107,10 @@ struct CollectionDetailView: View {
         }
         .background(LL.screenBackground)
         .llToast($toast)
+        .onChange(of: selectedBlendID) { _, _ in
+            kenBurnsEnd = .start
+            moveEdit = nil
+        }
         .task {
             for entry in model.collection(withID: collectionID)?.entries ?? [] {
                 if let blend = model.blends.first(where: { $0.id == entry.blendID }) {
@@ -338,6 +356,7 @@ struct CollectionDetailView: View {
             let aspect = model.blendAspect(blend)
             let tall = aspect < 1
             let letterboxed = !landscape && tall && letterboxPreview
+            let kenBurnsOn = collection.kenBurnsEnabled
             let clipSize: CGSize = {
                 if landscape { return CollectionMath.fit(aspect: aspect, maxWidth: maxWidth, maxHeight: maxHeight) }
                 if letterboxed { return CollectionMath.fit(aspect: aspect, maxWidth: maxWidth, maxHeight: 240) }
@@ -350,53 +369,63 @@ struct CollectionDetailView: View {
                 collection.ratio.flatMap { CollectionMath.cropBox(clipSize: clipSize, canvas: $0, offset: off) }
             }
 
-            ZStack {
-                Color.black
+            VStack(spacing: 8) {
+                ZStack {
+                    Color.black
 
-                ZStack(alignment: .topLeading) {
-                    ProjectThumbnailView(url: model.mediaURL(for: blend), kind: .video)
-                        .frame(width: clipSize.width, height: clipSize.height)
-                        .clipped()
+                    ZStack(alignment: .topLeading) {
+                        ProjectThumbnailView(url: model.mediaURL(for: blend), kind: .video)
+                            .frame(width: clipSize.width, height: clipSize.height)
+                            .clipped()
 
-                    if let box {
-                        cropFrame(box: box.rect, clipSize: clipSize, axis: box.axis, entry: entry, collection: collection)
-                    } else {
+                        if kenBurnsOn {
+                            kenBurnsFrameOverlay(entry: entry, collection: collection, clipSize: clipSize)
+                        } else if let box {
+                            cropFrame(box: box.rect, clipSize: clipSize, axis: box.axis, entry: entry, collection: collection)
+                        } else {
+                            Button {
+                                playSelected(blend, title: collection.name)
+                            } label: {
+                                Image(systemName: "play.fill")
+                                    .font(.system(size: 17))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(.black.opacity(0.45), in: Circle())
+                            }
+                            .buttonStyle(.plain)
+                            .position(x: clipSize.width / 2, y: clipSize.height / 2)
+                        }
+                    }
+                    .frame(width: clipSize.width, height: clipSize.height)
+                }
+                .frame(width: wrapSize.width, height: wrapSize.height)
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(alignment: .topLeading) {
+                    MediaBadge(text: "\(clipTitle(blend)) · \(blend.speedLabel)")
+                        .padding(10)
+                        .allowsHitTesting(false)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if !landscape && tall {
                         Button {
-                            playSelected(blend, title: collection.name)
+                            letterboxPreview.toggle()
                         } label: {
-                            Image(systemName: "play.fill")
-                                .font(.system(size: 17))
-                                .foregroundStyle(.white)
-                                .frame(width: 44, height: 44)
-                                .background(.black.opacity(0.45), in: Circle())
+                            Text(letterboxPreview ? "Remove letterbox" : "Apply letterbox")
+                                .font(.system(size: 10.5, weight: .semibold))
+                                .foregroundStyle(LL.amber)
+                                .padding(.horizontal, 11)
+                                .padding(.vertical, 4)
+                                .background(.black.opacity(0.55), in: Capsule())
                         }
                         .buttonStyle(.plain)
-                        .position(x: clipSize.width / 2, y: clipSize.height / 2)
+                        .padding(10)
                     }
                 }
-                .frame(width: clipSize.width, height: clipSize.height)
-            }
-            .frame(width: wrapSize.width, height: wrapSize.height)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(alignment: .topLeading) {
-                MediaBadge(text: "\(clipTitle(blend)) · \(blend.speedLabel)")
-                    .padding(10)
-                    .allowsHitTesting(false)
-            }
-            .overlay(alignment: .bottomTrailing) {
-                if !landscape && tall {
-                    Button {
-                        letterboxPreview.toggle()
-                    } label: {
-                        Text(letterboxPreview ? "Remove letterbox" : "Apply letterbox")
-                            .font(.system(size: 10.5, weight: .semibold))
-                            .foregroundStyle(LL.amber)
-                            .padding(.horizontal, 11)
-                            .padding(.vertical, 4)
-                            .background(.black.opacity(0.55), in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .padding(10)
+                .simultaneousGesture(kenBurnsPinch(entry: entry, collection: collection, enabled: kenBurnsOn))
+
+                if kenBurnsOn {
+                    kenBurnsFramingBar(entry: entry, collection: collection)
+                        .frame(width: wrapSize.width)
                 }
             }
         } else {
@@ -469,6 +498,190 @@ struct CollectionDetailView: View {
             p.addRect(cutout)
             return p
         }
+    }
+
+    // MARK: - Ken Burns framing editor
+
+    /// The move as the preview should draw it right now: the committed value,
+    /// with the framing under a finger substituted in.
+    private func displayedKenBurnsMove(
+        entry: LapseCollection.Entry, in collection: LapseCollection
+    ) -> LapseCollection.Entry.KenBurnsMove {
+        var move = model.kenBurnsResolvedMove(entry: entry, in: collection)
+        if let moveEdit, moveEdit.blendID == entry.blendID {
+            switch moveEdit.end {
+            case .start: move.start = moveEdit.framing
+            case .end: move.end = moveEdit.framing
+            }
+        }
+        return move
+    }
+
+    /// The white frame is the framing being edited (drag to place it, pinch
+    /// anywhere on the clip to zoom it); the dashed frame is the other end of
+    /// the move, so the travel between them is visible while either is held.
+    private func kenBurnsFrameOverlay(
+        entry: LapseCollection.Entry, collection: LapseCollection, clipSize: CGSize
+    ) -> some View {
+        let base = model.kenBurnsUnitBase(entry: entry, in: collection)
+        let move = displayedKenBurnsMove(entry: entry, in: collection)
+        let activeFraming = kenBurnsEnd == .start ? move.start : move.end
+        let ghostFraming = kenBurnsEnd == .start ? move.end : move.start
+        let active = pointsRect(CollectionMath.kenBurnsUnitRect(base: base, framing: activeFraming), in: clipSize)
+        let ghost = pointsRect(CollectionMath.kenBurnsUnitRect(base: base, framing: ghostFraming), in: clipSize)
+        let ghostDistinct = abs(ghost.midX - active.midX) + abs(ghost.midY - active.midY)
+            + abs(ghost.width - active.width) > 6
+
+        return ZStack(alignment: .topLeading) {
+            DimOutside(cutout: active)
+                .fill(Color.black.opacity(0.6), style: FillStyle(eoFill: true))
+                .allowsHitTesting(false)
+
+            if ghostDistinct {
+                // Tag rides the ghost's top-right corner — the clip badge
+                // owns the top-left.
+                Rectangle()
+                    .strokeBorder(LL.amber.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+                    .frame(width: ghost.width, height: ghost.height)
+                    .overlay(alignment: .topTrailing) {
+                        Text(kenBurnsEnd == .start ? "END" : "START")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .kerning(0.5)
+                            .foregroundStyle(LL.amber)
+                            .padding(.horizontal, 5)
+                            .padding(.vertical, 2)
+                            .background(.black.opacity(0.55), in: Capsule())
+                            .padding(3)
+                    }
+                    .offset(x: ghost.minX, y: ghost.minY)
+                    .allowsHitTesting(false)
+            }
+
+            ZStack {
+                Rectangle().strokeBorder(.white, lineWidth: 2)
+                Path { p in
+                    for f in [1.0 / 3.0, 2.0 / 3.0] {
+                        p.move(to: CGPoint(x: active.width * f, y: 0))
+                        p.addLine(to: CGPoint(x: active.width * f, y: active.height))
+                        p.move(to: CGPoint(x: 0, y: active.height * f))
+                        p.addLine(to: CGPoint(x: active.width, y: active.height * f))
+                    }
+                }
+                .stroke(.white.opacity(0.35), lineWidth: 1)
+            }
+            .frame(width: active.width, height: active.height)
+            .contentShape(Rectangle())
+            .offset(x: active.minX, y: active.minY)
+            .highPriorityGesture(
+                DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                    .onChanged { gesture in
+                        guard !pinchActive else { return }
+                        // The committed framing is frozen while the finger is
+                        // down, so it is the drag origin; translation is total.
+                        var framing = committedKenBurnsFraming(entry: entry, in: collection)
+                        framing.centerX += Double(gesture.translation.width / clipSize.width)
+                        framing.centerY += Double(gesture.translation.height / clipSize.height)
+                        moveEdit = MoveEdit(
+                            blendID: entry.blendID, end: kenBurnsEnd,
+                            framing: CollectionMath.clampedKenBurnsFraming(base: base, framing: framing),
+                            moved: true)
+                    }
+                    .onEnded { _ in
+                        guard !pinchActive else { return }
+                        commitMoveEdit(entry: entry)
+                    }
+            )
+        }
+        .frame(width: clipSize.width, height: clipSize.height, alignment: .topLeading)
+    }
+
+    /// Pinch anywhere on the clip to zoom the active framing — spreading
+    /// fingers tightens the window, photo-style. The centre holds.
+    private func kenBurnsPinch(
+        entry: LapseCollection.Entry, collection: LapseCollection, enabled: Bool
+    ) -> some Gesture {
+        MagnifyGesture(minimumScaleDelta: 0.02)
+            .onChanged { value in
+                guard enabled else { return }
+                pinchActive = true
+                let base = model.kenBurnsUnitBase(entry: entry, in: collection)
+                var framing = committedKenBurnsFraming(entry: entry, in: collection)
+                framing.zoom *= Double(value.magnification)
+                moveEdit = MoveEdit(
+                    blendID: entry.blendID, end: kenBurnsEnd,
+                    framing: CollectionMath.clampedKenBurnsFraming(base: base, framing: framing),
+                    moved: true)
+            }
+            .onEnded { _ in
+                guard enabled else { return }
+                commitMoveEdit(entry: entry)
+                pinchActive = false
+            }
+    }
+
+    private func committedKenBurnsFraming(
+        entry: LapseCollection.Entry, in collection: LapseCollection
+    ) -> LapseCollection.Entry.KenBurnsFraming {
+        let move = model.kenBurnsResolvedMove(entry: entry, in: collection)
+        return kenBurnsEnd == .start ? move.start : move.end
+    }
+
+    private func commitMoveEdit(entry: LapseCollection.Entry) {
+        guard let edit = moveEdit, edit.moved, edit.blendID == entry.blendID else {
+            moveEdit = nil
+            return
+        }
+        model.setKenBurnsFraming(
+            blendID: entry.blendID, in: collectionID, end: edit.end, framing: edit.framing)
+        moveEdit = nil
+    }
+
+    /// Start/End pills, the active framing's zoom, and the way back to the
+    /// dealt move once a hand has been in it.
+    private func kenBurnsFramingBar(
+        entry: LapseCollection.Entry, collection: LapseCollection
+    ) -> some View {
+        let move = displayedKenBurnsMove(entry: entry, in: collection)
+        let zoom = (kenBurnsEnd == .start ? move.start : move.end).zoom
+
+        return HStack(spacing: 8) {
+            ForEach(KenBurnsMoveEnd.allCases, id: \.rawValue) { end in
+                Button {
+                    kenBurnsEnd = end
+                    moveEdit = nil
+                } label: {
+                    Text(end == .start ? "START" : "END")
+                        .font(.system(size: 10.5, weight: .bold))
+                        .kerning(0.5)
+                        .foregroundStyle(kenBurnsEnd == end ? .white : LL.accent)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(
+                            Capsule().fill(kenBurnsEnd == end ? LL.accent : LL.accent.opacity(0.09)))
+                }
+                .buttonStyle(.plain)
+            }
+            Text(String(format: "%.2f×", zoom))
+                .font(.system(size: 11.5, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+            if entry.kenBurns?.isCustom == true {
+                Button("Reset move") {
+                    model.resetKenBurnsMove(blendID: entry.blendID, in: collectionID)
+                    moveEdit = nil
+                }
+                .font(.system(size: 11.5, weight: .semibold))
+                .foregroundStyle(LL.amber)
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(.horizontal, 2)
+    }
+
+    private func pointsRect(_ unit: CGRect, in size: CGSize) -> CGRect {
+        CGRect(
+            x: unit.minX * size.width, y: unit.minY * size.height,
+            width: unit.width * size.width, height: unit.height * size.height)
     }
 
     // MARK: - Crop logic
@@ -865,6 +1078,9 @@ struct CollectionDetailView: View {
         if cropDrag?.blendID == entry.blendID {
             cropDrag = nil
         }
+        if moveEdit?.blendID == entry.blendID {
+            moveEdit = nil
+        }
         toast = "Removed from the timeline — the clip stays in its project"
     }
 
@@ -995,6 +1211,11 @@ struct CollectionDetailView: View {
         }
         guard let ratio = collection.ratio else {
             return "Add a clip — the first one sets the canvas."
+        }
+        if collection.kenBurnsEnabled {
+            let active = kenBurnsEnd == .start ? "start" : "end"
+            let other = kenBurnsEnd == .start ? "end" : "start"
+            return "Ken Burns \(active) framing — drag the white frame to place it, pinch to zoom. The dashed frame is the \(other)."
         }
         guard model.blendNeedsCrop(blend, on: ratio) else {
             return "This clip matches the \(ratio.rawValue) canvas — nothing to crop."

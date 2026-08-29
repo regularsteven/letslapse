@@ -293,20 +293,25 @@ final class CollectionExportController: ObservableObject {
             let oriented = preferred.concatenating(
                 CGAffineTransform(translationX: -orientedRect.minX, y: -orientedRect.minY))
 
-            // The crop box is the move's zoom-1 framing — for a clip that
-            // matches the canvas it is simply the whole picture.
-            let offset = model.resolvedCropOffset(entry: entry, in: collection) ?? 0.5
-            guard let base = CollectionMath.cropBox(
-                clipSize: orientedSize, canvas: ratio, offset: offset) else {
+            // Framings live in unit clip coordinates; the base (zoom 1) is
+            // the crop box — for a clip that matches the canvas, the whole
+            // picture. Geometry is derived from the asset's own aspect so it
+            // matches the pixels the transforms move.
+            guard orientedSize.width > 0, orientedSize.height > 0 else {
                 throw ExportError.missingClip
             }
-            let move = entry.kenBurns ?? .bestEffort(forClipIndex: index)
-            let startRect = CollectionMath.kenBurnsRect(
-                base: base.rect, zoom: move.startZoom,
-                anchorX: move.startAnchorX, anchorY: move.startAnchorY)
-            let endRect = CollectionMath.kenBurnsRect(
-                base: base.rect, zoom: move.endZoom,
-                anchorX: move.endAnchorX, anchorY: move.endAnchorY)
+            let base = CollectionMath.kenBurnsUnitBase(
+                clipAspect: Double(orientedSize.width / orientedSize.height),
+                canvasAspect: ratio.aspect,
+                offset: model.resolvedCropOffset(entry: entry, in: collection) ?? 0.5)
+            let move = entry.kenBurns
+                ?? CollectionMath.kenBurnsDefaultMove(forClipIndex: index, base: base)
+            let startRect = pixelRect(
+                unit: CollectionMath.kenBurnsUnitRect(base: base, framing: move.start),
+                clipSize: orientedSize)
+            let endRect = pixelRect(
+                unit: CollectionMath.kenBurnsUnitRect(base: base, framing: move.end),
+                clipSize: orientedSize)
 
             var fade = 0.0
             if kenBurns.fadeTransition, let previous = planned.last {
@@ -406,6 +411,12 @@ final class CollectionExportController: ObservableObject {
         videoComposition.frameDuration = CMTime(
             value: 1, timescale: CMTimeScale(model.collectionExportFPS(collection)))
         return (composition, videoComposition)
+    }
+
+    private func pixelRect(unit: CGRect, clipSize: CGSize) -> CGRect {
+        CGRect(
+            x: unit.minX * clipSize.width, y: unit.minY * clipSize.height,
+            width: unit.width * clipSize.width, height: unit.height * clipSize.height)
     }
 
     /// Maps a source-space crop rect onto the canvas: orient, scale so the
