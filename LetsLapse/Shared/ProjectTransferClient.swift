@@ -41,6 +41,12 @@ final class ProjectTransferClient: ObservableObject {
         var fileName: String
         var bytesReceived: Int64
         var totalBytes: Int64
+        /// Which pull of the batch this is — "project 2 of 5" when several
+        /// were selected. Count is 1 for the everyday single import, and the
+        /// view says nothing extra then.
+        var projectName: String = ""
+        var projectIndex: Int = 1
+        var projectCount: Int = 1
 
         var fraction: Double? {
             guard totalBytes > 0 else { return nil }
@@ -56,7 +62,10 @@ final class ProjectTransferClient: ObservableObject {
         case transferring(Progress)
         /// Every file is down; the tree is being renamed into the library.
         case installing
-        case done(projectName: String)
+        /// The whole batch landed. The summary is a finished sentence —
+        /// "“Dawn run” was added to your library." or "3 projects were added
+        /// to your library." — because only this object knows how many.
+        case done(summary: String)
         case failed(String)
     }
 
@@ -198,8 +207,18 @@ final class ProjectTransferClient: ObservableObject {
     // MARK: - Pairing
 
     func select(_ library: DiscoveredLibrary) {
-        LLog("transfer-client selected \(library.name) [\(library.model)]")
-        phase = .enteringCode(library)
+        // The TXT record's `pid` is a hash of the device's LIVE code, so a
+        // remembered code can be checked against it before a byte moves: a
+        // match means the code never rotated and typing it again teaches the
+        // human nothing. A rotated code changes the pid and the match simply
+        // fails — straight to the code screen, no failed attempt shown.
+        if let remembered = RememberedTransferCodes.code(matching: library.pairingID) {
+            LLog("transfer-client selected \(library.name) [\(library.model)] — remembered code still current, pairing silently")
+            connect(to: library, code: remembered, isAutoAttempt: true)
+        } else {
+            LLog("transfer-client selected \(library.name) [\(library.model)]")
+            phase = .enteringCode(library)
+        }
     }
 
     func backToBrowsing() {
@@ -207,9 +226,17 @@ final class ProjectTransferClient: ObservableObject {
         phase = .browsing
     }
 
-    func connect(to library: DiscoveredLibrary, code: String) {
+    /// The code of the attempt in flight, and whether a human typed it. An
+    /// auto attempt that fails must land on the code screen as if it never
+    /// happened; a typed one has earned a sentence about what went wrong.
+    private var attemptedCode = ""
+    private var attemptWasAuto = false
+
+    func connect(to library: DiscoveredLibrary, code: String, isAutoAttempt: Bool = false) {
         guard code.count == 6 else { return }
         disconnect()
+        attemptedCode = code
+        attemptWasAuto = isAutoAttempt
         phase = .connecting(library)
         peerName = library.name
 
@@ -230,8 +257,14 @@ final class ProjectTransferClient: ObservableObject {
         }
         link.onProgress = { [weak self] file, received, total in
             Task { @MainActor in
-                self?.phase = .transferring(Progress(
-                    fileName: file, bytesReceived: received, totalBytes: total))
+                guard let self else { return }
+                // The link knows bytes; the batch context lives here.
+                let current = self.pullQueue.first
+                self.phase = .transferring(Progress(
+                    fileName: file, bytesReceived: received, totalBytes: total,
+                    projectName: current?.name ?? "Untitled project",
+                    projectIndex: self.installedNames.count + 1,
+                    projectCount: max(self.batchCount, 1)))
             }
         }
         link.onDone = { [weak self] captureID in
@@ -249,7 +282,18 @@ final class ProjectTransferClient: ObservableObject {
         connectTimeout = Task { @MainActor [weak self] in
             try? await Task.sleep(nanoseconds: 8_000_000_000)
             guard let self, !Task.isCancelled else { return }
-            guard case .connecting = self.phase else { return }
+            guard case .connecting(let attempted) = self.phase else { return }
+            if self.attemptWasAuto {
+                // The silent attempt stays silent: forget the code that lied
+                // (the pid matched but the pairing didn't — a rotation raced
+                // the browse) and present the code screen as if the attempt
+                // never happened.
+                LLog("transfer-client silent pairing timed out — falling back to the code screen")
+                RememberedTransferCodes.forget(self.attemptedCode)
+                self.disconnect()
+                self.phase = .enteringCode(attempted)
+                return
+            }
             LLog("transfer-client pairing timed out after 8s — wrong code, or the device stopped sharing")
             self.disconnect()
             self.phase = .failed("Incorrect code — try again.")
@@ -260,6 +304,10 @@ final class ProjectTransferClient: ObservableObject {
         LLog("transfer-client paired, asking for the project list")
         connectTimeout?.cancel()
         connectTimeout = nil
+        RememberedTransferCodes.remember(attemptedCode)
+        // Paired: whatever happens from here is a transfer problem, not a
+        // pairing problem, and must never fall back to the code screen.
+        attemptWasAuto = false
         link?.send(PTListRequest())
     }
 
@@ -299,27 +347,58 @@ final class ProjectTransferClient: ObservableObject {
     /// headroom for the install, which renames rather than copies but still
     /// wants somewhere to write `library.json`.
     func storageShortfall(for info: PTProjectInfo) -> String? {
-        guard info.totalBytes > 0 else { return nil }
+        storageShortfall(totalBytes: info.totalBytes)
+    }
+
+    func storageShortfall(totalBytes: Int64) -> String? {
+        guard totalBytes > 0 else { return nil }
         let available = (try? StorageRoot.current.resourceValues(
             forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?
             .volumeAvailableCapacityForImportantUsage ?? 0
-        guard available > 0, available < info.totalBytes + 1_000_000_000 else { return nil }
+        guard available > 0, available < totalBytes + 1_000_000_000 else { return nil }
         return """
-            Not enough storage to import this project. It needs \
-            \(LLFormat.bytes(info.totalBytes)) but only \(LLFormat.bytes(available)) is \
+            Not enough storage for this import. It needs \
+            \(LLFormat.bytes(totalBytes)) but only \(LLFormat.bytes(available)) is \
             available. Free up space and try again.
             """
     }
 
     func requestProject(_ info: PTProjectInfo) {
-        guard let link else { return }
-        if let shortfall = storageShortfall(for: info) {
+        requestProjects([info])
+    }
+
+    /// The batch still to pull, INCLUDING the one in flight (head), plus how
+    /// many the batch started with — which is all "project 2 of 5" needs.
+    private var pullQueue: [PTProjectInfo] = []
+    private var batchCount = 0
+
+    /// Pulls the selection in order, installing each project as it lands, so
+    /// a failure at number four keeps one-through-three. The server serves
+    /// one job at a time by design; the queue lives here.
+    func requestProjects(_ infos: [PTProjectInfo]) {
+        guard link != nil, !infos.isEmpty else { return }
+        // One storage answer for the whole batch, before a byte moves — the
+        // alternative is discovering it three projects in, with the earlier
+        // ones occupying the very space the next one needed.
+        let totalBytes = infos.reduce(Int64(0)) { $0 + $1.totalBytes }
+        if let shortfall = storageShortfall(totalBytes: totalBytes) {
             phase = .failed(shortfall)
             return
         }
+        pullQueue = infos
+        batchCount = infos.count
+        installedNames = []
+        startNextPull()
+    }
+
+    private func startNextPull() {
+        guard let link, let info = pullQueue.first else { return }
         pullingCaptureID = info.captureID
         phase = .transferring(Progress(
-            fileName: "", bytesReceived: 0, totalBytes: info.totalBytes))
+            fileName: "", bytesReceived: 0, totalBytes: info.totalBytes,
+            projectName: info.name ?? "Untitled project",
+            projectIndex: installedNames.count + 1,
+            projectCount: batchCount))
         setPullActive(true)
         link.send(PTTransferRequest(captureID: info.captureID))
     }
@@ -370,6 +449,10 @@ final class ProjectTransferClient: ObservableObject {
     func cancelTransfer() {
         link?.cancelTransfer()
         pullingCaptureID = nil
+        // Cancel stops the BATCH, not just the file in flight — a queue that
+        // marched on after Cancel would read as a bug, and the projects
+        // already installed stay installed either way.
+        pullQueue = []
         setPullActive(false)
         phase = projects.isEmpty ? .browsing : .selectingProject
     }
@@ -385,13 +468,28 @@ final class ProjectTransferClient: ObservableObject {
     }
 
     private func fail(_ message: String) {
+        // A failure during a SILENT pairing attempt is the same non-event as
+        // its timeout: the human never asked for it, so they get the code
+        // screen, not an error about an attempt they didn't make.
+        if attemptWasAuto, case .connecting(let attempted) = phase {
+            LLog("transfer-client silent pairing failed (\(message)) — falling back to the code screen")
+            RememberedTransferCodes.forget(attemptedCode)
+            disconnect()
+            phase = .enteringCode(attempted)
+            return
+        }
         LLog("transfer-client failed: \(message)")
         // The link has already discarded whatever it had staged — that tree is
         // its property, not this object's.
         pullingCaptureID = nil
+        pullQueue = []
         setPullActive(false)
         phase = .failed(message)
     }
+
+    /// Names of the batch's projects already renamed into the library, in
+    /// arrival order — the done screen's receipt.
+    private var installedNames: [String] = []
 
     private func install(_ captureID: UUID) async {
         guard let model else { return }
@@ -399,9 +497,24 @@ final class ProjectTransferClient: ObservableObject {
         phase = .installing
         do {
             let capture = try await model.commitIncoming(captureID: captureID)
+            installedNames.append(capture?.name ?? capture?.originalName ?? "Project")
+            if !pullQueue.isEmpty { pullQueue.removeFirst() }
             pullingCaptureID = nil
+            // More selected? The link is still up and the server is free again
+            // — straight into the next pull, same screen, next numerator.
+            if !pullQueue.isEmpty {
+                LLog("transfer-client installed \(installedNames.count)/\(batchCount), pulling next")
+                startNextPull()
+                return
+            }
             setPullActive(false)
-            phase = .done(projectName: capture?.name ?? capture?.originalName ?? "Project")
+            let summary: String
+            if installedNames.count == 1, let only = installedNames.first {
+                summary = "“\(only)” was added to your library."
+            } else {
+                summary = "\(installedNames.count) projects were added to your library."
+            }
+            phase = .done(summary: summary)
         } catch {
             fail(error.localizedDescription)
         }
@@ -679,5 +792,52 @@ final class PTLink: @unchecked Sendable {
         onDone?(id)
     }
 
+}
+
+// MARK: - Remembered pairing codes
+
+/// The last few codes that actually paired, keyed by the `pid` each serving
+/// device derives from its LIVE code and advertises in its TXT record
+/// (`CaptureRemotePairing.pairingID`). That derivation is what makes silent
+/// re-pairing safe to attempt: a match proves the code never rotated, and a
+/// rotation changes the pid so the match simply fails — no doomed connection,
+/// no error screen, just the code prompt as before.
+///
+/// Stored in `UserDefaults`: a code is only useful while its device keeps
+/// advertising the matching pid, so a stale entry is inert rather than a
+/// secret worth guarding, and the cap keeps the dictionary from growing with
+/// every device ever met.
+enum RememberedTransferCodes {
+    private static let key = "transfer.rememberedCodes"
+    private static let cap = 8
+
+    static func code(matching pairingID: String) -> String? {
+        guard !pairingID.isEmpty else { return nil }
+        return stored[pairingID]
+    }
+
+    static func remember(_ code: String) {
+        guard code.count == 6 else { return }
+        let pid = CaptureRemotePairing.pairingID(code: code)
+        var codes = stored
+        guard codes[pid] != code else { return }
+        codes[pid] = code
+        // Arbitrary eviction beyond the cap — recency bookkeeping is not
+        // worth the code for a dictionary this small.
+        while codes.count > cap, let victim = codes.keys.first(where: { $0 != pid }) {
+            codes.removeValue(forKey: victim)
+        }
+        UserDefaults.standard.set(codes, forKey: key)
+    }
+
+    static func forget(_ code: String) {
+        var codes = stored
+        codes.removeValue(forKey: CaptureRemotePairing.pairingID(code: code))
+        UserDefaults.standard.set(codes, forKey: key)
+    }
+
+    private static var stored: [String: String] {
+        UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+    }
 }
 #endif

@@ -21,7 +21,9 @@ struct ProjectTransferImportView: View {
     @EnvironmentObject var model: AppModel
     @StateObject private var client = ProjectTransferClient()
     @State private var code = ""
-    @State private var selectedProject: PTProjectInfo?
+    /// Tap order, because the pulls run in it — the first project picked is
+    /// the first one home.
+    @State private var selectedProjects: [PTProjectInfo] = []
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -73,7 +75,7 @@ struct ProjectTransferImportView: View {
             if showsBackButton {
                 Button("Back") {
                     code = ""
-                    selectedProject = nil
+                    selectedProjects = []
                     client.backToBrowsing()
                 }
                 .buttonStyle(.plain)
@@ -441,17 +443,19 @@ struct ProjectTransferImportView: View {
                 }
                 Divider()
                 HStack {
-                    if let selectedProject {
-                        Text(LLFormat.bytes(selectedProject.totalBytes) + " to copy")
+                    if !selectedProjects.isEmpty {
+                        let total = selectedProjects.reduce(Int64(0)) { $0 + $1.totalBytes }
+                        Text(LLFormat.bytes(total) + " to copy")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Import") {
-                        guard let selectedProject else { return }
-                        client.requestProject(selectedProject)
+                    Button(selectedProjects.count > 1
+                        ? "Import \(selectedProjects.count)" : "Import") {
+                        guard !selectedProjects.isEmpty else { return }
+                        client.requestProjects(selectedProjects)
                     }
-                    .disabled(selectedProject == nil)
+                    .disabled(selectedProjects.isEmpty)
                     #if os(macOS)
                     .keyboardShortcut(.defaultAction)
                     #endif
@@ -463,9 +467,15 @@ struct ProjectTransferImportView: View {
     }
 
     private func projectRow(_ project: PTProjectInfo) -> some View {
-        let isSelected = selectedProject?.captureID == project.captureID
+        let isSelected = selectedProjects.contains { $0.captureID == project.captureID }
         return Button {
-            selectedProject = project
+            // Tap toggles membership: one tap + Import is still the
+            // single-project flow, and a second row is just a second tap.
+            if isSelected {
+                selectedProjects.removeAll { $0.captureID == project.captureID }
+            } else {
+                selectedProjects.append(project)
+            }
         } label: {
             HStack(spacing: 10) {
                 thumbnail(project)
@@ -536,8 +546,16 @@ struct ProjectTransferImportView: View {
 
     private func transferring(_ progress: ProjectTransferClient.Progress) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("Copying project")
+            Text(progress.projectCount > 1
+                ? "Copying project \(progress.projectIndex) of \(progress.projectCount)"
+                : "Copying project")
                 .font(.headline)
+            if !progress.projectName.isEmpty {
+                Text(progress.projectName)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
 
             bar(progress.fraction)
 
@@ -560,7 +578,7 @@ struct ProjectTransferImportView: View {
             HStack {
                 Spacer()
                 Button("Cancel") {
-                    selectedProject = nil
+                    selectedProjects = []
                     client.cancelTransfer()
                 }
                 #if os(macOS)
@@ -612,17 +630,17 @@ struct ProjectTransferImportView: View {
 
     // MARK: - Terminal states
 
-    private func done(_ name: String) -> some View {
+    private func done(_ summary: String) -> some View {
         VStack(spacing: 0) {
             centred(
                 icon: "checkmark.circle.fill", tint: .green,
                 title: "Import complete",
-                detail: "“\(name)” was added to your library.",
+                detail: summary,
                 spinner: false)
             HStack {
                 Spacer()
                 Button("Import another") {
-                    selectedProject = nil
+                    selectedProjects = []
                     client.backToBrowsing()
                 }
                 Button("Done") { dismiss() }
@@ -645,7 +663,7 @@ struct ProjectTransferImportView: View {
                 Spacer()
                 Button("Try again") {
                     code = ""
-                    selectedProject = nil
+                    selectedProjects = []
                     client.backToBrowsing()
                 }
                 #if os(macOS)
@@ -711,7 +729,7 @@ struct ProjectTransferImportView: View {
                     if let match { connect(match) }
                 case .selectingProject:
                     guard let pull, client.projects.indices.contains(pull) else { return }
-                    selectedProject = client.projects[pull]
+                    selectedProjects = [client.projects[pull]]
                     client.requestProject(client.projects[pull])
                 case .done, .failed:
                     return
