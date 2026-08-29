@@ -78,8 +78,21 @@ enum TransferProbe {
         browser.browseResultsChangedHandler = { results, _ in
             guard endpoint == nil else { return }
             func name(_ result: NWBrowser.Result) -> String {
-                guard case .bonjour(let txt) = result.metadata else { return "" }
-                return txt[ProjectTransferService.TXTKey.deviceName] ?? ""
+                // BOTH names, because they differ on a real phone: the TXT
+                // record carries `UIDevice.current.name`, which a build without
+                // the user-assigned-device-name entitlement reads as the
+                // generic "iPhone" — so `--device "iPhone 12 Pro"` matched
+                // nothing and presented as "no device advertising" (found
+                // 2026-08-29). The Bonjour service instance name is stamped by
+                // the system and still says "iPhone 12 Pro".
+                var names = ""
+                if case .bonjour(let txt) = result.metadata {
+                    names = txt[ProjectTransferService.TXTKey.deviceName] ?? ""
+                }
+                if case .service(let instance, _, _, _) = result.endpoint {
+                    names += " " + instance
+                }
+                return names
             }
             let match = wantedDevice.map { wanted in
                 results.first { name($0).lowercased().contains(wanted) }

@@ -51,6 +51,16 @@ enum ProjectTransferService {
     }
 }
 
+/// Posted by the transfer client when a pull starts/ends (`userInfo["active"]`
+/// is a Bool). The idle transfer *server* on the same device listens and
+/// withdraws its Bonjour advertisement for the duration: AWDL announcement
+/// work forces the Wi-Fi radio off-channel, and on 2026-08-29 an iPad pulling
+/// 5 GB was advertising its own library over peer-to-peer the whole time.
+extension Notification.Name {
+    static let llProjectTransferPullState =
+        Notification.Name("llProjectTransferPullState")
+}
+
 // MARK: - Framing
 
 enum PTFrameType: UInt8 {

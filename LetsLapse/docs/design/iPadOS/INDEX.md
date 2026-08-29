@@ -2,6 +2,13 @@
 
 Canvas 820×1180 pt (iPad 10th gen class), portrait + landscape where bespoke.
 
+⚠️ **2026-08-29, behaviour split from iPhone:** iPad no longer auto-opens the
+camera — at launch or on the Create tab — by default
+(`CreateCameraSetting`, Settings ▸ Recording toggle). Create lands on the
+editing home, the Mac's posture. Affects any iPad spec that assumed the
+capture screen as the launch surface; Settings ▸ Recording gains the toggle
+row (shared iOS layout).
+
 🟡 **Mostly shared-spec.** The app is a universal target; iPad renders the iOS layouts (floating pill tab bar, same screens) — with one exception since 2026-08-12: the **guided clip builder's steps rail** activates on any surface ≥ 700×500pt, which covers every iPad orientation, so iPad shows the macOS layouts for that flow. When further iPad-specific passes happen (split layouts, wider capture rails), files land here following the conventions in [../README.md](../README.md).
 
 **2026-08-25 — the Scans tab is now conditional.** `LLTab.visible(scans:)` drops it from `FloatingTabBar` unless the library holds a scan and **Settings ▸ Advanced ▸ Layout ▸ Enable Scans menu** is on; with the switch off, scanner runs are listed in Projects behind a Scans filter instead. The bar's metrics are count-derived, so it falls back to five 66pt seats on its own. Same code on every platform — see `iOS/settings.layout.portrait.svg` and `iOS/projects.scans-filter.portrait.svg` for the drawn specs.

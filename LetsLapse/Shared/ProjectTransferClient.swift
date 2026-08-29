@@ -3,6 +3,9 @@
 #if !os(watchOS)
 import Foundation
 import Network
+#if os(iOS)
+import UIKit
+#endif
 
 /// A device offering its library, as shown in the Mac's picker.
 struct DiscoveredLibrary: Identifiable, Equatable {
@@ -317,7 +320,48 @@ final class ProjectTransferClient: ObservableObject {
         pullingCaptureID = info.captureID
         phase = .transferring(Progress(
             fileName: "", bytesReceived: 0, totalBytes: info.totalBytes))
+        setPullActive(true)
         link.send(PTTransferRequest(captureID: info.captureID))
+    }
+
+    /// True while a pull (or its install) is in flight. Three effects, all
+    /// about giving the radio and the human the next N minutes: this device's
+    /// own idle transfer server withdraws its Bonjour advertisement
+    /// (`llProjectTransferPullState`), the device-list browser stops scanning
+    /// (both are AWDL duty the Wi-Fi radio pays for on-channel — measured
+    /// 2026-08-29 against a 5 GB pull crawling at 1.3 MB/s), and on iOS the
+    /// screen stays awake so auto-lock cannot kill an hour-long transfer.
+    private var pullActive = false
+
+    private func setPullActive(_ active: Bool) {
+        guard pullActive != active else { return }
+        pullActive = active
+        NotificationCenter.default.post(
+            name: .llProjectTransferPullState, object: nil,
+            userInfo: ["active": active])
+        #if os(iOS)
+        UIApplication.shared.isIdleTimerDisabled = active
+        #endif
+        if active {
+            pauseBrowsing()
+        } else {
+            resumeBrowsingIfNeeded()
+        }
+    }
+
+    /// Stops the Bonjour scan without forgetting what it found — the picker
+    /// keeps its rows, only the radio goes quiet. `stopBrowsing` is the full
+    /// teardown for a closing window; this is the pull-time hush.
+    private func pauseBrowsing() {
+        browseKeepAlive?.cancel()
+        browseKeepAlive = nil
+        browser?.cancel()
+        browser = nil
+    }
+
+    private func resumeBrowsingIfNeeded() {
+        guard browseKeepAlive == nil, browser == nil else { return }
+        startBrowsing()
     }
 
     /// Stops the pull. The server stops writing, the link discards the partial
@@ -326,6 +370,7 @@ final class ProjectTransferClient: ObservableObject {
     func cancelTransfer() {
         link?.cancelTransfer()
         pullingCaptureID = nil
+        setPullActive(false)
         phase = projects.isEmpty ? .browsing : .selectingProject
     }
 
@@ -335,6 +380,7 @@ final class ProjectTransferClient: ObservableObject {
         link?.close()
         link = nil
         pullingCaptureID = nil
+        setPullActive(false)
         peerName = nil
     }
 
@@ -343,6 +389,7 @@ final class ProjectTransferClient: ObservableObject {
         // The link has already discarded whatever it had staged — that tree is
         // its property, not this object's.
         pullingCaptureID = nil
+        setPullActive(false)
         phase = .failed(message)
     }
 
@@ -353,6 +400,7 @@ final class ProjectTransferClient: ObservableObject {
         do {
             let capture = try await model.commitIncoming(captureID: captureID)
             pullingCaptureID = nil
+            setPullActive(false)
             phase = .done(projectName: capture?.name ?? capture?.originalName ?? "Project")
         } catch {
             fail(error.localizedDescription)
@@ -398,13 +446,20 @@ final class PTLink: @unchecked Sendable {
 
     init(endpoint: NWEndpoint, code: String, stagingRoot: URL) {
         self.stagingRoot = stagingRoot
-        self.connection = NWConnection(
-            to: endpoint,
-            using: CaptureRemotePairing.parameters(
-                code: code,
-                salt: ProjectTransferService.pairingSalt,
-                identity: "letslapse-transfer",
-                bulkTransfer: true))
+        let parameters = CaptureRemotePairing.parameters(
+            code: code,
+            salt: ProjectTransferService.pairingSalt,
+            identity: "letslapse-transfer",
+            bulkTransfer: true)
+        // The field case: discovery has always been peer-to-peer capable
+        // (browser and listener both set this), but the DATA connection never
+        // did — so two devices with no shared network would find each other
+        // and then hang at pairing forever. With it, the framework may carry
+        // the pull over AWDL (device-to-device, no router) when that is the
+        // only path — or the better one. Which path won is logged at `.ready`
+        // ("link ready via …": en0 = infrastructure, awdl0 = direct).
+        parameters.includePeerToPeer = true
+        self.connection = NWConnection(to: endpoint, using: parameters)
     }
 
     func start() {
@@ -412,6 +467,12 @@ final class PTLink: @unchecked Sendable {
             guard let self else { return }
             switch state {
             case .ready:
+                // The wire this pull actually rides. "en0" = infrastructure
+                // Wi-Fi, "awdl0" = peer-to-peer — the answer the 2026-08-29
+                // slow-transfer investigation could not read from outside.
+                let interfaces = self.connection.currentPath?.availableInterfaces
+                    .map { "\($0.name)/\($0.type)" }.joined(separator: ",") ?? "?"
+                LLog("transfer-client link ready via \(interfaces)")
                 self.onReady?()
                 self.receiveNext()
             case .failed(let error):

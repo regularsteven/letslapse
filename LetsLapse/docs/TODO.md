@@ -11,6 +11,64 @@ live inline.
 
 ## Open
 
+### Render progress publishing storm — UI staggers during any render
+
+**Detail:** [perf-audit-2026-08-29.md](perf-audit-2026-08-29.md) (finding A +
+ranked fixes P1) · **Raised:** 2026-08-29
+
+Every render publishes per-frame progress through `@Published` state on
+`AppModel` itself, so each engine tick re-evaluates the whole mounted view
+tree — plus an app-root `.onChange(of: model.progress)` and, on macOS, a
+whole-log-file re-read per emit. Fix at the sink (5–10 Hz gate), move run
+progress off `AppModel` onto a processing-only observable, ring-buffer the Mac
+job log tail, and throttle the `ImageStacker`/`TimeSliceRenderer` emitters.
+
+### Standalone phone↔iPad transfer — make the pairing work without a Mac
+
+**Detail:** [perf-audit-2026-08-29.md](perf-audit-2026-08-29.md) (findings
+B–D, both measured runs, the on-device profile) · **Raised:** 2026-08-29
+after a 5.1 GB iPhone 12 Pro → iPad pull ran hot, thermally stalled, and died
+at 4.6 GB with `NWError 60`, discarding the staged tree. The Mac relay is a
+bench workaround only — the iPad exists to remove the Mac dependency, so the
+radio path itself is the product surface.
+
+Measured basis: same phone/project did 12.6 MB/s over USB (thermal ≤2) vs
+7.4→1.3 MB/s over Wi-Fi (thermal critical in 3 min), ack window pinned full
+both times — the radio path is the bottleneck and the heater. The data
+connection is already infrastructure-only; the AWDL duty is the *three*
+side-radios (client browser scanning + both idle listeners advertising).
+
+- **Phase A (started 2026-08-29):** negotiated-interface logging on both
+  ends, client browse pause during pulls, both idle listeners withdraw their
+  Bonjour advert while a transfer is in flight
+  (`llProjectTransferPullState`), keep-awake on both roles, per-file progress
+  emit throttled. Acceptance test: the same 5.09 GB pull, instrumented.
+- **Phase B — resume (plan §4):** `have` set on `requestTransfer`, keep
+  partials on failure, auto-reconnect; turns a dropped hour-long pull into a
+  30-second reconnect. Friendlier failure copy than raw `NWError 60`.
+- **Phase D — direct peer-to-peer (started 2026-08-29):** the field case was
+  broken by one missing flag — discovery was P2P-capable but `PTLink`'s data
+  connection never set `includePeerToPeer`, so two devices with no shared
+  network would find each other and hang at pairing forever. Flag added; the
+  `via …` log names the winning path (`awdl0` = direct). Field validation
+  pending (cross-SSID bench test = a no-router simulation). Later: consider a
+  "direct connection" affordance if the framework prefers a bad AP over a
+  good AWDL path in practice. Same gap likely exists in the camera remote's
+  `LocalNetworkTransport.connect` — audit separately.
+- **Learned on the bench (2026-08-29 evening):** thermal was the *casualty*,
+  not the cause — a cool-pack run at thermal 0 crawled at the same 1 MB/s.
+  The home network is 2.4 GHz ch11/20 MHz ("blanickaback"), and an
+  infra transfer crosses that channel twice; single-digit-Mbit reality. The
+  fast run was USB (wiredEthernet), never Wi-Fi.
+- **Phase C:** serving-side UI churn (sharing chip out of ProjectsView's
+  observation, catalogue-walk TTL), screen-dim during transfers (design
+  pass: thermal/interface/rate readout in both transfer UIs), and the
+  `cleanUpOnDisappear`-never-stops-the-camera backstop.
+
+Open questions for the next instrumented run: infra band/RSSI vs yesterday,
+charging-heat contribution (both measured runs were cabled = charging), and
+whether advert-quiet alone recovers most of the rate.
+
 ### Time slicing — the time gradient that scrolls across the frame
 
 **Detail:** [time-slicing.md](time-slicing.md) · **Raised:** 2026-08-28 ·

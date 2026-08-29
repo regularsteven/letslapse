@@ -150,6 +150,11 @@ struct ProjectsView: View {
                 transferServer.start()
             }
         }
+        // No transfer dim, by decision (2026-08-29): direct peer-to-peer
+        // moved a 10 GB pull in ~9 minutes at thermal "fair" — too short for
+        // panel heat to matter. The keep-awake in `ProjectTransferServer`
+        // stays: auto-lock killing a serve is still real. If hour-long pulls
+        // ever return, a duration-aware dim is sketched in TODO (Phase C).
         #endif
     }
 

@@ -432,13 +432,22 @@ struct ContentView: View {
     /// Open the camera as the Create tab's front surface. Only when the tab is
     /// at rest (no job flow layered over it) — a running or parked flow keeps
     /// the screen it's on.
+    ///
+    /// Gated on `CreateCameraSetting`: an iPhone is a camera that edits, an
+    /// iPad is an editor that can shoot (the Mac's posture — its Create tab
+    /// has never auto-opened anything). All three default-behaviour paths
+    /// funnel through here — launch, switching to Create, and reselecting it —
+    /// while explicit asks (the Record button in Create, the Watch's
+    /// `armCamera`) present the camera directly and stay un-gated.
     private func openCameraForCreateTab() {
+        guard CreateCameraSetting.opensCamera else { return }
         guard model.stage == .home else { return }
         cameraIntent = CaptureIntent()
         showCamera = true
     }
 
     // MARK: - Watch: what the phone is doing
+
 
     /// The two commands the remote can send when the capture screen isn't
     /// there. Returns whether the command actually ran — a refusal must not
@@ -1163,5 +1172,28 @@ extension FlowHeader where Trailing == EmptyView {
         self.init(
             title: title, onBack: onBack, centersTitle: centersTitle,
             trailing: { EmptyView() })
+    }
+}
+
+/// Whether the Create tab opens the camera as its front surface — at launch,
+/// on switching to the tab, and on reselecting it. Settings ▸ Recording.
+///
+/// The default states the two devices' postures: an iPhone is a camera that
+/// edits, an iPad is an editor that can shoot — the Mac's posture, which has
+/// never auto-opened anything. Read via `object(forKey:)` so the per-idiom
+/// default holds until the human actually touches the toggle.
+enum CreateCameraSetting {
+    static let key = "letslapse.create.opensCamera"
+
+    static var defaultValue: Bool {
+        #if os(iOS)
+        return UIDevice.current.userInterfaceIdiom == .phone
+        #else
+        return false
+        #endif
+    }
+
+    static var opensCamera: Bool {
+        UserDefaults.standard.object(forKey: key) as? Bool ?? defaultValue
     }
 }

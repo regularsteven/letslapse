@@ -140,6 +140,10 @@ final class ProjectTransferServer: ObservableObject {
             listener.start(queue: networkQueue)
             isRunning = true
             stoodDownIdle = false
+            observePullState()
+            // Armed while this same device is mid-pull (Settings toggled, or
+            // the scene came back): stay quiet until that pull ends.
+            if pullElsewhereActive { pauseAdvertising() }
             restartIdleTimer()
             Task { await refreshCatalogue() }
         } catch {
@@ -151,6 +155,10 @@ final class ProjectTransferServer: ObservableObject {
     func stop() {
         idleTimer?.cancel()
         idleTimer = nil
+        if let pullStateObserver {
+            NotificationCenter.default.removeObserver(pullStateObserver)
+            self.pullStateObserver = nil
+        }
         abortTransfer(reason: nil)
         pendingConnections.forEach { $0.cancel() }
         pendingConnections = []
@@ -213,6 +221,51 @@ final class ProjectTransferServer: ObservableObject {
             LLog("transfer-server standing down — idle for \(Int(Self.idleTimeout / 60)) minutes")
             self.stop()
             self.stoodDownIdle = true
+        }
+    }
+
+    /// (Re)registers the Bonjour advertisement for the current code — the
+    /// counterpart of `pauseAdvertising`. Safe on a running listener: setting
+    /// `service` re-registers without touching live connections.
+    private func advertise() {
+        guard let listener, isRunning, !pairingCode.isEmpty else { return }
+        listener.service = NWListener.Service(
+            type: ProjectTransferService.type,
+            txtRecord: txtRecord(code: pairingCode))
+    }
+
+    /// Withdraws the Bonjour advertisement while keeping the listener and its
+    /// live connections. Announcing `_letslapse-xfer` includes AWDL, and AWDL
+    /// duty forces the Wi-Fi radio off its infrastructure channel — measured
+    /// 2026-08-29 alongside a 5 GB pull that crawled at 1.3 MB/s while the
+    /// ack window sat full. A device that is mid-transfer (either role) has
+    /// nothing to gain from being discoverable and a lot of throughput to
+    /// lose.
+    private func pauseAdvertising() {
+        listener?.service = nil
+    }
+
+    /// True while this device's transfer *client* is pulling a project —
+    /// see `llProjectTransferPullState`. The idle server stays quiet for the
+    /// duration.
+    private var pullElsewhereActive = false
+    private var pullStateObserver: NSObjectProtocol?
+
+    private func observePullState() {
+        guard pullStateObserver == nil else { return }
+        pullStateObserver = NotificationCenter.default.addObserver(
+            forName: .llProjectTransferPullState, object: nil, queue: .main
+        ) { [weak self] note in
+            let active = note.userInfo?["active"] as? Bool ?? false
+            Task { @MainActor in
+                guard let self else { return }
+                self.pullElsewhereActive = active
+                if active {
+                    self.pauseAdvertising()
+                } else if self.job == nil {
+                    self.advertise()
+                }
+            }
         }
     }
 
@@ -302,7 +355,14 @@ final class ProjectTransferServer: ObservableObject {
         connection = incoming
         isPeerConnected = true
         restartIdleTimer()
-        LLog("transfer-server peer connected")
+        // Which wire actually carries this peer. "en0" is infrastructure
+        // Wi-Fi, "awdl0" is peer-to-peer, and a USB-tethered Mac shows up as
+        // wiredEthernet — the 2026-08-29 slow-transfer investigation spent an
+        // afternoon unable to answer exactly this question from the outside.
+        let path = incoming.currentPath
+        let interfaces = path?.availableInterfaces
+            .map { "\($0.name)/\($0.type)" }.joined(separator: ",") ?? "?"
+        LLog("transfer-server peer connected via \(interfaces)")
         receiveNext(on: incoming)
     }
 
@@ -447,6 +507,16 @@ final class ProjectTransferServer: ObservableObject {
 
         let job = TransferJob(captureID: captureID)
         self.job = job
+        // The radio should spend the next N minutes on payload, not on
+        // announcing a library that is busy anyway (a second client gets
+        // `busy` even when it does find us).
+        pauseAdvertising()
+        #if os(iOS)
+        // A phone that locks mid-serve kills the transfer (background =
+        // listener stand-down). The 2026-08-28 iPad pull only survived
+        // because the screen happened to stay awake for an hour.
+        UIApplication.shared.isIdleTimerDisabled = true
+        #endif
         model.beginActivity(.servingTransfer)
         activeTransfer = TransferProgress(
             projectName: name,
@@ -513,6 +583,10 @@ final class ProjectTransferServer: ObservableObject {
         captureWatch?.cancel()
         captureWatch = nil
         activeTransfer = nil
+        #if os(iOS)
+        UIApplication.shared.isIdleTimerDisabled = false
+        #endif
+        if !pullElsewhereActive { advertise() }
         model?.endActivity(.servingTransfer)
     }
 
@@ -699,7 +773,15 @@ final class ProjectTransferServer: ObservableObject {
                 return
             }
             if let error = write(begin) { onFinish(error); return }
-            onProgress(sent, entry.relativePath)
+            // Same 0.2 s gate as the chunk loop below. Unthrottled, this fired
+            // once per file — and a project is thousands of files, each emit a
+            // main-actor hop that re-renders the whole Projects list on the
+            // serving device (profiled 2026-08-29: 93 % of the app's CPU
+            // during a serve was exactly this).
+            if Date().timeIntervalSince(lastReport) > 0.2 {
+                lastReport = Date()
+                onProgress(sent, entry.relativePath)
+            }
 
             // `project.json` is generated in memory and never exists on this
             // device's disk — the one entry with no file behind it.

@@ -42,6 +42,8 @@ struct SettingsView: View {
     /// Stored as the raw strategy id; stamped into every run's capture log.
     @AppStorage(BlendStrategyID.defaultsKey) private var blendStrategy = BlendStrategyID.zone.rawValue
     @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
+    /// Per-idiom default: iPhone on, iPad off — see `CreateCameraSetting`.
+    @AppStorage(CreateCameraSetting.key) private var opensCameraOnCreate = CreateCameraSetting.defaultValue
     @AppStorage(RawDecodeSettings.storageKey)
     private var rawDecodePath = RawDecodePath.bradfordAdaptation.rawValue
     @State private var storage: AppModel.LibraryStorage?
@@ -348,6 +350,17 @@ struct SettingsView: View {
 
     private var recordingCard: some View {
         VStack(spacing: 0) {
+            #if os(iOS)
+            LLRow(
+                title: "Open Camera on Create tab",
+                subtitle: "Create opens straight into the camera — at launch and whenever you switch to the tab. Off, Create is an editing home and Record starts the camera. On by default on iPhone; off on iPad"
+            ) {
+                Toggle("", isOn: $opensCameraOnCreate)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+            #endif
+
             LLRow(
                 title: "Remember recording settings",
                 subtitle: "Start each shoot in your last-used mode with its settings — lens, resolution, frame rate, stabilization, interval spacing and blend frames"
