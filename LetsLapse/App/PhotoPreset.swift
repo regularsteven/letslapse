@@ -288,12 +288,63 @@ enum PhotoGrader {
         let frame = try decodedFrame(
             url: url, scale: scale, decoder: decoder, recipe: grade.recipe)
         noteBalanceFallback(decoder, url: url)
-        let renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
         // Every consumer of this path quantises to 8 bits (preview CGImages,
         // JPEG export), so the engine adds its TPDF dither here; the blend
         // path dithers in its own encode kernel instead.
-        let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
-        return try decoder.cgImage(from: output)
+        guard maxDimension != nil else {
+            // Full resolution is a one-shot export: a fresh renderer, whose
+            // scratch would only evict a preview-sized one from the pool.
+            let renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
+            let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
+            return try decoder.cgImage(from: output)
+        }
+        return try withReusedRenderer(
+            width: frame.texture.width, height: frame.texture.height,
+            recipe: grade.recipe, reference: frame.reference()
+        ) { renderer in
+            let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
+            // Readback inside the lock: `apply` hands back renderer-owned
+            // scratch, valid only until the renderer's next encode.
+            return try decoder.cgImage(from: output)
+        }
+    }
+
+    // MARK: - Renderer reuse
+
+    /// Preview renderers keyed by texture size, guarded by one lock that also
+    /// serializes their use — `GradeRenderer` is single-driver by contract,
+    /// and remaking one per render reallocated ~60 MB of Metal scratch per
+    /// slider tick (editor-performance-plan.md, finding 3). The pool stays
+    /// small: fit preview, scrub preview, the detail hero's 1400 px, a loupe
+    /// patch. `body` runs under the lock and must finish reading the output
+    /// texture before it returns.
+    private static let rendererLock = NSLock()
+    private static var pooledRenderers: [String: (age: Int, renderer: GradeRenderer)] = [:]
+    private static var rendererAge = 0
+
+    private static func withReusedRenderer<T>(
+        width: Int, height: Int,
+        recipe: GradeRecipe, reference: GradeReference,
+        _ body: (GradeRenderer) throws -> T
+    ) throws -> T {
+        guard let engine = gradeEngine else { throw GradeError.renderFailed }
+        rendererLock.lock()
+        defer { rendererLock.unlock() }
+        rendererAge += 1
+        let key = "\(width)x\(height)"
+        let renderer: GradeRenderer
+        if let held = pooledRenderers[key] {
+            renderer = held.renderer
+            renderer.restage(recipe, reference: reference)
+        } else {
+            if pooledRenderers.count >= 4,
+               let oldest = pooledRenderers.min(by: { $0.value.age < $1.value.age }) {
+                pooledRenderers.removeValue(forKey: oldest.key)
+            }
+            renderer = engine.makeRenderer(recipe, reference: reference)
+        }
+        pooledRenderers[key] = (rendererAge, renderer)
+        return try body(renderer)
     }
 
     // MARK: - Pixel peeping
@@ -333,7 +384,7 @@ enum PhotoGrader {
         url: URL, preset: PhotoPreset, adjustments: PhotoAdjustments,
         center: CGPoint, pixelSize: CGSize
     ) -> DetailPatch? {
-        guard let decoder = linearDecoder, let engine = gradeEngine else { return nil }
+        guard let decoder = linearDecoder else { return nil }
         do {
             let grade = PhotoGrade(preset: preset, adjustments: adjustments)
             let frame = try detailFrame(url: url, decoder: decoder, recipe: grade.recipe)
@@ -354,10 +405,15 @@ enum PhotoGrader {
             // Graded against the WHOLE frame's long edge, not the patch's, so
             // the noise reduction and sharpening in it are the ones the export
             // will bake (see `GradeRenderer.encode`).
-            let renderer = engine.makeRenderer(grade.recipe, reference: frame.reference(
-                longEdge: Double(max(source.width, source.height))))
-            let output = try renderer.apply(to: cropped, ditherFor8Bit: true)
-            let rendered = try decoder.cgImage(from: output)
+            let reference = frame.reference(
+                longEdge: Double(max(source.width, source.height)))
+            let rendered = try withReusedRenderer(
+                width: cropped.width, height: cropped.height,
+                recipe: grade.recipe, reference: reference
+            ) { renderer in
+                let output = try renderer.apply(to: cropped, ditherFor8Bit: true)
+                return try decoder.cgImage(from: output)
+            }
             // Back to the region actually asked for — the margin was only ever
             // there to feed the blurs.
             let trimmed = rendered.cropping(to: CGRect(

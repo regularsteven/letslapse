@@ -519,7 +519,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -674,6 +674,27 @@ struct ContentView: View {
         if environment["LL_DETAIL"] == "latest", let capture = model.captures.first {
             selectedTab = .projects
             model.requestedProjectDetailID = capture.id
+        }
+        // `LL_EDITOR=latest` — the photo editor on the LARGEST interval shoot
+        // in the library (the bench wants the worst case), which is otherwise
+        // behind a detail-screen button no headless run can press. On macOS it
+        // opens the editor window directly; on iOS it routes to the project's
+        // detail screen, whose own `LL_EDITOR` task slides the cover over. The
+        // perf bench (docs/editor-performance-plan.md) pairs it with
+        // `LL_PERFWIGGLE`; it is equally the editor-screen screenshot hook.
+        if environment["LL_EDITOR"] == "latest",
+           let capture = model.captures
+               .filter({ $0.kind == .photos && !$0.isPhotoCapture })
+               .max(by: { $0.sourceFileNames.count < $1.sourceFileNames.count }) {
+            #if os(macOS)
+            if let url = model.sourceFrameURLs(for: capture).first {
+                openWindow(value: PhotoEditorWindowRequest(
+                    captureID: capture.id, url: url, title: capture.displayTitle))
+            }
+            #else
+            selectedTab = .projects
+            model.requestedProjectDetailID = capture.id
+            #endif
         }
         // LL_PROJECT_SCANNER[=<poses>|corrected] — fabricate a finished Scanner
         // shoot and open its project. The only way to see that screen

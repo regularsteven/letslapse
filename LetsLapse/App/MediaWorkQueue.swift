@@ -32,6 +32,15 @@ final class MediaWorkQueue {
     /// Shared queue for browsing work — thumbnails, previews, size walks.
     static let shared = MediaWorkQueue()
 
+    /// The editors' grade renders, one at a time. Width 1 on purpose: a
+    /// cancelled job only stops if it hasn't started, so on the shared queue
+    /// a drag stacked up stale renders that ran to completion holding its
+    /// slots while the newest one queued — seconds of "catching up"
+    /// (editor-performance-plan.md, finding 4). One lane means at most one
+    /// stale render is ever ahead of the newest request, and browsing I/O on
+    /// `shared` can never queue-block a slider.
+    static let grading = MediaWorkQueue(width: 1)
+
     private static let log = Logger(subsystem: "com.regularsteven.letslapse", category: "media")
 
     /// One place to record why a tile or a size stayed empty.

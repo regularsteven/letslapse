@@ -146,7 +146,7 @@ public final class GradeRenderer {
     private let core: GradeCore
     private let commandQueue: MTLCommandQueue
     public private(set) var recipe: GradeRecipe
-    public let reference: GradeReference
+    public private(set) var reference: GradeReference
 
     private var params: GPUGradeParams
     private var lut: [Float]
@@ -186,6 +186,19 @@ public final class GradeRenderer {
     public func restage(_ recipe: GradeRecipe) {
         guard recipe != self.recipe else { return }
         self.recipe = recipe
+        let lut = ToneMath.toneLUT(for: recipe)
+        self.lut = lut
+        self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)
+    }
+
+    /// `restage` for a caller that also moves to a different frame: the
+    /// preview path re-uses one renderer across frames, and the reference —
+    /// as-shot illuminant, long edge, decode path — travels with the frame.
+    /// Scratch depends only on texture size, so it survives the swap.
+    public func restage(_ recipe: GradeRecipe, reference: GradeReference) {
+        guard recipe != self.recipe || reference != self.reference else { return }
+        self.recipe = recipe
+        self.reference = reference
         let lut = ToneMath.toneLUT(for: recipe)
         self.lut = lut
         self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)

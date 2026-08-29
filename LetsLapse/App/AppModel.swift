@@ -1148,7 +1148,11 @@ final class AppModel: ObservableObject {
         let root = captureFolderURL(for: capture.id)
         return capture.sourceFileNames
             .filter { !$0.hasSuffix(".json") }
-            .map { root.appendingPathComponent($0) }
+            // `isDirectory: false` matters at this scale: without it,
+            // Foundation stats the disk per appended component to decide
+            // directory-ness — a getattrlist syscall per frame, thousands per
+            // call on a long shoot (measured; editor-performance-plan.md).
+            .map { root.appendingPathComponent($0, isDirectory: false) }
     }
 
     /// The frame that stands for a photo-kind capture when it is shown as a
@@ -3935,11 +3939,29 @@ final class AppModel: ObservableObject {
         processingFramesDone = 0
     }
 
+    /// The storm gate on the two progress sinks below. The engines report per
+    /// frame — thousands of main-actor `@Published` writes per run, each an
+    /// object-level invalidation of every mounted screen — which is what froze
+    /// screen transitions for the better part of a minute when a 1,249-frame
+    /// blend started (perf-audit-2026-08-29.md finding A; the 2026-08-29
+    /// 16 Pro screen recording). Progress is monotonic, so publishing at
+    /// 10 Hz loses nothing but the storm; terminal fractions always pass so a
+    /// band's completion is never dropped.
+    private var lastProgressPublish = Date.distantPast
+    private func progressGateOpens(fraction: Double) -> Bool {
+        if fraction >= 1 { return true }
+        let now = Date()
+        guard now.timeIntervalSince(lastProgressPublish) >= 0.1 else { return false }
+        lastProgressPublish = now
+        return true
+    }
+
     /// The single sink for every engine's per-clip fraction: maps it into the
     /// clip's band of the one global bar. Monotonic — a straggling callback
     /// from an earlier clip can't drag the bar backwards.
     private func reportClipProgress(_ clipIndex: Int, fraction: Double) {
         guard stage == .processing else { return }
+        guard progressGateOpens(fraction: fraction) else { return }
         guard let plan = activeProgressPlan else {
             progress = max(progress, min(max(fraction, 0), 1))
             return
@@ -3954,6 +3976,7 @@ final class AppModel: ObservableObject {
     /// Maps a tail-stage export's 0→1 (stitch, grade bake) into its band.
     private func reportTailProgress(band: ClosedRange<Double>, fraction: Double) {
         guard stage == .processing else { return }
+        guard progressGateOpens(fraction: fraction) else { return }
         let clamped = min(max(fraction, 0), 1)
         progress = max(progress, band.lowerBound + (band.upperBound - band.lowerBound) * clamped)
         updateTailETA(band)
@@ -7482,7 +7505,43 @@ final class AppModel: ObservableObject {
         captures[index].adjustments = adjustments
         captures[index].presetState = state
         captures[index].gradeTimeline = stored
-        try? persistLibrary()
+        // Not `persistLibrary()`: a grade write changes numbers, never files,
+        // so it must not clear the size caches — and the editors call this at
+        // gesture cadence, so the manifest encode cannot run on the main
+        // thread (editor-performance-plan.md, stage 2).
+        persistLibraryOffMain()
+    }
+
+    /// The manifest write for value-only changes, off the main thread.
+    ///
+    /// The snapshot is taken here, synchronously — value types, so the encode
+    /// on the queue sees exactly the state this call saw — and the queue is
+    /// serial, so rapid writes land in order and the last one wins. Unlike
+    /// `persistLibrary()` this leaves `projectStorageBytes` alone: callers
+    /// are changing stored numbers, not files on disk.
+    private static let libraryPersistQueue = DispatchQueue(
+        label: "com.letslapse.library-persist", qos: .utility)
+    private func persistLibraryOffMain() {
+        var manifest = LibraryManifest(
+            captures: captures.map(stampingPresetState), blends: blends, collections: collections)
+        manifest.gradingSchemaVersion = max(gradingSchemaVersion, 1)
+        let directory = projectsRootURL
+        let destination = manifestURL
+        Self.libraryPersistQueue.async {
+            try? FileManager.default.createDirectory(
+                at: directory, withIntermediateDirectories: true)
+            let encoder = JSONEncoder()
+            encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+            guard let data = try? encoder.encode(manifest) else { return }
+            try? data.write(to: destination, options: .atomic)
+        }
+    }
+
+    /// Blocks until every queued off-main manifest write has landed — the
+    /// editors call it on their way out, so quitting the app right after
+    /// closing an editor can't lose the final gesture.
+    func flushLibraryPersists() {
+        Self.libraryPersistQueue.sync {}
     }
 
     /// One of a capture's assets as the viewer shows it, ready to leave the app:

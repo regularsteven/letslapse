@@ -103,7 +103,7 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
 
 /// Per-project anchors the engine needs beside the recipe: what "as shot"
 /// means for this file, and the pixel scale the spatial effects key to.
-public struct GradeReference: Sendable {
+public struct GradeReference: Sendable, Equatable {
     /// The as-shot illuminant, from the DNG's own metadata when available.
     public var asShotTemperatureK: Double
     /// The as-shot tint, in the decoder's green–magenta units. Carried for

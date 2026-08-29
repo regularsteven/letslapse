@@ -110,6 +110,21 @@ struct ProjectDetailView: View {
                 .environmentObject(model)
         }
         #endif
+        #if DEBUG
+        // `LL_EDITOR=latest` (routed here by ContentView's hook): open the
+        // grading editor on this project's first frame without a tap — the
+        // perf bench and the screenshot hook for a screen that is otherwise
+        // behind a button.
+        .task {
+            guard ProcessInfo.processInfo.environment["LL_EDITOR"] == "latest",
+                  gradingPhoto == nil, let capture,
+                  capture.kind == .photos, !capture.isPhotoCapture,
+                  let url = model.sourceFrameURLs(for: capture).first else { return }
+            // Let the detail screen settle before the cover slides over it.
+            try? await Task.sleep(for: .milliseconds(600))
+            previewGradedPhoto(capture, url: url)
+        }
+        #endif
         .sheet(item: $autoName.proposal) { proposal in
             AutoNameSheet(proposal: proposal) { metadata in
                 if let capture {

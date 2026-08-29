@@ -23,6 +23,34 @@ whole-log-file re-read per emit. Fix at the sink (5–10 Hz gate), move run
 progress off `AppModel` onto a processing-only observable, ring-buffer the Mac
 job log tail, and throttle the `ImageStacker`/`TimeSliceRenderer` emitters.
 
+### Editor sliders unusable on big interval shoots — O(frames) body work + per-settle library persist
+
+**Detail:** [editor-performance-plan.md](editor-performance-plan.md) ·
+**Raised:** 2026-08-29 · **Stages 0–3 landed same day — Mac bench 4.8 →
+58.4 ticks/s; on-device A/B on the iPhone 16 Pro (real 260-capture library,
+1,250-frame shoot): 0.2 → 57.7 ticks/s, ~290×. The sibling audit's 10 Hz
+progress gate landed with it after the 16 Pro recording of a blend start
+freezing transitions for ~a minute. Owed: blend-transition re-check on
+device, iPad/12 Pro installs, stages 4–6, uncommitted.**
+
+Grading sliders miss touch-downs and catch up seconds late on every device
+(iPad M3 included — the mechanisms scale with shoot length and library size,
+not silicon; photo-mode stills are unaffected). Six ranked mechanisms, the
+top two measured: the editor rebuilds the full frame-URL list ~a dozen times
+per slider tick on the main thread (10.9 ms/call at 1,480 frames, measured),
+and every 100 ms debounce settle JSON-encodes the whole library on the main
+actor, clears every project's size cache, and invalidates the entire mounted
+view tree — which also fires a second hidden 1400 px render of the same grade
+behind the cover and a per-frame `fileExists` storm in list bodies (the same
+hot stack the sibling audit's 12 Pro trace caught). Plus: ~60 MB of Metal
+scratch allocated per preview render (`restage()` unused by previews),
+zombie renders holding the shared 4-wide media queue, RAW-decode-per-step
+scrubbing, and the video editor swapping a fresh `AVVideoComposition` per
+settle. Fix is staged Mac-first in the plan doc (seeded 1,480-frame bench +
+AX-driven drags + Time Profiler gates); everything is shared code, so iOS
+gets each win for free. Sibling: the render-progress storm entry above —
+stage 6 coordinates both on the structural `@Observable` question.
+
 ### Standalone phone↔iPad transfer — make the pairing work without a Mac
 
 **Detail:** [perf-audit-2026-08-29.md](perf-audit-2026-08-29.md) (findings

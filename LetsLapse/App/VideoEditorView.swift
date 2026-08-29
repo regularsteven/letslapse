@@ -191,8 +191,16 @@ struct VideoEditorView: View {
             guard loaded else { return }
             try? await Task.sleep(for: renderDebounce)
             guard !Task.isCancelled else { return }
-            persist()
             applyGradeToPlayer()
+        }
+        // Persist safety net — slider gestures persist on release; this
+        // catches edits that arrive without a grab/release pair (WB
+        // quick-picks, double-tapped label resets). See the photo editor.
+        .task(id: renderToken) {
+            guard loaded else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            persist()
         }
         .onDisappear {
             player.pause()
@@ -458,7 +466,12 @@ struct VideoEditorView: View {
             keyframedFields: timeline.keyframedFields,
             hasKeyframes: !timeline.isEmpty,
             onResetField: hasTimeline ? resetField : nil,
-            onResetAll: hasTimeline ? resetEverything : nil)
+            onResetAll: hasTimeline ? resetEverything : nil,
+            // A released slider is a finished gesture — write the grade
+            // through once, here, not per debounce settle mid-drag.
+            onFieldEditing: { _, editing in
+                if !editing { persist() }
+            })
     }
 
     // MARK: - Keyframe surface
@@ -565,6 +578,7 @@ struct VideoEditorView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
         refreshState()
         renderToken += 1
+        persist()
     }
 
     private func resetEverything() {
@@ -572,6 +586,7 @@ struct VideoEditorView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
         refreshState()
         renderToken += 1
+        persist()
     }
 
     private func deleteKeyframe(_ keyframe: GradeKeyframe) {
@@ -582,6 +597,7 @@ struct VideoEditorView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
         refreshState()
         renderToken += 1
+        persist()
     }
 
     private var saveAsPresetButton: some View {
@@ -629,6 +645,7 @@ struct VideoEditorView: View {
                 presetState = .original
                 declinedPresetSave = false
                 renderToken += 1
+                persist()
                 return
             }
             applyPresetValues(.neutral)
@@ -644,6 +661,8 @@ struct VideoEditorView: View {
         }
         declinedPresetSave = false
         renderToken += 1
+        // A chip tap is a finished gesture, not a drag: persist it now.
+        persist()
     }
 
     /// A chip's values, written where the playhead is standing — see
@@ -704,6 +723,9 @@ struct VideoEditorView: View {
     private func finishExit() {
         isOfferingPresetSave = false
         persist()
+        // The library write is asynchronous now; drain it before the editor
+        // goes away.
+        model.flushLibraryPersists()
         dismiss()
     }
 

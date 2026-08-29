@@ -75,6 +75,17 @@ struct PhotoViewerView: View {
     /// apart.
     @State private var allFrames: [URL] = []
     @State private var allFrameSeconds: [Double] = []
+    /// The filtered view of the pair above — the frames this screen walks,
+    /// their rebased clock, and the axis built from them. Stored, not
+    /// computed: the body reads these a dozen times per evaluation, and
+    /// rebuilding a 1,480-frame URL list per read (Foundation stats the disk
+    /// once per appended component) held the editor to ~5 slider ticks a
+    /// second (docs/editor-performance-plan.md, finding 1 — measured).
+    /// `refreshFrameWindow()` is the one writer.
+    @State private var frames: [URL] = []
+    @State private var frameSeconds: [Double] = []
+    @State private var frameAxis = FrameAxis(
+        frameCount: 0, elapsedSeconds: nil, uniformDuration: nil)
 
     @State private var rendered: CGImage?
     @State private var isRendering = false
@@ -225,37 +236,57 @@ struct PhotoViewerView: View {
         return model.nominatedBadFrameNames(for: capture)
     }
 
-    /// The frames this screen walks: the shoot, less whatever is hidden. Every
-    /// index in this view — the scrubber's, the steps', the render's — is an
-    /// index into THIS array, so a hidden frame simply isn't a place the
-    /// playhead can stand.
-    private var frames: [URL] {
-        guard let capture, !allFrames.isEmpty else { return allFrames }
-        return model.visibleFrameURLs(for: capture)
+    /// Rebuilds `frames`, `frameSeconds` and `frameAxis` — the frames this
+    /// screen walks (the shoot, less whatever is hidden), the capture clock
+    /// rebased onto the first frame the strip actually holds, and the axis
+    /// built from both. Every index in this view — the scrubber's, the
+    /// steps', the render's — is an index into `frames`, so a hidden frame
+    /// simply isn't a place the playhead can stand.
+    ///
+    /// The clock measures the frames that are on it, so hiding the opening
+    /// two frames of a 4:09 shoot leaves a strip that runs 0:00 → 4:07 rather
+    /// than 0:02 → 4:09: the head is the first visible frame, and the tail is
+    /// how long the visible frames last. A frame hidden out of the MIDDLE
+    /// takes no time off either end — the shoot still spans what it spanned,
+    /// and the strip simply steps over that moment — which is why this
+    /// rebases the origin rather than closing the gaps up. (A no-op when
+    /// nothing is hidden: `elapsedSeconds` already starts at 0.)
+    ///
+    /// Called from the load task and from the `frameWindowKey` watcher — the
+    /// only things the window depends on beyond `allFrames`.
+    private func refreshFrameWindow() {
+        let hidden = hiddenFrameNames
+        frames = hidden.isEmpty
+            ? allFrames
+            : allFrames.filter { !hidden.contains($0.lastPathComponent) }
+        if allFrameSeconds.count == allFrames.count {
+            let kept = hidden.isEmpty
+                ? allFrameSeconds
+                : zip(allFrames, allFrameSeconds)
+                    .filter { !hidden.contains($0.0.lastPathComponent) }
+                    .map(\.1)
+            if let origin = kept.first, origin != 0 {
+                frameSeconds = kept.map { $0 - origin }
+            } else {
+                frameSeconds = kept
+            }
+        } else {
+            frameSeconds = []
+        }
+        frameAxis = FrameAxis(
+            frameCount: frames.count,
+            elapsedSeconds: frameSeconds.isEmpty ? nil : frameSeconds,
+            uniformDuration: uniformVisibleDuration)
     }
 
-    /// The capture clock for exactly those frames, rebased onto the first one
-    /// the strip actually holds.
-    ///
-    /// The axis measures the frames that are on it, so hiding the opening two
-    /// frames of a 4:09 shoot leaves a strip that runs 0:00 → 4:07 rather than
-    /// 0:02 → 4:09: the head is the first visible frame, and the tail is how
-    /// long the visible frames last. A frame hidden out of the MIDDLE takes no
-    /// time off either end — the shoot still spans what it spanned, and the
-    /// strip simply steps over that moment — which is why this rebases the
-    /// origin rather than closing the gaps up.
-    ///
-    /// A no-op when nothing is hidden: `elapsedSeconds` already starts at 0.
-    private var frameSeconds: [Double] {
-        guard allFrameSeconds.count == allFrames.count else { return [] }
-        let hidden = hiddenFrameNames
-        let kept = hidden.isEmpty
-            ? allFrameSeconds
-            : zip(allFrames, allFrameSeconds)
-                .filter { !hidden.contains($0.0.lastPathComponent) }
-                .map(\.1)
-        guard let origin = kept.first, origin != 0 else { return kept }
-        return kept.map { $0 - origin }
+    /// What the visible-frame window depends on beyond `allFrames`, as one
+    /// cheap Equatable the body can watch: the nomination list plus the hide
+    /// toggle. Nil until the project resolves.
+    private var frameWindowKey: [String]? {
+        guard let capture else { return nil }
+        var key = capture.nominatedBadFrameNames ?? []
+        key.append(model.effectiveHideBadFrames(for: capture) ? "#hide" : "#show")
+        return key
     }
 
     // MARK: - Keyframe surface
@@ -277,16 +308,6 @@ struct PhotoViewerView: View {
     private var displayedURL: URL {
         guard hasTimeline else { return url }
         return frames[frameIndex(at: position)]
-    }
-
-    /// The shoot's time axis — the Kit component the warp timeline's stills
-    /// lane shares, so "which frame is at this position" has exactly one
-    /// definition (docs/interval-adjust-unification.md).
-    private var frameAxis: FrameAxis {
-        FrameAxis(
-            frameCount: frames.count,
-            elapsedSeconds: frameSeconds.isEmpty ? nil : frameSeconds,
-            uniformDuration: uniformVisibleDuration)
     }
 
     /// The shoot's length as the strip should read it when there is no
@@ -509,6 +530,7 @@ struct PhotoViewerView: View {
                         .elapsedSeconds(coveringExactly: sources.count) ?? []
                 }.value
             }
+            refreshFrameWindow()
             loaded = true
             let viewedURL = url
             // First, because it sizes the layout: a metadata-only read, well
@@ -534,6 +556,7 @@ struct PhotoViewerView: View {
                 mediaScale = 0
             }
             applyKeyframeHook()
+            applyPerfWiggleHook()
             #endif
             renderToken += 1
         }
@@ -550,11 +573,22 @@ struct PhotoViewerView: View {
             // waits a beat rather than a tenth of a second.
             try? await Task.sleep(for: isScrubbing || isPlaying ? .milliseconds(16) : renderDebounce)
             guard !Task.isCancelled else { return }
-            persist()
             await render()
+        }
+        // The persist safety net, for edits that arrive without a
+        // grab/release pair — the WB quick-picks, a double-tapped label
+        // reset, a hook-driven write. Slider gestures persist on release
+        // (`fieldEditingChanged`); this only has to catch the stragglers, so
+        // it can wait well past any debounce.
+        .task(id: renderToken) {
+            guard loaded else { return }
+            try? await Task.sleep(for: .seconds(2))
+            guard !Task.isCancelled else { return }
+            persist()
         }
         .task(id: patchRequest) { await renderPatch() }
         .task(id: loupeRequest) { await renderLoupe() }
+        .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
         .onChange(of: displayedURL) { _, _ in
             // A scrub moved to a different still: what is on screen at full
             // resolution is now a patch of the wrong frame.
@@ -1149,12 +1183,20 @@ struct PhotoViewerView: View {
     /// loupe up for as long as they are being dragged — the rest are visible
     /// at any scale and need nothing.
     private func fieldEditingChanged(_ field: PhotoAdjustmentField, _ editing: Bool) {
-        guard Self.detailFields.contains(field) else { return }
-        if editing {
-            loupeField = field
-        } else if loupeField == field {
-            loupeField = nil
+        if Self.detailFields.contains(field) {
+            if editing {
+                loupeField = field
+            } else if loupeField == field {
+                loupeField = nil
+            }
         }
+        // A released slider is a finished gesture: the grade goes through to
+        // the project once, here — not once per debounce settle mid-drag,
+        // which was a whole-library encode plus an app-wide invalidation
+        // every 100 ms (editor-performance-plan.md, stage 2). Edits that
+        // arrive without a grab/release pair are caught by the safety-net
+        // task below.
+        if !editing { persist() }
     }
 
     /// What the panel reads and writes: the grade *at the playhead*.
@@ -1203,6 +1245,7 @@ struct PhotoViewerView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
         refreshState()
         scheduleUpdate()
+        persist()
     }
 
     private func resetEverything() {
@@ -1211,6 +1254,7 @@ struct PhotoViewerView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
         refreshState()
         scheduleUpdate()
+        persist()
     }
 
     private func deleteKeyframe(_ keyframe: GradeKeyframe) {
@@ -1221,6 +1265,7 @@ struct PhotoViewerView: View {
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
         refreshState()
         scheduleUpdate()
+        persist()
     }
 
     // MARK: - Playback
@@ -1293,6 +1338,7 @@ struct PhotoViewerView: View {
                 presetState = .original
                 declinedPresetSave = false
                 scheduleUpdate()
+                persist()
                 return
             }
             applyPresetValues(.neutral)
@@ -1308,6 +1354,8 @@ struct PhotoViewerView: View {
         }
         declinedPresetSave = false
         scheduleUpdate()
+        // A chip tap is a finished gesture, not a drag: persist it now.
+        persist()
     }
 
     /// A chip's values, written where the playhead is standing.
@@ -1392,6 +1440,10 @@ struct PhotoViewerView: View {
     private func finishExit() {
         isOfferingPresetSave = false
         persist()
+        // The library write is asynchronous now; drain it before the editor
+        // goes away so closing the app right after closing the editor can't
+        // lose the last gesture.
+        model.flushLibraryPersists()
         dismiss()
     }
 
@@ -1405,7 +1457,7 @@ struct PhotoViewerView: View {
         // machine can't finish before the next one cancels it.
         let longEdge: CGFloat = isScrubbing || isPlaying ? 1100 : previewLongEdge
         isRendering = true
-        let image = await MediaWorkQueue.shared.run {
+        let image = await MediaWorkQueue.grading.run {
             PhotoGrader.render(
                 url: url, preset: preset, adjustments: adjustments, maxDimension: longEdge)
         }
@@ -1541,7 +1593,7 @@ struct PhotoViewerView: View {
     private func renderedPatch(for request: DetailPatchRequest) async -> PhotoGrader.DetailPatch? {
         let preset = preset
         let adjustments = displayedAdjustments
-        let result = await MediaWorkQueue.shared.run {
+        let result = await MediaWorkQueue.grading.run {
             PhotoGrader.renderDetail(
                 url: request.url, preset: preset, adjustments: adjustments,
                 center: request.centre, pixelSize: request.pixels)
@@ -1575,6 +1627,60 @@ struct PhotoViewerView: View {
     }
 
     #if DEBUG
+    /// `LL_PERFWIGGLE=<seconds>` drives the exposure control through the same
+    /// binding a finger on the slider drives, in bursts — ~0.7 s of 60 Hz
+    /// ticks, ~0.35 s pause — for that many seconds, then prints the achieved
+    /// in-burst tick rate. The bench instrument for
+    /// docs/editor-performance-plan.md: every tick pays exactly what a slider
+    /// tick pays (state writes, `refreshState`, render scheduling, body
+    /// invalidation), and the pauses let the debounced settle work (persist +
+    /// render) fire the way real drags let it. A saturated main thread can't
+    /// hit 60 — the achieved rate IS the responsiveness measurement.
+    /// One wiggle per process: window restoration (or a second editor
+    /// instance) must not run a second loop and halve the measured rate.
+    private static var perfWiggleRan = false
+
+    private func applyPerfWiggleHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_PERFWIGGLE"],
+              let seconds = Double(raw), seconds > 0 else { return }
+        guard !Self.perfWiggleRan else { return }
+        Self.perfWiggleRan = true
+        Task { @MainActor in
+            // Let the first render land so the run measures a settled editor.
+            try? await Task.sleep(for: .seconds(3))
+            let started = Date()
+            var ticks = 0
+            var burstTicks = 0
+            var burstStarted = Date()
+            var rates: [Double] = []
+            print("🧪LL perfwiggle: starting \(Int(seconds))s, 60 Hz bursts")
+            while Date().timeIntervalSince(started) < seconds {
+                let elapsed = Date().timeIntervalSince(burstStarted)
+                if elapsed >= 0.7 {
+                    let rate = Double(burstTicks) / elapsed
+                    rates.append(rate)
+                    print(String(format: "🧪LL perfwiggle: burst %.1f ticks/s", rate))
+                    burstTicks = 0
+                    try? await Task.sleep(for: .milliseconds(350))
+                    burstStarted = Date()
+                    continue
+                }
+                let t = Date().timeIntervalSince(started)
+                var values = editedAdjustments.wrappedValue
+                values.exposure = Float(sin(t * 4) * 2)
+                editedAdjustments.wrappedValue = values
+                ticks += 1
+                burstTicks += 1
+                try? await Task.sleep(for: .milliseconds(16))
+            }
+            let total = Date().timeIntervalSince(started)
+            let median = rates.sorted()[max(0, rates.count / 2 - (rates.count.isMultiple(of: 2) ? 1 : 0))]
+            print(String(
+                format: "🧪LL perfwiggle: DONE %d ticks in %.1fs, median burst %.1f ticks/s (60 = ideal)",
+                ticks, total, median))
+        }
+    }
+
     /// `LL_KEYFRAMES=sunset` stages the design's own scenario on an interval
     /// project — three moments across the shoot, playhead between the first
     /// two — and `LL_KEYFRAMES=empty` the first-run state the empty spec draws.
