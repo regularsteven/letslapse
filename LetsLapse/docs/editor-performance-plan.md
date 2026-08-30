@@ -50,6 +50,64 @@ Bench droppings that persist on this Mac: the seeded "Perf bench 1480"
 project in the library, `LL_EDITOR`/`LL_PERFWIGGLE` DEBUG hooks, and the
 bench harness in the session scratchpad (`bench.sh`, seeders, samples).
 
+**Processing-flow pass (2026-08-29 late evening), from the 18:34 16 Pro
+screen recording** (Create → 13 s frozen mid-transition composite → ghost
+layers to ~55 s → Cancel unpressable): four fixes landed —
+
+1. **Hero once per run**: `ProcessingView`'s hero resolved `mediaURL →
+   source(for:)` in its body — a `fileExists` per source frame, per progress
+   tick (~12k stats/s on the recorded shoot). Now resolved once in
+   `startProcessing` onto the progress model.
+2. **`ProcessingProgressModel`** (sibling P1.2): `progress`,
+   `processingETADate`, `processingFramesDone/Total` moved off `AppModel`
+   onto a processing-only observable (forwarding accessors keep the 45 write
+   sites unchanged; `processingPhase`/`statusMessage` stay on AppModel — low
+   cadence, the flow chrome reads them). App-root watch publishing moved
+   from `onChange` to `onReceive` of the new publishers.
+3. **Existence tickets**: `source(for:)`'s per-frame walk runs once per
+   capture per session (`validatedSourceFrames`), cleared beside the size
+   cache in `persistLibrary` (grade writes clear neither). Plus
+   `isDirectory: false` on its URL building.
+4. **Orchestration off main + `.utility` workers**: the sidecar load and
+   `IntervalWarp.compile` inside `blendTask` (which inherits the main actor)
+   now run detached; the stills/stack/slice spawns and `VideoBlender`'s
+   queue dropped `.userInitiated` → `.utility`, so a minutes-long render
+   sits below touch handling. Trade: blends may run somewhat longer on a
+   loaded system; the win is a device that answers.
+
+**Mac A/B** (`pbench.sh`, sampling t=3–23 s of the same blend, same
+project): main thread **100% busy → 6% busy** (11,507/11,507 → 882/13,589
+samples); AG graph updates 5,400+ → ~267; `ProcessingView →
+source(for:preferring:)` and persist/JSONEncoder branches gone. Symbolicate
+`sample`'s `???` frames with `atos -o …/LetsLapse.debug.dylib -l <load
+addr>` when a killed process leaves them unresolved. Bench lessons: the
+`LL_ADJUST=stills` pick is the NEWEST qualifying capture — the Mac library
+now holds real transferred projects, so both legs blended "Overheat 1" (a
+few bench blends registered there — delete when convenient) rather than
+the seed; and a CPU-threshold start gate misses `.utility` runs — sample on
+a fixed timer.
+
+**On-device 16 Pro A/B (2026-08-30 morning)** — same hook-launched blend of
+the real 1,249-frame DNG shoot, 25 s Time Profiler attach each side
+(`DEVICECTL_CHILD_LL_ADJUST=stills DEVICECTL_CHILD_LL_ADJUST_CREATE=1`,
+then attach by PID — attach-by-name races the process registry):
+
+| build | main-thread share of samples | ≈ main-thread CPU in 25 s |
+|---|---|---|
+| pre-fix (installed) | 3,681 / 24,417 (**15%**) | ~3.7 s |
+| fixed | 877 / 25,525 (**3.4%**) | ~0.9 s |
+
+4.2× less main-thread work — and the comparison is biased against the fix:
+the before-attach was delayed past the launch wedge (steady-state storm
+only), while the after window included the launch phase. The wedge window
+itself is the Mac A/B's symbolicated 100% → 6%. The after build's residual
+main-thread frames are benign (AG upkeep, GPU encoder, objc runtime).
+Export notes: the before trace's `time-profile` table never analyzed
+(deferred mode) — the raw `time-sample` table exports regardless and both
+sides were counted on it; its backtraces are unsymbolicated addresses, so
+name-level proof rides the Mac sample + the after trace's `time-profile`.
+The fixed build is left installed on the 16 Pro.
+
 **Sibling audit:** [perf-audit-2026-08-29.md](perf-audit-2026-08-29.md)
 (same day) found the *render-progress* `@Published` storm on `AppModel`. This
 document is the second storm of the same family — the editors' own loop —

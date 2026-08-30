@@ -950,7 +950,32 @@ final class AppModel: ObservableObject {
     }
 
     // Progress / results
-    @Published var progress: Double = 0
+
+    /// The run-rate progress values live on their own observable — their 10 Hz
+    /// writes must invalidate only the processing surfaces, never every screen
+    /// observing AppModel (perf-audit-2026-08-29.md P1.2; the frozen-create
+    /// recording). The forwarders below keep this file's forty-odd write sites
+    /// reading as they always did. Slow-cadence run state (`processingPhase`,
+    /// `statusMessage`, `processingStartedAt`) stays `@Published` here.
+    let processingProgress = ProcessingProgressModel()
+
+    var progress: Double {
+        get { processingProgress.fraction }
+        set { processingProgress.fraction = newValue }
+    }
+    var processingETADate: Date? {
+        get { processingProgress.etaDate }
+        set { processingProgress.etaDate = newValue }
+    }
+    var processingFramesDone: Int? {
+        get { processingProgress.framesDone }
+        set { processingProgress.framesDone = newValue }
+    }
+    var processingFramesTotal: Int? {
+        get { processingProgress.framesTotal }
+        set { processingProgress.framesTotal = newValue }
+    }
+
     @Published var resultVideoURL: URL?
     @Published var resultImage: CGImage?
     @Published var resultImageURL: URL?
@@ -961,13 +986,9 @@ final class AppModel: ObservableObject {
     @Published var jobLogLines: [String] = []
     @Published var processingStartedAt: Date?
     /// Explicit pipeline position; drives the checklist and the status line.
+    /// Stays here (a handful of writes per run); the run-rate values are the
+    /// forwarders above.
     @Published var processingPhase: ProcessingPhase = .preparing
-    /// Absolute finish estimate — the view counts down against its own clock
-    /// tick. Nil whenever there's no honest signal yet (early in a phase).
-    @Published var processingETADate: Date?
-    /// Whole-run frame counts from the progress plan, on both platforms.
-    @Published var processingFramesDone: Int?
-    @Published var processingFramesTotal: Int?
 
     /// The frame-weighted band layout for the run in flight; nil outside one.
     private var activeProgressPlan: BlendProgressPlan?
@@ -3769,10 +3790,17 @@ final class AppModel: ObservableObject {
     /// folder that can hold a hundred 19 MB DNGs.
     private var projectStorageBytes: [UUID: Int64] = [:]
 
+    /// Captures whose source frames have all passed an existence check this
+    /// session — the ticket `source(for:)` checks before its per-frame
+    /// `fileExists` walk. Lives and dies with the size cache above: the same
+    /// file-mutating persists invalidate both.
+    private var validatedSourceFrames: Set<UUID> = []
+
     /// Drops one project's cached size — for paths that change a folder's
     /// contents without persisting the library (field notes today).
     func invalidateStorageCache(for id: UUID) {
         projectStorageBytes[id] = nil
+        validatedSourceFrames.remove(id)
     }
 
     /// Walks the whole library — every project folder and every cache item — so
@@ -4034,6 +4062,12 @@ final class AppModel: ObservableObject {
     func startProcessing(blendProfile: VideoEncodePolicy.Profile? = nil) {
         guard let source, let captureID = currentCaptureID else { return }
         blendProfileOverride = blendProfile
+        // The processing screen's hero, resolved once for the whole run —
+        // resolved in the view body it cost a per-frame existence walk on
+        // every progress tick. Before the stage flip, so the screen's first
+        // body already has it.
+        processingProgress.heroURL = currentCapture.flatMap { mediaURL(for: $0) }
+        processingProgress.heroKind = currentCapture.map { mediaKind(for: $0) } ?? .video
         stage = .processing
         statusMessage = "Preparing job..."
         jobFolderURL = nil
@@ -4217,31 +4251,43 @@ final class AppModel: ObservableObject {
                     // the surviving frames on their true moments; a sidecar
                     // that doesn't describe this shoot frame-for-frame is
                     // ignored rather than guessed at.
-                    let frameTimes: [Double]? = FrameTimestamps
-                        .load(besideFrames: urls)
-                        .flatMap { stamps in
-                            stamps.entries.count == urls.count
-                                ? stamps.elapsedSeconds(forOrders: keptOrders)
-                                : nil
-                        }
+                    //
+                    // Off the main actor: this task inherits it (AppModel is
+                    // `@MainActor`), and reading + parsing a thousand-line
+                    // NDJSON sidecar as a main-actor job lands exactly inside
+                    // the Adjust→Processing transition it used to freeze.
+                    let frameTimes: [Double]? = await Task.detached(priority: .utility) {
+                        FrameTimestamps
+                            .load(besideFrames: urls)
+                            .flatMap { stamps in
+                                stamps.entries.count == urls.count
+                                    ? stamps.elapsedSeconds(forOrders: keptOrders)
+                                    : nil
+                            }
+                    }.value
                     // The interval timeline, compiled against exactly the
                     // frames this render feeds: kept frames keep their own
                     // axis moments, so an excluded tail can't slide a stretch
                     // boundary onto different photographs. nil (no axis, or
                     // the whole-shoot stack below) falls back to the legacy
                     // constant-depth schedule, which an untouched timeline
-                    // reproduces exactly anyway.
-                    let intervalCompiled: IntervalWarp.Compiled? = {
-                        guard photoDepth < filteredURLs.count,
-                              let axis = self.stillsFrameAxis() else { return nil }
+                    // reproduces exactly anyway. The model reads (axis,
+                    // timeline) stay on the main actor; the compile itself is
+                    // pure math over their values and runs off it.
+                    var intervalCompiled: IntervalWarp.Compiled?
+                    if photoDepth < filteredURLs.count, let axis = self.stillsFrameAxis() {
                         let timeline = self.activeWarp()
-                        return IntervalWarp.compile(
-                            frameSeconds: keptOrders.map { axis.second(atIndex: $0) },
-                            hasClock: axis.hasClock,
-                            bounds: timeline.bounds,
-                            depths: timeline.speeds,
-                            outputFPS: fps)
-                    }()
+                        let keptSeconds = keptOrders.map { axis.second(atIndex: $0) }
+                        let hasClock = axis.hasClock
+                        intervalCompiled = await Task.detached(priority: .utility) {
+                            IntervalWarp.compile(
+                                frameSeconds: keptSeconds,
+                                hasClock: hasClock,
+                                bounds: timeline.bounds,
+                                depths: timeline.speeds,
+                                outputFPS: fps)
+                        }.value
+                    }
                     // Stills bake their grade frame by frame inside the blend,
                     // so no separate grade band exists on this path.
                     self.beginProgressPlan(.make(
@@ -4459,7 +4505,10 @@ final class AppModel: ObservableObject {
                             self.reportTailProgress(band: sliceBand, fraction: fraction)
                         }
                     }
-                    let sliceTask = Task.detached(priority: .userInitiated) {
+                    // `.utility`, like every blend-run worker: a minutes-long
+                    // render must not outrank touch handling for the P-cores
+                    // (editor-performance-plan.md, the processing-flow pass).
+                    let sliceTask = Task.detached(priority: .utility) {
                         // The provider's exact frame count reads every
                         // compressed sample — off the main actor with the
                         // render itself.
@@ -5631,7 +5680,10 @@ final class AppModel: ObservableObject {
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
-        let result = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> StackSequenceResult in
+        // `.utility`: the run takes minutes and its workers must sit below
+        // touch handling — `.userInitiated` here is what let a blend starve
+        // the Cancel button on 6-core phones.
+        let result = try await Task.detached(priority: .utility) { [weak self] () throws -> StackSequenceResult in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
             let progress: (Double) -> Void = { fraction in
@@ -5761,7 +5813,8 @@ final class AppModel: ObservableObject {
                 height: image.height
             )
         }
-        let image = try await Task.detached(priority: .userInitiated) { [weak self] () throws -> CGImage in
+        // `.utility`, like the sequence path above — same reasoning.
+        let image = try await Task.detached(priority: .utility) { [weak self] () throws -> CGImage in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
             return try stacker.stack(
@@ -6082,9 +6135,16 @@ final class AppModel: ObservableObject {
 
         switch capture.kind {
         case .photos:
-            let urls = clipNames.map { root.appendingPathComponent($0) }
-            for url in urls where !FileManager.default.fileExists(atPath: url.path) {
-                throw CocoaError(.fileNoSuchFile)
+            let urls = clipNames.map { root.appendingPathComponent($0, isDirectory: false) }
+            // The per-frame existence walk is O(shoot) in syscalls and this
+            // sits on view-body paths via `mediaURL` — walk once per capture
+            // per session, and let file-mutating persists clear the ticket
+            // (`persistLibrary`; grade writes rightly don't).
+            if !validatedSourceFrames.contains(capture.id) {
+                for url in urls where !FileManager.default.fileExists(atPath: url.path) {
+                    throw CocoaError(.fileNoSuchFile)
+                }
+                validatedSourceFrames.insert(capture.id)
             }
             return .photos(urls)
         case .video:
@@ -6198,8 +6258,10 @@ final class AppModel: ObservableObject {
 
     private func persistLibrary() throws {
         // Every path that adds, converts, rotates or deletes a project's files
-        // ends here, so this is the one place that has to drop the size cache.
+        // ends here, so this is the one place that has to drop the size cache —
+        // and the existence tickets, which stale under exactly the same edits.
         projectStorageBytes.removeAll()
+        validatedSourceFrames.removeAll()
         try FileManager.default.createDirectory(at: projectsRootURL, withIntermediateDirectories: true)
         var manifest = LibraryManifest(
             captures: captures.map(stampingPresetState), blends: blends, collections: collections)

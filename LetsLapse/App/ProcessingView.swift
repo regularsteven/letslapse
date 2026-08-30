@@ -4,6 +4,10 @@ import SwiftUI
 /// checklist. Raw job folders and log lines live in Settings → Diagnostics.
 struct ProcessingView: View {
     @EnvironmentObject var model: AppModel
+    /// The run-rate values — ring fraction, frame counts, ETA, the hero —
+    /// live on their own observable so their 10 Hz cadence re-evaluates this
+    /// screen alone, not the whole app (see `ProcessingProgressModel`).
+    @EnvironmentObject var progressModel: ProcessingProgressModel
 
     var body: some View {
         VStack(spacing: 16) {
@@ -46,9 +50,12 @@ struct ProcessingView: View {
 
     private var previewCard: some View {
         ZStack {
+            // Resolved once per run in `startProcessing` — resolving it here
+            // walked every source frame's existence on the main actor at
+            // every progress tick.
             ProjectThumbnailView(
-                url: model.currentCapture.flatMap { model.mediaURL(for: $0) },
-                kind: model.currentCapture.map { model.mediaKind(for: $0) } ?? .video
+                url: progressModel.heroURL,
+                kind: progressModel.heroKind
             )
             .frame(height: 260)
             .frame(maxWidth: .infinity)
@@ -58,7 +65,7 @@ struct ProcessingView: View {
             .overlay(Color.black.opacity(0.55))
             .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
 
-            LLRigProgress(progress: model.progress)
+            LLRigProgress(progress: progressModel.fraction)
         }
     }
 
@@ -114,8 +121,8 @@ struct ProcessingView: View {
     private var blendingCounts: String? {
         // Whole-run counts from the progress plan, both platforms — never a
         // number synthesized from the ring's position.
-        guard let done = model.processingFramesDone,
-              let total = model.processingFramesTotal, total > 0 else { return nil }
+        guard let done = progressModel.framesDone,
+              let total = progressModel.framesTotal, total > 0 else { return nil }
         let formatter = NumberFormatter()
         formatter.numberStyle = .decimal
         let processedText = formatter.string(from: NSNumber(value: done)) ?? "\(done)"
@@ -126,7 +133,7 @@ struct ProcessingView: View {
     // MARK: - ETA
 
     private func timeRemainingText(at now: Date) -> String {
-        if let eta = model.processingETADate {
+        if let eta = progressModel.etaDate {
             let remaining = eta.timeIntervalSince(now)
             let phrase = remaining > 0 ? remainingPhrase(remaining) : "Almost done"
             if case .blending(let clip, let of) = model.processingPhase, of > 1 {

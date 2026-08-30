@@ -30,8 +30,15 @@ job log tail, and throttle the `ImageStacker`/`TimeSliceRenderer` emitters.
 58.4 ticks/s; on-device A/B on the iPhone 16 Pro (real 260-capture library,
 1,250-frame shoot): 0.2 → 57.7 ticks/s, ~290×. The sibling audit's 10 Hz
 progress gate landed with it after the 16 Pro recording of a blend start
-freezing transitions for ~a minute. Owed: blend-transition re-check on
-device, iPad/12 Pro installs, stages 4–6, uncommitted.**
+freezing transitions for ~a minute. Same evening, the processing-flow pass
+landed off that recording (plan doc header): hero-once-per-run,
+`ProcessingProgressModel` (sibling P1.2), `source(for:)` existence tickets,
+blend orchestration off the main actor + `.utility` workers — Mac A/B: main
+thread during a live blend 100% busy → 6%; 16 Pro A/B (2026-08-30, real
+1,249-frame shoot): main-thread share 15% → 3.4%, biased against the fix
+(the before window missed the launch wedge). Fixed build installed on the
+16 Pro. Owed: Steven's feel-check of the recorded flow + Cancel, iPad/12
+Pro installs, stages 4–6, uncommitted.**
 
 Grading sliders miss touch-downs and catch up seconds late on every device
 (iPad M3 included — the mechanisms scale with shoot length and library size,

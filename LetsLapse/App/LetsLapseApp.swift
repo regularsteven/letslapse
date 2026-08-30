@@ -84,6 +84,7 @@ struct LetsLapseApp: App {
     private var root: some View {
         ContentView()
             .environmentObject(model)
+            .environmentObject(model.processingProgress)
             // A `.lapse` double-clicked in Finder or opened from the Files
             // app. SwiftUI holds the URL until this view exists, so a file
             // that *launched* the app arrives here too rather than being
@@ -166,6 +167,7 @@ struct LetsLapseApp: App {
         Window("Import from Device", id: "import") {
             ImportWindow()
                 .environmentObject(model)
+            .environmentObject(model.processingProgress)
         }
         .defaultSize(width: 460, height: 520)
 
@@ -176,6 +178,7 @@ struct LetsLapseApp: App {
             if let request {
                 PhotoViewerView(captureID: request.captureID, url: request.url)
                 .environmentObject(model)
+            .environmentObject(model.processingProgress)
                 // The window's own title bar carries the name; the editor
                 // content deliberately doesn't repeat it.
                 .navigationTitle(request.title)
@@ -192,6 +195,7 @@ struct LetsLapseApp: App {
             if let request {
                 VideoEditorView(captureID: request.captureID, url: request.url)
                 .environmentObject(model)
+            .environmentObject(model.processingProgress)
                 .navigationTitle(request.title)
                 .frame(minWidth: 720, minHeight: 480)
             }
@@ -300,6 +304,7 @@ struct ContentView: View {
         .sheet(item: $model.archiveImport) { _ in
             ProjectImportSheet()
                 .environmentObject(model)
+            .environmentObject(model.processingProgress)
         }
         .onChange(of: model.requestedProjectDetailID) { requested in
             guard requested != nil else { return }
@@ -361,8 +366,12 @@ struct ContentView: View {
             DispatchQueue.main.async { showCamera = true }
         }
         .onChange(of: model.stage) { _ in publishFlowContext() }
-        .onChange(of: model.progress) { _ in publishFlowContext() }
-        .onChange(of: model.processingETADate) { _ in publishFlowContext() }
+        // `onReceive`, not `onChange`: these two moved off AppModel onto the
+        // run-rate progress model, so AppModel invalidation no longer carries
+        // them. Fires on willSet, so the context built here trails the value
+        // by one 10 Hz tick — invisible on a watch progress readout.
+        .onReceive(model.processingProgress.$fraction) { _ in publishFlowContext() }
+        .onReceive(model.processingProgress.$etaDate) { _ in publishFlowContext() }
         .onChange(of: model.guidedStep) { _ in publishFlowContext() }
         .onChange(of: model.guidedBuilderFocused) { _ in publishFlowContext() }
         .onAppear {

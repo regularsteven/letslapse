@@ -81,7 +81,9 @@ public struct VideoBlendResult: Sendable {
 /// runs on the GPU, so memory stays flat regardless of clip length.
 public final class VideoBlender: @unchecked Sendable {
     private let core: BlendCore
-    private let workQueue = DispatchQueue(label: "com.letslapse.videoblender", qos: .userInitiated)
+    // `.utility`: a blend runs for minutes, and its decode/accumulate loop
+    // must not outrank the UI's touch handling for the performance cores.
+    private let workQueue = DispatchQueue(label: "com.letslapse.videoblender", qos: .utility)
     private let lock = NSLock()
     private var cancelled = false
 
