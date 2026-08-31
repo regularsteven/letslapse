@@ -7342,6 +7342,14 @@ final class AppModel: ObservableObject {
                 try FileManager.default.moveItem(at: extracted, to: destination.appendingPathComponent(subfolder))
             }
         }
+        // The top-level sidecars, on the same terms — a missing one is simply
+        // a project that never had it, so this never throws for absence.
+        for file in ProjectArchive.transferableFiles {
+            let extracted = staging.appendingPathComponent(file)
+            if FileManager.default.fileExists(atPath: extracted.path) {
+                try? FileManager.default.moveItem(at: extracted, to: destination.appendingPathComponent(file))
+            }
+        }
 
         var importedBlends: [BlendProject] = []
         for blendEntry in manifest.blends {

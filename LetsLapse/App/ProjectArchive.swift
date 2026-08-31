@@ -40,6 +40,18 @@ enum ProjectArchive {
     /// deleted on arrival. A new project subfolder must be added here.
     static let transferableSubfolders = ["source", "blends", "notes"]
 
+    /// The project's top-level FILES that travel, on the same terms as the
+    /// subfolders above and read by the same two places.
+    ///
+    /// A separate list because the two are moved differently — a subfolder
+    /// arrives whole, a file arrives on its own — and because forgetting one
+    /// fails silently in the same way: overlays.json (the text overlays and
+    /// their mask dials) was dropped at install until 2026-08-31, so an
+    /// AirDropped project arrived with its text gone and had to be re-typed
+    /// on the far side. `project.json` is NOT here: the manifest is written
+    /// by the sender and re-keyed by the installer, never moved.
+    static let transferableFiles = ["overlays.json"]
+
     static func write(contentsOf directory: URL, to archiveURL: URL) throws {
         try DirectoryArchive.write(contentsOf: directory, to: archiveURL)
     }

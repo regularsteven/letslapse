@@ -654,6 +654,14 @@ final class ProjectTransferServer: ObservableObject {
             }
             entries.append(contentsOf: found.sorted { $0.relativePath < $1.relativePath })
         }
+        // The top-level sidecars, from the same constant the installer reads.
+        for file in ProjectArchive.transferableFiles {
+            let url = folder.appendingPathComponent(file)
+            guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+                  values.isRegularFile == true else { continue }
+            entries.append(PTFileEntry(
+                relativePath: file, byteCount: Int64(values.fileSize ?? 0)))
+        }
         return entries
     }
 
