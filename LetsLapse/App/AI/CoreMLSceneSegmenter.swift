@@ -60,9 +60,18 @@ final class CoreMLSceneSegmenter {
         for candidate in candidates {
             guard let contents = try? fileManager.contentsOfDirectory(
                 at: candidate, includingPropertiesForKeys: nil) else { continue }
-            if let package = contents.first(where: { $0.pathExtension == "mlpackage" }),
-               fileManager.fileExists(atPath: package
-                   .appendingPathComponent("Data/com.apple.CoreML/weights/weight.bin").path) {
+            // The same all-three-files completeness test `ModelManager
+            // .snapshotDirectory` applies — an interrupted download leaves
+            // the weights without the manifest, and that must read as "not
+            // installed" here too or the panel enables a model that can't
+            // compile.
+            if let package = contents.first(where: { url in
+                url.pathExtension == "mlpackage"
+                    && ["Manifest.json", "Data/com.apple.CoreML/model.mlmodel",
+                        "Data/com.apple.CoreML/weights/weight.bin"].allSatisfy {
+                        fileManager.fileExists(atPath: url.appendingPathComponent($0).path)
+                    }
+            }) {
                 let revision = candidate.lastPathComponent
                 return Source(
                     url: package,
@@ -70,6 +79,16 @@ final class CoreMLSceneSegmenter {
             }
         }
         return nil
+    }
+
+    /// Where compiled models live, and the broom `ModelManager.delete` uses —
+    /// a deleted 85 MB model must not leave a 90 MB `.mlmodelc` behind.
+    static func purgeCompiledModels() {
+        let fileManager = FileManager.default
+        guard let caches = fileManager.urls(for: .cachesDirectory, in: .userDomainMask).first
+        else { return }
+        try? fileManager.removeItem(
+            at: caches.appendingPathComponent("SegmentationModels", isDirectory: true))
     }
 
     let source: Source

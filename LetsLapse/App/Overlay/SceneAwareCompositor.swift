@@ -52,8 +52,13 @@ enum SceneAwareCompositor {
         case .none:
             return result
         case .mask:
+            // The debug tint reads as "what the analysis calls this region",
+            // so it skips the edge-bias erosion — that dial biases whichever
+            // region RESTORES, and baking it into the tint would show a
+            // different boundary than the segmentation actually produced.
             guard let occlusion,
-                  let restore = restorationMask(occlusion, extent: base.extent)
+                  let restore = restorationMask(
+                    occlusion, extent: base.extent, applyEdgeBias: false)
             else { return result }
             return tinted(result, mask: restore)
         case .confidence:
@@ -77,7 +82,9 @@ enum SceneAwareCompositor {
     /// Threshold → open/close → conservative erosion → feather → clamp, all
     /// at grid resolution (cheap enough to run live while the dials move —
     /// the cache stores raw model grids only), then scaled to the frame.
-    private static func restorationMask(_ occlusion: Occlusion, extent: CGRect) -> CIImage? {
+    private static func restorationMask(
+        _ occlusion: Occlusion, extent: CGRect, applyEdgeBias: Bool = true
+    ) -> CIImage? {
         guard let grid = occlusion.mask.ciImage() else { return nil }
         let settings = occlusion.settings
         var mask = grid
@@ -95,7 +102,7 @@ enum SceneAwareCompositor {
         mask = morphology(mask, filter: "CIMorphologyMinimum", radius: 2)
         // Conservative edges: erode the RESTORING region, so bias always
         // means less occlusion.
-        if settings.edgeBias > 0.01 {
+        if applyEdgeBias, settings.edgeBias > 0.01 {
             mask = morphology(mask, filter: "CIMorphologyMinimum", radius: settings.edgeBias)
         }
         if settings.featherRadius > 0.01, let blur = CIFilter(name: "CIGaussianBlur") {
@@ -125,7 +132,11 @@ enum SceneAwareCompositor {
 
     private static func morphology(_ image: CIImage, filter name: String, radius: Double) -> CIImage {
         guard let filter = CIFilter(name: name) else { return image }
-        filter.setValue(image, forKey: kCIInputImageKey)
+        // Clamped for the same reason the feather is: a minimum filter
+        // sampling transparent black past the extent erodes the whole frame
+        // border to zero, and border sky then never restores over border
+        // text.
+        filter.setValue(image.clampedToExtent(), forKey: kCIInputImageKey)
         filter.setValue(radius, forKey: kCIInputRadiusKey)
         return filter.outputImage?.cropped(to: image.extent) ?? image
     }

@@ -380,12 +380,16 @@ final class ModelManager: ObservableObject {
             let contents = (try? fileManager.contentsOfDirectory(
                 at: candidate, includingPropertiesForKeys: nil)) ?? []
             // Completeness is judged by what the engine actually loads: a Core ML snapshot is an
-            // .mlpackage whose weights landed; an MLX one is a config plus safetensors.
+            // .mlpackage with ALL THREE of its files — the downloader fetches them in path order
+            // ("Data…" before "Manifest.json"), so weights-only means the fetch was interrupted
+            // and the package won't compile. An MLX one is a config plus safetensors.
             if model.engine == .coreml {
                 return contents.contains { package in
-                    package.pathExtension == "mlpackage" && fileManager.fileExists(
-                        atPath: package.appendingPathComponent(
-                            "Data/com.apple.CoreML/weights/weight.bin").path)
+                    package.pathExtension == "mlpackage"
+                        && ["Manifest.json", "Data/com.apple.CoreML/model.mlmodel",
+                            "Data/com.apple.CoreML/weights/weight.bin"].allSatisfy {
+                            fileManager.fileExists(atPath: package.appendingPathComponent($0).path)
+                        }
                 }
             }
             guard fileManager.fileExists(
@@ -502,6 +506,9 @@ final class ModelManager: ObservableObject {
         guard !model.isBuiltIn else { return }
         cancelDownload(of: model)
         try? FileManager.default.removeItem(at: directory(for: model))
+        // The compiled twin in Caches goes with it — it is bigger than the
+        // download and regenerates on the next install.
+        if model.engine == .coreml { CoreMLSceneSegmenter.purgeCompiledModels() }
         states[model.id] = .notDownloaded
         diskUsage[model.id] = nil
         if activeModelID == model.id {

@@ -74,6 +74,9 @@ actor SceneMaskService {
         render: @escaping @Sendable () -> CGImage?
     ) async throws -> SceneMask {
         if let cached = cachedSkyMask(forKey: key) { return cached }
+        // An abandoned fetch (the editor moved on — new preset, new frame)
+        // must not start fresh work on the actor.
+        try Task.checkCancellation()
         if let running = inFlight[key] { return try await running.value }
         let task = Task<SceneMask, Error> { [self] in
             let segmenter = try await loadedSegmenter()
@@ -111,6 +114,10 @@ actor SceneMaskService {
         var width = 0, height = 0
         var contributors = 0
         for url in sampled {
+            // A cancelled caller stops paying for the vote between frames —
+            // without this, every abandoned fetch runs all nine inferences
+            // to completion and queues behind the live one on this actor.
+            try Task.checkCancellation()
             let frameKey = frameKey(modelIdentity: modelIdentity, url: url, presetID: presetID)
             let mask = try await skyMask(forKey: frameKey) { render(url) }
             if accumulated.isEmpty {

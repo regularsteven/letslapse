@@ -157,6 +157,34 @@ together. Position never moved except by hand.
     progress as `position`. The Photo editor already shows the Text tab
     (placement, no animation section) untouched by any of this.
 
+## Adversarial review pass (same day)
+
+A four-dimension review of the spike commit (concurrency, rendering,
+model management, UI state) with adversarial verification confirmed ten
+defects, all fixed in the follow-up commit: mask fetches now honor
+cancellation between frames (abandoned sequence votes no longer pile up on
+the actor); `maskFetchTask` snapshots its inputs with the cache key and
+re-verifies the key after the debounce (a mode flip or scrub step during
+the sleep could cache the wrong mask under a key — permanently, on disk);
+the raster cache got a byte budget (costs were inert without
+`totalCostLimit`; 24 × 12 MB rasters was jetsam bait); the morphology chain
+is `clampedToExtent` like the feather (border erosion to black); the debug
+tint skips the edge-bias erosion (it biases whichever region *restores*, so
+the tint showed a different boundary than segmentation produced);
+coreml snapshot validation requires all three package files (the downloader
+fetches `weight.bin` before `Manifest.json`, so an interrupted download
+validated as installed but couldn't compile) in both `snapshotDirectory`
+and `locate`; deleting the model purges its compiled `.mlmodelc` from
+Caches; the Frames tab gates on the UNFILTERED frame count (gating on the
+filtered count reintroduced the documented bad-frames one-way door);
+`finishExit`/`onDisappear` persist overlays (typed text's only mid-session
+commit was the 2 s safety net, which dies with the view); and
+`persistOverlays` no-ops when unchanged (a stale second window on the same
+project could otherwise delete the sidecar another window just wrote).
+Two further claims were refuted on verification (cooperative-pool
+starvation — bounded to one thread by the actor; main-thread key-building
+cost — measured at 68 µs).
+
 ## Traps hit / worth remembering
 
 - `CatalogModel.isBuiltIn` was `engine != .mlx` — a `.coreml` entry would

@@ -49,6 +49,10 @@ enum TextOverlayRasterizer {
     private static let cache: NSCache<NSString, CGImage> = {
         let cache = NSCache<NSString, CGImage>()
         cache.countLimit = 24
+        // The costs passed to setObject are inert without a byte budget, and
+        // a settled 2000 px raster is ~12 MB — 24 of them is jetsam bait.
+        // Playback only ever needs the current step plus the settled raster.
+        cache.totalCostLimit = 64 << 20
         return cache
     }()
 

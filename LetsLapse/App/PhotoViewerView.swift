@@ -131,6 +131,11 @@ struct PhotoViewerView: View {
     /// The project's overlays. Seeded once from the sidecar; the UI edits
     /// the first (one text layer in the spike — the model carries many).
     @State private var overlays: [SceneOverlay] = []
+    /// What this window last wrote (or seeded). `persistOverlays` no-ops
+    /// against it — so a second editor window on the same project, holding a
+    /// stale empty list, can never bulldoze the sidecar another window just
+    /// wrote. Deleting overlays.json requires an actual Remove Text here.
+    @State private var persistedOverlays: [SceneOverlay] = []
     /// A live drag over the preview: the SwiftUI proxy shows `current` while
     /// the baked overlay is suppressed from the render.
     @State private var overlayDrag: OverlayDragState?
@@ -571,6 +576,7 @@ struct PhotoViewerView: View {
             presetState = model.presetState(for: capture)
             timeline = model.gradeTimeline(for: capture)
             overlays = model.overlays(for: capture)
+            persistedOverlays = overlays
             segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
             // An interval shoot's frames — and, where the shoot wrote one, the
             // capture clock they sit on, which is what turns the strip's axis
@@ -685,6 +691,9 @@ struct PhotoViewerView: View {
         .onDisappear {
             stopPlayback()
             PhotoGrader.releaseDetailFrame()
+            // The macOS editor window has no exit of ours to intercept —
+            // closing it must not lose text typed in the last two seconds.
+            persistOverlays()
         }
         .overlay(alignment: .bottom) {
             if isOfferingPresetSave {
@@ -1063,8 +1072,13 @@ struct PhotoViewerView: View {
     /// The rail's pages. Frames exists only where frames do — a single still
     /// has nothing to nominate, and a tab that can never unlock would just
     /// advertise a dead end.
+    ///
+    /// Measured against the UNFILTERED shoot, same as `hasNominatedFrames`
+    /// and for the same reason: hiding every nominated frame must not take
+    /// the tab (and with it the hide toggle — the only route back) off the
+    /// screen.
     private var availableRailTabs: [RailTab] {
-        hasTimeline ? [.editor, .text, .frames] : [.editor, .text]
+        allFrames.count > 1 ? [.editor, .text, .frames] : [.editor, .text]
     }
 
     private var railTabBar: some View {
@@ -1080,7 +1094,7 @@ struct PhotoViewerView: View {
         case .text:
             textTab
         case .frames:
-            if hasTimeline { framesTab } else { editorTab(isWide: isWide) }
+            if allFrames.count > 1 { framesTab } else { editorTab(isWide: isWide) }
         }
     }
 
@@ -1612,8 +1626,9 @@ struct PhotoViewerView: View {
     }
 
     private func persistOverlays() {
-        guard let capture else { return }
+        guard let capture, overlays != persistedOverlays else { return }
         model.setOverlays(overlays, for: capture)
+        persistedOverlays = overlays
     }
 
     /// Generates whatever mask `activeSkyMaskKey` names and re-renders when
@@ -1627,35 +1642,44 @@ struct PhotoViewerView: View {
             maskStatus = cached.provenance
             return
         }
+        // Snapshot every input WITH the key: the cache write at the end is
+        // keyed on `key`, and state that moved during the debounce (a mode
+        // flip, a scrub step) must not smuggle a different frame's mask —
+        // or a single frame posing as the sequence vote — under it.
+        let sequenceMode = maskSettings.maskMode == .sequence && hasTimeline
+        let sequenceFrames = frames
+        let frameURL = displayedURL
+        let preset = preset
+        let adjustments = adjustments
         // A beat of stillness first, so a scrub in per-frame mode asks for
         // the frame it settles on rather than one inference per step.
         try? await Task.sleep(for: .milliseconds(200))
-        guard !Task.isCancelled else { return }
+        // Belt to the snapshot's braces: `.task(id:)` cancellation only
+        // lands on the next body evaluation, so re-derive the key and bail
+        // if the world moved while we slept.
+        guard !Task.isCancelled, activeSkyMaskKey == key else { return }
         maskStatus = "Analyzing scene…"
-        let preset = preset
-        let adjustments = adjustments
         do {
             let mask: SceneMask
-            if maskSettings.maskMode == .sequence, hasTimeline {
+            if sequenceMode {
                 mask = try await SceneMaskService.shared.sequenceSkyMask(
-                    forKey: key, modelIdentity: segModelIdentity, frames: frames,
+                    forKey: key, modelIdentity: segModelIdentity, frames: sequenceFrames,
                     sampleCount: 9, presetID: preset.presetID.uuidString
                 ) { url in
                     PhotoGrader.render(
                         url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
                 }
             } else {
-                let url = displayedURL
                 mask = try await SceneMaskService.shared.skyMask(forKey: key) {
                     PhotoGrader.render(
-                        url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
+                        url: frameURL, preset: preset, adjustments: adjustments, maxDimension: 512)
                 }
             }
             guard !Task.isCancelled else { return }
             maskStatus = mask.provenance
             renderToken += 1
         } catch {
-            guard !Task.isCancelled else { return }
+            guard !Task.isCancelled, !(error is CancellationError) else { return }
             maskStatus = error.localizedDescription
         }
     }
@@ -1706,6 +1730,9 @@ struct PhotoViewerView: View {
     private func finishExit() {
         isOfferingPresetSave = false
         persist()
+        // Typed overlay text has no release gesture — its only mid-session
+        // commit is the 2 s safety net, which dies with the view.
+        persistOverlays()
         // The library write is asynchronous now; drain it before the editor
         // goes away so closing the app right after closing the editor can't
         // lose the last gesture.
