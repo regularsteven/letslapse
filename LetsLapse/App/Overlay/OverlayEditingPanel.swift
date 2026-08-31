@@ -27,6 +27,12 @@ struct OverlayEditingPanel: View {
     let maskStatus: String?
     let onEdited: (_ commit: Bool) -> Void
 
+    /// The text field's focus — held here so the keyboard has real ways OUT
+    /// on iOS: Return (submitLabel .done), the keyboard toolbar's Done, and
+    /// the editor resigning focus when the user moves on to dragging or
+    /// scrubbing (PhotoViewerView.dismissTextEntry).
+    @FocusState private var textFieldFocused: Bool
+
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             if overlays.isEmpty {
@@ -100,7 +106,28 @@ struct OverlayEditingPanel: View {
                 }))
                 .textFieldStyle(.roundedBorder)
                 .font(.system(size: 14))
-                .onSubmit { onEdited(true) }
+                .focused($textFieldFocused)
+                .submitLabel(.done)
+                .onSubmit {
+                    onEdited(true)
+                    textFieldFocused = false
+                }
+                #if os(iOS)
+                // The soft keyboard needs an explicit exit: without this the
+                // only way out was leaving the tab (found on device
+                // 2026-08-31). Return says Done too, and the editor resigns
+                // focus when a drag or scrub starts.
+                .toolbar {
+                    ToolbarItemGroup(placement: .keyboard) {
+                        Spacer()
+                        Button("Done") {
+                            textFieldFocused = false
+                            onEdited(true)
+                        }
+                        .font(.system(size: 15, weight: .semibold))
+                    }
+                }
+                #endif
             HStack(spacing: 10) {
                 Text("Size")
                     .font(.system(size: 12.5, weight: .semibold))

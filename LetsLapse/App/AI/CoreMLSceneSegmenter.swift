@@ -184,10 +184,48 @@ final class CoreMLSceneSegmenter {
             .replacingOccurrences(of: "|", with: "-")
         let compiled = folder.appendingPathComponent("\(name).mlmodelc")
         if fileManager.fileExists(atPath: compiled.path) { return compiled }
-        let temporary = try MLModel.compileModel(at: source.url)
+        let (input, staging) = try compileInput(for: source.url, fileManager: fileManager)
+        defer { if let staging { try? fileManager.removeItem(at: staging) } }
+        let temporary = try MLModel.compileModel(at: input)
         try? fileManager.removeItem(at: compiled)
         try fileManager.moveItem(at: temporary, to: compiled)
         return compiled
+    }
+
+    /// What actually gets handed to the compiler. The Hub snapshot layout
+    /// stores every package file as a SYMLINK into `blobs/`, and on iOS the
+    /// Core ML compiler fails against that layout — the compiled bundle ends
+    /// up with a dangling `weight.bin` and compilation dies with "The file
+    /// 'weight.bin' doesn't exist" (seen on-device 2026-08-31; macOS happens
+    /// to tolerate the links). Any linked component ⇒ compile from a
+    /// real-file copy staged in tmp, deleted right after the one-time
+    /// compile. A package of plain files (the env-hook path) passes through
+    /// untouched.
+    private static func compileInput(
+        for package: URL, fileManager: FileManager
+    ) throws -> (url: URL, staging: URL?) {
+        let files = [
+            "Manifest.json",
+            "Data/com.apple.CoreML/model.mlmodel",
+            "Data/com.apple.CoreML/weights/weight.bin",
+        ]
+        let isLink: (String) -> Bool = { path in
+            let attributes = try? fileManager.attributesOfItem(
+                atPath: package.appendingPathComponent(path).path)
+            return attributes?[.type] as? FileAttributeType == .typeSymbolicLink
+        }
+        guard files.contains(where: isLink) else { return (package, nil) }
+        let staging = fileManager.temporaryDirectory
+            .appendingPathComponent("SegModelStaging-\(UUID().uuidString)", isDirectory: true)
+        let copy = staging.appendingPathComponent(package.lastPathComponent, isDirectory: true)
+        try fileManager.createDirectory(
+            at: copy.appendingPathComponent("Data/com.apple.CoreML/weights", isDirectory: true),
+            withIntermediateDirectories: true)
+        for path in files {
+            let resolved = package.appendingPathComponent(path).resolvingSymlinksInPath()
+            try fileManager.copyItem(at: resolved, to: copy.appendingPathComponent(path))
+        }
+        return (copy, staging)
     }
 
     private static func classLabels(of model: MLModel) -> [String] {

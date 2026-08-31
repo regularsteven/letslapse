@@ -415,6 +415,7 @@ struct PhotoViewerView: View {
                 onPlayToggle: togglePlayback,
                 onScrub: { next in
                     stopPlayback()
+                    dismissTextEntry()
                     renderedPosition = renderPosition(for: next)
                     renderToken += 1
                 },
@@ -657,6 +658,9 @@ struct PhotoViewerView: View {
         .task(id: loupeRequest) { await renderLoupe() }
         .task(id: activeSkyMaskKey) { await maskFetchTask() }
         .onChange(of: railTab) { _, tab in
+            // Leaving (or re-entering) any tab retires the soft keyboard —
+            // switching tabs was the only way out before the explicit exits.
+            dismissTextEntry()
             // A cheap staleness fix on the way in: the model may have been
             // downloaded (or deleted) in Settings while this window sat open.
             if tab == .text {
@@ -777,6 +781,7 @@ struct PhotoViewerView: View {
                     .padding(.vertical, 14)
             }
             .scrollBounceBehavior(.basedOnSize)
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
@@ -931,6 +936,8 @@ struct PhotoViewerView: View {
             .onChanged { value in
                 guard drawn.width > 0, drawn.height > 0 else { return }
                 if overlayDrag?.id != overlay.id {
+                    // Placing the text IS being done with typing it.
+                    dismissTextEntry()
                     overlayDrag = OverlayDragState(
                         id: overlay.id,
                         base: CGPoint(x: overlay.centerX, y: overlay.centerY),
@@ -1070,6 +1077,7 @@ struct PhotoViewerView: View {
                     .padding(.top, 8)
                     .padding(.bottom, 14)
             }
+            .scrollDismissesKeyboard(.interactively)
         }
     }
 
@@ -1627,6 +1635,18 @@ struct PhotoViewerView: View {
     private func overlayEdited(commit: Bool) {
         scheduleUpdate()
         if commit { persistOverlays() }
+    }
+
+    /// Resigns the overlay text field's soft keyboard. Called wherever the
+    /// user has visibly moved on — an overlay drag, a scrub, a tab switch —
+    /// because on iOS the keyboard otherwise sits over half the editor with
+    /// no way out (found on device 2026-08-31). A no-op with nothing focused,
+    /// and a no-op on macOS.
+    private func dismissTextEntry() {
+        #if os(iOS)
+        UIApplication.shared.sendAction(
+            #selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+        #endif
     }
 
     private func persistOverlays() {
