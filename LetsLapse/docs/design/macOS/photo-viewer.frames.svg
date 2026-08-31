@@ -1,0 +1,123 @@
+<svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Photo viewer / grading editor · Frames tab · 1000×700</title>
+  <desc>Mirrors App/PhotoViewerView.swift (framesTab: badFrameToggleButton + hideBadFramesToggle) — the Frames page of the editor rail added by the 2026-08-31 text-overlay spike, which promoted the bad-frame pair from the foot of the old single control stack to a page of its own (the old placement was deliberately buried; the tab makes it findable without changing what it does). Window, media column and timeline strip are photo-viewer.svg's; only the rail differs. THE TAB EXISTS only where frames do: availableRailTabs gates it on the UNFILTERED shoot (allFrames.count &gt; 1) — the same measured-against-the-unfiltered-shoot rule as hasNominatedFrames, and for the same reason: hiding every nominated frame must not take the tab (and with it the hide toggle, the only route back) off the screen. A single-still Photo capture shows [Editor · Text] only; the movie editor never shows Frames (a movie has no source frame files to nominate). CARD 1 — "Mark frame as bad": acts on the frame under the playhead (currentFrameFileName); nomination is metadata only, the file stays on disk, and every blend excludes nominated frames. Idle state drawn (exclamationmark.triangle outline, secondary); the nominated state (desc-only) flips to exclamationmark.triangle.fill in orange, title "Frame marked bad", caption "This frame will be excluded from all blends. Tap to undo.", and an orange-tinted card. CARD 2 — "Hide bad frames" (macOS .checkbox style, LL.amber tint, drawn ON): shown only when the project has nominations; ON pulls nominated frames off the strip and out of the project's counts (the frame list, clock and tick marks share one predicate and cannot disagree); OFF keeps them on the timeline ticked in orange (the tick row under the strip — not drawn here, because hiding is on and a hidden frame has no place to stand). The caption is count-aware and this drawing carries the app's REAL string including its number-agreement slip ("1 marked frame are off the timeline and out of this project's counts." — the singular should read "is"; flagged as a copy fix, the spec mirrors what ships). Turning hide OFF is the only route back to un-marking a nominated frame. Hooks: LL_EDITOR=&lt;capture-uuid&gt; stages this editor; the staged project carries exactly one nomination (frame-00001). Verified against the running Mac app 2026-08-31 (first-ever capture of this tab; Retina, measured to the point).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FA3B8"/>
+      <stop offset="0.45" stop-color="#E8B98C"/>
+      <stop offset="1" stop-color="#F6DFB2"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A45E"/>
+      <stop offset="1" stop-color="#5C666E"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+    </g>
+
+    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
+         control bottom-trailing. The picture is a flat approximation of the
+         staged frame: sunset sky, the overlay text, then skyline / bridge /
+         river / quay — the skyline is drawn AFTER the text on purpose, so
+         the drawing occludes the descenders the way the composite does. -->
+    <g id="media">
+      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
+      <g clip-path="url(#photo)">
+        <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
+        <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
+        <!-- The project's text overlay at its resting layout (Text tab owns
+             editing it; it is baked into the preview on every tab). -->
+        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF">LetsLapse</text>
+        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
+             descenders sink behind the rooftops, the way the composite cuts. -->
+        <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
+        <!-- Bridge deck with piers at the river head. -->
+        <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
+        <rect x="20" y="388" width="660" height="6" fill="#6E6152"/>
+        <g fill="#524A40">
+          <rect x="252" y="394" width="10" height="12"/><rect x="316" y="394" width="10" height="12"/>
+          <rect x="380" y="394" width="10" height="12"/><rect x="444" y="394" width="10" height="12"/>
+        </g>
+        <!-- River with the sunset's reflection. -->
+        <rect x="20" y="394" width="660" height="146" fill="url(#river)"/>
+        <rect x="120" y="410" width="260" height="6" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="90" y="430" width="330" height="6" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="140" y="452" width="240" height="6" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <!-- Quay diagonal, crowd, railing — the right embankment. -->
+        <path d="M330 540 L680 436 L680 605 L240 605 Z" fill="#8A7A55"/>
+        <path d="M500 605 L680 470 L680 605 Z" fill="#3F4438"/>
+        <g fill="#221F1C">
+          <circle cx="380" cy="560" r="4"/><circle cx="416" cy="550" r="4"/><circle cx="452" cy="540" r="4"/>
+          <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
+        </g>
+      </g>
+      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+    </g>
+
+    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
+    <g id="strip">
+      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
+      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
+      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
+      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
+      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
+      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
+      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
+      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
+      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
+      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
+      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
+    </g>
+
+    <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
+
+    <!-- Control rail · Frames tab (bad-frame pair, promoted from the old stack's foot). -->
+    <g id="rail">
+      <g id="railtabs">
+        <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="902" y="63" width="99" height="30" rx="15" fill="#C36A00"/>
+        <text x="748" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
+        <text x="850" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="951" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Frames</text>
+      </g>
+
+      <g id="card-mark">
+        <rect x="696" y="108" width="308" height="86" rx="12" fill="#FFFFFF"/>
+        <text x="718" y="140" font-size="15" fill="#6D6D72" data-symbol="exclamationmark.triangle">!</text>
+        <text x="744" y="140" font-size="15" class="sb" fill="#000">Mark frame as bad</text>
+        <text x="744" y="160" font-size="12" fill="#6D6D72">Exclude this frame from all blends. The file</text>
+        <text x="744" y="176" font-size="12" fill="#6D6D72">stays on disk.</text>
+      </g>
+
+      <g id="card-hide">
+        <rect x="696" y="208" width="308" height="86" rx="12" fill="#FFFFFF"/>
+        <rect x="712" y="228" width="15" height="15" rx="4" fill="#FFB340"/>
+        <text x="719.5" y="240" font-size="11" class="b" text-anchor="middle" fill="#FFFFFF" data-symbol="checkmark">✓</text>
+        <text x="736" y="241" font-size="15" class="sb" fill="#000">Hide bad frames</text>
+        <text x="736" y="261" font-size="12" fill="#6D6D72">1 marked frame are off the timeline and out of</text>
+        <text x="736" y="277" font-size="12" fill="#6D6D72">this project's counts.</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Frames tab · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (framesTab: badFrameToggleButton + hideBadFramesToggle) — Editor and Text rail pages in photo-viewer.svg / photo-viewer.text.svg</text>
+</svg>

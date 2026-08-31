@@ -1,0 +1,210 @@
+<svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Photo viewer / grading editor · Editor tab · 1000×700</title>
+  <desc>Mirrors App/PhotoViewerView.swift — the grading editor in its own resizable window (PhotoEditorWindowRequest scene in LetsLapseApp; default 1000×700 drawn here, min 720×480; the window chrome owns title and close, so there is no in-content back button or Done bar — ownsExit is false and the "Save as preset?" offer renders inline in the rail instead of intercepting an exit). One view serves photo AND interval captures; everything timeline-shaped in this drawing exists because the staged project is an interval shoot (hasTimeline = frames.count &gt; 1). LAYOUT: wide branch (width ≥ 500): HStack of a media column and a FIXED 340pt control rail (railWidth, macOS branch) separated by a hairline divider at x=660; resizing the window grows the photo, never the controls. Media column: imagePane (black ground, picture fitted at true aspect and centred — a 4:3 source in the 660×618 pane draws 660×495 with black bands above and below; MediaPaneMetrics.frame keeps the picture's own edges available for overlays) with the pixel-peep zoom controls bottom-trailing (only the expand-to-1:1 button at fit scale — the scale badge appears once zoomed; double-click toggles 1:1, pinch zooms, drag pans once zoomed), then the timeline strip on the media's side of the layout (GradeTimelineView, compact metrics: 26pt play control and track row, 12pt gap, hairline 3pt rail, 11pt keyframe dots swelling to 15pt with a white ring when the playhead stands on one, travelling 0:00 bubble in #2B2B2E@90% chrome, h:mm:ss end labels) flanked by prev/next single-frame step buttons (chevron.left/right in 26pt card circles — a 0…1 scrubber cannot land on frame 2 of 601, so the steps exist; left is disabled at the head). Track runs x=56…578 in media-column points; the three keyframe dots drawn sit at positions 0.281 / 0.733 / 0.998 of the source — the staged project's real grade timeline. RAIL (Editor tab of the RailTabBar added 2026-08-31 — [Editor | Text | Frames] capsule segments, LL.accent fill on the selected segment, white label on macOS; Frames exists only where frames do, i.e. interval shoots, measured against the UNFILTERED shoot so hiding every nominated frame cannot take the tab away): the tab bar is PINNED above the rail's own ScrollView (controlRail), so it never scrolls with the controls. Below it, scrolled to top: stateRow ("Preset" label + PresetStatePill — "Edited" here, the one state no chip stands for), the horizontal preset chip strip (Natural · Cinema · Matte · Vivid · … scrolls horizontally; active chip fills accent), then PhotoAdjustmentsPanel with alwaysExpanded=true — every section open inside one card, no accordions: White Balance (White Bal. dropdown Custom/As Shot + Temp/Tint), Light (Exposure/Contrast/Highlights/Shadows/Whites/Blacks), Color (Vibrance/Saturation), Effects (Texture/Clarity/Vignette), Detail (Sharpen + Masking, Noise Reduction + Detail, Color Noise ×2) — the card scrolls; this drawing shows down to the Color header, exactly what a 700pt window holds. Section headers carry an accent dot when the section holds non-neutral values and a Reset link; a field written into the grade timeline carries the amber ◆ (diamond.fill, LL.amber) after its label — Temp, Exposure, Highlights, Shadows here — and slider values render in accent when non-neutral. Below the fold (not drawn, in scroll order): remaining sections, the inline "Save these edits as a preset?" offer when Edited, the Save as Preset button. Values drawn are the staged project's real grade at the playhead (Custom WB 12298K/−14, Exposure +1.02, Highlights −83, Shadows +58, Whites +14, Blacks −16). STATES NOT DRAWN (desc-only): stacked layout below 500pt width (media pinned over scrolling controls — iOS's shape, reachable by shrinking the window); keyframe long-press Delete bubble; playhead-on-dot swell; drag-resize media handle (wide layout has none — the rail is fixed); bad-frame tick row under the strip (nominations exist here but Hide bad frames is on, so no tick has a place to stand). Hooks: LL_EDITOR=&lt;capture-uuid&gt; opens this window on a specific project (latest = largest interval shoot); LL_KEYFRAMES=sunset|empty stages the strip; LL_VIEWER=expanded is the stacked layout's handle-up state. Verified against the running Mac app 2026-08-31 (River Sunset to Dusk, 601 visible frames, Retina window capture measured to the point).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FA3B8"/>
+      <stop offset="0.45" stop-color="#E8B98C"/>
+      <stop offset="1" stop-color="#F6DFB2"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A45E"/>
+      <stop offset="1" stop-color="#5C666E"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+    </g>
+
+    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
+         control bottom-trailing. The picture is a flat approximation of the
+         staged frame: sunset sky, the overlay text, then skyline / bridge /
+         river / quay — the skyline is drawn AFTER the text on purpose, so
+         the drawing occludes the descenders the way the composite does. -->
+    <g id="media">
+      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
+      <g clip-path="url(#photo)">
+        <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
+        <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
+        <!-- The project's text overlay at its resting layout (Text tab owns
+             editing it; it is baked into the preview on every tab). -->
+        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF">LetsLapse</text>
+        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
+             descenders sink behind the rooftops, the way the composite cuts. -->
+        <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
+        <!-- Bridge deck with piers at the river head. -->
+        <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
+        <rect x="20" y="388" width="660" height="6" fill="#6E6152"/>
+        <g fill="#524A40">
+          <rect x="252" y="394" width="10" height="12"/><rect x="316" y="394" width="10" height="12"/>
+          <rect x="380" y="394" width="10" height="12"/><rect x="444" y="394" width="10" height="12"/>
+        </g>
+        <!-- River with the sunset's reflection. -->
+        <rect x="20" y="394" width="660" height="146" fill="url(#river)"/>
+        <rect x="120" y="410" width="260" height="6" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="90" y="430" width="330" height="6" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="140" y="452" width="240" height="6" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <!-- Quay diagonal, crowd, railing — the right embankment. -->
+        <path d="M330 540 L680 436 L680 605 L240 605 Z" fill="#8A7A55"/>
+        <path d="M500 605 L680 470 L680 605 Z" fill="#3F4438"/>
+        <g fill="#221F1C">
+          <circle cx="380" cy="560" r="4"/><circle cx="416" cy="550" r="4"/><circle cx="452" cy="540" r="4"/>
+          <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
+        </g>
+      </g>
+      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+    </g>
+
+    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
+    <g id="strip">
+      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
+      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
+      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
+      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
+      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
+      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
+      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
+      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
+      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
+      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
+      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
+    </g>
+
+    <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
+
+    <!-- Control rail · Editor tab. Tab bar pinned above the scroll. -->
+    <g id="rail">
+      <g id="railtabs">
+        <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="699" y="63" width="99" height="30" rx="15" fill="#C36A00"/>
+        <text x="748" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+        <text x="850" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="951" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
+      </g>
+
+      <g id="staterow">
+        <text x="696" y="122" font-size="13" class="sb" fill="#6D6D72">Preset</text>
+        <rect x="748" y="106" width="58" height="24" rx="12" fill="#6D6D72" fill-opacity="0.16"/>
+        <text x="777" y="122" font-size="13" class="sb" text-anchor="middle" fill="#3A3A3C">Edited</text>
+      </g>
+
+      <g id="presetstrip">
+        <rect x="696" y="144" width="76" height="33" rx="16.5" fill="#FFFFFF"/>
+        <text x="734" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Natural</text>
+        <rect x="780" y="144" width="76" height="33" rx="16.5" fill="#FFFFFF"/>
+        <text x="818" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Cinema</text>
+        <rect x="864" y="144" width="66" height="33" rx="16.5" fill="#FFFFFF"/>
+        <text x="897" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Matte</text>
+        <rect x="938" y="144" width="66" height="33" rx="16.5" fill="#FFFFFF"/>
+        <text x="971" y="165" font-size="13.5" class="sb" text-anchor="middle" fill="#000">Vivid</text>
+      </g>
+
+      <!-- PhotoAdjustmentsPanel, alwaysExpanded — one card, scrolled to top.
+           ◆ = field written into the grade timeline (LL.amber diamond.fill);
+           the accent dot beside a section = non-neutral values inside it. -->
+      <g id="sliderpanel">
+        <rect x="696" y="192" width="308" height="528" rx="12" fill="#FFFFFF"/>
+
+        <text x="712" y="226" font-size="15" class="b" fill="#000">White Balance</text>
+        <circle cx="816" cy="221" r="3.5" fill="#C36A00"/>
+        <text x="988" y="226" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+
+        <text x="712" y="256" font-size="14" fill="#000">White Bal.</text>
+        <rect x="784" y="240" width="204" height="24" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
+        <text x="794" y="257" font-size="13" fill="#000">Custom</text>
+        <rect x="966" y="243" width="18" height="18" rx="5" fill="#C36A00"/>
+        <text x="975" y="256" font-size="10" class="sb" text-anchor="middle" fill="#FFF" data-symbol="chevron.up.chevron.down">⌄</text>
+
+        <g id="row-temp">
+          <text x="712" y="288" font-size="14" fill="#000">Temp</text>
+          <path d="M756 281 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
+          <text x="988" y="288" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">12298 K</text>
+          <rect x="712" y="300" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="300" width="185" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="897" cy="302" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-tint">
+          <text x="712" y="336" font-size="14" fill="#000">Tint</text>
+          <text x="988" y="336" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">-14</text>
+          <rect x="712" y="348" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="348" width="112" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="824" cy="350" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+
+        <text x="712" y="384" font-size="15" class="b" fill="#000">Light</text>
+        <circle cx="756" cy="379" r="3.5" fill="#C36A00"/>
+        <text x="988" y="384" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+
+        <g id="row-exposure">
+          <text x="712" y="412" font-size="14" fill="#000">Exposure</text>
+          <path d="M782 405 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
+          <text x="988" y="412" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+1.02</text>
+          <rect x="712" y="424" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="424" width="160" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="872" cy="426" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-contrast">
+          <text x="712" y="460" font-size="14" fill="#000">Contrast</text>
+          <text x="988" y="460" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="712" y="472" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="472" width="138" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="850" cy="474" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-highlights">
+          <text x="712" y="508" font-size="14" fill="#000">Highlights</text>
+          <path d="M788 501 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
+          <text x="988" y="508" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">-83</text>
+          <rect x="712" y="520" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="520" width="24" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="736" cy="522" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-shadows">
+          <text x="712" y="556" font-size="14" fill="#000">Shadows</text>
+          <path d="M781 549 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
+          <text x="988" y="556" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+58</text>
+          <rect x="712" y="568" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="568" width="218" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="930" cy="570" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-whites">
+          <text x="712" y="604" font-size="14" fill="#000">Whites</text>
+          <text x="988" y="604" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+14</text>
+          <rect x="712" y="616" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="616" width="158" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="870" cy="618" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-blacks">
+          <text x="712" y="652" font-size="14" fill="#000">Blacks</text>
+          <text x="988" y="652" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">-16</text>
+          <rect x="712" y="664" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="664" width="116" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="828" cy="666" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+
+        <text x="712" y="700" font-size="15" class="b" fill="#000">Color</text>
+        <circle cx="753" cy="695" r="3.5" fill="#C36A00"/>
+        <text x="988" y="700" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Editor tab · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (editorTab + RailTabBar + GradeTimelineView + PhotoAdjustmentsPanel) — Text and Frames rail pages in photo-viewer.text.svg / photo-viewer.frames.svg</text>
+</svg>
