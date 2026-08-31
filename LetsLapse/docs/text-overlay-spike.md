@@ -213,20 +213,30 @@ card's cache-clearing path.
 
 ## Reproduce
 
-```
-python3 .claude/skills/run-letslapse/driver.py build mac
-python3 .claude/skills/run-letslapse/driver.py mac --hook LL_EDITOR=E39131D4-6C53-4601-A0E4-27C5B5AD1F37
-```
+**Plain Xcode — no driver, no hooks, no env vars.** The shared LetsLapse
+scheme carries no environment variables, so the whole feature is
+self-serve from ⌘R (verified end-to-end 2026-08-31 on a plain launch):
 
-Text tab → everything above. Harness:
+1. Run the LetsLapse scheme (My Mac).
+2. Settings ▸ AI Models ▸ **DETR Segmentation → Download** (85.5 MB, once
+   per machine — the row moves to "On this device" with an *Editor* badge;
+   it never becomes the active tagging model, by design).
+3. Projects ▸ any interval or photo project ▸ **Edit** ▸ **Text** tab.
+   Everything in this report is reachable from there. Skipping step 2 just
+   disables Intelligent Placement — the panel says so and text works fully.
+
+Bench conveniences (optional, DEBUG builds only): `LL_EDITOR=<capture-uuid>`
+opens the editor on a specific project from the command line;
+`LL_SEG_MODEL=<path>` loads a model file directly, and a snapshot can be
+hand-placed under
+`~/Library/Application Support/Models/detr-semantic-f16/models--apple--coreml-detr-semantic-segmentation/snapshots/<revision>/`.
+`driver.py mac` wraps launch+screenshot for agents. None of these are
+required for anything.
+
+Mask-quality harness (standalone, no app):
 
 ```
 swiftc -O LetsLapse/tools/seg_harness.swift -o /tmp/seg_harness
 /tmp/seg_harness describe <model.mlpackage>
 /tmp/seg_harness run <model.mlpackage> <outdir> <frames...>
 ```
-
-Model install for benches without the Settings download: place the
-`DETRResnet50SemanticSegmentationF16.mlpackage` under
-`~/Library/Application Support/Models/detr-semantic-f16/models--apple--coreml-detr-semantic-segmentation/snapshots/<revision>/`,
-or pass `LL_SEG_MODEL=<path>` (DEBUG).
