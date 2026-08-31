@@ -248,6 +248,25 @@ enum SceneAwareCompositor {
         skyMask: SceneMask?,
         settings: SegmentationSettings
     ) throws -> CVPixelBuffer? {
+        // Self-draining: a frame's worth of Core Image temporaries is tens of
+        // megabytes, and this is called from a render loop whose caller we
+        // don't own (the Kit hook is public). The caller pools too; both is
+        // cheap and neither alone is something to rely on.
+        try autoreleasepool {
+            try bakeExportFrameBody(
+                buffer, position: position, pool: pool,
+                overlays: overlays, skyMask: skyMask, settings: settings)
+        }
+    }
+
+    private static func bakeExportFrameBody(
+        _ buffer: CVPixelBuffer,
+        position: Double,
+        pool: CVPixelBufferPool,
+        overlays: [SceneOverlay],
+        skyMask: SceneMask?,
+        settings: SegmentationSettings
+    ) throws -> CVPixelBuffer? {
         let base = CIImage(cvPixelBuffer: buffer)
         guard let composite = composited(
             base: base, frameSize: base.extent.size,
