@@ -997,26 +997,31 @@ struct ContentView: View {
                 CreateView(showCapture: $showCamera, captureIntent: $cameraIntent)
                     .hiddenSystemTabBar()
             }
+            .hiddenMoreNavigationBar()
             .tabItem { Label(LLTab.create.title, systemImage: LLTab.create.systemImage) }
             .tag(LLTab.create)
 
             GalleryView(path: $galleryPath)
                 .hiddenSystemTabBar()
+                .hiddenMoreNavigationBar()
                 .tabItem { Label(LLTab.gallery.title, systemImage: LLTab.gallery.systemImage) }
                 .tag(LLTab.gallery)
 
             ScansView(path: $scansPath)
                 .hiddenSystemTabBar()
+                .hiddenMoreNavigationBar()
                 .tabItem { Label(LLTab.scans.title, systemImage: LLTab.scans.systemImage) }
                 .tag(LLTab.scans)
 
             ProjectsView(path: $projectsPath)
                 .hiddenSystemTabBar()
+                .hiddenMoreNavigationBar()
                 .tabItem { Label(LLTab.projects.title, systemImage: LLTab.projects.systemImage) }
                 .tag(LLTab.projects)
 
             CollectionsView(path: $collectionsPath)
                 .hiddenSystemTabBar()
+                .hiddenMoreNavigationBar()
                 .tabItem { Label(LLTab.collections.title, systemImage: LLTab.collections.systemImage) }
                 .tag(LLTab.collections)
 
@@ -1024,6 +1029,7 @@ struct ContentView: View {
                 SettingsView()
                     .hiddenSystemTabBar()
             }
+            .hiddenMoreNavigationBar()
             .tabItem { Label(LLTab.settings.title, systemImage: LLTab.settings.systemImage) }
             .tag(LLTab.settings)
         }
@@ -1090,7 +1096,64 @@ private extension View {
         self
         #endif
     }
+
+    /// With six tabs, iPhone's UITabBarController folds tabs 5+ into its
+    /// legacy "More" navigation controller even though the system tab bar is
+    /// hidden — and the More controller's glass bar floats a phantom back
+    /// button (pop target: the invisible More list) over the folded tabs,
+    /// Collections and Settings today, pushing their content down a bar's
+    /// height. No SwiftUI toolbar preference reaches that bar (measured —
+    /// `.toolbar(.hidden, for: .navigationBar)` outside the tab's stack does
+    /// nothing), so a zero-size helper controller walks up to the
+    /// UITabBarController and hides it with public API. Applied to every tab
+    /// so a reorder can't re-surface it.
+    @ViewBuilder
+    func hiddenMoreNavigationBar() -> some View {
+        #if os(iOS)
+        background(MoreNavigationBarHider().frame(width: 0, height: 0))
+        #else
+        self
+        #endif
+    }
 }
+
+#if os(iOS)
+/// Hides the tab bar controller's "More" navigation bar — the enclosing bar
+/// UIKit gives tabs it folds beyond the first four on iPhone. Re-asserted on
+/// every appearance because UIKit re-shows it when the folded selection
+/// changes. The More controller's edge-swipe pop is disabled too: it would
+/// drag the whole tab away to the never-shown More list.
+private struct MoreNavigationBarHider: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> Helper { Helper() }
+    func updateUIViewController(_ controller: Helper, context: Context) {}
+
+    final class Helper: UIViewController {
+        override func viewDidLoad() {
+            super.viewDidLoad()
+            view.isUserInteractionEnabled = false
+            view.isHidden = true
+        }
+        override func didMove(toParent parent: UIViewController?) {
+            super.didMove(toParent: parent)
+            hideMoreBar()
+        }
+        override func viewWillAppear(_ animated: Bool) {
+            super.viewWillAppear(animated)
+            hideMoreBar()
+        }
+        private func hideMoreBar() {
+            var walker: UIViewController? = self
+            while let candidate = walker, !(candidate is UITabBarController) {
+                walker = candidate.parent
+            }
+            guard let tabController = walker as? UITabBarController else { return }
+            let more = tabController.moreNavigationController
+            more.setNavigationBarHidden(true, animated: false)
+            more.interactivePopGestureRecognizer?.isEnabled = false
+        }
+    }
+}
+#endif
 
 /// The linear job flow. Back always pops one step; there are no dead ends:
 /// cancelling processing returns to Adjust, finishing lands on the project.

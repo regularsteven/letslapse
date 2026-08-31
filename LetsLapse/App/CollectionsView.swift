@@ -39,11 +39,16 @@ struct CollectionsView: View {
             }
             .background(LL.screenBackground)
             #if os(iOS)
-            // The tab draws its own 34pt title; the hidden bar still lends
-            // its title to pushed screens' back buttons ("‹ Collections").
+            // The tab draws its own 34pt title. No `navigationTitle` on iOS:
+            // a title on a hidden root bar makes iOS 26 render a phantom
+            // floating back button over the list AND over every pushed
+            // screen's real bar (the other four tabs already guard it this
+            // way). The back-button label the title used to lend is the
+            // price — pushed screens get the same bare chevron as Projects.
             .toolbar(.hidden, for: .navigationBar)
-            #endif
+            #else
             .navigationTitle("Collections")
+            #endif
             .navigationDestination(for: UUID.self) { collectionID in
                 CollectionDetailView(collectionID: collectionID)
             }

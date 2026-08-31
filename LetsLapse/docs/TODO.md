@@ -11,6 +11,45 @@ live inline.
 
 ## Open
 
+### iOS tab host still folds tabs 5+ into UIKit's invisible "More" controller
+
+**Raised:** 2026-08-30, while fixing the Collections phantom back button
+
+The six-tab `TabView` makes UITabBarController fold Collections and Settings
+into its legacy `UIMoreNavigationController` on iPhone — the system tab bar is
+hidden, but the fold still happens. Its glass bar floated a phantom back
+button over both tabs and pushed their content down a bar's height;
+`hiddenMoreNavigationBar()` (`App/LetsLapseApp.swift`) now hides that bar and
+disables its pop gesture with public API. The fold itself remains: folded
+tabs live inside a navigation controller nobody asked for, one UIKit
+behavior change away from a new artifact. The durable shape is the macOS
+pattern — a ZStack + `switch selectedTab` (only the selected tab mounted,
+paths already hoisted to ContentView) — at the cost of unhoisted per-tab
+@State (Projects' filter/search text) resetting on tab switches, which is
+what to weigh before doing it.
+
+### Collections wide layout: bottom Add/Export row collides with the floating tab bar on iPad
+
+**Raised:** 2026-08-30 (pre-existing; seen while verifying the up-the-fold rework)
+
+`CollectionDetailView.wideLayout` pins "+ Add clips | Export collection" to
+the bottom of the right column with 10pt of clearance. On iPad the floating
+tab bar pill is wide enough to sit on top of the Add button (Export, further
+right, stays clear). Needs tab-bar clearance like the portrait layout's
+140pt spacer — or the row moved above the pill's band.
+
+### Tall clips still own the whole portrait fold in the collection builder
+
+**Raised:** 2026-08-30, out of the up-the-fold rework
+
+A 9:16 clip in portrait fills the screen width by design ("never letterboxed
+by default"), which at ~630pt tall pushes the caption row and timeline below
+the fold — the one case the 2026-08-30 rework doesn't rescue. The "Apply
+letterbox" pill already shrinks it to 240pt on demand. Decide whether tall
+clips should default to the letterboxed preview (or a ~340pt cap) inside the
+collection builder specifically; that reverses a deliberate v1 choice, so it
+is Steven's call, not a drive-by.
+
 ### Render progress publishing storm — UI staggers during any render
 
 **Detail:** [perf-audit-2026-08-29.md](perf-audit-2026-08-29.md) (finding A +

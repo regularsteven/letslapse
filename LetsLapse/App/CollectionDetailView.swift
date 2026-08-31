@@ -1,7 +1,8 @@
 import SwiftUI
 
-/// The timeline builder: preview on top, canvas ratio chips, the clip rows
-/// (select · trim · reorder), and the export path.
+/// The timeline builder: preview on top with the canvas menu beside its
+/// caption, the clip rows (select · trim · reorder) right under it, then
+/// Ken Burns and the export path.
 ///
 /// The preview IS the crop surface — it shows the selected clip itself filling
 /// the space (never letterboxed by default; the canvas only shapes the white
@@ -78,34 +79,37 @@ struct CollectionDetailView: View {
                         portraitLayout(collection, width: geo.size.width - 32)
                     }
                 }
-                .navigationTitle(collection.name)
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .primaryAction) {
-                        Menu {
-                            Button {
-                                renameDraft = collection.name
-                                showRename = true
-                            } label: {
-                                Label("Rename collection", systemImage: "pencil")
-                            }
-                            Button(role: .destructive) {
-                                confirmingDelete = true
-                            } label: {
-                                Label("Delete collection…", systemImage: "trash")
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis.circle")
-                        }
-                    }
-                }
             } else {
                 Color.clear.onAppear { dismiss() }
             }
         }
         .background(LL.screenBackground)
+        // Navigation config lives out here on the stable view, not on the
+        // conditional inside the GeometryReader — same shape as
+        // ProjectDetailView, so the bar never depends on the lookup branch.
+        .navigationTitle(model.collection(withID: collectionID)?.name ?? "")
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Menu {
+                    Button {
+                        renameDraft = model.collection(withID: collectionID)?.name ?? ""
+                        showRename = true
+                    } label: {
+                        Label("Rename collection", systemImage: "pencil")
+                    }
+                    Button(role: .destructive) {
+                        confirmingDelete = true
+                    } label: {
+                        Label("Delete collection…", systemImage: "trash")
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                }
+            }
+        }
         .llToast($toast)
         .onChange(of: selectedBlendID) { _, _ in
             kenBurnsEnd = .start
@@ -200,37 +204,41 @@ struct CollectionDetailView: View {
                 previewSurface(collection, maxWidth: width, maxHeight: 300, landscape: false)
                     .frame(maxWidth: .infinity)
 
-                Text(previewCaption(collection))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
-                    .padding(.top, 8)
-                    .padding(.horizontal, 14)
-
-                sectionLabel("Canvas")
-                    .padding(.top, 16)
-                    .padding(.bottom, 8)
-                ratioChips(collection)
-                Text(ratioCaption(collection))
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 6)
-                    .padding(.horizontal, 4)
-
-                kenBurnsSection(collection)
-                    .padding(.top, 14)
+                // Caption left, canvas menu right — one row where the CANVAS
+                // section used to be, so the timeline starts a card higher
+                // and the select-a-clip → frame-it loop stays on one screen.
+                HStack(alignment: .top, spacing: 12) {
+                    Text(previewCaption(collection))
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !collection.entries.isEmpty {
+                        canvasRatioMenu(collection)
+                    }
+                }
+                .padding(.top, 8)
+                .padding(.horizontal, 2)
 
                 sectionLabel(timelineHeader(collection))
-                    .padding(.top, 20)
+                    .padding(.top, 16)
                     .padding(.bottom, 8)
 
                 if collection.entries.isEmpty {
                     emptyTimeline
+
+                    kenBurnsSection(collection)
+                        .padding(.top, 12)
                 } else {
                     timelineCard(collection)
 
                     addClipsButton(height: 52)
+                        .padding(.top, 12)
+
+                    // Below the timeline on purpose: its expanded options are
+                    // set once per collection, while the rows above are the
+                    // screen's working loop.
+                    kenBurnsSection(collection)
                         .padding(.top, 12)
 
                     summaryCard(collection)
@@ -276,23 +284,27 @@ struct CollectionDetailView: View {
             .frame(width: min(size.width * 0.46, 420))
 
             VStack(alignment: .leading, spacing: 0) {
-                ratioChips(collection)
-                    .padding(.top, 10)
-                Text("\(CollectionMath.timecode(model.collectionSeconds(collection))) · exports \(collection.ratio?.exportLabel ?? "—")")
-                    .font(.system(size: 11.5))
-                    .foregroundStyle(.secondary)
-                    .padding(.top, 6)
-                    .padding(.horizontal, 2)
+                // Length + export size left, canvas menu right — one row
+                // doing what the chips row and its caption line used to.
+                HStack(spacing: 12) {
+                    Text("\(CollectionMath.timecode(model.collectionSeconds(collection))) · exports \(collection.ratio?.exportLabel ?? "—")")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    if !collection.entries.isEmpty {
+                        canvasRatioMenu(collection)
+                    }
+                }
+                .padding(.top, 10)
+                .padding(.horizontal, 2)
 
                 // The Ken Burns card scrolls with the timeline — landscape
-                // iPhones don't have the height to pin it open.
+                // iPhones don't have the height to pin it open. It follows
+                // the timeline, same as portrait: set once, not the loop.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        kenBurnsSection(collection)
-                            .padding(.top, 12)
-
                         sectionLabel(timelineHeader(collection))
-                            .padding(.top, 14)
+                            .padding(.top, 12)
                             .padding(.bottom, 6)
 
                         if collection.entries.isEmpty {
@@ -318,6 +330,9 @@ struct CollectionDetailView: View {
                         } else {
                             timelineCard(collection)
                         }
+
+                        kenBurnsSection(collection)
+                            .padding(.top, 12)
                         Spacer(minLength: 8)
                     }
                 }
@@ -723,33 +738,61 @@ struct CollectionDetailView: View {
         }
     }
 
-    // MARK: - Canvas chips
+    // MARK: - Canvas menu
 
-    private func ratioChips(_ collection: LapseCollection) -> some View {
-        CanvasRatioChips(
-            selected: collection.ratio,
-            isEnabled: !collection.entries.isEmpty
-        ) { ratio in
-            model.setCanvasRatio(ratio, for: collectionID)
+    /// The canvas choice as a compact menu chip beside the preview caption —
+    /// the Adjust flow's collapsed-chip pattern. Each row carries the
+    /// consequence the retired CANVAS section's caption used to spell out:
+    /// the export size, and which ratio is the first clip's own shape.
+    /// Hidden while the collection is empty (the first clip sets the canvas,
+    /// and the caption says so).
+    private func canvasRatioMenu(_ collection: LapseCollection) -> some View {
+        Menu {
+            ForEach(CanvasRatio.allCases) { ratio in
+                Button {
+                    model.setCanvasRatio(ratio, for: collectionID)
+                } label: {
+                    if ratio == collection.ratio {
+                        Label(ratioChoiceLabel(ratio, in: collection), systemImage: "checkmark")
+                    } else {
+                        Text(ratioChoiceLabel(ratio, in: collection))
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                Text(collection.ratio?.rawValue ?? "Canvas")
+                    .font(.system(size: 13.5, weight: .semibold))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .bold))
+            }
+            .foregroundStyle(LL.accent)
+            .padding(.horizontal, 12)
+            .frame(height: 34)
+            .background(LL.cardBackground, in: Capsule())
+            .shadow(color: .black.opacity(0.06), radius: 1.5, y: 1)
+            .contentShape(Capsule())
         }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("Canvas \(collection.ratio?.rawValue ?? "unset")")
     }
 
-    private func ratioCaption(_ collection: LapseCollection) -> String {
-        guard let ratio = collection.ratio, !collection.entries.isEmpty else {
-            return "The first clip you add sets the canvas."
-        }
+    /// "16:9 — 3840×2160", "4:3 — 2880×2160 · the first clip’s shape"
+    private func ratioChoiceLabel(_ ratio: CanvasRatio, in collection: LapseCollection) -> String {
         let firstRatio = collection.entries.first
             .flatMap { e in model.blends.first { $0.id == e.blendID } }
             .map(model.canvasRatio(for:))
-        if let firstRatio, firstRatio != ratio {
-            return "\(ratio.rawValue) — overriding the first clip’s \(firstRatio.rawValue). Export: \(ratio.exportLabel)."
+        var label = "\(ratio.rawValue) — \(ratio.exportLabel)"
+        if ratio == firstRatio {
+            label += " · the first clip’s shape"
         }
-        return "\(ratio.rawValue) — set by the first clip added. Export: \(ratio.exportLabel)."
+        return label
     }
 
     // MARK: - Ken Burns
 
-    /// The toggle under the canvas picker, growing its choices downward when
+    /// The toggle under the timeline, growing its choices downward when
     /// on: pacing (consistent durations → the seconds, then how clips reach
     /// them) and the join (fade or cut). Turning it on answers everything
     /// with best-effort defaults, so Export straight away already cuts well.
