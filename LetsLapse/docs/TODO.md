@@ -40,15 +40,17 @@ preview so the loupe can point at text); SceneMasks folder on the storage
 card's clear-cache path; draggable range-band handles; SegFormer-B0 ADE20K
 conversion for true sky probabilities (DETR is 0/1 argmax).
 
-### Design mirrors for the tabbed editor rail
+### Design mirrors for the tabbed editor rail — iOS remainder
 
-**Raised:** 2026-08-31, out of the text-overlay spike (code-first agreed, SVGs deferred)
+**Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:** 2026-08-31 — macOS drawn (30b5836)
 
-The `[Editor | Text | Frames]` rail refactor stales the six iOS viewer SVGs
-(`project-photo.viewer.*.svg` family) and the macOS Edit window still has no
-spec at all (`macOS/photo-viewer.svg` remains an INDEX aspiration). Mirror
-whatever survives productization; the Text tab's panel (placement segments,
-mask dials, Set Start/End) needs drawing for the first time.
+The macOS Edit window now has its first specs: `macOS/photo-viewer.svg` /
+`.text.svg` / `.frames.svg`, verified against the running app and ✅ in the
+macOS INDEX (armed-animation, model-missing and mask-tint states desc-only —
+draw them if they matter for sign-off). Still owed: the six iOS viewer SVGs
+(`project-photo.viewer.*.svg` family) are stale against the tab bar and the
+stacked layout's Text/Frames pages have never been drawn; mirror once the
+iOS pass happens.
 
 ### iOS tab host still folds tabs 5+ into UIKit's invisible "More" controller
 
