@@ -119,24 +119,40 @@ struct PhotoViewerView: View {
     /// see `MediaPaneMetrics` for what the layout does in the meantime.
     @State private var aspect: Double?
 
-    // MARK: Text overlays (spike)
+    // MARK: Text overlays
     //
-    // The Text tab: overlays the user places by hand, the semantic mask that
-    // lets the scene occlude them, and the reveal animation. State lives here
-    // (like the grade) and persists through the per-project sidecar
-    // (`AppModel.setOverlays`) on finished gestures.
+    // The Text tab: the layer list the user places by hand, the semantic
+    // masks that let the scene occlude them, and the reveal animation. State
+    // lives here (like the grade) and persists through the per-project
+    // sidecar (`AppModel.setOverlayDocument`) on finished gestures.
 
-    /// Which rail page is showing.
-    @State private var railTab: RailTab = .editor
-    /// The project's overlays. Seeded once from the sidecar; the UI edits
-    /// the first (one text layer in the spike — the model carries many).
-    @State private var overlays: [SceneOverlay] = []
+    /// Which rail page is showing. `LL_RAIL=text|masks|frames` opens the
+    /// editor straight onto a page, the way `LL_EDITOR` opens the editor at
+    /// all: the rail's pages are otherwise only reachable by a tap, which a
+    /// screenshot or a design-mirror check has no way to make.
+    @State private var railTab: RailTab = {
+        #if DEBUG
+        if let hook = ProcessInfo.processInfo.environment["LL_RAIL"],
+           let tab = RailTab(rawValue: hook.capitalized) {
+            return tab
+        }
+        #endif
+        return .editor
+    }()
+    /// The project's overlay document — layers front-to-back, the project's
+    /// custom masks, and the mask dials. Seeded once from the sidecar.
+    @State private var overlayDocument = OverlayDocument()
     /// What this window last wrote (or seeded). `persistOverlays` no-ops
     /// against it — so a second editor window on the same project, holding a
     /// stale empty list, can never bulldoze the sidecar another window just
     /// wrote. Deleting overlays.json requires an actual Remove Text here.
-    @State private var persistedOverlays: [SceneOverlay] = []
-    @State private var persistedMaskSettings = SegmentationSettings()
+    @State private var persistedDocument = OverlayDocument()
+    /// The layer the preview draws its bounding box and handles around.
+    @State private var selectedOverlayID: UUID?
+    /// The region the Masks tab is inspecting — what "Show semantic mask"
+    /// tints and what the mask fetch is for. Editor state: which region is
+    /// being LOOKED at says nothing about the piece.
+    @State private var inspectedRegion: OverlayPlacement?
     /// A live drag over the preview: the SwiftUI proxy shows `current` while
     /// the baked overlay is suppressed from the render.
     @State private var overlayDrag: OverlayDragState?
@@ -149,7 +165,6 @@ struct PhotoViewerView: View {
     @State private var segModelIdentity: String?
     /// The mask debug view: the semantic mask tinted over the preview.
     @State private var showMask = false
-    @State private var maskSettings = SegmentationSettings()
     /// The mask readout in the Text tab — provenance, progress, or an error.
     @State private var maskStatus: String?
 
@@ -160,6 +175,22 @@ struct PhotoViewerView: View {
         let base: CGPoint
         var current: CGPoint
     }
+
+    /// The box's geometry when a handle drag began, for the same reason
+    /// `OverlayDragState.base` exists: resizing is absolute against a frozen
+    /// base, never accumulated per event.
+    private struct BoxResizeBase {
+        let width: Double
+        let height: Double
+        let centerX: Double
+        let centerY: Double
+    }
+
+    @State private var boxResizeBase: BoxResizeBase?
+    /// Whether the live drag is currently snapped to a centre line — the
+    /// only thing that puts a guide on screen.
+    @State private var overlaySnapX = false
+    @State private var overlaySnapY = false
 
     // MARK: Pixel peeping
     //
@@ -459,7 +490,7 @@ struct PhotoViewerView: View {
             // through Set Start / Set End in the Text tab, where the playhead
             // — frame steps, clock label, snap ladder — is already the
             // precision instrument.
-            if let animation = overlays.first?.animation, frames.count > 1 {
+            if let animation = selectedOverlay?.animation, frames.count > 1 {
                 GeometryReader { geo in
                     let lead = GradeTimelineView.leadInset(compact: compact)
                     let trackW = max(1, geo.size.width - lead)
@@ -577,11 +608,9 @@ struct PhotoViewerView: View {
             adjustments = model.photoAdjustments(for: capture)
             presetState = model.presetState(for: capture)
             timeline = model.gradeTimeline(for: capture)
-            let overlayDocument = model.overlayDocument(for: capture)
-            overlays = overlayDocument.overlays
-            maskSettings = overlayDocument.maskSettings
-            persistedOverlays = overlays
-            persistedMaskSettings = maskSettings
+            overlayDocument = model.overlayDocument(for: capture)
+            persistedDocument = overlayDocument
+            selectedOverlayID = overlayDocument.overlays.first?.id
             segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
             // An interval shoot's frames — and, where the shoot wrote one, the
             // capture clock they sit on, which is what turns the strip's axis
@@ -676,9 +705,14 @@ struct PhotoViewerView: View {
         .onChange(of: overlayDragActive) { _, active in
             // The gesture was cancelled rather than ended (SwiftUI reset the
             // @GestureState): drop the uncommitted move and restore the bake.
-            if !active, overlayDrag != nil {
-                overlayDrag = nil
-                renderToken += 1
+            if !active {
+                overlaySnapX = false
+                overlaySnapY = false
+                boxResizeBase = nil
+                if overlayDrag != nil {
+                    overlayDrag = nil
+                    renderToken += 1
+                }
             }
         }
         .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
@@ -898,10 +932,20 @@ struct PhotoViewerView: View {
                     .offset(x: drawn.width * patch.region.minX,
                             y: drawn.height * patch.region.minY)
             }
-            // The overlay's drag surface, only while the Text tab is the
+            // The overlays' drag surfaces, only while the Text tab is the
             // work: everywhere else the baked pixels are the overlay.
-            if railTab == .text, let overlay = overlays.first {
-                overlayProxy(overlay, drawn: drawn)
+            // Reversed so the frontmost layer (row 1) takes the hit first,
+            // matching what the composite paints on top.
+            if railTab == .text {
+                ForEach(overlayDocument.overlays.reversed()) { overlay in
+                    if overlay.isVisible || overlay.onionSkin {
+                        overlayProxy(overlay, drawn: drawn)
+                    }
+                }
+                if let selected = selectedOverlay {
+                    overlayChrome(selected, drawn: drawn)
+                }
+                overlaySnapGuides(drawn: drawn)
             }
         }
         .frame(width: drawn.width, height: drawn.height)
@@ -918,14 +962,244 @@ struct PhotoViewerView: View {
         let center = dragging
             ? overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY)
             : CGPoint(x: overlay.centerX, y: overlay.centerY)
-        let fontSize = overlay.size * max(drawn.width, drawn.height)
+        let style = overlay.textStyle
+        let fontSize = TextOverlayRasterizer.resolvedSize(
+            for: overlay, aspect: drawnAspect(drawn)) * max(drawn.width, drawn.height)
         Text(overlay.text)
-            .font(.system(size: fontSize, weight: .bold))
-            .foregroundStyle(.white)
+            .font(proxyFont(style, size: fontSize))
+            .italic(style?.isItalic == true)
+            .underline(style?.isUnderlined == true)
+            .multilineTextAlignment(proxyAlignment(style))
+            .foregroundStyle(Color(cgColor: TextOverlayRasterizer.color(
+                fromHex: style?.colorHex ?? "#FFFFFF")))
             .shadow(color: .black.opacity(0.55), radius: fontSize * 0.06)
+            .frame(width: overlay.mode == .box ? drawn.width * overlay.boxWidth : nil)
             .opacity(dragging ? 1 : 0.02)
             .position(x: drawn.width * center.x, y: drawn.height * center.y)
             .highPriorityGesture(overlayDragGesture(overlay, drawn: drawn))
+    }
+
+    /// The proxy's face. A named family the device lacks falls back to the
+    /// system face, the same rule the rasterizer applies.
+    private func proxyFont(_ style: TextOverlayContent?, size: CGFloat) -> Font {
+        guard let family = style?.fontFamily, !family.isEmpty else {
+            return .system(size: size, weight: style?.isBold == true ? .bold : .regular)
+        }
+        return .custom(family, size: size)
+    }
+
+    private func proxyAlignment(_ style: TextOverlayContent?) -> TextAlignment {
+        switch style?.alignment ?? .center {
+        case .left: return .leading
+        case .center: return .center
+        case .right: return .trailing
+        }
+    }
+
+    private func drawnAspect(_ drawn: CGSize) -> Double {
+        drawn.height > 0 ? Double(drawn.width / drawn.height) : 1
+    }
+
+    /// The selected layer, which is what the preview draws chrome around.
+    private var selectedOverlay: SceneOverlay? {
+        guard let selectedOverlayID else { return overlayDocument.overlays.first }
+        return overlayDocument.overlays.first { $0.id == selectedOverlayID }
+            ?? overlayDocument.overlays.first
+    }
+
+    // MARK: Selection chrome
+
+    /// The selected layer's bounding box, its badge, and — in box mode — the
+    /// eight handles that resize it. Free text gets a solid accent outline
+    /// around the space its line occupies; boxed text gets the dashed amber
+    /// box it is actually constrained by, which is the thing being dragged.
+    @ViewBuilder private func overlayChrome(_ overlay: SceneOverlay, drawn: CGSize) -> some View {
+        let boxed = overlay.mode == .box
+        let center = overlayDrag?.id == overlay.id
+            ? (overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY))
+            : CGPoint(x: overlay.centerX, y: overlay.centerY)
+        let size = chromeSize(overlay, drawn: drawn)
+        let tint = boxed ? LL.amber : accentColor
+        ZStack {
+            RoundedRectangle(cornerRadius: 2, style: .continuous)
+                .strokeBorder(
+                    tint,
+                    style: StrokeStyle(lineWidth: 1.5, dash: boxed ? [5, 4] : []))
+                .frame(width: size.width, height: size.height)
+                .overlay(alignment: .topLeading) {
+                    Text("\(boxed ? "BOX" : "FREE") · \(overlay.text.prefix(18).isEmpty ? "empty" : String(overlay.text.prefix(18)))")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(tint))
+                        .fixedSize()
+                        .offset(y: -22)
+                }
+                .overlay(alignment: .bottomTrailing) {
+                    if boxed, overlay.autoSize {
+                        autoSizeChip(overlay, drawn: drawn).offset(y: 24)
+                    }
+                }
+            if boxed {
+                overlayHandles(overlay, size: size, drawn: drawn, tint: tint)
+            }
+        }
+        .allowsHitTesting(boxed)
+        .position(x: drawn.width * center.x, y: drawn.height * center.y)
+    }
+
+    /// The chrome's footprint. A box has one; free text's is measured from
+    /// the resolved type, which is an estimate — the exact ink extent lives
+    /// in the rasterizer and is not worth a render round trip for an outline.
+    private func chromeSize(_ overlay: SceneOverlay, drawn: CGSize) -> CGSize {
+        if overlay.mode == .box {
+            return CGSize(
+                width: drawn.width * overlay.boxWidth,
+                height: drawn.height * overlay.boxHeight)
+        }
+        let resolved = TextOverlayRasterizer.resolvedSize(
+            for: overlay, aspect: drawnAspect(drawn))
+        let pixels = resolved * Double(max(drawn.width, drawn.height))
+        let lines = max(overlay.text.components(separatedBy: "\n").count, 1)
+        let widest = overlay.text.components(separatedBy: "\n")
+            .map(\.count).max() ?? 1
+        return CGSize(
+            width: min(CGFloat(Double(widest) * pixels * 0.56), drawn.width),
+            height: CGFloat(Double(lines) * pixels * 1.35))
+    }
+
+    /// The AUTO readout: what auto-size resolved to, and where that sits in
+    /// the Min…Max bracket it searched.
+    @ViewBuilder private func autoSizeChip(_ overlay: SceneOverlay, drawn: CGSize) -> some View {
+        let resolved = TextOverlayRasterizer.resolvedSize(
+            for: overlay, aspect: drawnAspect(drawn))
+        let span = max(overlay.maxSize - overlay.minSize, 0.0001)
+        let fill = min(max((resolved - overlay.minSize) / span, 0), 1)
+        HStack(spacing: 6) {
+            Text("AUTO")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(LL.amber)
+            Text("\(Int((resolved * sourceLongEdgePixels).rounded())) px")
+                .font(.system(size: 10, weight: .semibold))
+                .monospaced()
+                .foregroundStyle(.white)
+            ZStack(alignment: .leading) {
+                Capsule().fill(Color.white.opacity(0.28)).frame(width: 44, height: 3)
+                Circle().fill(LL.amber).frame(width: 8, height: 8)
+                    .offset(x: 44 * CGFloat(fill) - 4)
+            }
+            .frame(width: 44)
+        }
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(Color.black.opacity(0.82)))
+        .fixedSize()
+    }
+
+    /// Four corner squares and four edge circles. Dragging one moves that
+    /// edge and leaves the opposite one where it is — the box grows from the
+    /// side under the pointer, not from its centre.
+    @ViewBuilder private func overlayHandles(
+        _ overlay: SceneOverlay, size: CGSize, drawn: CGSize, tint: Color
+    ) -> some View {
+        ForEach(Self.handleAnchors, id: \.id) { anchor in
+            let corner = anchor.x != 0 && anchor.y != 0
+            Group {
+                if corner {
+                    RoundedRectangle(cornerRadius: 2, style: .continuous)
+                        .fill(Color.white)
+                        .overlay(RoundedRectangle(cornerRadius: 2, style: .continuous)
+                            .stroke(tint, lineWidth: 1.5))
+                        .frame(width: 8, height: 8)
+                } else {
+                    Circle()
+                        .fill(Color.white)
+                        .overlay(Circle().stroke(tint, lineWidth: 1.5))
+                        .frame(width: 7, height: 7)
+                }
+            }
+            .contentShape(Rectangle().inset(by: -8))
+            .offset(
+                x: size.width / 2 * CGFloat(anchor.x),
+                y: size.height / 2 * CGFloat(anchor.y))
+            .highPriorityGesture(boxResizeGesture(overlay, anchor: anchor, drawn: drawn))
+        }
+    }
+
+    private struct HandleAnchor: Identifiable {
+        let id: String
+        let x: Int
+        let y: Int
+    }
+
+    private static let handleAnchors: [HandleAnchor] = [
+        .init(id: "tl", x: -1, y: -1), .init(id: "tr", x: 1, y: -1),
+        .init(id: "bl", x: -1, y: 1), .init(id: "br", x: 1, y: 1),
+        .init(id: "t", x: 0, y: -1), .init(id: "b", x: 0, y: 1),
+        .init(id: "l", x: -1, y: 0), .init(id: "r", x: 1, y: 0),
+    ]
+
+    /// Resizing writes straight to the document — there is no proxy for a
+    /// box, because the box is chrome and the bake below it does not draw it.
+    private func boxResizeGesture(
+        _ overlay: SceneOverlay, anchor: HandleAnchor, drawn: CGSize
+    ) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .updating($overlayDragActive) { _, state, _ in state = true }
+            .onChanged { value in
+                guard drawn.width > 0, drawn.height > 0,
+                      let index = overlayDocument.overlays
+                        .firstIndex(where: { $0.id == overlay.id })
+                else { return }
+                if boxResizeBase == nil {
+                    dismissTextEntry()
+                    selectedOverlayID = overlay.id
+                    boxResizeBase = BoxResizeBase(
+                        width: overlay.boxWidth, height: overlay.boxHeight,
+                        centerX: overlay.centerX, centerY: overlay.centerY)
+                }
+                guard let base = boxResizeBase else { return }
+                let dx = Double(value.translation.width / drawn.width)
+                let dy = Double(value.translation.height / drawn.height)
+                var width = base.width, height = base.height
+                var centerX = base.centerX, centerY = base.centerY
+                if anchor.x != 0 {
+                    width = min(max(base.width + Double(anchor.x) * dx, 0.04), 1)
+                    // Half the travel, so the opposite edge stays put.
+                    centerX = base.centerX + Double(anchor.x) * (width - base.width) / 2
+                }
+                if anchor.y != 0 {
+                    height = min(max(base.height + Double(anchor.y) * dy, 0.03), 1)
+                    centerY = base.centerY + Double(anchor.y) * (height - base.height) / 2
+                }
+                overlayDocument.overlays[index].boxWidth = width
+                overlayDocument.overlays[index].boxHeight = height
+                overlayDocument.overlays[index].centerX = min(max(centerX, 0), 1)
+                overlayDocument.overlays[index].centerY = min(max(centerY, 0), 1)
+                scheduleUpdate()
+            }
+            .onEnded { _ in
+                boxResizeBase = nil
+                persistOverlays()
+                scheduleUpdate()
+            }
+    }
+
+    /// The centre guides, drawn while a drag is snapped to them.
+    @ViewBuilder private func overlaySnapGuides(drawn: CGSize) -> some View {
+        if overlaySnapX {
+            Rectangle().fill(LL.amber.opacity(0.9))
+                .frame(width: 1, height: drawn.height)
+                .position(x: drawn.width / 2, y: drawn.height / 2)
+                .allowsHitTesting(false)
+        }
+        if overlaySnapY {
+            Rectangle().fill(LL.amber.opacity(0.9))
+                .frame(width: drawn.width, height: 1)
+                .position(x: drawn.width / 2, y: drawn.height / 2)
+                .allowsHitTesting(false)
+        }
     }
 
     /// The Ken Burns drag idiom: a frozen committed base, absolute
@@ -938,6 +1212,8 @@ struct PhotoViewerView: View {
                 if overlayDrag?.id != overlay.id {
                     // Placing the text IS being done with typing it.
                     dismissTextEntry()
+                    // Dragging a layer is a way of choosing it.
+                    selectedOverlayID = overlay.id
                     overlayDrag = OverlayDragState(
                         id: overlay.id,
                         base: CGPoint(x: overlay.centerX, y: overlay.centerY),
@@ -947,18 +1223,28 @@ struct PhotoViewerView: View {
                     renderToken += 1
                 }
                 guard var drag = overlayDrag else { return }
-                drag.current = CGPoint(
-                    x: min(max(drag.base.x + value.translation.width / drawn.width, 0), 1),
-                    y: min(max(drag.base.y + value.translation.height / drawn.height, 0), 1))
+                var x = min(max(drag.base.x + value.translation.width / drawn.width, 0), 1)
+                var y = min(max(drag.base.y + value.translation.height / drawn.height, 0), 1)
+                // Centre snap, with the guide as its only feedback.
+                let snapX = abs(x - 0.5) < 0.018
+                let snapY = abs(y - 0.5) < 0.018
+                if snapX { x = 0.5 }
+                if snapY { y = 0.5 }
+                if overlaySnapX != snapX { overlaySnapX = snapX }
+                if overlaySnapY != snapY { overlaySnapY = snapY }
+                drag.current = CGPoint(x: x, y: y)
                 overlayDrag = drag
             }
             .onEnded { _ in
                 guard let drag = overlayDrag else { return }
-                if let index = overlays.firstIndex(where: { $0.id == drag.id }) {
-                    overlays[index].centerX = drag.current.x
-                    overlays[index].centerY = drag.current.y
+                if let index = overlayDocument.overlays
+                    .firstIndex(where: { $0.id == drag.id }) {
+                    overlayDocument.overlays[index].centerX = drag.current.x
+                    overlayDocument.overlays[index].centerY = drag.current.y
                 }
                 overlayDrag = nil
+                overlaySnapX = false
+                overlaySnapY = false
                 renderToken += 1
                 persistOverlays()
             }
@@ -1090,7 +1376,9 @@ struct PhotoViewerView: View {
     /// the tab (and with it the hide toggle — the only route back) off the
     /// screen.
     private var availableRailTabs: [RailTab] {
-        allFrames.count > 1 ? [.editor, .text, .frames] : [.editor, .text]
+        allFrames.count > 1
+            ? [.editor, .text, .frames, .masks]
+            : [.editor, .text, .masks]
     }
 
     private var railTabBar: some View {
@@ -1107,6 +1395,8 @@ struct PhotoViewerView: View {
             textTab
         case .frames:
             if allFrames.count > 1 { framesTab } else { editorTab(isWide: isWide) }
+        case .masks:
+            masksTab
         }
     }
 
@@ -1148,16 +1438,85 @@ struct PhotoViewerView: View {
 
     private var textTab: some View {
         OverlayEditingPanel(
-            overlays: $overlays,
+            document: $overlayDocument,
+            selectedID: $selectedOverlayID,
             hasTimeline: hasTimeline,
             position: position,
             label: timelineLabel,
             accent: accentColor,
-            modelInstalled: segModelIdentity != nil,
+            frameLongEdgePixels: sourceLongEdgePixels,
+            frameAspect: sourceAspect,
+            onEdited: overlayEdited,
+            onOpenMasks: { railTab = .masks })
+    }
+
+    private var masksTab: some View {
+        OverlayMasksPanel(
+            document: $overlayDocument,
+            inspectedRegion: $inspectedRegion,
             showMask: $showMask,
-            settings: $maskSettings,
-            maskStatus: maskStatus,
-            onEdited: overlayEdited)
+            modelInstalled: segModelIdentity != nil,
+            maskStatus: inspectedMaskStatus,
+            accent: accentColor,
+            thumbnail: { mask in
+                guard let capture else { return nil }
+                return CustomMaskThumbnails.thumbnail(
+                    at: model.customMaskURL(mask, for: capture))
+            },
+            onEdited: overlayEdited,
+            onImportMask: importCustomMask)
+    }
+
+    /// Copies a picked or dropped image into the project and adds it to the
+    /// document. Named for the file it came from, which is nearly always the
+    /// name the user already gave the region.
+    private func importCustomMask(_ url: URL) {
+        guard let capture else { return }
+        do {
+            let name = url.deletingPathExtension().lastPathComponent
+            let mask = try model.importCustomMask(from: url, name: name, for: capture)
+            overlayDocument.customMasks.append(mask)
+            persistOverlays()
+            scheduleUpdate()
+        } catch {
+            LLog("custom mask import failed: \(error.localizedDescription)")
+        }
+    }
+
+    /// The readout under the mask dials. A custom region is a FILE, so the
+    /// model's provenance line ("sequence vote · 9 frames") would be a lie
+    /// there — it gets the file's own instead, and says so when the file has
+    /// gone missing.
+    private var inspectedMaskStatus: String? {
+        guard let id = inspectedRegion?.customMaskID else { return maskStatus }
+        guard let capture,
+              let mask = overlayDocument.customMasks.first(where: { $0.id == id })
+        else { return nil }
+        return CustomMaskLoader.mask(at: model.customMaskURL(mask, for: capture))?
+            .provenance ?? "mask file missing — this region will not occlude"
+    }
+
+    /// The source frame's long edge in pixels, so the Text tab's size
+    /// readouts describe the DELIVERED file. The preview render is the wrong
+    /// ruler — it is capped at 2000 px (1100 mid-scrub), so a size quoted
+    /// against it would change as you scrub.
+    private var sourceLongEdgePixels: Double {
+        if let capture, let w = capture.sourceWidth, let h = capture.sourceHeight,
+           w > 0, h > 0 {
+            return Double(max(w, h))
+        }
+        guard let rendered else { return 4032 }
+        return Double(max(rendered.width, rendered.height))
+    }
+
+    private var sourceAspect: Double {
+        if let capture, let w = capture.sourceWidth, let h = capture.sourceHeight,
+           w > 0, h > 0 {
+            return Double(w) / Double(h)
+        }
+        if let aspect { return aspect }
+        guard let rendered, rendered.height > 0 else { return 4 / 3 }
+        return Double(rendered.width) / Double(rendered.height)
     }
 
     /// Frame management — the bad-frame pair, promoted from the foot of the
@@ -1611,9 +1970,14 @@ struct PhotoViewerView: View {
 
     // MARK: - Overlays
 
-    /// True while anything on screen needs the semantic mask.
+    /// True while anything on screen needs the segmentation model's mask.
+    /// Custom masks are files and never come through here.
     private var skyMaskWanted: Bool {
-        showMask || overlays.contains { $0.placement != .none }
+        if showMask, let inspectedRegion, inspectedRegion.customMaskID == nil,
+           inspectedRegion != .none {
+            return true
+        }
+        return overlayDocument.needsSegmentationModel
     }
 
     /// The cache key of the mask the composite should use right now, or nil
@@ -1621,13 +1985,33 @@ struct PhotoViewerView: View {
     /// ever LOOKS UP this key — `maskFetchTask` is what fills it.
     private var activeSkyMaskKey: String? {
         guard skyMaskWanted, let segModelIdentity else { return nil }
-        if maskSettings.maskMode == .sequence, hasTimeline {
+        if overlayDocument.maskSettings.maskMode == .sequence, hasTimeline {
             return SceneMaskService.shared.sequenceKey(
                 modelIdentity: segModelIdentity, frames: frames,
                 presetID: preset.presetID.uuidString, sampleCount: 9)
         }
         return SceneMaskService.shared.frameKey(
             modelIdentity: segModelIdentity, url: displayedURL, presetID: preset.presetID.uuidString)
+    }
+
+    /// Every mask the preview might need, resolved on the main actor before
+    /// the render hops off it. The model's mask is looked up by cache key
+    /// ONLY — the composite path can read a cached mask but must never
+    /// generate one, or a drag would stall on inference.
+    private func previewMaskSet() -> SceneAwareCompositor.MaskSet {
+        var masks = SceneAwareCompositor.MaskSet()
+        if let key = activeSkyMaskKey {
+            masks.sky = SceneMaskService.shared.cachedSkyMask(forKey: key)
+        }
+        guard let capture else { return masks }
+        // Only the masks something on screen actually names.
+        var wanted = Set(overlayDocument.overlays.compactMap { $0.placement.customMaskID })
+        if let id = inspectedRegion?.customMaskID, showMask { wanted.insert(id) }
+        for mask in overlayDocument.customMasks where wanted.contains(mask.id) {
+            masks.custom[mask.id] = CustomMaskLoader.mask(
+                at: model.customMaskURL(mask, for: capture))
+        }
+        return masks
     }
 
     /// A Text-tab edit. Motion re-renders; a finished gesture also persists —
@@ -1650,12 +2034,9 @@ struct PhotoViewerView: View {
     }
 
     private func persistOverlays() {
-        guard let capture,
-              overlays != persistedOverlays || maskSettings != persistedMaskSettings
-        else { return }
-        model.setOverlays(overlays, maskSettings: maskSettings, for: capture)
-        persistedOverlays = overlays
-        persistedMaskSettings = maskSettings
+        guard let capture, overlayDocument != persistedDocument else { return }
+        model.setOverlayDocument(overlayDocument, for: capture)
+        persistedDocument = overlayDocument
     }
 
     /// Generates whatever mask `activeSkyMaskKey` names and re-renders when
@@ -1673,7 +2054,7 @@ struct PhotoViewerView: View {
         // keyed on `key`, and state that moved during the debounce (a mode
         // flip, a scrub step) must not smuggle a different frame's mask —
         // or a single frame posing as the sequence vote — under it.
-        let sequenceMode = maskSettings.maskMode == .sequence && hasTimeline
+        let sequenceMode = overlayDocument.maskSettings.maskMode == .sequence && hasTimeline
         let sequenceFrames = frames
         let frameURL = displayedURL
         let preset = preset
@@ -1781,20 +2162,20 @@ struct PhotoViewerView: View {
         // list at its animation phase, the dragged overlay left out (the
         // SwiftUI proxy is showing it), and the mask by cache key only — the
         // composite path can read a cached mask but never generate one.
-        let overlays = overlays
+        let overlays = overlayDocument.overlays
         let suppressed = overlayDrag?.id
         let compositePosition = renderedPosition
-        let maskKey = activeSkyMaskKey
-        let maskSettings = maskSettings
-        let showMask = showMask
+        let maskSettings = overlayDocument.maskSettings
+        let masks = previewMaskSet()
+        let debugRegion = showMask ? inspectedRegion : nil
         let image = await MediaWorkQueue.grading.run { () -> CGImage? in
             guard let graded = PhotoGrader.render(
                 url: url, preset: preset, adjustments: adjustments, maxDimension: longEdge)
             else { return nil }
             return SceneAwareCompositor.compositedPreview(
                 base: graded, overlays: overlays, suppressing: suppressed,
-                position: compositePosition, skyMaskKey: maskKey,
-                settings: maskSettings, showMask: showMask)
+                position: compositePosition, masks: masks,
+                settings: maskSettings, debugRegion: debugRegion)
         }
         isRendering = false
         // A nil render (cancelled, or a missing file) leaves whatever is on

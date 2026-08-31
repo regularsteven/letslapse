@@ -1,12 +1,18 @@
 import SwiftUI
 
-/// The editor rail's three pages. The rail used to be one long stack; presets
+/// The editor rail's pages. The rail used to be one long stack; presets
 /// and sliders are the everyday work, text overlays and frame management are
 /// occasional, and stacking all three meant the occasional buried the daily.
+///
+/// Masks is a fourth page rather than a card inside Text because its
+/// contents belong to the PROJECT, not to a layer: every text layer can pick
+/// any of the project's regions, so the place to author them cannot live
+/// inside one layer's disclosure.
 enum RailTab: String, CaseIterable, Identifiable {
     case editor = "Editor"
     case text = "Text"
     case frames = "Frames"
+    case masks = "Masks"
     var id: String { rawValue }
 }
 

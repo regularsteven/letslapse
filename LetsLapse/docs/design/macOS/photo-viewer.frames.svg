@@ -92,10 +92,11 @@
     <g id="rail">
       <g id="railtabs">
         <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
-        <rect x="902" y="63" width="99" height="30" rx="15" fill="#C36A00"/>
-        <text x="748" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
-        <text x="850" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
-        <text x="951" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Frames</text>
+        <rect x="851" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
+        <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
+        <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Frames</text>
+        <text x="964" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
       </g>
 
       <g id="card-mark">

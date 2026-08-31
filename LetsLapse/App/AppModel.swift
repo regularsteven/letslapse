@@ -5818,9 +5818,9 @@ final class AppModel: ObservableObject {
             summary += " · \(moments) keyframe\(moments == 1 ? "" : "s")"
         }
         if let overlayBake {
-            summary += overlayBake.skyMask != nil
-                ? " · text baked in (scene-placed)"
-                : " · text baked in"
+            summary += overlayBake.masks.isEmpty
+                ? " · text baked in"
+                : " · text baked in (scene-placed)"
         }
         return ProcessingOutput(
             kind: .video,
@@ -5883,7 +5883,7 @@ final class AppModel: ObservableObject {
             guard let overlayBake else { return image }
             return SceneAwareCompositor.bakeStill(
                 image, overlays: overlayBake.overlays,
-                skyMask: overlayBake.skyMask, settings: overlayBake.settings) ?? image
+                masks: overlayBake.masks, settings: overlayBake.settings) ?? image
         }
         // A single frame has nothing to accumulate — the stacker needs at least
         // two — so load it straight through (blend=1 / one-frame-burst edge).

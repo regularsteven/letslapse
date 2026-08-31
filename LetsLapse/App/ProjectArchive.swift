@@ -38,7 +38,7 @@ enum ProjectArchive {
     /// network path it is worse — a subfolder that misses the list would be
     /// sent over the wire, for however many minutes that takes, and then
     /// deleted on arrival. A new project subfolder must be added here.
-    static let transferableSubfolders = ["source", "blends", "notes"]
+    static let transferableSubfolders = ["source", "blends", "notes", "masks"]
 
     /// The project's top-level FILES that travel, on the same terms as the
     /// subfolders above and read by the same two places.

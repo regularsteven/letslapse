@@ -279,6 +279,16 @@ loupe overlay parity, SVG mirrors for the tabbed rail (six iOS viewer SVGs
 + first `macOS/photo-viewer.svg`), and a SceneMasks entry on the storage
 card's cache-clearing path.
 
+## Superseded by the Text Features build (2026-08-31)
+
+The spike's deliberate limits — one layer, no typography, no bounding box —
+were lifted the same day by the Claude Design **Text Features** spec. What
+that build changed, and the traps it turned up, are recorded in
+[text-features.md](text-features.md). Read that file, not this one, for the
+current shape of the model, the rasterizer and the Text/Masks rail pages;
+this report stands as the record of how the machinery was arrived at and why
+the compositing core is overlay-agnostic.
+
 ## Reproduce
 
 **Plain Xcode — no driver, no hooks, no env vars.** The shared LetsLapse

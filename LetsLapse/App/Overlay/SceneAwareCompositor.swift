@@ -22,6 +22,53 @@ enum SceneAwareCompositor {
         var settings: SegmentationSettings
     }
 
+    /// Every mask a composite might need, resolved before the loop starts.
+    /// The segmentation model produces one analysis read two ways (sky and
+    /// its complement); custom masks are files, keyed by their own id.
+    ///
+    /// A value type so it can cross into a detached render task alongside
+    /// the overlays it serves.
+    struct MaskSet: Sendable {
+        var sky: SceneMask?
+        var custom: [UUID: SceneMask] = [:]
+
+        static let empty = MaskSet()
+
+        var isEmpty: Bool { sky == nil && custom.isEmpty }
+
+        /// The mask of the region that composites back OVER a layer placed
+        /// here — the occlusion half. Sky placement restores non-sky; land
+        /// restores sky; a custom placement restores everything outside the
+        /// named region. nil = nothing occludes (no placement, or the mask
+        /// this placement names is missing).
+        func restorationMask(for placement: OverlayPlacement) -> SceneMask? {
+            switch placement {
+            case .none:
+                return nil
+            case .sky:
+                return sky?.inverted()
+            case .land:
+                return sky
+            case .custom(let id):
+                return custom[id]?.inverted()
+            case .customInverted(let id):
+                return custom[id]
+            }
+        }
+
+        /// The mask of the region ITSELF, for the debug tint — "what the
+        /// analysis calls this region", not what occludes it.
+        func regionMask(for placement: OverlayPlacement) -> SceneMask? {
+            switch placement {
+            case .none: return nil
+            case .sky: return sky
+            case .land: return sky?.inverted()
+            case .custom(let id): return custom[id]
+            case .customInverted(let id): return custom[id]?.inverted()
+            }
+        }
+    }
+
     enum DebugMode {
         case none
         /// The post-processed restoration mask, tinted over the result.
@@ -165,18 +212,16 @@ enum SceneAwareCompositor {
         overlays: [SceneOverlay],
         suppressing suppressed: UUID?,
         position: Double,
-        skyMaskKey: String?,
+        masks: MaskSet,
         settings: SegmentationSettings,
-        showMask: Bool
+        debugRegion: OverlayPlacement?
     ) -> CGImage {
-        let skyMask = skyMaskKey.flatMap {
-            SceneMaskService.shared.cachedSkyMask(forKey: $0)
-        }
         guard let image = composited(
             base: CIImage(cgImage: base),
             frameSize: CGSize(width: base.width, height: base.height),
             overlays: overlays, suppressing: suppressed, position: position,
-            skyMask: skyMask, settings: settings, showMask: showMask)
+            masks: masks, settings: settings, debugRegion: debugRegion,
+            editorPreview: true)
         else { return base }
         return renderCGImage(image, colorSpace: base.colorSpace) ?? base
     }
@@ -185,50 +230,63 @@ enum SceneAwareCompositor {
     /// is what makes "what the editor shows is what the export bakes" true
     /// for overlays. Returns nil when there is nothing to draw (no overlays
     /// at this position, no debug tint), so callers can skip the re-encode.
+    /// `editorPreview` turns on the two affordances that describe how the
+    /// EDITOR draws rather than what the piece is: onion skin, and ghosting
+    /// a hidden layer that has onion skin on. An export passes false and
+    /// gets exactly the layers the viewer will see.
     static func composited(
         base: CIImage,
         frameSize: CGSize,
         overlays: [SceneOverlay],
         suppressing suppressed: UUID?,
         position: Double,
-        skyMask: SceneMask?,
+        masks: MaskSet,
         settings: SegmentationSettings,
-        showMask: Bool
+        debugRegion: OverlayPlacement?,
+        editorPreview: Bool
     ) -> CIImage? {
         var image = base
         var drewAnything = false
-        for overlay in overlays where overlay.id != suppressed {
+        // Layers are stored front-to-back (index 0 is frontmost), and each
+        // composite paints OVER what came before — so the array is walked in
+        // reverse and row 1 of the Text tab lands on top.
+        for overlay in overlays.reversed() where overlay.id != suppressed {
+            let onion = editorPreview && overlay.onionSkin
+            guard overlay.isVisible || onion else { continue }
             guard let spec = TextOverlayRasterizer.spec(
-                    for: overlay, frameSize: frameSize, position: position),
+                    for: overlay, frameSize: frameSize, position: position,
+                    ignoringAnimation: onion),
                   let raster = TextOverlayRasterizer.render(spec) else { continue }
-            var occlusion: Occlusion?
-            if let skyMask {
-                switch overlay.placement {
-                case .none:
-                    break
-                case .sky:
-                    // Text in the sky: everything that is not sky restores
-                    // over it.
-                    occlusion = Occlusion(mask: skyMask.inverted(), settings: settings)
-                case .land:
-                    occlusion = Occlusion(mask: skyMask, settings: settings)
-                }
+            var layer = CIImage(cgImage: raster)
+            if !overlay.isVisible {
+                // A hidden layer shown only by its onion skin reads as
+                // scaffolding, not as the piece.
+                layer = faded(layer, alpha: 0.34)
             }
-            image = composite(
-                base: image, overlay: CIImage(cgImage: raster),
-                occlusion: occlusion)
+            let occlusion = masks.restorationMask(for: overlay.placement)
+                .map { Occlusion(mask: $0, settings: settings) }
+            image = composite(base: image, overlay: layer, occlusion: occlusion)
             drewAnything = true
         }
-        if showMask, let skyMask {
-            // The debug tint shows what the model calls sky, after the same
-            // post-processing the occlusion uses.
+        if let debugRegion, let mask = masks.regionMask(for: debugRegion) {
+            // The debug tint shows what the analysis calls this region, after
+            // the same post-processing the occlusion uses.
             image = composite(
                 base: image, overlay: nil,
-                occlusion: Occlusion(mask: skyMask, settings: settings),
+                occlusion: Occlusion(mask: mask, settings: settings),
                 debug: .mask)
             drewAnything = true
         }
         return drewAnything ? image : nil
+    }
+
+    /// Scales a layer's alpha without touching its color — premultiplied
+    /// input, so the RGB channels scale with it.
+    private static func faded(_ image: CIImage, alpha: Double) -> CIImage {
+        guard let filter = CIFilter(name: "CIColorMatrix") else { return image }
+        filter.setValue(image, forKey: kCIInputImageKey)
+        filter.setValue(CIVector(x: 0, y: 0, z: 0, w: CGFloat(alpha)), forKey: "inputAVector")
+        return filter.outputImage ?? image
     }
 
     // MARK: - Export baking
@@ -245,7 +303,7 @@ enum SceneAwareCompositor {
         position: Double,
         pool: CVPixelBufferPool,
         overlays: [SceneOverlay],
-        skyMask: SceneMask?,
+        masks: MaskSet,
         settings: SegmentationSettings
     ) throws -> CVPixelBuffer? {
         // Self-draining: a frame's worth of Core Image temporaries is tens of
@@ -255,7 +313,7 @@ enum SceneAwareCompositor {
         try autoreleasepool {
             try bakeExportFrameBody(
                 buffer, position: position, pool: pool,
-                overlays: overlays, skyMask: skyMask, settings: settings)
+                overlays: overlays, masks: masks, settings: settings)
         }
     }
 
@@ -264,14 +322,15 @@ enum SceneAwareCompositor {
         position: Double,
         pool: CVPixelBufferPool,
         overlays: [SceneOverlay],
-        skyMask: SceneMask?,
+        masks: MaskSet,
         settings: SegmentationSettings
     ) throws -> CVPixelBuffer? {
         let base = CIImage(cvPixelBuffer: buffer)
         guard let composite = composited(
             base: base, frameSize: base.extent.size,
             overlays: overlays, suppressing: nil, position: position,
-            skyMask: skyMask, settings: settings, showMask: false)
+            masks: masks, settings: settings, debugRegion: nil,
+            editorPreview: false)
         else { return nil }
         var scratch: CVPixelBuffer?
         let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &scratch)
@@ -296,14 +355,15 @@ enum SceneAwareCompositor {
     static func bakeStill(
         _ image: CGImage,
         overlays: [SceneOverlay],
-        skyMask: SceneMask?,
+        masks: MaskSet,
         settings: SegmentationSettings
     ) -> CGImage? {
         guard let composite = composited(
             base: CIImage(cgImage: image),
             frameSize: CGSize(width: image.width, height: image.height),
             overlays: overlays, suppressing: nil, position: 1,
-            skyMask: skyMask, settings: settings, showMask: false)
+            masks: masks, settings: settings, debugRegion: nil,
+            editorPreview: false)
         else { return nil }
         return renderCGImage(composite, colorSpace: image.colorSpace)
     }

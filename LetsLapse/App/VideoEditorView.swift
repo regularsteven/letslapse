@@ -367,7 +367,7 @@ struct VideoEditorView: View {
 
     @ViewBuilder private func controlStack(isWide: Bool) -> some View {
         switch railTab {
-        case .editor, .frames:
+        case .editor, .frames, .masks:
             editorTab(isWide: isWide)
         case .text:
             // Overlay rendering rides the photo/interval engine path in the

@@ -27,30 +27,39 @@ no CI handler).
 
 ### Text overlays: productization follow-ups from the spike
 
-**Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31
+**Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31 · **Narrowed:** 2026-08-31 — the Text Features build closed the multi-layer, typography, box/auto-size and custom-mask items
 
-The recorded remainder, roughly in value order: VideoEditorView overlay
-rendering (its Text tab is an honest placeholder); promote `overlays.json`
-into a `CaptureProject` field (or add `"overlays"` to
-`ProjectArchive.transferableSubfolders`) so text travels in `.lapse`
-archives and device transfers; iOS pass (stacked-layout tab bar compiled but
-unverified, touch drag ergonomics); detail-patch/loupe render without
-overlays (pixel-peep shows no text; `PhotoDetailFocus` scans the composited
-preview so the loupe can point at text); SceneMasks folder on the storage
-card's clear-cache path; draggable range-band handles; SegFormer-B0 ADE20K
-conversion for true sky probabilities (DETR is 0/1 argmax).
+Closed by the "Text Features" design build: multiple layers with reorder /
+visibility / onion skin, type fundamentals (family, B/I/U, alignment,
+colour, kerning, line height, paragraph), Free vs Box with auto-size, the
+Masks tab with project-level custom masks, and archive travel (`masks/` is
+in `ProjectArchive.transferableSubfolders`; `overlays.json` was already in
+`transferableFiles`).
+
+Still owed, roughly in value order: **VideoEditorView overlay rendering**
+(its Text tab is still an honest placeholder); **iOS pass** — the panels
+compile and the iOS build is green, but the layer list, the popover and the
+box handles have never been touched on a device, and the rail is 339pt of
+macOS width; **font upload** (the design's type list includes a "(uploaded)"
+face — the picker ships six system families and no import path); promote
+`overlays.json` into a `CaptureProject` field; detail-patch/loupe render
+without overlays; SceneMasks **and the new per-project `masks/` folder** on
+the storage card's clear-cache path; draggable range-band handles;
+SegFormer-B0 ADE20K conversion for true sky probabilities (DETR is 0/1
+argmax).
 
 ### Design mirrors for the tabbed editor rail — iOS remainder
 
-**Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:** 2026-08-31 — macOS drawn (30b5836)
+**Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:** 2026-08-31 — macOS drawn (30b5836), then rebuilt for Text Features
 
-The macOS Edit window now has its first specs: `macOS/photo-viewer.svg` /
-`.text.svg` / `.frames.svg`, verified against the running app and ✅ in the
-macOS INDEX (armed-animation, model-missing and mask-tint states desc-only —
-draw them if they matter for sign-off). Still owed: the six iOS viewer SVGs
-(`project-photo.viewer.*.svg` family) are stale against the tab bar and the
-stacked layout's Text/Frames pages have never been drawn; mirror once the
-iOS pass happens.
+The macOS Edit window's specs are current: `macOS/photo-viewer.svg` /
+`.text.svg` / `.frames.svg` / `.masks.svg`, all four carrying the four-tab
+rail, verified against the running app and ✅ in the macOS INDEX
+(centre-snap guides, the More… popover, model-missing and mask-file-missing
+states desc-only — draw them if they matter for sign-off). Still owed: the
+six iOS viewer SVGs (`project-photo.viewer.*.svg` family) are stale against
+the tab bar and the stacked layout's Text/Frames/Masks pages have never been
+drawn; mirror once the iOS pass happens.
 
 ### iOS tab host still folds tabs 5+ into UIKit's invisible "More" controller
 
