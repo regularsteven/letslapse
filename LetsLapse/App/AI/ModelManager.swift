@@ -27,6 +27,9 @@ struct CatalogModel: Codable, Identifiable, Equatable, Sendable {
     enum Engine: String, Codable, Sendable {
         case mlx
         case visionFramework = "vision-framework"
+        /// A downloadable Core ML asset (the segmentation model). Downloads and deletes like an
+        /// MLX entry; runs through `SceneMaskService`, never the scene-tagging pipeline.
+        case coreml
     }
 
     /// Stable catalog identity, and the folder name under `Models/`.
@@ -57,7 +60,14 @@ struct CatalogModel: Codable, Identifiable, Equatable, Sendable {
 
     /// Nothing to download, nothing to delete, nothing to check for room. Everything the download
     /// machinery does is skipped for these, and the UI shows them as permanently present.
-    var isBuiltIn: Bool { engine != .mlx }
+    /// Named by engine, not by "not MLX": a `.coreml` entry downloads exactly the way an MLX one
+    /// does, and calling it built-in would silently disable its whole download state machine.
+    var isBuiltIn: Bool { engine == .visionFramework }
+
+    /// Whether this entry runs the scene-tagging pipeline (names, tags). The segmentation model
+    /// doesn't — it must never be adopted as the active tagging model, and the picker must not
+    /// offer it as one.
+    var tagsScenes: Bool { engine != .coreml }
 
     /// Written by hand so a built-in entry can leave out every field that only means something to
     /// a downloaded model — a repo, a revision, a glob list. Filling those in with empty strings in
@@ -324,8 +334,10 @@ final class ModelManager: ObservableObject {
     /// one, because it is the only one of the two that can write a title.
     private func adoptDefaultActiveModel() {
         guard activeModel == nil else { return }
-        activeModelID = downloadedModels.first { !$0.isBuiltIn }?.id
-            ?? downloadedModels.first?.id
+        // Tagging models only: the segmentation model is downloaded, not "active" — it would sit
+        // in the active slot doing nothing while tagging silently stopped.
+        activeModelID = downloadedModels.first { !$0.isBuiltIn && $0.tagsScenes }?.id
+            ?? downloadedModels.first { $0.tagsScenes }?.id
     }
 
     // MARK: - Locations
@@ -365,10 +377,19 @@ final class ModelManager: ObservableObject {
             at: snapshots, includingPropertiesForKeys: nil)) ?? []).sorted { $0.path < $1.path }
 
         return candidates.first { candidate in
-            guard fileManager.fileExists(
-                atPath: candidate.appendingPathComponent("config.json").path) else { return false }
             let contents = (try? fileManager.contentsOfDirectory(
                 at: candidate, includingPropertiesForKeys: nil)) ?? []
+            // Completeness is judged by what the engine actually loads: a Core ML snapshot is an
+            // .mlpackage whose weights landed; an MLX one is a config plus safetensors.
+            if model.engine == .coreml {
+                return contents.contains { package in
+                    package.pathExtension == "mlpackage" && fileManager.fileExists(
+                        atPath: package.appendingPathComponent(
+                            "Data/com.apple.CoreML/weights/weight.bin").path)
+                }
+            }
+            guard fileManager.fileExists(
+                atPath: candidate.appendingPathComponent("config.json").path) else { return false }
             return contents.contains { $0.pathExtension == "safetensors" }
         }
     }
@@ -468,7 +489,8 @@ final class ModelManager: ObservableObject {
         // A model that just cost several gigabytes should be the one that runs. `activeModel` is
         // never nil once a built-in exists, so "adopt when nothing is chosen" would never fire
         // again — the built-in is treated as the placeholder it is and stepped over here.
-        if activeModel == nil || activeModel?.isBuiltIn == true {
+        // Tagging models only: the segmentation model has no business in the active slot.
+        if model.tagsScenes, activeModel == nil || activeModel?.isBuiltIn == true {
             activeModelID = model.id
         }
         await refreshDiskUsage()
@@ -483,7 +505,7 @@ final class ModelManager: ObservableObject {
         states[model.id] = .notDownloaded
         diskUsage[model.id] = nil
         if activeModelID == model.id {
-            activeModelID = downloadedModels.first?.id
+            activeModelID = downloadedModels.first { $0.tagsScenes }?.id
         }
         Task { await refreshDiskUsage() }
     }

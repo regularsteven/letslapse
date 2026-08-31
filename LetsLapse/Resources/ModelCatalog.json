@@ -3,7 +3,7 @@
   "engine": {
     "package": "ml-explore/mlx-swift-lm",
     "revision": "18edd228",
-    "notes": "Vendored copy under tools/mlx-vlm-spike/vendor/mlx-swift-lm, carrying vendor/pr384.diff (Gemma 4 E-series shared-KV loading) and vendor/multi-image-fix.diff. A model entry is only valid against this engine revision — a Hub re-conversion can break an older engine, so revisions are pinned on both sides. See docs/ai/phase0-findings.md. Entries whose own `engine` is not `mlx` don't run on it at all and ignore this block.",
+    "notes": "Vendored copy under tools/mlx-vlm-spike/vendor/mlx-swift-lm, carrying vendor/pr384.diff (Gemma 4 E-series shared-KV loading) and vendor/multi-image-fix.diff. A model entry is only valid against this engine revision \u2014 a Hub re-conversion can break an older engine, so revisions are pinned on both sides. See docs/ai/phase0-findings.md. Entries whose own `engine` is not `mlx` don't run on it at all and ignore this block.",
     "notesOnBuiltIns": "A built-in entry (engine other than \"mlx\") has no repo, no revision and no download: it is a system framework the app can call today. It still carries an id and a name because it is chosen the same way an installed model is."
   },
   "models": [
@@ -17,7 +17,7 @@
       "minUnifiedMemoryGB": 0,
       "approxPeakMemoryBytes": 0,
       "maxImagesPerPrompt": 1,
-      "summary": "Apple's built-in scene and object classifier. Instant, and nothing to download. It tags a capture but doesn't write a name — keep a language model for titles.",
+      "summary": "Apple's built-in scene and object classifier. Instant, and nothing to download. It tags a capture but doesn't write a name \u2014 keep a language model for titles.",
       "warning": null
     },
     {
@@ -41,6 +41,24 @@
         "*.txt"
       ],
       "summary": "Google's small multimodal model. Names and tags a capture in about a second once loaded.",
+      "warning": null
+    },
+    {
+      "id": "detr-semantic-f16",
+      "engine": "coreml",
+      "repoID": "apple/coreml-detr-semantic-segmentation",
+      "revision": "7c771f8867a479d1441ac5fb0a8de31feea76bb6",
+      "name": "DETR Segmentation",
+      "quantization": "FP16",
+      "availability": "experimental",
+      "approxDownloadBytes": 85468610,
+      "minUnifiedMemoryGB": 0,
+      "approxPeakMemoryBytes": 400000000,
+      "maxImagesPerPrompt": 1,
+      "matching": [
+        "DETRResnet50SemanticSegmentationF16.mlpackage/*"
+      ],
+      "summary": "Apple's semantic scene segmentation. Powers Intelligent Placement in the photo editor's Text tab: sky and scene regions that can occlude overlaid text.",
       "warning": null
     }
   ]

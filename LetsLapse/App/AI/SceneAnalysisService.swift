@@ -34,9 +34,12 @@ enum SceneAnalyzerFactory {
         switch models.activeModel?.engine {
         case .visionFramework:
             return VisionSceneAnalyzer.shared
-        case .mlx, nil:
+        case .mlx, .coreml, nil:
             // Nil too: with nothing selected there is nothing to run, and the MLX path is the one
-            // that says so properly (`Failure.noModel` names the screen that fixes it).
+            // that says so properly (`Failure.noModel` names the screen that fixes it). `.coreml`
+            // is unreachable here in practice — the segmentation model is never adoptable as the
+            // active tagging model (`CatalogModel.tagsScenes`) — and lands on the same honest
+            // failure if that invariant ever breaks.
             return MLXSceneAnalyzer.shared
         }
     }

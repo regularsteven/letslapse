@@ -66,6 +66,12 @@ struct GradeTimelineView: View {
     // layout's, where the strip shares the media pane's width rather than the
     // whole screen's.
 
+    /// The left inset before the track begins — the play control plus its
+    /// gap. Static so the editor's companion rows (the bad-frame ticks, the
+    /// animation range band) align to the same origin instead of hand-copying
+    /// these numbers.
+    static func leadInset(compact: Bool) -> CGFloat { (compact ? 26 : 30) + 12 }
+
     private var controlSize: CGFloat { compact ? 26 : 30 }
     private var trackHeight: CGFloat { compact ? 26 : 30 }
     private var railThickness: CGFloat { 3 }
@@ -89,7 +95,7 @@ struct GradeTimelineView: View {
 
     var body: some View {
         GeometryReader { proxy in
-            let lead = showsPlayControl ? controlSize + gap : 0
+            let lead = showsPlayControl ? Self.leadInset(compact: compact) : 0
             let trackWidth = max(1, proxy.size.width - lead)
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: gap) {
@@ -358,7 +364,7 @@ struct GradeTimelineView: View {
         .monospacedDigit()
         .foregroundStyle(.secondary)
         .frame(height: labelRowHeight)
-        .padding(.leading, showsPlayControl ? controlSize + gap : 0)
+        .padding(.leading, showsPlayControl ? Self.leadInset(compact: compact) : 0)
     }
 }
 

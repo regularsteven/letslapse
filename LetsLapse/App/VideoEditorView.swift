@@ -84,6 +84,9 @@ struct VideoEditorView: View {
     /// ceiling. 1 = the ceiling, which is where every presentation starts.
     @State private var mediaScale: CGFloat = 1
 
+    /// Which rail page is showing — see `RailTabBar`.
+    @State private var railTab: RailTab = .editor
+
     private let wideLayoutThreshold: CGFloat = 500
     /// How the player is sized and how far the handle may shrink it — the same
     /// component the photo editor and the project hero lay out with.
@@ -279,6 +282,10 @@ struct VideoEditorView: View {
             if span > 0 {
                 MediaResizeHandle(scale: $mediaScale, span: span)
             }
+            railTabBar
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
             ScrollView(.vertical) {
                 controlStack(isWide: false)
                     .padding(16)
@@ -331,9 +338,17 @@ struct VideoEditorView: View {
     /// The side rail is tall and narrow, so it scrolls on its own. (The stacked
     /// layout's scroll view lives in `stackedBody`, outside the player.)
     private var controlRail: some View {
-        ScrollView {
-            controlStack(isWide: true)
-                .padding(16)
+        VStack(spacing: 0) {
+            railTabBar
+                .padding(.horizontal, 16)
+                .padding(.top, 12)
+                .padding(.bottom, 6)
+            ScrollView {
+                controlStack(isWide: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 16)
+            }
         }
         // A plain fill, not `editorBackground` — that one ignores the safe area,
         // which a rail inside the layout has no business doing. Forced dark
@@ -341,7 +356,34 @@ struct VideoEditorView: View {
         .background(LL.screenBackground)
     }
 
-    private func controlStack(isWide: Bool) -> some View {
+    /// The same tab structure as the photo/interval editor, so the two rails
+    /// keep reading as one design. No Frames page: a movie has no source
+    /// frame files to nominate.
+    private var railTabBar: some View {
+        RailTabBar(
+            selection: $railTab, tabs: [.editor, .text],
+            accent: accentColor, onAccent: pillTextColor)
+    }
+
+    @ViewBuilder private func controlStack(isWide: Bool) -> some View {
+        switch railTab {
+        case .editor, .frames:
+            editorTab(isWide: isWide)
+        case .text:
+            // Overlay rendering rides the photo/interval engine path in the
+            // spike; the movie editor states that honestly instead of half
+            // of it working.
+            Text("Text overlays aren't wired into movie clips yet. Open an interval project's editor to place and animate text.")
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(14)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
+    private func editorTab(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             stateRow
             presetStrip

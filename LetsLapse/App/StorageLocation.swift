@@ -33,7 +33,7 @@ enum StorageRoot {
     /// "everything in the folder". A new top-level item under the root must be
     /// added here, or a later move leaves it behind.
     static let libraryItemNames = [
-        "Projects", "Collections", "Thumbnails", "CaptureLogs", "Logs",
+        "Projects", "Collections", "Thumbnails", "SceneMasks", "CaptureLogs", "Logs",
         "Incoming",
         "blend-profiles.json", "custom_presets.json",
     ]

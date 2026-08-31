@@ -119,6 +119,42 @@ struct PhotoViewerView: View {
     /// see `MediaPaneMetrics` for what the layout does in the meantime.
     @State private var aspect: Double?
 
+    // MARK: Text overlays (spike)
+    //
+    // The Text tab: overlays the user places by hand, the semantic mask that
+    // lets the scene occlude them, and the reveal animation. State lives here
+    // (like the grade) and persists through the per-project sidecar
+    // (`AppModel.setOverlays`) on finished gestures.
+
+    /// Which rail page is showing.
+    @State private var railTab: RailTab = .editor
+    /// The project's overlays. Seeded once from the sidecar; the UI edits
+    /// the first (one text layer in the spike — the model carries many).
+    @State private var overlays: [SceneOverlay] = []
+    /// A live drag over the preview: the SwiftUI proxy shows `current` while
+    /// the baked overlay is suppressed from the render.
+    @State private var overlayDrag: OverlayDragState?
+    /// Healer: SwiftUI resets this when the drag gesture is cancelled rather
+    /// than ended, which is the only signal a cancelled drag gives.
+    @GestureState private var overlayDragActive = false
+    /// The segmentation model's identity, or nil when not installed.
+    /// Resolved off the file system once at load (and when the Text tab
+    /// opens), never per body evaluation.
+    @State private var segModelIdentity: String?
+    /// The mask debug view: the semantic mask tinted over the preview.
+    @State private var showMask = false
+    @State private var maskSettings = SegmentationSettings()
+    /// The mask readout in the Text tab — provenance, progress, or an error.
+    @State private var maskStatus: String?
+
+    private struct OverlayDragState {
+        let id: UUID
+        /// The committed centre when the drag began — translation is applied
+        /// to this absolute base, never accumulated.
+        let base: CGPoint
+        var current: CGPoint
+    }
+
     // MARK: Pixel peeping
     //
     // Noise reduction and sharpening work on single pixels, and the preview is
@@ -392,7 +428,7 @@ struct PhotoViewerView: View {
                 let badSet = ticks
                 GeometryReader { geo in
                     // Leave the same left margin as GradeTimelineView's play button
-                    let lead: CGFloat = compact ? 26 + 12 : 30 + 12
+                    let lead = GradeTimelineView.leadInset(compact: compact)
                     let trackW = max(1, geo.size.width - lead)
                     ZStack(alignment: .leading) {
                         ForEach(Array(frames.enumerated()), id: \.offset) { idx, frameURL in
@@ -410,6 +446,24 @@ struct PhotoViewerView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .frame(height: 6)
+            }
+
+            // The reveal's span, read-only under the strip: authoring happens
+            // through Set Start / Set End in the Text tab, where the playhead
+            // — frame steps, clock label, snap ladder — is already the
+            // precision instrument.
+            if let animation = overlays.first?.animation, frames.count > 1 {
+                GeometryReader { geo in
+                    let lead = GradeTimelineView.leadInset(compact: compact)
+                    let trackW = max(1, geo.size.width - lead)
+                    Capsule()
+                        .fill(accentColor.opacity(0.5))
+                        .frame(
+                            width: max(4, trackW * CGFloat(animation.end - animation.start)),
+                            height: 4)
+                        .offset(x: lead + trackW * CGFloat(min(max(animation.start, 0), 1)))
+                }
+                .frame(height: 4)
             }
         }
     }
@@ -516,6 +570,8 @@ struct PhotoViewerView: View {
             adjustments = model.photoAdjustments(for: capture)
             presetState = model.presetState(for: capture)
             timeline = model.gradeTimeline(for: capture)
+            overlays = model.overlays(for: capture)
+            segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
             // An interval shoot's frames — and, where the shoot wrote one, the
             // capture clock they sit on, which is what turns the strip's axis
             // from "frame 812" into "1:09:41 into the shoot".
@@ -585,9 +641,32 @@ struct PhotoViewerView: View {
             try? await Task.sleep(for: .seconds(2))
             guard !Task.isCancelled else { return }
             persist()
+            persistOverlays()
         }
         .task(id: patchRequest) { await renderPatch() }
         .task(id: loupeRequest) { await renderLoupe() }
+        .task(id: activeSkyMaskKey) { await maskFetchTask() }
+        .onChange(of: railTab) { _, tab in
+            // A cheap staleness fix on the way in: the model may have been
+            // downloaded (or deleted) in Settings while this window sat open.
+            if tab == .text {
+                segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
+            }
+            // Leaving the Text tab mid-drag: the proxy is gone, so the baked
+            // overlay must come back.
+            if tab != .text, overlayDrag != nil {
+                overlayDrag = nil
+                renderToken += 1
+            }
+        }
+        .onChange(of: overlayDragActive) { _, active in
+            // The gesture was cancelled rather than ended (SwiftUI reset the
+            // @GestureState): drop the uncommitted move and restore the bake.
+            if !active, overlayDrag != nil {
+                overlayDrag = nil
+                renderToken += 1
+            }
+        }
         .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
         .onChange(of: displayedURL) { _, _ in
             // A scrub moved to a different still: what is on screen at full
@@ -675,6 +754,10 @@ struct PhotoViewerView: View {
             if span > 0 {
                 MediaResizeHandle(scale: $mediaScale, span: span)
             }
+            railTabBar
+                .padding(.horizontal, 16)
+                .padding(.top, 6)
+                .padding(.bottom, 2)
             ScrollView(.vertical) {
                 controlStack(isWide: false)
                     .padding(.horizontal, 16)
@@ -797,9 +880,68 @@ struct PhotoViewerView: View {
                     .offset(x: drawn.width * patch.region.minX,
                             y: drawn.height * patch.region.minY)
             }
+            // The overlay's drag surface, only while the Text tab is the
+            // work: everywhere else the baked pixels are the overlay.
+            if railTab == .text, let overlay = overlays.first {
+                overlayProxy(overlay, drawn: drawn)
+            }
         }
         .frame(width: drawn.width, height: drawn.height)
         .offset(zoom.offset)
+    }
+
+    /// The draggable stand-in over the baked overlay. At rest it is an
+    /// invisible hit target registered exactly over the baked text; during a
+    /// drag the bake is suppressed from the render and this proxy — drawn at
+    /// final layout, full strength, because the resting state is what is
+    /// being placed — is what moves.
+    @ViewBuilder private func overlayProxy(_ overlay: SceneOverlay, drawn: CGSize) -> some View {
+        let dragging = overlayDrag?.id == overlay.id
+        let center = dragging
+            ? overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY)
+            : CGPoint(x: overlay.centerX, y: overlay.centerY)
+        let fontSize = overlay.size * max(drawn.width, drawn.height)
+        Text(overlay.text)
+            .font(.system(size: fontSize, weight: .bold))
+            .foregroundStyle(.white)
+            .shadow(color: .black.opacity(0.55), radius: fontSize * 0.06)
+            .opacity(dragging ? 1 : 0.02)
+            .position(x: drawn.width * center.x, y: drawn.height * center.y)
+            .highPriorityGesture(overlayDragGesture(overlay, drawn: drawn))
+    }
+
+    /// The Ken Burns drag idiom: a frozen committed base, absolute
+    /// translation divided into unit space, clamped, committed on release.
+    private func overlayDragGesture(_ overlay: SceneOverlay, drawn: CGSize) -> some Gesture {
+        DragGesture(minimumDistance: 1)
+            .updating($overlayDragActive) { _, state, _ in state = true }
+            .onChanged { value in
+                guard drawn.width > 0, drawn.height > 0 else { return }
+                if overlayDrag?.id != overlay.id {
+                    overlayDrag = OverlayDragState(
+                        id: overlay.id,
+                        base: CGPoint(x: overlay.centerX, y: overlay.centerY),
+                        current: CGPoint(x: overlay.centerX, y: overlay.centerY))
+                    // One re-render without this overlay; the proxy carries
+                    // it for the rest of the drag.
+                    renderToken += 1
+                }
+                guard var drag = overlayDrag else { return }
+                drag.current = CGPoint(
+                    x: min(max(drag.base.x + value.translation.width / drawn.width, 0), 1),
+                    y: min(max(drag.base.y + value.translation.height / drawn.height, 0), 1))
+                overlayDrag = drag
+            }
+            .onEnded { _ in
+                guard let drag = overlayDrag else { return }
+                if let index = overlays.firstIndex(where: { $0.id == drag.id }) {
+                    overlays[index].centerX = drag.current.x
+                    overlays[index].centerY = drag.current.y
+                }
+                overlayDrag = nil
+                renderToken += 1
+                persistOverlays()
+            }
     }
 
     /// The scale readout and the 1:1 toggle, bottom-trailing over the picture —
@@ -900,17 +1042,50 @@ struct PhotoViewerView: View {
 
     // MARK: - Controls
 
-    /// The side rail is tall and narrow, so it scrolls on its own. (The stacked
-    /// layout's scroll view lives in `stackedBody`, outside the media.)
+    /// The side rail is tall and narrow, so it scrolls on its own, with the
+    /// tab switcher pinned above the scroll. (The stacked layout's scroll
+    /// view lives in `stackedBody`, outside the media.)
     private var controlRail: some View {
-        ScrollView {
-            controlStack(isWide: true)
+        VStack(spacing: 0) {
+            railTabBar
                 .padding(.horizontal, 16)
-                .padding(.vertical, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 6)
+            ScrollView {
+                controlStack(isWide: true)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 8)
+                    .padding(.bottom, 14)
+            }
         }
     }
 
-    private func controlStack(isWide: Bool) -> some View {
+    /// The rail's pages. Frames exists only where frames do — a single still
+    /// has nothing to nominate, and a tab that can never unlock would just
+    /// advertise a dead end.
+    private var availableRailTabs: [RailTab] {
+        hasTimeline ? [.editor, .text, .frames] : [.editor, .text]
+    }
+
+    private var railTabBar: some View {
+        RailTabBar(
+            selection: $railTab, tabs: availableRailTabs,
+            accent: accentColor, onAccent: pillTextColor)
+    }
+
+    @ViewBuilder private func controlStack(isWide: Bool) -> some View {
+        switch railTab {
+        case .editor:
+            editorTab(isWide: isWide)
+        case .text:
+            textTab
+        case .frames:
+            if hasTimeline { framesTab } else { editorTab(isWide: isWide) }
+        }
+    }
+
+    /// The grading page — everything the rail held before it grew tabs.
+    private func editorTab(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             stateRow
             presetStrip
@@ -937,21 +1112,35 @@ struct PhotoViewerView: View {
             .foregroundStyle(accentColor)
             .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
 
-            // The bad-frame group, last in the stack and deliberately out of
-            // the way: presets, sliders and keyframes are the work, and
-            // somebody who never nominates a frame should never meet any of
-            // this without scrolling to the very bottom looking for it.
-            if hasTimeline {
-                badFrameToggleButton
-            }
-            if hasNominatedFrames {
-                hideBadFramesToggle
-            }
-
             if let error = presetStore.lastError {
                 Text(error)
                     .font(.footnote)
                     .foregroundStyle(.red)
+            }
+        }
+    }
+
+    private var textTab: some View {
+        OverlayEditingPanel(
+            overlays: $overlays,
+            hasTimeline: hasTimeline,
+            position: position,
+            label: timelineLabel,
+            accent: accentColor,
+            modelInstalled: segModelIdentity != nil,
+            showMask: $showMask,
+            settings: $maskSettings,
+            maskStatus: maskStatus,
+            onEdited: overlayEdited)
+    }
+
+    /// Frame management — the bad-frame pair, promoted from the foot of the
+    /// old single stack to a page of its own.
+    private var framesTab: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            badFrameToggleButton
+            if hasNominatedFrames {
+                hideBadFramesToggle
             }
         }
     }
@@ -1394,6 +1583,83 @@ struct PhotoViewerView: View {
         renderToken += 1
     }
 
+    // MARK: - Overlays
+
+    /// True while anything on screen needs the semantic mask.
+    private var skyMaskWanted: Bool {
+        showMask || overlays.contains { $0.placement != .none }
+    }
+
+    /// The cache key of the mask the composite should use right now, or nil
+    /// when none is wanted (or no model is installed). The render path only
+    /// ever LOOKS UP this key — `maskFetchTask` is what fills it.
+    private var activeSkyMaskKey: String? {
+        guard skyMaskWanted, let segModelIdentity else { return nil }
+        if maskSettings.maskMode == .sequence, hasTimeline {
+            return SceneMaskService.shared.sequenceKey(
+                modelIdentity: segModelIdentity, frames: frames,
+                presetID: preset.presetID.uuidString, sampleCount: 9)
+        }
+        return SceneMaskService.shared.frameKey(
+            modelIdentity: segModelIdentity, url: displayedURL, presetID: preset.presetID.uuidString)
+    }
+
+    /// A Text-tab edit. Motion re-renders; a finished gesture also persists —
+    /// the `fieldEditingChanged` discipline, applied to overlays.
+    private func overlayEdited(commit: Bool) {
+        scheduleUpdate()
+        if commit { persistOverlays() }
+    }
+
+    private func persistOverlays() {
+        guard let capture else { return }
+        model.setOverlays(overlays, for: capture)
+    }
+
+    /// Generates whatever mask `activeSkyMaskKey` names and re-renders when
+    /// it lands. Keyed on the key itself: scrubbing in per-frame mode walks
+    /// it frame by frame, and the sequence mask is one fetch per project per
+    /// grade. The composite path never waits on this — it composites with
+    /// whatever is cached and picks the fresh mask up on the next render.
+    private func maskFetchTask() async {
+        guard loaded, let key = activeSkyMaskKey, let segModelIdentity else { return }
+        if let cached = SceneMaskService.shared.cachedSkyMask(forKey: key) {
+            maskStatus = cached.provenance
+            return
+        }
+        // A beat of stillness first, so a scrub in per-frame mode asks for
+        // the frame it settles on rather than one inference per step.
+        try? await Task.sleep(for: .milliseconds(200))
+        guard !Task.isCancelled else { return }
+        maskStatus = "Analyzing scene…"
+        let preset = preset
+        let adjustments = adjustments
+        do {
+            let mask: SceneMask
+            if maskSettings.maskMode == .sequence, hasTimeline {
+                mask = try await SceneMaskService.shared.sequenceSkyMask(
+                    forKey: key, modelIdentity: segModelIdentity, frames: frames,
+                    sampleCount: 9, presetID: preset.presetID.uuidString
+                ) { url in
+                    PhotoGrader.render(
+                        url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
+                }
+            } else {
+                let url = displayedURL
+                mask = try await SceneMaskService.shared.skyMask(forKey: key) {
+                    PhotoGrader.render(
+                        url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
+                }
+            }
+            guard !Task.isCancelled else { return }
+            maskStatus = mask.provenance
+            renderToken += 1
+        } catch {
+            guard !Task.isCancelled else { return }
+            maskStatus = error.localizedDescription
+        }
+    }
+
     /// Writes the current grade onto the project. Cheap enough after debouncing
     /// — `setPhotoGrade` no-ops when nothing changed.
     private func persist() {
@@ -1457,9 +1723,24 @@ struct PhotoViewerView: View {
         // machine can't finish before the next one cancels it.
         let longEdge: CGFloat = isScrubbing || isPlaying ? 1100 : previewLongEdge
         isRendering = true
-        let image = await MediaWorkQueue.grading.run {
-            PhotoGrader.render(
+        // Everything the composite needs, copied before the hop: the overlay
+        // list at its animation phase, the dragged overlay left out (the
+        // SwiftUI proxy is showing it), and the mask by cache key only — the
+        // composite path can read a cached mask but never generate one.
+        let overlays = overlays
+        let suppressed = overlayDrag?.id
+        let compositePosition = renderedPosition
+        let maskKey = activeSkyMaskKey
+        let maskSettings = maskSettings
+        let showMask = showMask
+        let image = await MediaWorkQueue.grading.run { () -> CGImage? in
+            guard let graded = PhotoGrader.render(
                 url: url, preset: preset, adjustments: adjustments, maxDimension: longEdge)
+            else { return nil }
+            return SceneAwareCompositor.compositedPreview(
+                base: graded, overlays: overlays, suppressing: suppressed,
+                position: compositePosition, skyMaskKey: maskKey,
+                settings: maskSettings, showMask: showMask)
         }
         isRendering = false
         // A nil render (cancelled, or a missing file) leaves whatever is on

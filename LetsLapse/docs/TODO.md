@@ -11,6 +11,44 @@ live inline.
 
 ## Open
 
+### Text overlays: export baking (overlays render in the editor, vanish from every export)
+
+**Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31, out of the spike
+
+The spike composites overlays only in `PhotoViewerView`'s preview. Baking
+them into exports means the same `SceneAwareCompositor` call at
+`PhotoPreset.engineRender` (stills/JPEG), `ImageStacker.stackSequenceLinear`
+:523 (blended clips, resolving animation position through `GradeSourceMap`
+like keyframed grades), and the `VideoGrader`-family composition handlers —
+AND teaching `willBakeGrade` / `hasTailPass` / the `grade.isKeyframed` map
+gate that overlays are a second reason to run a pass. Until then an overlay
+on an ungraded project previews fine and exports without it.
+
+### Text overlays: productization follow-ups from the spike
+
+**Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31
+
+The recorded remainder, roughly in value order: VideoEditorView overlay
+rendering (its Text tab is an honest placeholder); promote `overlays.json`
+into a `CaptureProject` field (or add `"overlays"` to
+`ProjectArchive.transferableSubfolders`) so text travels in `.lapse`
+archives and device transfers; iOS pass (stacked-layout tab bar compiled but
+unverified, touch drag ergonomics); detail-patch/loupe render without
+overlays (pixel-peep shows no text; `PhotoDetailFocus` scans the composited
+preview so the loupe can point at text); SceneMasks folder on the storage
+card's clear-cache path; draggable range-band handles; SegFormer-B0 ADE20K
+conversion for true sky probabilities (DETR is 0/1 argmax).
+
+### Design mirrors for the tabbed editor rail
+
+**Raised:** 2026-08-31, out of the text-overlay spike (code-first agreed, SVGs deferred)
+
+The `[Editor | Text | Frames]` rail refactor stales the six iOS viewer SVGs
+(`project-photo.viewer.*.svg` family) and the macOS Edit window still has no
+spec at all (`macOS/photo-viewer.svg` remains an INDEX aspiration). Mirror
+whatever survives productization; the Text tab's panel (placement segments,
+mask dials, Set Start/End) needs drawing for the first time.
+
 ### iOS tab host still folds tabs 5+ into UIKit's invisible "More" controller
 
 **Raised:** 2026-08-30, while fixing the Collections phantom back button

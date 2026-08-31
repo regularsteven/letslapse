@@ -88,6 +88,9 @@ struct AIModelsView: View {
             let models = manager.downloadedModels
             ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
                 let row = Button {
+                    // The segmentation model is downloaded, not "active" — the active slot is
+                    // the tagging pipeline's, and its row is not a selection.
+                    guard model.tagsScenes else { return }
                     manager.activeModelID = model.id
                 } label: {
                     installedRow(model, showsDivider: index != models.count - 1)
@@ -137,15 +140,26 @@ struct AIModelsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer(minLength: 8)
-                HStack(spacing: 12) {
-                    if isActive {
-                        Text("Active")
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(LL.accent)
+                if model.tagsScenes {
+                    HStack(spacing: 12) {
+                        if isActive {
+                            Text("Active")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(LL.accent)
+                        }
+                        Image(systemName: isActive ? "largecircle.fill.circle" : "circle")
+                            .font(.system(size: 19))
+                            .foregroundStyle(isActive ? LL.accent : Color.secondary.opacity(0.5))
                     }
-                    Image(systemName: isActive ? "largecircle.fill.circle" : "circle")
-                        .font(.system(size: 19))
-                        .foregroundStyle(isActive ? LL.accent : Color.secondary.opacity(0.5))
+                } else {
+                    // Not in the active-model radio group: this one serves the editor's
+                    // Intelligent Placement, not tagging.
+                    Text("Editor")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(Capsule().fill(LL.cardBackground))
                 }
             }
             .padding(.horizontal, 16)

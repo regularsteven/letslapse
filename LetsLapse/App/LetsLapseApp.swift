@@ -691,19 +691,27 @@ struct ContentView: View {
         // detail screen, whose own `LL_EDITOR` task slides the cover over. The
         // perf bench (docs/editor-performance-plan.md) pairs it with
         // `LL_PERFWIGGLE`; it is equally the editor-screen screenshot hook.
-        if environment["LL_EDITOR"] == "latest",
-           let capture = model.captures
-               .filter({ $0.kind == .photos && !$0.isPhotoCapture })
-               .max(by: { $0.sourceFileNames.count < $1.sourceFileNames.count }) {
-            #if os(macOS)
-            if let url = model.sourceFrameURLs(for: capture).first {
-                openWindow(value: PhotoEditorWindowRequest(
-                    captureID: capture.id, url: url, title: capture.displayTitle))
+        // Any other value is a capture UUID — a bench that needs one SPECIFIC
+        // shoot (the text-overlay spike's sky project) rather than the biggest.
+        if let editorHook = environment["LL_EDITOR"] {
+            let capture: AppModel.CaptureProject? = editorHook == "latest"
+                ? model.captures
+                    .filter { $0.kind == .photos && !$0.isPhotoCapture }
+                    .max(by: { $0.sourceFileNames.count < $1.sourceFileNames.count })
+                : model.captures.first {
+                    $0.id.uuidString.caseInsensitiveCompare(editorHook) == .orderedSame
+                }
+            if let capture {
+                #if os(macOS)
+                if let url = model.sourceFrameURLs(for: capture).first {
+                    openWindow(value: PhotoEditorWindowRequest(
+                        captureID: capture.id, url: url, title: capture.displayTitle))
+                }
+                #else
+                selectedTab = .projects
+                model.requestedProjectDetailID = capture.id
+                #endif
             }
-            #else
-            selectedTab = .projects
-            model.requestedProjectDetailID = capture.id
-            #endif
         }
         // LL_PROJECT_SCANNER[=<poses>|corrected] — fabricate a finished Scanner
         // shoot and open its project. The only way to see that screen
