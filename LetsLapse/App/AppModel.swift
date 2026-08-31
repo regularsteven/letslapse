@@ -4362,7 +4362,13 @@ final class AppModel: ObservableObject {
                     // and all — so the blend loop composites from values and
                     // never waits on inference. nil when the project has no
                     // text, which keeps this path byte-identical to before.
-                    let overlayBake = await self.makeOverlayExportBake(for: self.currentCapture)
+                    // Looked up by the captureID this job STARTED with, never
+                    // `currentCapture`: the task has suspended by now, and a
+                    // selection change mid-render must not retarget which
+                    // project's text bakes into this clip (same rule as the
+                    // grade and the canvas, resolved before the job).
+                    let overlayBake = await self.makeOverlayExportBake(
+                        for: self.captures.first { $0.id == captureID })
                     if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
                         // into one frame: the classic single long exposure.

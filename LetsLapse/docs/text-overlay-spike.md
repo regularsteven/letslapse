@@ -157,6 +157,50 @@ together. Position never moved except by hand.
     progress as `position`. The Photo editor already shows the Text tab
     (placement, no animation section) untouched by any of this.
 
+## Export baking (shipped same day, commit 864c5f5)
+
+Blended clips, timelapses and long exposures from stills projects now BAKE
+the project's text overlays — verified end-to-end by seeding a cold project
+(no cached mask, editor never opened), rendering a 107-frame 4K blend
+through the app's own New-blended-clip flow (~20 s including the mask
+generation), and inspecting the output MP4: no text before the reveal
+band, staggered fade mid-band, and the settled word occluded by the night
+skyline exactly as the editor previews it. The blend summary records
+"text baked in (scene-placed)".
+
+Design:
+- `ImageStacker` (both the linear and legacy gamma paths) gained an
+  `overlayComposite` hook at the one honest seam: AFTER `encodeGamma` and
+  color tagging, BEFORE the writer append — the frame is display-referred
+  there, so the bake composites exactly what the preview composites. The
+  hook returns a replacement buffer allocated from the writer's own pool
+  (never in-place — Core Image on shared memory is undefined) and receives
+  the same source-position value `outputGrade` gets, which is what makes
+  overlay animation follow warps and exclusions precisely like keyframed
+  grades.
+- `OverlayExportBake` resolves everything BEFORE the render loop starts:
+  overlays, the mask dials, and the sequence mask itself — fetched
+  cache-first and GENERATED on a cold cache (a few seconds, up front), so
+  the blend loop composites from values and never waits on inference. The
+  editor and the export build identical mask cache keys: a mask either one
+  computes is a hit for the other.
+- Degradation mirrors the preview rule: no model installed (or
+  segmentation fails) → the text bakes as a plain overlay, which is
+  exactly what the preview shows in that state.
+- Mask settings moved into the sidecar (`OverlayDocument` — overlays +
+  dials; the spike's bare-array files still decode), because the export
+  needs the threshold/feather/bias the preview was tuned with. Export
+  always uses the SEQUENCE mask — "This frame" is a drift-inspection mode,
+  not an output mode.
+- Long exposures (`stackPhotos`) bake at position 1: the whole shoot folds
+  into one moment, so every reveal is complete. Photo-mode stacks are
+  untouched — that stack is the project's non-destructive ASSET, and
+  nothing bakes into it.
+
+Still out (unchanged non-goals): video-source blends and their tail-pass
+gates (no overlays can be authored on movies yet), and the Ken Burns
+collection export.
+
 ## Adversarial review pass (same day)
 
 A four-dimension review of the spike commit (concurrency, rendering,

@@ -11,18 +11,19 @@ live inline.
 
 ## Open
 
-### Text overlays: export baking (overlays render in the editor, vanish from every export)
+### Text overlays: export baking for VIDEO-source blends and tail passes
 
-**Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31, out of the spike
+**Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31, out of the spike · **Narrowed:** 2026-08-31 — stills paths shipped (864c5f5)
 
-The spike composites overlays only in `PhotoViewerView`'s preview. Baking
-them into exports means the same `SceneAwareCompositor` call at
-`PhotoPreset.engineRender` (stills/JPEG), `ImageStacker.stackSequenceLinear`
-:523 (blended clips, resolving animation position through `GradeSourceMap`
-like keyframed grades), and the `VideoGrader`-family composition handlers —
-AND teaching `willBakeGrade` / `hasTailPass` / the `grade.isKeyframed` map
-gate that overlays are a second reason to run a pass. Until then an overlay
-on an ungraded project previews fine and exports without it.
+Stills projects now bake overlays into blended clips, timelapses and long
+exposures (`ImageStacker.overlayComposite` + `OverlayExportBake`), verified
+end-to-end. Still open: video-source blends — the `VideoGrader`-family
+composition handlers plus the `willBakeGrade` / `hasTailPass` /
+`grade.isKeyframed` map gates that all assume grade-is-the-only-reason —
+which only matters once `VideoEditorView` can author overlays at all; the
+graded single-still export (`PhotoPreset.engineRender` full-res /
+`renderJPEG`); and the Ken Burns collection export (layer-instruction path,
+no CI handler).
 
 ### Text overlays: productization follow-ups from the spike
 
