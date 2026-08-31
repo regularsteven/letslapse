@@ -4358,11 +4358,17 @@ final class AppModel: ObservableObject {
                         clipFrames: [filteredURLs.count], hasStitch: false, hasGrade: false,
                         hasSlice: sliceSettings != nil && photoDepth < filteredURLs.count))
                     self.processingPhase = .blending(clip: 1, of: 1)
+                    // The project's text overlays, resolved up front — mask
+                    // and all — so the blend loop composites from values and
+                    // never waits on inference. nil when the project has no
+                    // text, which keeps this path byte-identical to before.
+                    let overlayBake = await self.makeOverlayExportBake(for: self.currentCapture)
                     if photoDepth >= filteredURLs.count {
                         // The blend depth spans every still, so fold them all
                         // into one frame: the classic single long exposure.
                         output = try await self.stackPhotos(
-                            urls: filteredURLs, linear: linear, grade: grade)
+                            urls: filteredURLs, linear: linear, grade: grade,
+                            overlayBake: overlayBake)
                     } else {
                         // A depth of 1 gives a straight timelapse; larger
                         // depths blend consecutive stills into each frame for
@@ -4372,7 +4378,8 @@ final class AppModel: ObservableObject {
                             linear: linear, grade: grade, frameTimes: frameTimes,
                             customWindows: intervalCompiled?.windows,
                             customWindowTimes: intervalCompiled?.presentationSeconds,
-                            profile: self.blendProfileOverride ?? self.defaultBlendProfile)
+                            profile: self.blendProfileOverride ?? self.defaultBlendProfile,
+                            overlayBake: overlayBake)
                     }
                 }
                 // Tail passes share the plan's reserved band. The geometry
@@ -5740,7 +5747,8 @@ final class AppModel: ObservableObject {
         frameTimes: [Double]? = nil,
         customWindows: [Int]? = nil,
         customWindowTimes: [Double]? = nil,
-        profile: VideoEncodePolicy.Profile = .h264High8Bit
+        profile: VideoEncodePolicy.Profile = .h264High8Bit,
+        overlayBake: OverlayExportBake? = nil
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
@@ -5768,6 +5776,7 @@ final class AppModel: ObservableObject {
                     customWindows: customWindows,
                     customWindowTimes: customWindowTimes,
                     loadFrame: Self.gradedFrameLoader(grade, over: urls),
+                    overlayComposite: overlayBake?.stackerHook(),
                     progress: progress)
             }
             // The engine path: linear half-float decode straight to the
@@ -5785,6 +5794,7 @@ final class AppModel: ObservableObject {
                 profile: profile,
                 decodeLinear: support.decode,
                 outputGrade: support.hook,
+                overlayComposite: overlayBake?.stackerHook(),
                 progress: progress)
         }.value
         var summary = "\(urls.count) photos → \(result.outputFrames) frames · \(result.width)×\(result.height)"
@@ -5800,6 +5810,11 @@ final class AppModel: ObservableObject {
         if grade.isKeyframed {
             let moments = grade.timeline.keyframes.count
             summary += " · \(moments) keyframe\(moments == 1 ? "" : "s")"
+        }
+        if let overlayBake {
+            summary += overlayBake.skyMask != nil
+                ? " · text baked in (scene-placed)"
+                : " · text baked in"
         }
         return ProcessingOutput(
             kind: .video,
@@ -5851,15 +5866,26 @@ final class AppModel: ObservableObject {
     private func stackPhotos(
         urls: [URL],
         linear: Bool,
-        grade: PhotoGrade = .identity
+        grade: PhotoGrade = .identity,
+        overlayBake: OverlayExportBake? = nil
     ) async throws -> ProcessingOutput {
+        // Overlays render at their resolved final state in a stack — the
+        // whole shoot folds into one moment, so every reveal is complete.
+        // A @Sendable closure rather than a nested func: it runs inside the
+        // detached stack task, off this model's actor.
+        let baked: @Sendable (CGImage) -> CGImage = { image in
+            guard let overlayBake else { return image }
+            return SceneAwareCompositor.bakeStill(
+                image, overlays: overlayBake.overlays,
+                skyMask: overlayBake.skyMask, settings: overlayBake.settings) ?? image
+        }
         // A single frame has nothing to accumulate — the stacker needs at least
         // two — so load it straight through (blend=1 / one-frame-burst edge).
         if urls.count == 1, let only = urls.first {
             let single = grade.isIdentity
                 ? loadImage(at: only)
                 : try? PhotoGrader.renderForBlend(url: only, grade: grade)
-            guard let image = single else { throw LapseError.noInputFrames }
+            guard let image = single.map(baked) else { throw LapseError.noInputFrames }
             let output = FileManager.default.temporaryDirectory
                 .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).png")
             try ImageExporter.write(
@@ -5881,7 +5907,7 @@ final class AppModel: ObservableObject {
         let image = try await Task.detached(priority: .utility) { [weak self] () throws -> CGImage in
             let core = try BlendCore()
             let stacker = ImageStacker(core: core)
-            return try stacker.stack(
+            let stacked = try stacker.stack(
                 imageURLs: urls,
                 linearLight: linear,
                 loadFrame: Self.gradedFrameLoader(grade, over: urls),
@@ -5890,6 +5916,7 @@ final class AppModel: ObservableObject {
                         self?.reportClipProgress(0, fraction: fraction)
                     }
                 })
+            return baked(stacked)
         }.value
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(Int(Date().timeIntervalSince1970)).png")

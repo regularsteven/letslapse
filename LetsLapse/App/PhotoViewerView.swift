@@ -136,6 +136,7 @@ struct PhotoViewerView: View {
     /// stale empty list, can never bulldoze the sidecar another window just
     /// wrote. Deleting overlays.json requires an actual Remove Text here.
     @State private var persistedOverlays: [SceneOverlay] = []
+    @State private var persistedMaskSettings = SegmentationSettings()
     /// A live drag over the preview: the SwiftUI proxy shows `current` while
     /// the baked overlay is suppressed from the render.
     @State private var overlayDrag: OverlayDragState?
@@ -575,8 +576,11 @@ struct PhotoViewerView: View {
             adjustments = model.photoAdjustments(for: capture)
             presetState = model.presetState(for: capture)
             timeline = model.gradeTimeline(for: capture)
-            overlays = model.overlays(for: capture)
+            let overlayDocument = model.overlayDocument(for: capture)
+            overlays = overlayDocument.overlays
+            maskSettings = overlayDocument.maskSettings
             persistedOverlays = overlays
+            persistedMaskSettings = maskSettings
             segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
             // An interval shoot's frames — and, where the shoot wrote one, the
             // capture clock they sit on, which is what turns the strip's axis
@@ -1626,9 +1630,12 @@ struct PhotoViewerView: View {
     }
 
     private func persistOverlays() {
-        guard let capture, overlays != persistedOverlays else { return }
-        model.setOverlays(overlays, for: capture)
+        guard let capture,
+              overlays != persistedOverlays || maskSettings != persistedMaskSettings
+        else { return }
+        model.setOverlays(overlays, maskSettings: maskSettings, for: capture)
         persistedOverlays = overlays
+        persistedMaskSettings = maskSettings
     }
 
     /// Generates whatever mask `activeSkyMaskKey` names and re-renders when

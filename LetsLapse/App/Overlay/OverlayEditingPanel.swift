@@ -174,7 +174,9 @@ struct OverlayEditingPanel: View {
                 enabled: true
             ) { index in
                 settings.maskMode = index == 0 ? .sequence : .perFrame
-                onEdited(false)
+                // A finished gesture: the mode is part of the persisted
+                // document (the export reads it), not just a view state.
+                onEdited(true)
             }
         }
 

@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreImage
+import CoreVideo
 import Foundation
 
 /// The scene-aware compositing stage: base frame, overlay raster, and —
@@ -168,11 +169,33 @@ enum SceneAwareCompositor {
         settings: SegmentationSettings,
         showMask: Bool
     ) -> CGImage {
-        let frameSize = CGSize(width: base.width, height: base.height)
         let skyMask = skyMaskKey.flatMap {
             SceneMaskService.shared.cachedSkyMask(forKey: $0)
         }
-        var image = CIImage(cgImage: base)
+        guard let image = composited(
+            base: CIImage(cgImage: base),
+            frameSize: CGSize(width: base.width, height: base.height),
+            overlays: overlays, suppressing: suppressed, position: position,
+            skyMask: skyMask, settings: settings, showMask: showMask)
+        else { return base }
+        return renderCGImage(image, colorSpace: base.colorSpace) ?? base
+    }
+
+    /// The one compositing core — preview and export both come here, which
+    /// is what makes "what the editor shows is what the export bakes" true
+    /// for overlays. Returns nil when there is nothing to draw (no overlays
+    /// at this position, no debug tint), so callers can skip the re-encode.
+    static func composited(
+        base: CIImage,
+        frameSize: CGSize,
+        overlays: [SceneOverlay],
+        suppressing suppressed: UUID?,
+        position: Double,
+        skyMask: SceneMask?,
+        settings: SegmentationSettings,
+        showMask: Bool
+    ) -> CIImage? {
+        var image = base
         var drewAnything = false
         for overlay in overlays where overlay.id != suppressed {
             guard let spec = TextOverlayRasterizer.spec(
@@ -205,8 +228,65 @@ enum SceneAwareCompositor {
                 debug: .mask)
             drewAnything = true
         }
-        guard drewAnything else { return base }
-        return renderCGImage(image, colorSpace: base.colorSpace) ?? base
+        return drewAnything ? image : nil
+    }
+
+    // MARK: - Export baking
+
+    /// Bakes overlays onto one finished export frame — the closure body
+    /// behind `ImageStacker`'s `overlayComposite` hook. The buffer arrives
+    /// display-referred and color-tagged; the composite renders into a fresh
+    /// buffer from the writer's own pool (never in place — Core Image's
+    /// behavior when source and destination share memory is undefined).
+    /// Returns nil when this frame needs nothing, so the original appends
+    /// untouched at zero cost.
+    static func bakeExportFrame(
+        _ buffer: CVPixelBuffer,
+        position: Double,
+        pool: CVPixelBufferPool,
+        overlays: [SceneOverlay],
+        skyMask: SceneMask?,
+        settings: SegmentationSettings
+    ) throws -> CVPixelBuffer? {
+        let base = CIImage(cvPixelBuffer: buffer)
+        guard let composite = composited(
+            base: base, frameSize: base.extent.size,
+            overlays: overlays, suppressing: nil, position: position,
+            skyMask: skyMask, settings: settings, showMask: false)
+        else { return nil }
+        var scratch: CVPixelBuffer?
+        let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &scratch)
+        guard status == kCVReturnSuccess, let scratch else {
+            throw NSError(
+                domain: "SceneAwareCompositor", code: Int(status),
+                userInfo: [NSLocalizedDescriptionKey: "overlay buffer allocation failed (\(status))"])
+        }
+        // Round-trip in the buffer's own color identity: the writer tagged
+        // it before this call, so read and write agree with the encoder.
+        let space = CVBufferCopyAttachments(buffer, .shouldPropagate)
+            .flatMap { CVImageBufferCreateColorSpaceFromAttachments($0)?.takeRetainedValue() }
+            ?? CGColorSpace(name: CGColorSpace.displayP3)!
+        context.render(composite, to: scratch, bounds: base.extent, colorSpace: space)
+        return scratch
+    }
+
+    /// Bakes overlays into a single finished still (the long-exposure PNG).
+    /// A stack folds the whole shoot into one frame, so the overlay renders
+    /// at its resolved final state — position 1, every reveal complete.
+    /// Returns nil when there is nothing to draw.
+    static func bakeStill(
+        _ image: CGImage,
+        overlays: [SceneOverlay],
+        skyMask: SceneMask?,
+        settings: SegmentationSettings
+    ) -> CGImage? {
+        guard let composite = composited(
+            base: CIImage(cgImage: image),
+            frameSize: CGSize(width: image.width, height: image.height),
+            overlays: overlays, suppressing: nil, position: 1,
+            skyMask: skyMask, settings: settings, showMask: false)
+        else { return nil }
+        return renderCGImage(composite, colorSpace: image.colorSpace)
     }
 
     /// The debug overlay: magenta through the mask, over the composite —

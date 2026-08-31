@@ -237,6 +237,9 @@ public final class ImageStacker {
         customWindows: [Int]? = nil,
         customWindowTimes: [Double]? = nil,
         loadFrame: ((URL) throws -> CGImage)? = nil,
+        /// Same contract as `stackSequenceLinear`'s hook: composites overlays
+        /// onto the finished output frame just before the writer.
+        overlayComposite: ((CVPixelBuffer, Double, CVPixelBufferPool) throws -> CVPixelBuffer?)? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
@@ -366,7 +369,19 @@ public final class ImageStacker {
                 ?? Double(outputFrames) / outputFPS
             let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
             VideoEncodePolicy.tagColor(outBuffer)
-            guard adaptor.append(outBuffer, withPresentationTime: time) else {
+            var appendBuffer = outBuffer
+            if let overlayComposite {
+                // The frame's source position, mid-window — the value the
+                // linear path hands its grade and overlay hooks.
+                let sourcePosition = imageURLs.count > 1
+                    ? min(max(Double(inputIndex - window / 2) / Double(imageURLs.count - 1), 0), 1)
+                    : 0
+                if let composited = try overlayComposite(outBuffer, sourcePosition, pool) {
+                    VideoEncodePolicy.tagColor(composited)
+                    appendBuffer = composited
+                }
+            }
+            guard adaptor.append(appendBuffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }
             outputFrames += 1
@@ -411,6 +426,15 @@ public final class ImageStacker {
         /// across the shoot knows which moment it is grading. A grade that
         /// doesn't change can ignore it.
         outputGrade: ((MTLTexture, MTLCommandBuffer, Double) throws -> MTLTexture)? = nil,
+        /// Composites overlays onto the FINISHED output frame — after the
+        /// transfer curve, dither and color tagging, just before the writer —
+        /// so what it draws matches a display-referred preview exactly. It
+        /// receives the frame's pixel buffer, the frame's source position
+        /// (the same 0…1 value `outputGrade` receives) and the writer's
+        /// buffer pool for allocating a replacement; returning nil appends
+        /// the original untouched. The buffer it returns is re-tagged and
+        /// appended in the original's place.
+        overlayComposite: ((CVPixelBuffer, Double, CVPixelBufferPool) throws -> CVPixelBuffer?)? = nil,
         progress: ((Double) -> Void)? = nil
     ) throws -> StackSequenceResult {
         guard imageURLs.count >= 2 else {
@@ -541,8 +565,16 @@ public final class ImageStacker {
             let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
                 ?? Double(outputFrames) / outputFPS
             let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
+            // Tag before the overlay pass so its reader sees the buffer's
+            // true color identity, and tag the replacement it hands back.
             policy.tagColor(outBuffer)
-            guard adaptor.append(outBuffer, withPresentationTime: time) else {
+            var appendBuffer = outBuffer
+            if let overlayComposite,
+               let composited = try overlayComposite(outBuffer, sourcePosition, pool) {
+                policy.tagColor(composited)
+                appendBuffer = composited
+            }
+            guard adaptor.append(appendBuffer, withPresentationTime: time) else {
                 throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
             }
             outputFrames += 1
