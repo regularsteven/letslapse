@@ -201,6 +201,30 @@ Still out (unchanged non-goals): video-source blends and their tail-pass
 gates (no overlays can be authored on movies yet), and the Ken Burns
 collection export.
 
+**The iOS trap (2026-08-31, found on Steven's iPhone 16 Pro):** the first
+device render of a 1250-frame 4032×3024 shoot failed while the same code
+passed on the Mac. Cause: `ImageStacker`'s output-frame section had no
+`autoreleasepool` — the accumulate loop above it does — so the Core Image
+temporaries the bake introduced lived until the whole render returned.
+Measured with a standalone writer harness: **~55 MB per frame, 351 MB →
+4.5 GB over 80 frames**, unbounded. macOS absorbs that on swap (which is
+exactly why the Mac verification passed and hid it); iOS answers with a
+jetsam kill. Both stacker paths now drain per output frame, and
+`bakeExportFrame` drains itself since the Kit hook is public. After the
+fix the real app peaks at 1.9 GB and holds flat at 1.19 GB for the rest of
+the render, with byte-identical output. **The lesson for any future hook
+on this loop: anything Core Image, Core Graphics or Foundation-object
+shaped that runs per output frame must be inside that pool.**
+
+**Overlays travel now (same day).** `overlays.json` is a top-level file,
+and the only import allowlist was of SUBfolders, so an AirDropped project
+arrived with its text gone. The archive always contained it —
+`DirectoryArchive` writes the whole project folder — so only the installer
+was dropping it. `ProjectArchive.transferableFiles` is the file-shaped
+twin of `transferableSubfolders`, read by the installer and the transfer's
+file manifest alike; archives made before the fix restore their text on
+re-import.
+
 ## Adversarial review pass (same day)
 
 A four-dimension review of the spike commit (concurrency, rendering,
