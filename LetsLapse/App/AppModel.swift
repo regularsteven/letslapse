@@ -1796,22 +1796,86 @@ final class AppModel: ObservableObject {
     /// Turning Ken Burns on for the first time answers everything with the
     /// best-effort defaults — consistent pacing at the shortest clip's length,
     /// speeds auto-adjusted, crossfades on — and deals every clip its move.
-    /// Turning it off keeps the settings for next time.
+    /// Turning it off keeps the settings for next time. (The tri-state
+    /// control goes through the mode setters below; this stays for the
+    /// LL_COLLECTIONS hook and lands in whichever mode was last live.)
     func setKenBurnsEnabled(_ enabled: Bool, for collectionID: UUID) {
         mutateCollection(collectionID) { collection in
             if var settings = collection.kenBurns {
                 settings.enabled = enabled
                 collection.kenBurns = settings
             } else if enabled {
-                collection.kenBurns = LapseCollection.KenBurnsSettings(
-                    enabled: true,
-                    consistentDurations: true,
-                    clipSeconds: kenBurnsMaxClipSeconds(collection),
-                    autoAdjustSpeed: true,
-                    fadeTransition: true)
+                collection.kenBurns = autoKenBurnsSettings(collection)
             }
             if enabled { dealKenBurnsMoves(&collection) }
         }
+    }
+
+    /// Off keeps everything — values, mode, per-clip moves — for next time.
+    func setKenBurnsOff(for collectionID: UUID) {
+        updateKenBurnsSettings(collectionID) { $0.enabled = false }
+    }
+
+    /// Auto: the dealt best-effort defaults take over the live values. Any
+    /// Custom answers are parked in `lastCustom` first, so the switch never
+    /// destroys them and needs no confirmation.
+    func setKenBurnsAuto(for collectionID: UUID) {
+        mutateCollection(collectionID) { collection in
+            var settings = collection.kenBurns ?? autoKenBurnsSettings(collection)
+            if settings.custom {
+                settings.lastCustom = LapseCollection.KenBurnsSettings.CustomChoices(
+                    consistentDurations: settings.consistentDurations,
+                    clipSeconds: settings.clipSeconds,
+                    autoAdjustSpeed: settings.autoAdjustSpeed,
+                    fadeTransition: settings.fadeTransition)
+            }
+            settings.enabled = true
+            settings.custom = false
+            settings.consistentDurations = true
+            settings.clipSeconds = kenBurnsMaxClipSeconds(collection)
+            settings.autoAdjustSpeed = true
+            settings.fadeTransition = true
+            collection.kenBurns = settings
+            dealKenBurnsMoves(&collection)
+        }
+    }
+
+    /// Entering the Custom drawer: the mode turns on, the parked Custom
+    /// values (if any) come back as the live ones, and edits from here apply
+    /// live. The caller snapshots `collection.kenBurns` first — Cancel is
+    /// `restoreKenBurnsSettings` with that snapshot.
+    func beginKenBurnsCustom(for collectionID: UUID) {
+        mutateCollection(collectionID) { collection in
+            var settings = collection.kenBurns ?? autoKenBurnsSettings(collection)
+            if let parked = settings.lastCustom {
+                settings.consistentDurations = parked.consistentDurations
+                settings.clipSeconds = parked.clipSeconds
+                settings.autoAdjustSpeed = parked.autoAdjustSpeed
+                settings.fadeTransition = parked.fadeTransition
+            }
+            settings.lastCustom = nil
+            settings.enabled = true
+            settings.custom = true
+            collection.kenBurns = settings
+            dealKenBurnsMoves(&collection)
+        }
+    }
+
+    /// The Custom drawer's Cancel: put back exactly what was there when it
+    /// opened (nil = Ken Burns had never been configured). Per-clip moves
+    /// dealt in between stay — moves already survive the mode toggling.
+    func restoreKenBurnsSettings(_ settings: LapseCollection.KenBurnsSettings?, for collectionID: UUID) {
+        mutateCollection(collectionID) { $0.kenBurns = settings }
+    }
+
+    /// The dealt Auto answers for this timeline, as fresh settings.
+    private func autoKenBurnsSettings(_ collection: LapseCollection) -> LapseCollection.KenBurnsSettings {
+        LapseCollection.KenBurnsSettings(
+            enabled: true,
+            consistentDurations: true,
+            clipSeconds: kenBurnsMaxClipSeconds(collection),
+            autoAdjustSpeed: true,
+            fadeTransition: true)
     }
 
     /// Every entry without a move gets its best-effort default, seeded from

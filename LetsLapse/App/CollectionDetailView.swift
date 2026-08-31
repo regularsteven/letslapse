@@ -1,13 +1,20 @@
 import SwiftUI
+#if os(macOS)
+import AppKit
+#endif
 
-/// The timeline builder: preview on top with the canvas menu beside its
-/// caption, the clip rows (select · trim · reorder) right under it, then
-/// Ken Burns and the export path.
+/// The timeline builder: preview on top wearing its own controls (clip badge
+/// top-left, canvas menu chip bottom-right), the timeline header carrying the
+/// Ken Burns tri-state (Off · Auto · Custom), the clip rows (select · trim ·
+/// reorder) right under it, then the export path. Custom's pacing/join
+/// options live in a drawer off the control — Apply keeps, Cancel restores —
+/// so the working loop never scrolls past a card of settings.
 ///
 /// The preview IS the crop surface — it shows the selected clip itself filling
 /// the space (never letterboxed by default; the canvas only shapes the white
 /// crop frame). A clip that mismatches the canvas gets the draggable frame
-/// right there; a tall clip fills the width and scrolls, with an "Apply
+/// right there, with the honest-pixels readout appearing only while a finger
+/// holds it; a tall clip fills the width and scrolls, with an "Apply
 /// letterbox" pill to see it shrunk to fit instead. Past 560pt of width the
 /// screen splits: preview left, controls right — iPhone landscape, iPad, Mac.
 struct CollectionDetailView: View {
@@ -21,6 +28,16 @@ struct CollectionDetailView: View {
 
     @State private var cropDrag: CropDrag?
     @State private var cropPrompt: CropPrompt?
+    /// The honest-pixels readout held on screen for a beat after the crop
+    /// drag lets go — the caption that used to live under the preview, now
+    /// only at the moment it matters.
+    @State private var cropHUDLinger: CropHUDLinger?
+
+    /// The Custom drawer's session: what Cancel restores, and whether Apply
+    /// was pressed. Any dismissal without Apply restores the snapshot.
+    @State private var kenBurnsDrawerPresented = false
+    @State private var kenBurnsDrawerSnapshot: LapseCollection.KenBurnsSettings?
+    @State private var kenBurnsDrawerApplied = false
 
     /// Which framing of the selected clip's Ken Burns move the preview edits.
     @State private var kenBurnsEnd: KenBurnsMoveEnd = .start
@@ -30,6 +47,16 @@ struct CollectionDetailView: View {
     @State private var pinchActive = false
 
     @State private var reorder: ReorderState?
+
+    #if os(macOS)
+    /// The preview's frame in window space — scopes the scroll-wheel
+    /// monitor to the framing surface.
+    @State private var macPreviewFrame: CGRect = .zero
+    @State private var macScrollMonitor: Any?
+    /// Wheel ticks stream with no clean end; edits ride `moveEdit` and this
+    /// debounce commits once the wheel goes quiet.
+    @State private var macScrollCommit: Task<Void, Never>?
+    #endif
 
     @State private var showPicker = false
     @State private var trimEntry: LapseCollection.Entry?
@@ -65,6 +92,11 @@ struct CollectionDetailView: View {
         var fromIndex: Int
         var toIndex: Int
         var residualY: CGFloat
+    }
+
+    private struct CropHUDLinger: Equatable {
+        var text: String
+        var id = UUID()
     }
 
     private let rowHeight: CGFloat = 66
@@ -114,7 +146,12 @@ struct CollectionDetailView: View {
         .onChange(of: selectedBlendID) { _, _ in
             kenBurnsEnd = .start
             moveEdit = nil
+            cropHUDLinger = nil
         }
+        #if os(macOS)
+        .onAppear(perform: installMacScrollZoom)
+        .onDisappear(perform: removeMacScrollZoom)
+        #endif
         .task {
             for entry in model.collection(withID: collectionID)?.entries ?? [] {
                 if let blend = model.blends.first(where: { $0.id == entry.blendID }) {
@@ -204,41 +241,19 @@ struct CollectionDetailView: View {
                 previewSurface(collection, maxWidth: width, maxHeight: 300, landscape: false)
                     .frame(maxWidth: .infinity)
 
-                // Caption left, canvas menu right — one row where the CANVAS
-                // section used to be, so the timeline starts a card higher
-                // and the select-a-clip → frame-it loop stays on one screen.
-                HStack(alignment: .top, spacing: 12) {
-                    Text(previewCaption(collection))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if !collection.entries.isEmpty {
-                        canvasRatioMenu(collection)
-                    }
-                }
-                .padding(.top, 8)
-                .padding(.horizontal, 2)
-
-                sectionLabel(timelineHeader(collection))
-                    .padding(.top, 16)
+                // The captions and the chips row are gone — the preview wears
+                // the canvas menu itself, so the timeline starts right here,
+                // its header carrying the Ken Burns tri-state.
+                timelineHeaderRow(collection)
+                    .padding(.top, 14)
                     .padding(.bottom, 8)
 
                 if collection.entries.isEmpty {
                     emptyTimeline
-
-                    kenBurnsSection(collection)
-                        .padding(.top, 12)
                 } else {
                     timelineCard(collection)
 
                     addClipsButton(height: 52)
-                        .padding(.top, 12)
-
-                    // Below the timeline on purpose: its expanded options are
-                    // set once per collection, while the rows above are the
-                    // screen's working loop.
-                    kenBurnsSection(collection)
                         .padding(.top, 12)
 
                     summaryCard(collection)
@@ -274,36 +289,23 @@ struct CollectionDetailView: View {
                     maxWidth: min(size.width * 0.46, 420) - 20,
                     maxHeight: size.height - 120,
                     landscape: true)
-                Text(previewCaption(collection))
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 340)
                 Spacer(minLength: 0)
             }
             .frame(width: min(size.width * 0.46, 420))
 
             VStack(alignment: .leading, spacing: 0) {
-                // Length + export size left, canvas menu right — one row
-                // doing what the chips row and its caption line used to.
-                HStack(spacing: 12) {
-                    Text("\(CollectionMath.timecode(model.collectionSeconds(collection))) · exports \(collection.ratio?.exportLabel ?? "—")")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    if !collection.entries.isEmpty {
-                        canvasRatioMenu(collection)
-                    }
-                }
-                .padding(.top, 10)
-                .padding(.horizontal, 2)
+                // The compact meta line is the wide layout's summary card —
+                // the canvas menu lives on the preview now.
+                Text("\(CollectionMath.timecode(model.collectionSeconds(collection))) · exports \(collection.ratio?.exportLabel ?? "—")")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.top, 10)
+                    .padding(.horizontal, 2)
 
-                // The Ken Burns card scrolls with the timeline — landscape
-                // iPhones don't have the height to pin it open. It follows
-                // the timeline, same as portrait: set once, not the loop.
                 ScrollView {
                     VStack(alignment: .leading, spacing: 0) {
-                        sectionLabel(timelineHeader(collection))
+                        timelineHeaderRow(collection)
                             .padding(.top, 12)
                             .padding(.bottom, 6)
 
@@ -315,7 +317,7 @@ struct CollectionDetailView: View {
                                     Text("+ Add your first clip")
                                         .font(.system(size: 14, weight: .semibold))
                                         .foregroundStyle(LL.accent)
-                                    Text("Blended clips from any project can join")
+                                    Text("Blended clips from any project can join — the first sets the canvas")
                                         .font(.system(size: 11))
                                         .foregroundStyle(.secondary)
                                 }
@@ -330,9 +332,6 @@ struct CollectionDetailView: View {
                         } else {
                             timelineCard(collection)
                         }
-
-                        kenBurnsSection(collection)
-                            .padding(.top, 12)
                         Spacer(minLength: 8)
                     }
                 }
@@ -421,6 +420,14 @@ struct CollectionDetailView: View {
                         .allowsHitTesting(false)
                 }
                 .overlay(alignment: .bottomTrailing) {
+                    // The canvas choice rides the canvas — opposite corner to
+                    // the clip badge. A drag that starts on it goes to the
+                    // menu, so the crop/framing frames are dragged from
+                    // anywhere else on the surface.
+                    canvasRatioMenu(collection)
+                        .padding(10)
+                }
+                .overlay(alignment: .bottomLeading) {
                     if !landscape && tall {
                         Button {
                             letterboxPreview.toggle()
@@ -436,7 +443,34 @@ struct CollectionDetailView: View {
                         .padding(10)
                     }
                 }
+                .overlay(alignment: .top) {
+                    // Honest pixels, only while a hand is in the crop (and a
+                    // beat after): what the white frame keeps of the source.
+                    if cropPrompt == nil, let text = cropHUDText(entry: entry, in: collection) {
+                        Text(text)
+                            .font(.system(size: 10.5, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 9)
+                            .padding(.vertical, 3)
+                            .background(.black.opacity(0.5), in: Capsule())
+                            // Below the clip badge's line — the two share the
+                            // top of a narrow preview (tall clip, wide layout).
+                            .padding(.top, 40)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .simultaneousGesture(kenBurnsPinch(entry: entry, collection: collection, enabled: kenBurnsOn))
+                #if os(macOS)
+                .background(
+                    GeometryReader { geo in
+                        Color.clear
+                            .onAppear { macPreviewFrame = geo.frame(in: .global) }
+                            .onChange(of: geo.frame(in: .global)) { _, frame in
+                                macPreviewFrame = frame
+                            }
+                    }
+                )
+                #endif
 
                 if kenBurnsOn {
                     kenBurnsFramingBar(entry: entry, collection: collection)
@@ -497,6 +531,7 @@ struct CollectionDetailView: View {
                         cropDrag = CropDrag(blendID: entry.blendID, offset: next, moved: true)
                     }
                     .onEnded { _ in
+                        lingerCropHUD(entry: entry, collection: collection)
                         commitCrop(entry: entry, collection: collection)
                     }
             )
@@ -532,61 +567,41 @@ struct CollectionDetailView: View {
         return move
     }
 
-    /// The white frame is the framing being edited (drag to place it, pinch
-    /// anywhere on the clip to zoom it); the dashed frame is the other end of
-    /// the move, so the travel between them is visible while either is held.
+    /// Both framings, identity-styled: the start frame is always white, the
+    /// end frame always amber — colour is identity, never selection. The one
+    /// under edit is solid with thirds (drag to place it, pinch anywhere on
+    /// the clip to zoom it); the other is dashed in its own colour. Corner
+    /// ties and an amber arrow draw the travel between them, and tapping the
+    /// dashed frame selects it.
     private func kenBurnsFrameOverlay(
         entry: LapseCollection.Entry, collection: LapseCollection, clipSize: CGSize
     ) -> some View {
         let base = model.kenBurnsUnitBase(entry: entry, in: collection)
         let move = displayedKenBurnsMove(entry: entry, in: collection)
-        let activeFraming = kenBurnsEnd == .start ? move.start : move.end
-        let ghostFraming = kenBurnsEnd == .start ? move.end : move.start
-        let active = pointsRect(CollectionMath.kenBurnsUnitRect(base: base, framing: activeFraming), in: clipSize)
-        let ghost = pointsRect(CollectionMath.kenBurnsUnitRect(base: base, framing: ghostFraming), in: clipSize)
-        let ghostDistinct = abs(ghost.midX - active.midX) + abs(ghost.midY - active.midY)
-            + abs(ghost.width - active.width) > 6
+        let startRect = pointsRect(CollectionMath.kenBurnsUnitRect(base: base, framing: move.start), in: clipSize)
+        let endRect = pointsRect(CollectionMath.kenBurnsUnitRect(base: base, framing: move.end), in: clipSize)
+        let active = kenBurnsEnd == .start ? startRect : endRect
+        let inactive = kenBurnsEnd == .start ? endRect : startRect
+        let distinct = abs(endRect.midX - startRect.midX) + abs(endRect.midY - startRect.midY)
+            + abs(endRect.width - startRect.width) > 6
 
         return ZStack(alignment: .topLeading) {
             DimOutside(cutout: active)
                 .fill(Color.black.opacity(0.6), style: FillStyle(eoFill: true))
                 .allowsHitTesting(false)
 
-            if ghostDistinct {
-                // Tag rides the ghost's top-right corner — the clip badge
-                // owns the top-left.
-                Rectangle()
-                    .strokeBorder(LL.amber.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
-                    .frame(width: ghost.width, height: ghost.height)
-                    .overlay(alignment: .topTrailing) {
-                        Text(kenBurnsEnd == .start ? "END" : "START")
-                            .font(.system(size: 8.5, weight: .bold))
-                            .kerning(0.5)
-                            .foregroundStyle(LL.amber)
-                            .padding(.horizontal, 5)
-                            .padding(.vertical, 2)
-                            .background(.black.opacity(0.55), in: Capsule())
-                            .padding(3)
-                    }
-                    .offset(x: ghost.minX, y: ghost.minY)
+            if distinct {
+                KenBurnsTravel(start: startRect, end: endRect)
+                    .allowsHitTesting(false)
+
+                kenBurnsIdentityFrame(
+                    rect: inactive,
+                    end: kenBurnsEnd == .start ? .end : .start,
+                    isActive: false)
                     .allowsHitTesting(false)
             }
 
-            ZStack {
-                Rectangle().strokeBorder(.white, lineWidth: 2)
-                Path { p in
-                    for f in [1.0 / 3.0, 2.0 / 3.0] {
-                        p.move(to: CGPoint(x: active.width * f, y: 0))
-                        p.addLine(to: CGPoint(x: active.width * f, y: active.height))
-                        p.move(to: CGPoint(x: 0, y: active.height * f))
-                        p.addLine(to: CGPoint(x: active.width, y: active.height * f))
-                    }
-                }
-                .stroke(.white.opacity(0.35), lineWidth: 1)
-            }
-            .frame(width: active.width, height: active.height)
-            .contentShape(Rectangle())
-            .offset(x: active.minX, y: active.minY)
+            kenBurnsIdentityFrame(rect: active, end: kenBurnsEnd, isActive: true)
             .highPriorityGesture(
                 DragGesture(minimumDistance: 1, coordinateSpace: .global)
                     .onChanged { gesture in
@@ -606,12 +621,188 @@ struct CollectionDetailView: View {
                         commitMoveEdit(entry: entry)
                     }
             )
+
+            #if os(macOS)
+            kenBurnsResizeHandles(
+                rect: active, entry: entry, collection: collection,
+                base: base, clipSize: clipSize)
+            #endif
         }
         .frame(width: clipSize.width, height: clipSize.height, alignment: .topLeading)
+        .contentShape(Rectangle())
+        // Tap the dashed frame to select that end. The solid frame's drag
+        // fails on a stationary touch, so the tap comes through even where
+        // the two overlap — a tap there reaches for the other one.
+        .gesture(
+            SpatialTapGesture()
+                .onEnded { value in
+                    guard distinct,
+                          inactive.insetBy(dx: -10, dy: -10).contains(value.location)
+                    else { return }
+                    kenBurnsEnd = kenBurnsEnd == .start ? .end : .start
+                    moveEdit = nil
+                }
+        )
     }
 
-    /// Pinch anywhere on the clip to zoom the active framing — spreading
-    /// fingers tightens the window, photo-style. The centre holds.
+    /// One framing drawn in its identity — white for the start, amber for
+    /// the end. Active gets the solid 2pt stroke and thirds; inactive is
+    /// dashed. The tag rides a fixed corner (START bottom-left, END
+    /// top-right) so the ends read apart even while they overlap; the clip
+    /// badge owns the preview's top-left, the canvas chip its bottom-right.
+    private func kenBurnsIdentityFrame(
+        rect: CGRect, end: KenBurnsMoveEnd, isActive: Bool
+    ) -> some View {
+        let color: Color = end == .start ? .white : LL.amber
+        return Group {
+            if isActive {
+                ZStack {
+                    Rectangle().strokeBorder(color, lineWidth: 2)
+                    Path { p in
+                        for f in [1.0 / 3.0, 2.0 / 3.0] {
+                            p.move(to: CGPoint(x: rect.width * f, y: 0))
+                            p.addLine(to: CGPoint(x: rect.width * f, y: rect.height))
+                            p.move(to: CGPoint(x: 0, y: rect.height * f))
+                            p.addLine(to: CGPoint(x: rect.width, y: rect.height * f))
+                        }
+                    }
+                    .stroke(color.opacity(0.35), lineWidth: 1)
+                }
+            } else {
+                Rectangle()
+                    .strokeBorder(color.opacity(0.75), style: StrokeStyle(lineWidth: 1.5, dash: [5, 4]))
+            }
+        }
+        .frame(width: rect.width, height: rect.height)
+        .overlay(alignment: end == .start ? .bottomLeading : .topTrailing) {
+            kenBurnsEndTag(end)
+                .padding(3)
+        }
+        .contentShape(Rectangle())
+        .offset(x: rect.minX, y: rect.minY)
+    }
+
+    /// The identity tag: a dot in the end's colour plus its name, on the
+    /// same dark capsule every on-media label uses.
+    private func kenBurnsEndTag(_ end: KenBurnsMoveEnd) -> some View {
+        let color: Color = end == .start ? .white : LL.amber
+        return HStack(spacing: 4) {
+            Circle()
+                .fill(color)
+                .frame(width: 5, height: 5)
+            Text(end == .start ? "START" : "END")
+                .font(.system(size: 8.5, weight: .bold))
+                .kerning(0.5)
+                .foregroundStyle(color)
+        }
+        .padding(.horizontal, 5)
+        .padding(.vertical, 2)
+        .background(.black.opacity(0.55), in: Capsule())
+    }
+
+    #if os(macOS)
+    /// Corner grips on the active framing — a Magnify gesture needs a
+    /// trackpad, so mouse users resize by the corners instead. Dragging a
+    /// grip scales the frame about its centre, exactly like the pinch, and
+    /// commits on release like every other framing edit.
+    private func kenBurnsResizeHandles(
+        rect: CGRect, entry: LapseCollection.Entry, collection: LapseCollection,
+        base: CGRect, clipSize: CGSize
+    ) -> some View {
+        let color: Color = kenBurnsEnd == .start ? .white : LL.amber
+        let signs: [(x: CGFloat, y: CGFloat)] = [(-1, -1), (1, -1), (-1, 1), (1, 1)]
+        return ForEach(0..<4, id: \.self) { index in
+            let sign = signs[index]
+            Rectangle()
+                .fill(color)
+                .frame(width: 7, height: 7)
+                .overlay(Rectangle().strokeBorder(.black.opacity(0.55), lineWidth: 1))
+                .frame(width: 20, height: 20)
+                .contentShape(Rectangle())
+                .position(
+                    x: rect.midX + sign.x * rect.width / 2,
+                    y: rect.midY + sign.y * rect.height / 2)
+                .gesture(
+                    DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                        .onChanged { gesture in
+                            // The committed framing is frozen while the mouse
+                            // is down, so it anchors the scale; translation
+                            // is total.
+                            var framing = committedKenBurnsFraming(entry: entry, in: collection)
+                            let startRect = pointsRect(
+                                CollectionMath.kenBurnsUnitRect(base: base, framing: framing),
+                                in: clipSize)
+                            let corner = CGPoint(
+                                x: startRect.midX + sign.x * startRect.width / 2,
+                                y: startRect.midY + sign.y * startRect.height / 2)
+                            let dragged = CGPoint(
+                                x: corner.x + gesture.translation.width,
+                                y: corner.y + gesture.translation.height)
+                            let before = max(4, hypot(corner.x - startRect.midX, corner.y - startRect.midY))
+                            let after = max(4, hypot(dragged.x - startRect.midX, dragged.y - startRect.midY))
+                            framing.zoom *= Double(before / after)
+                            moveEdit = MoveEdit(
+                                blendID: entry.blendID, end: kenBurnsEnd,
+                                framing: CollectionMath.clampedKenBurnsFraming(base: base, framing: framing),
+                                moved: true)
+                        }
+                        .onEnded { _ in
+                            commitMoveEdit(entry: entry)
+                        }
+                )
+        }
+    }
+    #endif
+
+    /// The travel between the two framings: thin ties joining corresponding
+    /// corners, and an amber arrow from the start's centre toward the end's.
+    /// A pure zoom skips the arrow — the converging ties already read as the
+    /// push.
+    private struct KenBurnsTravel: View {
+        var start: CGRect
+        var end: CGRect
+
+        var body: some View {
+            let a = CGPoint(x: start.midX, y: start.midY)
+            let b = CGPoint(x: end.midX, y: end.midY)
+            let travel = ((b.x - a.x) * (b.x - a.x) + (b.y - a.y) * (b.y - a.y)).squareRoot()
+
+            ZStack(alignment: .topLeading) {
+                Path { p in
+                    p.move(to: CGPoint(x: start.minX, y: start.minY))
+                    p.addLine(to: CGPoint(x: end.minX, y: end.minY))
+                    p.move(to: CGPoint(x: start.maxX, y: start.minY))
+                    p.addLine(to: CGPoint(x: end.maxX, y: end.minY))
+                    p.move(to: CGPoint(x: start.minX, y: start.maxY))
+                    p.addLine(to: CGPoint(x: end.minX, y: end.maxY))
+                    p.move(to: CGPoint(x: start.maxX, y: start.maxY))
+                    p.addLine(to: CGPoint(x: end.maxX, y: end.maxY))
+                }
+                .stroke(.white.opacity(0.22), lineWidth: 1)
+
+                if travel > 12 {
+                    let arrow = Path { p in
+                        let ux = (b.x - a.x) / travel
+                        let uy = (b.y - a.y) / travel
+                        let head = CGPoint(x: b.x - ux * 7, y: b.y - uy * 7)
+                        p.move(to: a)
+                        p.addLine(to: head)
+                        p.move(to: b)
+                        p.addLine(to: CGPoint(x: head.x - uy * 3.5, y: head.y + ux * 3.5))
+                        p.move(to: b)
+                        p.addLine(to: CGPoint(x: head.x + uy * 3.5, y: head.y - ux * 3.5))
+                    }
+                    // Dark halo first — amber alone sinks into bright footage.
+                    arrow.stroke(.black.opacity(0.4), style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                    arrow.stroke(LL.amber.opacity(0.9), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+                }
+            }
+        }
+    }
+
+    /// Pinch anywhere on the clip to resize the active framing — spreading
+    /// fingers GROWS the frame (you are pinching the frame, not the photo;
+    /// the photo-style inverse felt backwards on device). The centre holds.
     private func kenBurnsPinch(
         entry: LapseCollection.Entry, collection: LapseCollection, enabled: Bool
     ) -> some Gesture {
@@ -621,7 +812,7 @@ struct CollectionDetailView: View {
                 pinchActive = true
                 let base = model.kenBurnsUnitBase(entry: entry, in: collection)
                 var framing = committedKenBurnsFraming(entry: entry, in: collection)
-                framing.zoom *= Double(value.magnification)
+                framing.zoom /= Double(value.magnification)
                 moveEdit = MoveEdit(
                     blendID: entry.blendID, end: kenBurnsEnd,
                     framing: CollectionMath.clampedKenBurnsFraming(base: base, framing: framing),
@@ -641,6 +832,68 @@ struct CollectionDetailView: View {
         return kenBurnsEnd == .start ? move.start : move.end
     }
 
+    #if os(macOS)
+    /// Mouse-wheel resize for the active framing — the Magnify gesture needs
+    /// a trackpad, so a wheel must not leave mouse users stranded. A local
+    /// monitor scoped to the preview's frame turns wheel ticks into the same
+    /// clamped zoom the pinch writes: wheel up grows the frame, matching the
+    /// spread-to-grow pinch. Events over the preview are swallowed so no
+    /// enclosing scroll view fights the resize; everything else passes
+    /// through untouched.
+    private func installMacScrollZoom() {
+        guard macScrollMonitor == nil else { return }
+        macScrollMonitor = NSEvent.addLocalMonitorForEvents(matching: .scrollWheel) { event in
+            MainActor.assumeIsolated {
+                handleMacScrollEvent(event)
+            }
+        }
+    }
+
+    private func removeMacScrollZoom() {
+        if let macScrollMonitor {
+            NSEvent.removeMonitor(macScrollMonitor)
+        }
+        macScrollMonitor = nil
+        macScrollCommit?.cancel()
+        macScrollCommit = nil
+    }
+
+    private func handleMacScrollEvent(_ event: NSEvent) -> NSEvent? {
+        guard let contentView = event.window?.contentView else { return event }
+        var point = contentView.convert(event.locationInWindow, from: nil)
+        if !contentView.isFlipped {
+            point.y = contentView.bounds.height - point.y
+        }
+        guard macPreviewFrame.contains(point),
+              let collection = model.collection(withID: collectionID),
+              collection.kenBurnsEnabled,
+              let entry = selectedEntry(collection)
+        else { return event }
+
+        let base = model.kenBurnsUnitBase(entry: entry, in: collection)
+        var framing: LapseCollection.Entry.KenBurnsFraming
+        if let moveEdit, moveEdit.blendID == entry.blendID, moveEdit.end == kenBurnsEnd {
+            framing = moveEdit.framing
+        } else {
+            framing = committedKenBurnsFraming(entry: entry, in: collection)
+        }
+        let perTick = event.hasPreciseScrollingDeltas ? 0.004 : 0.05
+        framing.zoom /= exp(Double(event.scrollingDeltaY) * perTick)
+        moveEdit = MoveEdit(
+            blendID: entry.blendID, end: kenBurnsEnd,
+            framing: CollectionMath.clampedKenBurnsFraming(base: base, framing: framing),
+            moved: true)
+
+        macScrollCommit?.cancel()
+        macScrollCommit = Task { @MainActor in
+            try? await Task.sleep(for: .seconds(0.35))
+            guard !Task.isCancelled else { return }
+            commitMoveEdit(entry: entry)
+        }
+        return nil
+    }
+    #endif
+
     private func commitMoveEdit(entry: LapseCollection.Entry) {
         guard let edit = moveEdit, edit.moved, edit.blendID == entry.blendID else {
             moveEdit = nil
@@ -651,8 +904,9 @@ struct CollectionDetailView: View {
         moveEdit = nil
     }
 
-    /// Start/End pills, the active framing's zoom, and the way back to the
-    /// dealt move once a hand has been in it.
+    /// Start/End pills wearing their frames' identity dots (white = start,
+    /// amber = end — same colours as the canvas), the active framing's zoom,
+    /// and the way back to the dealt move once a hand has been in it.
     private func kenBurnsFramingBar(
         entry: LapseCollection.Entry, collection: LapseCollection
     ) -> some View {
@@ -665,14 +919,21 @@ struct CollectionDetailView: View {
                     kenBurnsEnd = end
                     moveEdit = nil
                 } label: {
-                    Text(end == .start ? "START" : "END")
-                        .font(.system(size: 10.5, weight: .bold))
-                        .kerning(0.5)
-                        .foregroundStyle(kenBurnsEnd == end ? .white : LL.accent)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(
-                            Capsule().fill(kenBurnsEnd == end ? LL.accent : LL.accent.opacity(0.09)))
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(end == .start ? Color.white : LL.amber)
+                            .overlay(Circle().strokeBorder(Color.black.opacity(0.25), lineWidth: 0.5))
+                            .frame(width: 7, height: 7)
+                        Text(end == .start ? "START" : "END")
+                            .font(.system(size: 10.5, weight: .bold))
+                            .kerning(0.5)
+                            .foregroundStyle(kenBurnsEnd == end ? .white : LL.accent)
+                    }
+                    .padding(.horizontal, 11)
+                    .padding(.vertical, 5)
+                    .background(
+                        Capsule().fill(kenBurnsEnd == end ? LL.accent : LL.accent.opacity(0.09)))
+                    .contentShape(Capsule())
                 }
                 .buttonStyle(.plain)
             }
@@ -681,12 +942,14 @@ struct CollectionDetailView: View {
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             if entry.kenBurns?.isCustom == true {
+                // Accent, not amber — amber now means "the end framing", and
+                // this resets the whole move.
                 Button("Reset move") {
                     model.resetKenBurnsMove(blendID: entry.blendID, in: collectionID)
                     moveEdit = nil
                 }
                 .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(LL.amber)
+                .foregroundStyle(LL.accent)
                 .buttonStyle(.plain)
             }
         }
@@ -740,15 +1003,17 @@ struct CollectionDetailView: View {
 
     // MARK: - Canvas menu
 
-    /// The canvas choice as a compact menu chip beside the preview caption —
-    /// the Adjust flow's collapsed-chip pattern. Each row carries the
-    /// consequence the retired CANVAS section's caption used to spell out:
-    /// the export size, and which ratio is the first clip's own shape.
-    /// Hidden while the collection is empty (the first clip sets the canvas,
-    /// and the caption says so).
+    /// Widest to square to tallest — the order a shape scan reads.
+    private static let canvasMenuOrder: [CanvasRatio] = [.wide, .classic, .square, .portrait, .tall]
+
+    /// The canvas choice as an on-media chip inside the preview's
+    /// bottom-right corner — the ratio is a property of the canvas, so it
+    /// rides the canvas. Rows are just the ratios (the summary card already
+    /// says what they export at), with the first clip's own shape marked.
+    /// Only drawn with the preview, so an empty collection never shows it.
     private func canvasRatioMenu(_ collection: LapseCollection) -> some View {
         Menu {
-            ForEach(CanvasRatio.allCases) { ratio in
+            ForEach(Self.canvasMenuOrder) { ratio in
                 Button {
                     model.setCanvasRatio(ratio, for: collectionID)
                 } label: {
@@ -762,15 +1027,14 @@ struct CollectionDetailView: View {
         } label: {
             HStack(spacing: 4) {
                 Text(collection.ratio?.rawValue ?? "Canvas")
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(.system(size: 12, weight: .semibold))
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .bold))
+                    .font(.system(size: 8.5, weight: .bold))
             }
-            .foregroundStyle(LL.accent)
-            .padding(.horizontal, 12)
-            .frame(height: 34)
-            .background(LL.cardBackground, in: Capsule())
-            .shadow(color: .black.opacity(0.06), radius: 1.5, y: 1)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 11)
+            .padding(.vertical, 5)
+            .background(.black.opacity(0.55), in: Capsule())
             .contentShape(Capsule())
         }
         .menuStyle(.borderlessButton)
@@ -778,12 +1042,12 @@ struct CollectionDetailView: View {
         .accessibilityLabel("Canvas \(collection.ratio?.rawValue ?? "unset")")
     }
 
-    /// "16:9 — 3840×2160", "4:3 — 2880×2160 · the first clip’s shape"
+    /// "16:9", "4:3 · the first clip’s shape"
     private func ratioChoiceLabel(_ ratio: CanvasRatio, in collection: LapseCollection) -> String {
         let firstRatio = collection.entries.first
             .flatMap { e in model.blends.first { $0.id == e.blendID } }
             .map(model.canvasRatio(for:))
-        var label = "\(ratio.rawValue) — \(ratio.exportLabel)"
+        var label = ratio.rawValue
         if ratio == firstRatio {
             label += " · the first clip’s shape"
         }
@@ -792,102 +1056,238 @@ struct CollectionDetailView: View {
 
     // MARK: - Ken Burns
 
-    /// The toggle under the timeline, growing its choices downward when
-    /// on: pacing (consistent durations → the seconds, then how clips reach
-    /// them) and the join (fade or cut). Turning it on answers everything
-    /// with best-effort defaults, so Export straight away already cuts well.
-    private func kenBurnsSection(_ collection: LapseCollection) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Toggle(isOn: kenBurnsEnabledBinding) {
+    /// TIMELINE · N CLIPS on the left, the Ken Burns tri-state on the right —
+    /// one row, so the mode lives where the eye moves between the preview and
+    /// the rows. The label drops its TIMELINE word before anything truncates.
+    private func timelineHeaderRow(_ collection: LapseCollection) -> some View {
+        HStack(spacing: 8) {
+            ViewThatFits(in: .horizontal) {
+                sectionLabel(timelineHeader(collection)).fixedSize()
+                sectionLabel(shortTimelineHeader(collection)).fixedSize()
+            }
+            Spacer(minLength: 8)
+            if !collection.entries.isEmpty {
+                kenBurnsModeControl(collection)
+            }
+        }
+    }
+
+    /// Off · Auto · Custom. On (either flavour) deals the best-effort
+    /// defaults silently, so Export straight away already cuts well; Custom
+    /// opens the drawer. Auto ↔ Custom parks and restores the custom
+    /// answers, so no switch needs a confirmation.
+    private func kenBurnsModeControl(_ collection: LapseCollection) -> some View {
+        let mode = collection.kenBurnsMode
+        return HStack(spacing: 5) {
+            Text("Ken Burns")
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundStyle(.secondary)
+            HStack(spacing: 1) {
+                kenBurnsModeSegment("Off", selected: mode == .off) {
+                    guard mode != .off else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        model.setKenBurnsOff(for: collectionID)
+                    }
+                }
+                kenBurnsModeSegment("Auto", selected: mode == .auto) {
+                    guard mode != .auto else { return }
+                    withAnimation(.easeInOut(duration: 0.2)) {
+                        model.setKenBurnsAuto(for: collectionID)
+                    }
+                }
+                kenBurnsModeSegment("Custom", selected: mode == .custom) {
+                    openKenBurnsDrawer(collection)
+                }
+            }
+            .padding(2)
+            .background(Capsule().fill(LL.cardBackground))
+            .shadow(color: .black.opacity(0.06), radius: 1.5, y: 1)
+            .popover(isPresented: $kenBurnsDrawerPresented) {
+                kenBurnsCustomDrawer
+            }
+        }
+        .fixedSize()
+    }
+
+    private func kenBurnsModeSegment(
+        _ title: String, selected: Bool, action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            Text(title)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(selected ? .white : LL.accent)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 5)
+                .background(Capsule().fill(selected ? LL.accent : Color.clear))
+                .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// Custom entered: snapshot what Cancel restores, switch the live values
+    /// to the remembered custom ones, then open the drawer over them —
+    /// edits inside apply live, so the preview and rows follow along.
+    private func openKenBurnsDrawer(_ collection: LapseCollection) {
+        kenBurnsDrawerSnapshot = collection.kenBurns
+        kenBurnsDrawerApplied = false
+        withAnimation(.easeInOut(duration: 0.2)) {
+            model.beginKenBurnsCustom(for: collectionID)
+        }
+        kenBurnsDrawerPresented = true
+    }
+
+    private func closeKenBurnsDrawer(applied: Bool) {
+        kenBurnsDrawerApplied = applied
+        kenBurnsDrawerPresented = false
+    }
+
+    /// The pacing/join options behind Custom — a sheet on iPhone, a popover
+    /// on iPad and the Mac. Apply keeps what's live; any other exit restores
+    /// the snapshot, so fiddling is free.
+    private var kenBurnsCustomDrawer: some View {
+        Group {
+            if let collection = model.collection(withID: collectionID),
+               let kenBurns = collection.kenBurns {
+                VStack(alignment: .leading, spacing: 0) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Ken Burns · Custom")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text("Tune the pacing and the joins — the preview and timeline follow along.")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .padding(.bottom, 12)
+
+                    Divider()
+                        .padding(.leading, 18)
+
+                    ScrollView {
+                        kenBurnsOptionRows(collection, kenBurns: kenBurns)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 14)
+                    }
+
+                    Divider()
+
+                    HStack(spacing: 10) {
+                        Button {
+                            closeKenBurnsDrawer(applied: false)
+                        } label: {
+                            Text("Cancel")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(LL.accent)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(
+                                    LL.accent.opacity(0.09),
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+
+                        Button {
+                            closeKenBurnsDrawer(applied: true)
+                        } label: {
+                            Text("Apply")
+                                .font(.system(size: 14, weight: .bold))
+                                .foregroundStyle(.white)
+                                .frame(maxWidth: .infinity, minHeight: 44)
+                                .background(
+                                    LL.accent,
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(14)
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(width: 380, height: 480)
+        #else
+        .frame(idealWidth: 380, idealHeight: 500)
+        #endif
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.hidden)
+        .presentationCompactAdaptation(.sheet)
+        .interactiveDismissDisabled()
+        .onDisappear {
+            if !kenBurnsDrawerApplied {
+                model.restoreKenBurnsSettings(kenBurnsDrawerSnapshot, for: collectionID)
+            }
+            kenBurnsDrawerSnapshot = nil
+        }
+    }
+
+    /// The four answers: pacing (consistent durations → the seconds, then
+    /// how clips reach them) and the join (fade or cut). Same rows the old
+    /// below-the-timeline card grew — now only on request.
+    private func kenBurnsOptionRows(
+        _ collection: LapseCollection, kenBurns: LapseCollection.KenBurnsSettings
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Toggle(isOn: kenBurnsBinding(\.consistentDurations)) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Ken Burns")
-                        .font(.system(size: 14.5, weight: .semibold))
-                    Text("A gentle zoom and pan across every clip on export")
+                    Text("Consistent durations")
+                        .font(.system(size: 14))
+                    Text(kenBurns.consistentDurations
+                        ? "Every clip plays the same length"
+                        : "Clips keep their own lengths, as shot")
                         .font(.system(size: 11.5))
                         .foregroundStyle(.secondary)
                 }
             }
             .tint(LL.accent)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .disabled(collection.entries.isEmpty)
-            .opacity(collection.entries.isEmpty ? 0.5 : 1)
 
-            if let kenBurns = collection.kenBurns, kenBurns.enabled, !collection.entries.isEmpty {
-                Divider()
-                    .padding(.leading, 14)
-                VStack(alignment: .leading, spacing: 14) {
-                    Toggle(isOn: kenBurnsBinding(\.consistentDurations)) {
+            if kenBurns.consistentDurations {
+                Stepper(
+                    value: kenBurnsClipSecondsBinding,
+                    in: 1...model.kenBurnsMaxClipSeconds(collection)
+                ) {
+                    HStack {
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Consistent durations")
+                            Text("Clip duration")
                                 .font(.system(size: 14))
-                            Text(kenBurns.consistentDurations
-                                ? "Every clip plays the same length"
-                                : "Clips keep their own lengths, as shot")
+                            Text("The shortest clip caps it at \(model.kenBurnsMaxClipSeconds(collection))s")
                                 .font(.system(size: 11.5))
                                 .foregroundStyle(.secondary)
                         }
+                        Spacer()
+                        Text("\(model.kenBurnsEffectiveClipSeconds(collection))s")
+                            .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                            .foregroundStyle(LL.accentDeep)
                     }
-                    .tint(LL.accent)
-
-                    if kenBurns.consistentDurations {
-                        Stepper(
-                            value: kenBurnsClipSecondsBinding,
-                            in: 1...model.kenBurnsMaxClipSeconds(collection)
-                        ) {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("Clip duration")
-                                        .font(.system(size: 14))
-                                    Text("The shortest clip caps it at \(model.kenBurnsMaxClipSeconds(collection))s")
-                                        .font(.system(size: 11.5))
-                                        .foregroundStyle(.secondary)
-                                }
-                                Spacer()
-                                Text("\(model.kenBurnsEffectiveClipSeconds(collection))s")
-                                    .font(.system(size: 14, weight: .semibold).monospacedDigit())
-                                    .foregroundStyle(LL.accentDeep)
-                            }
-                        }
-
-                        Toggle(isOn: kenBurnsBinding(\.autoAdjustSpeed)) {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text("Auto adjust clip speed")
-                                    .font(.system(size: 14))
-                                Text(kenBurns.autoAdjustSpeed
-                                    ? "Longer clips speed up to fit — only when required"
-                                    : "Each clip plays a \(model.kenBurnsEffectiveClipSeconds(collection))s window — set its start point from the timeline")
-                                    .font(.system(size: 11.5))
-                                    .foregroundStyle(.secondary)
-                            }
-                        }
-                        .tint(LL.accent)
-                    }
-
-                    Toggle(isOn: kenBurnsBinding(\.fadeTransition)) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Fade transition")
-                                .font(.system(size: 14))
-                            Text(kenBurns.fadeTransition
-                                ? "Clips crossfade for \(String(format: "%g", LapseCollection.fadeSeconds))s"
-                                : "Straight cuts between clips")
-                                .font(.system(size: 11.5))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .tint(LL.accent)
                 }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 12)
-            }
-        }
-        .llCard()
-    }
 
-    private var kenBurnsEnabledBinding: Binding<Bool> {
-        Binding(
-            get: { model.collection(withID: collectionID)?.kenBurnsEnabled == true },
-            set: { model.setKenBurnsEnabled($0, for: collectionID) })
+                Toggle(isOn: kenBurnsBinding(\.autoAdjustSpeed)) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text("Auto adjust clip speed")
+                            .font(.system(size: 14))
+                        Text(kenBurns.autoAdjustSpeed
+                            ? "Longer clips speed up to fit — only when required"
+                            : "Each clip plays a \(model.kenBurnsEffectiveClipSeconds(collection))s window — set its start point from the timeline")
+                            .font(.system(size: 11.5))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .tint(LL.accent)
+            }
+
+            Toggle(isOn: kenBurnsBinding(\.fadeTransition)) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Fade transition")
+                        .font(.system(size: 14))
+                    Text(kenBurns.fadeTransition
+                        ? "Clips crossfade for \(String(format: "%g", LapseCollection.fadeSeconds))s"
+                        : "Straight cuts between clips")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .tint(LL.accent)
+        }
     }
 
     private func kenBurnsBinding(
@@ -928,6 +1328,13 @@ struct CollectionDetailView: View {
             : "Timeline · \(collection.entries.count) \(collection.entries.count == 1 ? "clip" : "clips")"
     }
 
+    /// The header once the Ken Burns control needs the room.
+    private func shortTimelineHeader(_ collection: LapseCollection) -> String {
+        collection.entries.isEmpty
+            ? "Timeline"
+            : "\(collection.entries.count) \(collection.entries.count == 1 ? "clip" : "clips")"
+    }
+
     private var emptyTimeline: some View {
         Button {
             showPicker = true
@@ -939,7 +1346,7 @@ struct CollectionDetailView: View {
                 Text("Add your first clip")
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(LL.accent)
-                Text("Blended clips from any project can join")
+                Text("Blended clips from any project can join — the first sets the canvas")
                     .font(.system(size: 11.5))
                     .foregroundStyle(.secondary)
             }
@@ -1247,30 +1654,42 @@ struct CollectionDetailView: View {
         return text
     }
 
-    private func previewCaption(_ collection: LapseCollection) -> String {
-        guard let entry = selectedEntry(collection),
-              let blend = model.blends.first(where: { $0.id == entry.blendID }) else {
-            return "Add a clip — the first one sets the canvas."
+    /// What the crop HUD shows for this entry right now: live numbers while
+    /// the finger is down, the lingering release value for a beat after.
+    private func cropHUDText(entry: LapseCollection.Entry, in collection: LapseCollection) -> String? {
+        if let cropDrag, cropDrag.blendID == entry.blendID, cropDrag.moved {
+            return cropKeepLabel(entry: entry, in: collection)
         }
-        guard let ratio = collection.ratio else {
-            return "Add a clip — the first one sets the canvas."
-        }
-        if collection.kenBurnsEnabled {
-            let active = kenBurnsEnd == .start ? "start" : "end"
-            let other = kenBurnsEnd == .start ? "end" : "start"
-            return "Ken Burns \(active) framing — drag the white frame to place it, pinch to zoom. The dashed frame is the \(other)."
-        }
-        guard model.blendNeedsCrop(blend, on: ratio) else {
-            return "This clip matches the \(ratio.rawValue) canvas — nothing to crop."
-        }
-        guard let pixels = model.blendDisplaySize(for: blend),
+        return cropHUDLinger?.text
+    }
+
+    /// "keeps 1215×2160 of 3840×2160" — the honest pixels the retired
+    /// caption used to spell out, computed from wherever the frame sits.
+    private func cropKeepLabel(entry: LapseCollection.Entry, in collection: LapseCollection) -> String? {
+        guard let ratio = collection.ratio,
+              let blend = model.blends.first(where: { $0.id == entry.blendID }),
+              model.blendNeedsCrop(blend, on: ratio),
+              let pixels = model.blendDisplaySize(for: blend),
               let offset = displayedCropOffset(entry: entry, in: collection),
-              let box = CollectionMath.cropBox(clipSize: pixels, canvas: ratio, offset: offset) else {
-            return "Drag the white frame to choose the \(ratio.rawValue) crop."
-        }
+              let box = CollectionMath.cropBox(clipSize: pixels, canvas: ratio, offset: offset)
+        else { return nil }
         let kw = Int(box.rect.width.rounded())
         let kh = Int(box.rect.height.rounded())
-        return "Drag the white frame — it keeps \(kw)×\(kh) of \(Int(pixels.width))×\(Int(pixels.height)) for the \(ratio.rawValue) export."
+        return "keeps \(kw)×\(kh) of \(Int(pixels.width))×\(Int(pixels.height))"
+    }
+
+    /// Hold the release value on screen briefly, then fade it out — unless a
+    /// newer drag has taken over in the meantime.
+    private func lingerCropHUD(entry: LapseCollection.Entry, collection: LapseCollection) {
+        guard let text = cropKeepLabel(entry: entry, in: collection) else { return }
+        let hud = CropHUDLinger(text: text)
+        cropHUDLinger = hud
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(1.4))
+            if cropHUDLinger == hud {
+                withAnimation(.easeOut(duration: 0.25)) { cropHUDLinger = nil }
+            }
+        }
     }
 
     private func playSelected(_ blend: AppModel.BlendProject, title: String) {

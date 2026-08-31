@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Collection detail · crop on the preview · portrait</title>
-  <desc>Mirrors App/CollectionDetailView.swift (previewSurface + cropFrame, commitCrop): the timeline builder when the selected clip mismatches the canvas — City set, 9:16 canvas, 16:9 clip selected. The preview shows the clip itself filling its shape; the largest canvas-shaped rect becomes a draggable white 2pt frame with rule-of-thirds lines, everything outside dimmed black 60%. Dragging pans the frame along the free axis; on release: a collection-local crop updates in place ("Crop updated for this collection"); else if the clip's default crop for this ratio exists AND another collection uses the clip, the "Save this crop?" alert offers Replace the default / Just for City set / Cancel; else it saves silently as the clip's default ("Saved as this clip's default 9:16 crop"). The caption is honest pixels, left-aligned beside the canvas menu chip (9:16 current; rows list every ratio with its export size and mark the first clip's shape): "Drag the white frame — it keeps 1215×2160 of 3840×2160 for the 9:16 export." Rows carry CROP 9:16 badges (outlined accent); a collection-local override adds "· CUSTOM". Then the dashed "+ Add clips", the Ken Burns card (off here — on-state in collection-detail.kenburns.portrait.svg), and the below-the-fold export path: dark summary card (total timecode 26 bold · "exports 2160×3840" · "2 clips · 9:16 canvas" · "Trims retime the cut automatically — clips always butt together."), "Export collection" primary CTA (50pt), and when a kept render exists a "Last export kept · today 14:02" row (50pt, green check, trailing Share) — 140pt clearance keeps them above the tab bar at scroll end; the summary is drawn peeking behind the bar here. Tall (aspect &lt; 1) clips also get an "Apply letterbox / Remove letterbox" pill bottom-right of the preview.</desc>
+  <desc>Mirrors App/CollectionDetailView.swift (previewSurface + cropFrame, cropHUDText/cropKeepLabel/lingerCropHUD, commitCrop): the timeline builder when the selected clip mismatches the canvas — City set, 9:16 canvas, 16:9 clip selected, drawn MID-DRAG. The preview shows the clip itself filling its shape; the largest canvas-shaped rect becomes a draggable white 2pt frame with rule-of-thirds lines, everything outside dimmed black 60%. Dragging pans the frame along the free axis, and while a finger holds it the HONEST-PIXELS HUD rides the preview's top — "keeps 1215×2160 of 3840×2160" on the on-media black 50% capsule, monospaced digits, 40pt down so it clears the clip badge's line — lingering 1.4s after release then fading. That HUD is all that remains of the retired caption row (the 2026-08-31 rework deleted the row: reassurance copy is gone, the empty-state guidance moved into the empty-timeline card, and the canvas choice moved onto the preview itself). It hides while the "Save this crop?" alert is up. On release: a collection-local crop updates in place ("Crop updated for this collection"); else if the clip's default crop for this ratio exists AND another collection uses the clip, the "Save this crop?" alert offers Replace the default / Just for City set / Cancel; else it saves silently as the clip's default ("Saved as this clip's default 9:16 crop"). The canvas menu chip sits bottom-right ON the media (9:16 current; rows are bare ratios widest→tallest with a checkmark on current and the first clip's shape marked). Tall (aspect &lt; 1) clips get the "Apply letterbox / Remove letterbox" pill bottom-LEFT — the chip owns bottom-right now. The header row carries TIMELINE · 2 CLIPS and the Ken Burns tri-state (Off here). Rows carry CROP 9:16 badges (outlined accent); a collection-local override adds "· CUSTOM". Then the dashed "+ Add clips" and the export path: dark summary card (0:26 · "exports 2160×3840" · "2 clips · 9:16 canvas" · "Trims retime the cut automatically — clips always butt together."), "Export collection" CTA, and the kept-render row "Last export kept · today 14:02" peeking behind the tab bar. At-rest screen: collection-detail.portrait.svg.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="preview"><rect x="16" y="115" width="361" height="203" rx="12"/></clipPath>
@@ -33,7 +33,7 @@
         <g stroke="#C36A00" fill="#C36A00" data-symbol="ellipsis.circle"><circle cx="355" cy="84" r="10" fill="none" stroke-width="1.8"/><circle cx="350" cy="84" r="1.4" stroke="none"/><circle cx="355" cy="84" r="1.4" stroke="none"/><circle cx="360" cy="84" r="1.4" stroke="none"/></g>
       </g>
 
-      <!-- preview: 16:9 clip with the 9:16 crop frame (offset ≈ 0.48) -->
+      <!-- preview: 16:9 clip with the 9:16 crop frame (offset ≈ 0.48), mid-drag -->
       <g id="crop-preview">
         <g clip-path="url(#preview)">
           <rect x="16" y="115" width="361" height="203" fill="url(#clipA)"/>
@@ -47,75 +47,92 @@
         </g>
         <rect x="26" y="125" width="124" height="19" rx="9.5" fill="#000" opacity="0.5"/>
         <text x="88" y="138" font-size="10.5" class="sb" fill="#FFF" text-anchor="middle">Ridge sunset · 100×</text>
-      </g>
-
-      <!-- caption (honest pixels, left) + canvas menu chip (right) -->
-      <g id="caption-row">
-        <text x="18" y="338" font-size="11.5" class="sec">Drag the white frame — it keeps 1215×2160 of</text>
-        <text x="18" y="353" font-size="11.5" class="sec">3840×2160 for the 9:16 export.</text>
+        <!-- honest-pixels HUD: only while a hand is in the crop (+1.4s linger) -->
+        <g id="crop-hud">
+          <rect x="105" y="155" width="183" height="18" rx="9" fill="#000" opacity="0.5"/>
+          <text x="196.5" y="167.5" font-size="10.5" class="sb" fill="#FFF" text-anchor="middle" font-family="ui-monospace, 'SF Mono', Menlo, monospace">keeps 1215×2160 of 3840×2160</text>
+        </g>
         <g id="canvas-menu">
-          <rect x="309" y="326" width="66" height="34" rx="17" fill="#FFF" filter="url(#card)"/>
-          <text x="336" y="348" font-size="13.5" class="sb" fill="#C36A00" text-anchor="middle">9:16</text>
-          <path d="M352 340.5 l4.5 4.5 4.5 -4.5" stroke="#C36A00" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <rect x="305" y="284" width="62" height="24" rx="12" fill="#000" opacity="0.55"/>
+          <text x="328" y="300" font-size="12" class="sb" fill="#FFF" text-anchor="middle">9:16</text>
+          <path d="M347 296 l4 4 4 -4" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
       </g>
 
-      <!-- TIMELINE with crop badges -->
+      <!-- header row: TIMELINE left, Ken Burns tri-state right (Off) -->
+      <g id="timeline-header">
+        <text x="20" y="354" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 2 CLIPS</text>
+        <text x="234" y="353" font-size="10.5" class="sb" fill="#6D6D72" text-anchor="end">Ken Burns</text>
+        <rect x="240" y="336" width="137" height="28" rx="14" fill="#FFF" filter="url(#card)"/>
+        <rect x="242" y="338" width="33" height="24" rx="12" fill="#C36A00"/>
+        <text x="258.5" y="354" font-size="11" class="sb" fill="#FFF" text-anchor="middle">Off</text>
+        <text x="297" y="354" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Auto</text>
+        <text x="347" y="354" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Custom</text>
+      </g>
+
+      <!-- TIMELINE card, two rows -->
       <g id="timeline">
-        <text x="20" y="387" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 2 CLIPS</text>
-        <rect x="16" y="399" width="361" height="132" rx="16" fill="#FFF" filter="url(#card)"/>
+        <rect x="16" y="374" width="361" height="132" rx="16" fill="#FFF" filter="url(#card)"/>
 
-        <!-- row 1: 9:16 clip — matches the canvas, no badge -->
+        <!-- row 1 (selected · crop) -->
         <g id="row-1">
-          <rect x="28" y="411" width="58" height="42" rx="7" fill="url(#clipB)"/>
-          <path d="M53 426 l9 6 -9 6 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
-          <text x="96" y="427" font-size="14.5" class="sb" fill="#000">City tram</text>
-          <text x="96" y="446" font-size="11.5" class="sec">100× · 6.4s</text>
-          <circle cx="322" cy="432" r="17" fill="#C36A00" opacity="0.1"/>
-          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timeline.selection"><path d="M316 425 h-2 v14 h2 M328 425 h2 v14 h-2"/><path d="M319 432 h6"/></g>
-          <path d="M352 426 h16 M352 432 h16 M352 438 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <rect x="16" y="374" width="361" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
+          <rect x="28" y="386" width="58" height="42" rx="7" fill="url(#clipA)"/>
+          <path d="M53 401 l9 6 -9 6 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+          <text x="96" y="402" font-size="14.5" class="sb" fill="#000">Ridge sunset</text>
+          <text x="96" y="421" font-size="11.5" class="sec">100× · 15s</text>
+          <rect x="168" y="410" width="66" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
+          <rect x="168" y="410" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+          <text x="201" y="420" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16</text>
+          <circle cx="322" cy="407" r="17" fill="#C36A00" opacity="0.1"/>
+          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timeline.selection"><path d="M316 400 h-2 v14 h2 M328 400 h2 v14 h-2"/><path d="M319 407 h6"/></g>
+          <path d="M352 401 h16 M352 407 h16 M352 413 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
         </g>
-        <line x1="96" y1="465" x2="377" y2="465" stroke="#000" stroke-opacity="0.06"/>
+        <line x1="96" y1="440" x2="377" y2="440" stroke="#000" stroke-opacity="0.06"/>
 
-        <!-- row 2: 16:9 clip (selected) — collection-local crop override -->
+        <!-- row 2 (local override) -->
         <g id="row-2">
-          <rect x="16" y="465" width="361" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
-          <rect x="28" y="477" width="58" height="42" rx="7" fill="url(#clipA)"/>
-          <path d="M53 492 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
-          <text x="96" y="493" font-size="14.5" class="sb" fill="#000">Ridge sunset</text>
-          <text x="96" y="512" font-size="11.5" class="sec">100× · 9…</text>
-          <rect x="156" y="501" width="120" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
-          <rect x="156" y="501" width="120" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
-          <text x="216" y="511" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16 · CUSTOM</text>
-          <circle cx="322" cy="498" r="17" fill="#C36A00" opacity="0.1"/>
-          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M316 491 h-2 v14 h2 M328 491 h2 v14 h-2"/><path d="M319 498 h6"/></g>
-          <path d="M352 492 h16 M352 498 h16 M352 504 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
+          <rect x="28" y="452" width="58" height="42" rx="7" fill="url(#clipB)"/>
+          <path d="M53 467 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
+          <text x="96" y="468" font-size="14.5" class="sb" fill="#000">Tram Tester</text>
+          <text x="96" y="487" font-size="11.5" class="sec">50× · 15s</text>
+          <rect x="168" y="476" width="118" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
+          <rect x="168" y="476" width="118" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+          <text x="227" y="486" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 9:16 · CUSTOM</text>
+          <circle cx="322" cy="473" r="17" fill="#C36A00" opacity="0.1"/>
+          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M316 466 h-2 v14 h2 M328 466 h2 v14 h-2"/><path d="M319 473 h6"/></g>
+          <path d="M352 467 h16 M352 473 h16 M352 479 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
         </g>
       </g>
 
       <!-- add clips (dashed) -->
       <g id="add-clips">
-        <rect x="16" y="543" width="361" height="52" rx="14" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-        <path d="M158 574 v-10 M153 569 h10" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" data-symbol="plus"/>
-        <text x="172" y="579" font-size="15" class="sb" fill="#C36A00">Add clips</text>
+        <rect x="16" y="518" width="361" height="52" rx="14" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <path d="M158 549 v-10 M153 544 h10" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" data-symbol="plus"/>
+        <text x="172" y="554" font-size="15" class="sb" fill="#C36A00">Add clips</text>
       </g>
 
-      <!-- Ken Burns (off) -->
-      <g id="ken-burns">
-        <rect x="16" y="607" width="361" height="70" rx="16" fill="#FFF" filter="url(#card)"/>
-        <text x="30" y="630" font-size="14.5" class="sb" fill="#000">Ken Burns</text>
-        <text x="30" y="646" font-size="11.5" class="sec">A gentle zoom and pan across every clip</text>
-        <text x="30" y="661" font-size="11.5" class="sec">on export</text>
-        <rect x="312" y="627" width="51" height="31" rx="15.5" fill="#E9E9EA"/>
-        <circle cx="327.5" cy="642.5" r="13.5" fill="#FFF" filter="url(#card)"/>
+      <!-- summary card -->
+      <g id="summary">
+        <rect x="16" y="582" width="361" height="120" rx="18" fill="#1C1C1E"/>
+        <text x="32" y="618" font-size="26" class="b" fill="#FFF">0:26</text>
+        <text x="361" y="614" font-size="12" fill="#FFF" opacity="0.65" text-anchor="end">exports 2160×3840</text>
+        <text x="32" y="636" font-size="12.5" fill="#FFF" opacity="0.65">2 clips · 9:16 canvas</text>
+        <text x="32" y="658" font-size="11.5" fill="#FFF" opacity="0.45">Trims retime the cut automatically — clips always butt together.</text>
       </g>
 
-      <!-- summary card peeking behind the tab bar (scrolls fully into view; CTA + last-export follow — see desc) -->
-      <g id="summary-peek">
-        <rect x="16" y="689" width="361" height="120" rx="18" fill="#1C1C1E"/>
-        <text x="32" y="725" font-size="26" class="b" fill="#FFF">0:16</text>
-        <text x="361" y="721" font-size="12" fill="#FFF" opacity="0.65" text-anchor="end">exports 2160×3840</text>
-        <text x="32" y="743" font-size="12.5" fill="#FFF" opacity="0.65">2 clips · 9:16 canvas</text>
+      <!-- export CTA -->
+      <g id="export-cta">
+        <rect x="16" y="714" width="361" height="50" rx="14" fill="#C36A00"/>
+        <text x="196.5" y="744" font-size="15" class="b" fill="#FFF" text-anchor="middle">Export collection</text>
+      </g>
+
+      <!-- last export kept, peeking behind the tab bar -->
+      <g id="last-export">
+        <rect x="16" y="776" width="361" height="50" rx="14" fill="#FFF" filter="url(#card)"/>
+        <path d="M32 801 l5 5 9 -10" stroke="#34C759" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+        <text x="56" y="806" font-size="13" fill="#000">Last export kept · today 14:02</text>
+        <text x="363" y="806" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Share</text>
       </g>
 
       <!-- floating tab bar -->
@@ -151,5 +168,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collection detail · crop on the preview · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift — white crop frame w/ thirds · caption + canvas menu · CROP badges (· CUSTOM) · save rules in desc</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift — crop frame mid-drag with the transient honest-pixels HUD · chip on the preview · no caption row</text>
 </svg>

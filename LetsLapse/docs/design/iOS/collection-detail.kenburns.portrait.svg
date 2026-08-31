@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Collection detail · Ken Burns framing · portrait</title>
-  <desc>Mirrors App/CollectionDetailView.swift (kenBurnsFrameOverlay, kenBurnsFramingBar, kenBurnsSection, kenBurnsPinch): the timeline builder with Ken Burns ON. The preview becomes the start/end framing editor: the WHITE 2pt frame with rule-of-thirds is the framing being edited (drag to place it, pinch anywhere on the clip to zoom it — spreading fingers tightens the window, photo-style; outside the active frame dims black 60%, nothing here since the start framing is full-frame 1.00×); the AMBER dashed frame is the other end of the move, its END/START tag riding its top-right corner (the clip badge owns the top-left), drawn only while it differs from the active frame by &gt;6pt. Under the preview the framing bar: START / END pills switch which end the surface edits (active pill accent-filled), the active framing's zoom "1.00×" in monospaced digits, and "Reset move" in amber once a hand has been in the move (entry.kenBurns.isCustom). Edits commit on release via setKenBurnsFraming. The caption row: "Ken Burns start framing — drag the white frame to place it, pinch to zoom. The dashed frame is the end." left, canvas menu chip right. Rows carry KB-aware subtitles — consistent durations: "100× · plays 6.0s from the start" (windowed clips add "from Ns"; auto-speed adds "· sped ×N"); the trim button's role becomes "Set the clip's start point" (fixed window). The Ken Burns card below the timeline grows its choices downward while on (top edge drawn here; the grown card, summary and export path are drawn in full in collection-detail.kenburns-options.portrait.svg): Consistent durations toggle ("Every clip plays the same length" / "Clips keep their own lengths, as shot"); when on, a Clip duration stepper ("The shortest clip caps it at 6s" — value accentDeep, monospaced) and Auto adjust clip speed toggle ("Longer clips speed up to fit — only when required" / "Each clip plays a 6s window — set its start point from the timeline"); always Fade transition ("Clips crossfade for 0.5s" / "Straight cuts between clips"). Turning Ken Burns on answers everything with best-effort defaults, so Export straight away already cuts well. Off-state and the rest of the screen: collection-detail.portrait.svg.</desc>
+  <desc>Mirrors App/CollectionDetailView.swift (kenBurnsFrameOverlay, kenBurnsIdentityFrame, kenBurnsEndTag, KenBurnsTravel, kenBurnsFramingBar, kenBurnsPinch, timelineHeaderRow, kenBurnsModeControl): the timeline builder with Ken Burns ON (Auto). The preview is the framing editor, and COLOUR IS IDENTITY, never selection: the START framing is always WHITE, the END framing always AMBER. The one under edit is solid 2pt with rule-of-thirds in its own colour (drag to place it, pinch anywhere on the clip to resize it — spreading fingers GROWS the frame; outside the active frame dims black 60%); the other end is dashed 1.5pt in its own colour, and tapping it selects it. Both frames carry an identity tag on a fixed corner — a colour dot + name on the on-media black 55% capsule: START rides its frame's BOTTOM-LEFT, END its TOP-RIGHT (the clip badge owns the preview's top-left, the canvas chip its bottom-right — four corners, four jobs). Whenever the two framings differ, thin white 22% TIES join corresponding corners and an amber arrow (over a black 40% halo, so bright footage never swallows it) points from the start's centre toward the end's; a pure zoom (centres within 12pt) drops the arrow and lets the converging ties read as the push. Drawn here: start full-frame at 1.00× (its white frame hugs the preview edge), end dealt tighter and low-centre-right. Under the preview the framing bar: START / END pills wearing the same identity dots (white with a hairline dark ring / amber) — active pill accent-filled — the active framing's zoom "1.00×" in monospaced digits, and "Reset move" in ACCENT (not amber — amber means "the end" now) once a hand has been in the move (entry.kenBurns.isCustom). Edits commit on release via setKenBurnsFraming. macOS additionally draws 7pt corner grips on the active frame (mouse resize) and resizes by scroll wheel over the preview — interaction only, no separate spec. The header row shows Auto selected; rows carry KB-aware subtitles — consistent durations: "100× · plays 6.0s from the start" (windowed clips add "from Ns"; auto-speed adds "· sped ×N"); the trim button's role becomes "Set the clip's start point" (fixed window). No Ken Burns card follows the timeline any more — Custom's options live in the drawer (collection-detail.kenburns-options.portrait.svg) — so the dark summary card follows Add clips directly, its footer reading "Ken Burns moves on every clip, crossfades between them." (straight-cut variant swaps the ending). Off-state and the rest of the screen: collection-detail.portrait.svg.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -31,106 +31,123 @@
         <g stroke="#C36A00" fill="#C36A00" data-symbol="ellipsis.circle"><circle cx="355" cy="84" r="10" fill="none" stroke-width="1.8"/><circle cx="350" cy="84" r="1.4" stroke="none"/><circle cx="355" cy="84" r="1.4" stroke="none"/><circle cx="360" cy="84" r="1.4" stroke="none"/></g>
       </g>
 
-      <!-- preview: the framing editor. Active START framing = full frame (1.00×), dashed ghost = the dealt END move -->
+      <!-- preview: identity framing editor. White = start (active, full frame), amber = end (dashed) -->
       <g id="framing-preview">
         <rect x="16" y="115" width="361" height="203" rx="12" fill="url(#clipA)"/>
-        <!-- active framing: white frame + thirds (full frame at 1.00× — nothing to dim) -->
-        <g id="active-frame">
+        <!-- travel: corner ties + haloed arrow toward the end -->
+        <g id="travel">
+          <path d="M17 116 L228 180 M376 116 L348 180 M17 317 L228 248 M376 317 L348 248" stroke="#FFF" stroke-opacity="0.22"/>
+          <path d="M196.5 216.5 L281 214.4 M288 214 L279.5 210.4 M288 214 L279.7 217.9" stroke="#000" stroke-opacity="0.4" stroke-width="3.5" stroke-linecap="round"/>
+          <path d="M196.5 216.5 L281 214.4 M288 214 L279.5 210.4 M288 214 L279.7 217.9" stroke="#FFB340" stroke-opacity="0.9" stroke-width="1.5" stroke-linecap="round"/>
+        </g>
+        <!-- end framing: amber dashed, tag with dot on ITS top-right -->
+        <g id="end-frame">
+          <rect x="228" y="180" width="120" height="68" fill="none" stroke="#FFB340" stroke-opacity="0.75" stroke-width="1.5" stroke-dasharray="5 4"/>
+          <rect x="299" y="183" width="46" height="16" rx="8" fill="#000" opacity="0.55"/>
+          <circle cx="308" cy="191" r="3" fill="#FFB340"/>
+          <text x="314" y="194.5" font-size="8.5" class="b" fill="#FFB340" letter-spacing="0.5">END</text>
+        </g>
+        <!-- start framing: white solid + thirds (active — full frame at 1.00×), tag with dot on ITS bottom-left -->
+        <g id="start-frame">
           <rect x="17" y="116" width="359" height="201" fill="none" stroke="#FFF" stroke-width="2"/>
           <path d="M136.3 116 v201 M256.7 116 v201 M17 182.7 h359 M17 250.3 h359" stroke="#FFF" stroke-opacity="0.35"/>
-        </g>
-        <!-- ghost: the END framing, amber dashed, tag on its top-right -->
-        <g id="ghost-frame">
-          <rect x="118" y="262" width="92" height="52" fill="none" stroke="#FFB340" stroke-opacity="0.75" stroke-width="1.5" stroke-dasharray="5 4"/>
-          <rect x="177" y="265" width="30" height="13" rx="6.5" fill="#000" opacity="0.55"/>
-          <text x="192" y="274.5" font-size="8.5" class="b" fill="#FFB340" text-anchor="middle" letter-spacing="0.5">END</text>
+          <rect x="21" y="297" width="58" height="16" rx="8" fill="#000" opacity="0.55"/>
+          <circle cx="30" cy="305" r="3" fill="#FFF"/>
+          <text x="36" y="308.5" font-size="8.5" class="b" fill="#FFF" letter-spacing="0.5">START</text>
         </g>
         <rect x="26" y="125" width="128" height="19" rx="9.5" fill="#000" opacity="0.5"/>
         <text x="90" y="138" font-size="10.5" class="sb" fill="#FFF" text-anchor="middle">Harbour dawn · 100×</text>
-      </g>
-
-      <!-- framing bar: START/END pills · zoom · Reset move -->
-      <g id="framing-bar">
-        <rect x="18" y="326" width="58" height="22" rx="11" fill="#C36A00"/>
-        <text x="47" y="341" font-size="10.5" class="b" fill="#FFF" text-anchor="middle" letter-spacing="0.5">START</text>
-        <rect x="84" y="326" width="50" height="22" rx="11" fill="#C36A00" opacity="0.09"/>
-        <text x="109" y="341" font-size="10.5" class="b" fill="#C36A00" text-anchor="middle" letter-spacing="0.5">END</text>
-        <text x="146" y="341" font-size="11.5" class="sb" fill="#6D6D72">1.00×</text>
-        <text x="375" y="341" font-size="11.5" class="sb" fill="#FFB340" text-anchor="end">Reset move</text>
-      </g>
-
-      <!-- caption (left) + canvas menu chip (right) -->
-      <g id="caption-row">
-        <text x="18" y="368" font-size="11.5" class="sec">Ken Burns start framing — drag the white frame</text>
-        <text x="18" y="383" font-size="11.5" class="sec">to place it, pinch to zoom. The dashed frame is</text>
-        <text x="18" y="398" font-size="11.5" class="sec">the end.</text>
         <g id="canvas-menu">
-          <rect x="309" y="356" width="66" height="34" rx="17" fill="#FFF" filter="url(#card)"/>
-          <text x="336" y="378" font-size="13.5" class="sb" fill="#C36A00" text-anchor="middle">16:9</text>
-          <path d="M352 370.5 l4.5 4.5 4.5 -4.5" stroke="#C36A00" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <rect x="305" y="284" width="62" height="24" rx="12" fill="#000" opacity="0.55"/>
+          <text x="328" y="300" font-size="12" class="sb" fill="#FFF" text-anchor="middle">16:9</text>
+          <path d="M347 296 l4 4 4 -4" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
+      </g>
+
+      <!-- framing bar: identity-dotted START/END pills · zoom · Reset move (accent) -->
+      <g id="framing-bar">
+        <rect x="18" y="326" width="74" height="24" rx="12" fill="#C36A00"/>
+        <circle cx="31" cy="338" r="3.5" fill="#FFF"/>
+        <circle cx="31" cy="338" r="3.5" fill="none" stroke="#000" stroke-opacity="0.25" stroke-width="0.5"/>
+        <text x="60" y="342" font-size="10.5" class="b" fill="#FFF" text-anchor="middle" letter-spacing="0.5">START</text>
+        <rect x="100" y="326" width="62" height="24" rx="12" fill="#C36A00" opacity="0.09"/>
+        <circle cx="113" cy="338" r="3.5" fill="#FFB340"/>
+        <text x="137" y="342" font-size="10.5" class="b" fill="#C36A00" text-anchor="middle" letter-spacing="0.5">END</text>
+        <text x="174" y="342" font-size="11.5" class="sb" fill="#6D6D72">1.00×</text>
+        <text x="375" y="342" font-size="11.5" class="sb" fill="#C36A00" text-anchor="end">Reset move</text>
+      </g>
+
+      <!-- header row: TIMELINE left, Ken Burns tri-state right (Auto) -->
+      <g id="timeline-header">
+        <text x="20" y="384" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 3 CLIPS</text>
+        <text x="234" y="383" font-size="10.5" class="sb" fill="#6D6D72" text-anchor="end">Ken Burns</text>
+        <rect x="240" y="366" width="137" height="28" rx="14" fill="#FFF" filter="url(#card)"/>
+        <text x="258.5" y="384" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Off</text>
+        <rect x="277" y="368" width="42" height="24" rx="12" fill="#C36A00"/>
+        <text x="298" y="384" font-size="11" class="sb" fill="#FFF" text-anchor="middle">Auto</text>
+        <text x="347" y="384" font-size="11" class="sb" fill="#C36A00" text-anchor="middle">Custom</text>
       </g>
 
       <!-- TIMELINE: KB-aware subtitles ("plays 6.0s …") -->
       <g id="timeline">
-        <text x="20" y="431" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">TIMELINE · 3 CLIPS</text>
-        <rect x="16" y="443" width="361" height="198" rx="16" fill="#FFF" filter="url(#card)"/>
+        <rect x="16" y="402" width="361" height="198" rx="16" fill="#FFF" filter="url(#card)"/>
 
         <!-- row 1 (selected · trimmed → windowed start point) -->
         <g id="row-1">
-          <rect x="16" y="443" width="361" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
-          <rect x="28" y="455" width="58" height="42" rx="7" fill="url(#clipA)"/>
-          <path d="M53 470 l9 6 -9 6 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
-          <text x="96" y="471" font-size="14.5" class="sb" fill="#000">Harbour dawn</text>
-          <text x="96" y="490" font-size="11.5" class="sec">100× · plays 6.0s fro…</text>
-          <rect x="222" y="479" width="58" height="14" rx="7" fill="#FFB340" opacity="0.28"/>
-          <text x="251" y="489" font-size="9.5" class="b" fill="#8A4A00" text-anchor="middle">TRIMMED</text>
-          <circle cx="322" cy="476" r="17" fill="#C36A00" opacity="0.1"/>
-          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timeline.selection"><path d="M316 469 h-2 v14 h2 M328 469 h2 v14 h-2"/><path d="M319 476 h6"/></g>
-          <path d="M352 470 h16 M352 476 h16 M352 482 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
+          <rect x="16" y="402" width="361" height="66" rx="12" fill="#C36A00" opacity="0.07"/>
+          <rect x="28" y="414" width="58" height="42" rx="7" fill="url(#clipA)"/>
+          <path d="M53 429 l9 6 -9 6 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+          <text x="96" y="430" font-size="14.5" class="sb" fill="#000">Harbour dawn</text>
+          <text x="96" y="449" font-size="11.5" class="sec">100× · plays 6.0s fro…</text>
+          <rect x="222" y="438" width="58" height="14" rx="7" fill="#FFB340" opacity="0.28"/>
+          <text x="251" y="448" font-size="9.5" class="b" fill="#8A4A00" text-anchor="middle">TRIMMED</text>
+          <circle cx="322" cy="435" r="17" fill="#C36A00" opacity="0.1"/>
+          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="timeline.selection"><path d="M316 428 h-2 v14 h2 M328 428 h2 v14 h-2"/><path d="M319 435 h6"/></g>
+          <path d="M352 429 h16 M352 435 h16 M352 441 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round" data-symbol="line.3.horizontal"/>
         </g>
-        <line x1="96" y1="509" x2="377" y2="509" stroke="#000" stroke-opacity="0.06"/>
+        <line x1="96" y1="468" x2="377" y2="468" stroke="#000" stroke-opacity="0.06"/>
 
         <!-- row 2: crop badge still truncates the sub -->
         <g id="row-2">
-          <rect x="28" y="521" width="58" height="42" rx="7" fill="url(#clipA)"/>
-          <path d="M53 536 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
-          <text x="96" y="537" font-size="14.5" class="sb" fill="#000">City tram</text>
-          <text x="96" y="556" font-size="11.5" class="sec">100× · plays 6.0s fr…</text>
-          <rect x="218" y="545" width="66" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
-          <rect x="218" y="545" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
-          <text x="251" y="555" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 16:9</text>
-          <circle cx="322" cy="542" r="17" fill="#C36A00" opacity="0.1"/>
-          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M316 535 h-2 v14 h2 M328 535 h2 v14 h-2"/><path d="M319 542 h6"/></g>
-          <path d="M352 536 h16 M352 542 h16 M352 548 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
+          <rect x="28" y="480" width="58" height="42" rx="7" fill="url(#clipA)"/>
+          <path d="M53 495 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
+          <text x="96" y="496" font-size="14.5" class="sb" fill="#000">City tram</text>
+          <text x="96" y="515" font-size="11.5" class="sec">100× · plays 6.0s fr…</text>
+          <rect x="218" y="504" width="66" height="14" rx="7" fill="#C36A00" opacity="0.06"/>
+          <rect x="218" y="504" width="66" height="14" rx="7" fill="none" stroke="#C36A00" stroke-opacity="0.55" stroke-width="1.2"/>
+          <text x="251" y="514" font-size="9.5" class="b" fill="#C36A00" text-anchor="middle">CROP 16:9</text>
+          <circle cx="322" cy="501" r="17" fill="#C36A00" opacity="0.1"/>
+          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M316 494 h-2 v14 h2 M328 494 h2 v14 h-2"/><path d="M319 501 h6"/></g>
+          <path d="M352 495 h16 M352 501 h16 M352 507 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
         </g>
-        <line x1="96" y1="575" x2="377" y2="575" stroke="#000" stroke-opacity="0.06"/>
+        <line x1="96" y1="534" x2="377" y2="534" stroke="#000" stroke-opacity="0.06"/>
 
         <!-- row 3 -->
         <g id="row-3">
-          <rect x="28" y="587" width="58" height="42" rx="7" fill="url(#clipA)"/>
-          <path d="M53 602 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
-          <text x="96" y="603" font-size="14.5" class="sb" fill="#000">Ridge sunset</text>
-          <text x="96" y="622" font-size="11.5" class="sec">100× · plays 6.0s from the start</text>
-          <circle cx="322" cy="608" r="17" fill="#C36A00" opacity="0.1"/>
-          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M316 601 h-2 v14 h2 M328 601 h2 v14 h-2"/><path d="M319 608 h6"/></g>
-          <path d="M352 602 h16 M352 608 h16 M352 614 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
+          <rect x="28" y="546" width="58" height="42" rx="7" fill="url(#clipA)"/>
+          <path d="M53 561 l9 6 -9 6 z" fill="#FFF" opacity="0.8"/>
+          <text x="96" y="562" font-size="14.5" class="sb" fill="#000">Ridge sunset</text>
+          <text x="96" y="581" font-size="11.5" class="sec">100× · plays 6.0s from the start</text>
+          <circle cx="322" cy="567" r="17" fill="#C36A00" opacity="0.1"/>
+          <g stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round"><path d="M316 560 h-2 v14 h2 M328 560 h2 v14 h-2"/><path d="M319 567 h6"/></g>
+          <path d="M352 561 h16 M352 567 h16 M352 573 h16" stroke="#B9B9BE" stroke-width="1.8" stroke-linecap="round"/>
         </g>
       </g>
 
       <!-- add clips (dashed) -->
       <g id="add-clips">
-        <rect x="16" y="653" width="361" height="52" rx="14" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
-        <path d="M158 684 v-10 M153 679 h10" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" data-symbol="plus"/>
-        <text x="172" y="689" font-size="15" class="sb" fill="#C36A00">Add clips</text>
+        <rect x="16" y="612" width="361" height="52" rx="14" fill="none" stroke="#000" stroke-opacity="0.18" stroke-width="1.5" stroke-dasharray="5 4"/>
+        <path d="M158 643 v-10 M153 638 h10" stroke="#C36A00" stroke-width="2.2" stroke-linecap="round" data-symbol="plus"/>
+        <text x="172" y="648" font-size="15" class="sb" fill="#C36A00">Add clips</text>
       </g>
 
-      <!-- Ken Burns card, ON — grows its options downward (full copy in desc); top edge at the fold -->
-      <g id="ken-burns-on">
-        <rect x="16" y="717" width="361" height="96" rx="16" fill="#FFF" filter="url(#card)"/>
-        <text x="30" y="741" font-size="14.5" class="sb" fill="#000">Ken Burns</text>
-        <rect x="312" y="722" width="51" height="31" rx="15.5" fill="#C36A00"/>
-        <circle cx="347.5" cy="737.5" r="13.5" fill="#FFF" filter="url(#card)"/>
+      <!-- summary card, its lower edge behind the tab bar at this scroll position -->
+      <g id="summary">
+        <rect x="16" y="676" width="361" height="120" rx="18" fill="#1C1C1E"/>
+        <text x="32" y="712" font-size="26" class="b" fill="#FFF">0:17</text>
+        <text x="361" y="708" font-size="12" fill="#FFF" opacity="0.65" text-anchor="end">exports 3840×2160</text>
+        <text x="32" y="730" font-size="12.5" fill="#FFF" opacity="0.65">3 clips · 16:9 canvas</text>
+        <text x="32" y="752" font-size="11.5" fill="#FFF" opacity="0.45">Ken Burns moves on every clip, crossfades between them.</text>
       </g>
 
       <!-- floating tab bar -->
@@ -166,5 +183,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Collection detail · Ken Burns framing · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift — active/ghost framing frames · START/END bar · KB-aware rows · options: kenburns-options file</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CollectionDetailView.swift — white start / amber end identity frames · dot tags · ties + haloed arrow · dotted pills · Auto in the header</text>
 </svg>

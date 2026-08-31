@@ -123,9 +123,19 @@ struct LapseCollection: Identifiable, Codable, Equatable {
 
     /// The Ken Burns export mode: gentle zoom/pan on every clip, with the
     /// pacing and joining choices that make a one-tap export cut well.
-    /// Stored once configured so turning the mode off and on again keeps the
-    /// user's answers; `enabled` is the toggle.
+    /// Stored once configured so switching modes keeps the user's answers;
+    /// `enabled` is the master switch, `custom` says whether the live values
+    /// were applied from the Custom drawer or are the dealt Auto defaults.
     struct KenBurnsSettings: Codable, Equatable {
+        /// The pacing/join answers on their own — the shape `lastCustom`
+        /// parks while Auto plays the defaults.
+        struct CustomChoices: Codable, Equatable {
+            var consistentDurations: Bool
+            var clipSeconds: Int
+            var autoAdjustSpeed: Bool
+            var fadeTransition: Bool
+        }
+
         var enabled: Bool
         /// Every clip occupies the same length in the export.
         var consistentDurations: Bool
@@ -138,6 +148,41 @@ struct LapseCollection: Identifiable, Codable, Equatable {
         var autoAdjustSpeed: Bool
         /// Crossfade between clips instead of a straight cut.
         var fadeTransition: Bool
+        /// The live values were applied from the Custom drawer. False means
+        /// Auto — the dealt best-effort defaults are in charge.
+        var custom: Bool
+        /// The last applied Custom values, parked while Auto plays the
+        /// defaults so switching back restores them without a confirmation.
+        /// nil while Custom is live (the fields above ARE the custom values)
+        /// and before Custom is first applied. Never part of the export
+        /// recipe — parking must not invalidate a kept render.
+        var lastCustom: CustomChoices?
+
+        init(enabled: Bool, consistentDurations: Bool, clipSeconds: Int,
+             autoAdjustSpeed: Bool, fadeTransition: Bool,
+             custom: Bool = false, lastCustom: CustomChoices? = nil) {
+            self.enabled = enabled
+            self.consistentDurations = consistentDurations
+            self.clipSeconds = clipSeconds
+            self.autoAdjustSpeed = autoAdjustSpeed
+            self.fadeTransition = fadeTransition
+            self.custom = custom
+            self.lastCustom = lastCustom
+        }
+
+        /// Settings stored before the tri-state existed decode as Auto —
+        /// their live values are untouched, so nothing plays differently
+        /// until a mode is actually tapped. Encoding stays synthesized.
+        init(from decoder: Decoder) throws {
+            let container = try decoder.container(keyedBy: CodingKeys.self)
+            enabled = try container.decode(Bool.self, forKey: .enabled)
+            consistentDurations = try container.decode(Bool.self, forKey: .consistentDurations)
+            clipSeconds = try container.decode(Int.self, forKey: .clipSeconds)
+            autoAdjustSpeed = try container.decode(Bool.self, forKey: .autoAdjustSpeed)
+            fadeTransition = try container.decode(Bool.self, forKey: .fadeTransition)
+            custom = (try? container.decodeIfPresent(Bool.self, forKey: .custom)) ?? false
+            lastCustom = (try? container.decodeIfPresent(CustomChoices.self, forKey: .lastCustom)) ?? nil
+        }
     }
 
     /// The crossfade length `fadeTransition` uses. One place on purpose —
@@ -167,6 +212,13 @@ struct LapseCollection: Identifiable, Codable, Equatable {
 
     var kenBurnsEnabled: Bool { kenBurns?.enabled == true }
 
+    /// The tri-state the header control draws: Off, Auto (dealt defaults),
+    /// or Custom (drawer-applied values).
+    var kenBurnsMode: KenBurnsMode {
+        guard let kenBurns, kenBurns.enabled else { return .off }
+        return kenBurns.custom ? .custom : .auto
+    }
+
     /// Whether each clip's contribution is a fixed window from its in point —
     /// the mode where the timeline's per-clip editor sets start points
     /// instead of free trims.
@@ -193,6 +245,16 @@ struct LapseCollection: Identifiable, Codable, Equatable {
 enum KenBurnsMoveEnd: String, CaseIterable {
     case start
     case end
+}
+
+/// The Ken Burns tri-state: off, the dealt Auto defaults, or drawer-applied
+/// Custom values. Auto ↔ Custom is non-destructive — Custom's answers are
+/// parked in `lastCustom` and restored, so no mode switch needs a
+/// confirmation.
+enum KenBurnsMode: Equatable {
+    case off
+    case auto
+    case custom
 }
 
 // MARK: - Timeline math
