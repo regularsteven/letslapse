@@ -13,6 +13,17 @@ import Foundation
 actor SceneMaskService {
     static let shared = SceneMaskService()
 
+    /// How many frames the static-skyline vote samples.
+    ///
+    /// This is the quality knob for the ONE mask a locked-off shoot needs,
+    /// and it is paid once per project — so it can afford to be generous.
+    /// It buys two things: robustness (a frame where the model loses the
+    /// plot at dusk is outvoted) and RESOLUTION IN THE VALUES — N samples
+    /// give N+1 confidence levels, which is the difference between the
+    /// Threshold dial having 10 positions and having 26. The spike's 9 was
+    /// chosen when the vote was a nice-to-have rather than the default path.
+    static let sequenceSampleCount = 25
+
     private var segmenter: CoreMLSceneSegmenter?
     private var segmenterIdentity: String?
     private var inFlight: [String: Task<SceneMask, Error>] = [:]
@@ -105,7 +116,8 @@ actor SceneMaskService {
         frames: [URL],
         sampleCount: Int,
         presetID: String,
-        render: @escaping @Sendable (URL) -> CGImage?
+        render: @escaping @Sendable (URL) -> CGImage?,
+        progress: (@Sendable (Int, Int) -> Void)? = nil
     ) async throws -> SceneMask {
         if let cached = cachedSkyMask(forKey: key) { return cached }
         let sampled = Self.sample(frames, count: sampleCount)
@@ -119,6 +131,10 @@ actor SceneMaskService {
             // to completion and queues behind the live one on this actor.
             try Task.checkCancellation()
             let frameKey = frameKey(modelIdentity: modelIdentity, url: url, presetID: presetID)
+            // Reported BEFORE the work, so the first frame's decode — the
+            // slowest part on a DNG shoot — is visibly accounted for rather
+            // than looking like a hang.
+            progress?(contributors, sampled.count)
             let mask = try await skyMask(forKey: frameKey) { render(url) }
             if accumulated.isEmpty {
                 width = mask.width
@@ -136,7 +152,7 @@ actor SceneMaskService {
         let mask = SceneMask(
             region: .sky, width: width, height: height, pixels: pixels,
             geometry: .stretch,
-            provenance: "sequence vote · \(contributors) frames")
+            provenance: "one mask · voted across \(contributors) frames")
         SceneMaskStore.write(mask, forKey: key)
         Self.memory.setObject(MaskBox(mask), forKey: key as NSString)
         return mask

@@ -44,6 +44,25 @@ struct SceneMask: Sendable {
     /// debug readout.
     let provenance: String
 
+    /// How many distinct values the grid actually holds. An argmax model
+    /// returns 2 for a single frame — a hard yes/no per cell — and a
+    /// threshold applied to that can only ever be a no-op. A vote across N
+    /// frames returns up to N+1. The UI gates the Threshold dial on this
+    /// rather than on the analysis mode, so a future model that emits real
+    /// probabilities per frame lights the dial up without a UI change.
+    var confidenceLevels: Int {
+        var seen = [Bool](repeating: false, count: 256)
+        var count = 0
+        for pixel in pixels where !seen[Int(pixel)] {
+            seen[Int(pixel)] = true
+            count += 1
+        }
+        return count
+    }
+
+    /// True when thresholding this grid can change the result.
+    var carriesConfidence: Bool { confidenceLevels > 2 }
+
     /// The complementary region's mask: `land = 1 − sky`, by construction.
     func inverted() -> SceneMask {
         SceneMask(
@@ -82,10 +101,17 @@ struct SegmentationSettings: Codable, Equatable, Sendable {
     var threshold: Double = 0.5
     /// Gaussian feather radius, in mask-grid pixels.
     var featherRadius: Double = 2.5
-    /// Conservative erosion of the restoring region, in grid pixels. Bias
-    /// always means LESS occlusion — letters sinking into a mis-detected
-    /// boundary look broken; a sliver of scene not occluding them doesn't.
-    var edgeBias: Double = 1.5
+    /// Boundary bias, in grid pixels, applied to the RESTORING region.
+    ///
+    /// Positive erodes it — less occlusion, letters sit further over the
+    /// scene. Negative dilates it — more occlusion, letters tuck further
+    /// behind. The spike defaulted this to 1.5 on the theory that letters
+    /// sinking into a mis-detected boundary look worse than a sliver of
+    /// scene failing to occlude them. Measured against a hand-drawn skyline
+    /// (2026-08-31) that default cost 0.29 IoU points and pushed type over
+    /// every roofline, so it is 0 now: trust the mask, and let the
+    /// photographer bias it either way when the scene calls for it.
+    var edgeBias: Double = 0
     /// Whether frames are analyzed per frame or as one sequence-level mask.
     var maskMode: MaskMode = .sequence
 

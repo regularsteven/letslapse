@@ -152,7 +152,23 @@ struct PhotoViewerView: View {
     /// The region the Masks tab is inspecting — what "Show semantic mask"
     /// tints and what the mask fetch is for. Editor state: which region is
     /// being LOOKED at says nothing about the piece.
-    @State private var inspectedRegion: OverlayPlacement?
+    ///
+    /// `LL_MASK=sky|land[,tint]` pre-selects it. Nothing on the Masks tab is
+    /// analysed until a region is chosen, so without this the whole screen —
+    /// the dials, the status line, the tint, the analysis itself — is behind
+    /// a click that a screenshot run has no way to make.
+    @State private var inspectedRegion: OverlayPlacement? = {
+        #if DEBUG
+        guard let hook = ProcessInfo.processInfo.environment["LL_MASK"] else { return nil }
+        switch hook.split(separator: ",").first.map(String.init) {
+        case "sky": return .sky
+        case "land": return .land
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }()
     /// A live drag over the preview: the SwiftUI proxy shows `current` while
     /// the baked overlay is suppressed from the render.
     @State private var overlayDrag: OverlayDragState?
@@ -164,7 +180,14 @@ struct PhotoViewerView: View {
     /// opens), never per body evaluation.
     @State private var segModelIdentity: String?
     /// The mask debug view: the semantic mask tinted over the preview.
-    @State private var showMask = false
+    @State private var showMask: Bool = {
+        #if DEBUG
+        return ProcessInfo.processInfo.environment["LL_MASK"]?
+            .split(separator: ",").contains("tint") ?? false
+        #else
+        return false
+        #endif
+    }()
     /// The mask readout in the Text tab — provenance, progress, or an error.
     @State private var maskStatus: String?
 
@@ -1457,6 +1480,8 @@ struct PhotoViewerView: View {
             showMask: $showMask,
             modelInstalled: segModelIdentity != nil,
             maskStatus: inspectedMaskStatus,
+            thresholdIsLive: thresholdIsLive,
+            canVoteAcrossFrames: hasTimeline,
             accent: accentColor,
             thumbnail: { mask in
                 guard let capture else { return nil }
@@ -1481,6 +1506,26 @@ struct PhotoViewerView: View {
         } catch {
             LLog("custom mask import failed: \(error.localizedDescription)")
         }
+    }
+
+    /// Whether the grid currently on screen has anything for the Threshold
+    /// dial to cut. An argmax model on one frame gives 2 levels — a hard
+    /// yes/no — and thresholding that is a no-op; the vote across frames is
+    /// what produces real confidence. A custom mask is a drawn image and
+    /// usually has soft edges, so it answers for itself.
+    private var thresholdIsLive: Bool {
+        guard let region = inspectedRegion else { return true }
+        if let id = region.customMaskID {
+            guard let capture,
+                  let mask = overlayDocument.customMasks.first(where: { $0.id == id })
+            else { return false }
+            return CustomMaskLoader.mask(at: model.customMaskURL(mask, for: capture))?
+                .carriesConfidence ?? false
+        }
+        guard let key = activeSkyMaskKey,
+              let mask = SceneMaskService.shared.cachedSkyMask(forKey: key)
+        else { return overlayDocument.maskSettings.maskMode == .sequence }
+        return mask.carriesConfidence
     }
 
     /// The readout under the mask dials. A custom region is a FILE, so the
@@ -1988,7 +2033,7 @@ struct PhotoViewerView: View {
         if overlayDocument.maskSettings.maskMode == .sequence, hasTimeline {
             return SceneMaskService.shared.sequenceKey(
                 modelIdentity: segModelIdentity, frames: frames,
-                presetID: preset.presetID.uuidString, sampleCount: 9)
+                presetID: preset.presetID.uuidString, sampleCount: SceneMaskService.sequenceSampleCount)
         }
         return SceneMaskService.shared.frameKey(
             modelIdentity: segModelIdentity, url: displayedURL, presetID: preset.presetID.uuidString)
@@ -2066,17 +2111,22 @@ struct PhotoViewerView: View {
         // lands on the next body evaluation, so re-derive the key and bail
         // if the world moved while we slept.
         guard !Task.isCancelled, activeSkyMaskKey == key else { return }
-        maskStatus = "Analyzing scene…"
+        maskStatus = "Analysing the scene…"
         do {
             let mask: SceneMask
             if sequenceMode {
                 mask = try await SceneMaskService.shared.sequenceSkyMask(
                     forKey: key, modelIdentity: segModelIdentity, frames: sequenceFrames,
-                    sampleCount: 9, presetID: preset.presetID.uuidString
-                ) { url in
-                    PhotoGrader.render(
-                        url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
-                }
+                    sampleCount: SceneMaskService.sequenceSampleCount, presetID: preset.presetID.uuidString,
+                    render: { url in
+                        PhotoGrader.render(
+                            url: url, preset: preset, adjustments: adjustments, maxDimension: 512)
+                    },
+                    progress: { done, total in
+                        Task { @MainActor in
+                            maskStatus = "Analysing the scene — frame \(done + 1) of \(total)…"
+                        }
+                    })
             } else {
                 mask = try await SceneMaskService.shared.skyMask(forKey: key) {
                     PhotoGrader.render(

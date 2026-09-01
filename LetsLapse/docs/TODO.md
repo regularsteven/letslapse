@@ -48,6 +48,41 @@ the storage card's clear-cache path; draggable range-band handles;
 SegFormer-B0 ADE20K conversion for true sky probabilities (DETR is 0/1
 argmax).
 
+### Sky mask quality: guided-filter refinement, then a better model
+
+**Detail:** [sky-segmentation-quality.md](sky-segmentation-quality.md) · **Raised:** 2026-08-31, out of Steven's Prague skyline · **Narrowed:** 2026-08-31 — the misleading dials are fixed
+
+Fixed already: Threshold no longer pretends to work on an argmax grid, edge
+bias is bipolar and defaults to 0, the locked-off case is the assumption
+rather than a coin flip, and the vote samples 25 frames so the dial has 26
+levels instead of 10.
+
+Open, in value order:
+
+1. ~~Guided-filter refinement~~ — **shipped 2026-09-01.** The mask boundary
+   now sits 4.9 px from a real image edge instead of 12.6. `CIGuidedFilter`
+   is a registered no-op; the shipped version is box blurs + two
+   `CIColorKernel`s, and the CIContext needs a float working format or the
+   signed coefficients clip to nothing.
+2. **Keep continuous alpha.** The chain still thresholds to binary BEFORE
+   the refinement sees it, then feathers afterwards — it discards the soft
+   boundary and fakes one. Now the biggest remaining structural item:
+   threshold last, or not at all.
+3. **Revisit the threshold default.** Measured on two scenes, the optimum is
+   near the BOTTOM of the range (0.05–0.15), and 0.5 visibly pulls the sky
+   back off the skyline. Two scenes may now be enough to move it.
+4. **A better model.** 2.46 of the 2.69 IoU points of error are the model,
+   not the grid — so this is the biggest single term, and also the biggest
+   job. Candidates: ADE20K scene parsers with a real `sky` class (DNL,
+   ISANet, FastFCN, SegFormer-B0 at 512²; ready-made Core ML conversions
+   exist in the john-rocky zoo) or a sky-specific matting network. Wants a
+   bake-off against the hand-drawn reference before committing.
+
+
+**Do NOT** spend effort on tiled or higher-resolution inference: the ceiling
+test says a perfect mask on today's 448 grid scores 0.9977, so ≤0.23 points
+are available there.
+
 ### Design mirrors for the tabbed editor rail — iOS remainder
 
 **Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:** 2026-08-31 — macOS drawn (30b5836), then rebuilt for Text Features

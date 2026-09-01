@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Photo viewer / grading editor · Masks tab · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift (masksTab) hosting App/Overlay/OverlayMasksPanel.swift — the Masks page of the editor rail, added 2026-08-31 from the Claude Design &quot;Text Features&quot; spec. Window, media column and timeline strip are photo-viewer.svg's. WHY IT IS A TAB AND NOT A CARD INSIDE TEXT: what it authors belongs to the PROJECT, not to a layer — every text layer can pick any of these regions — so the place to author them cannot live inside one layer's disclosure. INTELLIGENT PLACEMENT — the project's regions as pills: Sky and Land (the segmentation model's one analysis read two ways, never two detectors), then each custom mask's name and, where it has one, its inverted name. Picking a pill SELECTS it for inspection; it is not a placement, and clicking it again deselects — nothing is analysed until one is chosen. Sky and Land render disabled without the model installed, with the footnote &quot;Sky and Land need the segmentation model — download it in Settings ▸ AI Models. Text placement works without it, and a custom mask needs nothing.&quot; (desc-only). Once a region is chosen: &quot;Show semantic mask&quot; (ON here — tints the post-processed region magenta over the live composite, edge bias excluded so the debug view shows what segmentation produced, not what the restorer eroded); Analysis Sequence · This frame (Sequence = the 9-frame vote mask, flicker-proof for a locked-off shoot; This frame is the drift-inspection mode and never what exports use); the three live dials Threshold / Feather / Edge bias (post-processing only — masks are cached raw, so the dials cost zero re-inference; edge bias erodes whichever region RESTORES, so bias always means less occlusion); and a status line that is region-aware — the model's provenance for Sky/Land, the FILE's for a custom mask, and &quot;mask file missing — this region will not occlude&quot; when the file has gone. CUSTOM MASKS — hand-supplied black &amp; white PNG/JPEG, added by drop or file picker, COPIED into the project's masks/ folder (never referenced in place: a sandbox-scoped drop is gone by the next launch, and the mask has to survive an archive round trip; masks/ is in ProjectArchive.transferableSubfolders, so it travels in .lapse archives and device transfers). White is the region the name refers to; the optional inverted name gives the complement its own pill. &quot;Replace Sky &amp; Land&quot; — at most one mask per project may claim it, and while claimed the Sky and Land pills drop out and that mask's two names become the project's whole vocabulary. Deleting a mask, or a mask claiming the replacement, drops any layer pointing at a region that no longer exists back to None — rendering unoccluded in silence would read as a segmentation bug rather than a missing mask. A custom mask is a FILE, so it needs no model and costs no inference; it loads through CustomMaskLoader into the same SceneMask grid the model produces, which is what lets one code path serve both. STAGED HERE: Sky selected and tinted, one custom mask &quot;Rooftops&quot; / &quot;Below the roofline&quot;. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=masks, LL_SEG_MODEL=&lt;path&gt;. Verified against the running Mac app 2026-08-31.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift (masksTab) hosting App/Overlay/OverlayMasksPanel.swift — the Masks page of the editor rail, added 2026-08-31 from the Claude Design &quot;Text Features&quot; spec. Window, media column and timeline strip are photo-viewer.svg's. WHY IT IS A TAB AND NOT A CARD INSIDE TEXT: what it authors belongs to the PROJECT, not to a layer — every text layer can pick any of these regions — so the place to author them cannot live inside one layer's disclosure. INTELLIGENT PLACEMENT — the project's regions as pills: Sky and Land (the segmentation model's one analysis read two ways, never two detectors), then each custom mask's name and, where it has one, its inverted name. Picking a pill SELECTS it for inspection; it is not a placement, and clicking it again deselects — nothing is analysed until one is chosen. Sky and Land render disabled without the model installed, with the footnote &quot;Sky and Land need the segmentation model — download it in Settings ▸ AI Models. Text placement works without it, and a custom mask needs nothing.&quot; (desc-only). Once a region is chosen: &quot;Show semantic mask&quot; (ON here — tints the post-processed region magenta over the live composite, edge bias excluded so the debug view shows what segmentation produced, not what the restorer eroded); &quot;Camera locked off&quot; (ON, and the DEFAULT — a timelapse is shot on a tripod, so the skyline is identical in every frame and ONE mask voted across 25 of them beats any single frame's: measured 2026-08-31 against a hand-drawn skyline, mean single frame 0.959 IoU, voted 0.975. Turning it off re-detects per frame, which is slower and flickers where the model changes its mind — the exception, for a camera that actually moved. It was a symmetric Sequence/This-frame control until this measurement made one side the obvious default); the three live dials Threshold / Feather / Edge bias (post-processing only — masks are cached raw, so the dials cost zero re-inference. THRESHOLD IS DISABLED, with a reason, whenever the grid on screen carries no confidence: this model answers sky-or-not per cell with an argmax, so a single frame's mask holds exactly two values and thresholding it cannot change anything — the vote across frames is what turns those answers into confidence, 26 levels of it. The gate reads the MASK, not the mode, so a future model that emits real per-frame probabilities lights the dial up for free. EDGE BIAS IS BIPOLAR and defaults to 0: positive erodes the occluder — less occlusion, type creeps over the roofline — negative grows it, which is what a spiky skyline usually wants. The spike's 1.5 default measured at −0.29 IoU points); and a status line that is region-aware — the model's provenance for Sky/Land, the FILE's for a custom mask, and &quot;mask file missing — this region will not occlude&quot; when the file has gone. CUSTOM MASKS — hand-supplied black &amp; white PNG/JPEG, added by drop or file picker, COPIED into the project's masks/ folder (never referenced in place: a sandbox-scoped drop is gone by the next launch, and the mask has to survive an archive round trip; masks/ is in ProjectArchive.transferableSubfolders, so it travels in .lapse archives and device transfers). White is the region the name refers to; the optional inverted name gives the complement its own pill. &quot;Replace Sky &amp; Land&quot; — at most one mask per project may claim it, and while claimed the Sky and Land pills drop out and that mask's two names become the project's whole vocabulary. Deleting a mask, or a mask claiming the replacement, drops any layer pointing at a region that no longer exists back to None — rendering unoccluded in silence would read as a segmentation bug rather than a missing mask. A custom mask is a FILE, so it needs no model and costs no inference; it loads through CustomMaskLoader into the same SceneMask grid the model produces, which is what lets one code path serve both. STAGED HERE: Sky selected and tinted, one custom mask &quot;Rooftops&quot; / &quot;Below the roofline&quot;. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=masks, LL_SEG_MODEL=&lt;path&gt;. Verified against the running Mac app 2026-08-31.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
     <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
@@ -129,7 +129,7 @@
            selects it for inspection and tuning — it is not a placement,
            and clicking it again deselects. -->
       <g id="card-placement">
-        <rect x="696" y="110" width="308" height="330" rx="12" fill="#FFFFFF"/>
+        <rect x="696" y="110" width="308" height="354" rx="12" fill="#FFFFFF"/>
         <text x="710" y="132" font-size="13" class="sb" fill="#6D6D72">Intelligent Placement</text>
         <rect x="710" y="142" width="280" height="52" rx="14" fill="#F2F2F7"/>
         <rect x="713" y="145" width="44" height="22" rx="11" fill="#C36A00"/>
@@ -143,52 +143,55 @@
         <rect x="710.5" y="240.5" width="15" height="15" rx="4" fill="#C36A00"/>
         <path d="M714 248 L717 251 L722 245" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="checkmark"/>
         <text x="734" y="253" font-size="13.5" class="sb" fill="#000000">Show semantic mask</text>
-        <text x="710" y="279" font-size="12.5" class="sb" fill="#6D6D72">Analysis</text>
-        <rect x="840" y="266" width="150" height="26" rx="13" fill="#F2F2F7"/>
-        <rect x="842" y="268" width="76" height="22" rx="11" fill="#C36A00"/>
-        <text x="880" y="283" font-size="11.5" class="sb" text-anchor="middle" fill="#FFFFFF">Sequence</text>
-        <text x="954" y="283" font-size="11.5" class="sb" text-anchor="middle" fill="#C36A00">This frame</text>
-        <text x="708" y="314" font-size="12.5" class="sb" fill="#6D6D72">Threshold</text>
-        <rect x="782" y="310" width="148" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="782" y="310" width="74" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="856" cy="312" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="1002" y="316" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">0.50</text>
-        <text x="708" y="345" font-size="12.5" class="sb" fill="#6D6D72">Feather</text>
-        <rect x="782" y="341" width="148" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="782" y="341" width="46" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="828" cy="343" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="1002" y="347" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">2.5</text>
-        <text x="708" y="376" font-size="12.5" class="sb" fill="#6D6D72">Edge bias</text>
-        <rect x="782" y="372" width="148" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="782" y="372" width="56" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="838" cy="374" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="1002" y="378" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">1.5</text>
-        <text x="710" y="410" font-size="11" fill="#6D6D72">sequence vote · 9 frames · disk cache</text>
+        <rect x="710.5" y="269.5" width="15" height="15" rx="4" fill="#C36A00"/>
+        <path d="M714 277 L717 280 L722 274" stroke="#FFFFFF" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="checkmark"/>
+        <text x="734" y="282" font-size="13.5" class="sb" fill="#000000">Camera locked off</text>
+        <text x="710" y="300" font-size="11" fill="#6D6D72">One mask for the whole shoot, voted across 25</text>
+        <text x="710" y="313" font-size="11" fill="#6D6D72">frames. Turn this off only if the camera moved.</text>
+        <text x="708" y="338" font-size="12.5" class="sb" fill="#6D6D72">Threshold</text>
+        <rect x="782" y="334" width="148" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+        <rect x="782" y="334" width="74" height="4" rx="2" fill="#C36A00"/>
+        <circle cx="856" cy="336" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="1002" y="340" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">0.50</text>
+        <text x="708" y="369" font-size="12.5" class="sb" fill="#6D6D72">Feather</text>
+        <rect x="782" y="365" width="148" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+        <rect x="782" y="365" width="46" height="4" rx="2" fill="#C36A00"/>
+        <circle cx="828" cy="367" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="1002" y="371" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">2.5</text>
+        <text x="708" y="400" font-size="12.5" class="sb" fill="#6D6D72">Edge bias</text>
+        <rect x="782" y="396" width="148" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+        <rect x="782" y="396" width="56" height="4" rx="2" fill="#C36A00"/>
+        <circle cx="838" cy="398" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="1002" y="402" font-size="11.5" class="sb mono" text-anchor="end" fill="#6D6D72">+0.0</text>
+        <text x="710" y="434" font-size="11" fill="#6D6D72">one mask · voted across 25 frames</text>
       </g>
 
       <!-- Custom masks: hand-supplied black &amp; white files that belong to
            the PROJECT. White is the region the name refers to; the
            optional inverted name gives its complement a pill too. -->
+      <!-- Custom masks: hand-supplied black &amp; white files that belong to
+           the PROJECT. White is the region the name refers to; the
+           optional inverted name gives its complement a pill too. -->
       <g id="card-custom">
-        <rect x="696" y="452" width="308" height="246" rx="12" fill="#FFFFFF"/>
-        <text x="710" y="474" font-size="13" class="sb" fill="#6D6D72">Custom Masks</text>
-        <text x="990" y="474" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">1 mask</text>
-        <rect x="710.5" y="486.5" width="279" height="86" rx="10" fill="none" stroke="#000" stroke-opacity="0.09"/>
-        <rect x="720" y="496" width="52" height="40" rx="5" fill="#FFFFFF"/>
-        <path d="M720 496 H772 V513 L758 510 L744 516 L730 511 L720 517 Z" fill="#1C1C1E"/>
-        <rect x="782.5" y="496.5" width="180" height="24" rx="5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
-        <text x="790" y="513" font-size="12.5" class="sb" fill="#000000">Rooftops</text>
-        <rect x="782.5" y="525.5" width="180" height="24" rx="5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
-        <text x="790" y="542" font-size="12" fill="#3A3A3C">Below the roofline</text>
-        <path d="M969 501 H980 M971.5 501 V499 H977.5 V501 M970.4 501 L971.1 511.5 H978 L978.7 501" stroke="#C7C7CC" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="trash"/>
-        <line x1="711" y1="549" x2="989" y2="549" stroke="#000" stroke-opacity="0.07"/>
-        <rect x="720.5" y="554.5" width="14" height="14" rx="4" fill="#FFFFFF" stroke="#000" stroke-opacity="0.28"/>
-        <text x="742" y="566" font-size="11.5" fill="#3A3A3C">Replace Sky &amp; Land (once per project)</text>
-        <rect x="710.75" y="584.75" width="278.5" height="64" rx="10" fill="#C36A00" fill-opacity="0.04" stroke="#C36A00" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
-        <text x="850" y="612" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">＋ Add Custom Mask</text>
-        <text x="850" y="628" font-size="10.5" text-anchor="middle" fill="#8A8A8E">Drop a black &amp; white PNG or JPEG</text>
-        <text x="710" y="668" font-size="11.5" fill="#6D6D72">Masks belong to the project, not the layer — every</text>
-        <text x="710" y="682" font-size="11.5" fill="#6D6D72">text layer can pick any of them.</text>
+        <rect x="696" y="472" width="308" height="228" rx="12" fill="#FFFFFF"/>
+        <text x="710" y="494" font-size="13" class="sb" fill="#6D6D72">Custom Masks</text>
+        <text x="990" y="494" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">1 mask</text>
+        <rect x="710.5" y="506.5" width="279" height="80" rx="10" fill="none" stroke="#000" stroke-opacity="0.09"/>
+        <rect x="720" y="516" width="52" height="40" rx="5" fill="#FFFFFF"/>
+        <path d="M720 516 H772 V533 L758 530 L744 536 L730 531 L720 537 Z" fill="#1C1C1E"/>
+        <rect x="782.5" y="514.5" width="180" height="24" rx="5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
+        <text x="790" y="531" font-size="12.5" class="sb" fill="#000000">Rooftops</text>
+        <rect x="782.5" y="542.5" width="180" height="24" rx="5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
+        <text x="790" y="559" font-size="12" fill="#3A3A3C">Below the roofline</text>
+        <path d="M969 519 H980 M971.5 519 V517 H977.5 V519 M970.4 519 L971.1 529.5 H978 L978.7 519" stroke="#C7C7CC" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="trash"/>
+        <line x1="711" y1="566" x2="989" y2="566" stroke="#000" stroke-opacity="0.07"/>
+        <rect x="720.5" y="571.5" width="14" height="14" rx="4" fill="#FFFFFF" stroke="#000" stroke-opacity="0.28"/>
+        <text x="742" y="583" font-size="11.5" fill="#3A3A3C">Replace Sky &amp; Land (once per project)</text>
+        <rect x="710.75" y="598.75" width="278.5" height="58" rx="10" fill="#C36A00" fill-opacity="0.04" stroke="#C36A00" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
+        <text x="850" y="623" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">＋ Add Custom Mask</text>
+        <text x="850" y="639" font-size="10.5" text-anchor="middle" fill="#8A8A8E">Drop a black &amp; white PNG or JPEG</text>
+        <text x="710" y="676" font-size="11.5" fill="#6D6D72">Masks belong to the project, not the layer — every</text>
+        <text x="710" y="690" font-size="11.5" fill="#6D6D72">text layer can pick any of them.</text>
       </g>
     </g>
   </g>

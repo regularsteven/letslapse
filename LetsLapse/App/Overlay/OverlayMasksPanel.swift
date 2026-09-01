@@ -19,6 +19,14 @@ struct OverlayMasksPanel: View {
     let modelInstalled: Bool
     /// The mask readout — model, timing, cache state, or an error.
     let maskStatus: String?
+    /// Whether the grid on screen carries confidence values at all. An
+    /// argmax model on ONE frame returns a hard yes/no per cell, and a
+    /// threshold applied to that cannot change the result — so the dial says
+    /// so instead of pretending. Gated on the mask, not on the mode, so a
+    /// model that emits real per-frame probabilities lights it up for free.
+    let thresholdIsLive: Bool
+    /// False for a single still, where there is no sequence to vote across.
+    let canVoteAcrossFrames: Bool
     let accent: Color
     /// Resolves a mask's thumbnail; the panel does not know where the
     /// project's files live.
@@ -127,25 +135,53 @@ struct OverlayMasksPanel: View {
             #endif
             .tint(accent)
 
-            HStack(spacing: 8) {
-                Text("Analysis")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                HStack(spacing: 1) {
-                    analysisPill("Sequence", mode: .sequence)
-                    analysisPill("This frame", mode: .perFrame)
+            // The assumption, stated — not a coin flip. A timelapse is shot
+            // on a tripod, so the skyline is the same in every frame, and one
+            // mask voted across the shoot beats any single frame's (measured
+            // 2026-08-31: mean single 0.959, voted 0.975 against a
+            // hand-drawn skyline). Re-detecting per frame is the exception,
+            // for a camera that actually moved.
+            if canVoteAcrossFrames {
+                VStack(alignment: .leading, spacing: 4) {
+                    Toggle(isOn: Binding(
+                        get: { document.maskSettings.maskMode == .sequence },
+                        set: { locked in
+                            document.maskSettings.maskMode = locked ? .sequence : .perFrame
+                            onEdited(true)
+                        })) {
+                        Text("Camera locked off")
+                            .font(.system(size: 13.5, weight: .semibold))
+                    }
+                    #if os(macOS)
+                    .toggleStyle(.checkbox)
+                    #endif
+                    .tint(accent)
+
+                    Text(document.maskSettings.maskMode == .sequence
+                        ? "One mask for the whole shoot, voted across \(SceneMaskService.sequenceSampleCount) frames. Turn this off only if the camera moved."
+                        : "Re-detecting on every frame. Slower, and it flickers where the model changes its mind — only worth it if the camera moved.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .padding(2)
-                .background(Capsule().fill(LL.screenBackground))
             }
 
             dial("Threshold", value: $document.maskSettings.threshold,
                  range: 0.05...0.95, format: "%.2f")
+                .disabled(!thresholdIsLive)
+                .opacity(thresholdIsLive ? 1 : 0.42)
+            if !thresholdIsLive {
+                Text("This model answers sky-or-not per cell with no confidence attached, so there is nothing for a threshold to cut. Voting across frames is what turns those answers into confidence.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             dial("Feather", value: $document.maskSettings.featherRadius,
                  range: 0...8, format: "%.1f")
+            // Bipolar: negative grows the occluder, so type tucks further
+            // behind a spiky skyline instead of creeping over it.
             dial("Edge bias", value: $document.maskSettings.edgeBias,
-                 range: 0...4, format: "%.1f")
+                 range: -2...4, format: "%+.1f")
 
             if let maskStatus {
                 Text(maskStatus)
@@ -155,29 +191,6 @@ struct OverlayMasksPanel: View {
             }
         }
         .padding(.top, 2)
-    }
-
-    private func analysisPill(
-        _ title: String, mode: SegmentationSettings.MaskMode
-    ) -> some View {
-        let selected = document.maskSettings.maskMode == mode
-        return Button {
-            guard !selected else { return }
-            document.maskSettings.maskMode = mode
-            // A finished gesture: the mode is part of the persisted document
-            // (the export reads it), not just a view state.
-            onEdited(true)
-        } label: {
-            Text(title)
-                .font(.system(size: 11.5, weight: .semibold))
-                .foregroundStyle(selected ? Color.white : accent)
-                .padding(.horizontal, 11)
-                .padding(.vertical, 5)
-                .background(Capsule().fill(selected ? accent : Color.clear))
-                .contentShape(Capsule())
-        }
-        .buttonStyle(.plain)
-        .accessibilityAddTraits(selected ? [.isSelected] : [])
     }
 
     private func dial(

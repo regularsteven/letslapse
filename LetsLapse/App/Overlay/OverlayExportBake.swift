@@ -70,11 +70,11 @@ extension AppModel {
             let frames = visibleFrameURLs(for: capture)
             let key = SceneMaskService.shared.sequenceKey(
                 modelIdentity: source.identity, frames: frames,
-                presetID: preset.presetID.uuidString, sampleCount: 9)
+                presetID: preset.presetID.uuidString, sampleCount: SceneMaskService.sequenceSampleCount)
             do {
                 masks.sky = try await SceneMaskService.shared.sequenceSkyMask(
                     forKey: key, modelIdentity: source.identity, frames: frames,
-                    sampleCount: 9, presetID: preset.presetID.uuidString
+                    sampleCount: SceneMaskService.sequenceSampleCount, presetID: preset.presetID.uuidString
                 ) { url in
                     PhotoGrader.render(
                         url: url, preset: preset, adjustments: adjustments, maxDimension: 512)

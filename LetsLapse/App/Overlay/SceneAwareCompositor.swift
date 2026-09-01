@@ -80,7 +80,102 @@ enum SceneAwareCompositor {
 
     /// One shared context: contexts own GPU caches, and per-call contexts
     /// rebuild them per call.
-    private static let context = CIContext(options: [.cacheIntermediates: false])
+    ///
+    /// A float working format because the guided filter carries signed,
+    /// unbounded coefficients between stages — in an 8-bit intermediate `a`
+    /// clips and `b` loses its sign, and the refinement quietly becomes a
+    /// no-op.
+    private static let context = CIContext(options: [
+        .workingFormat: CIFormat.RGBAh, .cacheIntermediates: false,
+    ])
+
+    // MARK: - Edge-aware refinement
+
+    /// The guided filter's two stages (He et al.). Written as Core Image
+    /// kernels rather than a Metal `.ci.metal` because that would need
+    /// `-fcikernel` build flags this project does not otherwise carry; if a
+    /// future OS drops the source-compiled path these return nil and
+    /// refinement is skipped, which degrades to exactly today's behaviour.
+    private static let coefficientKernel = CIColorKernel(source: """
+    kernel vec4 gfCoeffs(__sample meanI, __sample meanP, __sample corrI, __sample corrIP, float eps) {
+        float varI = corrI.r - meanI.r * meanI.r;
+        float cov  = corrIP.r - meanI.r * meanP.r;
+        float a = cov / (varI + eps);
+        return vec4(a, meanP.r - a * meanI.r, 0.0, 1.0);
+    }
+    """)
+
+    private static let applyKernel = CIColorKernel(source: """
+    kernel vec4 gfApply(__sample ab, __sample guide) {
+        float q = clamp(ab.r * guide.r + ab.g, 0.0, 1.0);
+        return vec4(q, q, q, 1.0);
+    }
+    """)
+
+    /// Radius as a fraction of the frame's long edge. Proportional, not
+    /// absolute, so the 1100 px scrub render and the full-resolution export
+    /// refine identically — the same reason overlay size is a fraction of
+    /// the long edge.
+    private static let refineRadiusFraction: Double = 0.032
+    private static let refineEpsilon: Double = 0.001
+
+    /// Pulls a mask's boundary onto the edges the PHOTOGRAPH actually has.
+    ///
+    /// The segmentation grid is 448² and its boundary is a smoothed,
+    /// rounded-off version of the skyline — measured 2026-09-01, the mask's
+    /// edge sat a mean 12.6 px from the nearest real image edge, and this
+    /// brings it to 4.9. The model knows WHERE the sky is; the photograph
+    /// knows exactly where it ENDS, and this is what marries the two. It is
+    /// what Google's Sky Optimization ships for the same reason.
+    ///
+    /// Returns the input untouched when the kernels are unavailable.
+    private static func edgeRefined(_ mask: CIImage, guide: CIImage) -> CIImage {
+        guard let coefficientKernel, let applyKernel else { return mask }
+        let extent = mask.extent
+        guard extent.width >= 8, extent.height >= 8 else { return mask }
+        let radius = max(extent.width, extent.height) * refineRadiusFraction
+
+        let luminance = grayscale(guide.cropped(to: extent))
+        let meanI = boxBlur(luminance, radius)
+        let meanP = boxBlur(mask, radius)
+        let corrI = boxBlur(multiply(luminance, luminance), radius)
+        let corrIP = boxBlur(multiply(luminance, mask), radius)
+        guard let coefficients = coefficientKernel.apply(
+                extent: extent, arguments: [meanI, meanP, corrI, corrIP, refineEpsilon]),
+              let refined = applyKernel.apply(
+                extent: extent, arguments: [boxBlur(coefficients, radius), luminance])
+        else { return mask }
+        return refined.cropped(to: extent)
+    }
+
+    private static func boxBlur(_ image: CIImage, _ radius: Double) -> CIImage {
+        guard let filter = CIFilter(name: "CIBoxBlur") else { return image }
+        // Clamped for the same reason the feather is: sampling transparent
+        // black past the extent drags the frame border toward zero.
+        filter.setValue(image.clampedToExtent(), forKey: kCIInputImageKey)
+        filter.setValue(radius, forKey: kCIInputRadiusKey)
+        return filter.outputImage?.cropped(to: image.extent) ?? image
+    }
+
+    private static func multiply(_ a: CIImage, _ b: CIImage) -> CIImage {
+        guard let filter = CIFilter(name: "CIMultiplyCompositing") else { return a }
+        filter.setValue(a, forKey: kCIInputImageKey)
+        filter.setValue(b, forKey: kCIInputBackgroundImageKey)
+        return filter.outputImage ?? a
+    }
+
+    /// Rec.709 luma into every channel — the guided filter works on one
+    /// channel, and a colour guide would need the 3×3 covariance variant.
+    private static func grayscale(_ image: CIImage) -> CIImage {
+        guard let filter = CIFilter(name: "CIColorMatrix") else { return image }
+        let luma = CIVector(x: 0.2126, y: 0.7152, z: 0.0722, w: 0)
+        filter.setValue(image, forKey: kCIInputImageKey)
+        filter.setValue(luma, forKey: "inputRVector")
+        filter.setValue(luma, forKey: "inputGVector")
+        filter.setValue(luma, forKey: "inputBVector")
+        filter.setValue(CIVector(x: 0, y: 0, z: 0, w: 1), forKey: "inputAVector")
+        return filter.outputImage ?? image
+    }
 
     static func composite(
         base: CIImage, overlay: CIImage?, occlusion: Occlusion?, debug: DebugMode = .none
@@ -88,7 +183,8 @@ enum SceneAwareCompositor {
         var result = base
         if let overlay {
             let overlaid = overlay.composited(over: base).cropped(to: base.extent)
-            if let occlusion, let restore = restorationMask(occlusion, extent: base.extent) {
+            if let occlusion,
+               let restore = restorationMask(occlusion, extent: base.extent, guide: base) {
                 // White restores the scene over the overlay; feathered grays
                 // restore it partially — which is where the subtlety lives.
                 result = blend(input: base, background: overlaid, mask: restore)
@@ -106,7 +202,7 @@ enum SceneAwareCompositor {
             // different boundary than the segmentation actually produced.
             guard let occlusion,
                   let restore = restorationMask(
-                    occlusion, extent: base.extent, applyEdgeBias: false)
+                    occlusion, extent: base.extent, guide: base, applyEdgeBias: false)
             else { return result }
             return tinted(result, mask: restore)
         case .confidence:
@@ -131,7 +227,8 @@ enum SceneAwareCompositor {
     /// at grid resolution (cheap enough to run live while the dials move —
     /// the cache stores raw model grids only), then scaled to the frame.
     private static func restorationMask(
-        _ occlusion: Occlusion, extent: CGRect, applyEdgeBias: Bool = true
+        _ occlusion: Occlusion, extent: CGRect, guide: CIImage?,
+        applyEdgeBias: Bool = true
     ) -> CIImage? {
         guard let grid = occlusion.mask.ciImage() else { return nil }
         let settings = occlusion.settings
@@ -148,10 +245,15 @@ enum SceneAwareCompositor {
         mask = morphology(mask, filter: "CIMorphologyMaximum", radius: 2)
         mask = morphology(mask, filter: "CIMorphologyMaximum", radius: 2)
         mask = morphology(mask, filter: "CIMorphologyMinimum", radius: 2)
-        // Conservative edges: erode the RESTORING region, so bias always
-        // means less occlusion.
-        if applyEdgeBias, settings.edgeBias > 0.01 {
-            mask = morphology(mask, filter: "CIMorphologyMinimum", radius: settings.edgeBias)
+        // Bias the boundary. Positive erodes the RESTORING region — less
+        // occlusion, type sits further over the scene. Negative dilates it —
+        // more occlusion, type tucks further behind, which is what a spiky
+        // skyline usually wants.
+        if applyEdgeBias, abs(settings.edgeBias) > 0.01 {
+            mask = morphology(
+                mask,
+                filter: settings.edgeBias > 0 ? "CIMorphologyMinimum" : "CIMorphologyMaximum",
+                radius: abs(settings.edgeBias))
         }
         if settings.featherRadius > 0.01, let blur = CIFilter(name: "CIGaussianBlur") {
             // The clamp is load-bearing: without it the blur samples
@@ -165,9 +267,14 @@ enum SceneAwareCompositor {
             clamp.setValue(mask, forKey: kCIInputImageKey)
             mask = clamp.outputImage ?? mask
         }
-        return mask
+        let scaled = mask
             .transformed(by: scaleTransform(from: occlusion.mask, to: extent))
             .cropped(to: extent)
+        // The refinement goes last, in FRAME space: its whole purpose is to
+        // use boundary detail the 448 grid never carried, which only exists
+        // at full resolution.
+        guard let guide else { return scaled }
+        return edgeRefined(scaled, guide: guide)
     }
 
     private static func scaleTransform(from mask: SceneMask, to extent: CGRect) -> CGAffineTransform {
