@@ -83,6 +83,70 @@ Open, in value order:
 test says a perfect mask on today's 448 grid scores 0.9977, so ≤0.23 points
 are available there.
 
+### Manual mask correction — "Add to Sky" / "Remove from Sky"
+
+**Detail:** [sky-segmentation-quality.md](sky-segmentation-quality.md) · **Raised:** 2026-09-01, Steven's proposal after the guided-filter work
+
+Let the photographer fix the mask by pointing at what is wrong, instead of
+drawing a whole custom mask by hand. Sky is the nominated region; "Add to
+Sky" grows it from where you click, "Remove from Sky" takes buildings,
+ground and trees back out. The stopping rule is local: keep going while the
+neighbourhood looks the same, stop at a contrast line, because a contrast
+line is an object.
+
+**Most of the engine already exists.** The guided filter shipped 2026-09-01
+is an edge-aware propagator — it already takes a coarse region and snaps it
+to the photograph's own edges. Pointing it at a user's scribble instead of
+the model's output is a step, not a subsystem.
+
+**Design notes, in rough order of how much they matter:**
+
+1. **Corrections must be stored as INTENT, not as pixels.** A stroke list
+   ("sky at 0.4,0.2", "not-sky along this path") re-applies against whatever
+   mask the engine produces next; a baked mask dies on the next re-vote,
+   grade change or model swap — and a model swap is on the roadmap. Getting
+   this wrong means asking people to redo their corrections to get a better
+   model. The tempting shortcut — seed a custom mask from the current Sky
+   mask and let people edit that — works next week and severs the model link
+   permanently. Don't.
+
+2. **Click-to-correct before paint.** Every measured error sits within 50 px
+   of the boundary, and the boundary is now snapped by the guided filter.
+   What is left is the model being confidently wrong about a REGION — a dark
+   roof read as sky, a bright cloud missed. That is one click, not a stroke.
+   Keep a brush for what a flood cannot express (a thin railing, the gap
+   between two spires), but the click is the primary gesture.
+
+3. **Grow locally, not from the seed.** Compare each candidate pixel to its
+   already-accepted neighbours, not to the original seed colour. A sunset sky
+   is a gradient from gold to deep purple: a fixed tolerance from one seed
+   either stops a third of the way up or leaks through a sunlit wall. Local
+   comparison follows the gradient and still stops dead at an edge.
+
+4. **Key on luminance, but pick the frame.** Luminance separates sky from
+   land almost perfectly in daylight (0.4% distribution overlap) and
+   collapses at night (37%) — see the findings doc. Because the camera is
+   locked off, the correction only has to work on ONE frame and then serves
+   the whole shoot, so the tool should run on a bright frame. The app can
+   choose it: the 25 vote samples are already decoded, so scoring
+   separability across them is nearly free. Saturation is the only signal
+   that does not collapse and belongs in the mix as a tiebreak.
+
+5. **Use the vote's confidence to triage.** The 26-level vote already knows
+   where it is unsure, and the uncertainty sits exactly where the errors are.
+   Surfacing "here are the four places I am not confident" turns an
+   open-ended painting task into a short confirm/flip pass — a much better
+   fit for something done once per project.
+
+**Cost ladder:** local flood fill + guided snap, click only (small,
+self-contained, most of the value) → stroke-based corrections stored as
+intent (the schema work; the part worth doing properly) → confidence triage
+UI (small once the above exists) → graph cut / GrabCut (genuinely better on
+hard cases, no Apple builtin, a real port).
+
+**Wrinkle:** drag on the preview is already taken by text placement, so this
+needs an explicit mode. Fine on the Mac, more intrusive on iPhone.
+
 ### Design mirrors for the tabbed editor rail — iOS remainder
 
 **Raised:** 2026-08-31, out of the text-overlay spike · **Narrowed:** 2026-08-31 — macOS drawn (30b5836), then rebuilt for Text Features

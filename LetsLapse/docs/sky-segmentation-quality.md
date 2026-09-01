@@ -171,6 +171,30 @@ why the refinement scores 18.20% → 16.79% on scene 1 but 12.6 → 4.9 px on
 scene 2, where mask and guide are the same frame. **Scene 2's numbers are
 the trustworthy ones**; scene 1's are a floor.
 
+## What separates sky from land, across a day→night run
+
+Measured for the manual-correction job below — which signal a "click the
+clear sky" tool could actually key on. Overlap is how much the two
+distributions sit on top of each other; 0% means trivially separable.
+
+| frame | mean luma | luminance | saturation | local texture |
+| --- | --- | --- | --- | --- |
+| 00200 (day) | 151 | **0.4%** | 20.8% | 2.2% |
+| 02500 (dusk) | 163 | 6.0% | 25.9% | 3.9% |
+| 04800 (night) | 75 | **37.1%** | 25.3% | **55.2%** |
+
+In daylight luminance is very nearly a perfect discriminator. **At night it
+collapses**, and so does texture: the sky goes dark and flat while the city
+lights up, so the buildings become the bright, textured thing and the
+relationship inverts. Saturation is mediocre throughout but is the only
+signal that does not collapse.
+
+The consequence is a product one rather than an algorithmic one: because the
+camera is locked off, a correction only has to work on ONE frame and then
+serves the whole shoot — so the tool should be used on a bright frame, and
+the app is in a position to pick that frame (it already samples 25 for the
+vote, so the separability numbers above are nearly free to compute).
+
 ## Ranked levers, with what each is worth
 
 1. ~~**Guided-filter refinement against the frame**~~ — **DONE 2026-09-01.**
