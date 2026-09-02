@@ -38,6 +38,11 @@ enum LL {
     static var hairline: Color {
         Color.primary.opacity(0.08)
     }
+
+    /// The fill behind compact controls — stepper squares and the ink
+    /// segmented control's track. UIKit's tertiary fill on a grouped screen;
+    /// the design's #E9E9EB.
+    static let controlFill = Color(red: 233 / 255, green: 233 / 255, blue: 235 / 255)
 }
 
 // MARK: - Speed math
@@ -423,5 +428,84 @@ struct MediaBadge: View {
             .padding(.horizontal, 11)
             .padding(.vertical, 5)
             .background(.black.opacity(0.5), in: Capsule())
+    }
+}
+
+// MARK: - Compact controls (2026-09-02)
+
+/// The design's compact stepper: "–" and "+" squares either side of a bold
+/// value, for a number that sits inside a card row rather than owning one
+/// (the Adjust depth drawer and the time-slicing Custom seats).
+struct LLStepControl: View {
+    @Binding var value: Int
+    var range: ClosedRange<Int>
+    var step: Int = 1
+    var suffix: String = ""
+
+    var body: some View {
+        HStack(spacing: 10) {
+            stepButton("minus", enabled: value > range.lowerBound) {
+                value = max(range.lowerBound, value - step)
+            }
+            Text("\(value)\(suffix)")
+                .font(.system(size: 14, weight: .semibold).monospacedDigit())
+                .foregroundStyle(.primary)
+                .frame(minWidth: suffix.isEmpty ? 22 : 34)
+            stepButton("plus", enabled: value < range.upperBound) {
+                value = min(range.upperBound, value + step)
+            }
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityValue("\(value)\(suffix)")
+    }
+
+    private func stepButton(_ symbol: String, enabled: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: symbol)
+                .font(.system(size: 13, weight: .bold))
+                .foregroundStyle(.primary)
+                .frame(width: 28, height: 28)
+                .background(LL.controlFill, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .contentShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .opacity(enabled ? 1 : 0.4)
+        .accessibilityLabel(symbol == "plus" ? "Increase" : "Decrease")
+    }
+}
+
+/// The ink-and-amber segmented control: the chosen seat is `LL.ink` with
+/// `LL.amber` text, the rest sit flat on `LL.controlFill` — the speed/depth
+/// chips' identity, for a picker whose choice is the headline of its card
+/// (the time-slicing count).
+struct LLInkSegment<Value: Hashable>: View {
+    var options: [Value]
+    var label: (Value) -> String
+    @Binding var selection: Value
+
+    var body: some View {
+        HStack(spacing: 2) {
+            ForEach(options, id: \.self) { option in
+                let active = option == selection
+                Button {
+                    selection = option
+                } label: {
+                    Text(label(option))
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(active ? LL.amber : .primary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 8)
+                        .background(
+                            active ? LL.ink : Color.clear,
+                            in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .contentShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(active ? .isSelected : [])
+            }
+        }
+        .padding(2)
+        .background(LL.controlFill, in: RoundedRectangle(cornerRadius: 9, style: .continuous))
     }
 }

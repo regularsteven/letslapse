@@ -1,12 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Adjust — Time slicing, a grid recipe re-opened · portrait</title>
-  <desc>Mirrors the grid branch of `timeSlicingControls` in App/AdjustView.swift — the state a clip rendered as a Grid variation re-opens in ("New blended clip from these settings" rehydrates `BlendProject.timeSlice`, grid and variation stamp included). Grid mode is deliberately NOT offered as a fresh single-slice choice; it arrives through Variations, and this screen exists so a grid recipe can be re-edited rather than silently dropped. Two rows replace Horizontal bands and Time starts: SWEEPS FROM — the origin corner holding the newest cell, the point the wavefront travels away from (top left · top right · bottom left · bottom right) — and WAVEFRONT — Stepped (Manhattan: column + row, so every cell on an anti-diagonal shares a moment) or Radial (Euclidean: a curved front from the corner). Under them, "Use single-axis bands instead" clears the grid and returns the card to the banded controls. Segments is relabelled COLUMNS, because the user-facing count applies to the horizontal axis only and the row count is DERIVED from the shoot's aspect to keep cells square — the value line reads back what resolved against this clip ("24 × 14 of 160 px"), since that is not something the number alone tells you. Cells are exactly square: the cell side is the frame width divided by the column count, rounded up so the columns always cover the frame, and the overhang is split between the two outer cells of each axis, which crop — squareness wins over full coverage, but never at the price of an uncovered strip, which would be unwritten black rather than a crop. Cells under 8 px, or a frame that derives fewer than two rows, are refused in red (a stricter floor than the banded path's 2 px: a band is full-height in its other axis by definition, a cell is not). The spread arithmetic divides by the far corner's DISTANCE rather than by segments − 1, so the same 25% spread means the same thing in both modes. Everything below the divider is the batch, unchanged from adjust.timeslice.portrait.svg — shown here with Variations off, which is how a re-opened single grid clip arrives.</desc>
+  <title>iOS · Adjust — Time slicing, one Grid slice · portrait</title>
+  <desc>Mirrors the `timeSlicingSection` of App/AdjustView.swift with ONE slice armed and Shape = Grid (2026-09-02), drawn scrolled so the card top meets the header. Grid is a first-class shape now — picking it seats a `TimeSliceGrid` (Top-left origin, Manhattan wavefront) on the recipe, and the Time-starts row gives way to SWEEPS FROM: a 2×2 of chips in the corners' own arrangement (Top left · Top right / Bottom left · Bottom right), the chosen corner ink with amber text, naming the cell that holds the newest moment. The wavefront metric (Stepped = Manhattan / Radial = Euclidean) is no longer a control; a recipe re-opened from a Radial batch member keeps its metric silently. Segments reads Columns in its Custom stepper here; the readout resolves the grid against the frame — "Ready — 24 × 14 grid" for 1920×1080 at 24 columns. With a batch (count 4/8) and Shape = Grid, this same corner picker pins every take's origin (`lockOrigin`), the metric alternating so no two grids read the same. Sample: the 184-photo harbour-dusk shoot, 24 columns, 25% spread — `LL_ADJUST=stills` + `LL_TIMESLICE="segs:24,lag:2,grid:topLeft"`.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="chip" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.1"/></filter>
     <filter id="knob" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000" flood-opacity="0.2"/></filter>
   </defs>
-  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-family:'SF Mono','Menlo',monospace}</style>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
   <g clip-path="url(#screen)">
@@ -28,97 +29,95 @@
         <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
       </g>
 
-      <!-- Time slicing card, grid recipe -->
+      <!-- Time slicing card, one Grid slice -->
       <g id="time-slicing-card">
-        <rect x="16" y="116" width="361" height="490" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="116" width="361" height="570" rx="16" fill="#FFF" filter="url(#soft)"/>
 
-        <g id="slicing-toggle-row">
-          <g data-symbol="rectangle.split.3x1" fill="none" stroke="#C36A00" stroke-width="1.6">
-            <rect x="32" y="133" width="18" height="13" rx="2"/>
-            <path d="M38 133 v13 M44 133 v13"/>
+        <g id="header-row">
+          <text x="32" y="148" font-size="15.5" fill="#000">Time slicing</text>
+          <text x="32" y="164" font-size="11.5" fill="#6D6D72">Grid</text>
+          <g id="count-segment" data-symbol="LLInkSegment">
+            <rect x="211" y="134" width="158" height="33" rx="9" fill="#E9E9EB"/>
+            <rect x="252" y="136" width="37" height="29" rx="7" fill="#1C1C1E"/>
+            <g font-size="14" class="b" text-anchor="middle">
+              <text x="231.5" y="155.5" fill="#000">0</text>
+              <text x="270.5" y="155.5" fill="#FFB340">1</text>
+              <text x="309.5" y="155.5" fill="#000">4</text>
+              <text x="348.5" y="155.5" fill="#000">8</text>
+            </g>
           </g>
-          <text x="60" y="141" font-size="15.5" fill="#000">Time slicing</text>
-          <text x="60" y="155" font-size="10.5" class="mono" fill="#6D6D72">timeslice-grid-bl-manh-segs_24-lag_2-v2of4</text>
-          <text x="336" y="146" font-size="12" fill="#8A4A00" text-anchor="end">On</text>
-          <path d="M349 148 l6 -6.5 6 6.5" stroke="#A0A0A6" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
         </g>
-        <line x1="32" y1="168" x2="361" y2="168" stroke="#000" stroke-opacity="0.09"/>
+        <line x1="32" y1="185" x2="361" y2="185" stroke="#000" stroke-opacity="0.09"/>
 
-        <!-- grid-only rows -->
+        <g id="shape">
+          <text x="32" y="215" font-size="14" fill="#000">Shape</text>
+          <rect x="32" y="227" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="250.5" y="229" width="108.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="86" y="247">Vertical</text>
+            <text x="196.5" y="247">Horizontal</text>
+            <text x="307" y="247" class="sb">Grid</text>
+          </g>
+        </g>
+
         <g id="sweeps-from">
-          <text x="32" y="199" font-size="14" fill="#000">Sweeps from</text>
-          <text x="345" y="199" font-size="13.5" fill="#C36A00" text-anchor="end">Bottom left</text>
-          <path d="M354 191 l4 -4.5 4 4.5 M354 197 l4 4.5 4 -4.5" stroke="#C36A00" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+          <text x="32" y="287" font-size="14" fill="#000">Sweeps from</text>
+          <g font-size="12.5" class="b" text-anchor="middle">
+            <rect x="32" y="299" width="161.5" height="36" rx="12" fill="#1C1C1E"/><text x="112.75" y="321.5" fill="#FFB340">Top left</text>
+            <rect x="199.5" y="299" width="161.5" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="280.25" y="321.5" fill="#000">Top right</text>
+            <rect x="32" y="341" width="161.5" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="112.75" y="363.5" fill="#000">Bottom left</text>
+            <rect x="199.5" y="341" width="161.5" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="280.25" y="363.5" fill="#000">Bottom right</text>
+          </g>
         </g>
 
-        <g id="wavefront">
-          <text x="32" y="239" font-size="14" fill="#000">Wavefront</text>
-          <rect x="161" y="221" width="200" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="163" y="223" width="96" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="211" y="239" font-size="12" class="sb" fill="#000" text-anchor="middle">Stepped</text>
-          <text x="311" y="239" font-size="12" fill="#000" text-anchor="middle">Radial</text>
-        </g>
-
-        <text x="32" y="272" font-size="12" fill="#C36A00">Use single-axis bands instead</text>
-
-        <g id="columns">
-          <text x="32" y="305" font-size="14" fill="#000">Columns</text>
-          <text x="273" y="305" font-size="11" class="mono" fill="#6D6D72" text-anchor="end">24 × 14 of 160 px</text>
-          <rect x="283" y="287" width="94" height="28" rx="8" fill="#E9E9EB"/>
-          <line x1="330" y1="289" x2="330" y2="313" stroke="#FFF" stroke-width="1.5"/>
-          <path d="M300 301 h14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M346 301 h14 M353 294 v14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
-        </g>
-
-        <g id="spread">
-          <text x="32" y="345" font-size="14" fill="#000">Spread</text>
-          <text x="273" y="345" font-size="11" class="mono" fill="#6D6D72" text-anchor="end">25% · lag 2 · ≈ 3.0 s</text>
-          <rect x="283" y="327" width="94" height="28" rx="8" fill="#E9E9EB"/>
-          <line x1="330" y1="329" x2="330" y2="353" stroke="#FFF" stroke-width="1.5"/>
-          <path d="M300 341 h14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M346 341 h14 M353 334 v14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
+        <g id="segments">
+          <text x="32" y="410" font-size="14" fill="#000">Segments</text>
+          <rect x="32" y="422" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="34" y="424" width="81.25" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="74.5" y="442" class="sb">Fine</text>
+            <text x="155.5" y="442">Medium</text>
+            <text x="237.5" y="442">Bold</text>
+            <text x="320" y="442">Custom</text>
+          </g>
         </g>
 
         <g id="output">
-          <text x="32" y="385" font-size="14" fill="#000">Output</text>
-          <rect x="101" y="367" width="260" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="275" y="369" width="84" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="144" y="385" font-size="12" fill="#000" text-anchor="middle">Image</text>
-          <text x="230" y="385" font-size="12" fill="#000" text-anchor="middle">Animation</text>
-          <text x="317" y="385" font-size="12" class="sb" fill="#000" text-anchor="middle">Both</text>
+          <text x="32" y="482" font-size="14" fill="#000">Output</text>
+          <rect x="32" y="494" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="250.5" y="496" width="108.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="86" y="514">Image</text>
+            <text x="196.5" y="514">Animation</text>
+            <text x="307" y="514" class="sb">Both</text>
+          </g>
+        </g>
+
+        <g id="spread">
+          <text x="32" y="554" font-size="14" fill="#000">Spread</text>
+          <rect x="32" y="566" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="115.25" y="568" width="81.25" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="73" y="586">Tight</text>
+            <text x="155.5" y="586" class="sb">Medium</text>
+            <text x="237.5" y="586">Wide</text>
+            <text x="320" y="586">Custom</text>
+          </g>
         </g>
 
         <g id="include-regular">
-          <text x="32" y="425" font-size="14" fill="#000">Include regular timelapse</text>
-          <g><rect x="310" y="406" width="51" height="31" rx="15.5" fill="#34C759"/><circle cx="345.5" cy="421.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
+          <text x="32" y="633" font-size="14" fill="#000">Include regular timelapse</text>
+          <g data-symbol="Toggle (on, accent)"><rect x="310" y="613" width="51" height="31" rx="15.5" fill="#C36A00"/><circle cx="345.5" cy="628.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
         </g>
 
-        <line x1="32" y1="447" x2="361" y2="447" stroke="#000" stroke-opacity="0.09"/>
-
-        <g id="variations">
-          <text x="32" y="477" font-size="14" fill="#000">Variations</text>
-          <rect x="161" y="459" width="200" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="163" y="461" width="48" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="186" y="477" font-size="12" class="sb" fill="#000" text-anchor="middle">Off</text>
-          <text x="236" y="477" font-size="12" fill="#000" text-anchor="middle">2</text>
-          <text x="285" y="477" font-size="12" fill="#000" text-anchor="middle">4</text>
-          <text x="335" y="477" font-size="12" fill="#000" text-anchor="middle">8</text>
-        </g>
-        <text x="32" y="509" font-size="11" fill="#6D6D72">Blending runs once — each extra take is a slice pass</text>
-
-        <g id="readout" font-size="11.5" fill="#6D6D72">
-          <text x="32" y="533">Spread 36 frames · 25% of the clip ≈ 3.0 s</text>
-          <text x="32" y="547">Sliced clip 266 frames — the spread is trimmed off the end</text>
-          <text x="32" y="561">Poster: the whole shoot spread across 24 bands</text>
-          <text x="32" y="575">Scratch ≈ 71.6 MB while rendering</text>
-        </g>
+        <text id="readout" x="32" y="669" font-size="12" fill="#6D6D72">Ready — 24 × 14 grid</text>
       </g>
 
       <!-- bottom bar -->
       <g id="bottom-bar">
         <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
         <rect x="16" y="735" width="305" height="50" rx="14" fill="#C36A00"/>
-        <text x="168.5" y="766" font-size="15" class="b" fill="#FFF" text-anchor="middle">Create 302-frame timelapse + slice</text>
+        <text x="168.5" y="766" font-size="15" class="b" fill="#FFF" text-anchor="middle">Create 184-frame timelapse + slice</text>
         <rect x="329" y="735" width="48" height="50" rx="12" fill="#C36A00"/>
         <path d="M347 757 l6 -6.5 6 6.5" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
         <text x="16" y="806" font-size="11" fill="#6D6D72">Your original is kept — you can always make another…</text>
@@ -131,6 +130,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — Time slicing, grid recipe re-opened · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift `timeSliceGridControls` — Sweeps from · Wavefront · escape link · Columns with the derived row count and cell size</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — Time slicing, one Grid slice · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift `timeSlicingSection` — Shape = Grid · Sweeps from corner chips (`timeSliceCornerGrid`) · Segments · Output · Spread · readout</text>
 </svg>

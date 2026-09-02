@@ -1,9 +1,13 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Adjust — New blended clip (photos source) · portrait</title>
-  <desc>Mirrors App/AdjustView.swift for an interval/photos source: FlowHeader, source card, tail-frame banner (shaky end-of-shoot frames with Keep/Exclude), ink stack card with blend-depth slider, photos→frames line and True-light toggle, bottom CTA. No tab bar on flow screens.</desc>
+  <desc>Mirrors App/AdjustView.swift for an interval/photos source after the 2026-09-02 simplification (Claude Design "Adjust Simplified" handoff). Top to bottom: FlowHeader; the warp card from App/WarpTimelineView.swift in the interval vocabulary — the full-width keyframe preview with its "≈ keyframe" badge and source clock, the playhead knob, the output-proportional stretch bar carrying the stretch's depth pill ("1:1"), the clip ruler and the selected-stretch caption "Stretch 1 of 1 · 0:00–0:03 · 1:1 → 7.4s of the clip" (no character word after the ratio any more); the DEPTH CARD (`depthCard`) — one white card holding the chips 1:1 · 2:1 · 3:1 · 5:1 · 8:1 · ··· as bare ratios, the active chip ink with amber text, and the "···" seat opening the drawer drawn in adjust.photos.custom.portrait.svg; the ink estimate card ("Your clip will be" · fps menu · "7.4 seconds · 1:1" · "184 photos → 184 frames" · before/after bar · explainer, clipped by the bottom bar); the Advanced row and the Time-slicing card sit below the fold (adjust.timeslice*.svg). Gone from this screen by decision: the source card (thumbnail · name · meta · Change), the words under the chips (crisp/soft/silky/…), the "custom" caption under "···", and the "One long exposure" row — the whole-shoot stack now lives inside the drawer as "All frames → 1". The tail-frame banner (shaky end-of-shoot frames, Keep/Exclude) still leads the column when it applies; not drawn here. Sample: the 184-photo synthetic harbour-dusk shoot the 2026-09-02 verification was run on, 25 fps.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="preview"><rect x="32" y="129" width="329" height="185" rx="10"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="chip" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.1"/></filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8E4A3A"/><stop offset="1" stop-color="#8C8A5C"/></linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#6E5A24"/><stop offset="1" stop-color="#3A2E14"/></linearGradient>
   </defs>
   <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
@@ -27,62 +31,86 @@
         <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
       </g>
 
-      <!-- source card -->
-      <g id="source-card">
-        <rect x="16" y="115" width="361" height="72" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <rect x="28" y="127" width="64" height="48" rx="7" fill="#4A3B2E"/>
-        <circle cx="50" cy="142" r="6" fill="#FFD9A0" opacity="0.85"/>
-        <polygon points="28,164 54,152 76,162 92,154 92,175 28,175" fill="#2E2419"/>
-        <text x="104" y="147" font-size="14.5" class="sb" fill="#000">Interval — harbour dusk</text>
-        <text x="104" y="164" font-size="12" fill="#6D6D72">184 photos · Interval · DNG · shot yesterday</text>
-        <text x="363" y="155" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Change</text>
-      </g>
-
-      <!-- tail-frame banner -->
-      <g id="tail-frame-banner">
-        <rect x="16" y="201" width="361" height="64" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <path d="M32 233 q3 -10 6 0 t6 0 t6 0" stroke="#FFB340" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="waveform"/>
-        <text x="60" y="228" font-size="13.5" class="sb" fill="#000">3 shaky frames at the end</text>
-        <text x="60" y="245" font-size="11.5" fill="#6D6D72">Looks like a phone-grab as you stopped — drop them?</text>
-        <text x="306" y="238" font-size="12.5" class="sb" fill="#6D6D72" text-anchor="end">Keep</text>
-        <rect x="316" y="219" width="70" height="28" rx="14" fill="#FFB340" transform="translate(-6,0)"/>
-        <text x="345" y="238" font-size="12.5" class="b" fill="#000" text-anchor="middle">Exclude</text>
-      </g>
-
-      <!-- stack card (ink) -->
-      <g id="stack-card">
-        <rect x="16" y="279" width="361" height="278" rx="16" fill="#1C1C1E"/>
-        <text x="32" y="311" font-size="20" class="b" fill="#FFF">A blended timelapse</text>
-        <text x="32" y="331" font-size="12.5" fill="#FFF" opacity="0.6">Every 10 photos average into one frame — a rolling long</text>
-        <text x="32" y="346" font-size="12.5" fill="#FFF" opacity="0.6">exposure that carries motion blur through the whole sequence.</text>
-
-        <text x="32" y="379" font-size="13" class="sb" fill="#FFF">Blend depth</text>
-        <text x="361" y="379" font-size="12" class="sb" fill="#FFB340" text-anchor="end">10 photos → 1 frame</text>
-        <g id="depth-slider">
-          <rect x="32" y="392" width="329" height="4" rx="2" fill="#48484A"/>
-          <rect x="32" y="392" width="46" height="4" rx="2" fill="#FFB340"/>
-          <circle cx="78" cy="394" r="13" fill="#FFF" filter="url(#soft)"/>
+      <!-- warp card (interval vocabulary) -->
+      <g id="warp-card">
+        <rect x="16" y="115" width="361" height="373" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="keyframe-preview" clip-path="url(#preview)">
+          <rect x="32" y="129" width="329" height="185" fill="url(#sky)"/>
+          <rect x="32" y="244" width="329" height="70" fill="#1B2430"/>
+          <circle cx="196.5" cy="217" r="10" fill="#FFD29A"/>
+          <rect x="190" y="252" width="13" height="4" fill="#0E1218"/>
         </g>
-        <text x="32" y="424" font-size="10" fill="#FFF" opacity="0.35">Crisp</text>
-        <text x="361" y="424" font-size="10" fill="#FFF" opacity="0.35" text-anchor="end">Long exposure</text>
+        <rect x="309" y="132" width="52" height="16" rx="8" fill="#000" opacity="0.5"/>
+        <text x="335" y="143.5" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">≈ keyframe</text>
+        <rect x="38" y="295" width="34" height="17" rx="5" fill="#000" opacity="0.5"/>
+        <text x="55" y="307" font-size="10.5" class="sb" fill="#FFF" text-anchor="middle">0:01</text>
 
-        <text x="32" y="455" font-size="13.5" class="sb" fill="#FFF">184 photos → 18 frames</text>
-        <text x="196" y="455" font-size="12" fill="#FFF" opacity="0.45">· 0.6s at 30 fps</text>
+        <!-- playhead + output-proportional bar -->
+        <circle cx="196.5" cy="323" r="9" fill="#C36A00"/>
+        <rect x="33" y="334" width="327" height="45" rx="8" fill="url(#bar)" stroke="#FFB340" stroke-width="2"/>
+        <line x1="196.5" y1="314" x2="196.5" y2="386" stroke="#C36A00" stroke-width="1.6"/>
+        <rect x="184" y="361" width="25" height="14" rx="7" fill="#1C1C1E"/>
+        <text x="196.5" y="371.5" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">1:1</text>
 
-        <text x="32" y="492" font-size="15" fill="#FFF">True-light blending</text>
-        <text x="32" y="508" font-size="11.5" fill="#FFF" opacity="0.5">Blends in linear light — smoother highlights</text>
-        <g id="truelight-toggle" data-symbol="Toggle (on, green)">
-          <rect x="310" y="483" width="51" height="31" rx="15.5" fill="#34C759"/>
-          <circle cx="345" cy="498.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        <!-- clip ruler -->
+        <g font-size="11" fill="#C7C7CC">
+          <text x="32" y="436">0s</text>
+          <text x="196.5" y="436" text-anchor="middle">3.7s</text>
+          <text x="361" y="436" text-anchor="end">7.4s</text>
+        </g>
+
+        <!-- selected-stretch caption -->
+        <rect x="32" y="447" width="329" height="30" rx="12" fill="#F2F2F7"/>
+        <text x="42" y="466" font-size="12" fill="#000">Stretch 1 of 1 · 0:00–0:03 · 1:1 → 7.4s of the clip</text>
+        <g data-symbol="ellipsis.circle" fill="none" stroke="#C36A00" stroke-width="1.5"><circle cx="343" cy="462" r="7"/><g fill="#C36A00" stroke="none"><circle cx="339.5" cy="462" r="1"/><circle cx="343" cy="462" r="1"/><circle cx="346.5" cy="462" r="1"/></g></g>
+      </g>
+
+      <!-- depth card: bare ratio chips + the ··· seat -->
+      <g id="depth-card">
+        <rect x="16" y="503" width="361" height="70" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="depth-chips" font-size="14" class="b" text-anchor="middle">
+          <rect x="32" y="521" width="49.8" height="36" rx="12" fill="#1C1C1E"/>
+          <text x="56.9" y="544" fill="#FFB340">1:1</text>
+          <rect x="87.8" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/>
+          <text x="112.7" y="544" fill="#000">2:1</text>
+          <rect x="143.6" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/>
+          <text x="168.5" y="544" fill="#000">3:1</text>
+          <rect x="199.4" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/>
+          <text x="224.3" y="544" fill="#000">5:1</text>
+          <rect x="255.2" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/>
+          <text x="280.1" y="544" fill="#000">8:1</text>
+          <rect x="311" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/>
+          <text x="335.9" y="544" fill="#000">···</text>
         </g>
       </g>
 
-      <!-- bottom CTA -->
+      <!-- estimate card (ink) — runs under the bottom bar -->
+      <g id="estimate-card">
+        <rect x="16" y="588" width="361" height="170" rx="16" fill="#1C1C1E"/>
+        <text x="32" y="618" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
+        <text x="361" y="618" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">25 fps ⌄</text>
+        <text x="32" y="648" font-size="28" class="b" fill="#FFF">7.4 seconds</text>
+        <text x="192" y="648" font-size="14" class="sb" fill="#FFB340">· 1:1</text>
+        <text x="32" y="678" font-size="13.5" class="sb" fill="#FFF">184 photos → 184 frames</text>
+        <g id="before-after">
+          <rect x="32" y="695" width="180" height="6" rx="3" fill="#48484A"/>
+          <text x="222" y="701" font-size="11" fill="#FFF" opacity="0.45">00:02</text>
+          <text x="256" y="701" font-size="11" fill="#FFF" opacity="0.45">→</text>
+          <rect x="272" y="695" width="50" height="6" rx="3" fill="#FFB340"/>
+          <text x="361" y="702" font-size="12" class="sb" fill="#FFB340" text-anchor="end">7.4s</text>
+        </g>
+        <text x="32" y="723" font-size="11" fill="#FFF" opacity="0.45">Never a trim — every photo lands in the clip. A stretch's depth is</text>
+      </g>
+
+      <!-- bottom bar -->
       <g id="bottom-bar">
         <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
-        <rect x="16" y="738" width="361" height="50" rx="14" fill="#C36A00"/>
-        <text x="196.5" y="768" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 18-frame timelapse</text>
-        <text x="196.5" y="806" font-size="11.5" fill="#6D6D72" text-anchor="middle">Your original is kept — you can always make another blended clip.</text>
+        <rect x="16" y="735" width="305" height="50" rx="14" fill="#C36A00"/>
+        <text x="168.5" y="766" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 184-frame timelapse</text>
+        <rect x="329" y="735" width="48" height="50" rx="12" fill="#C36A00"/>
+        <path d="M347 757 l6 -6.5 6 6.5" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
+        <text x="16" y="806" font-size="11" fill="#6D6D72">Your original is kept — you can always make another…</text>
+        <text x="377" y="806" font-size="11" class="sb" fill="#C36A00" text-anchor="end">+ Field note</text>
       </g>
 
       <!-- hardware -->
@@ -92,5 +120,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — New blended clip (photos) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — TailFrameBanner · stackCard · blend-depth slider</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — warpCard (interval vocabulary) · depthCard (bare ratio chips + ···) · estimateCard · bottomBar</text>
 </svg>

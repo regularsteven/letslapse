@@ -65,11 +65,51 @@ public struct TimeSliceVariationPlan: Codable, Equatable, Sendable {
     public var mode: TimeSliceVariationMode
     /// Recorded so a batch is reproducible (§6).
     public var seed: UInt64
+    /// Locks (the 2026-09-02 Adjust simplification): the Time-starts,
+    /// Segments and Sweeps-from controls each offer a fixed value or
+    /// "Mixed" for a batch. A fixed value pins every member to the baseline's
+    /// setting; Mixed (`false`, the default and the pre-lock behaviour) lets
+    /// the generator walk it. The spread is never locked — it is the subtlest
+    /// knob and the one a batch always varies last.
+    ///
+    /// `lockEdge` pins the newest edge on the baseline's OWN axis only; a
+    /// Mixed batch's other-axis members still draw from the pool, since no
+    /// control names an edge for an axis the baseline isn't on.
+    public var lockEdge: Bool
+    /// Every member keeps the baseline's segment count (still clamped to what
+    /// the frame can carry, and nudged only as a last resort for distinctness).
+    public var lockSegments: Bool
+    /// Every grid member sweeps from the baseline grid's origin corner; the
+    /// wavefront metric still alternates so two grids never read the same.
+    public var lockOrigin: Bool
 
-    public init(count: Int = 4, mode: TimeSliceVariationMode = .mixed, seed: UInt64 = Self.freshSeed()) {
+    public init(
+        count: Int = 4, mode: TimeSliceVariationMode = .mixed, seed: UInt64 = Self.freshSeed(),
+        lockEdge: Bool = false, lockSegments: Bool = false, lockOrigin: Bool = false
+    ) {
         self.count = count
         self.mode = mode
         self.seed = seed
+        self.lockEdge = lockEdge
+        self.lockSegments = lockSegments
+        self.lockOrigin = lockOrigin
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case count, mode, seed, lockEdge, lockSegments, lockOrigin
+    }
+
+    /// Field by field: the locks arrived after the first batches were written,
+    /// and a plan without them is a plan that varied everything.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        count = try container.decodeIfPresent(Int.self, forKey: .count) ?? 4
+        mode = (try? container.decodeIfPresent(TimeSliceVariationMode.self, forKey: .mode))
+            .flatMap { $0 } ?? .mixed
+        seed = try container.decodeIfPresent(UInt64.self, forKey: .seed) ?? Self.freshSeed()
+        lockEdge = try container.decodeIfPresent(Bool.self, forKey: .lockEdge) ?? false
+        lockSegments = try container.decodeIfPresent(Bool.self, forKey: .lockSegments) ?? false
+        lockOrigin = try container.decodeIfPresent(Bool.self, forKey: .lockOrigin) ?? false
     }
 
     public static func freshSeed() -> UInt64 { UInt64.random(in: 1...UInt64.max) }
@@ -166,17 +206,26 @@ public enum TimeSliceVariationGenerator {
             candidate.variation = nil
             candidate.grid = nil
             let spreadTarget = baselineSpread * spreadMultipliers[index % spreadMultipliers.count]
-            let segmentScale = segmentMultipliers[occurrence % segmentMultipliers.count]
+            // A locked segment count walks nothing — every member asks for
+            // the baseline's count and lets the pixel floor have the last word.
+            let segmentScale = plan.lockSegments
+                ? 1.0 : segmentMultipliers[occurrence % segmentMultipliers.count]
 
             switch shape {
             case .banded(let axis):
                 let pool = edgePool[axis] ?? [axis == .vertical ? .right : .bottom]
-                candidate.newestEdge = pool[occurrence % pool.count]
+                candidate.newestEdge = plan.lockEdge && axis == baseline.axis
+                    ? baseline.newestEdge
+                    : pool[occurrence % pool.count]
             case .grid:
                 // Corner and metric turn at different rates so even a batch
-                // with only two grids in it shows both wavefront shapes.
+                // with only two grids in it shows both wavefront shapes. A
+                // locked origin keeps the corner and lets the metric carry
+                // the difference.
                 candidate.grid = TimeSliceGrid(
-                    origin: cornerPool[occurrence % cornerPool.count],
+                    origin: plan.lockOrigin
+                        ? (baseline.grid?.origin ?? cornerPool[0])
+                        : cornerPool[occurrence % cornerPool.count],
                     metric: metrics[occurrence % metrics.count])
             }
 
@@ -192,7 +241,7 @@ public enum TimeSliceVariationGenerator {
                 guard let distinct = makeDistinct(
                     resolved, seen: seen, spread: spreadTarget,
                     baselineSegments: baseline.segments, masterFrames: masterFrames,
-                    width: width, height: height)
+                    width: width, height: height, lagFirst: plan.lockSegments)
                 else { continue }
                 resolved = distinct
             }
@@ -322,11 +371,18 @@ public enum TimeSliceVariationGenerator {
     }
 
     /// Nudges a colliding recipe until it is new: segment count first (it is
-    /// the loudest knob left once shape and origin are fixed), then the lag.
+    /// the loudest knob left once shape and origin are fixed), then the lag —
+    /// or the lag first when the segment count is what the user pinned, so a
+    /// locked batch only ever moves its count as the very last resort.
     private static func makeDistinct(
         _ settings: TimeSliceSettings, seen: Set<String>, spread: Double,
-        baselineSegments: Int, masterFrames: Int, width: Int, height: Int
+        baselineSegments: Int, masterFrames: Int, width: Int, height: Int,
+        lagFirst: Bool = false
     ) -> TimeSliceSettings? {
+        if lagFirst, let nudged = nudgeLag(settings, seen: seen, masterFrames: masterFrames,
+                                           width: width, height: height) {
+            return nudged
+        }
         for delta in 1...24 {
             for wanted in [settings.segments + delta, settings.segments - delta] where wanted >= 2 {
                 guard let segments = nearestValidSegments(
@@ -340,6 +396,12 @@ public enum TimeSliceVariationGenerator {
                 if !seen.contains(identity(resolved)) { return resolved }
             }
         }
+        return nudgeLag(settings, seen: seen, masterFrames: masterFrames, width: width, height: height)
+    }
+
+    private static func nudgeLag(
+        _ settings: TimeSliceSettings, seen: Set<String>, masterFrames: Int, width: Int, height: Int
+    ) -> TimeSliceSettings? {
         for delta in 1...12 {
             for lag in [settings.offsetFrames + delta, settings.offsetFrames - delta] where lag >= 1 {
                 var candidate = settings

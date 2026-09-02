@@ -231,8 +231,10 @@ struct WarpTimelineView: View {
         isInterval ? WarpTimeline.depthLabel(speed) : WarpTimeline.speedLabel(speed)
     }
 
-    private func speedWordText(_ speed: Double) -> String {
-        isInterval ? WarpTimeline.depthWord(speed) : WarpTimeline.speedWord(speed)
+    /// The chip vocabulary: "¼× slow" for a movie; a bare "3:1" for an
+    /// interval shoot, whose ratios carry no character word (2026-09-02).
+    private func speedCaption(_ speed: Double) -> String {
+        isInterval ? speedText(speed) : "\(speedText(speed)) \(WarpTimeline.speedWord(speed))"
     }
 
     /// A moment on the source axis: the clock where one exists, frame counts
@@ -845,7 +847,7 @@ struct WarpTimelineView: View {
                         menuStretch = nil
                     }
             )
-            .accessibilityLabel("Stretch \(index + 1), \(speedText(speed)) \(speedWordText(speed))")
+            .accessibilityLabel("Stretch \(index + 1), \(speedCaption(speed))")
             .accessibilityAddTraits(selected ? .isSelected : [])
         return platformStretchActions(tile, index: index)
     }
@@ -1158,7 +1160,7 @@ struct WarpTimelineView: View {
             Text(
                 "Stretch \(index + 1) of \(timeline.stretchCount) · "
                 + "\(axisText(range.lowerBound))–\(axisText(range.upperBound)) · "
-                + "\(speedText(speed)) \(speedWordText(speed)) → "
+                + "\(speedCaption(speed)) → "
                 + "\(SpeedMath.clipLengthCompact(output)) of the clip")
                 .font(.system(size: 12))
                 .foregroundStyle(.primary)

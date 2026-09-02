@@ -1,12 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Adjust — Time slicing expanded, with a variation batch armed · portrait</title>
-  <desc>Mirrors the `timeSlicingSection` of App/AdjustView.swift, drawn scrolled to that card (the warp card, chips and estimate card are above the fold — see adjust.portrait.svg / adjust.photos.portrait.svg for those). The card sits between the Advanced row and the fixed bottom bar in every layout and is hidden only where slicing has nothing to slice (a whole-shoot single still). Top to bottom: the toggle row (rectangle.split.3x1 glyph in accent · "Time slicing" · a subtitle that reads the derived recipe name when one slice is armed and "4 variations · mixed · one blend" when a batch is · "On" in accent-deep · chevron.up), then the SINGLE-SLICE controls, unchanged from the 2026-08-28 build: Horizontal bands (off = vertical bands), Time starts (reading order — the first band holds the EARLIEST moment, so the model stores the opposite edge as `newestEdge`), Segments, Spread as a share of the clip (the per-band lag in frames is derived and read out beside it; raw Offset frames replaces it only while the clip's length is unknown), Output (Image · Animation · Both) and Include regular timelapse. Below a divider, the 2026-09-01 addition: VARIATIONS (Off · 2 · 4 · 8) and, once a count is chosen, VARIATION MODE (Horizontal · Vertical · Grid · Mixed, default Mixed) and the batch seed with a Reroll button — the seed is recorded on every output so a batch is reproducible. The controls above act as the baseline the batch varies from. The readout states the single slice's numbers first, then what the batch actually resolved to against THIS clip — counted by shape, with every variation's derived name listed, because the generator discards any variation whose bands fall under the pixel floor or whose spread eats the clip, and a batch that cannot make N distinct valid recipes returns fewer (an amber line says so). Grid mode is not offered as a fresh single-slice choice: it arrives through Variations, and a clip re-opened from a Grid variation swaps the Horizontal-bands and Time-starts rows for "Sweeps from" (the origin corner holding the newest cell) and "Wavefront" (Stepped = Manhattan, Radial = Euclidean) plus a "Use single-axis bands instead" escape, with Segments relabelled Columns and reading out the derived row count and cell size. The CTA names what the run will keep — "… + 4 variations" here; "Create 4 variations" with the regular timelapse off. Refusals (sub-2 px bands, sub-8 px grid cells, a spread that consumes the clip, or a batch with no member that fits) render red in place of the readout and disable Create. Sample data: the 302-photo interval shoot the 2026-09-01 pass was built against, 24 bands at a 25% spread, batch of 4 in Mixed at seed 1A2B3C4D.</desc>
+  <title>iOS · Adjust — Time slicing, a batch of 4 takes armed · portrait</title>
+  <desc>Mirrors the `timeSlicingSection` of App/AdjustView.swift after the 2026-09-02 simplification (Claude Design "Adjust Simplified"), drawn scrolled to the card: the estimate card's tail and the Advanced row sit above it, the fixed bottom bar below. The card's header is "Time slicing" over a one-line reading of the recipe ("4 takes · Mixed" here; "Vertical bands" / "Horizontal bands" / "Grid" for one slice; "Bands of the frame show different moments" when off) and, at the right, the COUNT picker `LLInkSegment` 0 · 1 · 4 · 8 — 0 = off (the recipe goes to the session stash), 1 = one slice, 4 or 8 = a batch of that many takes from the one blend — which replaces both the old On/Off toggle row and the separate Variations picker. Every control below is label-above, full-width segmented: SHAPE Vertical · Horizontal · Grid · Mixed (Mixed only for a batch; Grid is a first-class choice now, no longer reachable only by re-opening a batch member); TIME STARTS (Left/Right or Top/Bottom in reading order, + Mixed for a batch) appears for a banded shape and SWEEPS FROM (2×2 corner chips, adjust.timeslice-grid.portrait.svg) for Grid — a Mixed batch shows neither; SEGMENTS Fine 24 · Medium 16 · Bold 8 · Mixed (batch) · Custom (a Bands/Columns – value + stepper, 4…64 in twos); OUTPUT Image · Animation · Both; SPREAD Tight 10% · Medium 25% · Wide 50% · Custom (a Percent stepper, 10…85 in fives), hidden when the output is Image only — the poster spreads the whole shoot regardless; INCLUDE REGULAR TIMELAPSE switch; and a one-line readout: "4 takes from one blend" (amber "Only N of M fit this clip…" under it when the generator seats fewer), "Ready — 24 bands" / "Ready — 24 × 14 grid" for one slice, or a red refusal that also disables Create. A batch's fixed seats are LOCKS on `TimeSliceVariationPlan` (lockEdge · lockSegments · lockOrigin): Mixed lets the generator walk that parameter, a named seat pins every take to the baseline; the spread is never locked. Gone from the card: the Horizontal-bands toggle, the Wavefront (Stepped/Radial) picker, the seed + Reroll row (the seed is still recorded on every output), the multi-line spread/scratch/poster readout and the per-take name list. The CTA says what the run keeps: "… + 4 takes" here, "Create 4 takes" with the regular timelapse off, "… + slice" / "Create sliced clip" for one slice. Sample: the 184-photo synthetic harbour-dusk shoot at 1:1, 24 bands at a 25% spread (lag 2), batch of 4 in Mixed — `LL_ADJUST=stills` + `LL_TIMESLICE="segs:24,lag:2,vars:4,mode:mixed"`. Switches draw in the app's accent tint.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
     <filter id="knob" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000" flood-opacity="0.2"/></filter>
   </defs>
-  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-family:'SF Mono','Menlo',monospace}</style>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
 
   <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
   <g clip-path="url(#screen)">
@@ -21,129 +21,118 @@
         <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
       </g>
 
-      <!-- flow header -->
+      <!-- estimate card tail (scrolled) -->
+      <g id="estimate-tail">
+        <rect x="16" y="60" width="361" height="131" rx="16" fill="#1C1C1E"/>
+        <rect x="32" y="119" width="180" height="6" rx="3" fill="#48484A"/>
+        <text x="222" y="125" font-size="11" fill="#FFF" opacity="0.45">00:02</text>
+        <text x="256" y="125" font-size="11" fill="#FFF" opacity="0.45">→</text>
+        <rect x="272" y="119" width="50" height="6" rx="3" fill="#FFB340"/>
+        <text x="361" y="126" font-size="12" class="sb" fill="#FFB340" text-anchor="end">7.4s</text>
+        <g font-size="11" fill="#FFF" opacity="0.45">
+          <text x="32" y="148">Never a trim — every photo lands in the clip. A stretch's depth is</text>
+          <text x="32" y="161">how many photos average into each frame: 1:1 keeps every</text>
+          <text x="32" y="174">photo as shot, deeper is a rolling long exposure.</text>
+        </g>
+      </g>
+
+      <!-- flow header (over the scroll) -->
       <g id="flow-header">
+        <rect x="0" y="0" width="393" height="106" fill="#F2F2F7"/>
         <circle cx="33" cy="88" r="17" fill="#FFF" filter="url(#soft)"/>
         <path d="M37 80 l-8 8 8 8" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
         <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
       </g>
 
-      <!-- Time slicing card (expanded) -->
+      <!-- Advanced row -->
+      <g id="advanced-row">
+        <rect x="16" y="207" width="361" height="44" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="234" font-size="15.5" fill="#000">Advanced</text>
+        <text x="345" y="233" font-size="12" fill="#6D6D72" text-anchor="end">True-light</text>
+        <path d="M356 223 l5 6 -5 6" stroke="#C7C7CC" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      </g>
+
+      <!-- Time slicing card, batch of 4 -->
       <g id="time-slicing-card">
-        <rect x="16" y="116" width="361" height="600" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="265" width="361" height="448" rx="16" fill="#FFF" filter="url(#soft)"/>
 
-        <!-- toggle row -->
-        <g id="slicing-toggle-row">
-          <g data-symbol="rectangle.split.3x1" fill="none" stroke="#C36A00" stroke-width="1.6">
-            <rect x="32" y="133" width="18" height="13" rx="2"/>
-            <path d="M38 133 v13 M44 133 v13"/>
+        <g id="header-row">
+          <text x="32" y="297" font-size="15.5" fill="#000">Time slicing</text>
+          <text x="32" y="313" font-size="11.5" fill="#6D6D72">4 takes · Mixed</text>
+          <g id="count-segment" data-symbol="LLInkSegment">
+            <rect x="211" y="283" width="158" height="33" rx="9" fill="#E9E9EB"/>
+            <rect x="291" y="285" width="37" height="29" rx="7" fill="#1C1C1E"/>
+            <g font-size="14" class="b" text-anchor="middle">
+              <text x="231.5" y="304.5" fill="#000">0</text>
+              <text x="270.5" y="304.5" fill="#000">1</text>
+              <text x="309.5" y="304.5" fill="#FFB340">4</text>
+              <text x="348.5" y="304.5" fill="#000">8</text>
+            </g>
           </g>
-          <text x="60" y="141" font-size="15.5" fill="#000">Time slicing</text>
-          <text x="60" y="155" font-size="11.5" fill="#6D6D72">4 variations · mixed · one blend</text>
-          <text x="336" y="146" font-size="12" fill="#8A4A00" text-anchor="end">On</text>
-          <path d="M349 148 l6 -6.5 6 6.5" stroke="#A0A0A6" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
         </g>
-        <line x1="32" y1="168" x2="361" y2="168" stroke="#000" stroke-opacity="0.09"/>
+        <line x1="32" y1="334" x2="361" y2="334" stroke="#000" stroke-opacity="0.09"/>
 
-        <!-- single-slice controls (unchanged) -->
-        <g id="horizontal-bands">
-          <text x="32" y="199" font-size="14" fill="#000">Horizontal bands</text>
-          <g><rect x="310" y="180" width="51" height="31" rx="15.5" fill="#E9E9EB"/><circle cx="325.5" cy="195.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
-        </g>
-
-        <g id="time-starts">
-          <text x="32" y="239" font-size="14" fill="#000">Time starts</text>
-          <rect x="161" y="221" width="200" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="163" y="223" width="96" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="211" y="239" font-size="12" class="sb" fill="#000" text-anchor="middle">Left</text>
-          <text x="311" y="239" font-size="12" fill="#000" text-anchor="middle">Right</text>
+        <g id="shape">
+          <text x="32" y="364" font-size="14" fill="#000">Shape</text>
+          <rect x="32" y="376" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="277.5" y="378" width="81.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="72.5" y="396">Vertical</text>
+            <text x="154" y="396">Horizontal</text>
+            <text x="236" y="396">Grid</text>
+            <text x="318" y="396" class="sb">Mixed</text>
+          </g>
         </g>
 
         <g id="segments">
-          <text x="32" y="279" font-size="14" fill="#000">Segments</text>
-          <text x="273" y="279" font-size="13" class="mono" fill="#6D6D72" text-anchor="end">24</text>
-          <rect x="283" y="261" width="94" height="28" rx="8" fill="#E9E9EB"/>
-          <line x1="330" y1="263" x2="330" y2="287" stroke="#FFF" stroke-width="1.5"/>
-          <path d="M300 275 h14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M346 275 h14 M353 268 v14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
-        </g>
-
-        <g id="spread">
-          <text x="32" y="319" font-size="14" fill="#000">Spread</text>
-          <text x="273" y="319" font-size="11" class="mono" fill="#6D6D72" text-anchor="end">25% · lag 2 · ≈ 3.0 s</text>
-          <rect x="283" y="301" width="94" height="28" rx="8" fill="#E9E9EB"/>
-          <line x1="330" y1="303" x2="330" y2="327" stroke="#FFF" stroke-width="1.5"/>
-          <path d="M300 315 h14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
-          <path d="M346 315 h14 M353 308 v14" stroke="#000" stroke-width="1.8" stroke-linecap="round"/>
+          <text x="32" y="436" font-size="14" fill="#000">Segments</text>
+          <rect x="32" y="448" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="229" y="450" width="65" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="66.5" y="468">Fine</text>
+            <text x="131.5" y="468">Medium</text>
+            <text x="196.5" y="468">Bold</text>
+            <text x="261.5" y="468" class="sb">Mixed</text>
+            <text x="326.5" y="468">Custom</text>
+          </g>
         </g>
 
         <g id="output">
-          <text x="32" y="359" font-size="14" fill="#000">Output</text>
-          <rect x="101" y="341" width="260" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="275" y="343" width="84" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="144" y="359" font-size="12" fill="#000" text-anchor="middle">Image</text>
-          <text x="230" y="359" font-size="12" fill="#000" text-anchor="middle">Animation</text>
-          <text x="317" y="359" font-size="12" class="sb" fill="#000" text-anchor="middle">Both</text>
+          <text x="32" y="508" font-size="14" fill="#000">Output</text>
+          <rect x="32" y="520" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="250.5" y="522" width="108.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="86" y="540">Image</text>
+            <text x="196.5" y="540">Animation</text>
+            <text x="307" y="540" class="sb">Both</text>
+          </g>
+        </g>
+
+        <g id="spread">
+          <text x="32" y="580" font-size="14" fill="#000">Spread</text>
+          <rect x="32" y="592" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="115.25" y="594" width="81.25" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="73" y="612">Tight</text>
+            <text x="155.5" y="612" class="sb">Medium</text>
+            <text x="237.5" y="612">Wide</text>
+            <text x="320" y="612">Custom</text>
+          </g>
         </g>
 
         <g id="include-regular">
-          <text x="32" y="399" font-size="14" fill="#000">Include regular timelapse</text>
-          <g><rect x="310" y="380" width="51" height="31" rx="15.5" fill="#34C759"/><circle cx="345.5" cy="395.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
+          <text x="32" y="659" font-size="14" fill="#000">Include regular timelapse</text>
+          <g data-symbol="Toggle (on, accent)"><rect x="310" y="639" width="51" height="31" rx="15.5" fill="#C36A00"/><circle cx="345.5" cy="654.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
         </g>
 
-        <line x1="32" y1="421" x2="361" y2="421" stroke="#000" stroke-opacity="0.09"/>
-
-        <!-- the batch (2026-09-01) -->
-        <g id="variations">
-          <text x="32" y="451" font-size="14" fill="#000">Variations</text>
-          <rect x="161" y="433" width="200" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="261" y="435" width="48" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="186" y="451" font-size="12" fill="#000" text-anchor="middle">Off</text>
-          <text x="236" y="451" font-size="12" fill="#000" text-anchor="middle">2</text>
-          <text x="285" y="451" font-size="12" class="sb" fill="#000" text-anchor="middle">4</text>
-          <text x="335" y="451" font-size="12" fill="#000" text-anchor="middle">8</text>
-        </g>
-
-        <!-- the caption sits UNDER the row, full width: a 200pt segmented
-             control leaves ~110pt of label column, which truncates it away -->
-        <text x="32" y="483" font-size="11" fill="#6D6D72">Blending runs once — each extra take is a slice pass</text>
-
-        <g id="variation-mode">
-          <text x="32" y="509" font-size="14" fill="#000">Variation mode</text>
-          <rect x="32" y="524" width="329" height="28" rx="8" fill="#E9E9EB"/>
-          <rect x="277" y="526" width="82" height="24" rx="7" fill="#FFF" filter="url(#knob)"/>
-          <text x="73" y="542" font-size="12" fill="#000" text-anchor="middle">Horizontal</text>
-          <text x="155" y="542" font-size="12" fill="#000" text-anchor="middle">Vertical</text>
-          <text x="237" y="542" font-size="12" fill="#000" text-anchor="middle">Grid</text>
-          <text x="318" y="542" font-size="12" class="sb" fill="#000" text-anchor="middle">Mixed</text>
-        </g>
-
-        <g id="seed-row">
-          <text x="32" y="576" font-size="11" class="mono" fill="#6D6D72">Seed 000000001A2B3C4D</text>
-          <text x="361" y="576" font-size="12" class="sb" fill="#C36A00" text-anchor="end">Reroll</text>
-        </g>
-
-        <!-- readout -->
-        <g id="readout" font-size="11.5" fill="#6D6D72">
-          <text x="32" y="596">Spread 46 frames · 25% of the clip ≈ 3.0 s</text>
-          <text x="32" y="610">Sliced clip 256 frames — the spread is trimmed off the end</text>
-          <text x="32" y="624">Poster: the whole shoot spread across 24 bands</text>
-          <text x="32" y="638">Scratch ≈ 91.6 MB while rendering</text>
-          <text x="32" y="656" fill="#8A4A00">4 variations · grid ×2 · vertical ×1 · horizontal ×1</text>
-          <g font-size="10.5" class="mono" fill="#A0A0A6">
-            <text x="32" y="672">· timeslice-vert-right-segs_24-lag_2-v1of4</text>
-            <text x="32" y="684">· timeslice-grid-bl-manh-segs_24-lag_2-v2of4</text>
-            <text x="32" y="696">· timeslice-horiz-bottom-segs_12-lag_3-v3of4</text>
-            <text x="32" y="708">· timeslice-grid-tr-eucl-segs_12-lag_4-v4of4</text>
-          </g>
-        </g>
+        <text id="readout" x="32" y="695" font-size="12" fill="#6D6D72">4 takes from one blend</text>
       </g>
 
       <!-- bottom bar -->
       <g id="bottom-bar">
         <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
         <rect x="16" y="735" width="305" height="50" rx="14" fill="#C36A00"/>
-        <text x="168.5" y="766" font-size="14" class="b" fill="#FFF" text-anchor="middle">Create 302-frame timelapse + 4 variations</text>
+        <text x="168.5" y="766" font-size="15" class="b" fill="#FFF" text-anchor="middle">Create 184-frame timelapse + 4 takes</text>
         <rect x="329" y="735" width="48" height="50" rx="12" fill="#C36A00"/>
         <path d="M347 757 l6 -6.5 6 6.5" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
         <text x="16" y="806" font-size="11" fill="#6D6D72">Your original is kept — you can always make another…</text>
@@ -156,6 +145,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — Time slicing, variations armed · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift `timeSlicingSection` — toggle row · single-slice controls · Variations · Variation mode · seed + Reroll · readout · CTA</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — Time slicing, 4 takes · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift `timeSlicingSection` — count picker 0·1·4·8 · Shape · Segments · Output · Spread · Include regular · readout · CTA</text>
 </svg>

@@ -262,18 +262,6 @@ struct WarpTimeline: Codable, Equatable {
         "\(max(1, Int(v.rounded()))):1"
     }
 
-    /// The character word for a depth — Crisp↔Long exposure, the poles the
-    /// old BLEND slider named at its ends. The bands are cut so each of the
-    /// canonical chips (1, 2, 3, 5, 8) lands on its own word.
-    static func depthWord(_ v: Double) -> String {
-        let depth = max(1, Int(v.rounded()))
-        if depth == 1 { return "crisp" }
-        if depth == 2 { return "soft" }
-        if depth <= 4 { return "silky" }
-        if depth <= 7 { return "long exposure" }
-        return "streaks"
-    }
-
     /// "812 fr" — the axis label for a shoot that never recorded a clock,
     /// where counting frames is honest and inventing seconds isn't.
     static func frameLabel(_ t: Double) -> String {

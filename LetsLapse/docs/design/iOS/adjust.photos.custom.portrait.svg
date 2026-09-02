@@ -1,0 +1,122 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Adjust (photos) — the "···" depth drawer open · portrait</title>
+  <desc>Mirrors `depthCard` in App/AdjustView.swift with its drawer open (2026-09-02). Tapping "···" lights that seat (ink/amber) and unfolds, under a hairline, two rows: "All frames → 1" / "Stack every photo into a single still" with a switch — the classic whole-shoot long exposure, which replaced the old "One long exposure" row — and, while that switch is off, "Photos per frame" with the compact – / value / + stepper (`LLStepControl`, 2…N−1) editing the selected stretch's depth live: here stepped to 3, so the timeline pill, ruler (0s · 1.2s · 2.5s), caption ("3:1 → 2.5s of the clip"), estimate and CTA ("Create 62-frame timelapse") all follow, and the Undo chip appears over the preview because the stepper is a timeline edit. The "···" seat stays lit whenever the value lives behind it — drawer open, shoot stacked, or a depth no chip names; tapping any ratio chip closes the drawer and lifts the stack. With "All frames → 1" ON (not drawn): the warp card disappears (one output photo has no schedule to edit), the stepper row is hidden, the estimate reads "One photo · long exposure" / "184 photos → one still", the Time-slicing card retires and the CTA becomes "Create long exposure" — verified 2026-09-02 on the iPhone 16 Pro simulator. The switch draws in the app's accent tint, as every switch on this screen does.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="preview"><rect x="32" y="129" width="329" height="185" rx="10"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="chip" x="-20%" y="-40%" width="140%" height="180%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.1"/></filter>
+    <filter id="knob" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000" flood-opacity="0.2"/></filter>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8E4A3A"/><stop offset="1" stop-color="#8C8A5C"/></linearGradient>
+    <linearGradient id="bar" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2E3A50"/><stop offset="1" stop-color="#1C2230"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- flow header -->
+      <g id="flow-header">
+        <circle cx="33" cy="88" r="17" fill="#FFF" filter="url(#soft)"/>
+        <path d="M37 80 l-8 8 8 8" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
+        <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
+      </g>
+
+      <!-- warp card at 3:1 -->
+      <g id="warp-card">
+        <rect x="16" y="115" width="361" height="373" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g clip-path="url(#preview)">
+          <rect x="32" y="129" width="329" height="185" fill="url(#sky)"/>
+          <rect x="32" y="244" width="329" height="70" fill="#1B2430"/>
+          <circle cx="196.5" cy="217" r="10" fill="#FFD29A"/>
+          <rect x="190" y="252" width="13" height="4" fill="#0E1218"/>
+        </g>
+        <rect x="38" y="132" width="56" height="16" rx="8" fill="#000" opacity="0.5"/>
+        <text x="66" y="143.5" font-size="9.5" class="b" fill="#FFB340" text-anchor="middle">↶ Undo</text>
+        <rect x="309" y="132" width="52" height="16" rx="8" fill="#000" opacity="0.5"/>
+        <text x="335" y="143.5" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">≈ keyframe</text>
+        <rect x="38" y="295" width="34" height="17" rx="5" fill="#000" opacity="0.5"/>
+        <text x="55" y="307" font-size="10.5" class="sb" fill="#FFF" text-anchor="middle">0:01</text>
+
+        <circle cx="196.5" cy="323" r="9" fill="#C36A00"/>
+        <rect x="33" y="334" width="327" height="45" rx="8" fill="url(#bar)" stroke="#C36A00" stroke-width="2"/>
+        <line x1="196.5" y1="314" x2="196.5" y2="386" stroke="#C36A00" stroke-width="1.6"/>
+        <rect x="184" y="361" width="25" height="14" rx="7" fill="#1C1C1E"/>
+        <text x="196.5" y="371.5" font-size="9.5" class="sb" fill="#FFF" text-anchor="middle">3:1</text>
+
+        <g font-size="11" fill="#C7C7CC">
+          <text x="32" y="436">0s</text>
+          <text x="196.5" y="436" text-anchor="middle">1.2s</text>
+          <text x="361" y="436" text-anchor="end">2.5s</text>
+        </g>
+        <rect x="32" y="447" width="329" height="30" rx="12" fill="#F2F2F7"/>
+        <text x="42" y="466" font-size="12" fill="#000">Stretch 1 of 1 · 0:00–0:03 · 3:1 → 2.5s of the clip</text>
+        <g data-symbol="ellipsis.circle" fill="none" stroke="#C36A00" stroke-width="1.5"><circle cx="343" cy="462" r="7"/><g fill="#C36A00" stroke="none"><circle cx="339.5" cy="462" r="1"/><circle cx="343" cy="462" r="1"/><circle cx="346.5" cy="462" r="1"/></g></g>
+      </g>
+
+      <!-- depth card with the drawer open -->
+      <g id="depth-card">
+        <rect x="16" y="503" width="361" height="172" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <g id="depth-chips" font-size="14" class="b" text-anchor="middle" fill="#000">
+          <rect x="32" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="56.9" y="544">1:1</text>
+          <rect x="87.8" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="112.7" y="544">2:1</text>
+          <rect x="143.6" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="168.5" y="544">3:1</text>
+          <rect x="199.4" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="224.3" y="544">5:1</text>
+          <rect x="255.2" y="521" width="49.8" height="36" rx="12" fill="#FFF" filter="url(#chip)"/><text x="280.1" y="544">8:1</text>
+          <rect x="311" y="521" width="49.8" height="36" rx="12" fill="#1C1C1E"/><text x="335.9" y="544" fill="#FFB340">···</text>
+        </g>
+        <line x1="32" y1="571" x2="361" y2="571" stroke="#000" stroke-opacity="0.09"/>
+
+        <g id="all-frames-row">
+          <text x="32" y="600" font-size="14.5" fill="#000">All frames → 1</text>
+          <text x="32" y="616" font-size="11.5" fill="#6D6D72">Stack every photo into a single still</text>
+          <g data-symbol="Toggle (off)"><rect x="310" y="588" width="51" height="31" rx="15.5" fill="#E9E9EB"/><circle cx="325.5" cy="603.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
+        </g>
+
+        <g id="photos-per-frame-row">
+          <text x="32" y="653" font-size="14" fill="#000">Photos per frame</text>
+          <rect x="272" y="634" width="28" height="28" rx="8" fill="#E9E9EB"/>
+          <path d="M280 648 h12" stroke="#000" stroke-width="2" stroke-linecap="round" data-symbol="minus"/>
+          <text x="320.5" y="653" font-size="14" class="sb" fill="#000" text-anchor="middle">3</text>
+          <rect x="341" y="634" width="28" height="28" rx="8" fill="#E9E9EB"/>
+          <path d="M349 648 h12 M355 642 v12" stroke="#000" stroke-width="2" stroke-linecap="round" data-symbol="plus"/>
+        </g>
+      </g>
+
+      <!-- estimate card, peeking under the bottom bar -->
+      <g id="estimate-card">
+        <rect x="16" y="689" width="361" height="80" rx="16" fill="#1C1C1E"/>
+        <text x="32" y="719" font-size="12" fill="#FFF" opacity="0.55">Your clip will be</text>
+        <text x="361" y="719" font-size="11" fill="#FFF" opacity="0.45" text-anchor="end">25 fps ⌄</text>
+      </g>
+
+      <!-- bottom bar -->
+      <g id="bottom-bar">
+        <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
+        <rect x="16" y="735" width="305" height="50" rx="14" fill="#C36A00"/>
+        <text x="168.5" y="766" font-size="16" class="b" fill="#FFF" text-anchor="middle">Create 62-frame timelapse</text>
+        <rect x="329" y="735" width="48" height="50" rx="12" fill="#C36A00"/>
+        <path d="M347 757 l6 -6.5 6 6.5" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
+        <text x="16" y="806" font-size="11" fill="#6D6D72">Your original is kept — you can always make another…</text>
+        <text x="377" y="806" font-size="11" class="sb" fill="#C36A00" text-anchor="end">+ Field note</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust (photos) — ··· depth drawer open · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift `depthCard` — All frames → 1 switch · Photos per frame stepper (LLStepControl) · timeline following the stepped depth</text>
+</svg>

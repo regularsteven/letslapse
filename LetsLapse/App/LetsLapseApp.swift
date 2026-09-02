@@ -795,6 +795,7 @@ struct ContentView: View {
             if let hook = environment["LL_TIMESLICE"] {
                 var settings = TimeSliceSettings()
                 var plan: TimeSliceVariationPlan?
+                var locks: [String] = []
                 for pair in hook.split(separator: ",") {
                     let parts = pair.split(separator: ":", maxSplits: 1).map(String.init)
                     guard parts.count == 2 else { continue }
@@ -837,9 +838,17 @@ struct ContentView: View {
                             plan = TimeSliceVariationPlan(
                                 count: plan?.count ?? 4, mode: plan?.mode ?? .mixed, seed: seed)
                         }
+                    // lock:edge+segments+origin — pin those to the baseline
+                    // across the batch (the 2026-09-02 controls' fixed seats;
+                    // anything not named stays Mixed).
+                    case "lock":
+                        locks = parts[1].split(separator: "+").map(String.init)
                     default: break
                     }
                 }
+                plan?.lockEdge = locks.contains("edge")
+                plan?.lockSegments = locks.contains("segments")
+                plan?.lockOrigin = locks.contains("origin")
                 model.timeSlice = settings
                 model.timeSliceVariations = plan
             }

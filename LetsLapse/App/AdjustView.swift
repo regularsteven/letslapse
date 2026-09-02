@@ -78,15 +78,14 @@ struct AdjustView: View {
                                 advancedRow
                                 timeSlicingSection
                             } else {
-                                sourceCard
                                 tailFrameBanner
-                                if model.photosProduceSingleImage {
-                                    stackModeRow
-                                } else {
+                                // One output photo has no schedule to edit —
+                                // the whole-shoot stack takes the timeline's
+                                // place entirely.
+                                if !model.photosProduceSingleImage {
                                     warpCard(inlineThumbnail: true)
-                                    chipsRow
-                                    stackModeRow
                                 }
+                                depthCard
                                 estimateCard
                                 advancedRow
                                 timeSlicingSection
@@ -169,17 +168,13 @@ struct AdjustView: View {
     /// unification; Blend-from codecs are video-only).
     private var wideStillsLayout: some View {
         VStack(spacing: 14) {
-            sourceCard
             tailFrameBanner
             HStack(alignment: .top, spacing: 14) {
                 VStack(spacing: 14) {
-                    if model.photosProduceSingleImage {
-                        stackModeRow
-                    } else {
+                    if !model.photosProduceSingleImage {
                         warpCard(inlineThumbnail: false)
-                        chipsRow
-                        stackModeRow
                     }
+                    depthCard
                 }
                 .frame(maxWidth: .infinity)
 
@@ -310,78 +305,6 @@ struct AdjustView: View {
         return "\(ratio.rawValue) — as shot"
     }
 
-    // MARK: - Source
-
-    private var sourceCard: some View {
-        HStack(spacing: 12) {
-            ProjectThumbnailView(
-                url: model.currentCapture.flatMap { model.mediaURL(for: $0) },
-                kind: model.currentCapture.map { model.mediaKind(for: $0) } ?? .video
-            )
-            .frame(width: 64, height: 48)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(model.currentCapture?.displayTitle ?? "Source")
-                    .font(.system(size: 14.5, weight: .semibold))
-                    .lineLimit(1)
-                sourceSubtitle
-                    .font(.system(size: 12))
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-            }
-            Spacer()
-            Button("Change") {
-                model.reset()
-            }
-            .font(.system(size: 12.5, weight: .semibold))
-            .foregroundStyle(LL.accent)
-            .buttonStyle(.plain)
-        }
-        .padding(12)
-        .llCard()
-    }
-
-    private var sourceDetailLine: String {
-        guard let capture = model.currentCapture else { return "—" }
-        var parts: [String] = []
-        // Video only for now: stills projects carry a probed capture span too
-        // (the warp-unification enablers), but this header deliberately keeps
-        // its shape until the unified Adjust screen ships — a look change
-        // here is a design-sync unit, not a probe side-effect.
-        if capture.kind == .video, let duration = capture.sourceDurationSeconds {
-            parts.append(DurationFormatter.recordingTime(from: duration) + " min")
-        }
-        parts.append(capture.formatLine)
-        parts.append("shot \(capture.createdAt.formatted(.relative(presentation: .named)))")
-        return parts.joined(separator: " · ")
-    }
-
-    /// "08:16 · 1080p · 30 fps · 2 moments" for a shoot with recorded
-    /// structure, "20:00 · 4K · 120 fps · continuous" for one take — the
-    /// design's exact shapes; the accent chunk replaces the Video/shot-date
-    /// tokens so the line fits.
-    private var sourceSubtitle: some View {
-        guard model.source?.isVideo == true, let capture = model.currentCapture else {
-            return Text(sourceDetailLine).foregroundColor(.secondary)
-        }
-        let moments = model.blendStretches().momentCount
-        var parts: [String] = []
-        if let duration = capture.sourceDurationSeconds {
-            parts.append(DurationFormatter.recordingTime(from: duration))
-        }
-        if let width = capture.sourceWidth, let height = capture.sourceHeight {
-            parts.append(AppModel.CaptureProject.resolutionLabel(width: width, height: height))
-        }
-        if let fps = capture.sourceFPS {
-            parts.append("\(Int(fps.rounded())) fps")
-        }
-        let tail = moments > 0 ? " · \(moments) \(moments == 1 ? "moment" : "moments")" : " · continuous"
-        return Text(parts.joined(separator: " · ")).foregroundColor(.secondary)
-            + Text(tail)
-                .foregroundColor(LL.accentDeep)
-                .fontWeight(.semibold)
-    }
-
     // MARK: - Warp timeline
 
     private func warpCard(inlineThumbnail: Bool) -> some View {
@@ -435,25 +358,15 @@ struct AdjustView: View {
             "Punch-in reframe, \(reframeLaneOpen ? "expanded" : "collapsed")")
     }
 
-    /// The interval chip set: the depths the old BLEND slider's travel was
-    /// really used for, with the value sheet covering everything between and
-    /// beyond.
-    private static let intervalDepthChips: [Double] = [1, 2, 3, 5, 8]
-
     /// Speed chips always edit the selected stretch — there is no separate
     /// "base" any more. A movie's chips are ×-real-time speeds gated by its
-    /// footage; an interval shoot's are blend depths — the whole-shoot BLEND
-    /// slider absorbed into the timeline, one value per stretch.
+    /// footage; an interval shoot's depths live in `depthCard`.
     private var chipsRow: some View {
         let timeline = model.activeWarp()
         let index = min(selectedStretch, max(0, timeline.stretchCount - 1))
         let current = timeline.speeds.indices.contains(index) ? timeline.speeds[index] : 1
-        let isInterval = model.source?.isVideo != true
-        let chips: [(speed: Double, label: String, word: String)] = isInterval
-            ? Self.intervalDepthChips.map {
-                ($0, WarpTimeline.depthLabel($0), WarpTimeline.depthWord($0))
-            }
-            : speedChips(forStretchFPS: model.warpStretchFPS(index)).map {
+        let chips: [(speed: Double, label: String, word: String)] =
+            speedChips(forStretchFPS: model.warpStretchFPS(index)).map {
                 ($0.speed, WarpTimeline.speedLabel($0.speed), $0.word)
             }
         return VStack(alignment: .leading, spacing: 6) {
@@ -500,13 +413,11 @@ struct AdjustView: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text(isInterval
-                ? "Every stretch has its own blend depth — photos per frame. Hold a stretch for Remove · Split · Reset."
-                : "Every stretch is speedable — no separate \u{201C}base\u{201D}. Hold a stretch for Remove · Split · Reset.")
+            Text("Every stretch is speedable — no separate \u{201C}base\u{201D}. Hold a stretch for Remove · Split · Reset.")
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
                 .padding(.horizontal, 4)
-            if !isInterval, model.useRamp {
+            if model.useRamp {
                 Text("Speed ramp \(model.rampStart)×→\(model.rampEnd)× is on — editing the timeline turns it off. Edit it in Advanced."
                     + (model.reframe?.isEmpty == false
                         ? " The punch-in reframe won't render while the ramp is on."
@@ -663,7 +574,7 @@ struct AdjustView: View {
             return "· \(timeline.stretchCount) stretches"
         }
         if !isVideo {
-            return "· \(WarpTimeline.depthWord(timeline.speeds.first ?? Double(model.photoBlendDepth)))"
+            return "· \(WarpTimeline.depthLabel(timeline.speeds.first ?? Double(model.photoBlendDepth)))"
         }
         let speed = timeline.speeds.first ?? Double(model.constantWindow)
         return "· \(WarpTimeline.speedWord(speed))"
@@ -689,9 +600,9 @@ struct AdjustView: View {
         if !isVideo {
             if model.photosProduceSingleImage {
                 let count = model.currentCapture?.sourceMediaCount ?? 0
-                return "All \(count) photos blend into one silky still — the classic stacked long exposure, with noise dropping by roughly the square root of the frame count."
+                return "All \(count) photos blend into one still — the classic stacked long exposure, with noise dropping by roughly the square root of the frame count."
             }
-            return "Never a trim — every photo lands in the clip. A stretch's depth is how many photos average into each frame: 1:1 is crisp, deeper is a rolling long exposure."
+            return "Never a trim — every photo lands in the clip. A stretch's depth is how many photos average into each frame: 1:1 keeps every photo as shot, deeper is a rolling long exposure."
         }
         return "Time-warp, never a trim — every source frame lands in the clip; blur follows speed through each ease."
     }
@@ -715,53 +626,168 @@ struct AdjustView: View {
         }
     }
 
-    // MARK: - Photos stack
+    // MARK: - Blend depth (stills)
 
-    /// The whole-shoot stack — the classic single long exposure — offered as
-    /// a mode switch rather than the old slider's top notch. On, it takes the
-    /// timeline's place entirely: one output photo has no schedule to edit.
-    private var stackModeRow: some View {
+    /// The interval chip set: the depths the old BLEND slider's travel was
+    /// really used for. Everything between and beyond — and the whole-shoot
+    /// stack — lives behind the "···" chip's drawer (the 2026-09-02 design).
+    private static let intervalDepthChips = [1, 2, 3, 5, 8]
+
+    /// The "···" drawer's disclosure. Session-only: the drawer is a way of
+    /// reaching values, not a value itself.
+    @State private var depthDrawerOpen = false
+    /// The depth the selected stretch had before "All frames → 1" folded the
+    /// shoot, so switching back lands where the user was rather than at 1:1.
+    @State private var depthBeforeStack: Int?
+
+    private var selectedStretchIndex: Int {
+        min(selectedStretch, max(0, model.activeWarp().stretchCount - 1))
+    }
+
+    /// The selected stretch's depth — photos per output frame.
+    private var selectedStretchDepth: Int {
+        let timeline = model.activeWarp()
+        let index = selectedStretchIndex
+        let speed = timeline.speeds.indices.contains(index) ? timeline.speeds[index] : 1
+        return max(1, Int(speed.rounded()))
+    }
+
+    /// Depth chips and the "···" drawer, one card. The chips edit the
+    /// selected stretch's depth — the whole-shoot BLEND slider absorbed into
+    /// the timeline, one value per stretch. The drawer holds the whole-shoot
+    /// stack (All frames → 1, the classic single long exposure, which takes
+    /// the timeline's place entirely: one output photo has no schedule to
+    /// edit) and a free Photos-per-frame value for anything the chips don't
+    /// offer. No character words under the ratios — "2:1" says it.
+    private var depthCard: some View {
         let photoCount = model.currentCapture?.sourceMediaCount ?? 0
-        let on = model.photosProduceSingleImage
-        return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                model.photoBlendDepth = on ? 1 : max(2, photoCount)
-            }
-        } label: {
-            HStack {
-                Image(systemName: "square.3.layers.3d.down.right")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(LL.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("One long exposure")
-                        .font(.system(size: 15.5))
-                        .foregroundStyle(.primary)
-                    Text(on
-                        ? "All \(photoCount) photos stack into a single still"
-                        : "Stack every photo into a single still instead of a clip")
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
+        let stacked = model.photosProduceSingleImage
+        let current = selectedStretchDepth
+        let canonical = Self.intervalDepthChips.contains(current)
+        // The "···" seat lights whenever the value lives behind it: the
+        // drawer is open, the shoot is stacked, or the depth isn't a chip's.
+        let customActive = depthDrawerOpen || stacked || !canonical
+        return VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                ForEach(Self.intervalDepthChips, id: \.self) { depth in
+                    Button {
+                        setDepth(depth)
+                    } label: {
+                        depthChip(WarpTimeline.depthLabel(Double(depth)),
+                                  active: !customActive && depth == current)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("\(depth) photos per frame")
                 }
-                Spacer()
-                Text(on ? "On" : "Off")
-                    .font(.system(size: 12))
-                    .foregroundStyle(on ? LL.accentDeep : .secondary)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.2)) { depthDrawerOpen.toggle() }
+                    if !depthDrawerOpen { model.endWarpCoalescing() }
+                } label: {
+                    depthChip("···", active: customActive)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(depthDrawerOpen ? "Hide custom depth" : "Custom depth")
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .contentShape(Rectangle())
+            if depthDrawerOpen {
+                Divider().padding(.top, 14)
+                VStack(spacing: 14) {
+                    HStack(spacing: 12) {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("All frames → 1")
+                                .font(.system(size: 14.5))
+                                .foregroundStyle(.primary)
+                            Text("Stack every photo into a single still")
+                                .font(.system(size: 11.5))
+                                .foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Toggle("All frames → 1", isOn: allFramesBinding)
+                            .labelsHidden()
+                    }
+                    if !stacked {
+                        HStack {
+                            Text("Photos per frame").font(.system(size: 14))
+                            Spacer()
+                            LLStepControl(value: customDepthBinding,
+                                          range: 2...max(2, photoCount - 1))
+                        }
+                    }
+                }
+                .padding(.top, 14)
+            }
         }
-        .buttonStyle(.plain)
+        .padding(16)
         .llCard()
-        .accessibilityLabel("One long exposure, \(on ? "on" : "off")")
+    }
+
+    private func depthChip(_ label: String, active: Bool) -> some View {
+        Text(label)
+            .font(.system(size: 14, weight: .bold))
+            .foregroundStyle(active ? LL.amber : .primary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 11)
+            .background(
+                active ? LL.ink : LL.cardBackground,
+                in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .shadow(color: .black.opacity(active ? 0 : 0.1), radius: 1.5, y: 1)
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+    }
+
+    /// A chip closes the drawer and lifts the whole-shoot stack if it was on.
+    private func setDepth(_ depth: Int) {
+        withAnimation(.easeInOut(duration: 0.2)) { depthDrawerOpen = false }
+        model.endWarpCoalescing()
+        if model.photosProduceSingleImage { model.photoBlendDepth = depth }
+        model.updateWarp { $0.setSpeed(Double(depth), for: selectedStretchIndex) }
+    }
+
+    private var customDepthBinding: Binding<Int> {
+        Binding(
+            get: { selectedStretchDepth },
+            set: { depth in
+                // One undo step per visit to the stepper, not one per tick.
+                let index = selectedStretchIndex
+                model.updateWarp(coalescing: "depth-\(index)") {
+                    $0.setSpeed(Double(depth), for: index)
+                }
+            })
+    }
+
+    /// All frames → 1: the classic single long exposure. The baseline depth
+    /// is the switch (`photosProduceSingleImage` reads it against the
+    /// count); the timeline's own speeds are left alone so switching back
+    /// finds every stretch where it was.
+    private var allFramesBinding: Binding<Bool> {
+        Binding(
+            get: { model.photosProduceSingleImage },
+            set: { on in
+                let photoCount = model.currentCapture?.sourceMediaCount ?? 0
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    if on {
+                        depthBeforeStack = selectedStretchDepth
+                        model.photoBlendDepth = max(2, photoCount)
+                    } else {
+                        model.photoBlendDepth = depthBeforeStack ?? 1
+                    }
+                }
+            })
     }
 
     // MARK: - Time slicing
 
-    /// Session stash: switching the toggle off keeps the entered values for
+    /// Session stash: taking the count to 0 keeps the entered values for
     /// this session (docs/time-slicing.md §3.2 of the brief).
     @State private var timeSliceStash: TimeSliceSettings?
     @State private var timeSliceVariationStash: TimeSliceVariationPlan?
+    /// "Custom" holds its seat while its stepper is in use, even when the
+    /// value happens to land on a preset's number.
+    @State private var timeSliceSegmentsCustom = false
+    @State private var timeSliceSpreadCustom = false
+
+    /// The header's count picker: 0 = off, 1 = one slice, 4 or 8 = a batch
+    /// (docs/time-slicing.md §10). The 2026-09-02 design folds the old On/Off
+    /// row and the separate Variations picker into this one control.
+    private static let timeSliceCounts = [0, 1, 4, 8]
 
     /// Hidden only where slicing has nothing to slice — the whole-shoot
     /// single still. Video and interval sequences both offer it.
@@ -773,142 +799,150 @@ struct AdjustView: View {
 
     @ViewBuilder private var timeSlicingSection: some View {
         if timeSlicingAvailable {
-            VStack(spacing: 0) {
-                timeSlicingToggleRow
+            VStack(alignment: .leading, spacing: 0) {
+                timeSlicingHeaderRow
                 if let settings = model.timeSlice {
-                    Divider().padding(.horizontal, 16)
-                    timeSlicingControls(settings)
+                    Divider().padding(.top, 16)
+                    timeSlicingControls(settings).padding(.top, 16)
                 }
             }
+            .padding(16)
             .llCard()
         }
     }
 
-    private var timeSlicingToggleRow: some View {
-        let on = model.timeSlice != nil
-        return Button {
-            withAnimation(.easeInOut(duration: 0.2)) {
-                if on {
-                    timeSliceStash = model.timeSlice
-                    timeSliceVariationStash = model.timeSliceVariations
-                    model.timeSlice = nil
-                    model.timeSliceVariations = nil
-                } else {
-                    // Fresh arming seeds the lag from a 25% spread of THIS
-                    // clip — the 2026-08-28 review finding: an absolute frame
-                    // default collapses to seams on a long shoot.
-                    model.timeSlice = timeSliceStash ?? seededTimeSlice()
-                    model.timeSliceVariations = timeSliceVariationStash
-                }
+    /// Title + a one-line reading of the recipe, and the count picker. The
+    /// subtitle truncates rather than wrapping: the picker keeps its width.
+    private var timeSlicingHeaderRow: some View {
+        HStack(spacing: 10) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("Time slicing")
+                    .font(.system(size: 15.5))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                Text(timeSliceSubtitle)
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
             }
-        } label: {
-            HStack {
-                Image(systemName: "rectangle.split.3x1")
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(LL.accent)
-                VStack(alignment: .leading, spacing: 1) {
-                    Text("Time slicing")
-                        .font(.system(size: 15.5))
-                        .foregroundStyle(.primary)
-                    Text(timeSliceToggleSubtitle(on: on))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Text(on ? "On" : "Off")
-                    .font(.system(size: 12))
-                    .foregroundStyle(on ? LL.accentDeep : .secondary)
-                Image(systemName: on ? "chevron.up" : "chevron.down")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.tertiary)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 13)
-            .contentShape(Rectangle())
+            .frame(maxWidth: .infinity, alignment: .leading)
+            LLInkSegment(
+                options: Self.timeSliceCounts,
+                label: { "\($0)" },
+                selection: timeSliceCountBinding)
+            .fixedSize()
+            .accessibilityLabel("Time slicing takes")
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Time slicing, \(on ? "on" : "off")")
     }
 
-    private func timeSliceToggleSubtitle(on: Bool) -> String {
-        guard on, let settings = model.timeSlice else {
-            return "Bands of the frame show different moments — time scrolls across the clip"
+    private var timeSliceSubtitle: String {
+        guard let settings = model.timeSlice else {
+            return "Bands of the frame show different moments"
         }
         if let plan = model.timeSliceVariations {
-            return "\(plan.count) variations · \(plan.mode.label.lowercased()) · one blend"
+            return "\(plan.count) takes · \(plan.mode.label)"
         }
-        return settings.displayName
+        if settings.grid != nil { return "Grid" }
+        return settings.axis == .vertical ? "Vertical bands" : "Horizontal bands"
+    }
+
+    /// 0 = off (the recipe goes to the session stash), 1 = the single slice,
+    /// more = a batch of that many takes from the one blend. Fresh arming
+    /// seeds the lag from a 25% spread of THIS clip — the 2026-08-28 review
+    /// finding: an absolute frame default collapses to seams on a long shoot.
+    private var timeSliceCountBinding: Binding<Int> {
+        Binding(
+            get: { model.timeSlice == nil ? 0 : (model.timeSliceVariations?.count ?? 1) },
+            set: { count in
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    guard count > 0 else {
+                        timeSliceStash = model.timeSlice
+                        timeSliceVariationStash = model.timeSliceVariations
+                        model.timeSlice = nil
+                        model.timeSliceVariations = nil
+                        return
+                    }
+                    if model.timeSlice == nil {
+                        model.timeSlice = timeSliceStash ?? seededTimeSlice()
+                    }
+                    if count == 1 {
+                        if let plan = model.timeSliceVariations { timeSliceVariationStash = plan }
+                        model.timeSliceVariations = nil
+                    } else {
+                        var plan = model.timeSliceVariations ?? timeSliceVariationStash
+                            ?? TimeSliceVariationPlan()
+                        plan.count = count
+                        model.timeSliceVariations = plan
+                    }
+                }
+            })
     }
 
     @ViewBuilder private func timeSlicingControls(_ settings: TimeSliceSettings) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if settings.grid != nil {
-                // A clip that came out of a Grid variation re-opens on its own
-                // recipe, so the grid's two parameters are editable here
-                // rather than silently dropped. Grid is not offered as a fresh
-                // single-slice choice — it arrives through Variations.
-                timeSliceGridControls(settings)
-            } else {
-                Toggle(isOn: timeSliceHorizontalBinding) {
-                    Text("Horizontal bands").font(.system(size: 14))
+        let plan = model.timeSliceVariations
+        let shape = timeSliceShape(settings, plan: plan)
+        VStack(alignment: .leading, spacing: 16) {
+            timeSliceGroup("Shape") {
+                Picker("Shape", selection: timeSliceShapeBinding) {
+                    Text("Vertical").tag(TimeSliceShape.vertical)
+                    Text("Horizontal").tag(TimeSliceShape.horizontal)
+                    Text("Grid").tag(TimeSliceShape.grid)
+                    if plan != nil {
+                        Text("Mixed").tag(TimeSliceShape.mixed)
+                    }
                 }
-                HStack {
-                    // Reading order: the first band holds the earliest moment
-                    // (the 2026-08-28 review's convention, both output modes).
-                    Text("Time starts").font(.system(size: 14))
-                    Spacer()
-                    Picker("Time starts", selection: timeSliceEarliestBinding) {
-                        if settings.axis == .vertical {
-                            Text("Left").tag(TimeSliceEdge.left)
-                            Text("Right").tag(TimeSliceEdge.right)
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            switch shape {
+            case .vertical, .horizontal:
+                // Reading order: the first band holds the earliest moment
+                // (the 2026-08-28 review's convention, both output modes).
+                timeSliceGroup("Time starts") {
+                    Picker("Time starts", selection: timeSliceStartBinding) {
+                        if shape == .vertical {
+                            Text("Left").tag(TimeSliceStart.edge(.left))
+                            Text("Right").tag(TimeSliceStart.edge(.right))
                         } else {
-                            Text("Top").tag(TimeSliceEdge.top)
-                            Text("Bottom").tag(TimeSliceEdge.bottom)
+                            Text("Top").tag(TimeSliceStart.edge(.top))
+                            Text("Bottom").tag(TimeSliceStart.edge(.bottom))
+                        }
+                        if plan != nil {
+                            Text("Mixed").tag(TimeSliceStart.mixed)
                         }
                     }
                     .pickerStyle(.segmented)
                     .labelsHidden()
-                    .frame(maxWidth: 200)
                 }
-            }
-            Stepper(value: timeSliceBinding(\.segments),
-                    in: 2...(settings.grid == nil ? 96 : TimeSliceGridGeometry.maximumColumns)) {
-                HStack {
-                    Text(settings.grid == nil ? "Segments" : "Columns").font(.system(size: 14))
-                    Spacer()
-                    Text(timeSliceSegmentsDetail(settings))
-                        .font(.system(size: 13).monospacedDigit())
-                        .foregroundStyle(.secondary)
+            case .grid:
+                timeSliceGroup("Sweeps from") {
+                    timeSliceCornerGrid(settings)
                 }
+            case .mixed:
+                EmptyView()
             }
-            // The primary temporal control is the spread as a share of the
-            // clip — the per-band lag is derived and read out alongside.
-            // Raw frames remain the stored recipe and the fallback control
-            // when the clip's length isn't known yet.
-            if timeSliceMasterFrames != nil {
-                Stepper(value: timeSliceSpreadPercentBinding, in: 2...95, step: 5) {
-                    HStack {
-                        Text("Spread").font(.system(size: 14))
-                        Spacer()
-                        Text(timeSliceSpreadDetail(settings))
-                            .font(.system(size: 13).monospacedDigit())
-                            .foregroundStyle(.secondary)
+            timeSliceGroup("Segments") {
+                Picker("Segments", selection: timeSliceSegmentsBinding) {
+                    Text("Fine").tag(TimeSliceSegmentsChoice.fine)
+                    Text("Medium").tag(TimeSliceSegmentsChoice.medium)
+                    Text("Bold").tag(TimeSliceSegmentsChoice.bold)
+                    if plan != nil {
+                        Text("Mixed").tag(TimeSliceSegmentsChoice.mixed)
                     }
+                    Text("Custom").tag(TimeSliceSegmentsChoice.custom)
                 }
-            } else {
-                Stepper(value: timeSliceBinding(\.offsetFrames), in: 1...120) {
-                    HStack {
-                        Text("Offset").font(.system(size: 14))
-                        Spacer()
-                        Text(timeSliceOffsetDetail(settings))
-                            .font(.system(size: 13).monospacedDigit())
-                            .foregroundStyle(.secondary)
-                    }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                if timeSliceSegmentsBinding.wrappedValue == .custom {
+                    timeSliceStepperRow(
+                        settings.grid == nil ? "Bands" : "Columns",
+                        value: timeSliceBinding(\.segments),
+                        range: 4...(settings.grid == nil ? 64 : TimeSliceGridGeometry.maximumColumns),
+                        step: 2)
                 }
             }
-            HStack {
-                Text("Output").font(.system(size: 14))
-                Spacer()
+            timeSliceGroup("Output") {
                 Picker("Output", selection: timeSliceBinding(\.output)) {
                     Text("Image").tag(TimeSliceOutput.image)
                     Text("Animation").tag(TimeSliceOutput.animation)
@@ -916,109 +950,99 @@ struct AdjustView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .frame(maxWidth: 260)
+            }
+            // The poster spreads the whole shoot regardless, so the spread
+            // only means anything once an animation is being kept.
+            if settings.output != .image {
+                timeSliceGroup("Spread") {
+                    if timeSliceMasterFrames != nil {
+                        Picker("Spread", selection: timeSliceSpreadBinding) {
+                            Text("Tight").tag(TimeSliceSpreadChoice.tight)
+                            Text("Medium").tag(TimeSliceSpreadChoice.medium)
+                            Text("Wide").tag(TimeSliceSpreadChoice.wide)
+                            Text("Custom").tag(TimeSliceSpreadChoice.custom)
+                        }
+                        .pickerStyle(.segmented)
+                        .labelsHidden()
+                        if timeSliceSpreadBinding.wrappedValue == .custom {
+                            timeSliceStepperRow(
+                                "Percent", value: timeSliceSpreadPercentBinding,
+                                range: 10...85, step: 5, suffix: "%")
+                        }
+                    } else {
+                        // The clip's length isn't known yet, so a share of it
+                        // can't be — the raw lag per band stands in.
+                        timeSliceStepperRow(
+                            "Frames per band", value: timeSliceBinding(\.offsetFrames),
+                            range: 1...120, step: 1)
+                    }
+                }
             }
             Toggle(isOn: timeSliceBinding(\.includeRegularClip)) {
                 Text("Include regular timelapse").font(.system(size: 14))
             }
-            // Everything above is the single slice, unchanged. Below it: the
-            // batch — one blend, several slices (docs/time-slicing.md §10).
-            Divider()
-            timeSliceVariationControls(settings)
             timeSliceReadout(settings)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
     }
 
-    /// The grid's own two parameters, shown only for a rehydrated grid recipe.
-    @ViewBuilder private func timeSliceGridControls(_ settings: TimeSliceSettings) -> some View {
-        HStack {
-            Text("Sweeps from").font(.system(size: 14))
-            Spacer()
-            Picker("Sweeps from", selection: timeSliceGridOriginBinding) {
-                ForEach(TimeSliceGridOrigin.allCases, id: \.self) { origin in
-                    Text(origin.label).tag(origin)
-                }
-            }
-            .labelsHidden()
-            .frame(maxWidth: 190)
+    /// Label above, control below, full width — the shape every row of the
+    /// card takes now that four-seat pickers need the whole 329pt.
+    private func timeSliceGroup<Content: View>(
+        _ title: String, @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(title).font(.system(size: 14))
+            content()
         }
-        HStack {
-            Text("Wavefront").font(.system(size: 14))
-            Spacer()
-            Picker("Wavefront", selection: timeSliceGridMetricBinding) {
-                Text("Stepped").tag(TimeSliceGridMetric.manhattan)
-                Text("Radial").tag(TimeSliceGridMetric.euclidean)
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 200)
-        }
-        Button {
-            var updated = settings
-            updated.grid = nil
-            updated.variation = nil
-            model.timeSlice = updated
-        } label: {
-            Text("Use single-axis bands instead")
-                .font(.system(size: 12))
-                .foregroundStyle(LL.accent)
-        }
-        .buttonStyle(.plain)
     }
 
-    /// Variations — the count, what varies, and the seed that makes a batch
-    /// repeatable. Off is the shipped single-output behaviour.
-    @ViewBuilder private func timeSliceVariationControls(_ settings: TimeSliceSettings) -> some View {
+    private func timeSliceStepperRow(
+        _ title: String, value: Binding<Int>, range: ClosedRange<Int>, step: Int,
+        suffix: String = ""
+    ) -> some View {
         HStack {
-            Text("Variations").font(.system(size: 14))
+            Text(title)
+                .font(.system(size: 12.5))
+                .foregroundStyle(.secondary)
             Spacer()
-            Picker("Variations", selection: timeSliceVariationCountBinding) {
-                Text("Off").tag(0)
-                ForEach(TimeSliceVariationPlan.allowedCounts, id: \.self) { count in
-                    Text("\(count)").tag(count)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: 200)
+            LLStepControl(value: value, range: range, step: step, suffix: suffix)
         }
-        // The caption sits UNDER the row, not beside the picker: a 200pt
-        // segmented control leaves ~110pt of label column on a 393pt screen,
-        // which truncates this sentence to nothing.
-        Text("Blending runs once — each extra take is a slice pass")
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-        if let plan = model.timeSliceVariations {
-            // Four options need the full card width, so the label goes above
-            // rather than beside it.
-            Text("Variation mode").font(.system(size: 14))
-            Picker("Variation mode", selection: timeSliceVariationModeBinding) {
-                ForEach(TimeSliceVariationMode.allCases, id: \.self) { mode in
-                    Text(mode.label).tag(mode)
+        .padding(.top, 2)
+    }
+
+    /// The grid's origin corner — the cell holding the newest moment — as a
+    /// 2×2 of chips in the corners' own arrangement.
+    private func timeSliceCornerGrid(_ settings: TimeSliceSettings) -> some View {
+        let current = settings.grid?.origin ?? .topLeft
+        let rows: [[TimeSliceGridOrigin]] = [[.topLeft, .topRight], [.bottomLeft, .bottomRight]]
+        return VStack(spacing: 6) {
+            ForEach(rows, id: \.self) { row in
+                HStack(spacing: 6) {
+                    ForEach(row, id: \.self) { corner in
+                        let active = corner == current
+                        Button {
+                            timeSliceGridOriginBinding.wrappedValue = corner
+                        } label: {
+                            Text(corner.label)
+                                .font(.system(size: 12.5, weight: .bold))
+                                .foregroundStyle(active ? LL.amber : .primary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 10)
+                                .background(
+                                    active ? LL.ink : LL.cardBackground,
+                                    in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                                .shadow(color: .black.opacity(active ? 0 : 0.1), radius: 1.5, y: 1)
+                                .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityAddTraits(active ? .isSelected : [])
+                    }
                 }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(maxWidth: .infinity)
-            HStack(spacing: 8) {
-                Text("Seed \(plan.seedToken)")
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(.secondary)
-                Spacer()
-                Button {
-                    model.timeSliceVariations = TimeSliceVariationPlan(
-                        count: plan.count, mode: plan.mode, seed: TimeSliceVariationPlan.freshSeed())
-                } label: {
-                    Text("Reroll")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(LL.accent)
-                }
-                .buttonStyle(.plain)
             }
         }
     }
+
+    // MARK: Bindings
 
     private func timeSliceBinding<T>(_ keyPath: WritableKeyPath<TimeSliceSettings, T>) -> Binding<T> {
         Binding(
@@ -1030,114 +1054,169 @@ struct AdjustView: View {
             })
     }
 
-    private var timeSliceGridOriginBinding: Binding<TimeSliceGridOrigin> {
-        Binding(
-            get: { model.timeSlice?.grid?.origin ?? .topLeft },
-            set: { origin in
-                guard var settings = model.timeSlice, var grid = settings.grid else { return }
-                grid.origin = origin
-                settings.grid = grid
-                model.timeSlice = settings
-            })
-    }
-
-    private var timeSliceGridMetricBinding: Binding<TimeSliceGridMetric> {
-        Binding(
-            get: { model.timeSlice?.grid?.metric ?? .manhattan },
-            set: { metric in
-                guard var settings = model.timeSlice, var grid = settings.grid else { return }
-                grid.metric = metric
-                settings.grid = grid
-                model.timeSlice = settings
-            })
-    }
-
-    /// 0 = Off. Turning it on mints a seed; turning it off keeps the plan in
-    /// the session stash, the same courtesy the slicing toggle already pays.
-    private var timeSliceVariationCountBinding: Binding<Int> {
-        Binding(
-            get: { model.timeSliceVariations?.count ?? 0 },
-            set: { count in
-                guard count > 0 else {
-                    timeSliceVariationStash = model.timeSliceVariations
-                    model.timeSliceVariations = nil
-                    return
-                }
-                if var plan = model.timeSliceVariations {
-                    plan.count = count
-                    model.timeSliceVariations = plan
-                } else {
-                    var plan = timeSliceVariationStash ?? TimeSliceVariationPlan()
-                    plan.count = count
-                    model.timeSliceVariations = plan
-                }
-            })
-    }
-
-    private var timeSliceVariationModeBinding: Binding<TimeSliceVariationMode> {
-        Binding(
-            get: { model.timeSliceVariations?.mode ?? .mixed },
-            set: { mode in
-                guard var plan = model.timeSliceVariations else { return }
-                plan.mode = mode
-                model.timeSliceVariations = plan
-            })
-    }
-
-    /// The batch this Adjust screen would generate, resolved against the clip
-    /// it can already measure — so the readout below states what will actually
-    /// be rendered rather than what was asked for. Empty when no batch is
-    /// armed or the clip's shape isn't known yet.
-    private var timeSliceBatch: [TimeSliceSettings] {
-        guard let plan = model.timeSliceVariations, let baseline = model.timeSlice,
-              let frames = timeSliceMasterFrames, frames > 1,
-              let size = timeSliceOutputSize, size.width >= 1, size.height >= 1
-        else { return [] }
-        return TimeSliceVariationGenerator.variations(
-            plan: plan, baseline: baseline, masterFrames: frames,
-            width: Int(size.width.rounded()), height: Int(size.height.rounded()))
-    }
-
-    /// "24" for a band count; "24 columns · 14 rows of 160 px" once the grid
-    /// has a frame to resolve against.
-    private func timeSliceSegmentsDetail(_ settings: TimeSliceSettings) -> String {
-        guard settings.grid != nil else { return "\(settings.segments)" }
-        guard let size = timeSliceOutputSize,
-              let layout = TimeSliceGridGeometry.layout(
-                width: Int(size.width.rounded()), height: Int(size.height.rounded()),
-                columns: settings.segments)
-        else { return "\(settings.segments)" }
-        return "\(layout.columns) × \(layout.rows) of \(layout.cellPixels) px"
-    }
-
-    /// Seeds a fresh recipe with the lag a ~25% spread of this clip needs —
-    /// scale-aware where the absolute default wasn't.
-    private func seededTimeSlice() -> TimeSliceSettings {
-        var settings = TimeSliceSettings()
-        if let frames = timeSliceMasterFrames, frames > 0 {
-            settings.offsetFrames = TimeSliceGeometry.offsetFrames(
-                spreadFraction: 0.25, masterFrames: frames, segments: settings.segments)
+    private func timeSliceShape(_ settings: TimeSliceSettings, plan: TimeSliceVariationPlan?) -> TimeSliceShape {
+        if let plan {
+            switch plan.mode {
+            case .vertical: return .vertical
+            case .horizontal: return .horizontal
+            case .grid: return .grid
+            case .mixed: return .mixed
+            }
         }
-        return settings
+        if settings.grid != nil { return .grid }
+        return settings.axis == .vertical ? .vertical : .horizontal
+    }
+
+    /// Shape edits the baseline recipe AND, for a batch, the mode — so the
+    /// Time-starts seats always belong to the axis the batch is on. A grid
+    /// batch pins its corner (the corner picker has no Mixed seat).
+    private var timeSliceShapeBinding: Binding<TimeSliceShape> {
+        Binding(
+            get: { timeSliceShape(model.timeSlice ?? TimeSliceSettings(), plan: model.timeSliceVariations) },
+            set: { shape in
+                var settings = model.timeSlice ?? TimeSliceSettings()
+                switch shape {
+                case .vertical:
+                    settings.grid = nil
+                    settings.newestEdge = Self.edge(settings.newestEdge, on: .vertical)
+                case .horizontal:
+                    settings.grid = nil
+                    settings.newestEdge = Self.edge(settings.newestEdge, on: .horizontal)
+                case .grid:
+                    if settings.grid == nil {
+                        settings.grid = TimeSliceGrid(origin: .topLeft, metric: .manhattan)
+                    }
+                case .mixed:
+                    break
+                }
+                model.timeSlice = settings
+                if var plan = model.timeSliceVariations {
+                    switch shape {
+                    case .vertical: plan.mode = .vertical
+                    case .horizontal: plan.mode = .horizontal
+                    case .grid:
+                        plan.mode = .grid
+                        plan.lockOrigin = true
+                    case .mixed: plan.mode = .mixed
+                    }
+                    model.timeSliceVariations = plan
+                }
+            })
+    }
+
+    /// The axis flip preserves which end holds the newest band: left↔top,
+    /// right↔bottom.
+    private static func edge(_ edge: TimeSliceEdge, on axis: TimeSliceAxis) -> TimeSliceEdge {
+        switch (edge, axis) {
+        case (.top, .vertical): return .left
+        case (.bottom, .vertical): return .right
+        case (.left, .horizontal): return .top
+        case (.right, .horizontal): return .bottom
+        default: return edge
+        }
     }
 
     /// The UI speaks reading order (where time STARTS); the model stores the
     /// newest edge. They are opposite ends of the same axis.
-    private var timeSliceEarliestBinding: Binding<TimeSliceEdge> {
-        func opposite(_ edge: TimeSliceEdge) -> TimeSliceEdge {
-            switch edge {
-            case .left: return .right
-            case .right: return .left
-            case .top: return .bottom
-            case .bottom: return .top
-            }
+    private static func opposite(_ edge: TimeSliceEdge) -> TimeSliceEdge {
+        switch edge {
+        case .left: return .right
+        case .right: return .left
+        case .top: return .bottom
+        case .bottom: return .top
         }
-        return Binding(
-            get: { opposite((model.timeSlice ?? TimeSliceSettings()).newestEdge) },
-            set: { earliest in
+    }
+
+    private var timeSliceStartBinding: Binding<TimeSliceStart> {
+        Binding(
+            get: {
+                if let plan = model.timeSliceVariations, !plan.lockEdge { return .mixed }
+                return .edge(Self.opposite((model.timeSlice ?? TimeSliceSettings()).newestEdge))
+            },
+            set: { start in
+                switch start {
+                case .mixed:
+                    if var plan = model.timeSliceVariations {
+                        plan.lockEdge = false
+                        model.timeSliceVariations = plan
+                    }
+                case .edge(let earliest):
+                    var settings = model.timeSlice ?? TimeSliceSettings()
+                    settings.newestEdge = Self.opposite(earliest)
+                    model.timeSlice = settings
+                    if var plan = model.timeSliceVariations {
+                        plan.lockEdge = true
+                        model.timeSliceVariations = plan
+                    }
+                }
+            })
+    }
+
+    private var timeSliceGridOriginBinding: Binding<TimeSliceGridOrigin> {
+        Binding(
+            get: { model.timeSlice?.grid?.origin ?? .topLeft },
+            set: { origin in
                 var settings = model.timeSlice ?? TimeSliceSettings()
-                settings.newestEdge = opposite(earliest)
+                settings.grid = TimeSliceGrid(
+                    origin: origin, metric: settings.grid?.metric ?? .manhattan)
                 model.timeSlice = settings
+                if var plan = model.timeSliceVariations {
+                    plan.lockOrigin = true
+                    model.timeSliceVariations = plan
+                }
+            })
+    }
+
+    private var timeSliceSegmentsBinding: Binding<TimeSliceSegmentsChoice> {
+        Binding(
+            get: {
+                if let plan = model.timeSliceVariations, !plan.lockSegments { return .mixed }
+                if timeSliceSegmentsCustom { return .custom }
+                let segments = (model.timeSlice ?? TimeSliceSettings()).segments
+                return TimeSliceSegmentsChoice.allCases.first { $0.count == segments } ?? .custom
+            },
+            set: { choice in
+                var settings = model.timeSlice ?? TimeSliceSettings()
+                var plan = model.timeSliceVariations
+                switch choice {
+                case .mixed:
+                    plan?.lockSegments = false
+                    timeSliceSegmentsCustom = false
+                case .custom:
+                    plan?.lockSegments = true
+                    timeSliceSegmentsCustom = true
+                case .fine, .medium, .bold:
+                    if let count = choice.count {
+                        settings.segments = settings.grid == nil
+                            ? count : min(count, TimeSliceGridGeometry.maximumColumns)
+                    }
+                    plan?.lockSegments = true
+                    timeSliceSegmentsCustom = false
+                }
+                model.timeSlice = settings
+                model.timeSliceVariations = plan
+            })
+    }
+
+    /// Named shares read back from the stored lag with a little tolerance:
+    /// the lag is an integer, so a 25% ask can land at 23% on a long clip
+    /// and must still read as Medium.
+    private var timeSliceSpreadBinding: Binding<TimeSliceSpreadChoice> {
+        Binding(
+            get: {
+                if timeSliceSpreadCustom { return .custom }
+                let percent = timeSliceSpreadPercentBinding.wrappedValue
+                return TimeSliceSpreadChoice.allCases.first {
+                    $0.percent.map { abs($0 - percent) <= 3 } ?? false
+                } ?? .custom
+            },
+            set: { choice in
+                if let percent = choice.percent {
+                    timeSliceSpreadPercentBinding.wrappedValue = percent
+                    timeSliceSpreadCustom = false
+                } else {
+                    timeSliceSpreadCustom = true
+                }
             })
     }
 
@@ -1161,37 +1240,31 @@ struct AdjustView: View {
             })
     }
 
-    private func timeSliceSpreadDetail(_ settings: TimeSliceSettings) -> String {
-        guard let frames = timeSliceMasterFrames, frames > 0 else {
-            return timeSliceOffsetDetail(settings)
-        }
-        let fraction = TimeSliceGeometry.spreadFraction(
-            offsetFrames: settings.offsetFrames, masterFrames: frames, segments: settings.segments)
-        var parts = ["\(Int((fraction * 100).rounded()))% of the clip",
-                     "lag \(settings.offsetFrames) \(settings.offsetFrames == 1 ? "frame" : "frames")"]
-        if let duration = model.currentCapture?.sourceDurationSeconds, duration > 0 {
-            let perBand = duration / Double(frames) * Double(settings.offsetFrames)
-            parts.append("≈ \(timeSliceSeconds(perBand)) of capture")
-        }
-        return parts.joined(separator: " · ")
+    // MARK: Derived
+
+    /// The batch this Adjust screen would generate, resolved against the clip
+    /// it can already measure — so the readout below states what will actually
+    /// be rendered rather than what was asked for. Empty when no batch is
+    /// armed or the clip's shape isn't known yet.
+    private var timeSliceBatch: [TimeSliceSettings] {
+        guard let plan = model.timeSliceVariations, let baseline = model.timeSlice,
+              let frames = timeSliceMasterFrames, frames > 1,
+              let size = timeSliceOutputSize, size.width >= 1, size.height >= 1
+        else { return [] }
+        return TimeSliceVariationGenerator.variations(
+            plan: plan, baseline: baseline, masterFrames: frames,
+            width: Int(size.width.rounded()), height: Int(size.height.rounded()))
     }
 
-    /// The axis flip preserves which end holds the newest band: left↔top,
-    /// right↔bottom.
-    private var timeSliceHorizontalBinding: Binding<Bool> {
-        Binding(
-            get: { (model.timeSlice?.axis ?? .vertical) == .horizontal },
-            set: { horizontal in
-                var settings = model.timeSlice ?? TimeSliceSettings()
-                switch (settings.newestEdge, horizontal) {
-                case (.left, true): settings.newestEdge = .top
-                case (.right, true): settings.newestEdge = .bottom
-                case (.top, false): settings.newestEdge = .left
-                case (.bottom, false): settings.newestEdge = .right
-                default: break
-                }
-                model.timeSlice = settings
-            })
+    /// Seeds a fresh recipe with the lag a ~25% spread of this clip needs —
+    /// scale-aware where the absolute default wasn't.
+    private func seededTimeSlice() -> TimeSliceSettings {
+        var settings = TimeSliceSettings()
+        if let frames = timeSliceMasterFrames, frames > 0 {
+            settings.offsetFrames = TimeSliceGeometry.offsetFrames(
+                spreadFraction: 0.25, masterFrames: frames, segments: settings.segments)
+        }
+        return settings
     }
 
     /// The master's frame count as Adjust can know it: exact for stills, the
@@ -1219,15 +1292,6 @@ struct AdjustView: View {
         return CGSize(width: width, height: height)
     }
 
-    private func timeSliceOffsetDetail(_ settings: TimeSliceSettings) -> String {
-        let frames = "\(settings.offsetFrames) \(settings.offsetFrames == 1 ? "frame" : "frames")"
-        guard let masterFrames = timeSliceMasterFrames, masterFrames > 0,
-              let duration = model.currentCapture?.sourceDurationSeconds, duration > 0
-        else { return frames }
-        let perBand = duration / Double(masterFrames) * Double(settings.offsetFrames)
-        return "\(frames) · ≈ \(timeSliceSeconds(perBand)) of capture"
-    }
-
     /// What stops a Create outright: bands thinner than the floor, or a
     /// spread that eats the whole clip. nil = fine.
     private var timeSliceRefusal: String? {
@@ -1253,14 +1317,14 @@ struct AdjustView: View {
            TimeSliceGeometry.slicedFrameCount(
                masterFrames: frames, maxLag: timeSliceSpreadFrames(settings)) < 1 {
             return "The spread (\(timeSliceSpreadFrames(settings)) frames) consumes the whole clip "
-                + "(\(frames) frames) — reduce segments or offset"
+                + "(\(frames) frames) — reduce segments or the spread"
         }
         // A batch whose every member is refused has nothing to render; the
         // generator has already discarded anything that wouldn't.
         if model.timeSliceVariations != nil, timeSliceMasterFrames != nil,
            timeSliceOutputSize != nil, timeSliceBatch.isEmpty {
-            return "No variation fits this clip — reduce the segments or the spread, or turn "
-                + "Variations off"
+            return "No take fits this clip — reduce the segments or the spread, or take the "
+                + "count down to 1"
         }
         return nil
     }
@@ -1273,74 +1337,41 @@ struct AdjustView: View {
             width: Int(size.width.rounded()), height: Int(size.height.rounded()))
     }
 
+    /// One line: a refusal in red, else what the run is ready to make. A
+    /// batch that can't seat every take says how many it will.
     @ViewBuilder private func timeSliceReadout(_ settings: TimeSliceSettings) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             if let refusal = timeSliceRefusal {
-                Text(refusal)
-                    .foregroundStyle(.red)
-            } else if let frames = timeSliceMasterFrames {
-                let spread = timeSliceSpreadFrames(settings)
-                let sliced = TimeSliceGeometry.slicedFrameCount(masterFrames: frames, maxLag: spread)
-                if settings.output.wantsAnimation {
-                    let fraction = Double(spread) / Double(max(1, frames))
-                    let clipSeconds = model.estimatedOutputSeconds()
-                    let spreadSeconds = clipSeconds.map { $0 * fraction }
-                    Text("Spread \(spread) frames · \(Int((fraction * 100).rounded()))% of the clip"
-                        + (spreadSeconds.map { " ≈ \(timeSliceSeconds($0))" } ?? ""))
-                    if fraction < 0.05 {
-                        // Under this line the bands sample near-identical
-                        // moments and the output is seam artifacts, not an
-                        // effect (2026-08-28 test-output review).
-                        Text("Under 5% spread the bands read as seams, not moments — raise the spread")
-                            .foregroundStyle(.orange)
-                    }
-                    Text("Sliced clip \(sliced) frames — the spread is trimmed off the end")
+                Text(refusal).foregroundStyle(.red)
+            } else if let plan = model.timeSliceVariations {
+                let batch = timeSliceBatch
+                let count = batch.isEmpty ? plan.count : batch.count
+                Text("\(count) takes from one blend")
+                if !batch.isEmpty, batch.count < plan.count {
+                    Text("Only \(batch.count) of \(plan.count) fit this clip — the rest would have "
+                        + "repeated one of these")
+                        .foregroundStyle(.orange)
                 }
-                if settings.output.wantsImage {
-                    Text("Poster: the whole shoot spread across \(settings.segments) bands")
-                }
-                if settings.output.wantsAnimation, let size = timeSliceOutputSize {
-                    let scratch = Int64(Double(timeSliceSpreadFrames(settings)) / 2 * size.width * size.height * 4)
-                    Text("Scratch ≈ \(ByteCountFormatter.string(fromByteCount: scratch, countStyle: .file)) while rendering")
-                }
-                timeSliceBatchReadout
+            } else if settings.grid != nil {
+                Text("Ready — \(timeSliceGridSummary(settings))")
+            } else {
+                Text("Ready — \(settings.segments) bands")
             }
         }
-        .font(.system(size: 11.5))
+        .font(.system(size: 12))
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// What the batch will actually produce — counted by shape, and named, so
-    /// the spread is legible before a minutes-long run rather than after it.
-    @ViewBuilder private var timeSliceBatchReadout: some View {
-        let batch = timeSliceBatch
-        if let plan = model.timeSliceVariations, !batch.isEmpty {
-            let grids = batch.filter { $0.grid != nil }.count
-            let vertical = batch.filter { $0.grid == nil && $0.axis == .vertical }.count
-            let horizontal = batch.count - grids - vertical
-            let shapes = [
-                grids > 0 ? "grid ×\(grids)" : nil,
-                vertical > 0 ? "vertical ×\(vertical)" : nil,
-                horizontal > 0 ? "horizontal ×\(horizontal)" : nil,
-            ].compactMap { $0 }
-            Text("\(batch.count) variations · \(shapes.joined(separator: " · "))")
-                .foregroundStyle(LL.accentDeep)
-            if batch.count < plan.count {
-                Text("Only \(batch.count) of \(plan.count) fit this clip — the rest would have "
-                    + "repeated one of these")
-                    .foregroundStyle(.orange)
-            }
-            ForEach(Array(batch.enumerated()), id: \.offset) { _, variation in
-                Text("· \(variation.displayName)")
-                    .font(.system(size: 10.5).monospacedDigit())
-                    .foregroundStyle(.tertiary)
-            }
-        }
-    }
-
-    private func timeSliceSeconds(_ seconds: Double) -> String {
-        seconds < 9.95 ? String(format: "%.1f s", seconds) : SpeedMath.clipLength(seconds)
+    /// "24 × 14 grid" once the grid has a frame to resolve against, else the
+    /// column count on its own.
+    private func timeSliceGridSummary(_ settings: TimeSliceSettings) -> String {
+        guard let size = timeSliceOutputSize,
+              let layout = TimeSliceGridGeometry.layout(
+                width: Int(size.width.rounded()), height: Int(size.height.rounded()),
+                columns: settings.segments)
+        else { return "\(settings.segments)-column grid" }
+        return "\(layout.columns) × \(layout.rows) grid"
     }
 
     // MARK: - Advanced
@@ -1481,10 +1512,9 @@ struct AdjustView: View {
             // whole point of arming it.
             if let plan = model.timeSliceVariations {
                 let count = timeSliceBatch.isEmpty ? plan.count : timeSliceBatch.count
-                let noun = slice.output == .image ? "posters" : "variations"
                 return slice.includeRegularClip
-                    ? baseCtaTitle + " + \(count) \(noun)"
-                    : "Create \(count) \(noun)"
+                    ? baseCtaTitle + " + \(count) takes"
+                    : "Create \(count) takes"
             }
             if !slice.includeRegularClip {
                 return slice.output == .image ? "Create time-slice poster" : "Create sliced clip"
@@ -1520,6 +1550,51 @@ struct AdjustView: View {
             return "Create \(frames)-frame timelapse"
         }
         return "Create timelapse"
+    }
+}
+
+// MARK: - Time-slicing control vocabulary
+
+/// The Shape picker's seats. Grid is a first-class single-slice choice now
+/// (2026-09-02); Mixed exists only for a batch, where it is the mode that
+/// alternates bands and grids.
+private enum TimeSliceShape: Hashable {
+    case vertical, horizontal, grid, mixed
+}
+
+/// Time starts: an edge in reading order, or — for a batch — Mixed, which
+/// lets the generator walk both edges of the axis.
+private enum TimeSliceStart: Hashable {
+    case edge(TimeSliceEdge)
+    case mixed
+}
+
+/// Segments: three named counts, a batch's Mixed, and Custom with a stepper.
+private enum TimeSliceSegmentsChoice: Hashable, CaseIterable {
+    case fine, medium, bold, mixed, custom
+
+    var count: Int? {
+        switch self {
+        case .fine: return 24
+        case .medium: return 16
+        case .bold: return 8
+        case .mixed, .custom: return nil
+        }
+    }
+}
+
+/// Spread as a share of the clip: three named shares and Custom. Never
+/// Mixed — a batch always varies the spread, last and least.
+private enum TimeSliceSpreadChoice: Hashable, CaseIterable {
+    case tight, medium, wide, custom
+
+    var percent: Int? {
+        switch self {
+        case .tight: return 10
+        case .medium: return 25
+        case .wide: return 50
+        case .custom: return nil
+        }
     }
 }
 

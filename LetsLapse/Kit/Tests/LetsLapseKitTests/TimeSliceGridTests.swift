@@ -255,4 +255,62 @@ final class TimeSliceGridTests: XCTestCase {
         XCTAssertNil(decoded.variation)
         XCTAssertEqual(decoded.displayName, "timeslice-vert-right-segs_24-lag_2")
     }
+    // MARK: - Locks (the 2026-09-02 Adjust simplification)
+
+    func testLockedEdgePinsEveryBandedMemberToTheBaselineEdge() {
+        let baseline = TimeSliceSettings(newestEdge: .left, segments: 24, offsetFrames: 6)
+        for mode in [TimeSliceVariationMode.vertical, .mixed] {
+            let batch = TimeSliceVariationGenerator.variations(
+                plan: TimeSliceVariationPlan(count: 8, mode: mode, seed: 7, lockEdge: true),
+                baseline: baseline, masterFrames: master, width: width, height: height)
+            XCTAssertEqual(batch.count, 8, "\(mode)")
+            for member in batch where member.grid == nil && member.axis == .vertical {
+                XCTAssertEqual(member.newestEdge, .left, "\(mode): \(member.displayName)")
+            }
+        }
+        // Unlocked, the same seed walks both edges.
+        let free = TimeSliceVariationGenerator.variations(
+            plan: TimeSliceVariationPlan(count: 8, mode: .vertical, seed: 7),
+            baseline: baseline, masterFrames: master, width: width, height: height)
+        XCTAssertEqual(Set(free.map(\.newestEdge)), [.left, .right])
+    }
+
+    func testLockedSegmentsKeepTheBaselineCountAndStayDistinct() {
+        let baseline = TimeSliceSettings(newestEdge: .right, segments: 16, offsetFrames: 6)
+        let batch = TimeSliceVariationGenerator.variations(
+            plan: TimeSliceVariationPlan(count: 4, mode: .vertical, seed: 11,
+                                         lockEdge: true, lockSegments: true),
+            baseline: baseline, masterFrames: master, width: width, height: height)
+        XCTAssertEqual(batch.count, 4)
+        // Edge and count are both pinned, so the lag is all that can differ —
+        // and it must, or the batch would repeat itself.
+        XCTAssertEqual(Set(batch.map(\.segments)), [16])
+        XCTAssertEqual(Set(batch.map(\.newestEdge)), [.right])
+        XCTAssertEqual(Set(batch.map(\.offsetFrames)).count, 4)
+    }
+
+    func testLockedOriginKeepsTheCornerAndAlternatesTheMetric() {
+        var baseline = TimeSliceSettings(newestEdge: .right, segments: 24, offsetFrames: 6)
+        baseline.grid = TimeSliceGrid(origin: .bottomRight, metric: .manhattan)
+        let batch = TimeSliceVariationGenerator.variations(
+            plan: TimeSliceVariationPlan(count: 4, mode: .grid, seed: 3, lockOrigin: true),
+            baseline: baseline, masterFrames: master, width: width, height: height)
+        XCTAssertEqual(batch.count, 4)
+        XCTAssertEqual(Set(batch.compactMap { $0.grid?.origin }), [.bottomRight])
+        XCTAssertEqual(Set(batch.compactMap { $0.grid?.metric }), [.manhattan, .euclidean])
+    }
+
+    func testPlanLocksRoundTripAndDefaultOffForOlderPlans() throws {
+        let plan = TimeSliceVariationPlan(count: 4, mode: .vertical, seed: 5,
+                                          lockEdge: true, lockSegments: false, lockOrigin: true)
+        let data = try JSONEncoder().encode(plan)
+        XCTAssertEqual(try JSONDecoder().decode(TimeSliceVariationPlan.self, from: data), plan)
+
+        let legacy = Data(#"{"count":8,"mode":"mixed","seed":42}"#.utf8)
+        let decoded = try JSONDecoder().decode(TimeSliceVariationPlan.self, from: legacy)
+        XCTAssertEqual(decoded, TimeSliceVariationPlan(count: 8, mode: .mixed, seed: 42))
+        XCTAssertFalse(decoded.lockEdge)
+        XCTAssertFalse(decoded.lockSegments)
+        XCTAssertFalse(decoded.lockOrigin)
+    }
 }
