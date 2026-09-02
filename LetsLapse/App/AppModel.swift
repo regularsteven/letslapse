@@ -301,7 +301,16 @@ final class AppModel: ObservableObject {
         /// file's name, or a dated fallback.
         var displayTitle: String {
             if let name, !name.isEmpty { return name }
-            if kind == .video, mode == "Import" {
+            if kind == .video, mode == AppModel.importedVideoMode {
+                let base = (originalName as NSString).deletingPathExtension
+                if !base.isEmpty { return base }
+            }
+            // An imported still sequence names itself after the folder it came
+            // out of — see `AppModel.importedStillsName`. Gated on the import
+            // mode rather than on `kind`, so photo projects registered through
+            // the old generic "Import" path (whose `originalName` is the
+            // count, not a name) keep their dated titles.
+            if kind == .photos, mode == AppModel.importedStillsMode {
                 let base = (originalName as NSString).deletingPathExtension
                 if !base.isEmpty { return base }
             }
@@ -429,7 +438,9 @@ final class AppModel: ObservableObject {
                 }
                 return "\(timing)\(trim)"
             case .image:
-                if timeSlice != nil { return "Time-slice poster" }
+                if let timeSlice {
+                    return timeSlice.grid != nil ? "Time-slice grid poster" : "Time-slice poster"
+                }
                 return linearLight ? "Linear-light stack" : "Stack"
             }
         }
@@ -464,9 +475,22 @@ final class AppModel: ObservableObject {
         /// The thumbnail badge: "100× · 2.2s" / "Long exposure" / "Sliced · 24 bands"
         var badgeLabel: String {
             if let timeSlice {
-                return kind == .image
-                    ? "Time-slice poster"
-                    : "Sliced · \(timeSlice.segments) bands"
+                // A batch of eight all badged "Sliced · 24 bands" is eight
+                // indistinguishable thumbnails, so a batch member leads with
+                // its place in the batch and then the shape that differs.
+                var label: String
+                if kind == .image {
+                    label = timeSlice.grid != nil ? "Grid poster" : "Time-slice poster"
+                } else if let grid = timeSlice.grid {
+                    label = "Grid · \(timeSlice.segments) wide · "
+                        + (grid.metric == .manhattan ? "stepped" : "radial")
+                } else {
+                    label = "Sliced · \(timeSlice.segments) bands"
+                }
+                if let variation = timeSlice.variation {
+                    label = "v\(variation.index)/\(variation.count) · " + label
+                }
+                return label
             }
             if kind == .image { return "Long exposure" }
             if let outputSeconds {
@@ -817,6 +841,11 @@ final class AppModel: ObservableObject {
     /// The time-slicing recipe for the next Create run; nil = off. Reset with
     /// the other Adjust state, rehydrated by `openBlend` from a sliced clip.
     @Published var timeSlice: TimeSliceSettings?
+    /// The variation batch armed for the next Create run; nil = one slice, the
+    /// original behaviour. Only meaningful while `timeSlice` is set, and
+    /// cleared with it. The blend runs once either way — a batch re-reads the
+    /// finished clip once per variation (docs/time-slicing.md §10).
+    @Published var timeSliceVariations: TimeSliceVariationPlan?
 
     /// Blend depth for interval-stills output, kept separate from the video
     /// `constantWindow` (whose default is a fast video speed). 1 = a crisp
@@ -2661,6 +2690,7 @@ final class AppModel: ObservableObject {
         guidedBuilderFocused = false
         exportShortEdge = nil
         timeSlice = nil
+        timeSliceVariations = nil
         clearWarpHistory()
         excludedFrameIndices = []
         tailFramesToExclude = 0
@@ -2703,6 +2733,7 @@ final class AppModel: ObservableObject {
             guidedBuilderFocused = false
             exportShortEdge = nil
             timeSlice = nil
+            timeSliceVariations = nil
             clearWarpHistory()
             // Seed from the project's persistent frame nominations so the
             // user doesn't have to re-exclude them each blend session.
@@ -2742,6 +2773,12 @@ final class AppModel: ObservableObject {
             // A sliced clip re-opens with its slicing recipe armed; anything
             // else starts with slicing off.
             timeSlice = blend.timeSlice
+            // …and a clip that came out of a variation batch re-opens with
+            // that batch armed, seed included, so re-rendering reproduces the
+            // whole set rather than one member of it.
+            timeSliceVariations = blend.timeSlice?.variation.map {
+                TimeSliceVariationPlan(count: $0.count, mode: $0.mode, seed: $0.seed)
+            }
             clearWarpHistory()
             // Seed from the project's persistent frame nominations.
             excludedFrameIndices = nominatedExcludedIndices(for: capture)
@@ -3988,6 +4025,22 @@ final class AppModel: ObservableObject {
         try? FileManager.default.removeItem(at: staging)
     }
 
+    /// A finished clip's size **as a viewer sees it** — natural size through
+    /// the preferred transform, so a portrait shoot reports 1080×1920 rather
+    /// than the landscape frame it is encoded as. The variation generator
+    /// works in display space (a grid's column count applies to the
+    /// horizontal axis the viewer sees), so it asks in these terms.
+    nonisolated static func displaySize(of url: URL) async -> CGSize? {
+        let asset = AVURLAsset(url: url)
+        guard let track = try? await asset.loadTracks(withMediaType: .video).first,
+              let (size, transform) = try? await track.load(.naturalSize, .preferredTransform)
+        else { return nil }
+        let display = size.applying(transform)
+        let width = abs(display.width), height = abs(display.height)
+        guard width >= 1, height >= 1 else { return nil }
+        return CGSize(width: width, height: height)
+    }
+
     nonisolated static func directorySize(_ url: URL) -> Int64 {
         let fileManager = FileManager.default
         var isDirectory: ObjCBool = false
@@ -4269,6 +4322,10 @@ final class AppModel: ObservableObject {
         // verified clip — so a single image (the whole-shoot stack) can't
         // slice and the gate below is on the output kind.
         let sliceSettings = timeSlice
+        // A batch is a slicing decision, not a blending one: the blend, the
+        // normalize, the stitch, the reframe and the grade all still run
+        // exactly once, and only the tail pass repeats (§8 of the brief).
+        let sliceVariations = timeSlice == nil ? nil : timeSliceVariations
         let sliceCodec: OutputCodec =
             (blendProfileOverride ?? defaultBlendProfile) == .hevcMain10 ? .hevc : .h264
         // The poster inherits the first source frame's EXIF/GPS on stills
@@ -4563,104 +4620,164 @@ final class AppModel: ObservableObject {
                     // work, so it runs detached, with Cancel bridged onto the
                     // renderer's own flag.
                     self.processingPhase = .slicing
-                    self.statusMessage = "Time slicing into \(sliceSettings.segments) bands..."
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
                     let sliceBand = self.activeProgressPlan?.sliceBand
                     let masterURL = output.url
                     let temp = FileManager.default.temporaryDirectory
-                    let animationURL = sliceSettings.output.wantsAnimation
-                        ? temp.appendingPathComponent("LetsLapse-slice-\(UUID().uuidString).mp4")
-                        : nil
-                    let posterURL = sliceSettings.output.wantsImage
-                        ? temp.appendingPathComponent("LetsLapse-slice-\(UUID().uuidString).png")
-                        : nil
-                    let renderer = TimeSliceRenderer()
-                    let reportSlice: @Sendable (Double) -> Void = { [weak self] fraction in
-                        Task { @MainActor in
-                            guard let self, let sliceBand else { return }
-                            self.reportTailProgress(band: sliceBand, fraction: fraction)
+
+                    // The variation batch (docs/time-slicing.md §10). Nothing
+                    // about the expensive half of the run changes: the blend,
+                    // the normalize, the stitch, the reframe and the grade all
+                    // ran once, above, and their result is the file at
+                    // `masterURL`. A variation re-READS that file — it never
+                    // re-blends — so its marginal cost is one sequential
+                    // decode plus its own slice and encode. Holding the
+                    // blended set in RAM instead was never on the table and is
+                    // not needed here: see the memory arithmetic in §1 of the
+                    // plan.
+                    var recipes: [TimeSliceSettings] = [sliceSettings]
+                    if let sliceVariations,
+                       let masterSize = await Self.displaySize(of: masterURL),
+                       let masterFrames = output.outputFrames, masterFrames > 1 {
+                        let generated = TimeSliceVariationGenerator.variations(
+                            plan: sliceVariations, baseline: sliceSettings,
+                            masterFrames: masterFrames,
+                            width: Int(masterSize.width.rounded()),
+                            height: Int(masterSize.height.rounded()))
+                        if !generated.isEmpty { recipes = generated }
+                    }
+                    let isBatch = recipes.count > 1
+
+                    // What lands in the library: the regular clip only when
+                    // asked for — once per RUN, not once per variation — then
+                    // the sliced outputs, each with its own id (storeBlend
+                    // names the file after it) and with the recipe on the
+                    // sliced copies only, so re-rendering the regular clip
+                    // never re-slices.
+                    var primaryBlend: BlendProject?
+                    var primaryOutput: ProcessingOutput?
+                    var slicedPrimaryTaken = false
+                    // A batch registers the regular clip up front, so a
+                    // variation that fails eight renders in doesn't take the
+                    // whole run's keepable output with it (plan §3.4). A
+                    // single slice keeps the original all-or-nothing order.
+                    if isBatch, sliceSettings.includeRegularClip {
+                        let regular = try self.storeBlend(
+                            output, captureID: captureID, parameters: parameters)
+                        primaryBlend = regular
+                        primaryOutput = output
+                    }
+
+                    for (position, recipe) in recipes.enumerated() {
+                        self.statusMessage = isBatch
+                            ? "Time slicing — variation \(position + 1) of \(recipes.count)..."
+                            : "Time slicing into \(recipe.segments) bands..."
+                        let animationURL = recipe.output.wantsAnimation
+                            ? temp.appendingPathComponent("LetsLapse-slice-\(UUID().uuidString).mp4")
+                            : nil
+                        let posterURL = recipe.output.wantsImage
+                            ? temp.appendingPathComponent("LetsLapse-slice-\(UUID().uuidString).png")
+                            : nil
+                        let renderer = TimeSliceRenderer()
+                        let variationCount = recipes.count
+                        let reportSlice: @Sendable (Double) -> Void = { [weak self] fraction in
+                            Task { @MainActor in
+                                guard let self, let sliceBand else { return }
+                                // One band shared by the whole batch, so the
+                                // bar crosses it once however many passes run.
+                                self.reportTailProgress(
+                                    band: sliceBand,
+                                    fraction: (Double(position) + fraction) / Double(variationCount))
+                            }
                         }
-                    }
-                    // `.utility`, like every blend-run worker: a minutes-long
-                    // render must not outrank touch handling for the P-cores
-                    // (editor-performance-plan.md, the processing-flow pass).
-                    let sliceTask = Task.detached(priority: .utility) {
-                        // The provider's exact frame count reads every
-                        // compressed sample — off the main actor with the
-                        // render itself.
-                        let provider = try await AssetFrameProvider(url: masterURL)
-                        return try renderer.render(
-                            provider: provider, settings: sliceSettings,
-                            animationURL: animationURL, posterURL: posterURL,
-                            codec: sliceCodec,
-                            posterMetadata: posterSourceURL.flatMap {
-                                ImageExporter.carryoverMetadata(from: $0)
-                            },
-                            progress: reportSlice)
-                    }
-                    let sliceResult = try await withTaskCancellationHandler {
-                        try await sliceTask.value
-                    } onCancel: {
-                        renderer.cancel()
+                        // `.utility`, like every blend-run worker: a minutes-long
+                        // render must not outrank touch handling for the P-cores
+                        // (editor-performance-plan.md, the processing-flow pass).
+                        let sliceTask = Task.detached(priority: .utility) {
+                            // The provider's exact frame count reads every
+                            // compressed sample — off the main actor with the
+                            // render itself.
+                            let provider = try await AssetFrameProvider(url: masterURL)
+                            return try renderer.render(
+                                provider: provider, settings: recipe,
+                                animationURL: animationURL, posterURL: posterURL,
+                                codec: sliceCodec,
+                                posterMetadata: posterSourceURL.flatMap {
+                                    ImageExporter.carryoverMetadata(from: $0)
+                                },
+                                progress: reportSlice)
+                        }
+                        let sliceResult = try await withTaskCancellationHandler {
+                            try await sliceTask.value
+                        } onCancel: {
+                            renderer.cancel()
+                        }
+                        // The geometry the run actually laid down — a grid's
+                        // row count and cell size are derived, so they are
+                        // recorded rather than assumed (brief §5.1).
+                        let geometryNote = sliceResult.grid.map { " · \($0.summary)" } ?? ""
+                        if !isBatch, sliceSettings.includeRegularClip {
+                            let regular = try self.storeBlend(
+                                output, captureID: captureID, parameters: parameters)
+                            primaryBlend = regular
+                            primaryOutput = output
+                        }
+                        if let posterURL, sliceResult.wrotePoster {
+                            var posterParameters = parameters
+                            posterParameters.id = UUID()
+                            posterParameters.createdAt = Date()
+                            posterParameters.timeSlice = recipe
+                            var posterOutput = output
+                            posterOutput.kind = .image
+                            posterOutput.url = posterURL
+                            posterOutput.image = nil
+                            posterOutput.outputFrames = nil
+                            posterOutput.summary =
+                                "\(recipe.posterDisplayName) · \(sliceResult.width)×\(sliceResult.height)"
+                                + geometryNote
+                            let posterBlend = try self.storeBlend(
+                                posterOutput, captureID: captureID, parameters: posterParameters)
+                            if !slicedPrimaryTaken {
+                                primaryBlend = posterBlend
+                                primaryOutput = posterOutput
+                            }
+                        }
+                        if let animationURL {
+                            var slicedParameters = parameters
+                            slicedParameters.id = UUID()
+                            slicedParameters.createdAt = Date()
+                            slicedParameters.timeSlice = recipe
+                            var slicedOutput = output
+                            slicedOutput.url = animationURL
+                            slicedOutput.outputFrames = sliceResult.outputFrames
+                            slicedOutput.summary += " · \(recipe.displayName)" + geometryNote
+                            let slicedBlend = try self.storeBlend(
+                                slicedOutput, captureID: captureID, parameters: slicedParameters)
+                            // The animation fronts the result screen when both
+                            // outputs exist — it is the thing that was asked for.
+                            if !slicedPrimaryTaken {
+                                primaryBlend = slicedBlend
+                                primaryOutput = slicedOutput
+                            }
+                        }
+                        // The FIRST variation fronts the result screen; the
+                        // rest are in the library beside it.
+                        slicedPrimaryTaken = true
+                        // Scratch: storeBlend copies, so this pass's temps go
+                        // now rather than piling up across the batch.
+                        for scratch in [animationURL, posterURL].compactMap({ $0 }) {
+                            try? FileManager.default.removeItem(at: scratch)
+                        }
                     }
                     if let sliceBand {
                         self.reportTailProgress(band: sliceBand, fraction: 1)
                     }
                     self.processingPhase = .saving
                     self.processingETADate = nil
-                    // What lands in the library: the regular clip only when
-                    // asked for, then the sliced outputs — each with its own
-                    // id (storeBlend names the file after it) and with the
-                    // recipe on the sliced copies only, so re-rendering the
-                    // regular clip never re-slices.
-                    var primaryBlend: BlendProject?
-                    var primaryOutput: ProcessingOutput?
-                    if sliceSettings.includeRegularClip {
-                        let regular = try self.storeBlend(
-                            output, captureID: captureID, parameters: parameters)
-                        primaryBlend = regular
-                        primaryOutput = output
-                    }
-                    if let posterURL, sliceResult.wrotePoster {
-                        var posterParameters = parameters
-                        posterParameters.id = UUID()
-                        posterParameters.createdAt = Date()
-                        posterParameters.timeSlice = sliceSettings
-                        var posterOutput = output
-                        posterOutput.kind = .image
-                        posterOutput.url = posterURL
-                        posterOutput.image = nil
-                        posterOutput.outputFrames = nil
-                        posterOutput.summary =
-                            "\(sliceSettings.posterDisplayName) · \(sliceResult.width)×\(sliceResult.height)"
-                        let posterBlend = try self.storeBlend(
-                            posterOutput, captureID: captureID, parameters: posterParameters)
-                        primaryBlend = posterBlend
-                        primaryOutput = posterOutput
-                    }
-                    if let animationURL {
-                        var slicedParameters = parameters
-                        slicedParameters.id = UUID()
-                        slicedParameters.createdAt = Date()
-                        slicedParameters.timeSlice = sliceSettings
-                        var slicedOutput = output
-                        slicedOutput.url = animationURL
-                        slicedOutput.outputFrames = sliceResult.outputFrames
-                        slicedOutput.summary += " · \(sliceSettings.displayName)"
-                        let slicedBlend = try self.storeBlend(
-                            slicedOutput, captureID: captureID, parameters: slicedParameters)
-                        // The animation fronts the result screen when both
-                        // outputs exist — it is the thing that was asked for.
-                        primaryBlend = slicedBlend
-                        primaryOutput = slicedOutput
-                    }
-                    // Scratch: storeBlend copies, so the slice temps go now,
-                    // and the master goes with them when the regular clip
-                    // wasn't kept — but only ever our own temp files.
-                    for scratch in [animationURL, posterURL].compactMap({ $0 }) {
-                        try? FileManager.default.removeItem(at: scratch)
-                    }
+                    // The master goes when the regular clip wasn't kept — but
+                    // only ever our own temp file, and only once every
+                    // variation has finished reading it.
                     if !sliceSettings.includeRegularClip,
                        masterURL.deletingLastPathComponent().standardizedFileURL
                         == FileManager.default.temporaryDirectory.standardizedFileURL {
@@ -4752,6 +4869,7 @@ final class AppModel: ObservableObject {
         blendCanvasRatio = nil
         blendCanvasOffset = 0.5
         timeSlice = nil
+        timeSliceVariations = nil
         source = captureSource
         currentCaptureID = capture.id
         photoBlendDepth = max(1, blendDepth)
@@ -6222,6 +6340,459 @@ final class AppModel: ObservableObject {
         return capture
     }
 
+
+    // MARK: - Importing a shoot taken outside the app
+
+    /// An import of outside footage in flight — nil the rest of the time.
+    /// Drives the Create screen's progress card.
+    ///
+    /// Its own state rather than a reuse of `archiveImport`: that one owns a
+    /// modal sheet, a duplicate question and a cancel path for a `.lapse`
+    /// file, none of which a folder of frames or a movie has. What they do
+    /// share is the *library* activity bracket, so a transfer or a render can
+    /// see that this device is busy writing gigabytes.
+    struct MediaImportProgress: Equatable {
+        enum Phase: Equatable {
+            /// Walking the selection and reading every file's metadata.
+            case reading
+            /// Copying frames into the project folder.
+            case copying
+            /// Sidecars and the manifest.
+            case finishing
+        }
+
+        var phase: Phase = .reading
+        /// Frame counts for a still sequence; both zero for a movie, which is
+        /// one file and names itself instead.
+        var frames = 0
+        var totalFrames = 0
+        /// The movie's file name, when that is what is being imported.
+        var name: String?
+        var bytes: Int64 = 0
+        var totalBytes: Int64 = 0
+
+        /// 0…1 by BYTES, not by frame count — raw frames are large and evenly
+        /// sized, but a mixed set (raws beside JPEGs) advances in very uneven
+        /// steps, and a bar that stalls is worse than one that is slightly
+        /// nonlinear. Falls back to the frame count when nothing sized.
+        var fraction: Double {
+            if totalBytes > 0 { return min(1, Double(bytes) / Double(totalBytes)) }
+            guard totalFrames > 0 else { return 0 }
+            return min(1, Double(frames) / Double(totalFrames))
+        }
+
+        var caption: String {
+            switch phase {
+            case .reading:
+                if let name { return "Reading \(name)…" }
+                return "Reading \(totalFrames > 0 ? "\(totalFrames) " : "")frames…"
+            case .copying:
+                if let name { return "Copying \(name)…" }
+                return "Copying frame \(frames) of \(totalFrames)…"
+            case .finishing:
+                return "Finishing up…"
+            }
+        }
+    }
+
+    @Published var mediaImport: MediaImportProgress?
+
+    /// The `mode` line a still sequence imported from outside the app
+    /// registers with.
+    ///
+    /// It names the MODE dial the shoot would have been taken on here, exactly
+    /// as `CaptureView.intervalSourceModeName` does for the shoots that were:
+    /// an imported interval set IS an interval project, and every screen that
+    /// routes on this string should treat it as one. The suffix is what the
+    /// app can't claim — that it watched the shutter.
+    static let importedStillsMode = "Interval · Imported"
+
+    /// The `mode` line an imported video registers with. Long-standing value,
+    /// named here so the two import paths are readable side by side.
+    static let importedVideoMode = "Import"
+
+    /// Brings a set of stills shot on another camera in as an interval
+    /// project.
+    ///
+    /// `selection` is what the picker handed back: files, folders, or both.
+    /// **Whatever it resolves to IS the shoot** — the frames are not
+    /// re-ordered by their timestamps, not de-duplicated by content, and not
+    /// filtered for outliers. A set with a lens cap frame or a test shot in it
+    /// is a set with a lens cap frame in it, and Bad Frames is where that gets
+    /// dealt with, by the person who can see the picture.
+    func importStills(from selection: [URL]) {
+        guard mediaImport == nil else { return }
+        Task { await runStillsImport(selection) }
+    }
+
+    private func runStillsImport(_ selection: [URL]) async {
+        // Held for the whole job. On a sandboxed build the picker's URLs are
+        // the only ones with access, and a folder's scope is what covers the
+        // files inside it — so the scope has to outlive the walk, not be
+        // taken and dropped per file.
+        let scoped = selection.filter { $0.startAccessingSecurityScopedResource() }
+        defer { scoped.forEach { $0.stopAccessingSecurityScopedResource() } }
+
+        beginActivity(.importingArchive)
+        mediaImport = MediaImportProgress()
+        defer {
+            mediaImport = nil
+            endActivity(.importingArchive)
+        }
+
+        let urls = Self.expandStillSelection(selection)
+        guard urls.count >= 2 else {
+            errorMessage = urls.isEmpty
+                ? "No photos there. Choose image files, or a folder holding them."
+                : "Pick at least two photos to stack."
+            return
+        }
+        mediaImport?.totalFrames = urls.count
+
+        // Header reads only — milliseconds per file, but 300 of them, and the
+        // main actor is drawing the progress card.
+        let sequence = await Task.detached(priority: .userInitiated) {
+            ImportedStills.probe(urls: urls)
+        }.value
+
+        let totalBytes = sequence.frames.reduce(Int64(0)) { $0 + Int64($1.byteCount ?? 0) }
+        mediaImport?.phase = .copying
+        mediaImport?.totalBytes = totalBytes
+
+        let id = UUID()
+        let root = captureFolderURL(for: id)
+        do {
+            try Self.checkStorageHeadroom(for: totalBytes, at: projectsRootURL)
+            let relativeNames = try await copyImportedStills(sequence, to: root) { frames, bytes in
+                self.mediaImport?.frames = frames
+                self.mediaImport?.bytes = bytes
+            }
+            mediaImport?.phase = .finishing
+            let capture = try registerImportedStills(
+                sequence, id: id, relativeNames: relativeNames, selection: selection)
+            openCapture(capture)
+        } catch {
+            // A half-copied project folder is not a project. Nothing has been
+            // written to the manifest yet, so removing the tree leaves the
+            // library exactly as it was.
+            try? FileManager.default.removeItem(at: root)
+            errorMessage = "Couldn't import those photos: \(error.localizedDescription)"
+        }
+    }
+
+    /// Resolves a picker selection into the frames it means, in the order the
+    /// person who made it saw.
+    ///
+    /// Folders contribute the stills directly inside them, name-sorted.
+    /// Loose files contribute themselves. The whole list is then sorted by
+    /// folder and then by name, in the Finder's own natural order (`img9`
+    /// before `img10`), because that is the only ordering the operator can see
+    /// and control — an open panel's own result order is not shown to anyone.
+    ///
+    /// Duplicates are dropped by resolved path: a folder and a file inside it,
+    /// both selected, are one frame rather than two.
+    nonisolated static func expandStillSelection(_ selection: [URL]) -> [URL] {
+        var found: [URL] = []
+        var seen = Set<String>()
+        for url in selection {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory)
+            else { continue }
+            let candidates = isDirectory.boolValue
+                ? ImportedStills.stills(in: url)
+                : (ImportedStills.isStill(url) ? [url] : [])
+            for candidate in candidates {
+                let key = candidate.standardizedFileURL.resolvingSymlinksInPath().path
+                if seen.insert(key).inserted { found.append(candidate) }
+            }
+        }
+        return found.sorted { lhs, rhs in
+            let leftFolder = lhs.deletingLastPathComponent().path
+            let rightFolder = rhs.deletingLastPathComponent().path
+            if leftFolder != rightFolder {
+                return leftFolder.localizedStandardCompare(rightFolder) == .orderedAscending
+            }
+            return lhs.lastPathComponent.localizedStandardCompare(rhs.lastPathComponent)
+                == .orderedAscending
+        }
+    }
+
+    /// Copies every frame into `root/source/`, **keeping its own name**.
+    ///
+    /// The capture path renames its output to `frame-00001…N` because it is
+    /// the thing that produced the files and the numbering is a fact about the
+    /// shoot. An import has no such standing: the names came off a camera, the
+    /// operator recognises them, they match the RAWs still on the card and the
+    /// sidecars in whatever else has touched them. Renaming would be the app
+    /// asserting authorship of files it merely copied.
+    ///
+    /// Nothing downstream needs the pattern — frame ORDER is
+    /// `sourceFileNames`' order and frame IDENTITY is the last path component,
+    /// which is exactly what Bad Frames nominates against. (The `frame-%05d`
+    /// readers that do exist are Scanner's, and Scanner sets are made here.)
+    ///
+    /// A name collision — the same file name from two different folders — is
+    /// resolved by suffixing rather than by overwriting, so a set assembled
+    /// from two cards keeps all of its frames.
+    private func copyImportedStills(
+        _ sequence: ImportedStills.Sequence,
+        to root: URL,
+        progress: @escaping @MainActor (Int, Int64) -> Void
+    ) async throws -> [String] {
+        let sourceFolder = root.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+
+        let frames = sequence.frames
+        return try await Task.detached(priority: .userInitiated) {
+            var relativeNames: [String] = []
+            var used = Set<String>()
+            var copiedBytes: Int64 = 0
+            for (index, frame) in frames.enumerated() {
+                try Task.checkCancellation()
+                let name = Self.uniqueImportName(for: frame.url, taken: &used)
+                try FileManager.default.copyItem(
+                    at: frame.url, to: sourceFolder.appendingPathComponent(name))
+                relativeNames.append("source/\(name)")
+                copiedBytes += Int64(frame.byteCount ?? 0)
+                let done = index + 1
+                let bytes = copiedBytes
+                await MainActor.run { progress(done, bytes) }
+            }
+            return relativeNames
+        }.value
+    }
+
+    /// `_WEX3517.ARW`, or `_WEX3517-2.ARW` when that name is already spoken
+    /// for. Case-insensitive, because the destination may be.
+    nonisolated static func uniqueImportName(for url: URL, taken: inout Set<String>) -> String {
+        let base = url.deletingPathExtension().lastPathComponent
+        let ext = url.pathExtension
+        func compose(_ stem: String) -> String { ext.isEmpty ? stem : "\(stem).\(ext)" }
+        var candidate = compose(base)
+        var suffix = 2
+        while !taken.insert(candidate.lowercased()).inserted {
+            candidate = compose("\(base)-\(suffix)")
+            suffix += 1
+        }
+        return candidate
+    }
+
+    /// Writes the derived sidecars, adds the project to the library and
+    /// returns it.
+    ///
+    /// The sidecars are the point of the whole path. A capture writes
+    /// `frames.timestamps`, `frames.exposure` and `capture_log.json` as it
+    /// shoots; an import rebuilds them from what the camera wrote into the
+    /// frames themselves, so the warp axis lays this shoot out on its real
+    /// clock and the exposure trail has something to show. They keep the
+    /// capture path's file names, and are deliberately absent from
+    /// `sourceFileNames` — that list is the project's frames, and a sidecar
+    /// isn't one.
+    private func registerImportedStills(
+        _ sequence: ImportedStills.Sequence,
+        id: UUID,
+        relativeNames: [String],
+        selection: [URL]
+    ) throws -> CaptureProject {
+        let root = captureFolderURL(for: id)
+        let sourceFolder = root.appendingPathComponent("source", isDirectory: true)
+
+        // A set with no usable clock writes no timestamps sidecar at all,
+        // rather than one full of guesses: its absence is already the signal
+        // every reader downstream acts on (fall back to even spacing).
+        if let timestamps = sequence.frameTimestamps(),
+           let writer = FrameTimestampWriter(directory: sourceFolder) {
+            for entry in timestamps.entries { writer.append(entry) }
+            writer.close()
+        }
+        if let writer = CaptureExposureWriter(directory: sourceFolder) {
+            for entry in sequence.exposureEntries() { writer.append(entry) }
+            writer.close()
+        }
+        CaptureExposureLog.write(
+            sequence.captureSession(sessionID: id.uuidString), toDirectory: sourceFolder)
+
+        let capture = CaptureProject(
+            id: id,
+            kind: .photos,
+            // The shoot's own date, not the import's. A timelapse taken last
+            // August belongs beside last August's work in the library, and
+            // every "when was this" the app shows reads this field.
+            createdAt: sequence.startedAt ?? Date(),
+            originalName: Self.importedStillsName(selection: selection, sequence: sequence),
+            mode: Self.importedStillsMode,
+            sourceFileNames: relativeNames,
+            sourceFPS: nil,
+            // Stamped here from the probe rather than left to the background
+            // refresh, so the card is right the first time it draws. The
+            // refresh runs anyway and agrees.
+            sourceDurationSeconds: sequence.elapsedSeconds,
+            sourceWidth: sequence.pixelSize?.width,
+            sourceHeight: sequence.pixelSize?.height)
+
+        captures.insert(capture, at: 0)
+        captures.sort { $0.createdAt > $1.createdAt }
+        try persistLibrary()
+        Task { [weak self] in
+            await self?.refreshStillsMetadata(for: capture.id)
+        }
+        autoTagIfEnabled(capture)
+        return capture
+    }
+
+    /// What the project calls itself: the folder the frames came out of when
+    /// they all came out of one, otherwise the camera that took them,
+    /// otherwise the frame count.
+    ///
+    /// The folder wins because it is the name the operator gave this shoot —
+    /// "Charles_ARW" is a title; "306 photos" is a measurement.
+    nonisolated static func importedStillsName(
+        selection: [URL], sequence: ImportedStills.Sequence
+    ) -> String {
+        let folders = Set(sequence.frames.map { $0.url.deletingLastPathComponent().path })
+        if folders.count == 1,
+           let folder = sequence.frames.first?.url.deletingLastPathComponent()
+               .lastPathComponent.trimmingCharacters(in: .whitespaces),
+           !folder.isEmpty, folder != "/" {
+            return folder
+        }
+        if let camera = sequence.cameraName { return camera }
+        return "\(sequence.count) photos"
+    }
+
+
+    // MARK: - Importing a movie shot outside the app
+
+    /// Brings a movie file in as a video project.
+    ///
+    /// The same job as the stills path and for the same reason: what the
+    /// camera wrote about this clip should end up in the LetsLapse structure
+    /// rather than being thrown away at the door. For a movie that is a
+    /// shorter list than a raw sequence's — the container carries a creation
+    /// date, a frame rate, a pixel size and a codec, and that is about all —
+    /// but every one of those is something the project used to invent.
+    ///
+    /// Three concrete differences from the old one-line `setSource(.video:)`:
+    /// the file keeps its own name, `createdAt` is the day the clip was SHOT,
+    /// and the multi-gigabyte copy happens off the main actor behind a
+    /// progress card instead of freezing the window.
+    func importVideo(from url: URL) {
+        guard mediaImport == nil else { return }
+        Task { await runVideoImport(url) }
+    }
+
+    private func runVideoImport(_ url: URL) async {
+        let scoped = url.startAccessingSecurityScopedResource()
+        defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+
+        beginActivity(.importingArchive)
+        mediaImport = MediaImportProgress(phase: .reading, name: url.lastPathComponent)
+        defer {
+            mediaImport = nil
+            endActivity(.importingArchive)
+        }
+
+        let byteCount = Int64((try? url.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+        let shotAt = await Self.movieCreationDate(of: url)
+        mediaImport?.phase = .copying
+        mediaImport?.totalBytes = byteCount
+
+        let id = UUID()
+        let root = captureFolderURL(for: id)
+        do {
+            try Self.checkStorageHeadroom(for: byteCount, at: projectsRootURL)
+            let relativeName = try await copyImportedMovie(url, to: root, bytes: byteCount)
+            mediaImport?.phase = .finishing
+            let capture = CaptureProject(
+                id: id,
+                kind: .video,
+                createdAt: shotAt ?? Date(),
+                originalName: url.lastPathComponent,
+                mode: Self.importedVideoMode,
+                sourceFileNames: [relativeName],
+                sourceFPS: nil)
+            captures.insert(capture, at: 0)
+            captures.sort { $0.createdAt > $1.createdAt }
+            try persistLibrary()
+            // Frame rate, duration and pixel size come from the probe every
+            // video project gets — one code path, so an imported clip and a
+            // captured one describe themselves the same way.
+            Task { [weak self] in await self?.refreshVideoMetadata(for: capture.id) }
+            autoTagIfEnabled(capture)
+            openCapture(capture)
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            errorMessage = "Couldn't import that video: \(error.localizedDescription)"
+        }
+    }
+
+    /// Copies the movie into `root/source/` under its own name, reporting
+    /// progress by watching the destination grow.
+    ///
+    /// The poll is there because `FileManager.copyItem` is one opaque call
+    /// with no progress of its own, and the alternative — a hand-rolled
+    /// chunked copy — would give up APFS cloning, which is what makes a
+    /// same-volume import of a 40 GB ProRes clip instant instead of a
+    /// ten-minute wait. Polling costs one `stat` a quarter-second and is
+    /// wrong about nothing.
+    private func copyImportedMovie(
+        _ url: URL, to root: URL, bytes: Int64
+    ) async throws -> String {
+        let sourceFolder = root.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        let name = url.lastPathComponent
+        let destination = sourceFolder.appendingPathComponent(name)
+
+        let watcher = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: 250_000_000)
+                let written = Int64((try? destination.resourceValues(
+                    forKeys: [.fileSizeKey]))?.fileSize ?? 0)
+                await MainActor.run { self?.mediaImport?.bytes = min(written, bytes) }
+            }
+        }
+        defer { watcher.cancel() }
+
+        try await Task.detached(priority: .userInitiated) {
+            try FileManager.default.copyItem(at: url, to: destination)
+        }.value
+        return "source/\(name)"
+    }
+
+    /// When the clip was shot, from the container's own creation date.
+    ///
+    /// Nil rather than "now" when the file doesn't say: `createdAt` decides
+    /// where a project sorts in the library and what every "shot N ago" line
+    /// reads, and a made-up date is worse than the import date, which is at
+    /// least true about something.
+    nonisolated static func movieCreationDate(of url: URL) async -> Date? {
+        let asset = AVURLAsset(url: url)
+        if let item = try? await asset.load(.creationDate),
+           let date = try? await item.load(.dateValue) {
+            return date
+        }
+        // QuickTime/MP4 files written by tools that skip the creation atom
+        // still carry the file system's own date, which for a card copy is
+        // the shoot's.
+        return (try? url.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+    }
+
+    /// Refuses an import that would not fit, before a byte is written.
+    /// `slack` is the working room left behind — a volume filled to the last
+    /// byte by a copy is a volume nothing else on the device can run on.
+    nonisolated static func checkStorageHeadroom(
+        for needed: Int64, at destination: URL, slack: Int64 = 512 * 1024 * 1024
+    ) throws {
+        let available = Int64((try? destination
+            .resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+            .volumeAvailableCapacityForImportantUsage) ?? 0)
+        guard available > 0 else { return }  // Unknown: let the copy speak.
+        guard available >= needed + slack else {
+            throw ImportError.insufficientStorageForStills(
+                available: available, needed: needed)
+        }
+    }
+
     private func source(
         for capture: CaptureProject,
         preferring codec: OutputCodec? = nil
@@ -7073,12 +7644,21 @@ final class AppModel: ObservableObject {
 
     enum ImportError: LocalizedError {
         case insufficientStorage(available: Int64, needed: Int64)
+        /// The stills-import twin. Its own case because the archive sentence
+        /// talks about unpacking, and a folder of frames is copied.
+        case insufficientStorageForStills(available: Int64, needed: Int64)
 
         var errorDescription: String? {
             switch self {
             case .insufficientStorage(let available, let needed):
                 return """
                 Not enough storage to import this project. It unpacks to at least \
+                \(LLFormat.bytes(needed)) but only \(LLFormat.bytes(available)) is available. \
+                Free up space and try again.
+                """
+            case .insufficientStorageForStills(let available, let needed):
+                return """
+                Not enough storage to import those photos. They take \
                 \(LLFormat.bytes(needed)) but only \(LLFormat.bytes(available)) is available. \
                 Free up space and try again.
                 """

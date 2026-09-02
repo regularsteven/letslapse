@@ -78,10 +78,35 @@ public struct TimeSliceSettings: Codable, Equatable, Sendable {
     /// sliced output. Blended frames exist either way — this governs what is
     /// kept, not what is rendered.
     public var includeRegularClip: Bool
+    /// Present = **grid** mode: both axes banded at once, the lag following
+    /// each cell's distance from an origin corner. Absent = the original
+    /// single-axis banding, whose behaviour this field never touches.
+    /// `segments` is the column count when it is present (§5.1).
+    public var grid: TimeSliceGrid?
+    /// Set only on an output that came out of a variation batch — which
+    /// variation it was, out of how many, and the batch's seed. Absent on
+    /// every single-slice render, so nothing about that path changes.
+    public var variation: TimeSliceVariationStamp?
 
     public var axis: TimeSliceAxis { newestEdge.axis }
     /// The oldest band's lag — how many master frames the spread consumes.
+    /// Banded geometry only: a grid's span depends on the frame's aspect, so
+    /// ask `maxLagFrames(width:height:)` for that.
     public var maxLagFrames: Int { (max(2, segments) - 1) * max(1, offsetFrames) }
+
+    /// The spread in master frames, grid included — the frame's shape decides
+    /// a grid's row count, and the row count decides the far corner's lag.
+    /// Returns the banded value (and ignores the size) when `grid` is nil, so
+    /// the two agree wherever both are defined.
+    public func maxLagFrames(width: Int, height: Int) -> Int {
+        guard let grid,
+              let layout = TimeSliceGridGeometry.layout(
+                width: width, height: height, columns: segments)
+        else { return maxLagFrames }
+        let span = TimeSliceGridGeometry.maximumDistance(
+            columns: layout.columns, rows: layout.rows, metric: grid.metric)
+        return Int((span * Double(max(1, offsetFrames))).rounded())
+    }
 
     public init(
         // Default flipped 2026-08-28 (test-output review): the first band in
@@ -96,7 +121,9 @@ public struct TimeSliceSettings: Codable, Equatable, Sendable {
         featherPixels: Int = 0,
         distribution: TimeSliceDistribution = .linear,
         output: TimeSliceOutput = .both,
-        includeRegularClip: Bool = true
+        includeRegularClip: Bool = true,
+        grid: TimeSliceGrid? = nil,
+        variation: TimeSliceVariationStamp? = nil
     ) {
         self.newestEdge = newestEdge
         self.segments = segments
@@ -105,6 +132,8 @@ public struct TimeSliceSettings: Codable, Equatable, Sendable {
         self.distribution = distribution
         self.output = output
         self.includeRegularClip = includeRegularClip
+        self.grid = grid
+        self.variation = variation
     }
 
     public init(from decoder: Decoder) throws {
@@ -121,18 +150,30 @@ public struct TimeSliceSettings: Codable, Equatable, Sendable {
             .flatMap { $0 } ?? defaults.output
         includeRegularClip = try container.decodeIfPresent(Bool.self, forKey: .includeRegularClip)
             ?? defaults.includeRegularClip
+        grid = (try? container.decodeIfPresent(TimeSliceGrid.self, forKey: .grid)).flatMap { $0 }
+        variation = (try? container.decodeIfPresent(TimeSliceVariationStamp.self, forKey: .variation))
+            .flatMap { $0 }
     }
 
     /// The derived display name carrying the key attributes (decided
     /// 2026-08-28): `timeslice-vert-left-segs_24-lag_2`. Band width never
-    /// appears — it is auto-calculated.
+    /// appears — it is auto-calculated. A grid names its origin corner and
+    /// metric where a band names its axis and edge; a batch member appends its
+    /// place in the batch, so a set of eight is legible at a glance rather
+    /// than by index alone (§7).
     public var displayName: String {
-        "timeslice-\(axis.nameToken)-\(newestEdge.rawValue)-segs_\(segments)-lag_\(offsetFrames)"
+        let shape = grid.map { "grid-\($0.origin.nameToken)-\($0.metric.nameToken)" }
+            ?? "\(axis.nameToken)-\(newestEdge.rawValue)"
+        return "timeslice-\(shape)-segs_\(segments)-lag_\(offsetFrames)"
+            + (variation.map { "-\($0.label)" } ?? "")
     }
 
     /// The poster's name drops the lag — its spread is the full shoot.
     public var posterDisplayName: String {
-        "timeslice-poster-\(axis.nameToken)-\(newestEdge.rawValue)-segs_\(segments)"
+        let shape = grid.map { "grid-\($0.origin.nameToken)-\($0.metric.nameToken)" }
+            ?? "\(axis.nameToken)-\(newestEdge.rawValue)"
+        return "timeslice-poster-\(shape)-segs_\(segments)"
+            + (variation.map { "-\($0.label)" } ?? "")
     }
 }
 
@@ -219,17 +260,33 @@ public enum TimeSliceGeometry {
     public static func offsetFrames(
         spreadFraction: Double, masterFrames: Int, segments: Int
     ) -> Int {
-        let steps = max(1, max(2, segments) - 1)
-        let targetFrames = max(0, spreadFraction) * Double(max(1, masterFrames))
-        return max(1, Int((targetFrames / Double(steps)).rounded()))
+        offsetFrames(spreadFraction: spreadFraction, masterFrames: masterFrames,
+                     steps: Double(max(1, max(2, segments) - 1)))
     }
 
     public static func spreadFraction(
         offsetFrames: Int, masterFrames: Int, segments: Int
     ) -> Double {
+        spreadFraction(offsetFrames: offsetFrames, masterFrames: masterFrames,
+                       steps: Double(max(1, max(2, segments) - 1)))
+    }
+
+    /// The same two-way mapping over an arbitrary ladder span. A banded slice's
+    /// span is `segments − 1`; a grid's is the far corner's distance, which is
+    /// fractional under the Euclidean metric — hence `Double`.
+    public static func offsetFrames(
+        spreadFraction: Double, masterFrames: Int, steps: Double
+    ) -> Int {
+        let steps = max(1, steps)
+        let targetFrames = max(0, spreadFraction) * Double(max(1, masterFrames))
+        return max(1, Int((targetFrames / steps).rounded()))
+    }
+
+    public static func spreadFraction(
+        offsetFrames: Int, masterFrames: Int, steps: Double
+    ) -> Double {
         guard masterFrames > 0 else { return 0 }
-        let steps = max(1, max(2, segments) - 1)
-        return Double(max(1, offsetFrames) * steps) / Double(masterFrames)
+        return Double(max(1, offsetFrames)) * max(1, steps) / Double(masterFrames)
     }
 
     /// The poster's master indices: the bands spread evenly over the ENTIRE

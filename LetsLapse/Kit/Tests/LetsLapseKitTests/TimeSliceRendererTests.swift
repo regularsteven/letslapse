@@ -145,6 +145,144 @@ final class TimeSliceRendererTests: XCTestCase {
         }
     }
 
+    // MARK: - Grid (docs/time-slicing.md §10)
+
+    func testGridCellsShowTheCommandedMasterFramesFromTheOriginCorner() async throws {
+        // 320×240, 4 columns → 80 px cells → 240/80 = 3 rows exactly.
+        // Manhattan, origin top-left, lag 6 → maxLag = (3+2)×6 = 30.
+        let master = try makeRampClip()
+        let sliced = scratchFile("grid.mp4")
+        var settings = TimeSliceSettings(segments: 4, offsetFrames: 6)
+        settings.grid = TimeSliceGrid(origin: .topLeft, metric: .manhattan)
+        let provider = try await AssetFrameProvider(url: master)
+
+        let result = try TimeSliceRenderer().render(
+            provider: provider, settings: settings, animationURL: sliced, posterURL: nil)
+        XCTAssertEqual(result.grid?.columns, 4)
+        XCTAssertEqual(result.grid?.rows, 3)
+        XCTAssertEqual(result.grid?.cellPixels, 80)
+        XCTAssertEqual(result.maxLagFrames, 30)
+        XCTAssertEqual(result.outputFrames, 30)
+
+        // Cell centres: x = 40, 120, 200, 280 · y = 40, 120, 200.
+        var points: [(x: Int, y: Int)] = []
+        for row in 0..<3 {
+            for column in 0..<4 { points.append((40 + column * 80, 40 + row * 80)) }
+        }
+        let samples = try await sampleFrames(of: sliced, frameIndices: [0, 12], points: points)
+        for t in [0, 12] {
+            let cells = try XCTUnwrap(samples[t])
+            for row in 0..<3 {
+                for column in 0..<4 {
+                    let commanded = t + 30 - (column + row) * 6
+                    XCTAssertEqual(
+                        cells[row * 4 + column], expectedGray(frame: commanded, of: 60),
+                        accuracy: tolerance,
+                        "frame \(t) cell (\(column),\(row)) should show master \(commanded)")
+                }
+            }
+        }
+    }
+
+    /// The wavefront is diagonal: cells on the same anti-diagonal share a
+    /// moment, and moving the origin moves where the sweep starts.
+    func testTheOriginCornerMovesTheWavefront() async throws {
+        let master = try makeRampClip()
+        let sliced = scratchFile("grid-br.mp4")
+        var settings = TimeSliceSettings(segments: 4, offsetFrames: 6)
+        settings.grid = TimeSliceGrid(origin: .bottomRight, metric: .manhattan)
+        let provider = try await AssetFrameProvider(url: master)
+        _ = try TimeSliceRenderer().render(
+            provider: provider, settings: settings, animationURL: sliced, posterURL: nil)
+
+        let corners = [(40, 40), (280, 40), (40, 200), (280, 200)]
+        let samples = try await sampleFrames(of: sliced, frameIndices: [0], points: corners)
+        let cells = try XCTUnwrap(samples[0])
+        // Bottom-right holds the newest (master 30); top-left the oldest (0).
+        XCTAssertEqual(cells[3], expectedGray(frame: 30, of: 60), accuracy: tolerance)
+        XCTAssertEqual(cells[0], expectedGray(frame: 0, of: 60), accuracy: tolerance)
+        // The off-diagonal corners sit at Manhattan distance 2 and 3 (4×3 is
+        // not square), so the wavefront reaches the top-right first.
+        XCTAssertEqual(cells[1], expectedGray(frame: 18, of: 60), accuracy: tolerance)
+        XCTAssertEqual(cells[2], expectedGray(frame: 12, of: 60), accuracy: tolerance)
+    }
+
+    func testEuclideanGridRoundsItsLadderAndStaysWithinTheClip() async throws {
+        let master = try makeRampClip()
+        let sliced = scratchFile("grid-eucl.mp4")
+        var settings = TimeSliceSettings(segments: 4, offsetFrames: 6)
+        settings.grid = TimeSliceGrid(origin: .topLeft, metric: .euclidean)
+        let provider = try await AssetFrameProvider(url: master)
+        let result = try TimeSliceRenderer().render(
+            provider: provider, settings: settings, animationURL: sliced, posterURL: nil)
+        // √(3² + 2²) = 3.606 × 6 = 21.6 → 22 frames of spread.
+        XCTAssertEqual(result.maxLagFrames, 22)
+        XCTAssertEqual(result.outputFrames, 38)
+
+        let samples = try await sampleFrames(
+            of: sliced, frameIndices: [0], points: [(40, 40), (280, 200), (120, 120)])
+        let cells = try XCTUnwrap(samples[0])
+        XCTAssertEqual(cells[0], expectedGray(frame: 22, of: 60), accuracy: tolerance)
+        XCTAssertEqual(cells[1], expectedGray(frame: 0, of: 60), accuracy: tolerance)
+        // (1,1): √2 × 6 = 8.49 → 8, so master 22 − 8 = 14.
+        XCTAssertEqual(cells[2], expectedGray(frame: 14, of: 60), accuracy: tolerance)
+    }
+
+    func testGridPosterSpreadsTheWholeShootDiagonally() async throws {
+        let master = try makeRampClip()
+        let poster = scratchFile("grid-poster.png")
+        var settings = TimeSliceSettings(segments: 4, offsetFrames: 6)
+        settings.grid = TimeSliceGrid(origin: .topLeft, metric: .manhattan)
+        let provider = try await AssetFrameProvider(url: master)
+        let result = try TimeSliceRenderer().render(
+            provider: provider, settings: settings, animationURL: nil, posterURL: poster)
+        XCTAssertTrue(result.wrotePoster)
+
+        let image = try XCTUnwrap(loadImage(poster))
+        let cells = try samplePoster(image, points: [(40, 40), (280, 200), (200, 120)])
+        // Distance 0 of 5 → master 59; distance 5 → 0; (2,1) is distance 3 →
+        // 59 × (1 − 3/5) = 23.6 → 24.
+        XCTAssertEqual(cells[0], expectedGray(frame: 59, of: 60), accuracy: tolerance)
+        XCTAssertEqual(cells[1], expectedGray(frame: 0, of: 60), accuracy: tolerance)
+        XCTAssertEqual(cells[2], expectedGray(frame: 24, of: 60), accuracy: tolerance)
+    }
+
+    /// Every cell is written on every output frame — a gap in the tiling would
+    /// leave black, which no per-cell sample would catch.
+    func testEveryPixelOfAGridFrameIsWritten() async throws {
+        // 17 columns over 320 px: cells of 19 px, edges cropped.
+        let master = try makeRampClip()
+        let sliced = scratchFile("grid-cover.mp4")
+        var settings = TimeSliceSettings(segments: 17, offsetFrames: 1)
+        settings.grid = TimeSliceGrid(origin: .topLeft, metric: .manhattan)
+        let provider = try await AssetFrameProvider(url: master)
+        _ = try TimeSliceRenderer().render(
+            provider: provider, settings: settings, animationURL: sliced, posterURL: nil)
+
+        var points: [(x: Int, y: Int)] = []
+        for x in stride(from: 0, to: 320, by: 1) { points.append((x, 7)) }
+        for y in stride(from: 0, to: 240, by: 1) { points.append((113, y)) }
+        let samples = try await sampleFrames(of: sliced, frameIndices: [5], points: points)
+        let values = try XCTUnwrap(samples[5])
+        // The ramp never reaches black, so any zero is an unwritten pixel.
+        XCTAssertFalse(values.contains { $0 < 5 }, "the grid left pixels unwritten")
+    }
+
+    func testGridRefusesCellsUnderTheFloor() async throws {
+        let master = try makeRampClip(frames: 40, width: 320, height: 240)
+        let provider = try await AssetFrameProvider(url: master)
+        var settings = TimeSliceSettings(segments: 48, offsetFrames: 1)
+        settings.grid = TimeSliceGrid()
+        XCTAssertThrowsError(try TimeSliceRenderer().render(
+            provider: provider, settings: settings,
+            animationURL: scratchFile("refused-grid.mp4"), posterURL: nil)
+        ) { error in
+            guard case LapseError.timeSliceInvalid = error else {
+                return XCTFail("expected timeSliceInvalid, got \(error)")
+            }
+        }
+    }
+
     // MARK: - Poster
 
     func testPosterSpansTheWholeShootNewestAtTheChosenEdge() async throws {

@@ -37,6 +37,19 @@ USAGE:
       --newest EDGE         left | right | top | bottom — the edge holding the
                             newest band (default right, so time starts at the
                             left; top/bottom = horizontal)
+      --grid CORNER         topLeft | topRight | bottomLeft | bottomRight —
+                            switches to grid mode: both axes banded into square
+                            cells, the lag following each cell's distance from
+                            this corner. --segments is then the COLUMN count and
+                            the row count is derived from the aspect.
+      --metric NAME         manhattan | euclidean (default manhattan) — stepped
+                            diagonal bands vs a curved radial wavefront
+      --variations N        Render a batch of N variations from one decode-per-
+                            variation over the same clip, instead of one slice.
+                            Output paths gain the variation's name before the
+                            extension.
+      --variation-mode NAME horizontal | vertical | grid | mixed (default mixed)
+      --seed N              The batch's seed, for reproducibility (default random)
       --codec NAME          h264 | hevc | prores | jpeg (default h264)
 
   lapse grade <image> [options]                 Grade one frame through the tone engine
@@ -65,6 +78,16 @@ func printErr(_ message: String) {
 func fail(_ message: String) -> Never {
     printErr("error: \(message)")
     exit(1)
+}
+
+/// `out.mp4` + `-v3of8` → `out-v3of8.mp4`. Empty suffix leaves the path alone,
+/// so the single-slice call sites are byte-identical.
+func insertSuffix(_ suffix: String, into path: String) -> String {
+    guard !suffix.isEmpty else { return path }
+    let url = URL(fileURLWithPath: path)
+    let ext = url.pathExtension
+    let base = url.deletingPathExtension().path
+    return ext.isEmpty ? base + suffix : base + suffix + "." + ext
 }
 
 func usage() -> Never {
@@ -215,6 +238,11 @@ do {
         let segments = Int(takeOption(["--segments"]) ?? "24") ?? 0
         let lag = Int(takeOption(["--lag"]) ?? "2") ?? 0
         let newestName = takeOption(["--newest"]) ?? TimeSliceSettings().newestEdge.rawValue
+        let gridName = takeOption(["--grid"])
+        let metricName = takeOption(["--metric"]) ?? TimeSliceGridMetric.manhattan.rawValue
+        let variationCount = Int(takeOption(["--variations"]) ?? "0") ?? 0
+        let variationModeName = takeOption(["--variation-mode"]) ?? TimeSliceVariationMode.mixed.rawValue
+        let seed = UInt64(takeOption(["--seed"]) ?? "") ?? TimeSliceVariationPlan.freshSeed()
         let codecName = takeOption(["--codec"]) ?? "h264"
         guard args.count == 1 else { fail("slice needs exactly one input clip (got \(args.count))") }
         guard outputPath != nil || posterPath != nil else {
@@ -225,26 +253,64 @@ do {
         guard let newest = TimeSliceEdge(rawValue: newestName) else {
             fail("unknown edge '\(newestName)' — choose from: \(TimeSliceEdge.allCases.map(\.rawValue).joined(separator: ", "))")
         }
+        guard let metric = TimeSliceGridMetric(rawValue: metricName) else {
+            fail("unknown metric '\(metricName)' — choose from: \(TimeSliceGridMetric.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        guard let variationMode = TimeSliceVariationMode(rawValue: variationModeName) else {
+            fail("unknown variation mode '\(variationModeName)' — choose from: \(TimeSliceVariationMode.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
         guard let codec = OutputCodec(rawValue: codecName) else {
             fail("unknown codec '\(codecName)' — choose from: \(OutputCodec.allCases.map(\.rawValue).joined(separator: ", "))")
         }
-        let settings = TimeSliceSettings(newestEdge: newest, segments: segments, offsetFrames: lag)
+        var settings = TimeSliceSettings(newestEdge: newest, segments: segments, offsetFrames: lag)
+        if let gridName {
+            guard let origin = TimeSliceGridOrigin(rawValue: gridName) else {
+                fail("unknown grid corner '\(gridName)' — choose from: \(TimeSliceGridOrigin.allCases.map(\.rawValue).joined(separator: ", "))")
+            }
+            settings.grid = TimeSliceGrid(origin: origin, metric: metric)
+        }
         let input = URL(fileURLWithPath: args[0])
-        let provider = try await AssetFrameProvider(url: input)
-        let renderer = TimeSliceRenderer()
-        let started = Date()
-        let result = try renderer.render(
-            provider: provider, settings: settings,
-            animationURL: outputPath.map { URL(fileURLWithPath: $0) },
-            posterURL: posterPath.map { URL(fileURLWithPath: $0) },
-            codec: codec, progress: progressToStderr)
-        let elapsed = Date().timeIntervalSince(started)
-        print("\(settings.displayName): \(result.masterFrames) master frames → "
-            + "\(result.outputFrames) sliced frames"
-            + (result.wrotePoster ? " + poster" : "")
-            + " (\(result.width)x\(result.height)) in \(String(format: "%.1f", elapsed))s")
-        if let outputPath { print(URL(fileURLWithPath: outputPath).path) }
-        if let posterPath { print(URL(fileURLWithPath: posterPath).path) }
+
+        // A batch varies the recipe, never the source: the blended clip is
+        // read once per variation and the expensive blend never re-runs.
+        var recipes = [settings]
+        if variationCount >= 2 {
+            let asset = AVURLAsset(url: input)
+            guard let track = try await asset.loadTracks(withMediaType: .video).first else {
+                fail("no video track in \(input.lastPathComponent)")
+            }
+            let (size, transform) = try await track.load(.naturalSize, .preferredTransform)
+            let display = size.applying(transform)
+            let counter = try await AssetFrameProvider(url: input)
+            recipes = TimeSliceVariationGenerator.variations(
+                plan: TimeSliceVariationPlan(count: variationCount, mode: variationMode, seed: seed),
+                baseline: settings, masterFrames: counter.frameCount,
+                width: Int(abs(display.width).rounded()), height: Int(abs(display.height).rounded()))
+            guard !recipes.isEmpty else { fail("no valid variation fits this clip") }
+            print("batch of \(recipes.count) (\(variationMode.rawValue), seed \(seed))")
+        }
+
+        for recipe in recipes {
+            let suffix = recipe.variation.map { "-\($0.label)" } ?? ""
+            let animation = outputPath.map { URL(fileURLWithPath: insertSuffix(suffix, into: $0)) }
+            let poster = posterPath.map { URL(fileURLWithPath: insertSuffix(suffix, into: $0)) }
+            let provider = try await AssetFrameProvider(url: input)
+            let renderer = TimeSliceRenderer()
+            let started = Date()
+            let result = try renderer.render(
+                provider: provider, settings: recipe,
+                animationURL: animation, posterURL: poster,
+                codec: codec, progress: progressToStderr)
+            let elapsed = Date().timeIntervalSince(started)
+            print("\(recipe.displayName): \(result.masterFrames) master frames → "
+                + "\(result.outputFrames) sliced frames"
+                + (result.wrotePoster ? " + poster" : "")
+                + " (\(result.width)x\(result.height)"
+                + (result.grid.map { ", \($0.summary)" } ?? "")
+                + ") in \(String(format: "%.1f", elapsed))s")
+            if let animation { print(animation.path) }
+            if let poster { print(poster.path) }
+        }
 
     case "grade":
         let probe = takeFlag(["--probe"])

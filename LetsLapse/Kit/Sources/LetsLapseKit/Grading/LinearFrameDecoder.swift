@@ -132,7 +132,10 @@ public final class LinearFrameDecoder {
         // `DCPDecoder` is the thing that reports it is not implemented.
         let effective: RawDecodePath = RawDecodePathRegistry.isAvailable(path)
             ? path : .bradfordAdaptation
-        let isRAW = ["dng", "raw"].contains(url.pathExtension.lowercased())
+        // Every raw family, not just the two extensions the app used to write
+        // itself: an imported Sony ARW that misses this branch is decoded by
+        // ImageIO instead, which on iOS hands back the file's embedded preview.
+        let isRAW = ImportedStills.isRaw(url)
         if isRAW, let raw = CIRAWFilter(imageURL: url) {
             raw.boostAmount = 0
             raw.extendedDynamicRangeAmount = 2

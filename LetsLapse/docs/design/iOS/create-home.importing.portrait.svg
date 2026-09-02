@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Create (tab home) · portrait</title>
-  <desc>Mirrors App/CreateView.swift (effect cards grid, source rows) + App/DesignSystem.swift (FloatingTabBar). On iOS selecting the Create tab opens the camera immediately; this screen is the tab's home behind the camera, revealed on close. Both import rows now build real projects rather than staging a blend: "Import a video" registers a video project keeping the file's own name and the date it was SHOT, and "Import photos to stack…" registers an interval project whose frames.timestamps, frames.exposure and capture_log.json are rebuilt from the frames' own EXIF — see create-home.photo-source.portrait.svg for the chooser it opens and create-home.importing.portrait.svg for the progress card.</desc>
+  <title>iOS · Create · import in progress · portrait</title>
+  <desc>Mirrors App/CreateView.swift — the Create tab home while an import runs, over AppModel.mediaImport (MediaImportProgress) and AppModel.importStills(from:) / importVideo(from:). Drawn at the moment the Sony shoot this feature was built against is copying: 306 ARW frames, 5.64 GB, from /Volumes/letslapse/Source_SONY/Charles_ARW. Three phases — reading (the EXIF walk, ~4.4 ms a frame), copying (drawn), finishing (sidecars and the manifest). The card replaces the indeterminate "Importing…" spinner that used to sit under the source rows: a folder of raw frames is gigabytes and minutes, and a spinner that long reads as a hang. The Create screen stays live behind it — an import is not modal, and the library registers the project only when the last frame has landed. macOS shows the identical card in its own window. When it ends, the project opens straight into the blended-clip flow, exactly as a finished capture does.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -29,7 +29,33 @@
       <text x="20" y="101" font-size="34" class="b" fill="#000">Create</text>
       <text x="20" y="121" font-size="13.5" fill="#6D6D72">What do you want to make?</text>
 
+
+      <!-- IMPORT PROGRESS — AppModel.mediaImport, drawn by MediaImportCard.
+           Determinate, and by BYTES rather than by frame count: a mixed set
+           (raws beside JPEGs) advances in very uneven steps, and a bar that
+           stalls reads worse than one that is slightly nonlinear. The caption
+           counts frames for a still sequence and names the file for a movie
+           (the icon follows: photo.stack / film).
+
+           It sits ABOVE the effect grid. Below the source rows — where every
+           other Create status card used to live — the card lands at ~787pt on
+           a 393×852 iPhone and the floating bar starts at 755, so the progress
+           track itself would be behind the bar. The grid and the rows are what
+           give way instead; the last row tucking under the floating bar while
+           an import runs is what scrolling is for. -->
+      <g id="import-progress">
+        <rect x="16" y="134" width="361" height="58" rx="14" fill="#FFF" filter="url(#soft)"/>
+        <g data-symbol="photo.stack" stroke="#C36A00" stroke-width="1.6" fill="none">
+          <rect x="30" y="152" width="13" height="10" rx="2"/><path d="M32 149.5 h11.5 a2 2 0 0 1 2 2 V159"/>
+        </g>
+        <text x="53" y="161" font-size="14" fill="#000">Copying frame 284 of 306…</text>
+        <text x="363" y="161" font-size="12" text-anchor="end" fill="#6D6D72" font-family="ui-monospace, 'SF Mono', Menlo, monospace">5.64 GB</text>
+        <rect x="30" y="173" width="333" height="4" rx="2" fill="#000" fill-opacity="0.09"/>
+        <rect x="30" y="173" width="309" height="4" rx="2" fill="#C36A00"/>
+      </g>
+
       <!-- effect cards 2×2 -->
+      <g transform="translate(0,70)">
       <g id="effect-cards">
         <g id="card-smooth-timelapse">
           <rect x="16" y="134" width="174.5" height="169" rx="18" fill="#FFF" filter="url(#soft)"/>
@@ -68,8 +94,10 @@
           <text x="216.5" y="455" font-size="11.5" fill="#6D6D72">Every dial, no presets</text>
         </g>
       </g>
+      </g>
 
       <!-- source rows card -->
+      <g transform="translate(0,70)">
       <g id="source-rows">
         <rect x="16" y="500" width="361" height="205" rx="18" fill="#FFF" filter="url(#soft)"/>
         <g id="row-record-now">
@@ -99,6 +127,7 @@
           <text x="74" y="684" font-size="16" fill="#000">Import a LetsLapse project…</text>
           <path d="M363 672 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         </g>
+      </g>
       </g>
 
       <!-- floating tab bar (Create selected) -->
@@ -134,6 +163,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create (tab home) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — EffectCard grid · SourceRow card · FloatingTabBar</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create · import in progress · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — MediaImportCard over AppModel.mediaImport</text>
 </svg>

@@ -119,6 +119,25 @@ public struct TimeSliceRenderResult: Sendable {
     public var width: Int
     public var height: Int
     public var wrotePoster: Bool
+    /// Grid runs only: the geometry that was actually laid down — cell size,
+    /// effective row count, edge crop. Documented in the output's metadata
+    /// because the row count is derived, not asked for (§5.1).
+    public var grid: TimeSliceGridLayout?
+    /// The ladder's span in master frames — what the animation was trimmed by.
+    public var maxLagFrames: Int
+
+    public init(
+        masterFrames: Int, outputFrames: Int, width: Int, height: Int,
+        wrotePoster: Bool, grid: TimeSliceGridLayout? = nil, maxLagFrames: Int = 0
+    ) {
+        self.masterFrames = masterFrames
+        self.outputFrames = outputFrames
+        self.width = width
+        self.height = height
+        self.wrotePoster = wrotePoster
+        self.grid = grid
+        self.maxLagFrames = maxLagFrames
+    }
 }
 
 /// The time-slicing pass — stage 1.5 of `docs/time-slicing.md`. Reads the
@@ -173,15 +192,21 @@ public final class TimeSliceRenderer {
             throw LapseError.timeSliceInvalid("nothing to render — no animation or poster output was requested")
         }
 
-        let ladder = TimeSliceGeometry.lagLadder(
-            segments: settings.segments, offsetFrames: settings.offsetFrames,
-            distribution: settings.distribution)
-        let maxLag = ladder.last ?? 0
-        let animationFrames = TimeSliceGeometry.slicedFrameCount(masterFrames: masterFrames, maxLag: maxLag)
-        if animationURL != nil, animationFrames < 1 {
-            throw LapseError.timeSliceInvalid(
-                "the spread (\(maxLag) frames) consumes the whole clip (\(masterFrames) frames) — "
-                + "reduce segments or offset")
+        // The banded ladder is known before a single pixel is touched, so its
+        // refusal comes first, exactly as it always has. A grid's ladder spans
+        // a row count derived from the frame's own aspect, so the identical
+        // check runs below, once the first frame has been peeked.
+        if settings.grid == nil {
+            let ladder = TimeSliceGeometry.lagLadder(
+                segments: settings.segments, offsetFrames: settings.offsetFrames,
+                distribution: settings.distribution)
+            let maxLag = ladder.last ?? 0
+            let animationFrames = TimeSliceGeometry.slicedFrameCount(masterFrames: masterFrames, maxLag: maxLag)
+            if animationURL != nil, animationFrames < 1 {
+                throw LapseError.timeSliceInvalid(
+                    "the spread (\(maxLag) frames) consumes the whole clip (\(masterFrames) frames) — "
+                    + "reduce segments or offset")
+            }
         }
 
         // First-frame peek for the true dimensions before any geometry.
@@ -190,35 +215,27 @@ public final class TimeSliceRenderer {
         let width = CVPixelBufferGetWidth(firstFrame.pixelBuffer)
         let height = CVPixelBufferGetHeight(firstFrame.pixelBuffer)
 
-        // The user's edge is display-space; geometry runs in encoded pixel
-        // space, so a rotated master (portrait video shoots) maps its edge
-        // through the transform.
-        let newestEdge = Self.encodedEdge(displayEdge: settings.newestEdge, transform: provider.transform)
-        let axisLength = newestEdge.axis == .vertical ? width : height
-        guard let ranges = TimeSliceGeometry.bandRanges(axisLength: axisLength, segments: settings.segments) else {
+        // Bands and cells are the same thing to the loop below — a rect and a
+        // lag — so the two geometries meet here and the pass is one code path
+        // from this line on.
+        let plan = try Self.makePlan(
+            settings: settings, width: width, height: height,
+            transform: provider.transform, masterFrames: masterFrames,
+            wantsPoster: posterURL != nil)
+        let bandRects = plan.cellRects
+        let bandLags = plan.cellLags
+        let maxLag = plan.maxLag
+        if animationURL != nil,
+           TimeSliceGeometry.slicedFrameCount(masterFrames: masterFrames, maxLag: maxLag) < 1 {
             throw LapseError.timeSliceInvalid(
-                "\(settings.segments) segments across \(axisLength) px makes bands thinner than "
-                + "\(TimeSliceGeometry.minimumBandPixels) px")
+                "the spread (\(maxLag) frames) consumes the whole clip (\(masterFrames) frames) — "
+                + "reduce segments or offset")
         }
-        let bandRects: [BandRect] = ranges.map { range in
-            newestEdge.axis == .vertical
-                ? BandRect(x: range.lowerBound, y: 0, width: range.count, height: height)
-                : BandRect(x: 0, y: range.lowerBound, width: width, height: range.count)
-        }
-        let bandLags = TimeSliceGeometry.bandLags(ladder: ladder, newestEdge: newestEdge)
 
         // Poster: master index → the bands it fills (short masters repeat).
-        var posterBands: [Int: [Int]] = [:]
+        let posterBands = plan.posterCells
         var posterPixels: [UInt8] = []
         if posterURL != nil {
-            guard let posterIndices = TimeSliceGeometry.posterIndices(
-                masterFrames: masterFrames, segments: settings.segments) else {
-                throw LapseError.timeSliceInvalid("a poster needs at least 2 segments")
-            }
-            let geometric = newestEdge.newestLeadsGeometry ? posterIndices : posterIndices.reversed()
-            for (band, master) in geometric.enumerated() {
-                posterBands[master, default: []].append(band)
-            }
             posterPixels = [UInt8](repeating: 0, count: width * height * 4)
         }
 
@@ -423,7 +440,148 @@ public final class TimeSliceRenderer {
 
         return TimeSliceRenderResult(
             masterFrames: masterFrames, outputFrames: outputFrames,
-            width: width, height: height, wrotePoster: wrotePoster)
+            width: width, height: height, wrotePoster: wrotePoster,
+            grid: plan.gridLayout, maxLagFrames: maxLag)
+    }
+
+    // MARK: - The plan
+
+    /// What the pass executes: a rect and a lag per cell, and which cells each
+    /// master frame fills in the poster. Bands are cells that happen to span
+    /// the whole of the other axis.
+    struct SlicePlan {
+        let cellRects: [BandRect]
+        let cellLags: [Int]
+        let posterCells: [Int: [Int]]
+        let maxLag: Int
+        let gridLayout: TimeSliceGridLayout?
+    }
+
+    /// Builds the plan for either geometry.
+    ///
+    /// The two geometries stay separate **by decision** (brief §5.3). A grid
+    /// is not a superset of a band on this code's terms: bands distribute
+    /// their division remainder Bresenham-style across every band, while the
+    /// grid's square-cell rule fixes an integer cell and crops the outer
+    /// row/column instead. Those produce different boundaries for the same
+    /// count, and the banded distribution is the shipped, measured behaviour —
+    /// so it is reproduced here verbatim rather than re-derived. What IS
+    /// shared, and is where the cost lives, is everything downstream of this
+    /// function: one decode pass, one spool, one composite loop, one encoder.
+    static func makePlan(
+        settings: TimeSliceSettings, width: Int, height: Int,
+        transform: CGAffineTransform, masterFrames: Int, wantsPoster: Bool
+    ) throws -> SlicePlan {
+        if let grid = settings.grid {
+            return try gridPlan(
+                settings: settings, grid: grid, width: width, height: height,
+                transform: transform, masterFrames: masterFrames, wantsPoster: wantsPoster)
+        }
+        return try bandedPlan(
+            settings: settings, width: width, height: height,
+            transform: transform, masterFrames: masterFrames, wantsPoster: wantsPoster)
+    }
+
+    private static func bandedPlan(
+        settings: TimeSliceSettings, width: Int, height: Int,
+        transform: CGAffineTransform, masterFrames: Int, wantsPoster: Bool
+    ) throws -> SlicePlan {
+        let ladder = TimeSliceGeometry.lagLadder(
+            segments: settings.segments, offsetFrames: settings.offsetFrames,
+            distribution: settings.distribution)
+        // The user's edge is display-space; geometry runs in encoded pixel
+        // space, so a rotated master (portrait video shoots) maps its edge
+        // through the transform.
+        let newestEdge = Self.encodedEdge(displayEdge: settings.newestEdge, transform: transform)
+        let axisLength = newestEdge.axis == .vertical ? width : height
+        guard let ranges = TimeSliceGeometry.bandRanges(axisLength: axisLength, segments: settings.segments) else {
+            throw LapseError.timeSliceInvalid(
+                "\(settings.segments) segments across \(axisLength) px makes bands thinner than "
+                + "\(TimeSliceGeometry.minimumBandPixels) px")
+        }
+        let bandRects: [BandRect] = ranges.map { range in
+            newestEdge.axis == .vertical
+                ? BandRect(x: range.lowerBound, y: 0, width: range.count, height: height)
+                : BandRect(x: 0, y: range.lowerBound, width: width, height: range.count)
+        }
+        let bandLags = TimeSliceGeometry.bandLags(ladder: ladder, newestEdge: newestEdge)
+
+        var posterBands: [Int: [Int]] = [:]
+        if wantsPoster {
+            guard let posterIndices = TimeSliceGeometry.posterIndices(
+                masterFrames: masterFrames, segments: settings.segments) else {
+                throw LapseError.timeSliceInvalid("a poster needs at least 2 segments")
+            }
+            let geometric = newestEdge.newestLeadsGeometry ? posterIndices : posterIndices.reversed()
+            for (band, master) in geometric.enumerated() {
+                posterBands[master, default: []].append(band)
+            }
+        }
+        return SlicePlan(
+            cellRects: bandRects, cellLags: bandLags, posterCells: posterBands,
+            maxLag: ladder.last ?? 0, gridLayout: nil)
+    }
+
+    private static func gridPlan(
+        settings: TimeSliceSettings, grid: TimeSliceGrid, width: Int, height: Int,
+        transform: CGAffineTransform, masterFrames: Int, wantsPoster: Bool
+    ) throws -> SlicePlan {
+        // Columns are counted along the axis the VIEWER sees as horizontal
+        // (§5.1), which on a rotated master is not the encoded X axis. Both
+        // display axes are mapped into encoded space the same way a banded
+        // edge is, and the layout is resolved in display lengths so the cells
+        // come out square on screen rather than in the file.
+        var columnAxis = Self.encodedAxis(displayEdge: .left, transform: transform)
+        var rowAxis = Self.encodedAxis(displayEdge: .top, transform: transform)
+        if columnAxis.isX == rowAxis.isX {
+            // A transform that collapses both display axes onto one encoded
+            // axis is not a rotation or a flip; fall back to identity rather
+            // than build a degenerate grid.
+            columnAxis = EncodedAxis(isX: true, reversed: false)
+            rowAxis = EncodedAxis(isX: false, reversed: false)
+        }
+        let displayWidth = columnAxis.isX ? width : height
+        let displayHeight = rowAxis.isX ? width : height
+        guard let layout = TimeSliceGridGeometry.layout(
+            width: displayWidth, height: displayHeight, columns: settings.segments) else {
+            throw LapseError.timeSliceInvalid(
+                "\(settings.segments) columns across \(displayWidth) px makes grid cells thinner than "
+                + "\(TimeSliceGridGeometry.minimumCellPixels) px, or leaves fewer than two rows")
+        }
+
+        var rects: [BandRect] = []
+        rects.reserveCapacity(layout.cellCount)
+        for row in 0..<layout.rows {
+            for column in 0..<layout.columns {
+                let columnRange = layout.columnRanges[
+                    columnAxis.reversed ? layout.columns - 1 - column : column]
+                let rowRange = layout.rowRanges[rowAxis.reversed ? layout.rows - 1 - row : row]
+                let xRange = columnAxis.isX ? columnRange : rowRange
+                let yRange = columnAxis.isX ? rowRange : columnRange
+                rects.append(BandRect(
+                    x: xRange.lowerBound, y: yRange.lowerBound,
+                    width: xRange.count, height: yRange.count))
+            }
+        }
+
+        let lags = TimeSliceGridGeometry.lagLadder(
+            columns: layout.columns, rows: layout.rows, origin: grid.origin,
+            metric: grid.metric, offsetFrames: settings.offsetFrames)
+
+        var posterCells: [Int: [Int]] = [:]
+        if wantsPoster {
+            guard let indices = TimeSliceGridGeometry.posterIndices(
+                masterFrames: masterFrames, columns: layout.columns, rows: layout.rows,
+                origin: grid.origin, metric: grid.metric) else {
+                throw LapseError.timeSliceInvalid("a grid poster needs at least 2 columns")
+            }
+            for (cell, master) in indices.enumerated() {
+                posterCells[master, default: []].append(cell)
+            }
+        }
+        return SlicePlan(
+            cellRects: rects, cellLags: lags, posterCells: posterCells,
+            maxLag: lags.max() ?? 0, gridLayout: layout)
     }
 
     // MARK: - Edge mapping
@@ -448,6 +606,24 @@ public final class TimeSliceRenderer {
             return dx < 0 ? .left : .right
         }
         return dy < 0 ? .top : .bottom
+    }
+
+    /// Where one display axis lands in encoded space: which encoded axis
+    /// carries it, and whether its index order is reversed. The grid needs
+    /// both display axes at once, so it asks in these terms rather than in
+    /// edges.
+    struct EncodedAxis {
+        let isX: Bool
+        let reversed: Bool
+    }
+
+    static func encodedAxis(displayEdge: TimeSliceEdge, transform: CGAffineTransform) -> EncodedAxis {
+        switch encodedEdge(displayEdge: displayEdge, transform: transform) {
+        case .left: return EncodedAxis(isX: true, reversed: false)
+        case .right: return EncodedAxis(isX: true, reversed: true)
+        case .top: return EncodedAxis(isX: false, reversed: false)
+        case .bottom: return EncodedAxis(isX: false, reversed: true)
+        }
     }
 
     // MARK: - Band copies

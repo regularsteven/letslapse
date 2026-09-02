@@ -2,8 +2,9 @@
 
 **Raised:** 2026-08-28 (developer brief, same date) ·
 **Status: stages 1–4 + the verifier landed 2026-08-28 (Mac-only, per the
-sequencing decision); stage 4's UI awaits Steven's sign-off → then the SVG
-mirrors; stage 5 (processing loader) not started**
+sequencing decision); stage 5 (processing loader) not started.
+Variations + grid mode landed 2026-09-01 — see §10, which also discharges
+stage 4's owed SVG mirrors for the expanded card.**
 
 *Stage 4 (Adjust UI, code-first per the standing decision) landed the same
 day and was screenshot-verified on the Mac build: a `Time slicing` card
@@ -564,3 +565,170 @@ engine feature after the stage-5 loader rather than "later".
 1. When *Include regular timelapse* is OFF, should the throwaway master render
    at `hevcMain10` regardless of the user's blend-format default (better
    gradient survival into the slice, zero user-visible cost)?
+
+## 10. Variations and grid mode (2026-09-01)
+
+**Status: engine, orchestration, UI and mirrors landed; unrendered in the app
+(see "What is not verified" below).** Additive throughout — the single-slice
+path's arithmetic, geometry and output are untouched, and every one of its
+tests still passes unchanged.
+
+### 10.1 The three questions, answered from the code
+
+The brief for this phase asked three things to be settled before building.
+
+**1 · Can the blended frame set be held across N slice passes?** No — and it
+does not need to be. The premise the question rests on is not how this feature
+works: **there is no in-memory blended frame set to hold.** Slicing is the last
+tail pass over the *finished blended clip on disk* (§2), and even a minimal
+drop-after-read retention floors at half the spread in full frames — 285–760 MB
+at 4K for the default spread (§1), against a whole 12 MP master that would be
+~76 GB. What §8 of the brief actually asks for is that **blended frame
+generation runs once per run**, and that is what happens: the blend, the
+normalize, the stitch, the reframe and the grade all run exactly once and
+produce one master file; each variation re-*decodes* that file. Marginal cost
+per variation = one sequential decode + the slice pass + one encode. Nothing
+re-blends.
+
+The alternative — one decode fanned out to N spools and N writers concurrently
+— was rejected on scratch: spool bytes multiply by N (≈8.8 GB for eight
+variations at the measured 1.1 GB), against a re-decode that costs seconds.
+
+**2 · Does the existing pass decode per band?** Neither per band nor as a held
+set: one sequential decode in presentation order (`AssetFrameProvider`), each
+frame cut into bands, the lagged bands parked in a preallocated on-disk ring
+(`TimeSliceBandSpool`), RAM flat at one decoded frame plus one composite. No
+restructuring was needed for variations.
+
+**3 · Upper bound on grid segment count.** Cells must be ≥ **8 px** on both
+axes and the derived row count ≥ 2 (`TimeSliceGridGeometry.minimumCellPixels`,
+stricter than the banded path's 2 px floor: a band spans its other axis
+entirely by definition, a cell does not). Columns are capped at **48**
+(`maximumColumns`) — above that the wavefront's step count grows faster than a
+usable spread can cover, since a grid's ladder spans the far corner's
+*distance*, not its column count: 24 columns on 16:9 derives 14 rows and a
+Manhattan span of 36 steps, half again a 24-band slice at the same lag.
+
+### 10.2 Grid geometry — square cells, edge crop
+
+`TimeSliceGrid { origin, metric }` rides `TimeSliceSettings`; the column count
+**is** `segments`, because the user-facing count applies to the horizontal axis
+and the row count is derived. Both are display-space: on a rotated master the
+two display axes are mapped into encoded space through the transform the same
+way a banded edge is (`encodedAxis`), so cells come out square **on screen**,
+not in the file.
+
+- Cell side = ⌈width ÷ columns⌉ — rounded **up** so the columns always cover
+  the frame.
+- Rows = round(height ÷ cell), bumped up by one only where rounding down would
+  leave an uncovered strip. That strip would be *unwritten* output — black —
+  not a crop, which is the one way squareness must not win.
+- Both axes are then centred over the frame and clipped to it: every interior
+  cell is exactly square and only the outer row and column crop. 1920×1080 at
+  24 columns → 80 px cells, 14 rows, 40 px of overhang split 20/20, so the
+  first and last rows are 60 px.
+- The resolved geometry (`TimeSliceGridLayout.summary` — "24×14 cells of 80 px
+  · edges cropped 0/40 px") is written into the output's summary, because the
+  row count and cell size are derived and the recipe alone does not state them.
+
+Lag per cell = distance from the origin corner × `offsetFrames`, rounded to
+whole master frames. **Manhattan** (column + row) gives stepped diagonal bands;
+**Euclidean** gives a curved radial front. The poster spreads the whole master
+by distance rank, the banded poster's rule in two dimensions.
+
+### 10.3 §5.3 — one code path, two geometries, and why
+
+The pass **is** one code path: `render` builds a `SlicePlan` (a rect and a lag
+per cell, plus the poster's cell→master map) and everything downstream — the
+decode loop, the spool, the composite, the encoder, cancellation, progress — is
+shared verbatim. A band is just a cell that spans its other axis.
+
+The *geometry* stays separate, deliberately, and the brief's own condition is
+why: bit-for-bit identical behaviour could not be guaranteed by folding the
+banded case into the grid. Bands distribute their division remainder
+Bresenham-style across every band (1920÷7 → 274/275 interleaved); the grid
+fixes an integer cell and crops the outer row and column. Those give different
+boundaries for the same count, and the banded distribution is the shipped,
+measured, verified behaviour. So `bandedPlan` reproduces it verbatim and
+`gridPlan` sits beside it. What the claim rests on is tested directly: a
+one-row grid's ladder is *equal* to the banded ladder
+(`testASingleRowGridReproducesTheBandedLadder`).
+
+### 10.4 Variation batches
+
+`TimeSliceVariationPlan { count, mode, seed }` on the model;
+`TimeSliceVariationStamp { index, count, mode, seed }` on each produced
+recipe — so it rides `BlendProject.timeSlice`, which means archive, transfer,
+import re-ID, storage buckets, rotate and delete are all inherited with **no
+manifest schema change** (the same trick `grid` uses).
+
+`TimeSliceVariationGenerator.variations` is deterministic from the seed
+(SplitMix64 — `SystemRandomNumberGenerator` is not seedable, and a recorded
+seed that cannot reproduce its batch is not a seed). Order of variation follows
+the brief's priority: **shape** first (banded axis vs grid — Mixed cycles
+`[baseline axis, grid, other axis, grid]`, so half a mixed batch is grid, the
+most visibly distinct of the three), then **edge / origin corner** (shuffled
+once per batch and consumed in order, the baseline's own edge leading its
+axis), then **segment count** (a multiplier ladder walking coarse and fine),
+then **metric**, and only last the **spread**. Every emitted recipe is
+individually valid against this master — bands clear the pixel floor, grids
+resolve, spreads leave output frames — and distinct from every other; a
+collision is nudged on segments first, then lag. Where a master is too small or
+too short to make N distinct valid recipes, **fewer** are returned and the
+readout says so in amber.
+
+### 10.5 Orchestration and output
+
+The tail pass loops. `includeRegularClip` applies once per **run**, not per
+variation, and for a batch the regular clip is registered *before* the loop, so
+a variation that fails eight renders in doesn't take the run's keepable output
+with it (§3.4's stated intent; a single slice keeps the original
+all-or-nothing order). Each variation registers its own `BlendProject`s —
+animation and/or poster, per the shared Output setting — with its own recipe
+attached. The first variation fronts the result screen; the rest sit beside it
+in the library. Progress shares one `sliceBand`, crossed once however many
+passes run. The master is deleted (when the regular clip wasn't kept) only
+after every variation has finished reading it.
+
+Naming makes the batch legible rather than indexed: `displayName` grows a grid
+form and a batch suffix —
+`timeslice-grid-bl-manh-segs_24-lag_2-v2of4`,
+`timeslice-vert-right-segs_24-lag_2-v1of4`.
+
+### 10.6 Surfaces
+
+- **UI**: Variations (Off / 2 / 4 / 8) and Variation mode (Horizontal /
+  Vertical / Grid / Mixed, default Mixed) below the existing controls, with the
+  seed and a Reroll; the readout resolves the batch against the clip Adjust can
+  already measure and lists every variation's name before a minutes-long run
+  commits to it. The CTA counts what will be kept. Grid is not a fresh
+  single-slice choice — it arrives through Variations — but a clip re-opened
+  from a Grid variation gets `timeSliceGridControls` (Sweeps from · Wavefront ·
+  "Use single-axis bands instead") rather than losing its grid silently.
+- **CLI**: `lapse slice … --grid <corner> --metric <manhattan|euclidean>`,
+  and `--variations N --variation-mode <mode> --seed N`, which names each
+  output file after its variation.
+- **Hook**: `LL_TIMESLICE` gains `grid:`, `metric:`, `vars:`, `mode:`, `seed:`.
+- **Mirrors**: `iOS/adjust.timeslice.portrait.svg` (which also discharges the
+  stage-4 mirror debt for the expanded card) and
+  `iOS/adjust.timeslice-grid.portrait.svg`, plus INDEX rows. Drawing them
+  caught two real collisions in the SwiftUI layout — the Variations caption and
+  the Variation-mode picker both fought their labels for width — and the code
+  was fixed rather than the drawing fudged.
+
+### 10.7 What is verified, and what is not
+
+Verified: all three platforms build (iOS, macOS, watchOS); the Kit suite passes
+397 tests including 22 new ones over grid layout, tiling, ladders, poster
+mapping, batch distinctness/determinism/validity and the Codable round trip
+(old manifests still decode, `grid` and `variation` absent); and real grid and
+four-variation batches render end to end through `lapse slice`, with the grid
+poster showing the expected Manhattan wavefront.
+
+**Not verified: the app's batch orchestration has not been run.** The Mac used
+for this pass had its screen locked, which blocks synthetic input, and the
+headless `LL_ADJUST_CREATE` / `LL_AUTO=process` route failed to start a blend
+**even with slicing switched off entirely** — so the harness, not this change,
+is what stopped it. The next session should run one batch on the Mac against a
+real shoot and check that N sliced `BlendProject`s land beside one regular
+clip, each with its own recipe and stamp.

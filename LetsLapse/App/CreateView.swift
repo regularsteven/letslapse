@@ -1,4 +1,5 @@
 import SwiftUI
+import Photos
 import PhotosUI
 import UniformTypeIdentifiers
 
@@ -72,13 +73,30 @@ struct CreateView: View {
     #if os(iOS)
     @State private var videoItem: PhotosPickerItem?
     @State private var photoItems: [PhotosPickerItem] = []
+    /// "Import photos to stack" asks where from on iOS, for the same reason
+    /// the project row does: the Photos library and the Files app are two
+    /// genuinely different answers, and only one of them can hand over a
+    /// camera's raw files under their own names.
+    @State private var choosingPhotoSource = false
+    @State private var pickingLibraryPhotos = false
     #else
     @State private var importingVideo = false
-    @State private var importingPhotos = false
     @State private var isDropTargeted = false
     #endif
+    /// The Files/Finder picker, on every platform — the path that reaches a
+    /// card, a drive or an iCloud folder, and the only one that preserves the
+    /// camera's own file names.
+    @State private var importingPhotos = false
 
     private static let projectArchiveTypes: [UTType] = [.lapseProject]
+
+    /// What the stills picker will accept. `.image` already covers every raw
+    /// format the system knows (`com.sony.arw-raw-image` and its siblings all
+    /// conform to `public.camera-raw-image`, which conforms to `public.image`);
+    /// `.rawImage` is named anyway so a body whose files the system types only
+    /// as raw is still selectable, and `.folder` is what lets a whole shoot be
+    /// chosen in one gesture instead of 306 clicks.
+    private static let stillContentTypes: [UTType] = [.image, .rawImage, .folder]
 
     private let effectColumns = [
         GridItem(.flexible(), spacing: 12),
@@ -99,6 +117,43 @@ struct CreateView: View {
                     .padding(.top, 2)
                     .padding(.bottom, 14)
 
+                // Status sits ABOVE the grid, not under the source rows where it
+                // used to. Measured on a 393×852 iPhone: the effect grid and the
+                // rows card together end at ~787pt, and the floating tab bar
+                // starts at 755 — so a card added below them lands UNDER the bar,
+                // with the progress track itself right where the bar is opaque.
+                // A progress bar you have to scroll to see is not a progress bar,
+                // and an import failure you have to scroll to read is worse. Both
+                // are answers to "what is the app doing right now", which is a
+                // top-of-screen question anyway.
+                if let progress = model.mediaImport {
+                    MediaImportCard(progress: progress)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                } else if isImporting {
+                    HStack(spacing: 10) {
+                        ProgressView()
+                        Text("Importing…")
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 14)
+                    .llCard()
+                    .padding(.horizontal, 16)
+                    .padding(.bottom, 12)
+                }
+
+                if let error = model.errorMessage {
+                    Text(error)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .llCard()
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 12)
+                }
+
                 LazyVGrid(columns: effectColumns, spacing: 12) {
                     ForEach(CreateEffect.allCases) { effect in
                         Button {
@@ -115,29 +170,6 @@ struct CreateView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 16)
 
-                if isImporting {
-                    HStack(spacing: 10) {
-                        ProgressView()
-                        Text("Importing…")
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 14)
-                    .llCard()
-                    .padding(.horizontal, 16)
-                    .padding(.top, 12)
-                }
-
-                if let error = model.errorMessage {
-                    Text(error)
-                        .font(.footnote)
-                        .foregroundStyle(.red)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(14)
-                        .llCard()
-                        .padding(.horizontal, 16)
-                        .padding(.top, 12)
-                }
 
                 Spacer(minLength: 110)
             }
@@ -173,8 +205,14 @@ struct CreateView: View {
         }
         .onChange(of: photoItems) { items in
             guard !items.isEmpty else { return }
-            importPhotos(items)
+            importLibraryPhotos(items)
         }
+        .photosPicker(
+            isPresented: $pickingLibraryPhotos,
+            selection: $photoItems,
+            maxSelectionCount: 500,
+            matching: .images
+        )
         .fileImporter(
             isPresented: $importingProject,
             allowedContentTypes: Self.projectArchiveTypes
@@ -190,13 +228,6 @@ struct CreateView: View {
         #else
         .fileImporter(isPresented: $importingVideo, allowedContentTypes: Self.videoContentTypes) { result in
             handleVideoImport(result)
-        }
-        .fileImporter(
-            isPresented: $importingPhotos,
-            allowedContentTypes: [.image],
-            allowsMultipleSelection: true
-        ) { result in
-            handlePhotosImport(result)
         }
         .fileImporter(
             isPresented: $importingProject,
@@ -220,6 +251,13 @@ struct CreateView: View {
             }
         }
         #endif
+        .fileImporter(
+            isPresented: $importingPhotos,
+            allowedContentTypes: Self.stillContentTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            handleStillsImport(result)
+        }
     }
 
     // MARK: - Rows
@@ -308,18 +346,31 @@ struct CreateView: View {
 
     @ViewBuilder
     private var importPhotosRow: some View {
-        #if os(iOS)
-        PhotosPicker(selection: $photoItems, maxSelectionCount: 500, matching: .images) {
-            SourceRow(icon: "photo.stack", iconColor: Color(red: 0.48, green: 0.42, blue: 0.61), title: "Import photos to stack")
-        }
-        .buttonStyle(.plain)
-        #else
         Button {
+            #if os(iOS)
+            choosingPhotoSource = true
+            #else
             importingPhotos = true
+            #endif
         } label: {
-            SourceRow(icon: "photo.stack", iconColor: Color(red: 0.48, green: 0.42, blue: 0.61), title: "Import photos to stack…")
+            SourceRow(
+                icon: "photo.stack",
+                iconColor: Color(red: 0.48, green: 0.42, blue: 0.61),
+                title: "Import photos to stack…")
         }
         .buttonStyle(.plain)
+        #if os(iOS)
+        .confirmationDialog(
+            "Import photos to stack",
+            isPresented: $choosingPhotoSource,
+            titleVisibility: .visible
+        ) {
+            Button("From Files…") { importingPhotos = true }
+            Button("From Photos…") { pickingLibraryPhotos = true }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text("A folder of frames from a card or a drive, or photos already in your library. Raw files keep their own names when they come from Files.")
+        }
         #endif
     }
 
@@ -343,6 +394,24 @@ struct CreateView: View {
 
     // MARK: - Import plumbing
 
+    /// The Files/Finder answer for "Import photos to stack", on every
+    /// platform. Files, folders or both — `AppModel.importStills` resolves the
+    /// selection into the shoot and takes it from there.
+    ///
+    /// The security scope is claimed by the model for the whole job rather
+    /// than here: a folder pick hands back ONE url whose scope has to cover
+    /// every file found inside it, and it has to still be held when the copy
+    /// runs, which is minutes later and on another thread.
+    private func handleStillsImport(_ result: Result<[URL], Error>) {
+        switch result {
+        case .success(let urls):
+            guard !urls.isEmpty else { return }
+            model.importStills(from: urls)
+        case .failure(let error):
+            model.errorMessage = error.localizedDescription
+        }
+    }
+
     #if os(iOS)
     private func importVideo(_ item: PhotosPickerItem) {
         isImporting = true
@@ -350,7 +419,7 @@ struct CreateView: View {
             defer { isImporting = false }
             do {
                 if let movie = try await item.loadTransferable(type: PickedMovie.self) {
-                    model.setSource(.video(movie.url))
+                    model.importVideo(from: movie.url)
                 } else {
                     model.errorMessage = "Couldn't load that video."
                 }
@@ -361,29 +430,62 @@ struct CreateView: View {
         }
     }
 
-    private func importPhotos(_ items: [PhotosPickerItem]) {
+    /// Stages the Photos library's answer on disk and hands it to the same
+    /// importer the Files path uses.
+    ///
+    /// Two things this now does that it didn't:
+    ///
+    /// - **The staged file keeps an extension**, taken from the item's own
+    ///   content type. Without one nothing downstream can tell a raw from a
+    ///   JPEG — not the decoder's raw gate, not the project's format pill —
+    ///   and every frame of every library import read as typeless.
+    /// - **It keeps the camera's file name** where the library still knows it
+    ///   (`PHAssetResource.originalFilename`), falling back to the picked
+    ///   order. An imported frame's name is its identity everywhere after
+    ///   this, Bad Frames included.
+    private func importLibraryPhotos(_ items: [PhotosPickerItem]) {
         isImporting = true
         Task {
-            defer { isImporting = false }
             let directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("import-\(UUID().uuidString)")
             try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             var urls: [URL] = []
+            var used = Set<String>()
             for (index, item) in items.enumerated() {
-                if let data = try? await item.loadTransferable(type: Data.self) {
-                    let url = directory.appendingPathComponent(String(format: "photo-%04d", index))
-                    if (try? data.write(to: url)) != nil {
-                        urls.append(url)
-                    }
-                }
+                guard let data = try? await item.loadTransferable(type: Data.self) else { continue }
+                let name = Self.stagedName(
+                    for: item, fallbackIndex: index, taken: &used)
+                let url = directory.appendingPathComponent(name)
+                if (try? data.write(to: url)) != nil { urls.append(url) }
             }
             photoItems = []
-            if urls.count >= 2 {
-                model.setSource(.photos(urls))
-            } else {
+            isImporting = false
+            guard urls.count >= 2 else {
                 model.errorMessage = "Pick at least two photos to stack."
+                return
+            }
+            model.importStills(from: urls)
+        }
+    }
+
+    /// The name one library item is staged under: its original camera file
+    /// name when the library still has it, else `photo-0001` plus whatever
+    /// extension its content type implies.
+    private static func stagedName(
+        for item: PhotosPickerItem, fallbackIndex: Int, taken: inout Set<String>
+    ) -> String {
+        let ext = item.supportedContentTypes
+            .compactMap(\.preferredFilenameExtension).first ?? "jpg"
+        var name: String?
+        if let identifier = item.itemIdentifier {
+            let assets = PHAsset.fetchAssets(withLocalIdentifiers: [identifier], options: nil)
+            if let asset = assets.firstObject {
+                name = PHAssetResource.assetResources(for: asset).first?.originalFilename
             }
         }
+        let candidate = name ?? String(format: "photo-%04d.%@", fallbackIndex + 1, ext)
+        return AppModel.uniqueImportName(
+            for: URL(fileURLWithPath: candidate), taken: &taken)
     }
     #else
     private static let videoContentTypes: [UTType] = [
@@ -403,21 +505,7 @@ struct CreateView: View {
         }
     }
 
-    private func handlePhotosImport(_ result: Result<[URL], Error>) {
-        switch result {
-        case .success(let urls):
-            guard urls.count >= 2 else {
-                model.errorMessage = "Pick at least two photos to stack."
-                return
-            }
-            for url in urls {
-                _ = url.startAccessingSecurityScopedResource()
-            }
-            model.setSource(.photos(urls))
-        case .failure(let error):
-            model.errorMessage = error.localizedDescription
-        }
-    }
+
 
     private func handleDroppedURLs(_ urls: [URL]) -> Bool {
         // A project archive dropped here is the same gesture as double-clicking
@@ -440,11 +528,7 @@ struct CreateView: View {
             return
         }
 
-        isImporting = true
-        Task {
-            defer { isImporting = false }
-            model.setSource(.video(url))
-        }
+        model.importVideo(from: url)
     }
 
     private func isVideoURL(_ url: URL) -> Bool {
@@ -479,6 +563,51 @@ private struct SourceRow: View {
         .padding(.horizontal, 16)
         .padding(.vertical, 13)
         .contentShape(Rectangle())
+    }
+}
+
+/// The import in flight — a folder of frames or a movie — on the Create
+/// screen where it was started.
+///
+/// Determinate on purpose. A folder of raw frames is gigabytes and minutes —
+/// the indeterminate spinner this replaces said "something is happening" for
+/// long enough that the honest reading was "something has hung".
+private struct MediaImportCard: View {
+    var progress: AppModel.MediaImportProgress
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 10) {
+                Image(systemName: progress.name == nil ? "photo.stack" : "film")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                Text(progress.caption)
+                    .font(.system(size: 14))
+                Spacer()
+                if progress.totalBytes > 0 {
+                    Text(LLFormat.bytes(progress.totalBytes))
+                        .font(.system(size: 12).monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+            }
+            // Drawn rather than a `ProgressView(value:)`, for the same reason
+            // the project-import sheet draws its own: the system linear bar
+            // fills in the control grey on macOS whatever the tint says, and
+            // a progress bar on a screen the accent owns has to be the accent.
+            GeometryReader { geometry in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Color.primary.opacity(0.12))
+                    Capsule()
+                        .fill(LL.accent)
+                        .frame(width: max(0, geometry.size.width * progress.fraction))
+                }
+            }
+            .frame(height: 5)
+            .animation(.easeOut(duration: 0.25), value: progress.fraction)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .llCard()
     }
 }
 

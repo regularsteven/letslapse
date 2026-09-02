@@ -2,6 +2,7 @@ import AVFoundation
 import AVKit
 import CoreImage
 import ImageIO
+import LetsLapseKit
 import SwiftUI
 
 // `_AVKit_SwiftUI` — the framework behind SwiftUI's `VideoPlayer` — only
@@ -294,7 +295,7 @@ enum ProjectThumbnailGenerator {
     /// The same test `LinearFrameDecoder` uses, so the two decoders cannot
     /// disagree about what a raw file is.
     static func isRAW(_ url: URL) -> Bool {
-        ["dng", "raw"].contains(url.pathExtension.lowercased())
+        ImportedStills.isRaw(url)
     }
 
     /// A bounded, oriented, Display P3 decode of a raw file. Nil when

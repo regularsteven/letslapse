@@ -528,7 +528,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -680,6 +680,20 @@ struct ContentView: View {
         } else if let seed = environment["LL_SEED"] {
             model.setSource(.video(URL(fileURLWithPath: seed)))
         }
+        // LL_IMPORT_STILLS=<path>[:<path>…] — run a real stills import from
+        // disk. The picker it stands in for is an NSOpenPanel/UIDocumentPicker,
+        // which no headless run can drive, and this is the whole feature behind
+        // it: the selection walk, the EXIF probe, the copy, the derived
+        // sidecars and the registration. Paths may be folders or files.
+        if let paths = environment["LL_IMPORT_STILLS"], !paths.isEmpty {
+            model.importStills(from: paths.split(separator: ":").map {
+                URL(fileURLWithPath: String($0))
+            })
+        }
+        // LL_IMPORT_VIDEO=<path> — its movie twin.
+        if let path = environment["LL_IMPORT_VIDEO"], !path.isEmpty {
+            model.importVideo(from: URL(fileURLWithPath: path))
+        }
         if environment["LL_DETAIL"] == "latest", let capture = model.captures.first {
             selectedTab = .projects
             model.requestedProjectDetailID = capture.id
@@ -780,6 +794,7 @@ struct ContentView: View {
             // clears it; pairs with LL_ADJUST_CREATE for a headless render.
             if let hook = environment["LL_TIMESLICE"] {
                 var settings = TimeSliceSettings()
+                var plan: TimeSliceVariationPlan?
                 for pair in hook.split(separator: ",") {
                     let parts = pair.split(separator: ":", maxSplits: 1).map(String.init)
                     guard parts.count == 2 else { continue }
@@ -791,10 +806,42 @@ struct ContentView: View {
                     case "output":
                         settings.output = TimeSliceOutput(rawValue: parts[1]) ?? settings.output
                     case "regular": settings.includeRegularClip = parts[1] != "off"
+                    // grid:<corner> and metric:<name> arm a grid recipe — the
+                    // state a batch member re-opens in, otherwise reachable
+                    // only by rendering a batch first.
+                    case "grid":
+                        if let origin = TimeSliceGridOrigin(rawValue: parts[1]) {
+                            settings.grid = TimeSliceGrid(
+                                origin: origin, metric: settings.grid?.metric ?? .manhattan)
+                        }
+                    case "metric":
+                        if let metric = TimeSliceGridMetric(rawValue: parts[1]) {
+                            settings.grid = TimeSliceGrid(
+                                origin: settings.grid?.origin ?? .topLeft, metric: metric)
+                        }
+                    // vars:<2|4|8>, mode:<horizontal|vertical|grid|mixed> and
+                    // seed:<n> arm a variation batch; a fixed seed is what
+                    // makes the readout screenshottable.
+                    case "vars":
+                        if let count = Int(parts[1]), count >= 2 {
+                            plan = TimeSliceVariationPlan(
+                                count: count, mode: plan?.mode ?? .mixed, seed: plan?.seed ?? 0x1A2B3C4D)
+                        }
+                    case "mode":
+                        if let mode = TimeSliceVariationMode(rawValue: parts[1]) {
+                            plan = TimeSliceVariationPlan(
+                                count: plan?.count ?? 4, mode: mode, seed: plan?.seed ?? 0x1A2B3C4D)
+                        }
+                    case "seed":
+                        if let seed = UInt64(parts[1]) {
+                            plan = TimeSliceVariationPlan(
+                                count: plan?.count ?? 4, mode: plan?.mode ?? .mixed, seed: seed)
+                        }
                     default: break
                     }
                 }
                 model.timeSlice = settings
+                model.timeSliceVariations = plan
             }
             if environment["LL_ADJUST_CREATE"] == "1" {
                 model.startProcessing()

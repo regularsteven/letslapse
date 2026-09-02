@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Create (tab home) · portrait</title>
-  <desc>Mirrors App/CreateView.swift (effect cards grid, source rows) + App/DesignSystem.swift (FloatingTabBar). On iOS selecting the Create tab opens the camera immediately; this screen is the tab's home behind the camera, revealed on close. Both import rows now build real projects rather than staging a blend: "Import a video" registers a video project keeping the file's own name and the date it was SHOT, and "Import photos to stack…" registers an interval project whose frames.timestamps, frames.exposure and capture_log.json are rebuilt from the frames' own EXIF — see create-home.photo-source.portrait.svg for the chooser it opens and create-home.importing.portrait.svg for the progress card.</desc>
+  <title>iOS · Create · photo source chooser · portrait</title>
+  <desc>Mirrors App/CreateView.swift — the source chooser behind "Import photos to stack…" (importPhotosRow). iOS only: the Photos library and the Files app are two genuinely different answers, and only one of them reaches a memory card, an external drive or an iCloud folder — which is where a shoot off a real camera actually lives. "From Files…" is a fileImporter over [.image, .rawImage, .folder], so a whole shoot is one gesture rather than 306 taps, and it hands the frames over under their own names. "From Photos…" is the PhotosPicker, which stages each item under its PHAssetResource.originalFilename where the library still knows it. Both ends in AppModel.importStills(from:), which reads every frame's EXIF and rebuilds the sidecars a captured interval shoot writes for itself. macOS shows NO chooser — that row opens the Finder picker outright, a Mac having no Photos library to offer. Drawn as an iOS action sheet over create-home.portrait.svg unchanged.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -128,12 +128,38 @@
         </g>
       </g>
 
+
+      <!-- PHOTO SOURCE CHOOSER — .confirmationDialog on the "Import photos to
+           stack…" row. Two genuinely different answers, which is why the row
+           asks instead of opening one of them: only Files reaches a card, a
+           drive or an iCloud folder, and only Files hands the frames over
+           under the camera's own file names — which is what a raw sequence
+           needs, since a frame's name is its identity everywhere afterwards,
+           Bad Frames included. macOS has no chooser: it goes straight to the
+           Finder picker, having no Photos library to offer. -->
+      <g id="photo-source-dialog">
+        <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.28"/>
+        <g id="sheet">
+          <rect x="8" y="574" width="377" height="164" rx="14" fill="#F7F7F8" fill-opacity="0.96"/>
+          <text x="196.5" y="600" font-size="13" class="sb" text-anchor="middle" fill="#3C3C43" fill-opacity="0.7">Import photos to stack</text>
+          <text x="196.5" y="618" font-size="12" text-anchor="middle" fill="#3C3C43" fill-opacity="0.6">A folder of frames from a card or a drive, or</text>
+          <text x="196.5" y="633" font-size="12" text-anchor="middle" fill="#3C3C43" fill-opacity="0.6">photos already in your library. Raw files keep</text>
+          <text x="196.5" y="648" font-size="12" text-anchor="middle" fill="#3C3C43" fill-opacity="0.6">their own names when they come from Files.</text>
+          <line x1="8" y1="660" x2="385" y2="660" stroke="#000" stroke-opacity="0.12"/>
+          <text x="196.5" y="683" font-size="20" text-anchor="middle" fill="#007AFF">From Files…</text>
+          <line x1="8" y1="699" x2="385" y2="699" stroke="#000" stroke-opacity="0.12"/>
+          <text x="196.5" y="722" font-size="20" text-anchor="middle" fill="#007AFF">From Photos…</text>
+        </g>
+        <rect x="8" y="748" width="377" height="56" rx="14" fill="#FFFFFF" fill-opacity="0.97"/>
+        <text x="196.5" y="783" font-size="20" class="sb" text-anchor="middle" fill="#007AFF">Cancel</text>
+      </g>
+
       <!-- hardware -->
       <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
       <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create (tab home) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — EffectCard grid · SourceRow card · FloatingTabBar</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create · photo source chooser · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — the .confirmationDialog behind "Import photos to stack…"</text>
 </svg>

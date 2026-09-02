@@ -11,6 +11,79 @@ live inline.
 
 ## Open
 
+### Time-slice variation batches: run one in the app
+
+**Raised:** 2026-09-01, out of the variations + grid-mode build
+
+The whole feature is built and the engine is proven — grid geometry and
+four-variation batches render end to end through `lapse slice`, and 22 new Kit
+tests cover the layout, the ladders, the poster mapping and the batch
+generator — but the **app-side orchestration has never actually run a batch**.
+The Mac used for the build had its screen locked, which puts a Window Server
+shield over everything and blocks synthetic input, and the headless routes
+(`LL_ADJUST_CREATE=1`, `LL_AUTO=process`) failed to start a blend *even with
+slicing switched off entirely*, so the harness — not the change — is what
+stopped it.
+
+What to check, on the Mac, against a real interval or video shoot: arm
+`LL_TIMESLICE="segs:24,lag:2,vars:4,mode:mixed,seed:305419896"` inside
+`LL_ADJUST` (it nests there — `openCapture` clears the recipe, so the hook does
+nothing on its own), press Create, and confirm that one run registers four
+sliced `BlendProject`s beside one regular clip; that each carries its own
+recipe and `variation` stamp; that the grid members' summaries record the
+derived row count and cell size; that the master temp is removed only after the
+last variation has read it; and that the progress bar crosses the slice band
+once rather than four times. Detail: `docs/time-slicing.md` §10.7.
+
+---
+
+### Out-of-app imports: follow-ups from the first build
+
+**Raised:** 2026-09-01, out of the "Import a video" / "Import photos to stack" build
+
+Both Create rows now build real projects rather than staging a blend.
+`LetsLapseKit/ImportedStills.swift` reads every frame's EXIF and rebuilds the
+sidecars a captured interval shoot writes for itself — `frames.timestamps`,
+`frames.exposure`, `capture_log.json` — so an imported shoot lands on its own
+capture clock with its own exposure trail. Files keep their names, the shoot's
+own date becomes `createdAt`, and the raw gate (`ImportedStills.isRaw`) now
+covers every camera family rather than the two extensions the app used to
+write itself. Verified end to end on macOS against a 306-frame Sony ARW shoot
+(18m26s span, 3.624s median interval, sub-second timing) and a 137 MB MP4.
+
+Still open:
+
+- **iOS/iPadOS verification.** Everything above was checked on the Mac only.
+  Three things genuinely differ there and none has been run: the widened raw
+  gate matters *most* on iOS (ImageIO hands back the embedded preview for a
+  raw file — see the 2026-08-26 DNG finding, and the purple-frame-0
+  signature), the Files picker over `[.image, .rawImage, .folder]` is
+  UIDocumentPicker rather than NSOpenPanel, and the Photos-library path's
+  `PHAssetResource.originalFilename` lookup needs a real library. Hooks:
+  `LL_IMPORT_STILLS=<path>[:<path>…]`, `LL_IMPORT_VIDEO=<path>`.
+- **Nothing surfaces the session log.** `capture_log.json` now travels with
+  every imported shoot carrying the camera, the lens, the pixel size, the
+  measured interval and per-frame ISO/shutter/aperture/EV — and the app reads
+  exactly one field out of it (`captureFlat`). The same is true of shoots
+  captured here. A "how this was shot" panel on the project screen would pay
+  for itself twice over the moment it exists.
+- **The review step, deliberately deferred** (Steven, 2026-09-01: straight
+  through first). What it would add: name the project, confirm the inferred
+  interval, and drop outliers *before* several gigabytes are copied. Today
+  the answer to a stray frame is Bad Frames after the fact, which works
+  (nomination is by `lastPathComponent`, so it is name-agnostic) but only
+  after the copy.
+- **Imported video is thin by comparison** — creation date, size, fps and
+  codec, which is most of what an MP4 container carries. Not yet lifted: the
+  QuickTime location atom (a captured video writes a `.gpx` sidecar), and any
+  per-segment structure — an imported clip has no `sequence.json`, so it warps
+  as one stretch. Both are only worth doing against a real source that has
+  them.
+- **`ImportedStills.Sequence.issues()` is written and never read.** Out-of-order
+  capture times, long gaps and mixed frame sizes are recorded into the session
+  log's issue trail, where the same field is already used for thermal and
+  framing events. Nothing shows any of them yet.
+
 ### Text overlays: export baking for VIDEO-source blends and tail passes
 
 **Detail:** [text-overlay-spike.md](text-overlay-spike.md) · **Raised:** 2026-08-31, out of the spike · **Narrowed:** 2026-08-31 — stills paths shipped (864c5f5)
