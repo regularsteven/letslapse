@@ -4,7 +4,10 @@
 **Status: stages 1–4 + the verifier landed 2026-08-28 (Mac-only, per the
 sequencing decision); stage 5 (processing loader) not started.
 Variations + grid mode landed 2026-09-01 — see §10, which also discharges
-stage 4's owed SVG mirrors for the expanded card.**
+stage 4's owed SVG mirrors for the expanded card. A planned exception to
+§2's last-tail-pass rule — image-only posters on stills shoots rendering
+only the windows the ladder names — lives in
+`time-slicing-poster-fast-path.md` (2026-09-02, not started).**
 
 *Stage 4 (Adjust UI, code-first per the standing decision) landed the same
 day and was screenshot-verified on the Mac build: a `Time slicing` card

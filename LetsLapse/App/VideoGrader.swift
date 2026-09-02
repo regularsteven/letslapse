@@ -51,7 +51,9 @@ enum VideoGrader {
             return nil
         }
         guard !grade.isIdentity else { return frame }
-        let source = CIImage(cgImage: frame)
+        // Levelled first, graded second — the same order every bake uses, so
+        // the vignette sits on the frame that ships.
+        let source = FrameRotation.rotated(CIImage(cgImage: frame), degrees: grade.rotationDegrees)
         // A card's one frame is the clip's opening moment, which is the moment
         // a keyframed grade answers for when it is only asked once.
         let output = filterChain(grade.frozen(at: 0))(source)
@@ -79,20 +81,26 @@ enum VideoGrader {
         map: GradeSourceMap = .direct
     ) -> AVMutableVideoComposition? {
         guard !grade.isIdentity else { return nil }
+        // The project's level, applied to every frame before its colour: the
+        // geometry keeps the frame's size, so the writer sees nothing new.
+        let rotation = grade.rotationDegrees
         guard grade.isKeyframed, let duration = durationSeconds, duration > 0 else {
             let chain = filterChain(grade.frozen(at: 0))
             return AVMutableVideoComposition(asset: asset) { request in
+                let levelled = FrameRotation.rotated(request.sourceImage, degrees: rotation)
                 // Filters like the unsharp mask and the vignette grow the extent;
                 // the frame has to come back the size the writer expects.
-                let graded = chain(request.sourceImage).cropped(to: request.sourceImage.extent)
+                let graded = chain(levelled).cropped(to: request.sourceImage.extent)
                 request.finish(with: graded, context: context)
             }
         }
         return AVMutableVideoComposition(asset: asset) { request in
             let position = map.position(
                 outputSeconds: request.compositionTime.seconds, outputDuration: duration)
-            let chain = filterChain(grade.frozen(at: position))
-            let graded = chain(request.sourceImage).cropped(to: request.sourceImage.extent)
+            let moment = grade.frozen(at: position)
+            let chain = filterChain(moment)
+            let levelled = FrameRotation.rotated(request.sourceImage, degrees: moment.rotationDegrees)
+            let graded = chain(levelled).cropped(to: request.sourceImage.extent)
             request.finish(with: graded, context: context)
         }
     }
@@ -177,7 +185,9 @@ enum VideoGrader {
     /// The Core Image chain for a grade, anchored at D65: a movie carries no
     /// as-shot temperature tag the way a DNG does, so the white-balance control
     /// is expressed relative to the sRGB white point the frames are encoded
-    /// against — the same anchor a JPEG still gets.
+    /// against — the same anchor a JPEG still gets. Colour only: the grade's
+    /// rotation is geometry and every caller applies it before the crop it
+    /// carries, never inside the chain.
     private static func filterChain(_ grade: PhotoGrade) -> (CIImage) -> CIImage {
         PhotoGrader.filterChain(grade, asShotKelvin: PhotoGrader.neutralKelvin)
     }

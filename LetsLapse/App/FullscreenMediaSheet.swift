@@ -646,7 +646,7 @@ private struct FrameSequencePage: View {
             if let grade, !grade.isIdentity {
                 return PhotoGrader.render(
                     url: url, preset: grade.preset, adjustments: grade.adjustments,
-                    maxDimension: CGFloat(size))
+                    rotationDegrees: grade.rotationDegrees, maxDimension: CGFloat(size))
             }
             return ProjectThumbnailGenerator.imageThumbnail(for: url, maxPixelSize: size)
         }

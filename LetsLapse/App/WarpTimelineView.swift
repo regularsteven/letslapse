@@ -60,14 +60,16 @@ final class WarpPreviewLoader: ObservableObject {
             let time = CMTime(seconds: max(0, seconds), preferredTimescale: 600)
             let image = try? await generator.image(at: time).image
             guard !Task.isCancelled, let image else { return }
-            self?.image = image
+            // Levelled like the render will be — the crop is composed on
+            // the levelled picture.
+            self?.image = AdjustPreviewLevel.apply(image)
         }
     }
 
     private func loadStill(url: URL) {
         task?.cancel()
         if let hit = stillCache[url] {
-            image = hit
+            image = AdjustPreviewLevel.apply(hit)
             return
         }
         task = Task { [weak self, debounceNanos] in
@@ -77,8 +79,10 @@ final class WarpPreviewLoader: ObservableObject {
                 Self.decodeStill(url: url)
             }.value
             guard !Task.isCancelled, let decoded else { return }
+            // The cache holds the raw decode; the level is applied on the
+            // way out so a rotation change never serves a stale turn.
             self?.rememberStill(decoded, for: url)
-            self?.image = decoded
+            self?.image = AdjustPreviewLevel.apply(decoded)
         }
     }
 

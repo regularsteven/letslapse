@@ -1,5 +1,6 @@
 import Foundation
 import CoreGraphics
+import LetsLapseKit
 
 /// One element composited over a project's frames — text today, SVG/image
 /// later. The scene-integration and animation machinery deliberately never
@@ -54,12 +55,24 @@ struct SceneOverlay: Identifiable, Codable, Equatable, Sendable {
     var minSize: Double = 0.04
     var maxSize: Double = 0.18
 
+    // MARK: Rotation
+
+    /// This layer's own angle in degrees, positive clockwise, about its
+    /// anchor — set with the same `RotationSlider` the Edit screen levels
+    /// the project with. It lives in the OUTPUT frame's space, after the
+    /// project's rotation: a layer added to a levelled project starts at 0
+    /// and reads level, and a layer that was already there when the project
+    /// was levelled carries the project's turn (see `remapped`). 0 for every
+    /// layer written before the field existed.
+    var rotationDegrees: Double = 0
+
     private enum CodingKeys: String, CodingKey {
         case id, content = "c", centerX = "x", centerY = "y", size = "s",
              placement = "p", animation = "an",
              isVisible = "v", onionSkin = "on", mode = "md",
              boxWidth = "bw", boxHeight = "bh",
-             autoSize = "as", minSize = "mn", maxSize = "mx"
+             autoSize = "as", minSize = "mn", maxSize = "mx",
+             rotationDegrees = "r"
     }
 
     init(content: OverlayContent) {
@@ -88,6 +101,32 @@ struct SceneOverlay: Identifiable, Codable, Equatable, Sendable {
         autoSize = try c.decodeIfPresent(Bool.self, forKey: .autoSize) ?? false
         minSize = try c.decodeIfPresent(Double.self, forKey: .minSize) ?? 0.04
         maxSize = try c.decodeIfPresent(Double.self, forKey: .maxSize) ?? 0.18
+        rotationDegrees = try c.decodeIfPresent(Double.self, forKey: .rotationDegrees) ?? 0
+    }
+
+    /// This layer re-expressed after the project's rotation changes from
+    /// `old` to `new` degrees, so it stays pinned to the scene it was placed
+    /// on: the anchor rides the same point of the picture, the layer turns
+    /// with it, and it grows with the crop-in the way the rock under it
+    /// does. Layers are stored in the output frame's space (what the editor
+    /// shows and the export bakes), which is why this has to be applied at
+    /// the moment the rotation moves rather than derived at render time.
+    /// `width`/`height` only need the frame's aspect.
+    func remapped(fromRotation old: Double, to new: Double, width: Double, height: Double) -> SceneOverlay {
+        guard old != new, width > 0, height > 0 else { return self }
+        var copy = self
+        let centre = FrameRotation.remap(
+            CGPoint(x: centerX, y: centerY), width: width, height: height, from: old, to: new)
+        copy.centerX = centre.x
+        copy.centerY = centre.y
+        copy.rotationDegrees += new - old
+        let grow = FrameRotation.lengthScale(width: width, height: height, from: old, to: new)
+        copy.size *= grow
+        copy.minSize *= grow
+        copy.maxSize *= grow
+        copy.boxWidth *= grow
+        copy.boxHeight *= grow
+        return copy
     }
 
     /// The text, when this overlay is text. The editing panel goes through

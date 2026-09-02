@@ -113,6 +113,12 @@ enum ReframeVideoCropper {
         outputFPS: Int,
         grade: PhotoGrade = .identity,
         gradeMap: GradeSourceMap = .direct,
+        /// The project's fine rotation, applied to every source frame BEFORE
+        /// its crop — the keys are authored on the levelled picture, which is
+        /// what the Adjust and Guided previews show. Its own parameter rather
+        /// than `grade.rotationDegrees` because the per-segment normalisation
+        /// path runs this pass with an identity grade and still has to level.
+        rotationDegrees: Double = 0,
         exportShortEdge: Int? = nil,
         /// Forces the output size instead of deriving it from `sourceURL`.
         ///
@@ -217,7 +223,15 @@ enum ReframeVideoCropper {
             let flipped = CGRect(
                 x: rect.minX, y: extent.height - rect.maxY,
                 width: max(1, rect.width), height: max(1, rect.height))
-            let cropped = request.sourceImage.cropped(to: flipped)
+            // The level this frame gets: the grade's own moment when it
+            // travels, else the constant handed in.
+            let angle = keyframedGrade.map {
+                $0.rotationDegrees(at: gradeMap.position(
+                    outputSeconds: request.compositionTime.seconds,
+                    outputDuration: gradedDuration))
+            } ?? rotationDegrees
+            let levelled = FrameRotation.rotated(request.sourceImage, degrees: angle)
+            let cropped = levelled.cropped(to: flipped)
                 .transformed(by: CGAffineTransform(translationX: -flipped.minX, y: -flipped.minY))
             // Lanczos for the resample — the punch is a magnification, and
             // bilinear stair-steps exactly where the move should be silkiest.

@@ -1,6 +1,6 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Photo viewer / grading editor · Text tab · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift (textTab) hosting App/Overlay/OverlayEditingPanel.swift — the Text page of the editor rail, rebuilt 2026-08-31 from the Claude Design &quot;Text Features&quot; spec (multiple layers, type fundamentals, bounding boxes, a Masks tab). Window, media column and timeline strip are photo-viewer.svg's (same staged project, same moment); only the rail differs. THE PAGE edits a LIST of text layers stored in the per-project overlays.json sidecar (OverlayDocument: overlays + customMasks + mask dials; persisted on finished gestures plus a 2s safety net, exit and window close; a second window on the same project can never bulldoze the sidecar because persists no-op when unchanged; every field past the spike's original five decodes with decodeIfPresent, so a sidecar written before the schema grew keeps its text instead of reading as empty). ORDER IS STACKING ORDER: row 1 is the frontmost layer, and the compositor walks the array in reverse so row 1 paints last. Drag a card by its grip to reorder. LAYER ROW: grip · visibility eye · title (the text itself, newlines shown as ↵) · an animation indicator (accent when the layer has a reveal) · onion skin · expand chevron. Hidden layers are skipped in the preview AND the export. Onion skin draws a layer at full strength ignoring its animation — editor-only scaffolding, never baked — and is disabled without an animation, because with no reveal the text is always drawn; a hidden layer with onion on ghosts at 34%. EXPANDED, four disclosures (a card opens with TEXT &amp; SIZE showing): TEXT &amp; SIZE — the string (multi-line; Return inserts a newline, so on iOS the keyboard toolbar's Done is the exit), Mode Free · Box, and Size as a fraction of the frame's LONG edge with the readout in px of the DELIVERED file (the preview is capped at 2000px / 1100px mid-scrub, so quoting against it would change as you scrub). Auto-size in box mode dims this slider and turns the readout amber. TYPE — family (SF Pro · Helvetica Neue · Georgia · Avenir Next · Futura · Courier New; an absent family falls back to the system face at raster time), B/I/U, alignment, five swatches (White · Ink · Accent · Amber · Sky), and More… — a popover holding Kerning (a fraction of the em, so it scales with the type), Line height, Paragraph, and Auto-Size font with Min/Max, all three box-only. Auto-size solves BOTH axes by bisection against a FIXED reference long edge, so the chosen step is a property of the layer and cannot differ between a 1100px scrub and a 2000px settled render. INTELLIGENT PLACEMENT — None, then the project's regions (Sky · Land, or a custom mask's names), then Custom, which is a route to the Masks tab rather than a value. ANIMATION — None · Fade · Slide, a From direction for Slide, and Set Start / Set End pinning the band to the playhead (the playhead is the precision instrument, so there are no draggable band handles); reveals are per-character with overlap 0.6, eased by the house cubic, and the settled raster is byte-identical to no animation — the resting layout IS the end state. REMOVE TEXT — red, per layer. ON THE PREVIEW (this tab only): every visible layer is draggable — baked at rest, a SwiftUI proxy takes over during the drag (frozen committed centre + translation ÷ drawn size, unit-clamped, committed and persisted on release; a cancelled drag heals back), and dragging a layer selects it. A centre snap within 0.018 pins the axis and draws an amber guide (desc-only). The SELECTED layer gets chrome: a solid accent outline for FREE, a dashed amber box with eight resize handles for BOX (each handle moves its own edge and leaves the opposite one put), a mode+text badge, and — with auto-size on — an AUTO chip reading the resolved px and where it sits in the Min…Max bracket. STAGED HERE: 4 layers. Row 1 &quot;LetsLapse&quot; is selected, FREE, Sky-placed, with a fade whose reveal has not started at this playhead (so the composite draws nothing and only the chrome marks the spot). Row 2 is BOX + auto-size + onion skin, Georgia italic, Land-placed. Row 3 is hidden. Row 4 is Courier with wide tracking. Exports bake exactly this page's state — same compositing core, same masks, dials from the sidecar; hidden layers and onion skin are the two things the export deliberately does not carry. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=text, LL_SEG_MODEL=&lt;path&gt;. Verified against the running Mac app 2026-08-31.</desc>
+  <desc>Mirrors App/PhotoViewerView.swift (textTab) hosting App/Overlay/OverlayEditingPanel.swift — the Text page of the editor rail, rebuilt 2026-08-31 from the Claude Design &quot;Text Features&quot; spec (multiple layers, type fundamentals, bounding boxes, a Masks tab). Window, media column and timeline strip are photo-viewer.svg's (same staged project, same moment); only the rail differs. THE PAGE edits a LIST of text layers stored in the per-project overlays.json sidecar (OverlayDocument: overlays + customMasks + mask dials; persisted on finished gestures plus a 2s safety net, exit and window close; a second window on the same project can never bulldoze the sidecar because persists no-op when unchanged; every field past the spike's original five decodes with decodeIfPresent, so a sidecar written before the schema grew keeps its text instead of reading as empty). ORDER IS STACKING ORDER: row 1 is the frontmost layer, and the compositor walks the array in reverse so row 1 paints last. Drag a card by its grip to reorder. LAYER ROW: grip · visibility eye · title (the text itself, newlines shown as ↵) · an animation indicator (accent when the layer has a reveal) · onion skin · expand chevron. Hidden layers are skipped in the preview AND the export. Onion skin draws a layer at full strength ignoring its animation — editor-only scaffolding, never baked — and is disabled without an animation, because with no reveal the text is always drawn; a hidden layer with onion on ghosts at 34%. EXPANDED, four disclosures (a card opens with TEXT &amp; SIZE showing): TEXT &amp; SIZE — the string (multi-line; Return inserts a newline, so on iOS the keyboard toolbar's Done is the exit), Mode Free · Box, and Size as a fraction of the frame's LONG edge with the readout in px of the DELIVERED file (the preview is capped at 2000px / 1100px mid-scrub, so quoting against it would change as you scrub). Then Angle (2026-09-02): the layer's own rotation about its anchor, the SAME RotationSlider the Edit tab levels the whole picture with (±10°, centre-snapped, degrees readout, double-click the label to zero) in its inline shape. Layers live in the LEVELLED frame's space: when the project's rotation moves, every existing layer is re-expressed to stay pinned to the scene — anchor remapped, angle carried, size and box grown by the crop-in — so a layer that was already on the project tilts with the picture and its Angle reads the project's angle; a layer added afterwards starts at 0° and reads level. The rasterizer turns the whole block (lines, slide offsets, underlines) about the anchor with one CTM rotation; the preview proxy, the outline and the eight box handles turn with it, and a handle drag is read along the box's own axes. Auto-size in box mode dims this slider and turns the readout amber. TYPE — family (SF Pro · Helvetica Neue · Georgia · Avenir Next · Futura · Courier New; an absent family falls back to the system face at raster time), B/I/U, alignment, five swatches (White · Ink · Accent · Amber · Sky), and More… — a popover holding Kerning (a fraction of the em, so it scales with the type), Line height, Paragraph, and Auto-Size font with Min/Max, all three box-only. Auto-size solves BOTH axes by bisection against a FIXED reference long edge, so the chosen step is a property of the layer and cannot differ between a 1100px scrub and a 2000px settled render. INTELLIGENT PLACEMENT — None, then the project's regions (Sky · Land, or a custom mask's names), then Custom, which is a route to the Masks tab rather than a value. ANIMATION — None · Fade · Slide, a From direction for Slide, and Set Start / Set End pinning the band to the playhead (the playhead is the precision instrument, so there are no draggable band handles); reveals are per-character with overlap 0.6, eased by the house cubic, and the settled raster is byte-identical to no animation — the resting layout IS the end state. REMOVE TEXT — red, per layer. ON THE PREVIEW (this tab only): every visible layer is draggable — baked at rest, a SwiftUI proxy takes over during the drag (frozen committed centre + translation ÷ drawn size, unit-clamped, committed and persisted on release; a cancelled drag heals back), and dragging a layer selects it. A centre snap within 0.018 pins the axis and draws an amber guide (desc-only). The SELECTED layer gets chrome: a solid accent outline for FREE, a dashed amber box with eight resize handles for BOX (each handle moves its own edge and leaves the opposite one put), a mode+text badge, and — with auto-size on — an AUTO chip reading the resolved px and where it sits in the Min…Max bracket. STAGED HERE: 4 layers. Row 1 &quot;LetsLapse&quot; is selected, FREE, Sky-placed, with a fade whose reveal has not started at this playhead (so the composite draws nothing and only the chrome marks the spot). Row 2 is BOX + auto-size + onion skin, Georgia italic, Land-placed. Row 3 is hidden. Row 4 is Courier with wide tracking. Exports bake exactly this page's state — same compositing core, same masks, dials from the sidecar; hidden layers and onion skin are the two things the export deliberately does not carry. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=text, LL_SEG_MODEL=&lt;path&gt;. Verified against the running Mac app 2026-08-31; Angle row verified 2026-09-02 (project "Day to night 5k dng i16" levelled +4.9°: the pre-existing box layer read +4.9°, a freshly added layer read 0°).</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
     <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
@@ -136,7 +136,7 @@
       <!-- Layer 1 — selected and expanded, TEXT &amp; SIZE open (a card
            opens with its text showing; the other sections start shut). -->
       <g id="layer-1">
-        <rect x="696" y="137" width="308" height="328" rx="12" fill="#FFFFFF"/>
+        <rect x="696" y="137" width="308" height="357" rx="12" fill="#FFFFFF"/>
         <rect x="696" y="137" width="308" height="38" rx="12" fill="#FFFFFF"/>
         <rect x="696" y="137" width="308" height="38" rx="12" fill="#C36A00" fill-opacity="0.06"/>
         <rect x="696.5" y="137.5" width="307" height="37" rx="11.5" fill="none" stroke="#C36A00" stroke-opacity="0.55"/>
@@ -167,19 +167,29 @@
         <rect x="744" y="289" width="121" height="4" rx="2" fill="#C36A00"/>
         <circle cx="865" cy="291" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
         <text x="1002" y="295" font-size="12" class="sb mono" text-anchor="end" fill="#C36A00">585 px</text>
-        <line x1="696" y1="313" x2="1004" y2="313" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 321 L712 325 L708 329" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="720" y="329" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">TYPE</text>
-        <line x1="696" y1="346" x2="1004" y2="346" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 354 L712 358 L708 362" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="720" y="362" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">INTELLIGENT PLACEMENT</text>
-        <line x1="696" y1="379" x2="1004" y2="379" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 387 L712 391 L708 395" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="720" y="395" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">ANIMATION</text>
-        <line x1="696" y1="412" x2="1004" y2="412" stroke="#000" stroke-opacity="0.07"/>
-        <rect x="708" y="420" width="284" height="36" rx="9" fill="#FF3B30" fill-opacity="0.08"/>
-        <path d="M772 428.5 H783 M774.5 428.5 V426.5 H780.5 V428.5 M773.4 428.5 L774.1 439 H781 L781.7 428.5" stroke="#FF3B30" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="trash"/>
-        <text x="792" y="443" font-size="13.5" class="sb" fill="#FF3B30">Remove Text</text>
+        <!-- Angle: this layer's own turn about its anchor — the shared
+             RotationSlider (App/RotationSlider.swift) in its inline shape,
+             ±10°, resting at centre, "0°" in secondary until it moves. A
+             layer that was on the project when the picture was levelled
+             carries the project's angle here; one added afterwards reads 0. -->
+        <text x="708" y="320" font-size="12" class="sb" fill="#6D6D72">Angle</text>
+        <rect x="744" y="318" width="186" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+        <rect x="744" y="318" width="93" height="4" rx="2" fill="#C36A00"/>
+        <circle cx="837" cy="320" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        <text x="1002" y="324" font-size="12" class="sb mono" text-anchor="end" fill="#6D6D72">0°</text>
+        <line x1="696" y1="342" x2="1004" y2="342" stroke="#000" stroke-opacity="0.07"/>
+        <path d="M708 350 L712 354 L708 358" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="720" y="358" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">TYPE</text>
+        <line x1="696" y1="375" x2="1004" y2="375" stroke="#000" stroke-opacity="0.07"/>
+        <path d="M708 383 L712 387 L708 391" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="720" y="391" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">INTELLIGENT PLACEMENT</text>
+        <line x1="696" y1="408" x2="1004" y2="408" stroke="#000" stroke-opacity="0.07"/>
+        <path d="M708 416 L712 420 L708 424" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <text x="720" y="424" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">ANIMATION</text>
+        <line x1="696" y1="441" x2="1004" y2="441" stroke="#000" stroke-opacity="0.07"/>
+        <rect x="708" y="449" width="284" height="36" rx="9" fill="#FF3B30" fill-opacity="0.08"/>
+        <path d="M772 457.5 H783 M774.5 457.5 V426.5 H780.5 V428.5 M773.4 457.5 L774.1 468 H781 L781.7 457.5" stroke="#FF3B30" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="trash"/>
+        <text x="792" y="472" font-size="13.5" class="sb" fill="#FF3B30">Remove Text</text>
       </g>
 
       <!-- Layers 2–4, collapsed. Row 2 is a BOX layer with a slide reveal
@@ -188,42 +198,42 @@
            hidden: the eye is struck through and the title greys, and the
            compositor skips it in the preview AND the export. -->
       <g id="layer-2">
-        <rect x="696" y="478" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="492" width="10" height="1.6" rx="0.8"/><rect x="706" y="496.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="500.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 497c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="497" r="2.1" fill="#3A3A3C"/></g>
-        <text x="750" y="501.5" font-size="13" class="sb" fill="#000000">River Sunset to Dusk</text>
-        <g data-symbol="wand.and.stars" stroke="#C36A00" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 502 L933 494 M931.4 492.2 L934.8 495.6"/></g>
-        <rect x="943" y="488" width="18" height="18" rx="5" fill="#FFB340"/>
-        <g data-symbol="circle.dashed" fill="none" stroke="#FFFFFF" stroke-width="1.3"><ellipse cx="952" cy="497" rx="6.2" ry="4"/><ellipse cx="952" cy="497" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <path d="M976 493 L981 497 L976 501" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        <rect x="696" y="507" width="308" height="38" rx="12" fill="#FFFFFF"/>
+        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="521" width="10" height="1.6" rx="0.8"/><rect x="706" y="525.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="529.4" width="10" height="1.6" rx="0.8"/></g>
+        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 526c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="526" r="2.1" fill="#3A3A3C"/></g>
+        <text x="750" y="530.5" font-size="13" class="sb" fill="#000000">River Sunset to Dusk</text>
+        <g data-symbol="wand.and.stars" stroke="#C36A00" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 531 L933 523 M931.4 521.2 L934.8 524.6"/></g>
+        <rect x="943" y="517" width="18" height="18" rx="5" fill="#FFB340"/>
+        <g data-symbol="circle.dashed" fill="none" stroke="#FFFFFF" stroke-width="1.3"><ellipse cx="952" cy="526" rx="6.2" ry="4"/><ellipse cx="952" cy="526" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
+        <path d="M976 522 L981 526 L976 530" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
       </g>
       <g id="layer-3">
-        <rect x="696" y="526" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="540" width="10" height="1.6" rx="0.8"/><rect x="706" y="544.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="548.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye.slash" fill="none" stroke="#B5B5BA" stroke-width="1.3"><path d="M726 545c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="545" r="2.1" fill="#B5B5BA"/><path d="M727 550 L741 540"/></g>
-        <text x="750" y="549.5" font-size="13" class="sb" fill="#9A9A9E">Shot on iPhone 16 Pro</text>
-        <g data-symbol="wand.and.stars" stroke="#C7C7CC" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 550 L933 542 M931.4 540.2 L934.8 543.6"/></g>
-        <g data-symbol="circle.dashed" fill="none" stroke="#DCDCE0" stroke-width="1.3"><ellipse cx="952" cy="545" rx="6.2" ry="4"/><ellipse cx="952" cy="545" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <path d="M976 541 L981 545 L976 549" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        <rect x="696" y="555" width="308" height="38" rx="12" fill="#FFFFFF"/>
+        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="569" width="10" height="1.6" rx="0.8"/><rect x="706" y="573.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="577.4" width="10" height="1.6" rx="0.8"/></g>
+        <g data-symbol="eye.slash" fill="none" stroke="#B5B5BA" stroke-width="1.3"><path d="M726 574c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="574" r="2.1" fill="#B5B5BA"/><path d="M727 579 L741 569"/></g>
+        <text x="750" y="578.5" font-size="13" class="sb" fill="#9A9A9E">Shot on iPhone 16 Pro</text>
+        <g data-symbol="wand.and.stars" stroke="#C7C7CC" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 579 L933 571 M931.4 569.2 L934.8 572.6"/></g>
+        <g data-symbol="circle.dashed" fill="none" stroke="#DCDCE0" stroke-width="1.3"><ellipse cx="952" cy="574" rx="6.2" ry="4"/><ellipse cx="952" cy="574" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
+        <path d="M976 570 L981 574 L976 578" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
       </g>
       <g id="layer-4">
-        <rect x="696" y="574" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="588" width="10" height="1.6" rx="0.8"/><rect x="706" y="592.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="596.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 593c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="593" r="2.1" fill="#3A3A3C"/></g>
-        <text x="750" y="597.5" font-size="13" class="sb" fill="#000000">12 Aug 2026 · 55 min</text>
-        <g data-symbol="wand.and.stars" stroke="#C7C7CC" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 598 L933 590 M931.4 588.2 L934.8 591.6"/></g>
-        <g data-symbol="circle.dashed" fill="none" stroke="#DCDCE0" stroke-width="1.3"><ellipse cx="952" cy="593" rx="6.2" ry="4"/><ellipse cx="952" cy="593" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <path d="M976 589 L981 593 L976 597" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+        <rect x="696" y="603" width="308" height="38" rx="12" fill="#FFFFFF"/>
+        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="617" width="10" height="1.6" rx="0.8"/><rect x="706" y="621.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="625.4" width="10" height="1.6" rx="0.8"/></g>
+        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 622c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="622" r="2.1" fill="#3A3A3C"/></g>
+        <text x="750" y="626.5" font-size="13" class="sb" fill="#000000">12 Aug 2026 · 55 min</text>
+        <g data-symbol="wand.and.stars" stroke="#C7C7CC" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 627 L933 619 M931.4 617.2 L934.8 620.6"/></g>
+        <g data-symbol="circle.dashed" fill="none" stroke="#DCDCE0" stroke-width="1.3"><ellipse cx="952" cy="622" rx="6.2" ry="4"/><ellipse cx="952" cy="622" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
+        <path d="M976 618 L981 622 L976 626" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
       </g>
 
       <g id="add-text">
-        <rect x="696" y="622" width="308" height="44" rx="12" fill="#FFFFFF"/>
-        <path d="M819 636 V652 M811 644 H827" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="plus"/>
-        <text x="838" y="649" font-size="15" class="sb" fill="#C36A00">Add Text</text>
+        <rect x="696" y="651" width="308" height="44" rx="12" fill="#FFFFFF"/>
+        <path d="M819 665 V652 M811 673 H827" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="plus"/>
+        <text x="838" y="678" font-size="15" class="sb" fill="#C36A00">Add Text</text>
       </g>
-      <text x="698" y="683" font-size="11.5" fill="#6D6D72">Drag the text on the preview to place it. Where it rests</text>
-      <text x="698" y="697" font-size="11.5" fill="#6D6D72">is where every animation ends. Drag a layer by its grip</text>
-      <text x="698" y="711" font-size="11.5" fill="#6D6D72">to reorder — the top layer sits in front.</text>
+      <text x="698" y="712" font-size="11.5" fill="#6D6D72">Drag the text on the preview to place it. Where it rests</text>
+      <text x="698" y="726" font-size="11.5" fill="#6D6D72">is where every animation ends. Drag a layer by its grip</text>
+      <text x="698" y="740" font-size="11.5" fill="#6D6D72">to reorder — the top layer sits in front.</text>
     </g>
   </g>
 

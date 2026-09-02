@@ -79,8 +79,12 @@ struct PresetSnapshot: Codable, Equatable, Sendable {
 
     /// Exact match, field for field: anything else is a divergence, and the
     /// project is Edited from that instant.
+    ///
+    /// Rotation-blind on both sides: a level is geometry the project carries
+    /// whatever look is on it, so it neither belongs in a snapshot nor makes
+    /// a project diverge from one.
     func matches(preset: PhotoPreset, adjustments: PhotoAdjustments) -> Bool {
-        basePreset == preset && self.adjustments == adjustments
+        basePreset == preset && self.adjustments.withoutRotation == adjustments.withoutRotation
     }
 }
 
@@ -149,8 +153,13 @@ enum PresetStateResolver {
         // two clauses below, or a shoot whose opening frame happens to sit at
         // neutral would report Original and have its whole timeline discarded
         // as "no filter" on the next render.
-        if !timeline.isEmpty { return .edited }
+        //
+        // A level that travels is the exception: rotation is geometry, not a
+        // look, so keyframes that only move the rotation change nothing here.
+        if !timeline.isColorEmpty { return .edited }
         // Original is "no filter": no preset, no sliders, nothing to bake.
+        // The level is not a filter — a levelled Original stays Original.
+        let adjustments = adjustments.withoutRotation
         if preset == .original, adjustments.isNeutral { return .original }
         // Still exactly what the applied preset gave us — including when that
         // preset has been reworked or deleted since.
@@ -166,7 +175,7 @@ enum PresetStateResolver {
         }
         // A saved preset the values happen to match exactly.
         if let custom = customPresets.first(where: {
-            $0.basePreset == preset && $0.adjustments == adjustments
+            $0.basePreset == preset && $0.adjustments.withoutRotation == adjustments
         }) {
             return .named(id: custom.id, snapshot: custom.snapshot)
         }

@@ -435,6 +435,21 @@ struct OverlayEditingPanel: View {
             }
 
             sizeRow(layer)
+            // The same instrument the Edit screen levels the whole picture
+            // with, turning this one layer about its anchor.
+            RotationSlider(
+                label: "Angle",
+                degrees: Binding(
+                    get: { layer.wrappedValue.rotationDegrees },
+                    set: { next in
+                        layer.wrappedValue.rotationDegrees = next
+                        onEdited(false)
+                    }),
+                style: .inline,
+                accent: accent,
+                onEditing: { editing in
+                    if !editing { onEdited(true) }
+                })
         }
         .padding(.bottom, 12)
     }

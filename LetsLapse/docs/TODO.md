@@ -11,6 +11,25 @@ live inline.
 
 ## Open
 
+### Time-slice poster fast path (image-only, regular clip off)
+
+**Raised:** 2026-09-02 (Steven)
+
+An image-only time slice with the regular timelapse off still blends and
+encodes the whole shoot, verifies and counts the temp master, then decodes
+every master frame to copy bands from S of them. A poster needs one master
+frame per band or cell, each of which is one stacker window — so the run
+should resolve the same window schedule, render only the windows the ladder
+names (**still blended at the chosen depth**; 1:1 is the only case with
+nothing to blend), and compose the poster from those. Stills sources only:
+their grade, level and text already ride the stacker and its frame hook, and
+no other tail pass runs on that path. The animation gets no shortcut — every
+master frame feeds it. Video sources are deferred with reasons. Plan, cost
+model, build stages and the four decisions it needs:
+`docs/time-slicing-poster-fast-path.md`.
+
+---
+
 ### Time-slice variation batches: run one in the app
 
 **Raised:** 2026-09-01, out of the variations + grid-mode build
@@ -1001,3 +1020,39 @@ are the standing lists:
   status; anything marked stale is outstanding UI work by definition.
 - **Holy Grail Field Program** (artifact). The blend-strategy field programme:
   what has been run, what passed, what the next bench is for.
+
+## Fine rotation (Edit screen · Rotation section) — follow-ups
+
+Shipped 2026-09-02: a ±10° straighten slider on the Edit screen for stills
+and video projects (`RotationSlider`, `FrameRotation` in the Kit), levelled
+into every preview and baked into blended, guided and standalone-grade
+outputs; keyframeable like every other control (rotation lives in
+`PhotoAdjustments`, eased per frame by every bake); text layers ride the
+levelled frame (existing layers turn with the picture, new ones start level,
+and a travelling level carries them per moment). Owed:
+
+- **Project cards and thumbnails are not levelled.** `ProjectThumbnailCache`
+  decodes without the grade, so a levelled project's card still shows the
+  raw tilt; the hero (`ProjectMedia`), grid and fullscreen sheet ARE levelled.
+  Decide whether the card should pay for a grade render.
+- **iOS viewer SVGs** (`project-photo.viewer.*`) are marked ⚠️ Stale: they
+  predate the sectioned panel and now also lack the Rotation card. Restage
+  from the running app (LL_VIEWER=1 + LL_SECTIONS=rotation).
+- **Ken Burns collection export / time slicing** consume finished blend
+  clips, so they inherit the level for free — but a collection built from
+  a clip rendered BEFORE the project was levelled keeps the old geometry.
+  Same rule as the grade; worth a line in the collection UI one day.
+- **Keyframed rotation in mixed-resolution ramp shoots** (segment
+  normalisation) levels every segment at the OPENING angle — the per-segment
+  croppers have no whole-clip frame map to ease against — and the standalone
+  pass then bakes colour only. Every other path eases per frame.
+- **Adjust/Guided source-frame previews** level at the opening angle
+  (`AdjustPreviewLevel`), not the moment's: the loaders know a clip time but
+  not a source position. The bake is right; the preview is approximate under
+  a travelling level.
+- **Text-layer Angle shares the ±10° range** with the project control on
+  purpose (one instrument). If a wider range is wanted for type, widen it
+  on the overlay's slider only (`RotationSlider.range`).
+- **Loupe / 1:1 patch under a level** is levelled by turning a larger
+  source patch about the window centre (`PhotoGrader.renderDetail`);
+  verified on Mac only at fit scale — pixel-peep a levelled DNG on device.

@@ -15,13 +15,46 @@ struct OverlayExportBake: Sendable {
     let overlays: [SceneOverlay]
     let masks: SceneAwareCompositor.MaskSet
     let settings: SegmentationSettings
+    /// The project's grade, for its fine rotation — levelled into each OUTPUT
+    /// frame before the overlays go on, at that frame's own moment when the
+    /// level is keyframed. The one place a stills blend turns the picture:
+    /// the stacker's frame hook is the only per-output-frame seam the Kit
+    /// offers, which is why the geometry rides the overlay bake rather than
+    /// a pass of its own; a project with a level and no text still gets one.
+    var grade: PhotoGrade = .identity
+
+    /// True when the frames have overlays to carry — as opposed to a bake
+    /// that only levels them.
+    var hasOverlays: Bool { !overlays.isEmpty }
+
+    /// The level at one moment of the source.
+    func rotation(at position: Double) -> Double {
+        grade.rotationDegrees(at: position)
+    }
+
+    /// The layers as this moment's frame wants them. Layers are stored in the
+    /// OPENING moment's levelled frame; when the level travels, every layer
+    /// is re-expressed into this moment's frame so it stays pinned to the
+    /// scene it was placed on (the editor shows exactly this). The frame's
+    /// pixel size only needs the aspect, so 1×aspect is enough.
+    func overlays(at position: Double) -> [SceneOverlay] {
+        let opening = grade.rotationDegrees
+        let now = rotation(at: position)
+        guard opening != now, let aspect = frameAspect else { return overlays }
+        return overlays.map { $0.remapped(fromRotation: opening, to: now, width: aspect, height: 1) }
+    }
+
+    /// The source frame's aspect (w ÷ h), needed only to remap layers between
+    /// moments of a travelling level.
+    var frameAspect: Double?
 
     /// The closure `ImageStacker`'s `overlayComposite` hook wants.
     func stackerHook() -> (CVPixelBuffer, Double, CVPixelBufferPool) throws -> CVPixelBuffer? {
         { buffer, position, pool in
             try SceneAwareCompositor.bakeExportFrame(
                 buffer, position: position, pool: pool,
-                overlays: overlays, masks: masks, settings: settings)
+                overlays: overlays(at: position), masks: masks, settings: settings,
+                rotationDegrees: rotation(at: position))
         }
     }
 }
@@ -38,10 +71,23 @@ extension AppModel {
     func makeOverlayExportBake(for capture: CaptureProject?) async -> OverlayExportBake? {
         guard let capture else { return nil }
         let document = overlayDocument(for: capture)
+        let grade = photoGrade(for: capture)
+        let aspect: Double? = {
+            guard let width = capture.sourceWidth, let height = capture.sourceHeight,
+                  width > 0, height > 0 else { return nil }
+            return Double(width) / Double(height)
+        }()
         // Hidden layers are not part of the piece; onion skin is an editor
         // affordance and never reaches an export.
         let overlays = document.overlays.filter { !$0.text.isEmpty && $0.isVisible }
-        guard !overlays.isEmpty else { return nil }
+        guard !overlays.isEmpty else {
+            // Nothing to draw — but a levelled project still needs the hook,
+            // which is where the level is baked.
+            guard grade.hasRotation else { return nil }
+            return OverlayExportBake(
+                overlays: [], masks: SceneAwareCompositor.MaskSet(),
+                settings: document.maskSettings, grade: grade, frameAspect: aspect)
+        }
 
         var masks = SceneAwareCompositor.MaskSet()
 
@@ -84,6 +130,7 @@ extension AppModel {
             }
         }
         return OverlayExportBake(
-            overlays: overlays, masks: masks, settings: document.maskSettings)
+            overlays: overlays, masks: masks, settings: document.maskSettings,
+            grade: grade, frameAspect: aspect)
     }
 }

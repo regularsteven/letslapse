@@ -53,6 +53,11 @@ enum VideoCanvasCropper {
         shortEdge: Int? = nil,
         grade: PhotoGrade = .identity,
         gradeMap: GradeSourceMap = .direct,
+        /// The project's fine rotation, applied to every frame BEFORE the
+        /// canvas crop. Its own parameter (not `grade.rotationDegrees`) so the
+        /// per-segment normalisation, which runs with an identity grade, can
+        /// still level — and a level on its own is reason enough to run.
+        rotationDegrees: Double = 0,
         /// The rate the job asked for. Stated by the caller rather than probed
         /// off `sourceURL`: this pass runs over an intermediate, and reading the
         /// clock back from it propagates whatever an upstream stage did to it
@@ -104,7 +109,8 @@ enum VideoCanvasCropper {
         // one clip is the whole clip and skipping a pointless re-encode of an
         // already-correct portrait video is exactly right.
         let needsOrienting = renderSizeOverride != nil && !preferred.isIdentity
-        guard needsCrop || needsScale || needsOrienting else { return (sourceURL, nil) }
+        let needsLevelling = FrameRotation.isActive(rotationDegrees) || grade.hasRotation
+        guard needsCrop || needsScale || needsOrienting || needsLevelling else { return (sourceURL, nil) }
         let renderSize = target ?? keptSize
         let boxRect = CollectionMath.cropBox(
             clipSize: orientedSize, canvas: canvas, offset: offset)?.rect
@@ -127,7 +133,15 @@ enum VideoCanvasCropper {
             let flipped = CGRect(
                 x: boxRect.minX, y: extent.height - boxRect.maxY,
                 width: max(1, boxRect.width), height: max(1, boxRect.height))
-            let croppedImage = request.sourceImage.cropped(to: flipped)
+            // The level this frame gets: the grade's own moment when it
+            // travels, else the constant handed in.
+            let angle = keyframedGrade.map {
+                $0.rotationDegrees(at: gradeMap.position(
+                    outputSeconds: request.compositionTime.seconds,
+                    outputDuration: gradedDuration))
+            } ?? rotationDegrees
+            let levelled = FrameRotation.rotated(request.sourceImage, degrees: angle)
+            let croppedImage = levelled.cropped(to: flipped)
                 .transformed(by: CGAffineTransform(translationX: -flipped.minX, y: -flipped.minY))
             // Lanczos, like the reframe pass — the layer-instruction transform
             // this replaces resampled bilinearly, so a downscaled crop landed

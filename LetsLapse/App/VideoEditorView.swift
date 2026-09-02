@@ -737,7 +737,8 @@ struct VideoEditorView: View {
         // A preset is a look, and the look on screen is the one at the
         // playhead — which is the whole grade when nothing is keyframed.
         if let saved = presetStore.save(
-            name: newPresetName, basePreset: preset, adjustments: displayedAdjustments) {
+            name: newPresetName, basePreset: preset,
+            adjustments: displayedAdjustments.withoutRotation) {
             if timeline.isEmpty {
                 presetState = .named(id: saved.id, snapshot: saved.snapshot)
             }

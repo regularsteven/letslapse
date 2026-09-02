@@ -198,10 +198,12 @@ enum PhotoGrader {
     ) -> (CIImage) -> CIImage {
         let preset = preset ?? .original
         let adjustments = adjustments ?? .neutral
-        guard preset != .original || !adjustments.isNeutral else { return { $0 } }
+        // Colour only: the rotation inside `adjustments` is every caller's
+        // own business, applied before the crop it carries.
+        guard preset != .original || !adjustments.isColorNeutral else { return { $0 } }
         return { image in
             let out = preset.apply(to: image)
-            guard !adjustments.isNeutral else { return out }
+            guard !adjustments.isColorNeutral else { return out }
             return adjust(out, adjustments, asShotKelvin: asShotKelvin)
         }
     }
@@ -256,9 +258,20 @@ enum PhotoGrader {
         url: URL,
         preset: PhotoPreset,
         adjustments: PhotoAdjustments = .neutral,
+        /// The project's fine rotation, applied after the grade — with the
+        /// crop-in that keeps the frame full — so every still surface that
+        /// renders through here (editor, hero, grid, fullscreen, JPEG export)
+        /// shows the levelled picture. The blend path does NOT come through
+        /// here with a rotation: it levels once per output frame instead.
+        /// Defaults to the rotation inside `adjustments`; pass a value to
+        /// override it (the blend loader passes 0 — it levels per output frame).
+        rotationDegrees: Double? = nil,
         maxDimension: CGFloat? = nil
     ) -> CGImage? {
-        let key = cacheKey(url: url, preset: preset, adjustments: adjustments, maxDimension: maxDimension)
+        var adjustments = adjustments
+        if let rotationDegrees { adjustments.rotationDegrees = Float(rotationDegrees) }
+        let key = cacheKey(
+            url: url, preset: preset, adjustments: adjustments, maxDimension: maxDimension)
         if let cached = cache.object(forKey: key) { return cached.image }
         do {
             let grade = PhotoGrade(preset: preset, adjustments: adjustments)
@@ -275,8 +288,16 @@ enum PhotoGrader {
         }
     }
 
-    /// The engine path shared by previews, exports and the blend loader.
+    /// The engine path shared by previews, exports and the blend loader. The
+    /// grade's rotation, when it has one, is applied to the graded result —
+    /// callers on the blend path hand in `grade.withoutRotation`.
     static func engineRender(url: URL, grade: PhotoGrade, maxDimension: CGFloat?) throws -> CGImage {
+        let graded = try engineRenderFlat(url: url, grade: grade, maxDimension: maxDimension)
+        return rotated(graded, degrees: grade.rotationDegrees)
+    }
+
+    /// `engineRender` before any geometry: the colour engine alone.
+    private static func engineRenderFlat(url: URL, grade: PhotoGrade, maxDimension: CGFloat?) throws -> CGImage {
         guard let decoder = linearDecoder, let engine = gradeEngine else {
             throw GradeError.renderFailed
         }
@@ -307,6 +328,19 @@ enum PhotoGrader {
             // scratch, valid only until the renderer's next encode.
             return try decoder.cgImage(from: output)
         }
+    }
+
+    /// `image` levelled by `degrees` — `FrameRotation`'s one transform, run
+    /// through this grader's context so a rotated preview costs one Core
+    /// Image pass on top of the cached grade. The input comes back untouched
+    /// at zero, and on a failed render rather than a blank.
+    static func rotated(_ image: CGImage, degrees: Double) -> CGImage {
+        guard FrameRotation.isActive(degrees) else { return image }
+        let levelled = FrameRotation.rotated(CIImage(cgImage: image), degrees: degrees)
+        return context.createCGImage(
+            levelled, from: levelled.extent, format: .RGBA8,
+            colorSpace: image.colorSpace ?? CGColorSpace(name: CGColorSpace.displayP3)!)
+            ?? image
     }
 
     // MARK: - Renderer reuse
@@ -381,6 +415,96 @@ enum PhotoGrader {
     /// own — and it is graded against the whole frame's long edge, so the
     /// noise reduction and sharpening in it are the ones the export will bake.
     static func renderDetail(
+        url: URL, preset: PhotoPreset, adjustments: PhotoAdjustments,
+        center: CGPoint, pixelSize: CGSize
+    ) -> DetailPatch? {
+        // The rotation inside `adjustments` (the moment's): `center` and the
+        // returned `region` are then in the LEVELLED frame's space — what the
+        // preview shows — and the patch is levelled to match: the source patch
+        // under it is fetched larger, turned about the same point, and
+        // trimmed, which is the whole-frame transform restricted to this
+        // window.
+        let rotationDegrees = Double(adjustments.rotationDegrees)
+        guard let decoder = linearDecoder else { return nil }
+        guard FrameRotation.isActive(rotationDegrees) else {
+            return renderDetailFlat(
+                url: url, preset: preset, adjustments: adjustments,
+                center: center, pixelSize: pixelSize)
+        }
+        // The window in the levelled frame, snapped to whole output pixels
+        // the way the flat path snaps its own — the region must describe
+        // exactly the pixels handed back.
+        guard let probe = sourcePixelSize(url: url), probe.width > 0, probe.height > 0 else {
+            return nil
+        }
+        let width = min(max(pixelSize.width.rounded(), 16), probe.width)
+        let height = min(max(pixelSize.height.rounded(), 16), probe.height)
+        let originX = min(max((center.x * probe.width - width / 2).rounded(), 0), probe.width - width)
+        let originY = min(max((center.y * probe.height - height / 2).rounded(), 0), probe.height - height)
+        let window = CGRect(x: originX, y: originY, width: width, height: height)
+        let windowCentre = CGPoint(
+            x: window.midX / probe.width, y: window.midY / probe.height)
+        // Where that window's centre sits in the source, and how big a source
+        // patch covers the window once turned: the window shrunk by the
+        // crop-in scale, then its rotated bounding box, plus the resample's
+        // reach.
+        let sourceCentre = FrameRotation.outputToSource(
+            windowCentre, width: probe.width, height: probe.height, degrees: rotationDegrees)
+        let scale = FrameRotation.inscribedScale(
+            width: probe.width, height: probe.height, degrees: rotationDegrees)
+        let theta = abs(rotationDegrees) * .pi / 180
+        let boundW = (width * scale * cos(theta) + height * scale * sin(theta)) + 8
+        let boundH = (width * scale * sin(theta) + height * scale * cos(theta)) + 8
+        guard let flat = renderDetailFlat(
+            url: url, preset: preset, adjustments: adjustments,
+            center: sourceCentre, pixelSize: CGSize(width: boundW, height: boundH))
+        else { return nil }
+        // The flat patch's region says where it actually landed (the frame
+        // edge can have shoved it); turn about the window centre's true
+        // source position, expressed in the patch's own pixels.
+        let patch = CIImage(cgImage: flat.image)
+        let patchSize = patch.extent.size
+        let pivot = CGPoint(
+            x: (sourceCentre.x - flat.region.minX) / flat.region.width * patchSize.width,
+            // Core Image is y-up; the region is top-left.
+            y: patchSize.height - (sourceCentre.y - flat.region.minY) / flat.region.height * patchSize.height)
+        let spin = CGAffineTransform(translationX: pivot.x, y: pivot.y)
+            .rotated(by: CGFloat(-rotationDegrees * .pi / 180))
+            .translatedBy(x: -pivot.x, y: -pivot.y)
+        let upscale = 1 / scale
+        let turned = patch.clampedToExtent().transformed(by: spin)
+            .transformed(by: CGAffineTransform(scaleX: upscale, y: upscale))
+        // The window, centred on the (now scaled) pivot.
+        let out = CGRect(
+            x: (pivot.x * upscale - width / 2).rounded(),
+            y: (pivot.y * upscale - height / 2).rounded(),
+            width: width, height: height)
+        let levelled = turned.cropped(to: out)
+            .transformed(by: CGAffineTransform(translationX: -out.minX, y: -out.minY))
+        guard let image = context.createCGImage(
+            levelled, from: CGRect(origin: .zero, size: out.size), format: .RGBA8,
+            colorSpace: flat.image.colorSpace ?? CGColorSpace(name: CGColorSpace.displayP3)!)
+        else { return nil }
+        return DetailPatch(
+            image: image,
+            region: CGRect(x: window.minX / probe.width, y: window.minY / probe.height,
+                           width: width / probe.width, height: height / probe.height))
+    }
+
+    /// The source's pixel size from metadata alone — what the levelled
+    /// detail path measures its window against.
+    private static func sourcePixelSize(url: URL) -> CGSize? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let properties = CGImageSourceCopyPropertiesAtIndex(source, 0, nil) as? [CFString: Any],
+              let width = properties[kCGImagePropertyPixelWidth] as? CGFloat,
+              let height = properties[kCGImagePropertyPixelHeight] as? CGFloat
+        else { return nil }
+        let orientation = (properties[kCGImagePropertyOrientation] as? UInt32) ?? 1
+        // 5…8 are the quarter turns, which transpose the decoded frame.
+        return orientation >= 5 ? CGSize(width: height, height: width) : CGSize(width: width, height: height)
+    }
+
+    private static func renderDetailFlat(
         url: URL, preset: PhotoPreset, adjustments: PhotoAdjustments,
         center: CGPoint, pixelSize: CGSize
     ) -> DetailPatch? {
@@ -729,8 +853,12 @@ enum PhotoGrader {
     /// Nothing is cached: a blend reads each frame exactly once, and
     /// full-resolution frames would evict every preview for no gain.
     static func renderForBlend(url: URL, grade: PhotoGrade) throws -> CGImage {
-        guard !grade.isIdentity else { return try ImageStacker.loadImage(at: url) }
-        return try engineRender(url: url, grade: grade, maxDimension: nil)
+        // Never the rotation here: a blend levels each OUTPUT frame once, in
+        // the stacker's frame hook (`OverlayExportBake`), and levelling every
+        // input on the way in as well would turn the picture twice.
+        let flat = grade.withoutRotation
+        guard !flat.isIdentity else { return try ImageStacker.loadImage(at: url) }
+        return try engineRender(url: url, grade: flat, maxDimension: nil)
     }
 
     /// The pieces the linear blend path needs: a decode closure handing the

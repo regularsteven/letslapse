@@ -1,5 +1,6 @@
 import CoreGraphics
 import CoreImage
+import LetsLapseKit
 import CoreVideo
 import Foundation
 
@@ -20,6 +21,10 @@ enum SceneAwareCompositor {
     struct Occlusion {
         var mask: SceneMask
         var settings: SegmentationSettings
+        /// The rotation the frame being composited has been levelled by; the
+        /// mask is a SOURCE grid and is levelled to match on its way to frame
+        /// space. 0 = the frame is the source.
+        var rotationDegrees: Double = 0
     }
 
     /// Every mask a composite might need, resolved before the loop starts.
@@ -210,7 +215,9 @@ enum SceneAwareCompositor {
                   let raw = occlusion.mask.ciImage()?.transformed(
                     by: scaleTransform(from: occlusion.mask, to: base.extent))
             else { return result }
-            return tinted(result, mask: raw.cropped(to: base.extent))
+            let levelled = FrameRotation.rotated(
+                raw.cropped(to: base.extent), degrees: occlusion.rotationDegrees)
+            return tinted(result, mask: levelled)
         }
     }
 
@@ -267,9 +274,12 @@ enum SceneAwareCompositor {
             clamp.setValue(mask, forKey: kCIInputImageKey)
             mask = clamp.outputImage ?? mask
         }
-        let scaled = mask
-            .transformed(by: scaleTransform(from: occlusion.mask, to: extent))
-            .cropped(to: extent)
+        // Scaled to the frame, then levelled the way the frame was — the
+        // grid describes the source, and the frame under it has turned.
+        let scaled = FrameRotation.rotated(
+            mask.transformed(by: scaleTransform(from: occlusion.mask, to: extent))
+                .cropped(to: extent),
+            degrees: occlusion.rotationDegrees)
         // The refinement goes last, in FRAME space: its whole purpose is to
         // use boundary detail the 448 grid never carried, which only exists
         // at full resolution.
@@ -321,14 +331,18 @@ enum SceneAwareCompositor {
         position: Double,
         masks: MaskSet,
         settings: SegmentationSettings,
-        debugRegion: OverlayPlacement?
+        debugRegion: OverlayPlacement?,
+        /// The project's fine rotation, which `base` has ALREADY been
+        /// levelled by (`PhotoGrader.render` does it). The masks are source
+        /// grids, so they are levelled here to stay registered with it.
+        rotationDegrees: Double = 0
     ) -> CGImage {
         guard let image = composited(
             base: CIImage(cgImage: base),
             frameSize: CGSize(width: base.width, height: base.height),
             overlays: overlays, suppressing: suppressed, position: position,
             masks: masks, settings: settings, debugRegion: debugRegion,
-            editorPreview: true)
+            editorPreview: true, rotationDegrees: rotationDegrees)
         else { return base }
         return renderCGImage(image, colorSpace: base.colorSpace) ?? base
     }
@@ -350,7 +364,11 @@ enum SceneAwareCompositor {
         masks: MaskSet,
         settings: SegmentationSettings,
         debugRegion: OverlayPlacement?,
-        editorPreview: Bool
+        editorPreview: Bool,
+        /// The rotation `base` has already been levelled by. Overlays live in
+        /// the levelled frame and need nothing; the masks are grids over the
+        /// SOURCE frame and are levelled the same way so sky stays over sky.
+        rotationDegrees: Double = 0
     ) -> CIImage? {
         var image = base
         var drewAnything = false
@@ -371,7 +389,7 @@ enum SceneAwareCompositor {
                 layer = faded(layer, alpha: 0.34)
             }
             let occlusion = masks.restorationMask(for: overlay.placement)
-                .map { Occlusion(mask: $0, settings: settings) }
+                .map { Occlusion(mask: $0, settings: settings, rotationDegrees: rotationDegrees) }
             image = composite(base: image, overlay: layer, occlusion: occlusion)
             drewAnything = true
         }
@@ -380,7 +398,7 @@ enum SceneAwareCompositor {
             // the same post-processing the occlusion uses.
             image = composite(
                 base: image, overlay: nil,
-                occlusion: Occlusion(mask: mask, settings: settings),
+                occlusion: Occlusion(mask: mask, settings: settings, rotationDegrees: rotationDegrees),
                 debug: .mask)
             drewAnything = true
         }
@@ -411,7 +429,11 @@ enum SceneAwareCompositor {
         pool: CVPixelBufferPool,
         overlays: [SceneOverlay],
         masks: MaskSet,
-        settings: SegmentationSettings
+        settings: SegmentationSettings,
+        /// The project's fine rotation, levelled into the frame here — the
+        /// stacker hands over the graded, colour-tagged output frame and this
+        /// is the only place a stills blend turns it.
+        rotationDegrees: Double = 0
     ) throws -> CVPixelBuffer? {
         // Self-draining: a frame's worth of Core Image temporaries is tens of
         // megabytes, and this is called from a render loop whose caller we
@@ -420,7 +442,8 @@ enum SceneAwareCompositor {
         try autoreleasepool {
             try bakeExportFrameBody(
                 buffer, position: position, pool: pool,
-                overlays: overlays, masks: masks, settings: settings)
+                overlays: overlays, masks: masks, settings: settings,
+                rotationDegrees: rotationDegrees)
         }
     }
 
@@ -430,15 +453,19 @@ enum SceneAwareCompositor {
         pool: CVPixelBufferPool,
         overlays: [SceneOverlay],
         masks: MaskSet,
-        settings: SegmentationSettings
+        settings: SegmentationSettings,
+        rotationDegrees: Double
     ) throws -> CVPixelBuffer? {
-        let base = CIImage(cvPixelBuffer: buffer)
-        guard let composite = composited(
+        let levelling = FrameRotation.isActive(rotationDegrees)
+        let base = FrameRotation.rotated(CIImage(cvPixelBuffer: buffer), degrees: rotationDegrees)
+        let composited = composited(
             base: base, frameSize: base.extent.size,
             overlays: overlays, suppressing: nil, position: position,
             masks: masks, settings: settings, debugRegion: nil,
-            editorPreview: false)
-        else { return nil }
+            editorPreview: false, rotationDegrees: rotationDegrees)
+        // Nothing drawn and nothing levelled: the frame appends untouched.
+        guard composited != nil || levelling else { return nil }
+        let composite = composited ?? base
         var scratch: CVPixelBuffer?
         let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &scratch)
         guard status == kCVReturnSuccess, let scratch else {
@@ -463,16 +490,19 @@ enum SceneAwareCompositor {
         _ image: CGImage,
         overlays: [SceneOverlay],
         masks: MaskSet,
-        settings: SegmentationSettings
+        settings: SegmentationSettings,
+        rotationDegrees: Double = 0
     ) -> CGImage? {
-        guard let composite = composited(
-            base: CIImage(cgImage: image),
+        let levelling = FrameRotation.isActive(rotationDegrees)
+        let base = FrameRotation.rotated(CIImage(cgImage: image), degrees: rotationDegrees)
+        let composited = composited(
+            base: base,
             frameSize: CGSize(width: image.width, height: image.height),
             overlays: overlays, suppressing: nil, position: 1,
             masks: masks, settings: settings, debugRegion: nil,
-            editorPreview: false)
-        else { return nil }
-        return renderCGImage(composite, colorSpace: image.colorSpace)
+            editorPreview: false, rotationDegrees: rotationDegrees)
+        guard composited != nil || levelling else { return nil }
+        return renderCGImage(composited ?? base, colorSpace: image.colorSpace)
     }
 
     /// The debug overlay: magenta through the mask, over the composite —

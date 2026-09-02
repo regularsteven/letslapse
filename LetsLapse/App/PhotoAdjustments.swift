@@ -61,6 +61,14 @@ struct PhotoAdjustments: Codable, Equatable {
     var colorNoise: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
+    /// The Edit screen's fine rotation in degrees, positive clockwise —
+    /// `FrameRotation` owns the geometry. The one field here that is not a
+    /// colour: it lives in this struct so the grade timeline carries it per
+    /// keyframe and eases it between moments exactly like every other
+    /// control, but it is kept OUT of presets (`withoutRotation` at save and
+    /// compare time) and out of the Original/Edited verdict, and the colour
+    /// engine never sees it (`recipe(over:)` ignores it). −10…+10.
+    var rotationDegrees: Float
 
     /// Every slider at its no-op value — the preset alone, ungarnished. Every
     /// field is 0 except `noiseDetail`, whose no-op is the middle of its
@@ -71,8 +79,24 @@ struct PhotoAdjustments: Codable, Equatable {
               blacks: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0,
               clarity: 0, texture: 0, sharpen: 0, sharpenMasking: 0,
               noiseReduction: 0, noiseDetail: neutralNoiseDetail,
-              colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0)
+              colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0,
+              rotationDegrees: 0)
     }
+
+    /// True when the rotation would change a pixel.
+    var hasRotation: Bool { FrameRotation.isActive(Double(rotationDegrees)) }
+
+    /// These values with the rotation taken out — what a preset stores, what
+    /// the Original/Edited verdict looks at, and what a path that levels
+    /// separately hands the colour engine.
+    var withoutRotation: PhotoAdjustments {
+        var copy = self
+        copy.rotationDegrees = 0
+        return copy
+    }
+
+    /// True when no COLOUR control has moved, whatever the rotation says.
+    var isColorNeutral: Bool { withoutRotation == .neutral }
 
     /// The middle of the Detail sub-slider's travel — the gate width the
     /// engine used before the control existed.
@@ -106,6 +130,8 @@ struct PhotoAdjustments: Codable, Equatable {
     static let colorNoiseReductionRange: ClosedRange<Float> = 0...1
     static let colorNoiseRange: ClosedRange<Float> = 0...1
     static let vignetteRange: ClosedRange<Float> = 0...1
+    static let rotationRange: ClosedRange<Float> =
+        Float(FrameRotation.range.lowerBound)...Float(FrameRotation.range.upperBound)
 
     /// The engine-side recipe these adjustments describe, optionally layered
     /// on a preset's base recipe (component-wise, clamped to the UI ranges).
@@ -146,6 +172,7 @@ struct PhotoAdjustments: Codable, Equatable {
             temperature, tint, vibrance, saturation, clarity, vignetteIntensity,
             texture, sharpen, sharpenMasking, noiseReduction, noiseDetail,
             colorNoiseReduction, colorNoise)
+            + (hasRotation ? String(format: ",r%.2f", rotationDegrees) : "")
     }
 
     // MARK: - Codable
@@ -162,7 +189,7 @@ struct PhotoAdjustments: Codable, Equatable {
          noiseReduction: Float = 0,
          noiseDetail: Float = PhotoAdjustments.neutralNoiseDetail,
          colorNoiseReduction: Float = 0, colorNoise: Float = 0,
-         vignetteIntensity: Float) {
+         vignetteIntensity: Float, rotationDegrees: Float = 0) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -182,6 +209,7 @@ struct PhotoAdjustments: Codable, Equatable {
         self.colorNoiseReduction = colorNoiseReduction
         self.colorNoise = colorNoise
         self.vignetteIntensity = vignetteIntensity
+        self.rotationDegrees = rotationDegrees
     }
 
     private enum CodingKeys: String, CodingKey {
@@ -190,6 +218,7 @@ struct PhotoAdjustments: Codable, Equatable {
         case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
         case texture, sharpen, noiseReduction, colorNoiseReduction, colorNoise
         case sharpenMasking, noiseDetail
+        case rotationDegrees = "rotation"
         case whiteBalance  // v1 only; never written by v2
     }
 
@@ -239,7 +268,8 @@ struct PhotoAdjustments: Codable, Equatable {
                 noiseDetail: field(.noiseDetail, default: Self.neutralNoiseDetail),
                 colorNoiseReduction: field(.colorNoiseReduction),
                 colorNoise: field(.colorNoise),
-                vignetteIntensity: field(.vignetteIntensity))
+                vignetteIntensity: field(.vignetteIntensity),
+                rotationDegrees: field(.rotationDegrees))
             return
         }
         let legacyWB = (try? container.decodeIfPresent(LegacyWhiteBalance.self, forKey: .whiteBalance)) ?? .asShot
@@ -288,6 +318,11 @@ struct PhotoAdjustments: Codable, Equatable {
         try container.encode(colorNoiseReduction, forKey: .colorNoiseReduction)
         try container.encode(colorNoise, forKey: .colorNoise)
         try container.encode(vignetteIntensity, forKey: .vignetteIntensity)
+        // Only when set: an unlevelled project reads and writes exactly the
+        // payload it always did.
+        if hasRotation {
+            try container.encode(rotationDegrees, forKey: .rotationDegrees)
+        }
     }
 }
 
@@ -307,9 +342,57 @@ struct PhotoGrade: Equatable, Sendable {
     /// The grade that changes nothing: the file exactly as captured.
     static let identity = PhotoGrade(preset: .original, adjustments: .neutral)
 
-    /// True when no filter in the chain would move a pixel, so every render can
-    /// be skipped and every export can hand over the original bytes.
-    var isIdentity: Bool { preset == .original && adjustments.isNeutral && timeline.isEmpty }
+    /// True when nothing here would move a pixel — no filter in the chain and
+    /// no rotation at any moment — so every render can be skipped and every
+    /// export can hand over the original bytes.
+    var isIdentity: Bool { isColorIdentity && !hasRotation }
+
+    /// True when the colour chain alone is a no-op, whatever the geometry.
+    var isColorIdentity: Bool {
+        preset == .original && adjustments.isColorNeutral && timeline.isColorEmpty
+    }
+
+    // MARK: Rotation
+    //
+    // The Edit screen's fine rotation rides inside `PhotoAdjustments` so the
+    // timeline can keyframe it (`FrameRotation` owns the geometry); these are
+    // the views of it the render paths want.
+
+    /// The rotation at the OPENING moment, degrees, positive clockwise — the
+    /// one every single-image surface shows, and the space text layers are
+    /// stored in. `rotationDegrees(at:)` is the moment-aware read.
+    var rotationDegrees: Double { Double(adjustments.rotationDegrees) }
+
+    /// The rotation at one moment of the source, eased between keyframes
+    /// exactly like the colour controls.
+    func rotationDegrees(at position: Double) -> Double {
+        Double(adjustments(at: position).rotationDegrees)
+    }
+
+    /// True when the rotation would change a pixel at ANY moment.
+    var hasRotation: Bool {
+        adjustments.hasRotation || timeline.keyframes.contains { $0.adjustments.hasRotation }
+    }
+
+    /// True when the rotation changes across the clip.
+    var hasKeyframedRotation: Bool { timeline.keyframedFields.contains(.rotation) }
+
+    /// This grade with its rotation taken out everywhere — for the paths that
+    /// level frames themselves, once per OUTPUT frame, and must not have the
+    /// colour renderer level them a second time on the way in.
+    var withoutRotation: PhotoGrade {
+        PhotoGrade(
+            preset: preset, adjustments: adjustments.withoutRotation,
+            timeline: timeline.withoutRotation)
+    }
+
+    /// Only the rotation of this grade: Original colour, the level kept at
+    /// every moment. What an Original project renders through.
+    var rotationOnly: PhotoGrade {
+        var neutral = PhotoAdjustments.neutral
+        neutral.rotationDegrees = adjustments.rotationDegrees
+        return PhotoGrade(preset: .original, adjustments: neutral, timeline: timeline.rotationOnly)
+    }
 
     /// True when the grade is a function of time, so a caller that can only
     /// apply one set of values has to say *when*.

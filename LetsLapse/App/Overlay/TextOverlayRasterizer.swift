@@ -46,6 +46,9 @@ enum TextOverlayRasterizer {
         var phases: [Double]
         /// nil = fade only; otherwise characters arrive from this direction.
         var direction: OverlayAnimation.Direction?
+        /// The block's turn about its anchor, degrees, positive clockwise on
+        /// screen. 0 for the vast majority of layers.
+        var rotationDegrees: Double = 0
 
         /// Deterministic cache identity. Phases arrive quantized (the scrub
         /// ladder), so rounding here only guards float noise.
@@ -66,6 +69,7 @@ enum TextOverlayRasterizer {
                 wrapWidth.map { String(format: "%.1f", $0) } ?? "-",
                 boxHeight.map { String(format: "%.1f", $0) } ?? "-",
                 direction?.rawValue ?? "-", phaseKey,
+                String(format: "%.2f", rotationDegrees),
             ].joined(separator: "|")
         }
     }
@@ -187,7 +191,8 @@ enum TextOverlayRasterizer {
             boxHeight: overlay.mode == .box
                 ? CGFloat(overlay.boxHeight) * frameSize.height : nil,
             phases: phases,
-            direction: direction)
+            direction: direction,
+            rotationDegrees: overlay.rotationDegrees)
     }
 
     // MARK: - Layout
@@ -390,6 +395,17 @@ enum TextOverlayRasterizer {
             case .left: return CGSize(width: -travel, height: 0)
             case .right: return CGSize(width: travel, height: 0)
             }
+        }
+
+        // The layer's own turn: one CTM rotation about the anchor, applied
+        // before any glyph is placed, so the lines, their animation offsets
+        // and their underlines all turn together as one block. The context
+        // is y-up, so a clockwise-on-screen angle is a negative CG angle.
+        if abs(spec.rotationDegrees) > 0.005 {
+            let anchor = CGPoint(x: spec.center.x, y: spec.frameSize.height - spec.center.y)
+            ctx.translateBy(x: anchor.x, y: anchor.y)
+            ctx.rotate(by: CGFloat(-spec.rotationDegrees * .pi / 180))
+            ctx.translateBy(x: -anchor.x, y: -anchor.y)
         }
 
         let shadowBlur = spec.fontSizePixels * 0.06

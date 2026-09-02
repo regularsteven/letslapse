@@ -12,6 +12,8 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
     case texture, sharpen, noiseReduction, colorNoiseReduction
     case sharpenMasking, noiseDetail, colorNoise
+    /// The fine rotation — the one geometry control, keyframed like the rest.
+    case rotation
 
     var keyPath: WritableKeyPath<PhotoAdjustments, Float> {
         switch self {
@@ -34,6 +36,7 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .colorNoiseReduction: return \.colorNoiseReduction
         case .colorNoise: return \.colorNoise
         case .vignetteIntensity: return \.vignetteIntensity
+        case .rotation: return \.rotationDegrees
         }
     }
 
@@ -63,6 +66,7 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .colorNoiseReduction: return PhotoAdjustments.colorNoiseReductionRange
         case .colorNoise: return PhotoAdjustments.colorNoiseRange
         case .vignetteIntensity: return PhotoAdjustments.vignetteRange
+        case .rotation: return PhotoAdjustments.rotationRange
         }
     }
 
@@ -144,6 +148,36 @@ struct GradeTimeline: Codable, Equatable, Sendable {
     }
 
     var isEmpty: Bool { keyframes.isEmpty }
+
+    /// True when nothing about the COLOUR travels: no keyframes, or keyframes
+    /// that only ever move the rotation. The Original/Edited verdict asks
+    /// this, because a level that changes over the clip is still "no filter".
+    var isColorEmpty: Bool {
+        keyframes.allSatisfy { $0.adjustments.isColorNeutral }
+            && keyframedFields.subtracting([.rotation]).isEmpty
+    }
+
+    /// The same moments with the rotation zeroed in each — for a pass that
+    /// levels frames itself and hands the colour engine the rest.
+    var withoutRotation: GradeTimeline {
+        GradeTimeline(
+            keyframes: keyframes.map {
+                GradeKeyframe(id: $0.id, position: $0.position, adjustments: $0.adjustments.withoutRotation)
+            },
+            baselineAnchor: baselineAnchor)
+    }
+
+    /// The same moments with everything BUT the rotation neutral — what an
+    /// Original project still carries.
+    var rotationOnly: GradeTimeline {
+        GradeTimeline(
+            keyframes: keyframes.map {
+                var neutral = PhotoAdjustments.neutral
+                neutral.rotationDegrees = $0.adjustments.rotationDegrees
+                return GradeKeyframe(id: $0.id, position: $0.position, adjustments: neutral)
+            },
+            baselineAnchor: baselineAnchor)
+    }
 
     /// How close a position has to be to a keyframe to *be* that keyframe —
     /// a fraction of the whole clip. About 4pt on a phone-width track, which is

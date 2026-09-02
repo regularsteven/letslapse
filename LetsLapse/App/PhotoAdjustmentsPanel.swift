@@ -1,4 +1,5 @@
 import SwiftUI
+import LetsLapseKit
 
 /// The manual grade's controls — Lightroom-basic-panel parity, grouped the way
 /// Lightroom groups them: White Balance, Light, Color, Effects.
@@ -51,16 +52,19 @@ struct PhotoAdjustmentsPanel: View {
         case color = "Color"
         case effects = "Effects"
         case detail = "Detail"
+        case rotation = "Rotation"
         var id: String { rawValue }
     }
 
     @State private var openSections: Set<PanelSection> = [.light]
 
+    private var sections: [PanelSection] { PanelSection.allCases }
+
     var body: some View {
         Group {
             if alwaysExpanded {
                 VStack(spacing: 14) {
-                    ForEach(PanelSection.allCases) { section in
+                    ForEach(sections) { section in
                         VStack(spacing: 10) {
                             header(for: section, collapsible: false)
                             content(for: section)
@@ -72,7 +76,7 @@ struct PhotoAdjustmentsPanel: View {
                 .background(LL.cardBackground, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
             } else {
                 VStack(spacing: 10) {
-                    ForEach(PanelSection.allCases) { section in
+                    ForEach(sections) { section in
                         VStack(spacing: 10) {
                             header(for: section, collapsible: true)
                             if openSections.contains(section) {
@@ -155,6 +159,26 @@ struct PhotoAdjustmentsPanel: View {
             slider("Detail", field: .noiseDetail, indented: true,
                    readout: unsignedReadout)
             slider("Color Noise", field: .colorNoiseReduction)
+        case .rotation:
+            // The one control that is not a colour: the shared
+            // `RotationSlider`, in its stacked shape, so a text layer's Angle
+            // row and this one are the same instrument. It writes through
+            // the same binding as every colour, so the timeline keyframes and
+            // eases it exactly like them.
+            RotationSlider(
+                label: "Angle",
+                degrees: Binding(
+                    get: { Double(adjustments.rotationDegrees) },
+                    set: { adjustments.rotationDegrees = Float($0) }),
+                style: .stacked, accent: accent,
+                onEditing: { editing in onFieldEditing?(.rotation, editing) },
+                isKeyframed: keyframedFields.contains(.rotation),
+                onReset: onResetField.map { reset in { reset(.rotation) } })
+            Text("Levels the picture and crops in so no corner shows black. Baked into blended and guided clips; set it at more than one moment and it eases between them.")
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
@@ -350,6 +374,8 @@ struct PhotoAdjustmentsPanel: View {
                 && adjustments.colorNoise == 0
                 && adjustments.sharpenMasking == 0
                 && adjustments.noiseDetail == PhotoAdjustments.neutralNoiseDetail
+        case .rotation:
+            return !adjustments.hasRotation
         }
     }
 
@@ -364,6 +390,8 @@ struct PhotoAdjustmentsPanel: View {
         case .detail:
             return [.sharpen, .sharpenMasking, .noiseReduction, .noiseDetail,
                     .colorNoiseReduction, .colorNoise]
+        case .rotation:
+            return [.rotation]
         }
     }
 
@@ -397,11 +425,13 @@ struct PhotoAdjustmentsPanel: View {
             adjustments.noiseDetail = PhotoAdjustments.neutralNoiseDetail
             adjustments.colorNoiseReduction = 0
             adjustments.colorNoise = 0
+        case .rotation:
+            adjustments.rotationDegrees = 0
         }
     }
 
-    /// `LL_SECTIONS=all|wb|light|color|effects|detail` forces the stacked
-    /// layout's open state for design screenshots.
+    /// `LL_SECTIONS=all|wb|light|color|effects|detail|rotation` forces the
+    /// stacked layout's open state for design screenshots.
     private func applySectionHook() {
         #if DEBUG
         guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
@@ -412,6 +442,7 @@ struct PhotoAdjustmentsPanel: View {
         case "color": openSections = [.color]
         case "effects": openSections = [.effects]
         case "detail": openSections = [.detail]
+        case "rotation": openSections = [.rotation]
         default: break
         }
         #endif

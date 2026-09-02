@@ -980,7 +980,8 @@ struct PhotoViewerView: View {
     /// drag the bake is suppressed from the render and this proxy — drawn at
     /// final layout, full strength, because the resting state is what is
     /// being placed — is what moves.
-    @ViewBuilder private func overlayProxy(_ overlay: SceneOverlay, drawn: CGSize) -> some View {
+    @ViewBuilder private func overlayProxy(_ stored: SceneOverlay, drawn: CGSize) -> some View {
+        let overlay = displayOverlay(stored)
         let dragging = overlayDrag?.id == overlay.id
         let center = dragging
             ? overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY)
@@ -998,6 +999,9 @@ struct PhotoViewerView: View {
             .shadow(color: .black.opacity(0.55), radius: fontSize * 0.06)
             .frame(width: overlay.mode == .box ? drawn.width * overlay.boxWidth : nil)
             .opacity(dragging ? 1 : 0.02)
+            // The layer's own turn, about its anchor — the rasterizer's
+            // rotation, so the proxy sits where the bake will.
+            .rotationEffect(.degrees(overlay.rotationDegrees))
             .position(x: drawn.width * center.x, y: drawn.height * center.y)
             .highPriorityGesture(overlayDragGesture(overlay, drawn: drawn))
     }
@@ -1036,7 +1040,8 @@ struct PhotoViewerView: View {
     /// eight handles that resize it. Free text gets a solid accent outline
     /// around the space its line occupies; boxed text gets the dashed amber
     /// box it is actually constrained by, which is the thing being dragged.
-    @ViewBuilder private func overlayChrome(_ overlay: SceneOverlay, drawn: CGSize) -> some View {
+    @ViewBuilder private func overlayChrome(_ stored: SceneOverlay, drawn: CGSize) -> some View {
+        let overlay = displayOverlay(stored)
         let boxed = overlay.mode == .box
         let center = overlayDrag?.id == overlay.id
             ? (overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY))
@@ -1069,6 +1074,8 @@ struct PhotoViewerView: View {
             }
         }
         .allowsHitTesting(boxed)
+        // The outline and its handles turn with the layer.
+        .rotationEffect(.degrees(overlay.rotationDegrees))
         .position(x: drawn.width * center.x, y: drawn.height * center.y)
     }
 
@@ -1175,16 +1182,27 @@ struct PhotoViewerView: View {
                       let index = overlayDocument.overlays
                         .firstIndex(where: { $0.id == overlay.id })
                 else { return }
+                // Everything here is in THIS moment's frame (the displayed
+                // layer); the result goes back to the stored frame at the end.
+                let shown = displayOverlay(overlay)
                 if boxResizeBase == nil {
                     dismissTextEntry()
                     selectedOverlayID = overlay.id
                     boxResizeBase = BoxResizeBase(
-                        width: overlay.boxWidth, height: overlay.boxHeight,
-                        centerX: overlay.centerX, centerY: overlay.centerY)
+                        width: shown.boxWidth, height: shown.boxHeight,
+                        centerX: shown.centerX, centerY: shown.centerY)
                 }
                 guard let base = boxResizeBase else { return }
-                let dx = Double(value.translation.width / drawn.width)
-                let dy = Double(value.translation.height / drawn.height)
+                // The handles live on a box that may be turned: the pointer's
+                // travel is read along the box's own axes, so dragging its
+                // right edge grows it along that edge whatever the angle.
+                let theta = -shown.rotationDegrees * .pi / 180
+                let tx = Double(value.translation.width), ty = Double(value.translation.height)
+                let along = CGSize(
+                    width: tx * cos(theta) - ty * sin(theta),
+                    height: tx * sin(theta) + ty * cos(theta))
+                let dx = Double(along.width / drawn.width)
+                let dy = Double(along.height / drawn.height)
                 var width = base.width, height = base.height
                 var centerX = base.centerX, centerY = base.centerY
                 if anchor.x != 0 {
@@ -1196,10 +1214,12 @@ struct PhotoViewerView: View {
                     height = min(max(base.height + Double(anchor.y) * dy, 0.03), 1)
                     centerY = base.centerY + Double(anchor.y) * (height - base.height) / 2
                 }
-                overlayDocument.overlays[index].boxWidth = width
-                overlayDocument.overlays[index].boxHeight = height
-                overlayDocument.overlays[index].centerX = min(max(centerX, 0), 1)
-                overlayDocument.overlays[index].centerY = min(max(centerY, 0), 1)
+                let grow = displayGrow
+                let stored = storedPoint(CGPoint(x: min(max(centerX, 0), 1), y: min(max(centerY, 0), 1)))
+                overlayDocument.overlays[index].boxWidth = width / grow
+                overlayDocument.overlays[index].boxHeight = height / grow
+                overlayDocument.overlays[index].centerX = stored.x
+                overlayDocument.overlays[index].centerY = stored.y
                 scheduleUpdate()
             }
             .onEnded { _ in
@@ -1227,8 +1247,11 @@ struct PhotoViewerView: View {
 
     /// The Ken Burns drag idiom: a frozen committed base, absolute
     /// translation divided into unit space, clamped, committed on release.
-    private func overlayDragGesture(_ overlay: SceneOverlay, drawn: CGSize) -> some Gesture {
-        DragGesture(minimumDistance: 1)
+    private func overlayDragGesture(_ stored: SceneOverlay, drawn: CGSize) -> some Gesture {
+        // The drag happens on THIS moment's frame; the committed centre goes
+        // back to the stored (opening) frame on release.
+        let overlay = displayOverlay(stored)
+        return DragGesture(minimumDistance: 1)
             .updating($overlayDragActive) { _, state, _ in state = true }
             .onChanged { value in
                 guard drawn.width > 0, drawn.height > 0 else { return }
@@ -1262,8 +1285,9 @@ struct PhotoViewerView: View {
                 guard let drag = overlayDrag else { return }
                 if let index = overlayDocument.overlays
                     .firstIndex(where: { $0.id == drag.id }) {
-                    overlayDocument.overlays[index].centerX = drag.current.x
-                    overlayDocument.overlays[index].centerY = drag.current.y
+                    let stored = storedPoint(drag.current)
+                    overlayDocument.overlays[index].centerX = stored.x
+                    overlayDocument.overlays[index].centerY = stored.y
                 }
                 overlayDrag = nil
                 overlaySnapX = false
@@ -1798,6 +1822,59 @@ struct PhotoViewerView: View {
             onFieldEditing: fieldEditingChanged)
     }
 
+    // MARK: Rotation and the text layers
+
+    /// The level at the opening moment — the space the text layers are
+    /// stored in (`SceneOverlay.remapped`).
+    private var openingRotation: Double {
+        Double(timeline.adjustments(at: 0, baseline: adjustments).rotationDegrees)
+    }
+
+    /// The level under the playhead — what the picture on screen is turned by.
+    private var displayedRotation: Double { Double(displayedAdjustments.rotationDegrees) }
+
+    /// Carries every text layer with a change of the OPENING level: layers
+    /// live in that levelled frame's space, so each one is re-expressed from
+    /// the old level to the new — pinned to the same point of the scene,
+    /// turned by the same amount, grown by the same crop-in. A layer added
+    /// afterwards starts at 0 and reads level, which is the other half of
+    /// the rule. A level that only changes at a LATER moment moves nothing
+    /// here: the layers stay stored at the opening and the render carries
+    /// them into each moment (`displayOverlay`).
+    private func carryOverlays(fromRotation old: Double, to new: Double) {
+        guard old != new else { return }
+        let frame = sourcePixelSize
+        overlayDocument.overlays = overlayDocument.overlays.map {
+            $0.remapped(fromRotation: old, to: new, width: frame.width, height: frame.height)
+        }
+    }
+
+    /// A stored layer as this moment's frame shows it — the same remap the
+    /// export applies per frame, so the proxy and chrome sit where the bake
+    /// will put the text.
+    private func displayOverlay(_ overlay: SceneOverlay) -> SceneOverlay {
+        let frame = sourcePixelSize
+        return overlay.remapped(
+            fromRotation: openingRotation, to: displayedRotation,
+            width: frame.width, height: frame.height)
+    }
+
+    /// The inverse: a point placed on this moment's frame, back into the
+    /// stored (opening) frame.
+    private func storedPoint(_ point: CGPoint) -> CGPoint {
+        let frame = sourcePixelSize
+        return FrameRotation.remap(
+            point, width: frame.width, height: frame.height,
+            from: displayedRotation, to: openingRotation)
+    }
+
+    /// How much longer a stored length is on this moment's frame.
+    private var displayGrow: Double {
+        let frame = sourcePixelSize
+        return FrameRotation.lengthScale(
+            width: frame.width, height: frame.height, from: openingRotation, to: displayedRotation)
+    }
+
     /// A control grabbed or let go. The five that work on pixels bring the
     /// loupe up for as long as they are being dragged — the rest are visible
     /// at any scale and need nothing.
@@ -1815,7 +1892,11 @@ struct PhotoViewerView: View {
         // every 100 ms (editor-performance-plan.md, stage 2). Edits that
         // arrive without a grab/release pair are caught by the safety-net
         // task below.
-        if !editing { persist() }
+        if !editing {
+            persist()
+            // A released level may have carried the text layers with it.
+            if field == .rotation { persistOverlays() }
+        }
     }
 
     /// What the panel reads and writes: the grade *at the playhead*.
@@ -1828,6 +1909,8 @@ struct PhotoViewerView: View {
         Binding(
             get: { displayedAdjustments },
             set: { values in
+                let openingBefore = openingRotation
+                defer { carryOverlays(fromRotation: openingBefore, to: openingRotation) }
                 guard hasTimeline else {
                     adjustments = values
                     refreshState()
@@ -1857,34 +1940,43 @@ struct PhotoViewerView: View {
     /// out of the moment under the playhead rather than writing a zero into it.
     /// A moment left saying nothing at all removes itself.
     private func resetField(_ field: PhotoAdjustmentField) {
+        let openingBefore = openingRotation
         var baseline = adjustments
         var updated = timeline
         updated.resetField(field, at: position, baseline: &baseline)
         adjustments = baseline
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
+        carryOverlays(fromRotation: openingBefore, to: openingRotation)
         refreshState()
         scheduleUpdate()
         persist()
+        persistOverlays()
     }
 
     private func resetEverything() {
         stopPlayback()
+        let openingBefore = openingRotation
         adjustments = .neutral
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline.clear() }
+        carryOverlays(fromRotation: openingBefore, to: 0)
         refreshState()
         scheduleUpdate()
         persist()
+        persistOverlays()
     }
 
     private func deleteKeyframe(_ keyframe: GradeKeyframe) {
+        let openingBefore = openingRotation
         var baseline = adjustments
         var updated = timeline
         updated.remove(keyframe.id, baseline: &baseline)
         adjustments = baseline
         withAnimation(.spring(response: 0.3, dampingFraction: 0.62)) { timeline = updated }
+        carryOverlays(fromRotation: openingBefore, to: openingRotation)
         refreshState()
         scheduleUpdate()
         persist()
+        persistOverlays()
     }
 
     // MARK: - Playback
@@ -2153,9 +2245,11 @@ struct PhotoViewerView: View {
 
     private func saveCurrentAsPreset() {
         // A preset is a look, and the look on screen is the one at the
-        // playhead — which is the whole grade when nothing is keyframed.
+        // playhead — which is the whole grade when nothing is keyframed. The
+        // level is not part of a look.
         if let saved = presetStore.save(
-            name: newPresetName, basePreset: preset, adjustments: displayedAdjustments) {
+            name: newPresetName, basePreset: preset,
+            adjustments: displayedAdjustments.withoutRotation) {
             // Naming a look is what takes a project out of Edited: the values
             // haven't moved, but they now have a preset behind them. A grade
             // that travels stays Edited whatever gets named — one preset can't
@@ -2212,20 +2306,28 @@ struct PhotoViewerView: View {
         // list at its animation phase, the dragged overlay left out (the
         // SwiftUI proxy is showing it), and the mask by cache key only — the
         // composite path can read a cached mask but never generate one.
-        let overlays = overlayDocument.overlays
+        // Layers as THIS moment's frame shows them (stored at the opening
+        // level, carried into a travelling level per frame — the export does
+        // the same in `OverlayExportBake.overlays(at:)`).
+        let overlays = overlayDocument.overlays.map(displayOverlay)
         let suppressed = overlayDrag?.id
         let compositePosition = renderedPosition
         let maskSettings = overlayDocument.maskSettings
         let masks = previewMaskSet()
         let debugRegion = showMask ? inspectedRegion : nil
+        let rotation = Double(adjustments.rotationDegrees)
         let image = await MediaWorkQueue.grading.run { () -> CGImage? in
+            // Levelled inside the grader (cached with the grade, at this
+            // moment's angle); the compositor is told so its source-space
+            // masks turn to match.
             guard let graded = PhotoGrader.render(
                 url: url, preset: preset, adjustments: adjustments, maxDimension: longEdge)
             else { return nil }
             return SceneAwareCompositor.compositedPreview(
                 base: graded, overlays: overlays, suppressing: suppressed,
                 position: compositePosition, masks: masks,
-                settings: maskSettings, debugRegion: debugRegion)
+                settings: maskSettings, debugRegion: debugRegion,
+                rotationDegrees: rotation)
         }
         isRendering = false
         // A nil render (cancelled, or a missing file) leaves whatever is on

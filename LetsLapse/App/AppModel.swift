@@ -551,6 +551,9 @@ final class AppModel: ObservableObject {
         /// the canvas pass finds nothing to crop and becomes a pure scale.
         var canvas: CanvasRatio
         var canvasOffset: Double
+        /// The project's fine rotation, levelled into every segment before
+        /// its crop — the same order the tail passes use.
+        var rotationDegrees: Double = 0
         /// nil = no punch-in; segments are only scaled (and canvas-cropped) to
         /// `renderSize`.
         var reframe: Reframe?
@@ -1101,6 +1104,12 @@ final class AppModel: ObservableObject {
 
     init() {
         loadLibrary()
+        // The Adjust and Guided previews level their source frames the way
+        // the render will; they learn the current project's level from here.
+        AdjustPreviewLevel.provider = { [weak self] in
+            guard let self, let capture = self.currentCapture else { return 0 }
+            return self.photoGrade(for: capture).rotationDegrees
+        }
     }
 
     var currentCapture: CaptureProject? {
@@ -4269,6 +4278,7 @@ final class AppModel: ObservableObject {
                 renderSize: renderSize,
                 canvas: canvas,
                 canvasOffset: cropOffset,
+                rotationDegrees: grade.rotationDegrees,
                 reframe: reframeTrack.flatMap { track in
                     guard !reframeFrameTimesBySegment.isEmpty,
                           !reframeFrameTimes.isEmpty else { return nil }
@@ -4453,6 +4463,12 @@ final class AppModel: ObservableObject {
                 // Set when a geometry pass baked the grade, so the standalone
                 // grade pass (one more full re-encode) stands down.
                 var gradeBaked = false
+                // Whether a geometry pass has already levelled the clip. The
+                // per-segment normalisation levels before the stitch (and
+                // marks the output `geometryBaked`); the two croppers below
+                // level as they crop. Whichever did it, the standalone grade
+                // pass must not turn the picture a second time.
+                var rotationBaked = output.geometryBaked && grade.hasRotation
                 // The punch-in reframe bakes the animated crop into the
                 // finished clip — per-frame, at the source moments the
                 // compiled schedule says each output frame shows. It renders
@@ -4461,7 +4477,7 @@ final class AppModel: ObservableObject {
                 // pass whenever it runs, and therefore the grade's ride.
                 if let reframeTrack, output.kind == .video, !output.geometryBaked,
                    let reframeSourceSize, !reframeFrameTimes.isEmpty {
-                    self.statusMessage = grade.isIdentity
+                    self.statusMessage = grade.isColorIdentity
                         ? "Baking the punch-in reframe..."
                         : "Baking the punch-in reframe and \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
@@ -4478,6 +4494,7 @@ final class AppModel: ObservableObject {
                         outputFPS: reframeOutputFPS,
                         grade: grade,
                         gradeMap: gradeMap,
+                        rotationDegrees: grade.rotationDegrees,
                         exportShortEdge: exportEdge
                     ) { fraction in
                         Task { @MainActor [weak self] in
@@ -4499,7 +4516,11 @@ final class AppModel: ObservableObject {
                     output.width = Int(reframed.renderSize.width)
                     output.height = Int(reframed.renderSize.height)
                     output.summary += " · punch-in reframe"
-                    if !grade.isIdentity {
+                    if grade.hasRotation {
+                        rotationBaked = true
+                        output.summary += Self.levelSummary(grade)
+                    }
+                    if !grade.isColorIdentity {
                         gradeBaked = true
                         output.summary += " · \(grade.preset.displayName) grade baked in"
                     }
@@ -4515,7 +4536,7 @@ final class AppModel: ObservableObject {
                 // kept pixels are cropped, graded and encoded exactly once.
                 if let cropCanvas, output.kind == .video, reframeTrack == nil,
                    !output.geometryBaked {
-                    self.statusMessage = grade.isIdentity
+                    self.statusMessage = grade.isColorIdentity
                         ? "Cropping to \(cropCanvas.rawValue)..."
                         : "Cropping to \(cropCanvas.rawValue) and baking the \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
@@ -4526,6 +4547,7 @@ final class AppModel: ObservableObject {
                     let cropped = try await VideoCanvasCropper.croppedCopy(
                         of: uncropped, canvas: cropCanvas, offset: cropOffset,
                         shortEdge: exportEdge, grade: grade, gradeMap: gradeMap,
+                        rotationDegrees: grade.rotationDegrees,
                         outputFPS: fps
                     ) { fraction in
                         Task { @MainActor [weak self] in
@@ -4548,7 +4570,11 @@ final class AppModel: ObservableObject {
                         if cropIsReal {
                             output.summary += " · cropped to \(cropCanvas.rawValue)"
                         }
-                        if !grade.isIdentity {
+                        if grade.hasRotation {
+                            rotationBaked = true
+                            output.summary += Self.levelSummary(grade)
+                        }
+                        if !grade.isColorIdentity {
                             gradeBaked = true
                             output.summary += " · \(grade.preset.displayName) grade baked in"
                         }
@@ -4562,15 +4588,23 @@ final class AppModel: ObservableObject {
                 // carry it (a nil crop renderSize means the crop pass no-oped
                 // and baked nothing). Still one short pass over a few seconds
                 // of output, never a re-encode of the original source.
-                if source.isVideo, output.kind == .video, !grade.isIdentity, !gradeBaked {
-                    self.statusMessage = "Baking the \(grade.preset.displayName) grade..."
+                // The level rides whichever pass ran; what is left for this
+                // one is the colour, and — when nothing geometric ran at all —
+                // the level as well.
+                let standaloneGrade = rotationBaked ? grade.withoutRotation : grade
+                let standaloneNeeded = !standaloneGrade.isIdentity
+                    && (!gradeBaked || (standaloneGrade.hasRotation && !rotationBaked))
+                if source.isVideo, output.kind == .video, standaloneNeeded {
+                    self.statusMessage = standaloneGrade.isColorIdentity
+                        ? "Levelling the clip..."
+                        : "Baking the \(grade.preset.displayName) grade..."
                     self.processingPhase = .grading
                     self.tailPhaseStartedAt = Date()
                     self.processingETADate = nil
                     let gradeBand = tailBand
                     let ungraded = output.url
                     output.url = try await VideoGrader.bakedCopy(
-                        of: ungraded, grade: grade, map: gradeMap,
+                        of: ungraded, grade: standaloneGrade, map: gradeMap,
                         outputFPS: fps) { fraction in
                         Task { @MainActor [weak self] in
                             guard let self, let gradeBand else { return }
@@ -4580,7 +4614,12 @@ final class AppModel: ObservableObject {
                     if let gradeBand {
                         self.reportTailProgress(band: gradeBand, fraction: 1)
                     }
-                    output.summary += " · \(grade.preset.displayName) grade baked in"
+                    if standaloneGrade.hasRotation {
+                        output.summary += Self.levelSummary(grade)
+                    }
+                    if !standaloneGrade.isColorIdentity {
+                        output.summary += " · \(grade.preset.displayName) grade baked in"
+                    }
                     // The ungraded intermediate is scratch, and on iOS this runs
                     // on a phone that may be tight on space — but only remove it
                     // when it is our own temp file, never a Mac job folder's
@@ -4805,7 +4844,12 @@ final class AppModel: ObservableObject {
                 self?.stage = .configure
             } catch {
                 self?.processingStartedAt = nil
-                self?.errorMessage = (error as? LapseError)?.errorDescription ?? error.localizedDescription
+                let description = (error as? LapseError)?.errorDescription ?? error.localizedDescription
+                // On the console as well as the banner: a headless bench run
+                // has no banner to read, and the banner does not say which
+                // stage threw.
+                LLog("render failed: \(description) — \(error)")
+                self?.errorMessage = description
                 self?.stage = .configure
             }
         }
@@ -5062,6 +5106,7 @@ final class AppModel: ObservableObject {
                 sourceSize: reframe.sourceSize,
                 frameSourceTimes: frameTimes,
                 outputFPS: reframe.outputFPS,
+                rotationDegrees: normalization.rotationDegrees,
                 renderSizeOverride: normalization.renderSize,
                 rectsOverride: frameRects)
             return reframed.url
@@ -5081,6 +5126,7 @@ final class AppModel: ObservableObject {
             of: url,
             canvas: normalization.canvas,
             offset: normalization.canvasOffset,
+            rotationDegrees: normalization.rotationDegrees,
             outputFPS: outputFPS,
             renderSizeOverride: normalization.renderSize)
         return cropped.url
@@ -5928,17 +5974,20 @@ final class AppModel: ObservableObject {
         if customWindows != nil ? customWindowTimes != nil : frameTimes != nil {
             summary += " · timed from capture"
         }
-        if !grade.isIdentity {
+        if !grade.isColorIdentity {
             summary += " · \(grade.preset.displayName) grade baked in"
         }
         if grade.isKeyframed {
             let moments = grade.timeline.keyframes.count
             summary += " · \(moments) keyframe\(moments == 1 ? "" : "s")"
         }
-        if let overlayBake {
+        if let overlayBake, overlayBake.hasOverlays {
             summary += overlayBake.masks.isEmpty
                 ? " · text baked in"
                 : " · text baked in (scene-placed)"
+        }
+        if grade.hasRotation {
+            summary += Self.levelSummary(grade)
         }
         return ProcessingOutput(
             kind: .video,
@@ -5950,6 +5999,16 @@ final class AppModel: ObservableObject {
             width: result.width,
             height: result.height
         )
+    }
+
+    /// The summary fragment for a baked level, e.g. " · levelled +2.5°", or
+    /// " · levelled +2.5° → −1.0°" when the level travels across the clip.
+    nonisolated static func levelSummary(_ grade: PhotoGrade) -> String {
+        guard grade.hasKeyframedRotation else {
+            return " · levelled \(RotationSlider.readout(grade.rotationDegrees))"
+        }
+        return " · levelled \(RotationSlider.readout(grade.rotationDegrees(at: 0)))"
+            + " → \(RotationSlider.readout(grade.rotationDegrees(at: 1)))"
     }
 
     /// A loader that grades every frame on its way into a blend, or nil for an
@@ -6000,8 +6059,9 @@ final class AppModel: ObservableObject {
         let baked: @Sendable (CGImage) -> CGImage = { image in
             guard let overlayBake else { return image }
             return SceneAwareCompositor.bakeStill(
-                image, overlays: overlayBake.overlays,
-                masks: overlayBake.masks, settings: overlayBake.settings) ?? image
+                image, overlays: overlayBake.overlays(at: 1),
+                masks: overlayBake.masks, settings: overlayBake.settings,
+                rotationDegrees: overlayBake.rotation(at: 1)) ?? image
         }
         // A single frame has nothing to accumulate — the stacker needs at least
         // two — so load it straight through (blend=1 / one-frame-burst edge).
@@ -6050,8 +6110,11 @@ final class AppModel: ObservableObject {
             image, to: output, format: .png,
             metadata: urls.first.flatMap { ImageExporter.carryoverMetadata(from: $0) })
         var summary = "\(urls.count) photos stacked · \(image.width)×\(image.height)"
-        if !grade.isIdentity {
+        if !grade.isColorIdentity {
             summary += " · \(grade.preset.displayName) grade baked in"
+        }
+        if grade.hasRotation {
+            summary += Self.levelSummary(grade)
         }
         return ProcessingOutput(
             kind: .image,
@@ -8141,11 +8204,14 @@ final class AppModel: ObservableObject {
     /// stored beside it: Original *is* "no filter", and every render and bake
     /// in the app comes through here, so that rule is enforced once.
     func photoGrade(for capture: CaptureProject) -> PhotoGrade {
-        guard !presetState(for: capture).isOriginal else { return .identity }
-        return PhotoGrade(
+        let grade = PhotoGrade(
             preset: photoPreset(for: capture),
             adjustments: photoAdjustments(for: capture),
             timeline: gradeTimeline(for: capture))
+        // The rotation is geometry, not a filter: Original means "no filter",
+        // and a levelled Original project is still levelled — at every moment.
+        guard !presetState(for: capture).isOriginal else { return grade.rotationOnly }
+        return grade
     }
 
     /// The manual slider grade layered on the preset. Projects saved before the
@@ -8200,20 +8266,27 @@ final class AppModel: ObservableObject {
         // A preset is one look, so applying it wholesale from outside the editor
         // takes the shoot back to one look — the keyframes go with the manual
         // adjustments they were made of. (Inside the editor, where there is a
-        // playhead to aim at, a chip writes at the playhead instead.)
+        // playhead to aim at, a chip writes at the playhead instead.) The
+        // level is geometry, not a look, and stays — at every moment it had.
+        let current = photoGrade(for: captures[index]).rotationOnly
         write(
-            preset: preset, adjustments: .neutral, state: state, timeline: .empty,
-            at: index)
+            preset: preset, adjustments: current.adjustments, state: state,
+            timeline: current.timeline, at: index)
     }
 
     /// Applies a saved preset wholesale: its base preset and its slider values,
     /// plus the snapshot that pins what "this preset" meant at this moment.
     func applyCustomPreset(_ preset: CustomPreset, for capture: CaptureProject) {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        // The preset's look over the project's own level, which the preset
+        // never carried (see `PresetSnapshot.matches`).
+        let current = photoGrade(for: captures[index]).rotationOnly
+        var adjustments = preset.adjustments.withoutRotation
+        adjustments.rotationDegrees = current.adjustments.rotationDegrees
         write(
-            preset: preset.basePreset, adjustments: preset.adjustments,
-            state: .named(id: preset.id, snapshot: preset.snapshot), timeline: .empty,
-            at: index)
+            preset: preset.basePreset, adjustments: adjustments,
+            state: .named(id: preset.id, snapshot: preset.snapshot),
+            timeline: current.timeline, at: index)
     }
 
     /// The editors' write-back: the live values and the state they resolved to,
@@ -8310,8 +8383,10 @@ final class AppModel: ObservableObject {
         // The state first, and the values only as a second net: Original is a
         // promise about the bytes that leave the app, not a fact derived from
         // whatever numbers happen to be sitting on the project.
-        guard !presetState(for: capture).isOriginal else { return (url, false) }
         let grade = photoGrade(for: capture)
+        // A levelled project is rendered even when its look is Original —
+        // the rotation is as much "how I'm looking at it" as a preset is.
+        guard !presetState(for: capture).isOriginal || grade.hasRotation else { return (url, false) }
         guard !grade.isIdentity else { return (url, false) }
         let isImage = UTType(filenameExtension: url.pathExtension)?.conforms(to: .image) ?? false
         let graded: URL

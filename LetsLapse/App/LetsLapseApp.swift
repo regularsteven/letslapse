@@ -675,7 +675,15 @@ struct ContentView: View {
                 scansPath = [id]
             }
         }
-        if environment["LL_OPEN"] == "latest", let capture = model.captures.first {
+        // `LL_OPEN=latest` opens the newest capture in the Create flow;
+        // `LL_OPEN=<capture-uuid>` a specific one — pairs with `LL_AUTO=process`
+        // for a headless render of a project that is not the newest.
+        if let openHook = environment["LL_OPEN"],
+           let capture = openHook == "latest"
+            ? model.captures.first
+            : model.captures.first(where: {
+                $0.id.uuidString.caseInsensitiveCompare(openHook) == .orderedSame
+            }) {
             model.openCapture(capture)
         } else if let seed = environment["LL_SEED"] {
             model.setSource(.video(URL(fileURLWithPath: seed)))
@@ -705,19 +713,32 @@ struct ContentView: View {
         // detail screen, whose own `LL_EDITOR` task slides the cover over. The
         // perf bench (docs/editor-performance-plan.md) pairs it with
         // `LL_PERFWIGGLE`; it is equally the editor-screen screenshot hook.
+        // `LL_EDITOR=video` — the VIDEO editor on the newest movie project,
+        // for the same reason: its rail (the shared adjustment panel with the
+        // Rotation section, over a playing movie) is otherwise behind a tap.
         // Any other value is a capture UUID — a bench that needs one SPECIFIC
         // shoot (the text-overlay spike's sky project) rather than the biggest.
         if let editorHook = environment["LL_EDITOR"] {
-            let capture: AppModel.CaptureProject? = editorHook == "latest"
-                ? model.captures
+            let capture: AppModel.CaptureProject? = switch editorHook {
+            case "latest":
+                model.captures
                     .filter { $0.kind == .photos && !$0.isPhotoCapture }
                     .max(by: { $0.sourceFileNames.count < $1.sourceFileNames.count })
-                : model.captures.first {
+            case "video":
+                model.captures
+                    .filter { $0.kind == .video }
+                    .max(by: { $0.createdAt < $1.createdAt })
+            default:
+                model.captures.first {
                     $0.id.uuidString.caseInsensitiveCompare(editorHook) == .orderedSame
                 }
+            }
             if let capture {
                 #if os(macOS)
-                if let url = model.sourceFrameURLs(for: capture).first {
+                if capture.kind == .video, let url = model.sourceClipURLs(for: capture).first {
+                    openWindow(value: VideoEditorWindowRequest(
+                        captureID: capture.id, url: url, title: capture.displayTitle))
+                } else if let url = model.sourceFrameURLs(for: capture).first {
                     openWindow(value: PhotoEditorWindowRequest(
                         captureID: capture.id, url: url, title: capture.displayTitle))
                 }
