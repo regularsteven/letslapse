@@ -73,6 +73,12 @@ enum WatchCaptureCommand: String {
     /// OLED phones — so unlike the capture setters this is accepted mid-run:
     /// flipping it live on a bench arm is exactly the A/B it exists for.
     case setDimDuringShoot
+    /// Bench only, DEBUG builds only: fires the thermal-critical stop on a
+    /// running shoot exactly as the heat observers would — the run ends
+    /// `tooHot` and its trailing outputs are dropped — so the stop's plumbing
+    /// can be proved without waiting for a phone to cook. Release builds
+    /// refuse it. It does not change what the hardware is doing.
+    case simulateTooHot
     /// Bring the camera back without touching the phone. Presents the capture
     /// screen over whatever is showing — including a setup flow, which stays
     /// underneath and intact. Deliberately refused while a blend is running:
@@ -118,7 +124,7 @@ extension WatchCaptureCommand {
              .setIntervalMode, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop, .setDimDuringShoot,
-             .armCamera, .cancelExport:
+             .armCamera, .cancelExport, .simulateTooHot:
             return true
         }
     }
@@ -166,6 +172,8 @@ extension WatchCaptureCommand {
             return "No mark was placed."
         case .setDimDuringShoot:
             return "Screen dimming is unchanged."
+        case .simulateTooHot:
+            return "The shoot is still running."
         case .setISO, .setLensPosition, .state, .previewFrame:
             return nil
         }

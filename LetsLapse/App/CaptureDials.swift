@@ -148,6 +148,12 @@ struct IntervalDialsRow: View, Equatable {
     let blendDepth: BlendDepth
     let safeDepthAvailable: Bool
     let captionText: String?
+    /// The rate the blend engine's tap can stream at (the format's pinned
+    /// frame rate), or nil when no stream bounds the depth (the RAW photo
+    /// path). A fixed count the stream cannot deliver at this interval is
+    /// greyed under what it would need — a 20-frame blend every second on a
+    /// 10 fps stream is not a choice, it is a promise the window breaks.
+    let streamFPS: Double?
     /// Whether this platform has a MODE dial at all — the Mac doesn't (no
     /// manual exposure API, no RAW), so it simply isn't drawn there.
     let modeAvailable: Bool
@@ -169,6 +175,7 @@ struct IntervalDialsRow: View, Equatable {
             && lhs.modeAvailable == rhs.modeAvailable
             && lhs.intervalMode == rhs.intervalMode
             && lhs.intervalOptions == rhs.intervalOptions
+            && lhs.streamFPS == rhs.streamFPS
     }
 
     /// Scanner fires from the scene, so the shoot has no spacing to show.
@@ -317,15 +324,21 @@ struct IntervalDialsRow: View, Equatable {
             Divider()
         }
         ForEach(BlendMenuOrder.options, id: \.frames) { option in
+            let attainable = StreamRatePlan.isAttainable(
+                frames: option.frames, intervalSeconds: intervalSeconds, streamFPS: streamFPS)
             Button {
                 onSelectFixedBlend(option.frames)
             } label: {
                 if blendDepth == .fixed(option.frames) {
                     Label(option.label, systemImage: "checkmark")
-                } else {
+                } else if attainable {
                     Text(option.label)
+                } else {
+                    Text(String(format: "%@ · needs %.0f fps", option.label,
+                                StreamRatePlan.requiredFPS(frames: option.frames, intervalSeconds: intervalSeconds)))
                 }
             }
+            .disabled(!attainable)
         }
         if !BlendMenuOrder.topFirst {
             Divider()

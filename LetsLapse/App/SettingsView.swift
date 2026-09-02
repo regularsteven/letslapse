@@ -921,7 +921,7 @@ struct SettingsView: View {
             }
 
             NavigationLink(value: SettingsDestination.performance) {
-                LLRow(title: "Performance", subtitle: "CPU workers, GPU batches") {
+                LLRow(title: "Performance", subtitle: "Capture stream rate, CPU workers, GPU batches") {
                     Image(systemName: "chevron.right")
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundStyle(.tertiary)
@@ -1219,9 +1219,44 @@ private struct LayoutSettingsView: View {
 
 private struct PerformanceSettingsView: View {
     @EnvironmentObject var model: AppModel
+    @AppStorage(StreamRatePolicy.defaultsKey) private var streamRateRaw = StreamRatePolicy.auto.rawValue
+    @AppStorage(StreamRateLearning.learnedReducedKey) private var streamRateLearnedReduced = false
+    @AppStorage(StreamRateLearning.engagedRunsKey) private var streamRateEngagedRuns = 0
+
+    private var streamRate: Binding<StreamRatePolicy> {
+        Binding(
+            get: { StreamRatePolicy(rawValue: streamRateRaw) ?? .auto },
+            set: { policy in
+                // Choosing Auto again is the reset: the device gets to prove
+                // it needs the throttle over fresh runs. Off (Full) or
+                // Reduced by hand overrides whatever was learned.
+                if policy == .auto, streamRateRaw != StreamRatePolicy.auto.rawValue {
+                    StreamRateLearning.reset()
+                }
+                streamRateRaw = policy.rawValue
+            })
+    }
 
     var body: some View {
         Form {
+            #if !os(macOS)
+            Section {
+                Picker("Capture stream rate", selection: streamRate) {
+                    ForEach(StreamRatePolicy.allCases) { policy in
+                        Text(policy.label).tag(policy)
+                    }
+                }
+                if streamRate.wrappedValue == .auto, streamRateLearnedReduced {
+                    LLRow(title: "Reduced on this device",
+                          subtitle: "Auto needed the throttle on \(max(streamRateEngagedRuns, StreamRateLearning.runsToLearn)) shoots, so runs now start reduced. Choose Auto again to reset.") {
+                        EmptyView()
+                    }
+                }
+            } footer: {
+                Text(streamRateFooter)
+            }
+            #endif
+
             Section {
                 Stepper(
                     "CPU worker budget: \(model.maxCPUWorkers)",
@@ -1254,6 +1289,19 @@ private struct PerformanceSettingsView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+    }
+
+    /// One sentence per choice, and the cost named: the preview shares the
+    /// stream, the pixels do not change.
+    private var streamRateFooter: String {
+        switch streamRate.wrappedValue {
+        case .auto:
+            return "How fast the camera streams while a blend runs — the main thermal lever. Auto keeps the full rate while the camera is cool and streams only what the blend needs once it reports serious pressure, then returns to full as it cools. A device that keeps needing it starts reduced. The preview slows with the stream; the frames do not change."
+        case .reduced:
+            return "Streams only what the blend needs from the first frame, with headroom for dropped frames. Coolest option; the preview runs at a few frames per second during the shoot. The frames do not change."
+        case .full:
+            return "Never throttles the stream. Warmest option — on an iPhone 12 Pro this reached thermal critical, where the lens stabiliser parks and the framing jumps, in 12–16 minutes. A shoot that reaches critical still ends there, cleanly."
+        }
     }
 }
 

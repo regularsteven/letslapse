@@ -15,6 +15,10 @@ enum LiveBlendStatus: String, Codable {
     case processingBehind = "Processing behind"
     case thermalPressure = "Thermal pressure"
     case captureFailed = "Capture failed"
+    /// The run ended (or refused to start) at thermal critical — the state
+    /// in which the iPhone 12 Pro's lens stabiliser parks and the framing
+    /// jumps. A stop is recoverable; a reframed sequence is not.
+    case tooHot = "Too hot — stopped"
 }
 
 /// Compact readout for the capture screen, pushed on the main queue.
@@ -61,6 +65,10 @@ struct LiveBlendCaptureResult {
     /// "dng" when the RAW path produced the frames; drives the project's
     /// provenance label at registration.
     var outputFormat: String = "standard"
+    /// Outputs the run deleted at its end — a thermal stop drops the windows
+    /// the lens moved in. The frames are gone from `frameURLs` already; the
+    /// count lets the camera layer trim a sidecar it owns to match.
+    var droppedTrailingFrames: Int = 0
 }
 
 /// The experiment log written to Application Support/LetsLapse/Logs/.
@@ -75,6 +83,9 @@ struct LiveBlendSessionLog: Codable {
         var captureWidth: Int
         var captureHeight: Int
         var configuredFrameRate: Int
+        /// The rate the tap actually streams at after the run throttled it to
+        /// what its depth needs (2026-09-02); nil = the configured rate.
+        var streamFrameRate: Double? = nil
         var requestedIntervalSeconds: Double
         /// The fixed frames-per-blend, or 0 for the adaptive depths (see
         /// `blendDepth`).
@@ -123,6 +134,8 @@ struct LiveBlendSessionLog: Codable {
         /// Thermal state when the window opened — the learning system's
         /// primary predictor; `thermalState` above is read at close.
         var thermalStateAtStart: String? = nil
+        /// `AVCaptureDevice.systemPressureState` at close — level(factors).
+        var systemPressureAtClose: String? = nil
         /// An unthrottled window stopped capturing at the app's memory
         /// budget rather than the device's rate.
         var memoryCapped: Bool? = nil
@@ -185,6 +198,7 @@ extension CaptureExposureLog.WindowPerformance {
             fallbackSingleFrame: entry.fallbackSingleFrame ? true : nil,
             thermalStateAtStart: entry.thermalStateAtStart,
             thermalStateAtClose: entry.thermalState,
+            systemPressureAtClose: entry.systemPressureAtClose,
             frameSpacingAvgSeconds: entry.frameSpacingAvgSeconds,
             frameSpacingMaxSeconds: entry.frameSpacingMaxSeconds,
             processingMillis: entry.totalMillis > 0 ? entry.totalMillis : nil,
@@ -241,6 +255,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         var captureWidth: Int
         var captureHeight: Int
         var configuredFrameRate: Int
+        /// The tap's throttled stream rate, when the run slowed it (log header).
+        var streamFrameRate: Double? = nil
+        /// The camera's own pressure reading, stamped on each window at close
+        /// — the bench's margin evidence. nil where the platform has none.
+        var systemPressure: (() -> String?)? = nil
         /// "dng" when the user asked for DNG but this (standard) path ran as
         /// the fallback — recorded in the log header.
         var requestedOutputFormat: String = "standard"
@@ -417,6 +436,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// (the 2026-08-22 sunrise stops were undiagnosable without it).
     /// Written on videoQueue before the finish hops queues.
     private var endReason: String?
+    /// Outputs to delete at finish — a thermal stop's trailing windows.
+    /// Written on videoQueue before the finish hops queues.
+    private var dropTrailingOnFinish = 0
     /// Windows that closed with nothing usable arrived (camera went quiet) —
     /// the travelling log's `starvedWindows`. blendQueue.
     private var emptyWindows = 0
@@ -464,6 +486,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             captureWidth: configuration.captureWidth,
             captureHeight: configuration.captureHeight,
             configuredFrameRate: configuration.configuredFrameRate,
+            streamFrameRate: configuration.streamFrameRate,
             requestedIntervalSeconds: configuration.intervalSeconds,
             requestedFramesPerBlend: configuration.initialDisplayFrames,
             blendDepth: configuration.blendDepth.familyName,
@@ -501,11 +524,16 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// is false — a scheduled "stop at N" wants exactly N) and hands the run
     /// over; discard drops queued work, deletes the temp frames, and never
     /// fires the result. All are safe to call more than once.
-    func requestStop(discard: Bool, keepPartial: Bool = true, reason: String = "user") {
+    ///
+    /// `dropTrailing` deletes that many already-written outputs at finish —
+    /// the thermal stop's use: the lens moved in the window that crossed into
+    /// critical, and the notification landed one window late every time.
+    func requestStop(discard: Bool, keepPartial: Bool = true, reason: String = "user", dropTrailing: Int = 0) {
         videoQueue.async {
             guard !self.finishRequested else { return }
             self.finishRequested = true
             self.endReason = reason
+            self.dropTrailingOnFinish = max(0, dropTrailing)
             self.selecting = false
             self.watchdog?.cancel()
             self.watchdog = nil
@@ -819,6 +847,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             thermalState: LiveBlendController.thermalStateName(),
             partial: record.partial)
         entry.thermalStateAtStart = record.thermalStateAtStart
+        entry.systemPressureAtClose = configuration.systemPressure?()
         accumulateFailuresThisWindow = 0
         if record.rejectedByAlignment > 0 {
             entry.rejectedByAlignment = record.rejectedByAlignment
@@ -1093,6 +1122,33 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         // delete the directory out from under it.
         timestampWriter?.close()
 
+        // A thermal stop trims the tail. On every logged iPhone 12 Pro event
+        // the framing moved in the window that crossed into critical or the
+        // one before it, and the app's own thermal record moved a window
+        // later — so the last two outputs are the ones that cannot be
+        // trusted. Dropping them is what makes the stop clean rather than a
+        // reframe with a warning.
+        var droppedTrailing = 0
+        if dropTrailingOnFinish > 0, !discard, !frameURLs.isEmpty {
+            let count = min(dropTrailingOnFinish, frameURLs.count)
+            for url in frameURLs.suffix(count) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            frameURLs.removeLast(count)
+            sessionFrameLog.removeLast(min(count, sessionFrameLog.count))
+            completedOutputs = max(0, completedOutputs - count)
+            if timestampWriter != nil {
+                try? FrameTimestamps.dropTrailingEntries(
+                    count: count, in: configuration.outputDirectory)
+            }
+            droppedTrailing = count
+            sessionIssues.append(.init(
+                at: Date(), windowIndex: outputIndex,
+                kind: "tooHot", severity: "problem",
+                detail: "run ended at thermal critical — last \(count) output(s) discarded"))
+            LLog("liveblend: too hot — run ended, last \(count) output(s) discarded")
+        }
+
         let result: LiveBlendCaptureResult?
         if discard || frameURLs.isEmpty {
             try? FileManager.default.removeItem(at: configuration.outputDirectory)
@@ -1143,10 +1199,11 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 logURL: configuration.logURL,
                 completedOutputs: completedOutputs,
                 fallbackOutputs: fallbackOutputs,
-                failedOutputs: failedOutputs)
+                failedOutputs: failedOutputs,
+                droppedTrailingFrames: droppedTrailing)
         }
         if frameURLs.isEmpty, !discard {
-            pushDiagnostics { $0.status = .captureFailed }
+            pushDiagnostics { $0.status = self.endReason == "tooHot" ? .tooHot : .captureFailed }
         }
         active.withLock { $0 = false }
         LLog("liveblend: finished outputs=\(frameURLs.count) discarded=\(discard) log=\(configuration.logURL.path)")

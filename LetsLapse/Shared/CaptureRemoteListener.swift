@@ -22,7 +22,13 @@ final class CaptureRemoteListener: ObservableObject {
     static let enabledKey = "remote.allowRemoteAccess"
 
     static var isEnabled: Bool {
-        UserDefaults.standard.bool(forKey: enabledKey)
+        #if DEBUG
+        // Bench: `LL_REMOTE=1` at launch (devicectl `--environment-variables`)
+        // stands in for the Settings toggle on a device nobody is holding.
+        // Not a hook key, so it does not put the app into screenshot mode.
+        if ProcessInfo.processInfo.environment["LL_REMOTE"] == "1" { return true }
+        #endif
+        return UserDefaults.standard.bool(forKey: enabledKey)
     }
 
     enum State: Equatable {

@@ -547,6 +547,7 @@ struct CaptureView: View {
         .onChange(of: interval) { seconds in
             RecordingSettingsStore.save(intervalSeconds: seconds, for: mode)
             revalidateSafeDepth()
+            revalidateFixedDepthAttainable()
         }
         .onChange(of: blendDepth) { depth in
             RecordingSettingsStore.save(blendDepth: depth)
@@ -1237,6 +1238,29 @@ struct CaptureView: View {
     /// Safe's basis can vanish while it is selected (interval change, format
     /// change, learning reset, a remembered setting from another day): fall
     /// back to the last deliberate fixed choice rather than guessing.
+    /// The rate the blend engine's tap can stream at, bounding the fixed
+    /// depths the dial offers; nil on the RAW photo path, which has no stream.
+    private var blendStreamFPS: Double? {
+        let dng = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+        return dng ? nil : Double(camera.selectedFrameRate)
+    }
+
+    /// An interval change can put the chosen fixed count out of the stream's
+    /// reach (20 frames every second on a 10 fps stream). Falls to the deepest
+    /// count the stream can deliver rather than starting a run that cannot
+    /// fill its windows — and says so, since the dial changed under the user.
+    private func revalidateFixedDepthAttainable() {
+        guard case .fixed(let frames) = blendDepth, frames > 1,
+              !StreamRatePlan.isAttainable(frames: frames, intervalSeconds: interval, streamFPS: blendStreamFPS)
+        else { return }
+        let fallback = BlendDepth.fixedOptions.map(\.frames)
+            .filter { $0 < frames && StreamRatePlan.isAttainable(frames: $0, intervalSeconds: interval, streamFPS: blendStreamFPS) }
+            .max() ?? 1
+        LLog("blend: \(frames) frames every \(interval)s exceeds the \(blendStreamFPS.map { Int($0) } ?? 0) fps stream — depth set to \(fallback)")
+        blendDepth = .fixed(fallback)
+        lastFixedBlendFrames = fallback
+    }
+
     private func revalidateSafeDepth() {
         if blendDepth == .throttled, !safeDepthAvailable {
             blendDepth = .fixed(lastFixedBlendFrames)
@@ -2210,11 +2234,13 @@ struct CaptureView: View {
     // MARK: - Thermal warning chip
 
     /// Pre-flight heat warning, shown while idle at serious or critical.
-    /// Warn-only by decision (2026-08-24): Record always works — the bench
-    /// runs devices hot on purpose, and a block would fight it. At critical
-    /// the wording names the real stake: the lens stabiliser can glitch and
-    /// jump the framing mid-stack (Praha 2026-08-23). During a run the
-    /// diagnostics readout already carries thermal pressure.
+    /// Serious is warn-only (2026-08-24): Record works, the bench runs
+    /// devices warm on purpose. Critical is a refusal since 2026-09-02 —
+    /// on iPhones the camera layer declines to start and ends a run there,
+    /// because that is the state in which the 12 Pro's lens stabiliser parks
+    /// and the framing jumps (every logged event; none at serious). The chip
+    /// says so, so a shutter press that does nothing is not a mystery.
+    /// During a run the diagnostics readout already carries thermal pressure.
     @ViewBuilder
     private func thermalWarningChip(compact: Bool = false) -> some View {
         if !isCapturing, thermalState == .serious || thermalState == .critical {
@@ -2224,9 +2250,9 @@ struct CaptureView: View {
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(critical ? Color.red : LL.amber)
                 Text(compact
-                    ? (critical ? "Hot — cool down" : "Warm")
+                    ? (critical ? "Too hot to shoot" : "Warm")
                     : (critical
-                        ? "Device hot — framing can glitch. Let it cool first."
+                        ? "Too hot to shoot — let it cool first"
                         : "Device warm — long shoots may throttle"))
                     .font(.system(size: 12.5, weight: .medium))
                     .foregroundStyle(.white)
@@ -2237,7 +2263,7 @@ struct CaptureView: View {
             .padding(.vertical, 7)
             .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
             .accessibilityLabel(critical
-                ? "Device hot. Framing can glitch. Let it cool before a long shoot."
+                ? "Too hot to shoot. Let it cool first."
                 : "Device warm. Long shoots may throttle.")
         }
     }
@@ -2837,6 +2863,7 @@ struct CaptureView: View {
             blendDepth: blendDepth,
             safeDepthAvailable: safeDepthAvailable,
             captionText: blendCaptionText,
+            streamFPS: blendStreamFPS,
             modeAvailable: Self.intervalModesAvailable,
             intervalMode: intervalMode,
             onSelectInterval: { seconds in
@@ -3375,7 +3402,7 @@ struct CaptureView: View {
     private func blendStatusTint(_ status: LiveBlendStatus) -> Color {
         switch status {
         case .healthy: return .white.opacity(0.75)
-        case .captureFailed: return .red
+        case .captureFailed, .tooHot: return .red
         default: return LL.amber
         }
     }
@@ -4509,7 +4536,10 @@ struct CaptureView: View {
                     blendDepth = .auto
                     return true
                 case .fixed(let frames):
-                    guard BlendDepth.fixedOptions.contains(where: { $0.frames == frames }) else { return false }
+                    guard BlendDepth.fixedOptions.contains(where: { $0.frames == frames }),
+                          StreamRatePlan.isAttainable(
+                              frames: frames, intervalSeconds: interval, streamFPS: blendStreamFPS)
+                    else { return false }
                     blendDepth = .fixed(frames)
                     lastFixedBlendFrames = frames
                     return true
@@ -4520,7 +4550,10 @@ struct CaptureView: View {
             }
             // Numeric form: the Watch picker's fixed counts.
             guard let value,
-                  BlendDepth.fixedOptions.contains(where: { $0.frames == Int(value) }) else { return false }
+                  BlendDepth.fixedOptions.contains(where: { $0.frames == Int(value) }),
+                  StreamRatePlan.isAttainable(
+                      frames: Int(value), intervalSeconds: interval, streamFPS: blendStreamFPS)
+            else { return false }
             blendDepth = .fixed(Int(value))
             lastFixedBlendFrames = Int(value)
             return true
@@ -4581,6 +4614,15 @@ struct CaptureView: View {
             // Never reached: the receiver answers `state` from its cache
             // before consulting this handler. Kept for exhaustiveness.
             return true
+        case .simulateTooHot:
+            // DEBUG bench hook: the thermal stop's plumbing, on demand.
+            #if DEBUG
+            guard isCapturing else { return false }
+            camera.simulateTooHot()
+            return true
+            #else
+            return false
+            #endif
         case .armCamera, .cancelExport:
             // Also never reached, and for a sharper reason: these are the
             // commands for when the capture screen ISN'T up, so the receiver

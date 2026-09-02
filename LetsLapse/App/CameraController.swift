@@ -1232,6 +1232,7 @@ final class CameraController: NSObject, ObservableObject {
         sessionQueue.async {
             self.intervalTimer?.cancel()
             self.intervalTimer = nil
+            self.removeRunThermalGuard()
             // Cancelling the timer is not finishing the run: `intervalActive`
             // and the published `isIntervalRunning` used to survive this, and a
             // stranded `isIntervalRunning` refuses every tap-to-focus for the
@@ -5407,6 +5408,11 @@ final class CameraController: NSObject, ObservableObject {
     func startInterval(every seconds: Double, frameCap: Int? = nil) {
         sessionQueue.async {
             guard self.intervalTimer == nil else { return }
+            if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
+                LLog("capture: refused to start at thermal critical — the lens stabiliser parks there; let the device cool")
+                CaptureSessionLogger.shared.log("capture_refused", ["kind": "interval", "reason": "tooHot"])
+                return
+            }
             // Same ordering rule as startRecording: both preview taps detach
             // inline before any capture work.
             self.detachTestCardTapNow()
@@ -5416,6 +5422,7 @@ final class CameraController: NSObject, ObservableObject {
             // An interval shoot is the least forgiving of the three — a hunt
             // three frames in is baked into the finished timelapse for good.
             self.lockFocusForRun(deviceChanged: false)
+            self.installRunThermalGuard()
             // Wait for AE/AWB to converge before the first shutter: the timer
             // fires at .now() so frame 0 is otherwise shot with whatever
             // exposure the sensor happened to be outputting at the press. Dark
@@ -5506,11 +5513,12 @@ final class CameraController: NSObject, ObservableObject {
     /// clears interval state — exactly once (guarded by `intervalActive`), so a
     /// cap-reached finish and a user stop never double-emit. A single frame is
     /// valid output (Photo mode's snapshot), so there is no minimum-frame floor.
-    private func finishIntervalOnQueue() {
+    private func finishIntervalOnQueue(dropTrailing: Int = 0, reason: String = "user") {
         guard self.intervalActive else { return }
         self.intervalActive = false
         self.intervalTimer?.cancel()
         self.intervalTimer = nil
+        self.removeRunThermalGuard()
         let wasHolyGrail = self.holyGrailActive
         self.endHolyGrailIfActive()
         self.releaseRunFocusLock()
@@ -5518,10 +5526,24 @@ final class CameraController: NSObject, ObservableObject {
         // sidecar from beside the frames, and it must be complete by then.
         self.intervalWriter?.close()
         self.intervalWriter = nil
+        // A thermal stop trims the tail — the stills the lens moved in (see
+        // `tooHotTrailingWindows`), with their sidecar lines.
+        if dropTrailing > 0, !self.photoURLs.isEmpty {
+            let count = min(dropTrailing, self.photoURLs.count)
+            for url in self.photoURLs.suffix(count) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            self.photoURLs.removeLast(count)
+            if let directory = self.photoDirectory {
+                try? FrameTimestamps.dropTrailingEntries(count: count, in: directory)
+            }
+            LLog("interval: too hot — run ended, last \(count) still(s) discarded")
+        }
         let urls = self.photoURLs
         CaptureSessionLogger.shared.log(
             "capture_end",
-            ["kind": wasHolyGrail ? "holyGrail" : "interval", "frameCount": urls.count])
+            ["kind": wasHolyGrail ? "holyGrail" : "interval", "frameCount": urls.count,
+             "endReason": reason])
         self.intervalFrameCap = nil
         self.intervalFramesRequested = 0
         DispatchQueue.main.async {
@@ -7131,6 +7153,22 @@ final class CameraController: NSObject, ObservableObject {
 
     /// What `activeVideoMaxFrameDuration` was before a blend run relaxed it.
     private var pinnedVideoMaxFrameDuration: CMTime?
+    /// What `activeVideoMinFrameDuration` was before a blend run throttled
+    /// the stream. sessionQueue-confined.
+    private var pinnedVideoMinFrameDuration: CMTime?
+    /// The stream rate the running depth strictly needs (frames per second),
+    /// nil for the open-ended depths. sessionQueue-confined.
+    private var streamNeededFPS: Double?
+    /// The policy the running blend was started under. sessionQueue-confined.
+    private var streamPolicyForRun: StreamRatePolicy?
+    /// The rate the run opened at under its policy (nil = the configured
+    /// rate), so cooling can return to it. sessionQueue-confined.
+    private var streamStartFPS: Double?
+    /// Whether the serious-pressure floor was applied during this run —
+    /// what Auto's self-learning counts. sessionQueue-confined.
+    private var streamFloorEngaged = false
+    /// The rate the tap streams at after throttling, for the run's log.
+    private(set) var streamFrameRate: Double?
 
     /// Let the shutter reach the exposure the ramp is asking for.
     ///
@@ -7157,7 +7195,7 @@ final class CameraController: NSObject, ObservableObject {
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            pinnedVideoMaxFrameDuration = current
+            if pinnedVideoMaxFrameDuration == nil { pinnedVideoMaxFrameDuration = current }
             device.activeVideoMaxFrameDuration =
                 CMTimeMakeWithSeconds(ceiling, preferredTimescale: 1_000_000)
             LLog(String(format:
@@ -7170,20 +7208,334 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     /// Puts the frame rate back where the format pinned it. A relaxed ceiling
-    /// left behind would let a later VIDEO recording drop frames in low light.
+    /// left behind would let a later VIDEO recording drop frames in low light,
+    /// and a throttled floor would leave the preview crawling.
     private func restoreVideoFrameDuration() {
         #if os(iOS)
-        guard let device = videoDevice, let pinned = pinnedVideoMaxFrameDuration
+        if streamPolicyForRun == .auto, streamNeededFPS != nil || streamStartFPS != nil || streamFloorEngaged {
+            StreamRateLearning.noteAutoRun(engaged: streamFloorEngaged)
+        }
+        streamPolicyForRun = nil
+        streamStartFPS = nil
+        streamFloorEngaged = false
+        streamNeededFPS = nil
+        streamFrameRate = nil
+        guard let device = videoDevice,
+              pinnedVideoMaxFrameDuration != nil || pinnedVideoMinFrameDuration != nil
         else { return }
+        let pinnedMin = pinnedVideoMinFrameDuration
+        let pinnedMax = pinnedVideoMaxFrameDuration
+        pinnedVideoMinFrameDuration = nil
         pinnedVideoMaxFrameDuration = nil
         do {
             try device.lockForConfiguration()
             defer { device.unlockForConfiguration() }
-            device.activeVideoMaxFrameDuration = pinned
+            // Minimum first: it is the shorter duration, so min ≤ max holds
+            // at both writes. (Throttling writes them the other way round.)
+            if let pinnedMin { device.activeVideoMinFrameDuration = pinnedMin }
+            if let pinnedMax { device.activeVideoMaxFrameDuration = pinnedMax }
         } catch {
             LLog("liveblend: could not restore the frame duration — \(error.localizedDescription)")
         }
         #endif
+    }
+
+    // MARK: - Stream throttle (the thermal lever)
+
+    /// Runs the blend tap at the rate the window needs, not the format's
+    /// pinned rate.
+    ///
+    /// The JPEG blend path streams the full-resolution tap at the pinned
+    /// 30 fps for the whole run regardless of depth: a depth-1 run at 2 s
+    /// discards 59 of every 60 frames while the ISP works flat out, and on the
+    /// 2026-09-01 sunset the iPhone 12 Pro reached thermal critical at 16 min
+    /// that way — the same as unthrottled. The photo-output runs on the same
+    /// phone held serious for an hour and more. Apple's guidance for camera
+    /// system pressure is this exact lever: "System pressure can be
+    /// effectively mitigated by lowering the device's
+    /// activeVideoMinFrameDuration" (`AVCaptureDevice.h`). A timelapse can
+    /// tolerate a reduced frame rate by definition, and nothing else changes —
+    /// same lens, same format, same resolution.
+    ///
+    /// What happens is the user's policy (`StreamRatePolicy`, Settings ▸
+    /// Advanced ▸ Performance): Full never throttles; Reduced opens at twice
+    /// the strict need; Auto opens at the configured rate — or reduced, once
+    /// this device has learned it needs to — and meets the pressure floor
+    /// below. The arithmetic lives in `StreamRatePlan`. sessionQueue-confined.
+    private func throttleBlendStreamForRun(interval: Double, depth: BlendDepth) {
+        #if os(iOS)
+        guard let device = videoDevice else { return }
+        let policy = StreamRatePolicy.current
+        streamPolicyForRun = policy
+        streamFloorEngaged = false
+        let needed = StreamRatePlan.neededFPS(
+            depth: depth, intervalSeconds: interval,
+            throttledTarget: depth == .throttled
+                ? Self.throttledFrameTarget(pipeline: "standard", interval: interval)() : nil)
+        streamNeededFPS = needed
+        streamStartFPS = StreamRatePlan.startFPS(
+            policy: policy, neededFPS: needed, learnedReduced: StreamRateLearning.learnedReduced)
+        LLog(String(format: "liveblend: stream policy %@%@ — %@ every %.1fs needs %@",
+                    policy.rawValue,
+                    policy == .auto && StreamRateLearning.learnedReduced ? " (learned reduced)" : "",
+                    depth.token, interval,
+                    needed.map { String(format: "%.2f fps", $0) } ?? "an open-ended rate"))
+        guard let start = streamStartFPS else { return }
+        setStreamRate(fps: start, on: device, reason: "\(policy.rawValue) start rate")
+        #endif
+    }
+
+    #if os(iOS)
+    /// The serious-pressure floor under the run's policy: the depth's need
+    /// with headroom (open depths to `StreamRatePlan.openDepthPressuredFPS`),
+    /// never below the format's own floor. Full does nothing here.
+    private func applyPressureFloorToStream() {
+        guard let device = videoDevice, liveBlendController?.isActive == true,
+              let policy = streamPolicyForRun,
+              let floor = StreamRatePlan.floorFPS(policy: policy, neededFPS: streamNeededFPS)
+        else { return }
+        streamFloorEngaged = true
+        setStreamRate(fps: floor, on: device, reason: "camera system pressure serious")
+    }
+
+    /// Cooling under Auto: back to the rate the run opened at (Reduced stays
+    /// reduced; Full never moved). Only at nominal — fair sits between and
+    /// the 2026-09-02 runs oscillated fair↔serious for minutes at a time, so
+    /// returning at fair would just flap the frame duration.
+    private func liftPressureFloorFromStream() {
+        guard let device = videoDevice, liveBlendController?.isActive == true,
+              streamPolicyForRun == .auto, streamFloorEngaged else { return }
+        let pinnedFPS = pinnedVideoMinFrameDuration.map { 1 / $0.seconds }
+        guard let target = streamStartFPS ?? pinnedFPS else { return }
+        setStreamRate(fps: target, on: device, reason: "camera system pressure nominal")
+    }
+
+    /// Writes a stream rate onto the device, clamped to the active format's
+    /// range around the pinned rate — an out-of-range duration is an
+    /// uncatchable NSException (see `frameDuration(forNominal:in:)`). Only
+    /// ever slows the stream; the maximum moves out with the minimum so
+    /// min ≤ max holds at both writes. sessionQueue-confined.
+    private func setStreamRate(fps wanted: Double, on device: AVCaptureDevice, reason: String) {
+        let currentMin = device.activeVideoMinFrameDuration
+        let currentMax = device.activeVideoMaxFrameDuration
+        guard currentMin.isValid, currentMin.seconds > 0, wanted > 0 else { return }
+        let pinnedFPS = 1 / (pinnedVideoMinFrameDuration ?? currentMin).seconds
+        let ranges = device.activeFormat.videoSupportedFrameRateRanges
+        let range = ranges.first { pinnedFPS >= $0.minFrameRate - 0.01 && pinnedFPS <= $0.maxFrameRate + 0.01 }
+            ?? ranges.min { abs($0.maxFrameRate - pinnedFPS) < abs($1.maxFrameRate - pinnedFPS) }
+        guard let range else { return }
+        let fps = min(pinnedFPS, max(range.minFrameRate, wanted))
+        var duration = CMTimeMakeWithSeconds(1 / fps, preferredTimescale: 1_000_000)
+        if CMTimeCompare(duration, range.maxFrameDuration) > 0 { duration = range.maxFrameDuration }
+        if CMTimeCompare(duration, range.minFrameDuration) < 0 { duration = range.minFrameDuration }
+        let achieved = 1 / duration.seconds
+        guard abs(achieved - 1 / currentMin.seconds) > 0.01 else { return }
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            if pinnedVideoMinFrameDuration == nil { pinnedVideoMinFrameDuration = currentMin }
+            if pinnedVideoMaxFrameDuration == nil { pinnedVideoMaxFrameDuration = currentMax }
+            // Slowing: the maximum moves out first so min ≤ max holds.
+            // Speeding back up: only the minimum moves — the maximum stays
+            // where the ramp (or the earlier slow-down) put it.
+            if CMTimeCompare(currentMax, duration) < 0 {
+                device.activeVideoMaxFrameDuration = duration
+            }
+            device.activeVideoMinFrameDuration = duration
+            streamFrameRate = achieved
+            LLog(String(format: "liveblend: stream %.2f → %.2f fps (%@; format floor %.0f fps)",
+                        1 / currentMin.seconds, achieved, reason, range.minFrameRate))
+        } catch {
+            LLog("liveblend: could not throttle the stream — \(error.localizedDescription)")
+        }
+    }
+    #endif
+
+    // MARK: - Thermal critical stop
+
+    /// iPhones do not shoot at thermal critical. Every framing step in the
+    /// 2026-09-02 corpus sweep (28 projects, ~17 k frames) was an iPhone 12 Pro
+    /// in a window at critical — none at serious — and the shift is the lens
+    /// stabiliser parking, which no API controls. A shoot that ends clean is
+    /// recoverable; a sequence that reframed is not, so the run ends at the
+    /// transition (and refuses to start there). iPads have no OIS and ride
+    /// critical without incident; the Mac has no thermal state to read.
+    static let stopsAtThermalCritical: Bool = {
+        #if os(iOS)
+        return LiveBlendController.deviceModelIdentifier().hasPrefix("iPhone")
+        #else
+        return false
+        #endif
+    }()
+
+    /// Outputs discarded at a thermal stop. On every logged event the
+    /// framing moved in the window that crossed into critical or the one
+    /// before it, and the app's own thermal record moved one window later —
+    /// so the last two outputs are the ones that cannot be trusted.
+    static let tooHotTrailingWindows = 2
+
+    private var runThermalObserver: NSObjectProtocol?
+    #if os(iOS)
+    private var runPressureObservation: NSKeyValueObservation?
+    private var lastRunPressureLevel: AVCaptureDevice.SystemPressureState.Level?
+    #endif
+    /// One thermal stop per run, whichever observer sees it first.
+    private var runEndedTooHot = false
+
+    /// Arms the run's two heat observers: the device-wide thermal state
+    /// (`ProcessInfo`) and the camera's own pressure state, which is
+    /// camera-specific and carries its factors. Either reaching critical ends
+    /// the run; the camera's serious level throttles the stream (Apple's
+    /// prescribed mitigation). sessionQueue-confined.
+    private func installRunThermalGuard() {
+        removeRunThermalGuard()
+        runEndedTooHot = false
+        #if os(iOS)
+        guard Self.stopsAtThermalCritical else { return }
+        runThermalObserver = NotificationCenter.default.addObserver(
+            forName: ProcessInfo.thermalStateDidChangeNotification, object: nil, queue: nil
+        ) { [weak self] _ in
+            guard let self, ProcessInfo.processInfo.thermalState == .critical else { return }
+            self.sessionQueue.async { self.endRunTooHot(trigger: "thermal state critical") }
+        }
+        guard let device = videoDevice else { return }
+        lastRunPressureLevel = nil
+        runPressureObservation = device.observe(\.systemPressureState, options: [.initial, .new]) { [weak self] device, _ in
+            let state = device.systemPressureState
+            guard let self else { return }
+            self.sessionQueue.async { self.handleRunPressure(state) }
+        }
+        #endif
+    }
+
+    private func removeRunThermalGuard() {
+        if let runThermalObserver {
+            NotificationCenter.default.removeObserver(runThermalObserver)
+        }
+        runThermalObserver = nil
+        #if os(iOS)
+        runPressureObservation?.invalidate()
+        runPressureObservation = nil
+        #endif
+    }
+
+    #if os(iOS)
+    /// sessionQueue-confined.
+    private func handleRunPressure(_ state: AVCaptureDevice.SystemPressureState) {
+        let name = Self.systemPressureName(state)
+        if lastRunPressureLevel != state.level {
+            let first = lastRunPressureLevel == nil
+            lastRunPressureLevel = state.level
+            LLog("capture: camera system pressure \(name)")
+            if !first {
+                let severity: String
+                switch state.level {
+                case .serious: severity = "warning"
+                case .critical, .shutdown: severity = "problem"
+                default: severity = "info"
+                }
+                liveBlendController?.noteExternalIssue(kind: "systemPressure", severity: severity, detail: name)
+            }
+        }
+        switch state.level {
+        case .nominal:
+            liftPressureFloorFromStream()
+        case .serious, .critical:
+            // The camera's critical is Apple's throttling advice, not the
+            // measured OIS trigger: every logged framing step sat on the
+            // DEVICE-WIDE (`ProcessInfo`) transition into critical, and no
+            // data ties the camera's own level to it. So this level only
+            // throttles and is recorded — the stop stays on the trigger the
+            // corpus proved, so a shoot is never ended on a proxy.
+            applyPressureFloorToStream()
+        case .shutdown:
+            // "Capture must immediately stop" — the OS ends capture here
+            // regardless; ending it ourselves keeps the log honest and drops
+            // the tail the same way.
+            endRunTooHot(trigger: "camera system pressure \(name)")
+        default:
+            break
+        }
+    }
+
+    /// "serious(systemTemperature,cameraTemperature)" — level plus factors.
+    static func systemPressureName(_ state: AVCaptureDevice.SystemPressureState) -> String {
+        let level: String
+        switch state.level {
+        case .nominal: level = "nominal"
+        case .fair: level = "fair"
+        case .serious: level = "serious"
+        case .critical: level = "critical"
+        case .shutdown: level = "shutdown"
+        default: level = state.level.rawValue
+        }
+        var factors: [String] = []
+        if state.factors.contains(.systemTemperature) { factors.append("systemTemperature") }
+        if state.factors.contains(.peakPower) { factors.append("peakPower") }
+        if state.factors.contains(.depthModuleTemperature) { factors.append("depthModuleTemperature") }
+        if state.factors.contains(.cameraTemperature) { factors.append("cameraTemperature") }
+        return factors.isEmpty ? level : "\(level)(\(factors.joined(separator: ",")))"
+    }
+    #endif
+
+    /// The camera's own pressure reading for the logs; nil off-iOS.
+    private func systemPressureProvider() -> () -> String? {
+        #if os(iOS)
+        return { [weak self] in
+            self?.videoDevice.map { Self.systemPressureName($0.systemPressureState) }
+        }
+        #else
+        return { nil }
+        #endif
+    }
+
+    /// sessionQueue-confined. Ends whichever run is under way with the
+    /// trailing windows dropped — see `tooHotTrailingWindows`.
+    private func endRunTooHot(trigger: String) {
+        guard !runEndedTooHot else { return }
+        runEndedTooHot = true
+        let drop = Self.tooHotTrailingWindows
+        LLog("capture: TOO HOT — \(trigger); ending the run, last \(drop) output(s) will be discarded")
+        CaptureSessionLogger.shared.log("stop_requested", [
+            "source": "thermal", "kind": "tooHot", "trigger": trigger,
+        ])
+        DispatchQueue.main.async {
+            var snapshot = self.liveBlendDiagnostics
+                ?? LiveBlendDiagnosticsSnapshot(requestedIntervalSeconds: 0, requestedFramesPerBlend: 0)
+            snapshot.status = .tooHot
+            self.liveBlendDiagnostics = snapshot
+        }
+        #if os(iOS)
+        if let raw = liveBlendRawController, raw.isActive {
+            raw.requestStop(discard: false, keepPartial: false, reason: "tooHot", dropTrailing: drop)
+            return
+        }
+        #endif
+        if let controller = liveBlendController, controller.isActive {
+            liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
+            controller.requestStop(discard: false, keepPartial: false, reason: "tooHot", dropTrailing: drop)
+            return
+        }
+        if intervalActive {
+            finishIntervalOnQueue(dropTrailing: drop, reason: "tooHot")
+        }
+    }
+
+    #if DEBUG
+    /// Bench hook (remote `simulateTooHot`): the critical stop, on demand.
+    func simulateTooHot() {
+        sessionQueue.async { self.endRunTooHot(trigger: "simulated (remote, DEBUG build)") }
+    }
+    #endif
+
+    /// A ramped run's sidecar belongs to the ramp, not the blend controller,
+    /// so a thermal stop's trailing drop has to reach it from here — after
+    /// `endHolyGrailIfActive` has closed the writer. sessionQueue-confined.
+    private func trimRampSidecarAfterTooHotStop(_ result: LiveBlendCaptureResult?, ramped: Bool) {
+        guard ramped, let result, result.droppedTrailingFrames > 0,
+              let first = result.frameURLs.first else { return }
+        try? FrameTimestamps.dropTrailingEntries(
+            count: result.droppedTrailingFrames, in: first.deletingLastPathComponent())
     }
 
     #if !os(iOS)
@@ -7296,6 +7648,14 @@ final class CameraController: NSObject, ObservableObject {
     func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
+                LLog("capture: refused to start at thermal critical — the lens stabiliser parks there; let the device cool")
+                CaptureSessionLogger.shared.log("capture_refused", [
+                    "kind": holyGrail ? "holyGrailBlend" : "liveBlend", "reason": "tooHot",
+                ])
+                self.publishLiveBlendRefusal(interval: interval, depth: depth)
+                return
+            }
             CaptureSessionLogger.shared.log("capture_start", [
                 "kind": holyGrail ? "holyGrailBlend" : "liveBlend",
                 "intervalSeconds": interval,
@@ -7475,6 +7835,8 @@ final class CameraController: NSObject, ObservableObject {
             if self.holyGrailRequestedForRun {
                 self.relaxVideoFrameDurationForBlend(interval: interval)
             }
+            // The thermal lever: stream at the rate the depth needs, not 30 fps.
+            self.throttleBlendStreamForRun(interval: interval, depth: depth)
             // Everything that touches the device or the session on this path is
             // now behind us, so put focus back where the press found it.
             self.restoreFocusState(focusBeforeStart, reason: "live blend start")
@@ -7502,6 +7864,8 @@ final class CameraController: NSObject, ObservableObject {
                 captureWidth: Int(dimensions?.width ?? 0),
                 captureHeight: Int(dimensions?.height ?? 0),
                 configuredFrameRate: self.selectedFrameRate,
+                streamFrameRate: self.streamFrameRate,
+                systemPressure: self.systemPressureProvider(),
                 requestedOutputFormat: requestedOutputFormat,
                 throttledFrameTarget: Self.throttledFrameTarget(pipeline: "standard", interval: interval),
                 capabilityProfile: { [weak self] in self?.capabilityProfileHolder.profile },
@@ -7559,9 +7923,13 @@ final class CameraController: NSObject, ObservableObject {
                 self.isLiveBlendRunning = false
                 self.sessionQueue.async {
                     self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
+                    self.removeRunThermalGuard()
                     #if os(iOS)
+                    let ramped = self.holyGrailRequestedForRun
                     self.endHolyGrailIfActive()
+                    self.trimRampSidecarAfterTooHotStop(result, ramped: ramped)
                     self.restoreConstituentSwitchingAfterRun()
+                    self.restoreVideoFrameDuration()
                     #endif
                     self.releaseRunFocusLock()
                 }
@@ -7590,6 +7958,8 @@ final class CameraController: NSObject, ObservableObject {
             // while frames are being averaged. (The DNG path already runs on
             // a pinned physical device; this path stays on the virtual one.)
             self.lockConstituentSwitchingForRun()
+            // Heat: the run ends at critical and the stream drops at serious.
+            self.installRunThermalGuard()
             // The ramp arms HERE, after the pin — not up with its callback.
             //
             // Arming before it meant every JPEG Dynamic run on the 2026-08-26
@@ -7778,7 +8148,8 @@ final class CameraController: NSObject, ObservableObject {
             },
             // Holy Grail owns the sidecar on ramped runs — the ramp appends
             // richer entries (scene EV) per window.
-            writesFrameTimestamps: !holyGrailRequestedForRun)
+            writesFrameTimestamps: !holyGrailRequestedForRun,
+            systemPressure: systemPressureProvider())
         let controller = LiveBlendRawController(
             configuration: configuration,
             photoOutput: photoOutput,
@@ -7812,9 +8183,12 @@ final class CameraController: NSObject, ObservableObject {
             self.isLiveBlendRunning = false
             self.sessionQueue.async {
                 self.stopCapabilityReprofiling()
+                self.removeRunThermalGuard()
                 self.capabilityProfiler = nil
                 self.capabilityProfileHolder.set(nil)
+                let ramped = self.holyGrailRequestedForRun
                 self.endHolyGrailIfActive()
+                self.trimRampSidecarAfterTooHotStop(result, ramped: ramped)
                 self.restoreAfterDNGRun()
                 self.restoreVideoFrameDuration()
                 self.releaseRunFocusLock()
@@ -7828,6 +8202,7 @@ final class CameraController: NSObject, ObservableObject {
         // the constituent swap above and the photo-preset switch — either would
         // have handed focus back to auto under the pin.
         lockFocusForRun(deviceChanged: videoDevice !== deviceBeforeSwap)
+        installRunThermalGuard()
         if depth == .auto {
             // Auto is the one depth whose first window needs a number before it
             // opens, so the capability probe runs ahead of the shoot rather than
@@ -7926,6 +8301,17 @@ final class CameraController: NSObject, ObservableObject {
             guard let controller = self.liveBlendController, controller.isActive else { return }
             self.liveBlendOutput?.setSampleBufferDelegate(nil, queue: nil)
             controller.requestStop(discard: false, keepPartial: keepPartial)
+        }
+    }
+
+    /// Too hot to start: the readout (and any remote reading it) says so.
+    private func publishLiveBlendRefusal(interval: Double, depth: BlendDepth) {
+        DispatchQueue.main.async {
+            var snapshot = LiveBlendDiagnosticsSnapshot(
+                requestedIntervalSeconds: interval,
+                requestedFramesPerBlend: depth.fixedFrames ?? 0)
+            snapshot.status = .tooHot
+            self.liveBlendDiagnostics = snapshot
         }
     }
 
@@ -8382,6 +8768,14 @@ enum RecordingSettingsStore {
     /// old telephoto token maps to 4.0, which nearest-stop selection
     /// resolves to the device's tele stop (5× on a 16 Pro, 3× on a 15 Pro).
     static var stopDisplayFactor: Double? {
+        #if DEBUG
+        // Bench: `LL_STOP=1` at launch pins the lens stop for a scripted run
+        // (the remote has no zoom command). Not a hook key: no screenshot mode.
+        if let raw = ProcessInfo.processInfo.environment["LL_STOP"],
+           let factor = Double(raw), factor > 0 {
+            return factor
+        }
+        #endif
         if let value = UserDefaults.standard.object(forKey: stopFactorKey) as? Double,
            value > 0 {
             return value

@@ -23,6 +23,35 @@ final class FrameTimestampsTests: XCTestCase {
             shutter: 0.02, iso: 100, ev: 10)
     }
 
+    // MARK: - Trimming
+
+    func testDroppingTrailingEntriesKeepsTheHeadByteForByte() throws {
+        let writer = try XCTUnwrap(FrameTimestampWriter(directory: directory))
+        for entry in [entry(0, 0), entry(1, 2), entry(2, 4), entry(3, 6)] { writer.append(entry) }
+        writer.close()
+        let before = try String(contentsOf: writer.url, encoding: .utf8)
+            .split(separator: "\n").map(String.init)
+
+        try FrameTimestamps.dropTrailingEntries(count: 2, in: directory)
+
+        let after = try String(contentsOf: writer.url, encoding: .utf8)
+            .split(separator: "\n").map(String.init)
+        XCTAssertEqual(after, Array(before.prefix(2)))
+        XCTAssertEqual(try FrameTimestamps.load(from: writer.url).entries.map(\.frame), [0, 1])
+    }
+
+    func testDroppingMoreThanExistsEmptiesTheSidecarWithoutThrowing() throws {
+        let writer = try XCTUnwrap(FrameTimestampWriter(directory: directory))
+        writer.append(entry(0, 0))
+        writer.close()
+        try FrameTimestamps.dropTrailingEntries(count: 5, in: directory)
+        XCTAssertEqual(try FrameTimestamps.load(from: writer.url).entries.count, 0)
+        // Nothing to trim is not an error either.
+        try FrameTimestamps.dropTrailingEntries(count: 1, in: directory)
+        XCTAssertNoThrow(try FrameTimestamps.dropTrailingEntries(
+            count: 1, in: directory.appendingPathComponent("absent")))
+    }
+
     // MARK: - Round trip
 
     func testWrittenLinesReadBackIdentically() throws {

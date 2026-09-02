@@ -113,7 +113,25 @@ public struct FrameTimestamps: Equatable, Sendable {
         guard let existing = try? load(from: url) else { return }
         let kept = existing.entries.filter { $0.frame != frame }
         guard kept.count != existing.entries.count else { return }
+        try rewrite(entries: kept, at: url, in: directory)
+    }
 
+    /// Drops the last `count` lines from the sidecar beside `directory` — the
+    /// frames a run discarded at its end. A thermal stop trims the windows
+    /// the lens moved in (2026-09-02: every logged iPhone 12 Pro framing step
+    /// sat in the window that crossed into thermal critical, or the one
+    /// before it), and the sidecar must shed the same lines or the coverage
+    /// gate (`elapsedSeconds(coveringExactly:)`) throws the whole time axis
+    /// away. No-op for a missing or empty sidecar.
+    public static func dropTrailingEntries(count: Int, in directory: URL) throws {
+        guard count > 0 else { return }
+        let url = directory.appendingPathComponent(fileName)
+        guard let existing = try? load(from: url), !existing.entries.isEmpty else { return }
+        let kept = Array(existing.entries.dropLast(count))
+        try rewrite(entries: kept, at: url, in: directory)
+    }
+
+    private static func rewrite(entries kept: [Entry], at url: URL, in directory: URL) throws {
         let staging = directory.appendingPathComponent("\(fileName).rewrite", isDirectory: true)
         try? FileManager.default.removeItem(at: staging)
         try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)

@@ -47,6 +47,11 @@ public struct CaptureExposureLog {
         public var fallbackSingleFrame: Bool?
         public var thermalStateAtStart: String?
         public var thermalStateAtClose: String?
+        /// The camera's own pressure reading (`AVCaptureDevice.systemPressureState`)
+        /// when the window closed — level plus contributing factors, e.g.
+        /// "serious(systemTemperature)". Camera-specific where the thermal
+        /// state above is device-wide; nil on paths and platforms without it.
+        public var systemPressureAtClose: String?
         /// Spacing of the window's captures — bunching shows a device
         /// struggling to keep its cadence.
         public var frameSpacingAvgSeconds: Double?
@@ -101,6 +106,7 @@ public struct CaptureExposureLog {
             fallbackSingleFrame: Bool? = nil,
             thermalStateAtStart: String? = nil,
             thermalStateAtClose: String? = nil,
+            systemPressureAtClose: String? = nil,
             frameSpacingAvgSeconds: Double? = nil,
             frameSpacingMaxSeconds: Double? = nil,
             processingMillis: Double? = nil,
@@ -121,6 +127,7 @@ public struct CaptureExposureLog {
             self.fallbackSingleFrame = fallbackSingleFrame
             self.thermalStateAtStart = thermalStateAtStart
             self.thermalStateAtClose = thermalStateAtClose
+            self.systemPressureAtClose = systemPressureAtClose
             self.frameSpacingAvgSeconds = frameSpacingAvgSeconds
             self.frameSpacingMaxSeconds = frameSpacingMaxSeconds
             self.processingMillis = processingMillis

@@ -797,6 +797,9 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
             // A poll. Its frame is taken in `apply`, alongside the state
             // snapshot the same reply carries.
             break
+        case .simulateTooHot:
+            // Bench-only; the next state snapshot says what happened.
+            break
         case .armCamera, .cancelExport:
             // Nothing to mirror optimistically: both are requests for the
             // phone to change what it is doing, and the honest signal that it

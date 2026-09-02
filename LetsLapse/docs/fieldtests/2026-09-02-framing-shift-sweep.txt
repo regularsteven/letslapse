@@ -1,0 +1,242 @@
+=== 0B4310FD-2853-4193-BF22-DFB69347B29D
+    iPhone17,1 · Back Triple Camera · mode=interval blend=unthrottled interval=2s · frames=206 · started 2026-08-23T05:45 · end=None · gate=pre-gate
+    thermal: peak=fair [fair=206]
+    lens f-numbers seen: {'None': 206} · sizes: {'3024x4032': 206}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 0B4310FD-2853-4193-BF22-DFB69347B29D — no step ≥ threshold in 206 frames
+=== 1877966A-9973-4EFF-AC02-693F257B49C2
+    iPhone17,1 · Back Triple Camera · mode=interval blend=unthrottled interval=3s · frames=107 · started 2026-08-22T18:52 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=107]
+    lens f-numbers seen: {'None': 107} · sizes: {'4032x3024': 107}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 1877966A-9973-4EFF-AC02-693F257B49C2 — no step ≥ threshold in 107 frames
+=== 192A5B9E-2228-4C32-BE76-CBC15CB02D7D
+    iPhone13,3 · Back Triple Camera · mode=interval blend=10 interval=2s · frames=376 · started 2026-08-24T12:22 · end=user · gate=pre-gate
+    thermal: peak=nominal [nominal=376]
+    lens f-numbers seen: {'1.6': 376} · sizes: {'4032x3024': 376}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 192A5B9E-2228-4C32-BE76-CBC15CB02D7D — no step ≥ threshold in 376 frames
+=== 1FB0FD23-3853-4325-AAD7-A5B422CBFB79
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=unthrottled interval=3s · frames=1439 · started 2026-08-23T17:35 · end=None · gate=pre-gate
+    thermal: peak=serious [nominal=53 fair=60 serious=1326]
+    lens f-numbers seen: {'1.6': 1439} · sizes: {'4032x3024': 1439}
+    max offset from start: 16.3 px · final offset dx=-16.3 dy=-5.2
+FRAMING SHIFT PASS 1FB0FD23-3853-4325-AAD7-A5B422CBFB79 — no step ≥ threshold in 1439 frames
+=== 225E61C2-DE6F-4D3E-BC52-CFDDE8637A65
+    iPhone17,1 · Back Triple Camera · mode=interval blend=unthrottled interval=2s · frames=186 · started 2026-08-23T05:38 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=186]
+    lens f-numbers seen: {'None': 186} · sizes: {'3024x4032': 186}
+    max offset from start: 1.5 px · final offset dx=1.5 dy=0.5
+FRAMING SHIFT PASS 225E61C2-DE6F-4D3E-BC52-CFDDE8637A65 — no step ≥ threshold in 186 frames
+=== 27A53544-9816-463F-9ABA-DBD5BB51FDDC
+    iPhone17,1 · Back Triple Camera · mode=interval blend=unthrottled interval=1s · frames=100 · started 2026-08-23T06:02 · end=None · gate=pre-gate
+    thermal: peak=fair [nominal=64 fair=36]
+    lens f-numbers seen: {'None': 100} · sizes: {'3024x4032': 100}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 27A53544-9816-463F-9ABA-DBD5BB51FDDC — no step ≥ threshold in 100 frames
+=== 385DC396-5B24-4605-8899-B18BD3D05FF7
+    iPad13,16 · Back Camera · mode=dynamic blend=unthrottled interval=3s · frames=2753 · started 2026-08-25T03:30 · end=user · gate=yes
+    thermal: peak=serious [nominal=839 fair=55 serious=1859]
+    lens f-numbers seen: {'1.8': 2753} · sizes: {'3024x4032': 2753}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+    GHOST SUSPECTS (response/local-median, thermal) — 2: 92(0.68/1.00,nominal), 422(0.63/0.98,nominal)
+FRAMING SHIFT PASS 385DC396-5B24-4605-8899-B18BD3D05FF7 — no step ≥ threshold in 2753 frames
+=== 44BFC44E-3CC5-40F0-BC81-98741B6C1B5E
+    iPhone13,3 · Back Triple Camera · mode=interval blend=unthrottled interval=2s · frames=190 · started 2026-08-23T05:38 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=190]
+    lens f-numbers seen: {'None': 190} · sizes: {'3024x4032': 190}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 44BFC44E-3CC5-40F0-BC81-98741B6C1B5E — no step ≥ threshold in 190 frames
+=== 5EDE6DB9-89DA-4959-B95F-AB79920DCFCF
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=5 interval=3s · frames=372 · started 2026-08-25T18:16 · end=user · gate=yes
+    thermal: peak=serious [serious=372]
+    lens f-numbers seen: {'1.6': 372} · sizes: {'3024x4032': 372}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 5EDE6DB9-89DA-4959-B95F-AB79920DCFCF — no step ≥ threshold in 372 frames
+=== 5EFCC959-FF7F-46F6-A4DA-33BCCD4CBC6D
+    iPhone13,3 · Back Triple Camera · mode=interval blend=10 interval=3s · frames=104 · started 2026-08-22T18:11 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=104]
+    lens f-numbers seen: {'None': 104} · sizes: {'4032x3024': 104}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 5EFCC959-FF7F-46F6-A4DA-33BCCD4CBC6D — no step ≥ threshold in 104 frames
+=== 6156BA32-2BC3-40E1-91B0-D4B7C95329DF
+    iPhone17,1 · Back Triple Camera · mode=dynamic blend=unthrottled interval=3s · frames=204 · started 2026-08-24T12:27 · end=user · gate=yes
+    thermal: peak=nominal [nominal=204]
+    lens f-numbers seen: {'1.7799999713880652': 204} · sizes: {'3024x4032': 204}
+    max offset from start: 2.3 px · final offset dx=0.7 dy=0.2
+FRAMING SHIFT PASS 6156BA32-2BC3-40E1-91B0-D4B7C95329DF — no step ≥ threshold in 204 frames
+=== 6CE7460B-159B-4AE3-9EEA-2A93A614B229
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=10 interval=3s · frames=302 · started 2026-09-01T11:37 · end=user · gate=yes
+    thermal: peak=serious [nominal=40 fair=190 serious=72]
+    lens f-numbers seen: {'1.6': 302} · sizes: {'4032x3024': 302}
+    max offset from start: 4.2 px · final offset dx=-4.2 dy=0.0
+    GHOST SUSPECTS (response/local-median, thermal) — 1: 220(0.64/0.91,fair)
+FRAMING SHIFT PASS 6CE7460B-159B-4AE3-9EEA-2A93A614B229 — no step ≥ threshold in 302 frames
+=== 8B6C7BFC-FF06-4784-9D43-D2F45F6F4AEE
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=10 interval=2s · frames=1587 · started 2026-08-26T13:05 · end=consecutiveProcessingFailures · gate=yes
+    thermal: peak=critical [nominal=79 fair=40 serious=266 critical=1202]
+    lens f-numbers seen: {'1.6': 1587} · sizes: {'3024x4032': 1587}
+    max offset from start: 44.0 px · final offset dx=-0.1 dy=-44.0
+    kind: STAYED = new baseline · RE-CENTRED = back on the run-start framing · transient = returned within --settle frames
+    GHOST SUSPECTS (response/local-median, thermal) — 1: 1587(0.13/1.00,serious)
+     frame      dx      dy  resp kind      thermal (win open→close)   blend gate       lens/size  issues nearby
+       386    -0.1   -44.0  0.96 STAYED    critical→critical             10 -          f/1.6  w384:framingGlitch(rejected 9 of 10 frames, peak shift 44 p); w385:thermal(serious → critical); w385:framingGlitch(rejected 10 of 10 frames, peak shift 44 ); w385:framingChanged(framing moved and stayed — new baseline )
+FRAMING SHIFT FAIL 8B6C7BFC-FF06-4784-9D43-D2F45F6F4AEE — 1 step(s), 1 stayed, max 44 px
+=== 98C4542D-506F-4E74-9404-C308B7A32BAD
+    iPad13,16 · Back Camera · mode=interval blend=unthrottled interval=3s · frames=2473 · started 2026-08-23T03:06 · end=None · gate=pre-gate
+    thermal: peak=serious [nominal=1274 fair=115 serious=1084]
+    lens f-numbers seen: {'None': 2473} · sizes: {'3024x4032': 2473}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS 98C4542D-506F-4E74-9404-C308B7A32BAD — no step ≥ threshold in 2473 frames
+=== A5517BFB-C09E-47F0-A19D-8EFC0DCB9FF7
+    iPhone13,3 · Back Triple Camera · mode=interval blend=unthrottled interval=3s · frames=107 · started 2026-08-22T18:20 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=107]
+    lens f-numbers seen: {'None': 107} · sizes: {'4032x3024': 107}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS A5517BFB-C09E-47F0-A19D-8EFC0DCB9FF7 — no step ≥ threshold in 107 frames
+=== B9E17C99-0402-4C4A-BD76-1EE6CD754637
+    iPhone17,1 · Back Triple Camera · mode=interval blend=unthrottled interval=1s · frames=100 · started 2026-08-23T05:59 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=100]
+    lens f-numbers seen: {'None': 100} · sizes: {'3024x4032': 100}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS B9E17C99-0402-4C4A-BD76-1EE6CD754637 — no step ≥ threshold in 100 frames
+=== BE74C9FC-ED8C-4EF0-9C47-85655FF8E42D
+    iPhone13,3 · Back Triple Camera · mode=interval blend=3 interval=3s · frames=103 · started 2026-08-22T18:06 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=103]
+    lens f-numbers seen: {'None': 103} · sizes: {'4032x3024': 103}
+    max offset from start: 4.3 px · final offset dx=2.4 dy=1.8
+FRAMING SHIFT PASS BE74C9FC-ED8C-4EF0-9C47-85655FF8E42D — no step ≥ threshold in 103 frames
+=== BF7E57A6-5B80-431C-841E-297EF2F29BBF
+    ? · ? · mode=? blend=? interval=Nones · frames=250 · started ? · end=None · gate=pre-gate
+    thermal: peak=? []
+    lens f-numbers seen: {'None': 250} · sizes: {'1080x1920': 250}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS BF7E57A6-5B80-431C-841E-297EF2F29BBF — no step ≥ threshold in 250 frames
+=== BFE2EB33-8A64-4784-86AA-BC2BA3C08120
+    iPhone17,1 · Back Triple Camera · mode=dynamic blend=3 interval=1s · frames=310 · started 2026-09-01T11:44 · end=user · gate=yes
+    thermal: peak=serious [fair=194 serious=116]
+    lens f-numbers seen: {'1.7799999713880652': 310} · sizes: {'4032x3024': 310}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS BFE2EB33-8A64-4784-86AA-BC2BA3C08120 — no step ≥ threshold in 310 frames
+=== CBD2B71A-EFBF-42E6-B6AA-375677B7F456
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=unthrottled interval=3s · frames=313 · started 2026-08-23T14:19 · end=None · gate=pre-gate
+    thermal: peak=critical [nominal=47 fair=40 serious=159 critical=67]
+    lens f-numbers seen: {'1.6': 313} · sizes: {'4032x3024': 313}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS CBD2B71A-EFBF-42E6-B6AA-375677B7F456 — no step ≥ threshold in 313 frames
+=== D8DF938A-CD99-418B-8B39-55B5B3138C04
+    iPhone17,1 · Back Triple Camera · mode=dynamic blend=unthrottled interval=3s · frames=1249 · started 2026-08-23T17:46 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=1249]
+    lens f-numbers seen: {'1.7799999713880652': 1249} · sizes: {'4032x3024': 1249}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS D8DF938A-CD99-418B-8B39-55B5B3138C04 — no step ≥ threshold in 1249 frames
+=== E9D52934-F4F3-4AF2-A65C-DBF5110B0FC4
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=unthrottled interval=3s · frames=303 · started 2026-08-23T14:47 · end=None · gate=pre-gate
+    thermal: peak=critical [critical=303]
+    lens f-numbers seen: {'1.6': 303} · sizes: {'4032x3024': 303}
+    max offset from start: 65.7 px · final offset dx=2.2 dy=4.4
+    kind: STAYED = new baseline · RE-CENTRED = back on the run-start framing · transient = returned within --settle frames
+    GHOST SUSPECTS (response/local-median, thermal) — 2: 126(0.66/0.96,critical), 133(0.64/0.98,critical)
+     frame      dx      dy  resp kind      thermal (win open→close)   blend gate       lens/size  issues nearby
+        18     0.0    63.3  0.74 transient critical→critical             86 -          f/1.6  -
+        19     0.1   -62.7  0.87 RE-CENTRED critical→critical             86 -          f/1.6  -
+       205     0.4    64.0  0.74 transient critical→critical             81 -          f/1.6  -
+       206    -0.0   -63.2  0.72 RE-CENTRED critical→critical             80 -          f/1.6  -
+FRAMING SHIFT FAIL E9D52934-F4F3-4AF2-A65C-DBF5110B0FC4 — 4 step(s), 2 stayed, max 64 px
+=== EB1F5EC3-7584-4048-B0BC-5CEBFB606B5A
+    iPhone13,3 · Back Triple Camera · mode=interval blend=unthrottled interval=2s · frames=103 · started 2026-08-22T18:31 · end=None · gate=pre-gate
+    thermal: peak=fair [nominal=80 fair=23]
+    lens f-numbers seen: {'None': 103} · sizes: {'4032x3024': 103}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS EB1F5EC3-7584-4048-B0BC-5CEBFB606B5A — no step ≥ threshold in 103 frames
+=== F4BA152E-A226-4988-BE48-88E259F091FA
+    iPhone17,1 · Back Triple Camera · mode=dynamic blend=10 interval=3s · frames=304 · started 2026-09-01T11:28 · end=user · gate=yes
+    thermal: peak=fair [nominal=141 fair=163]
+    lens f-numbers seen: {'1.7799999713880652': 304} · sizes: {'4032x3024': 304}
+    max offset from start: 1.1 px · final offset dx=-0.7 dy=1.1
+FRAMING SHIFT PASS F4BA152E-A226-4988-BE48-88E259F091FA — no step ≥ threshold in 304 frames
+=== F6F7FCC8-606B-41EA-AA84-B2A2F6C5F256
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=1 interval=2s · frames=1453 · started 2026-09-01T17:44 · end=user · gate=yes
+    thermal: peak=critical [nominal=51 fair=95 serious=338 critical=969]
+    lens f-numbers seen: {'1.6': 1453} · sizes: {'3024x4032': 1453}
+    max offset from start: 65.1 px · final offset dx=4.5 dy=-51.9
+    kind: STAYED = new baseline · RE-CENTRED = back on the run-start framing · transient = returned within --settle frames
+    GHOST SUSPECTS (response/local-median, thermal) — 2: 151(0.56/0.99,serious), 152(0.57/0.99,serious)
+     frame      dx      dy  resp kind      thermal (win open→close)   blend gate       lens/size  issues nearby
+       485    -0.2   -56.6  0.89 STAYED    serious→critical               1 rej1/55px  f/1.6  w484:framingGlitch(displaced frame kept (single-frame windo); w485:thermal(serious → critical); w485:framingGlitch(displaced frame kept (single-frame windo); w485:framingChanged(framing moved and stayed — new baseline )
+       790    -0.3    61.1  0.98 transient critical→critical              1 rej1/62px  f/1.6  w789:framingGlitch(displaced frame kept (single-frame windo)
+       791     0.2   -60.8  0.99 STAYED    critical→critical              1 -          f/1.6  w789:framingGlitch(displaced frame kept (single-frame windo)
+FRAMING SHIFT FAIL F6F7FCC8-606B-41EA-AA84-B2A2F6C5F256 — 3 step(s), 2 stayed, max 61 px
+=== FC69DAEB-8EA8-4A73-AD12-BA260E0ABE7F
+    iPhone13,3 · Back Triple Camera · mode=dynamic blend=unthrottled interval=3s · frames=635 · started 2026-08-25T03:30 · end=consecutiveProcessingFailures · gate=yes
+    thermal: peak=critical [nominal=135 fair=65 serious=120 critical=315]
+    lens f-numbers seen: {'1.6': 635} · sizes: {'3024x4032': 635}
+    max offset from start: 45.4 px · final offset dx=-0.1 dy=-44.5
+    kind: STAYED = new baseline · RE-CENTRED = back on the run-start framing · transient = returned within --settle frames
+    GHOST SUSPECTS (response/local-median, thermal) — 1: 635(0.01/1.00,nominal)
+     frame      dx      dy  resp kind      thermal (win open→close)   blend gate       lens/size  issues nearby
+       321     0.2   -44.2  0.98 STAYED    critical→critical             74 -          f/1.6  w319:framingGlitch(rejected 63 of 69 frames, peak shift 44 ); w320:thermal(serious → critical); w320:framingGlitch(rejected 75 of 75 frames, peak shift 45 ); w320:framingChanged(framing moved and stayed — new baseline )
+FRAMING SHIFT FAIL FC69DAEB-8EA8-4A73-AD12-BA260E0ABE7F — 1 step(s), 1 stayed, max 44 px
+=== FEB75B48-8A94-470D-B916-86C98B52E58C
+    iPhone13,3 · Back Triple Camera · mode=interval blend=unthrottled interval=1s · frames=109 · started 2026-08-22T18:17 · end=None · gate=pre-gate
+    thermal: peak=nominal [nominal=109]
+    lens f-numbers seen: {'None': 109} · sizes: {'4032x3024': 109}
+    max offset from start: 0.0 px · final offset dx=0.0 dy=0.0
+FRAMING SHIFT PASS FEB75B48-8A94-470D-B916-86C98B52E58C — no step ≥ threshold in 109 frames
+=== FEE94B7D-CBE3-4C31-9350-0DA926E5EF18
+    ? · ? · mode=? blend=? interval=Nones · frames=360 · started ? · end=None · gate=pre-gate
+    thermal: peak=? []
+    lens f-numbers seen: {'None': 360} · sizes: {'1920x1080': 360}
+    max offset from start: 36.3 px · final offset dx=-12.8 dy=36.0
+    GHOST SUSPECTS (response/local-median, thermal) — 32: 54(0.53/0.75,n/a), 56(0.51/0.76,n/a), 58(0.41/0.77,n/a), 69(0.46/0.67,n/a), 73(0.37/0.64,n/a), 100(0.39/0.62,n/a), 117(0.41/0.65,n/a), 139(0.38/0.56,n/a), 141(0.36/0.52,n/a), 152(0.43/0.63,n/a), 162(0.43/0.62,n/a), 171(0.44/0.63,n/a), 172(0.34/0.63,n/a), 174(0.41/0.60,n/a), 188(0.34/0.56,n/a), 212(0.33/0.56,n/a), 239(0.39/0.56,n/a), 254(0.36/0.59,n/a), 255(0.43/0.63,n/a), 273(0.37/0.58,n/a) … +12
+FRAMING SHIFT PASS FEE94B7D-CBE3-4C31-9350-0DA926E5EF18 — no step ≥ threshold in 360 frames
+
+====================================================================================================
+PATTERN — one row per project (steps ≥ threshold; thermal = state of the window each step landed in)
+project  device      camera                 mode     blend        int frames gate     peak     steps stayed max px ghosts  thermal@steps            lens-change  axis
+BF7E57A6 ?           ?                      ?        ?                   250 pre      ?            0      0      0      0  -                        0           -
+FEE94B7D ?           ?                      ?        ?                   360 pre      ?            0      0      0     32  -                        0           -
+98C4542D iPad13,16   Back Camera            interval unthrottled    3   2473 pre      serious      0      0      0      0  -                        0           -
+385DC396 iPad13,16   Back Camera            dynamic  unthrottled    3   2753 yes      serious      0      0      0      2  -                        0           -
+BE74C9FC iPhone13,3  Back Triple Camera     interval 3              3    103 pre      nominal      0      0      0      0  -                        0           -
+5EFCC959 iPhone13,3  Back Triple Camera     interval 10             3    104 pre      nominal      0      0      0      0  -                        0           -
+FEB75B48 iPhone13,3  Back Triple Camera     interval unthrottled    1    109 pre      nominal      0      0      0      0  -                        0           -
+A5517BFB iPhone13,3  Back Triple Camera     interval unthrottled    3    107 pre      nominal      0      0      0      0  -                        0           -
+EB1F5EC3 iPhone13,3  Back Triple Camera     interval unthrottled    2    103 pre      fair         0      0      0      0  -                        0           -
+44BFC44E iPhone13,3  Back Triple Camera     interval unthrottled    2    190 pre      nominal      0      0      0      0  -                        0           -
+CBD2B71A iPhone13,3  Back Triple Camera     dynamic  unthrottled    3    313 pre      critical     0      0      0      0  -                        0           -
+E9D52934 iPhone13,3  Back Triple Camera     dynamic  unthrottled    3    303 pre      critical     4      2     64      2  critical=4               0           single-axis
+1FB0FD23 iPhone13,3  Back Triple Camera     dynamic  unthrottled    3   1439 pre      serious      0      0      0      0  -                        0           -
+192A5B9E iPhone13,3  Back Triple Camera     interval 10             2    376 pre      nominal      0      0      0      0  -                        0           -
+FC69DAEB iPhone13,3  Back Triple Camera     dynamic  unthrottled    3    635 yes      critical     1      1     44      1  critical=1               0           single-axis
+5EDE6DB9 iPhone13,3  Back Triple Camera     dynamic  5              3    372 yes      serious      0      0      0      0  -                        0           -
+8B6C7BFC iPhone13,3  Back Triple Camera     dynamic  10             2   1587 yes      critical     1      1     44      1  critical=1               0           single-axis
+6CE7460B iPhone13,3  Back Triple Camera     dynamic  10             3    302 yes      serious      0      0      0      1  -                        0           -
+F6F7FCC8 iPhone13,3  Back Triple Camera     dynamic  1              2   1453 yes      critical     3      2     61      2  critical=3               0           single-axis
+1877966A iPhone17,1  Back Triple Camera     interval unthrottled    3    107 pre      nominal      0      0      0      0  -                        0           -
+225E61C2 iPhone17,1  Back Triple Camera     interval unthrottled    2    186 pre      nominal      0      0      0      0  -                        0           -
+0B4310FD iPhone17,1  Back Triple Camera     interval unthrottled    2    206 pre      fair         0      0      0      0  -                        0           -
+B9E17C99 iPhone17,1  Back Triple Camera     interval unthrottled    1    100 pre      nominal      0      0      0      0  -                        0           -
+27A53544 iPhone17,1  Back Triple Camera     interval unthrottled    1    100 pre      fair         0      0      0      0  -                        0           -
+D8DF938A iPhone17,1  Back Triple Camera     dynamic  unthrottled    3   1249 pre      nominal      0      0      0      0  -                        0           -
+6156BA32 iPhone17,1  Back Triple Camera     dynamic  unthrottled    3    204 yes      nominal      0      0      0      0  -                        0           -
+F4BA152E iPhone17,1  Back Triple Camera     dynamic  10             3    304 yes      fair         0      0      0      0  -                        0           -
+BFE2EB33 iPhone17,1  Back Triple Camera     dynamic  3              1    310 yes      serious      0      0      0      0  -                        0           -
+
+BY DEVICE × THERMAL STATE AT STEP (stayed steps only):
+    iPad13,16   nominal   stayed-steps=0   over 2113 frames captured in that state
+    iPad13,16   fair      stayed-steps=0   over 170 frames captured in that state
+    iPad13,16   serious   stayed-steps=0   over 2943 frames captured in that state
+    iPhone13,3  nominal   stayed-steps=0   over 1474 frames captured in that state
+    iPhone13,3  fair      stayed-steps=0   over 513 frames captured in that state
+    iPhone13,3  serious   stayed-steps=0   over 2653 frames captured in that state
+    iPhone13,3  critical  stayed-steps=6   over 2856 frames captured in that state
+    iPhone17,1  nominal   stayed-steps=0   over 2051 frames captured in that state
+    iPhone17,1  fair      stayed-steps=0   over 599 frames captured in that state
+    iPhone17,1  serious   stayed-steps=0   over 116 frames captured in that state
+
+BY CAMERA (device, camera → projects with stayed steps / projects measured):
+    ?           ?                        0/2
+    iPad13,16   Back Camera              0/2
+    iPhone13,3  Back Triple Camera       4/15
+    iPhone17,1  Back Triple Camera       0/9

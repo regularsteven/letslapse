@@ -739,6 +739,43 @@ starvation repace, so unthrottled degrades instead of summiting into the OS
 veto; scheduled unattended shoots should warn on (or default away from)
 unthrottled on OIS-class phones.
 
+### 12 Pro OIS park at thermal critical — mitigation decision
+
+**Raised:** 2026-09-02 · **Steps 1+2 implemented 2026-09-02 — bench envelope pending** · report:
+[2026-09-02-framing-shift-pattern.md](fieldtests/2026-09-02-framing-shift-pattern.md) ·
+decision + implementation notes:
+[2026-09-02-framing-shift-decision-analysis.md](fieldtests/2026-09-02-framing-shift-decision-analysis.md)
+
+*Shipped on `ios-app` (uncommitted): the blend tap streams at twice what the
+depth needs instead of the pinned rate, and drops to the depth's need when
+the camera's `systemPressureState` reaches serious (Apple's prescribed
+mitigation); iPhones end any run at device-wide thermal critical with
+`endReason: tooHot` and the last two outputs + sidecar lines dropped, and
+refuse to start there; per-window camera pressure in both logs. Verified on
+the 12 Pro: stream 10 → 1 fps at depth 1 @ 2 s, `simulateTooHot` (DEBUG
+remote command) ended a 23-window run at 21. Owed: the 2 h × 3 warm-ambient
+envelope arms, the design mirror for the idle thermal chip (never drawn),
+and a decision on the open-ended depths' serious-pressure rate (3 fps).*
+
+`tools/framing_shift_report.py` (new) swept every project with JPEG sources
+(28 projects, ~17 k frames): all six persistent framing steps in the corpus
+are on the iPhone 12 Pro, all land in a window at thermal **critical** (0 over
+2653 serious frames), and in the three post-gate runs the step sits in the
+`serious → critical` transition window itself. Each is a pure 44–64 px
+gravity-axis translation with identical lens f-number and dimensions either
+side, so it is the lens-shift OIS actuator dropping to its gravity stop — no
+API controls it. The brief's four software suspects (geometry change, implicit
+EIS, constituent hand-off, GDC toggle) are each ruled out in the report.
+
+Decision owed (Steven), then build — no post-capture reframing by design:
+keep the phone out of critical (thermal → AIMD ceiling, warn on Dynamic/
+unthrottled for OIS-class phones in scheduled shoots), surface the gate's
+`framingChanged` on the capture screen + Field Notes, optionally pause at
+critical on OIS-class devices (the lens re-centres when the servo returns),
+and a bench repro on the test card: 12 Pro virtual-triple vs physical-wide
+pinned, and a 16 Pro driven to critical (never reached in any logged run —
+its sensor-shift immunity is plausible, not proven).
+
 ### Pin digital stabilization off on tap connections, and log it
 
 **Raised:** 2026-08-25 · **Not started** · small

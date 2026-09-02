@@ -79,6 +79,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         /// False on Holy Grail runs: the ramp already owns that file and
         /// appends richer entries (scene EV) per window from CameraController.
         var writesFrameTimestamps: Bool = true
+        /// The camera's own pressure reading, stamped on each window at
+        /// close — see the twin in `LiveBlendController.Configuration`.
+        var systemPressure: (() -> String?)? = nil
 
         /// What readouts show before the first window resolves: the fixed
         /// count, or 0 (unlimited/unresolved) for the adaptive depths.
@@ -236,6 +239,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// says otherwise. The stop reason used to exist only in print-level
     /// logs, invisible on a field device. workQueue.
     private var endReason = "user"
+    /// Outputs to delete at finish — a thermal stop's trailing windows.
+    private var dropTrailingOnFinish = 0
 
     /// Blend/author work runs here so capture scheduling never stalls
     /// behind it — the next window's burst fires while the previous window
@@ -348,10 +353,15 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         }
     }
 
-    func requestStop(discard: Bool, keepPartial: Bool = true) {
+    /// `reason` names the end in the travelling log when it is not the user's
+    /// ("tooHot"); `dropTrailing` deletes that many already-written outputs at
+    /// finish — see `LiveBlendController.requestStop`.
+    func requestStop(discard: Bool, keepPartial: Bool = true, reason: String = "user", dropTrailing: Int = 0) {
         workQueue.async {
             guard !self.finishRequested else { return }
             self.finishRequested = true
+            if reason != "user" { self.endReason = reason }
+            self.dropTrailingOnFinish = max(0, dropTrailing)
             self.selecting = false
             self.timer?.cancel()
             self.timer = nil
@@ -875,6 +885,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             thermalState: LiveBlendController.thermalStateName(),
             partial: windowPartial)
         entry.thermalStateAtStart = windowThermalAtStart
+        entry.systemPressureAtClose = configuration.systemPressure?()
         if windowMemoryCapped {
             entry.memoryCapped = true
         }
@@ -1361,6 +1372,25 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         timestampWriter?.close()
         timestampWriter = nil
 
+        // A thermal stop trims the tail — the windows the lens moved in. Same
+        // rule and reasoning as the video-tap path (`LiveBlendController`).
+        var droppedTrailing = 0
+        if dropTrailingOnFinish > 0, !discard, !frameURLs.isEmpty {
+            let count = min(dropTrailingOnFinish, frameURLs.count)
+            for url in frameURLs.suffix(count) {
+                try? FileManager.default.removeItem(at: url)
+            }
+            frameURLs.removeLast(count)
+            sessionFrameLog.removeLast(min(count, sessionFrameLog.count))
+            completedOutputs = max(0, completedOutputs - count)
+            if configuration.writesFrameTimestamps {
+                try? FrameTimestamps.dropTrailingEntries(
+                    count: count, in: configuration.outputDirectory)
+            }
+            droppedTrailing = count
+            LLog("liveblend-dng: too hot — run ended, last \(count) output(s) discarded")
+        }
+
         let result: LiveBlendCaptureResult?
         if discard || frameURLs.isEmpty {
             try? FileManager.default.removeItem(at: configuration.outputDirectory)
@@ -1405,10 +1435,11 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 completedOutputs: completedOutputs,
                 fallbackOutputs: fallbackOutputs,
                 failedOutputs: failedOutputs,
-                outputFormat: "dng")
+                outputFormat: "dng",
+                droppedTrailingFrames: droppedTrailing)
         }
         if frameURLs.isEmpty, !discard {
-            pushDiagnostics { $0.status = .captureFailed }
+            pushDiagnostics { $0.status = self.endReason == "tooHot" ? .tooHot : .captureFailed }
         }
         active.withLock { $0 = false }
         LLog("liveblend-dng: finished outputs=\(frameURLs.count) discarded=\(discard) log=\(configuration.logURL.path)")
