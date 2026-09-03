@@ -1,0 +1,38 @@
+<svg viewBox="0 0 600 730" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Framing review · measuring · 560×640</title>
+  <desc>Mirrors App/FramingReviewView.swift in its own macOS window, MEASURING state: LetsLapseKit.FramingMeasurement over the project's stills (half-size raw decode, 30-photo anchor chunks, half the cores up to eight), progress = photos measured ÷ total, time left from the run pace (a 5030-photo DNG shoot took 7 minutes on an M4 Max). Cancel stops the run and leaves no review; an earlier review stays until a new one completes. Report state: framing-review.svg.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="560" height="640" rx="11"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="560" height="640" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="560" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="300.0" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Framing review — Interval — harbour dusk</text>
+    </g>
+    <g id="header">
+      <g data-symbol="scope" transform="translate(46,74)"><circle r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/><path d="M-11 0 h6 M5 0 h6 M0 -11 v6 M0 5 v6" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round"/></g>
+      <text x="62" y="72" font-size="14" class="b" fill="#000">Measuring the framing</text>
+      <text x="62" y="87" font-size="10.5" fill="#6D6D72">184 photos · 4032×3024</text>
+      <line x1="20" y1="100" x2="580" y2="100" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+    <g id="progress">
+      <rect x="34" y="128" width="512" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
+      <rect x="34" y="128" width="200" height="6" rx="3" fill="#C36A00"/>
+      <text x="34" y="156" font-size="12" class="mono" fill="#6D6D72">Photo 72 of 184</text>
+      <text x="546" y="156" font-size="12" class="mono" fill="#6D6D72" text-anchor="end">About 20 seconds left</text>
+      <text x="34" y="186" font-size="10.5" fill="#6D6D72">Each photo is matched against its neighbours to find where the framing moved. Nothing on disk</text>
+      <text x="34" y="200" font-size="10.5" fill="#6D6D72">changes — the review is written beside the photos, and the fix stays metadata until you apply it.</text>
+    </g>
+    <g id="footer">
+      <rect x="518" y="602" width="62" height="22" rx="5" fill="#FBFBFD" stroke="#000" stroke-opacity="0.14"/>
+      <text x="549" y="617" font-size="12" text-anchor="middle" fill="#000">Cancel</text>
+    </g>
+  </g>
+  <rect x="20" y="20" width="560" height="640" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="300.0" y="682" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Framing review · measuring · 560×640 pt window</text>
+  <text x="300.0" y="700" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/FramingReviewView.swift — progress over LetsLapseKit.FramingMeasurement, cancellable</text>
+</svg>

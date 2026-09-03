@@ -1,0 +1,85 @@
+<svg viewBox="0 0 600 730" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Framing review · report · 560×640</title>
+  <desc>Mirrors App/FramingReviewView.swift hosted in its own macOS window (`WindowGroup(for: FramingReviewWindowRequest.self)`, the pattern the photo and video editors use — a sheet on the Mac is never user-resizable) in its REPORT state, over LetsLapseKit.FramingReview from the project's source/framing.json. Same four blocks as the iOS sheet (../iOS/framing-review.portrait.svg) at desktop density: header (amber warning glyph + headline, or green check + "Framing steady"), the summary in full, the path card (every photo's vertical offset on a ±10 px scale, knocks shaded amber), the knocks list (largest first, peak bar on a 10 px scale) and the ink plan card. Footer: Done closes; Stabilise photos commits the plan as metadata (`applyingPlan()`), after which the header line gains "Stabilised" in green and the primary reads "Undo". 560×640 pt, fixed.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="560" height="640" rx="11"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.10"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="560" height="640" fill="#F2F2F7"/>
+    <g id="titlebar">
+      <rect x="20" y="20" width="560" height="28" fill="#E9E9EC"/>
+      <circle cx="34" cy="34" r="6" fill="#FF5F57"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#28C840"/>
+      <text x="300.0" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Framing review — Interval — harbour dusk</text>
+    </g>
+    <g id="header">
+      <g data-symbol="exclamationmark.triangle.fill"><path d="M46 64 L55.5 81.5 L36.5 81.5 Z" fill="#FFB340" stroke-linejoin="round"/><rect x="44.7" y="70.5" width="2.6" height="6.0" rx="1.3" fill="#1C1C1E"/><circle cx="46" cy="79.0" r="1.6" fill="#1C1C1E"/></g>
+      <text x="62" y="72" font-size="14" class="b" fill="#000">Stabilisation recommended</text>
+      <text x="62" y="87" font-size="10.5" fill="#6D6D72">184 photos · 4032×3024 · reviewed today at 18:42</text>
+      <line x1="20" y1="100" x2="580" y2="100" stroke="#000" stroke-opacity="0.10"/>
+    </g>
+    <g id="summary">
+      <text x="34" y="122" font-size="12" fill="#000">3 knocks across 184 photos over 3 minutes, the largest 5.6 px at</text>
+      <text x="34" y="138" font-size="12" fill="#000">photos 121–129. Locking the framing crops 0.4% from each edge (4016×3012 of 4032×3024).</text>
+    </g>
+    <text x="34" y="168" font-size="11" class="sb" fill="#6D6D72" letter-spacing="0.5">FRAMING OVER THE SHOOT</text>
+    <g id="path-card">
+      <rect x="34" y="176" width="512" height="130" rx="8" fill="#FFF" stroke="#000" stroke-opacity="0.08"/>
+<g id="path-chart" transform="translate(42,184)">
+<rect x="0" y="0" width="496" height="114" rx="6" fill="#F7F7F9"/>
+<line x1="34" y1="8.0" x2="488" y2="8.0" stroke="#000" stroke-opacity="0.05" stroke-dasharray="2 3"/>
+<text x="30" y="11.5" font-size="9" fill="#6D6D72" text-anchor="end">+10 px</text>
+<line x1="34" y1="57.0" x2="488" y2="57.0" stroke="#000" stroke-opacity="0.1" stroke-dasharray=""/>
+<text x="30" y="60.5" font-size="9" fill="#6D6D72" text-anchor="end">0</text>
+<line x1="34" y1="106.0" x2="488" y2="106.0" stroke="#000" stroke-opacity="0.05" stroke-dasharray="2 3"/>
+<text x="30" y="109.5" font-size="9" fill="#6D6D72" text-anchor="end">−10 px</text>
+<rect x="329.7" y="6" width="23.8" height="102" fill="#FFB340" fill-opacity="0.22"/>
+<rect x="426.5" y="6" width="11.4" height="102" fill="#FFB340" fill-opacity="0.22"/>
+<rect x="128.8" y="6" width="4.0" height="102" fill="#FFB340" fill-opacity="0.22"/>
+<polyline points="34.0,54.2 36.5,56.6 39.0,58.5 41.4,56.8 43.9,57.0 46.4,59.9 48.9,59.7 51.4,56.6 53.8,56.8 56.3,58.6 58.8,56.9 61.3,55.1 63.8,57.6 66.3,59.9 68.7,58.4 71.2,58.0 73.7,60.5 76.2,60.4 78.7,57.2 81.1,57.0 83.6,59.1 86.1,58.1 88.6,56.4 91.1,58.8 93.5,61.3 96.0,59.8 98.5,58.7 101.0,60.9 103.5,60.9 105.9,57.7 108.4,57.3 110.9,59.8 113.4,59.5 115.9,57.8 118.3,59.9 120.8,62.6 123.3,61.1 125.8,59.4 128.3,61.1 130.8,73.2 133.2,58.4 135.7,57.8 138.2,60.7 140.7,61.0 143.2,59.3 145.6,61.0 148.1,63.6 150.6,62.1 153.1,59.8 155.6,61.2 158.0,61.9 160.5,59.2 163.0,58.6 165.5,61.7 168.0,62.6 170.4,60.8 172.9,61.9 175.4,64.4 177.9,62.9 180.4,60.2 182.9,61.3 185.3,62.5 187.8,60.3 190.3,59.7 192.8,62.8 195.3,64.1 197.7,62.2 200.2,62.6 202.7,65.0 205.2,63.6 207.7,60.6 210.1,61.6 212.6,63.3 215.1,61.7 217.6,60.9 220.1,64.0 222.5,65.6 225.0,63.4 227.5,63.2 230.0,65.3 232.5,64.2 235.0,61.1 237.4,62.0 239.9,64.3 242.4,63.2 244.9,62.2 247.4,65.1 249.8,66.8 252.3,64.4 254.8,63.5 257.3,65.5 259.8,64.8 262.2,61.8 264.7,62.6 267.2,65.4 269.7,64.8 272.2,63.6 274.6,66.1 277.1,67.8 279.6,65.3 282.1,63.8 284.6,65.7 287.0,65.5 289.5,62.8 292.0,63.5 294.5,66.6 297.0,66.4 299.5,64.9 301.9,66.8 304.4,68.5 306.9,66.0 309.4,64.1 311.9,65.9 314.3,66.3 316.8,64.0 319.3,64.6 321.8,67.9 324.3,68.0 326.7,66.1 329.2,67.4 331.7,53.2 334.2,47.2 336.7,42.0 339.1,41.2 341.6,39.9 344.1,40.3 346.6,43.3 349.1,49.7 351.6,53.6 354.0,67.1 356.5,67.7 359.0,69.4 361.5,67.3 364.0,64.9 366.4,66.8 368.9,68.6 371.4,66.9 373.9,67.0 376.4,70.2 378.8,70.6 381.3,67.9 383.8,67.9 386.3,69.7 388.8,68.0 391.2,65.7 393.7,67.6 396.2,69.9 398.7,68.6 401.2,68.2 403.7,71.1 406.1,71.5 408.6,68.5 411.1,68.1 413.6,70.0 416.1,68.9 418.5,66.7 421.0,68.6 423.5,71.3 426.0,70.2 428.5,76.9 430.9,84.3 433.4,84.9 435.9,76.7 438.4,68.3 440.9,70.4 443.3,69.9 445.8,67.9 448.3,69.7 450.8,72.7 453.3,71.7 455.7,70.2 458.2,72.1 460.7,72.8 463.2,69.7 465.7,68.6 468.2,71.0 470.6,71.2 473.1,69.3 475.6,70.9 478.1,73.9 480.6,73.0 483.0,70.9 485.5,72.3 488.0,73.2" fill="none" stroke="#C36A00" stroke-width="1.2" stroke-linejoin="round"/>
+<text x="34" y="111" font-size="9" fill="#6D6D72">photo 1</text>
+<text x="488" y="111" font-size="9" fill="#6D6D72" text-anchor="end">184 · 3 min</text>
+</g>
+    </g>
+    <text x="34" y="332" font-size="11" class="sb" fill="#6D6D72" letter-spacing="0.5">KNOCKS · 3</text>
+    <g id="knocks-card">
+      <rect x="34" y="340" width="512" height="112" rx="8" fill="#FFF" stroke="#000" stroke-opacity="0.08"/>
+<text x="48" y="358" font-size="13" fill="#000">Photos 121–129</text>
+<text x="48" y="373" font-size="10.5" fill="#6D6D72">9 photos</text>
+<rect x="368" y="357" width="120" height="6" rx="3" fill="#E9E9EB"/>
+<rect x="368" y="357" width="67.2" height="6" rx="3" fill="#FFB340"/>
+<text x="532" y="364" font-size="13" class="sb" fill="#000" text-anchor="end">5.6 px</text>
+<line x1="48" y1="378" x2="532" y2="378" stroke="#000" stroke-opacity="0.08"/>
+<text x="48" y="395" font-size="13" fill="#000">Photos 160–163</text>
+<text x="48" y="410" font-size="10.5" fill="#6D6D72">4 photos</text>
+<rect x="368" y="394" width="120" height="6" rx="3" fill="#E9E9EB"/>
+<rect x="368" y="394" width="37.2" height="6" rx="3" fill="#FFB340"/>
+<text x="532" y="401" font-size="13" class="sb" fill="#000" text-anchor="end">3.1 px</text>
+<line x1="48" y1="415" x2="532" y2="415" stroke="#000" stroke-opacity="0.08"/>
+<text x="48" y="432" font-size="13" fill="#000">Photo 40</text>
+<text x="48" y="447" font-size="10.5" fill="#6D6D72">1 photo</text>
+<rect x="368" y="431" width="120" height="6" rx="3" fill="#E9E9EB"/>
+<rect x="368" y="431" width="28.8" height="6" rx="3" fill="#FFB340"/>
+<text x="532" y="438" font-size="13" class="sb" fill="#000" text-anchor="end">2.4 px</text>
+    </g>
+    <g id="plan-card">
+      <rect x="34" y="468" width="512" height="104" rx="8" fill="#1C1C1E"/>
+      <text x="48" y="490" font-size="10.5" class="sb" fill="#FFB340" letter-spacing="0.5">THE FIX · LOCK EVERY PHOTO TO ONE FRAMING</text>
+      <text x="48" y="510" font-size="11.5" fill="#FFF" fill-opacity="0.78">Shift each photo by up to ±1.2 px across and ±6.0 px down, and crop</text>
+      <text x="48" y="526" font-size="11.5" fill="#FFF" fill-opacity="0.78">0.4% from each edge. The originals stay untouched — the correction is</text>
+      <text x="48" y="542" font-size="11.5" fill="#FFF" fill-opacity="0.78">applied when a clip is blended or a photo is viewed.</text>
+      <text x="48" y="562" font-size="11" class="sb" fill="#FFB340">Crops 0.4% · keeps 4016×3012 of 4032×3024</text>
+    </g>
+    <g id="footer">
+      <text x="34" y="617" font-size="10.5" fill="#6D6D72">Nothing on disk changes. Undo any time from the project screen.</text>
+      <rect x="418" y="602" width="52" height="22" rx="5" fill="#FBFBFD" stroke="#000" stroke-opacity="0.14"/>
+      <text x="444" y="617" font-size="12" text-anchor="middle" fill="#000">Done</text>
+      <rect x="478" y="602" width="102" height="22" rx="5" fill="#C36A00"/>
+      <text x="529" y="617" font-size="12" class="sb" text-anchor="middle" fill="#FFF">Stabilise photos</text>
+    </g>
+  </g>
+  <rect x="20" y="20" width="560" height="640" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="300.0" y="682" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Framing review · report · 560×640 pt window</text>
+  <text x="300.0" y="700" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/FramingReviewView.swift over LetsLapseKit.FramingReview — same blocks as the iOS sheet</text>
+</svg>

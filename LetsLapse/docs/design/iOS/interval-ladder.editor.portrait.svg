@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Interval ladder · editor · portrait</title>
+  <desc>Mirrors App/LightLaddersView.swift (LightLadderEditorView, LadderRibbon, RungRow) over LightLadderStore / LetsLapseKit's LightLadder — the handoff's 2c-ii shape, ribbon + list, pushed from Interval ladders (interval-ladders.portrait.svg) inside the same sheet. Drawn on the BUILT-IN, which is read-only: inline title (a large title truncates the 26-character name), Back. Sections: (1) the name — a plain Text here, a TextField on a user ladder — and the subtitle "always present · cloneable · never editable in place" (a clone says "cloned from the built-in"); (2) the RIBBON: the whole ladder in 60 pt, one band per rung at its EV span inside the 16 … −2 drawing window (LightLadder.drawingTopEV/BottomEV), brightest first in LadderPalette (amber · accent · accentDeep · ink), 2 pt white dividers at each threshold, EV ticks beneath (16 · 13 · 8 · 4 · −2, 9.5 mono), then the hint "Tap a band to reveal its rung's threshold." (a user ladder adds "Drag a divider to move a threshold." — dividers drag in ½-EV steps, kept ½ EV from both neighbours); tapping a band selects its rung (band ringed 3 pt amber, its row tinted amber 10% and showing "≥ 13" plus the boundary statement, e.g. "This boundary changes pacing only — the exposure carries straight through it."); (3) RUNGS · BRIGHTEST FIRST: one row per rung — 11 pt swatch, name 16, shortLeverSummary 11.5 secondary ("ISO min · auto · 3 s · blend 10"), chevron — each pushing its rung screen (interval-ladder.rung.portrait.svg); a user ladder adds "+ Add a rung" and swipe-to-delete; (4) BOUNDARIES: "Switching band ±0.5" (read-only, LightLadderSelector.switchingBandEV) with its explanation, then below the fold "Never mid-window" with a FIXED badge, the "EV thresholds always visible" toggle, and a last section with "Use this ladder" (or "Armed for the next Ladder shoot"), "Duplicate" (pushes the copy's editor) and, on a user ladder, "Delete ladder". Staged by LL_LADDERS=editor. Ribbon x: ev → 36 + (16 − ev) / 18 × 321.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
+    <clipPath id="ribbon"><rect x="36" y="278" width="321" height="60" rx="14"/></clipPath>
+    <filter id="soft" x="-10%" y="-30%" width="120%" height="180%"><feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#000" flood-opacity="0.09"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <rect x="16" y="44" width="361" height="30" rx="10" fill="#C7C7CC"/>
+
+      <g id="editor-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="56" width="393" height="796" fill="#F2F2F7"/>
+
+        <!-- navigation bar: Back + inline title -->
+        <g id="nav-bar">
+          <path d="M16 80 l-7 7 7 7" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="92" font-size="17" fill="#C36A00">Back</text>
+          <text x="196.5" y="92" font-size="17" class="sb" fill="#000" text-anchor="middle">Bright &amp; Fast, Dark &amp; Slow</text>
+        </g>
+
+        <!-- name section -->
+        <g id="section-name">
+          <rect x="20" y="144" width="353" height="85" rx="10" fill="#FFF"/>
+          <text x="40" y="171" font-size="16" fill="#000">Bright &amp; Fast, Dark &amp; Slow</text>
+          <line x1="40" y1="186" x2="373" y2="186" stroke="#000" stroke-opacity="0.1"/>
+          <text x="40" y="214" font-size="11.5" class="sec">always present · cloneable · never editable in place</text>
+        </g>
+
+        <!-- the ribbon: LadderRibbon, 60 pt, bands at EV span -->
+        <g id="ladder-ribbon" filter="url(#soft)">
+          <g clip-path="url(#ribbon)">
+            <rect x="36" y="278" width="53.5" height="60" fill="#FFB340"/>
+            <rect x="89.5" y="278" width="89.2" height="60" fill="#C36A00"/>
+            <rect x="178.7" y="278" width="71.3" height="60" fill="#8A4A00"/>
+            <rect x="250" y="278" width="107" height="60" fill="#1C1C1E"/>
+            <rect x="88.5" y="278" width="2" height="60" fill="#FFF" opacity="0.9"/>
+            <rect x="177.7" y="278" width="2" height="60" fill="#FFF" opacity="0.9"/>
+            <rect x="249" y="278" width="2" height="60" fill="#FFF" opacity="0.9"/>
+          </g>
+        </g>
+        <g id="ribbon-ticks" font-size="9.5" class="m sec">
+          <text x="38" y="349">16</text>
+          <text x="91.5" y="349">13</text>
+          <text x="180.7" y="349">8</text>
+          <text x="252" y="349">4</text>
+          <text x="341" y="349">−2</text>
+        </g>
+        <line x1="40" y1="362" x2="373" y2="362" stroke="#000" stroke-opacity="0.1"/>
+        <text x="40" y="386" font-size="11.5" class="sec">Tap a band to reveal its rung's threshold.</text>
+
+        <!-- rungs -->
+        <g id="section-rungs">
+          <text x="40" y="451" font-size="13" class="sec" letter-spacing="0.3">RUNGS · BRIGHTEST FIRST</text>
+          <rect x="20" y="464" width="353" height="244" rx="10" fill="#FFF"/>
+          <g id="rung-daylight">
+            <rect x="40" y="488.5" width="11" height="11" rx="3" fill="#FFB340"/>
+            <text x="61" y="492" font-size="16" fill="#000">Daylight</text>
+            <text x="61" y="509" font-size="11.5" class="sec">ISO min · auto · 3 s · blend 10</text>
+            <path d="M345 487 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="61" y1="525" x2="373" y2="525" stroke="#000" stroke-opacity="0.1"/>
+          <g id="rung-fading">
+            <rect x="40" y="549.5" width="11" height="11" rx="3" fill="#C36A00"/>
+            <text x="61" y="553" font-size="16" fill="#000">Fading</text>
+            <text x="61" y="570" font-size="11.5" class="sec">ISO min · auto ≤ 1 s · 2 s · blend 5</text>
+            <path d="M345 548 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          </g>
+          <line x1="61" y1="586" x2="373" y2="586" stroke="#000" stroke-opacity="0.1"/>
+          <g id="rung-dusk">
+            <rect x="40" y="610.5" width="11" height="11" rx="3" fill="#8A4A00"/>
+            <text x="61" y="614" font-size="16" fill="#000">Dusk</text>
+            <text x="61" y="631" font-size="11.5" class="sec">ISO auto · auto ≤ 1 s · 2 s · blend 3</text>
+            <path d="M345 609 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          </g>
+          <line x1="61" y1="647" x2="373" y2="647" stroke="#000" stroke-opacity="0.1"/>
+          <g id="rung-night">
+            <rect x="40" y="671.5" width="11" height="11" rx="3" fill="#1C1C1E"/>
+            <text x="61" y="675" font-size="16" fill="#000">Night</text>
+            <text x="61" y="692" font-size="11.5" class="sec">ISO auto · auto ≤ 1 s · 2 s · blend off</text>
+            <path d="M345 670 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+          </g>
+        </g>
+
+        <!-- boundaries (continues below the fold) -->
+        <g id="section-boundaries">
+          <text x="40" y="752" font-size="13" class="sec" letter-spacing="0.3">BOUNDARIES</text>
+          <rect x="20" y="764" width="353" height="150" rx="10" fill="#FFF"/>
+          <text x="40" y="791" font-size="16" fill="#000">Switching band</text>
+          <text x="352" y="791" font-size="14" class="m sec" text-anchor="end">±0.5</text>
+          <text x="40" y="810" font-size="11.5" class="sec">A rung holds until scene EV passes its</text>
+          <text x="40" y="824" font-size="11.5" class="sec">threshold by this much, over 3 smoothed</text>
+          <text x="40" y="838" font-size="11.5" class="sec">windows.</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Interval ladder · editor · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLaddersView (LightLadderEditorView · LadderRibbon · RungRow) · LL_LADDERS=editor</text>
+</svg>

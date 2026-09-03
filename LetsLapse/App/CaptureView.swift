@@ -413,7 +413,10 @@ struct CaptureView: View {
 
     /// Sheets, lifecycle and the clock.
     private var chrome: some View {
-        stage
+        // Two expressions, not one: with the ladder chrome inline the macOS
+        // type-checker gave up on this chain ("unable to type-check this
+        // expression in reasonable time", 2026-09-03).
+        let sheets = stage
         .sheet(isPresented: $showFormatSheet) {
             FormatSheet(
                 camera: camera,
@@ -431,37 +434,13 @@ struct CaptureView: View {
                 startTargetCapture(plan)
             }
         }
-        .sheet(isPresented: $showLadderPicker) {
-            LadderPickerSheet(store: ladders, selectedID: $selectedLadderID) {
-                showLadderPicker = false
-                showLadderManager = true
-            }
-        }
-        .sheet(isPresented: $showLadderManager) {
-            LightLaddersView(store: ladders, selectedID: $selectedLadderID)
-        }
-        .onChange(of: selectedLadderID) { id in
-            RecordingSettingsStore.save(ladderID: id)
-            ladderPreviewSelector = nil
-            advanceLadderPreview(ev: camera.previewSceneEV)
-        }
-        .onChange(of: ladderPreviewWanted) { wanted in
-            camera.setLadderPreview(enabled: wanted)
-            if !wanted { ladderPreviewSelector = nil }
-        }
-        .onChange(of: camera.previewSceneEV) { ev in advanceLadderPreview(ev: ev) }
-        .onChange(of: camera.ladderState?.rungIndex) { index in
-            // Down the ladder is darker (a higher index); the toast says which
-            // way the step went. The first index of a run is the opening rung,
-            // not a step.
-            defer { lastLadderRungIndex = index }
-            guard let index, let previous = lastLadderRungIndex, previous != index else { return }
-            flashLadderToast(down: index > previous)
-        }
-        .onAppear(perform: configureOnAppear)
-        .onAppear { camera.setLadderPreview(enabled: ladderPreviewWanted) }
-        .onDisappear(perform: cleanUpOnDisappear)
-        .onDisappear { camera.setLadderPreview(enabled: false) }
+        // The ladder chrome wraps the lifecycle pair so the order is what it
+        // was: `configureOnAppear` first, then the preview meter; the
+        // preview meter off first, then `cleanUpOnDisappear`.
+        return ladderChrome(
+            sheets
+            .onAppear(perform: configureOnAppear)
+            .onDisappear(perform: cleanUpOnDisappear))
         // Keep the recent-capture tile current: a new project (any mode) takes
         // the slot, and a Photo shot's blend replaces its own hero moments after
         // the capture itself lands.
@@ -495,6 +474,49 @@ struct CaptureView: View {
             }
         }
     }
+
+    #if os(iOS)
+    /// Ladder MODE's sheets and observers over `content`. iOS/iPadOS only:
+    /// `CameraController.setLadderPreview` lives in the ramp engine's
+    /// iOS-only region (no manual exposure on macOS cameras), and the
+    /// capture screen hides the RAMP dial there — so the picker, the
+    /// manager, the preview meter and the rung toast have nothing to
+    /// attach to. On the Mac this is the identity.
+    private func ladderChrome<Content: View>(_ content: Content) -> some View {
+        content
+        .sheet(isPresented: $showLadderPicker) {
+            LadderPickerSheet(store: ladders, selectedID: $selectedLadderID) {
+                showLadderPicker = false
+                showLadderManager = true
+            }
+        }
+        .sheet(isPresented: $showLadderManager) {
+            LightLaddersView(store: ladders, selectedID: $selectedLadderID)
+        }
+        .onChange(of: selectedLadderID) { id in
+            RecordingSettingsStore.save(ladderID: id)
+            ladderPreviewSelector = nil
+            advanceLadderPreview(ev: camera.previewSceneEV)
+        }
+        .onChange(of: ladderPreviewWanted) { wanted in
+            camera.setLadderPreview(enabled: wanted)
+            if !wanted { ladderPreviewSelector = nil }
+        }
+        .onChange(of: camera.previewSceneEV) { ev in advanceLadderPreview(ev: ev) }
+        .onChange(of: camera.ladderState?.rungIndex) { index in
+            // Down the ladder is darker (a higher index); the toast says which
+            // way the step went. The first index of a run is the opening rung,
+            // not a step.
+            defer { lastLadderRungIndex = index }
+            guard let index, let previous = lastLadderRungIndex, previous != index else { return }
+            flashLadderToast(down: index > previous)
+        }
+        .onAppear { camera.setLadderPreview(enabled: ladderPreviewWanted) }
+        .onDisappear { camera.setLadderPreview(enabled: false) }
+    }
+    #else
+    private func ladderChrome<Content: View>(_ content: Content) -> Content { content }
+    #endif
 
     /// Everything that persists or re-validates the capture setup as it changes.
     private var settingsObservers: some View {
@@ -3097,9 +3119,15 @@ struct CaptureView: View {
                 spans: ladder.drawingSpans(), smoothedEV: 5.2, intervalSeconds: 2, blendFrames: 2,
                 readoutLine: "Dusk · every 2 s · blend 3 → 2, thermal", changeCount: 1,
                 nextRungName: "Night", nextRungThresholdEV: 4, previousRungName: "Fading")
-            framingStartedAt = Date().addingTimeInterval(-(41 * 60 + 8))
             mountBurstPill(taken: 823, total: nil)
-            flashLadderToast(down: true)
+            // Deferred past `startCameraSession()`, which re-anchors the run
+            // clock on the main queue — set here directly, the reset lands
+            // second and the elapsed pill reads 00:04. The toast rides the
+            // same delay so a screenshot at ~4 s catches it (it lives 3 s).
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                framingStartedAt = Date().addingTimeInterval(-(41 * 60 + 8))
+                flashLadderToast(down: true)
+            }
         default:
             ladderPanelOpen = true
         }

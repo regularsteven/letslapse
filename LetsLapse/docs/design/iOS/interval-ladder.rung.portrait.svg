@@ -1,0 +1,144 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Interval ladder · rung · portrait</title>
+  <desc>Mirrors App/LightLaddersView.swift (LightRungView, MessageCard) over LetsLapseKit's Rung, LightLadderAdvice and LightLadderFormatInfo — the five levers, pushed from the editor (interval-ladder.editor.portrait.svg). Drawn on the built-in's Dusk rung, which is read-only (the whole list is disabled, so the pickers and steppers render dimmed; a user ladder's are live and every edit writes through to the store). Inline title = the rung's name; the first section is the Name field. Three sections whose headers carry the thesis: APPLIES AT — "Scene EV and brighter" with a ½-EV stepper (the last rung reads "and darker · the last rung has no lower bound" instead) and the footer "Shown as EV 4 to 8 because Fading sits above it. Only the lower bound is stored, so the ladder can never gap or overlap."; EXPOSURE — HANDED TO THE SERVO — ISO (menu Min · Auto · Max · Value; subtitle resolves the symbol for the last-known lens, "Auto · 54–3072 on Wide (typical)", plus an "ISO value" stepper when Value), Shutter (menu Auto · Auto, capped · Pinned; subtitle "Auto, capped at 1 s · 0.57 s at this pacing" states the effective ceiling = min(cap, hardware, (interval − 0.3 s) ÷ blend); a Cap or "Pinned at" stepper follows), White balance (segmented Auto · Locked; "Tracked — slew-limited, never continuous AWB" / "Frozen at arm"); PACING — STEPS AT THE BOUNDARY — Every and Blend steppers (interval options 0.5 … 60 s; blend 1 = "off"). Then the MESSAGE CARDS from LightLadderAdvice.messages: green ✓ "fits" (drawn), grey i "note" (just below the fold, drawn under the clip: "3 frames share a 2 s window, so each gets 0.57 s at most — the 1 s shutter only applies once blend is off."), and — not drawn — the amber ! warnings: "Shutter … does not fit a … interval with the 0.3 s settle margin — the servo will get … at most.", "Blend … will not fit a … interval at … a frame — the device will take … at most, and the light panel will say so." and the adjacency warning "Dusk leaves the ISO 2.3 stops from where Fading settles. The servo will walk that over about 7 windows — the frames in between are neither look. Consider bringing the two rungs' ISO closer." Steppers: LL.controlFill r8, − / value (14 mono, min 46) / +, 30 pt tall. Staged by LL_LADDERS=rung.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}.sec{fill:#6D6D72}.dim{fill:#8E8E93}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <rect x="16" y="44" width="361" height="30" rx="10" fill="#C7C7CC"/>
+
+      <g id="rung-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="56" width="393" height="796" fill="#F2F2F7"/>
+
+        <g id="nav-bar">
+          <path d="M16 80 l-7 7 7 7" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.left"/>
+          <text x="30" y="92" font-size="17" fill="#C36A00">Back</text>
+          <text x="196.5" y="92" font-size="17" class="sb" fill="#000" text-anchor="middle">Dusk</text>
+        </g>
+
+        <!-- the list, 36 pt under the inline bar -->
+        <g id="rung-list" transform="translate(0,35)">
+        <!-- name -->
+        <g id="section-name">
+          <rect x="20" y="108" width="353" height="44" rx="10" fill="#FFF"/>
+          <text x="40" y="135" font-size="16" fill="#000">Dusk</text>
+        </g>
+
+        <!-- APPLIES AT -->
+        <g id="section-applies-at">
+          <text x="40" y="194" font-size="13" class="sec" letter-spacing="0.3">APPLIES AT</text>
+          <rect x="20" y="210" width="353" height="41" rx="10" fill="#FFF"/>
+          <text x="40" y="236" font-size="16" fill="#000">Scene EV and brighter</text>
+          <g id="stepper-threshold">
+            <rect x="246" y="215.5" width="106" height="30" rx="8" fill="#E9E9EB"/>
+            <text x="262" y="236" font-size="17" class="dim" text-anchor="middle">−</text>
+            <text x="299" y="235.5" font-size="14" class="m" fill="#000" text-anchor="middle">4</text>
+            <text x="337" y="236" font-size="17" class="dim" text-anchor="middle">+</text>
+          </g>
+          <text x="40" y="266" font-size="13" class="sec">Shown as EV 4 to 8 because Fading sits above it.</text>
+          <text x="40" y="282" font-size="13" class="sec">Only the lower bound is stored, so the ladder can</text>
+          <text x="40" y="298" font-size="13" class="sec">never gap or overlap.</text>
+        </g>
+
+        <!-- EXPOSURE — HANDED TO THE SERVO -->
+        <g id="section-exposure">
+          <text x="40" y="342" font-size="13" class="sec" letter-spacing="0.3">EXPOSURE — HANDED TO THE SERVO</text>
+          <rect x="20" y="356" width="353" height="221" rx="10" fill="#FFF"/>
+          <g id="row-iso">
+            <text x="40" y="371" font-size="16" fill="#000">ISO</text>
+            <text x="40" y="389" font-size="11.5" class="sec">Auto · 54–3072 on Wide (typical)</text>
+            <text x="338" y="384" font-size="17" class="dim" text-anchor="end">Auto</text>
+            <path d="M345 376 l4 -4 l4 4 M345 383 l4 4 l4 -4" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+          </g>
+          <line x1="40" y1="400" x2="373" y2="400" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-shutter">
+            <text x="40" y="421" font-size="16" fill="#000">Shutter</text>
+            <text x="40" y="439" font-size="11.5" class="sec">Auto, capped at 1 s · 0.57 s at</text>
+            <text x="40" y="453" font-size="11.5" class="sec">this pacing</text>
+            <text x="338" y="442" font-size="17" class="dim" text-anchor="end">Auto, capped</text>
+            <path d="M345 434 l4 -4 l4 4 M345 441 l4 4 l4 -4" stroke="#8E8E93" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up.chevron.down"/>
+            <text x="40" y="486" font-size="16" fill="#000">Cap</text>
+            <g id="stepper-cap">
+              <rect x="246" y="466" width="106" height="30" rx="8" fill="#E9E9EB"/>
+              <text x="262" y="486.5" font-size="17" class="dim" text-anchor="middle">−</text>
+              <text x="299" y="486" font-size="14" class="m" fill="#000" text-anchor="middle">1 s</text>
+              <text x="337" y="486.5" font-size="17" class="dim" text-anchor="middle">+</text>
+            </g>
+          </g>
+          <line x1="40" y1="505" x2="373" y2="505" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-white-balance">
+            <text x="40" y="528" font-size="16" fill="#000">White balance</text>
+            <text x="40" y="546" font-size="11.5" class="sec">Tracked — slew-limited, never</text>
+            <text x="40" y="560" font-size="11.5" class="sec">continuous AWB</text>
+            <g id="segmented-wb">
+              <rect x="204" y="529" width="148" height="27" rx="8" fill="#E9E9EB"/>
+              <rect x="206" y="531" width="70" height="23" rx="6" fill="#FFF"/>
+              <text x="241" y="547" font-size="13.5" class="sb dim" text-anchor="middle">Auto</text>
+              <text x="314" y="547" font-size="13.5" class="dim" text-anchor="middle">Locked</text>
+            </g>
+          </g>
+        </g>
+
+        <!-- PACING — STEPS AT THE BOUNDARY -->
+        <g id="section-pacing">
+          <text x="40" y="620" font-size="13" class="sec" letter-spacing="0.3">PACING — STEPS AT THE BOUNDARY</text>
+          <rect x="20" y="634" width="353" height="88" rx="10" fill="#FFF"/>
+          <text x="40" y="661" font-size="16" fill="#000">Every</text>
+          <g id="stepper-every">
+            <rect x="246" y="641" width="106" height="30" rx="8" fill="#E9E9EB"/>
+            <text x="262" y="661.5" font-size="17" class="dim" text-anchor="middle">−</text>
+            <text x="299" y="661" font-size="14" class="m" fill="#000" text-anchor="middle">2 s</text>
+            <text x="337" y="661.5" font-size="17" class="dim" text-anchor="middle">+</text>
+          </g>
+          <line x1="40" y1="678" x2="373" y2="678" stroke="#000" stroke-opacity="0.1"/>
+          <text x="40" y="705" font-size="16" fill="#000">Blend</text>
+          <g id="stepper-blend">
+            <rect x="246" y="685" width="106" height="30" rx="8" fill="#E9E9EB"/>
+            <text x="262" y="705.5" font-size="17" class="dim" text-anchor="middle">−</text>
+            <text x="299" y="705" font-size="14" class="m" fill="#000" text-anchor="middle">3</text>
+            <text x="337" y="705.5" font-size="17" class="dim" text-anchor="middle">+</text>
+          </g>
+        </g>
+
+        <!-- messages: LightLadderAdvice at the foot -->
+        <g id="messages">
+          <g id="message-fits">
+            <rect x="36" y="762" width="321" height="46" rx="10" fill="#34C759" opacity="0.12"/>
+            <circle cx="55.5" cy="781" r="7.5" fill="#34C759"/>
+            <path d="M52 781 l2.5 2.5 l5 -5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+            <text x="72" y="778" font-size="11.5" fill="#1C1C1E">Shutter 0.57 s and blend 3 both fit a 2 s interval —</text>
+            <text x="72" y="792" font-size="11.5" fill="#1C1C1E">0.3 s settle margin kept, ceiling 7 frames.</text>
+          </g>
+          <g id="message-note">
+            <rect x="36" y="816" width="321" height="46" rx="10" fill="#E9E9EB" opacity="0.6"/>
+            <circle cx="55.5" cy="835" r="7.5" fill="#8E8E93"/>
+            <text x="55.5" y="838.5" font-size="10" class="b" fill="#FFF" text-anchor="middle">i</text>
+            <text x="72" y="832" font-size="11.5" fill="#1C1C1E">3 frames share a 2 s window, so each gets 0.57 s at</text>
+            <text x="72" y="846" font-size="11.5" fill="#1C1C1E">most — the 1 s shutter only applies once blend is off.</text>
+          </g>
+        </g>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Interval ladder · rung · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLaddersView (LightRungView · MessageCard) — five levers · advice · LL_LADDERS=rung</text>
+</svg>

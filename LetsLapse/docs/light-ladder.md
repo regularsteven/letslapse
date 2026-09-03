@@ -362,25 +362,35 @@ the existing `intervalMode` key (an older Watch decodes it to Basic via
 Code-first from the handoff (the handoff **is** the spec), mirrored after
 device sign-off. Files, all `docs/design/iOS/`:
 
-| File | State |
-|---|---|
-| `capture-interval.ladder.portrait.svg` | armed, light panel open |
-| `capture-interval.ladder-panel-closed.portrait.svg` | the rung pill |
-| `capture-interval.ladder-picker.portrait.svg` | the sheet |
-| `capture-interval.ladder-running.portrait.svg` | rail + toast + readout |
-| `interval-ladders.portrait.svg` | the list |
-| `interval-ladder.editor.portrait.svg` | ribbon + list |
-| `interval-ladder.rung.portrait.svg` | the five levers |
-| `create-home.portrait.svg` | gains the "Interval ladders" row (existing file) |
+| File | State | Mirrored |
+|---|---|---|
+| `capture-interval.ladder.portrait.svg` | armed, light panel open | 2026-09-03 |
+| `capture-interval.ladder-panel-closed.portrait.svg` | the rung pill | 2026-09-03 |
+| `capture-interval.ladder-picker.portrait.svg` | the sheet | 2026-09-03 |
+| `capture-interval.ladder-running.portrait.svg` | rail + toast + readout | 2026-09-03 |
+| `interval-ladders.portrait.svg` | the list | 2026-09-03 |
+| `interval-ladder.editor.portrait.svg` | ribbon + list | 2026-09-03 |
+| `interval-ladder.rung.portrait.svg` | the five levers | 2026-09-03 |
+| `create-home.portrait.svg` | gains the "Interval ladders" row (existing file) | 2026-09-03 |
 
-Plus INDEX rows, and `iPadOS/` rows only where the layout differs. Hooks,
-in `README.md`'s hook list: `LL_LADDER=armed|closed|picker|running`
+All eight drawn 2026-09-03 (evening) from iPhone 16 Pro simulator
+screenshots, INDEX rows flipped to ✅ with device sign-off still owed; the
+iPadOS INDEX notes the picker's form-sheet presentation. Hooks, in
+`README.md`'s hook list: `LL_LADDER=armed|closed|picker|running`
 (implies Interval + Ladder; pair with `LL_CAPTURE=1`; stages the built-in
 on Dusk at scene EV 5.2 — the simulator has no camera to meter — and
 `running` freezes the 2f state: 41:08, 823 frames, blend 3 → 2, the toast
-just fired). **Built.** The list, editor and rung screens are reached by
-hand from the Create tab's row (`Interval ladders`) — an `LL_LADDERS` hook
-is still owed for their screenshots.
+just fired) and `LL_LADDERS=list|editor|rung` (the Interval ladders sheet
+on the Create tab: the list — seeding one user clone when the store is
+empty, so YOUR LADDERS has a row — the built-in's editor, or its Dusk rung).
+**Both built.** Three things the hooks taught, all fixed the same evening:
+a path seeded into `LightLaddersView`'s `@State` initial value is dropped on
+the sheet's first presentation (the push now lands 350 ms after appear);
+`startCameraSession()` re-anchors `framingStartedAt` after the preview hooks
+run, so `running`'s 41:08 read 00:04 until the clock and toast were deferred
+2 s like `LL_RECORDING`; and the rung screen's large title, pushed from a
+sheet, drew a second name over the Name row — it is inline now, as the
+editor's already was.
 
 ### 7.1 Simulator verification, 2026-09-03
 

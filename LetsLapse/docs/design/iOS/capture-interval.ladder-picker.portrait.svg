@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval · Ladder picker · portrait</title>
+  <desc>Mirrors App/LightLadderViews.swift (LadderPickerSheet), presented from the ladder chip in App/CaptureDials.swift (IntervalDialsRow.ladderChip → onSelectLadder) via CaptureView's ladderChrome. A medium-detent sheet (.medium/.large, drag indicator) over the dimmed capture screen, white: title "Ladder" 20 bold with "Manage" 15 semibold in LL.amber trailing; then the store's ladders — the built-in first, each row = 26 pt LadderSwatch (the ladder's own rungs as a vertical gradient, amber → accent → accentDeep → ink), name 16, subtitle 11.5 secondary ("Built in · 4 rungs · EV 13 · 8 · 4 · darker"; user ladders drop the "Built in ·"), a checkmark in LL.amber on the selected one; rows 13 pt padded with a 38 pt-inset divider between them. Picking dismisses and arms that ladder for the next Ladder shoot (nil = the built-in); Manage dismisses and opens Interval ladders (interval-ladders.portrait.svg) — the sheet never edits. Footer 11.5 secondary. Drawn with the built-in alone; a user ladder would follow as a second row. Same medium sheet on iPad (the chip lives inside the Equatable dial row, which a popover anchor would have to reach through) — a noted deviation from the handoff's popover. Staged by LL_LADDER=picker with LL_CAPTURE=1.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+    <linearGradient id="swatch" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#FFB340"/><stop offset="0.33" stop-color="#C36A00"/><stop offset="0.67" stop-color="#8A4A00"/><stop offset="1" stop-color="#1C1C1E"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- dimmed capture screen behind the sheet -->
+      <g id="dimmed-capture" opacity="0.7">
+        <rect x="0" y="86" width="393" height="440" fill="url(#sky)"/>
+        <circle cx="132" cy="252" r="28" fill="#FFB340" opacity="0.9"/>
+        <polygon points="0,370 70,330 150,364 235,308 310,357 393,321 393,526 0,526" fill="#141A24"/>
+        <g id="top-bar">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+          <circle cx="81" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="81" cy="88" r="8.5" fill="none" stroke="#FFF" stroke-width="1.8"/>
+          <path d="M81 83 v5 h3.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+          <rect x="198" y="70" width="179" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="212" y="92" font-size="13" class="sb" fill="#FFF">12MP 4:3</text>
+          <text x="274" y="92" font-size="13" class="sb" fill="#FFF">· JPEG</text>
+          <rect x="106" y="72" width="84" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="134" y="92.0" font-size="12.5" class="sb" fill="#FFF">≈10.6k</text>
+        </g>
+      </g>
+      <rect x="0" y="0" width="393" height="852" fill="#000" opacity="0.35"/>
+
+      <!-- the picker sheet (medium detent) -->
+      <g id="ladder-picker-sheet">
+        <rect x="0" y="400" width="393" height="452" rx="20" fill="#FFF"/>
+        <rect x="178.5" y="406" width="36" height="5" rx="2.5" fill="#000" opacity="0.2"/>
+        <text x="16" y="435" font-size="20" class="b" fill="#000">Ladder</text>
+        <text x="377" y="435" font-size="15" class="sb" fill="#FFB340" text-anchor="end">Manage</text>
+
+        <g id="row-built-in">
+          <rect x="16" y="469" width="26" height="26" rx="7" fill="url(#swatch)"/>
+          <text x="54" y="479" font-size="16" fill="#000">Bright &amp; Fast, Dark &amp; Slow</text>
+          <text x="54" y="496" font-size="11.5" class="sec">Built in · 4 rungs · EV 13 · 8 · 4 · darker</text>
+          <path d="M364 482 l4.5 4.5 l9 -9.5" stroke="#FFB340" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="checkmark"/>
+        </g>
+
+        <text x="16" y="535" font-size="11.5" class="sec">Manage opens Interval ladders, where a ladder can be duplicated,</text>
+        <text x="16" y="549" font-size="11.5" class="sec">edited or deleted. Picking one here only arms it.</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval · Ladder picker · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLadderViews (LadderPickerSheet) — ✓ on the armed ladder · Manage · LL_LADDER=picker</text>
+</svg>

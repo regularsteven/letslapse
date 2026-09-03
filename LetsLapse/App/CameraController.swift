@@ -7901,6 +7901,7 @@ final class CameraController: NSObject, ObservableObject {
             var depth = depth
             var holyGrail = holyGrail
             var autoInterval = autoInterval
+            #if os(iOS)
             if let ladder {
                 let rung = self.armLadder(ladder)
                 interval = rung.intervalSeconds
@@ -7910,6 +7911,13 @@ final class CameraController: NSObject, ObservableObject {
             } else {
                 self.ladderRequestedForRun = nil
             }
+            #else
+            // The ladder rides the ramp engine, which is iOS/iPadOS-only (see
+            // the region comment above `holyGrailSettleSeconds`), and so does
+            // its state: a Mac run ignores the table rather than pretending a
+            // webcam can climb it.
+            _ = ladder
+            #endif
             if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
                 LLog("capture: refused to start at thermal critical — the lens stabiliser parks there; let the device cool")
                 CaptureSessionLogger.shared.log("capture_refused", [

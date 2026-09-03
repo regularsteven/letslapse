@@ -11,15 +11,59 @@ live inline.
 
 ## Open
 
+### Framing lock — post-capture stabilisation of interval shoots
+
+**Raised:** 2026-09-03 · **Engine, design files and app wiring shipped
+2026-09-03 (uncommitted) — Steven testing on the Mac; screenshot
+verification against the SVGs, the viewer/preview/motion-player lock and
+an iOS timing check owed** · medium · design + engine notes:
+[framing-lock.md](framing-lock.md) · tools: `lapse framing`, `lapse stack
+--lock`, `tools/framing_lock_report.py`
+
+*Decided by Steven 2026-09-03: engine first → design → UI; lock everything.
+Product shape agreed: on the interval project detail's Originals card, a
+**Review photos** row (progress, then a report of the knocks and the plan —
+human copy and the numbers in one `source/framing.json`) and a **Stabilise
+photos** row, disabled until a review exists, that commits the plan as
+metadata — never a pixel on disk; in Adjust › Advanced an **Apply
+stabilisation** switch, ON by default once stabilised, OFF and disabled
+before. The Kit engine, the `lapse` commands and 14 tests are in; the E33
+plan is committed and `lapse stack --lock` renders its 803–810 window crisp.
+Owed: the SVGs, the app wiring in every stills consumer, the sidecar in the
+export/import/transfer lists, an iOS timing check — itemised in the doc.*
+
+A tripod on a bridge moves when a tram crosses. `E33ED216` (16 Pro
+telephoto, DNG, 5030 frames, sunset → night) has **25** bounce events of
+2–10 px — pure vertical translation, no rotation, no scale, zero issues in
+the capture log, never thermal-critical — and at speed 8 every one of them
+ghosts the edges inside its 8-still window and wobbles the framing between
+windows. Locking the whole shoot to one reference framing costs a **0.76 %**
+crop (4001×3001 of 4032×3024). Unlike the 12 Pro OIS park below, nothing at
+capture can prevent this; it is post-capture by nature.
+
+The job: a measurement pass (Vision translational registration or the Kit's
+own `FrameAlignmentGate` correlation at stride 1–2, anchors chained every
+~30 frames, reduced-scale raw decode) into a `frames.alignment` sidecar;
+then a per-source-frame translate + fixed inset + scale-back applied through
+the one decode closure of each stills path (`PhotoPreset.blendSupport`'s
+`decode`, `stackSequence`'s `loadFrame`, and the poster fast path's texture
+provider — same `BlendWindowRenderer`, so posters stay identical), composed
+with `FrameRotation` so a levelled and locked shoot resamples once. UI: a
+*Lock framing* switch in the Adjust (photos) ··· drawer with a cost line,
+and a real "Measuring framing…" processing phase. Decisions owed first:
+lock-everything vs bounce-only, sub-pixel vs integer, the crop cap — all
+laid out in the doc with the measurements behind them.
+
 ### Light Ladder — a fourth Interval MODE (Basic · Dynamic · Scanner · Ladder)
 
 **Raised:** 2026-09-03 (Steven — Claude Design handoff "Light Ladder
 interval profile", Turn 2) · **Built 2026-09-03** (Kit model + 21 tests,
 store, engine hook, capture screen, list/editor/rung, test-card ramp; two
 16 Pro runs — the pressure-floor fix from the first is unproven until a run
-reaches serious). Owed: the seven SVGs, an `LL_LADDERS` hook, the §9 card
-bench, one real dusk, sign-off. Plan, model, decisions and the bench:
-`docs/light-ladder.md`.
+reaches serious) · **Mirrored 2026-09-03** (the seven SVGs + the Create row,
+`LL_LADDERS=list|editor|rung`, rung title inline). Owed: the §9 card bench,
+one real dusk, device sign-off of the mirrors. Plan, model, decisions and the
+bench: `docs/light-ladder.md`.
 
 A shoot follows a user-authored table of **rungs** keyed on scene EV; each
 rung fixes ISO, shutter, WB, interval and blend depth. The servo stays in
@@ -31,26 +75,24 @@ decisions taken 2026-09-03 by recommendation (Night shutter auto ≤ 1 s not
 pinned; governor may lengthen a rung's interval, never shorten; WB auto =
 tracked; ribbon editor; iPhone + iPad first, Mac hidden). Acceptance bench
 = the monitor test card's brightness ramp, designed before the engine hook.
-Seven SVGs owed, listed in the plan.
+The seven SVGs and the Create-row edit are mirrored (iOS INDEX ✅, sim
+screenshots); the device pass that signs them off is not.
 
 ---
 
-### Time-slice poster fast path (image-only, regular clip off)
+### Time-slice poster fast path — what is still owed
 
-**Raised:** 2026-09-02 (Steven)
+**Raised:** 2026-09-02 (Steven) · **Implemented 2026-09-02** (Kit, CLI,
+app, Adjust cost line; Mac-verified against the 1,480-frame library —
+`docs/time-slicing-poster-fast-path.md` carries the numbers). Left open:
 
-An image-only time slice with the regular timelapse off still blends and
-encodes the whole shoot, verifies and counts the temp master, then decodes
-every master frame to copy bands from S of them. A poster needs one master
-frame per band or cell, each of which is one stacker window — so the run
-should resolve the same window schedule, render only the windows the ladder
-names (**still blended at the chosen depth**; 1:1 is the only case with
-nothing to blend), and compose the poster from those. Stills sources only:
-their grade, level and text already ride the stacker and its frame hook, and
-no other tail pass runs on that path. The animation gets no shortcut — every
-master frame feeds it. Video sources are deferred with reasons. Plan, cost
-model, build stages and the four decisions it needs:
-`docs/time-slicing-poster-fast-path.md`.
+- The §7 stage-6 iPhone run at depth 1 with DNGs, for the RAW-decode-per-
+  band number and the thermal picture.
+- Sign-off on the four §9 decisions taken by recommendation (cost line
+  only; iOS chunks of 4; the `lapse poster` CLI kept; fast posters not
+  bit-identical to tail-pass posters), and on the code-first mirror
+  `docs/design/iOS/adjust.timeslice-poster.portrait.svg`.
+- Video sources (§8) — a second job with its own plan.
 
 ---
 

@@ -2,6 +2,7 @@ import SwiftUI
 import Photos
 import PhotosUI
 import UniformTypeIdentifiers
+import LetsLapseKit
 
 /// What a tap on an effect card should set up before the camera opens.
 /// A nil mode (the plain "Record now" entry) means no opinion: the capture
@@ -72,6 +73,9 @@ struct CreateView: View {
     /// screen's; it is mirrored here so "Use this ladder" arms the next shoot.
     @State private var showLadders = false
     @State private var selectedLadderID: UUID? = RecordingSettingsStore.ladderID
+    /// Where the ladders sheet opens — empty for the list; the `LL_LADDERS`
+    /// hook pushes an editor or a rung (DEBUG only, set on appear).
+    @State private var laddersInitialPath: [LadderRoute] = []
     #else
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -199,6 +203,28 @@ struct CreateView: View {
             if let hook = environment["LL_TRANSFER"], hook != "0" {
                 showDeviceImport = true
             }
+            // `LL_LADDERS=list|editor|rung` — the Interval ladders sheet on the
+            // requested screen. `editor` opens the built-in; `rung` opens its
+            // Dusk rung, the one every `LL_LADDER` capture state stands on.
+            // `list` seeds one user clone when there is none, so YOUR LADDERS
+            // shows the row the design draws rather than an empty section —
+            // simulator data, written to the same `light_ladders.json` a tap
+            // on Duplicate would write.
+            if let screen = environment["LL_LADDERS"] {
+                let builtIn = LightLadder.builtIn
+                switch screen {
+                case "editor":
+                    laddersInitialPath = [.editor(builtIn.id)]
+                case "rung":
+                    let dusk = builtIn.rungs[min(2, builtIn.rungs.count - 1)]
+                    laddersInitialPath = [.editor(builtIn.id), .rung(ladder: builtIn.id, rung: dusk.id)]
+                default:
+                    if LightLadderStore.shared.userLadders.isEmpty {
+                        LightLadderStore.shared.duplicate(builtIn, named: "Bright & Fast (copy)")
+                    }
+                }
+                showLadders = true
+            }
             #endif
         }
         #endif
@@ -294,16 +320,20 @@ struct CreateView: View {
 
             importProjectRow
 
+            #if os(iOS)
             Divider().padding(.leading, 58)
 
             laddersRow
+            #endif
         }
         .llCard(cornerRadius: 18)
     }
 
+    #if os(iOS)
     /// Interval's Ladder MODE tables. A sheet here as on the capture screen:
     /// the list owns its own navigation (editor, rung), so it presents the
-    /// same way from both doors.
+    /// same way from both doors. iOS only, with the state above it: Ladder
+    /// MODE rides the ramp engine, which macOS cameras cannot run.
     private var laddersRow: some View {
         Button {
             showLadders = true
@@ -316,10 +346,11 @@ struct CreateView: View {
         }
         .buttonStyle(.plain)
         .sheet(isPresented: $showLadders) {
-            LightLaddersView(store: LightLadderStore.shared, selectedID: $selectedLadderID)
+            LightLaddersView(store: LightLadderStore.shared, selectedID: $selectedLadderID, initialPath: laddersInitialPath)
         }
         .onChange(of: selectedLadderID) { id in RecordingSettingsStore.save(ladderID: id) }
     }
+    #endif
 
     private var importProjectRow: some View {
         Button {

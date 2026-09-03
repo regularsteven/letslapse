@@ -201,6 +201,20 @@ struct LetsLapseApp: App {
             }
         }
         .defaultSize(width: 1000, height: 700)
+
+        // The framing review — "Review photos" on an interval project — is a
+        // fixed 560×640 window (docs/design/macOS/framing-review.svg): a
+        // report with a chart, not an editor, so it neither resizes nor
+        // needs to. One per project; reopening fronts it.
+        WindowGroup(for: FramingReviewWindowRequest.self) { $request in
+            if let request {
+                FramingReviewView(captureID: request.captureID)
+                    .environmentObject(model)
+                    .navigationTitle(request.title)
+            }
+        }
+        .windowResizability(.contentSize)
+        .defaultSize(width: 560, height: 640)
         #endif
     }
 }
@@ -528,7 +542,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_LADDERS"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -588,6 +602,12 @@ struct ContentView: View {
         case "create": selectedTab = .create
         case "collections": selectedTab = .collections
         default: break
+        }
+        // LL_LADDERS=list|editor|rung — the Interval ladders sheet lives on
+        // the Create tab, so the hook implies that tab; `CreateView` reads the
+        // value itself and opens the sheet on the requested screen.
+        if environment["LL_LADDERS"] != nil {
+            selectedTab = .create
         }
         // LL_SCANS / LL_SCANS_EMPTY / LL_SCANS_DETAIL / LL_SCANS_CORRECTED —
         // the Scans tab in each of its states. Same reason as every other

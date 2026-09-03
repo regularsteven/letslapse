@@ -22,6 +22,12 @@ struct LightLaddersView: View {
     @Binding var selectedID: UUID?
     @State private var path: [LadderRoute] = []
     @Environment(\.dismiss) private var dismiss
+    /// Opens the sheet already pushed to an editor or a rung — the
+    /// `LL_LADDERS` hook's door, since a headless run cannot tap a row.
+    /// Applied a beat after the stack appears: a path seeded into the
+    /// `@State` initial value is dropped on the sheet's first presentation,
+    /// before `navigationDestination` has registered.
+    var initialPath: [LadderRoute] = []
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -75,6 +81,11 @@ struct LightLaddersView: View {
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Done") { dismiss() }
                 }
+            }
+            .task {
+                guard !initialPath.isEmpty, path.isEmpty else { return }
+                try? await Task.sleep(nanoseconds: 350_000_000)
+                path = initialPath
             }
         }
     }
@@ -612,6 +623,11 @@ struct LightRungView: View {
         }
         .disabled(isBuiltIn)
         .navigationTitle(draft.name)
+        #if os(iOS)
+        // Inline, as the editor: pushed from a sheet, the large title's
+        // collapse animation drew a second "Dusk" over the name row.
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
         .onChange(of: draft) { _ in commit() }
     }
 

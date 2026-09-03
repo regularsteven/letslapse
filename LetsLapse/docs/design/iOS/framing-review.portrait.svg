@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Framing review · report · portrait</title>
+  <desc>Mirrors App/FramingReviewView.swift (iOS: a large-detent sheet over ProjectDetailView; macOS: its own window, ../macOS/framing-review.svg) in its REPORT state, over LetsLapseKit.FramingReview loaded from the project's source/framing.json. Four blocks, top to bottom: the verdict card (exclamationmark.triangle.fill in amber + "Stabilisation recommended", or checkmark.circle.fill in green + "Framing steady" when the review found no knocks — the copy is `FramingReview.summary`, verbatim); the path card — every photo's vertical offset against the reference framing on a ±10 px scale, knocks shaded amber, the accent line the measured path (`frames[].dy` minus `plan.referenceY`; horizontal is not drawn — on a tripod it is the gravity axis that moves); the knocks card (`events`, largest first, `Event.summary` split into range · count, the amber bar the peak on a 10 px scale); and the plan card in ink — `plan.summary` in words and the crop line, the same numbers `FramingLock` will apply. The primary button commits the plan (`applyingPlan()` → `stabilisation` in the same file — metadata only); once committed the verdict row gains a green "Stabilised" line and the button reads "Undo". Done dismisses; the project's Originals rows update in place. The measuring state is framing-review.measuring.portrait.svg.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <!-- the project detail, pushed back behind the sheet -->
+      <rect x="0" y="0" width="393" height="852" fill="#000"/>
+      <rect x="14" y="12" width="365" height="60" rx="14" fill="#F2F2F7" opacity="0.22"/>
+      <!-- the sheet -->
+      <g id="sheet">
+        <rect x="0" y="30" width="393" height="822" rx="12" fill="#F2F2F7"/>
+        <rect x="178.5" y="36" width="36" height="5" rx="2.5" fill="#C6C6CB"/>
+        <text x="196.5" y="70" font-size="17" class="sb" fill="#000" text-anchor="middle">Framing review</text>
+        <text x="377" y="70" font-size="17" class="sb" fill="#C36A00" text-anchor="end">Done</text>
+        <line x1="0" y1="86" x2="393" y2="86" stroke="#000" stroke-opacity="0.08"/>
+        <text x="196.5" y="106" font-size="12" fill="#6D6D72" text-anchor="middle">Interval — harbour dusk · 184 photos · 4032×3024</text>
+        <!-- verdict -->
+        <g id="verdict-card">
+          <rect x="16" y="120" width="361" height="96" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <g data-symbol="exclamationmark.triangle.fill"><path d="M40 135 L50.45 154.25 L29.55 154.25 Z" fill="#FFB340" stroke-linejoin="round"/><rect x="38.7" y="142.15" width="2.6" height="6.6" rx="1.3" fill="#1C1C1E"/><circle cx="40" cy="151.5" r="1.6" fill="#1C1C1E"/></g>
+          <text x="58" y="151" font-size="16" class="sb" fill="#000">Stabilisation recommended</text>
+          <text x="32" y="172" font-size="12" fill="#6D6D72">3 knocks across 184 photos over 3 minutes, the</text>
+          <text x="32" y="186" font-size="12" fill="#6D6D72">largest 5.6 px at photos 121–129. Locking the</text>
+          <text x="32" y="200" font-size="12" fill="#6D6D72">framing crops 0.4% from each edge (4016×3012</text>
+          <text x="32" y="214" font-size="12" fill="#6D6D72">of 4032×3024).</text>
+        </g>
+        <!-- the path: vertical offset of every photo against the reference framing -->
+        <text x="20" y="243" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">FRAMING OVER THE SHOOT</text>
+        <g id="path-card">
+          <rect x="16" y="252" width="361" height="132" rx="16" fill="#FFF" filter="url(#soft)"/>
+<g id="path-chart" transform="translate(28,262)">
+<rect x="0" y="0" width="337" height="112" rx="6" fill="#F7F7F9"/>
+<line x1="34" y1="8.0" x2="329" y2="8.0" stroke="#000" stroke-opacity="0.05" stroke-dasharray="2 3"/>
+<text x="30" y="11.5" font-size="9.5" fill="#6D6D72" text-anchor="end">+10 px</text>
+<line x1="34" y1="56.0" x2="329" y2="56.0" stroke="#000" stroke-opacity="0.1" stroke-dasharray=""/>
+<text x="30" y="59.5" font-size="9.5" fill="#6D6D72" text-anchor="end">0</text>
+<line x1="34" y1="104.0" x2="329" y2="104.0" stroke="#000" stroke-opacity="0.05" stroke-dasharray="2 3"/>
+<text x="30" y="107.5" font-size="9.5" fill="#6D6D72" text-anchor="end">−10 px</text>
+<rect x="225.4" y="6" width="16.9" height="100" fill="#FFB340" fill-opacity="0.22"/>
+<rect x="288.3" y="6" width="8.8" height="100" fill="#FFB340" fill-opacity="0.22"/>
+<rect x="94.9" y="6" width="4.0" height="100" fill="#FFB340" fill-opacity="0.22"/>
+<polyline points="34.0,53.2 35.6,55.6 37.2,57.4 38.8,55.8 40.4,56.0 42.1,58.8 43.7,58.6 45.3,55.7 46.9,55.8 48.5,57.5 50.1,55.9 51.7,54.2 53.3,56.6 55.0,58.9 56.6,57.4 58.2,56.9 59.8,59.4 61.4,59.3 63.0,56.2 64.6,56.0 66.2,58.0 67.9,57.1 69.5,55.4 71.1,57.7 72.7,60.2 74.3,58.8 75.9,57.7 77.5,59.8 79.1,59.8 80.7,56.7 82.4,56.3 84.0,58.7 85.6,58.4 87.2,56.8 88.8,58.8 90.4,61.5 92.0,60.0 93.6,58.3 95.3,60.0 96.9,71.8 98.5,57.4 100.1,56.8 101.7,59.6 103.3,59.9 104.9,58.2 106.5,59.9 108.2,62.5 109.8,61.0 111.4,58.8 113.0,60.1 114.6,60.8 116.2,58.2 117.8,57.6 119.4,60.6 121.0,61.4 122.7,59.7 124.3,60.8 125.9,63.3 127.5,61.8 129.1,59.1 130.7,60.2 132.3,61.4 133.9,59.3 135.6,58.6 137.2,61.7 138.8,63.0 140.4,61.1 142.0,61.5 143.6,63.8 145.2,62.4 146.8,59.5 148.5,60.5 150.1,62.2 151.7,60.6 153.3,59.8 154.9,62.9 156.5,64.4 158.1,62.3 159.7,62.0 161.3,64.1 163.0,63.0 164.6,60.0 166.2,60.9 167.8,63.1 169.4,62.0 171.0,61.1 172.6,64.0 174.2,65.6 175.9,63.3 177.5,62.4 179.1,64.3 180.7,63.6 182.3,60.7 183.9,61.5 185.5,64.2 187.1,63.6 188.8,62.5 190.4,64.9 192.0,66.6 193.6,64.1 195.2,62.7 196.8,64.5 198.4,64.3 200.0,61.7 201.7,62.4 203.3,65.4 204.9,65.2 206.5,63.7 208.1,65.6 209.7,67.3 211.3,64.8 212.9,62.9 214.5,64.7 216.2,65.1 217.8,62.8 219.4,63.4 221.0,66.7 222.6,66.8 224.2,64.9 225.8,66.2 227.4,52.3 229.1,46.4 230.7,41.3 232.3,40.5 233.9,39.3 235.5,39.7 237.1,42.6 238.7,48.9 240.3,52.6 242.0,65.9 243.6,66.5 245.2,68.2 246.8,66.0 248.4,63.8 250.0,65.6 251.6,67.3 253.2,65.7 254.8,65.8 256.5,68.9 258.1,69.3 259.7,66.7 261.3,66.7 262.9,68.4 264.5,66.8 266.1,64.5 267.7,66.4 269.4,68.7 271.0,67.3 272.6,67.0 274.2,69.8 275.8,70.2 277.4,67.3 279.0,66.9 280.6,68.7 282.3,67.6 283.9,65.5 285.5,67.4 287.1,70.0 288.7,68.9 290.3,75.5 291.9,82.8 293.5,83.3 295.1,75.3 296.8,67.0 298.4,69.1 300.0,68.7 301.6,66.7 303.2,68.4 304.8,71.4 306.4,70.4 308.0,68.9 309.7,70.8 311.3,71.4 312.9,68.4 314.5,67.4 316.1,69.7 317.7,69.9 319.3,68.1 320.9,69.6 322.6,72.6 324.2,71.7 325.8,69.6 327.4,71.0 329.0,71.9" fill="none" stroke="#C36A00" stroke-width="1.3" stroke-linejoin="round"/>
+<text x="34" y="109" font-size="9.5" fill="#6D6D72">photo 1</text>
+<text x="329" y="109" font-size="9.5" fill="#6D6D72" text-anchor="end">184 · 3 min</text>
+</g>
+        </g>
+        <!-- the knocks, largest first; the amber bar is the peak on a 10 px scale -->
+        <text x="20" y="411" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">KNOCKS · 3</text>
+        <g id="knocks-card">
+          <rect x="16" y="420" width="361" height="122" rx="16" fill="#FFF" filter="url(#soft)"/>
+<text x="32" y="438" font-size="14.5" fill="#000">Photos 121–129</text>
+<text x="32" y="453" font-size="11.5" fill="#6D6D72">9 photos</text>
+<rect x="243" y="437" width="90" height="6" rx="3" fill="#E9E9EB"/>
+<rect x="243" y="437" width="50.4" height="6" rx="3" fill="#FFB340"/>
+<text x="377" y="444" font-size="13" class="sb" fill="#000" text-anchor="end">5.6 px</text>
+<line x1="32" y1="461" x2="377" y2="461" stroke="#000" stroke-opacity="0.08"/>
+<text x="32" y="478" font-size="14.5" fill="#000">Photos 160–163</text>
+<text x="32" y="493" font-size="11.5" fill="#6D6D72">4 photos</text>
+<rect x="243" y="477" width="90" height="6" rx="3" fill="#E9E9EB"/>
+<rect x="243" y="477" width="27.9" height="6" rx="3" fill="#FFB340"/>
+<text x="377" y="484" font-size="13" class="sb" fill="#000" text-anchor="end">3.1 px</text>
+<line x1="32" y1="501" x2="377" y2="501" stroke="#000" stroke-opacity="0.08"/>
+<text x="32" y="518" font-size="14.5" fill="#000">Photo 40</text>
+<text x="32" y="533" font-size="11.5" fill="#6D6D72">1 photo</text>
+<rect x="243" y="517" width="90" height="6" rx="3" fill="#E9E9EB"/>
+<rect x="243" y="517" width="21.6" height="6" rx="3" fill="#FFB340"/>
+<text x="377" y="524" font-size="13" class="sb" fill="#000" text-anchor="end">2.4 px</text>
+        </g>
+        <!-- the plan: the same numbers the engine will apply, in words -->
+        <g id="plan-card">
+          <rect x="16" y="558" width="361" height="132" rx="16" fill="#1C1C1E"/>
+          <text x="32" y="582" font-size="11.5" class="sb" fill="#FFB340" letter-spacing="0.5">THE FIX</text>
+          <text x="32" y="602" font-size="15" class="sb" fill="#FFF">Lock every photo to one framing</text>
+          <text x="32" y="622" font-size="11.5" fill="#FFF" fill-opacity="0.72">Shift each photo by up to ±1.2 px across and ±6.0 px</text>
+          <text x="32" y="636" font-size="11.5" fill="#FFF" fill-opacity="0.72">down, and crop 0.4% from each edge. The originals stay</text>
+          <text x="32" y="650" font-size="11.5" fill="#FFF" fill-opacity="0.72">untouched — the correction is applied when a clip is</text>
+          <text x="32" y="664" font-size="11.5" fill="#FFF" fill-opacity="0.72">blended or a photo is viewed.</text>
+          <text x="32" y="682" font-size="11.5" class="sb" fill="#FFB340">Crops 0.4% · keeps 4016×3012 of 4032×3024</text>
+        </g>
+        <!-- primary: commits the plan. After it: "Stabilised" (green check) and the button reads "Undo" -->
+        <g id="stabilise-button">
+          <rect x="16" y="706" width="361" height="50" rx="14" fill="#C36A00"/>
+          <text x="196.5" y="737" font-size="16" class="b" fill="#FFF" text-anchor="middle">Stabilise photos</text>
+        </g>
+        <text x="196.5" y="780" font-size="11.5" fill="#6D6D72" text-anchor="middle">Nothing on disk changes. Undo any time from the project screen.</text>
+      </g>
+      <!-- status bar -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+    </g>
+  </g>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Framing review · report · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/FramingReviewView.swift over LetsLapseKit.FramingReview — verdict · path · knocks · plan · Stabilise photos</text>
+</svg>

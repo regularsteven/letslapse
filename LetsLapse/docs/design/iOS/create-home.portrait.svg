@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Create (tab home) · portrait</title>
-  <desc>Mirrors App/CreateView.swift (effect cards grid, source rows) + App/DesignSystem.swift (FloatingTabBar). On iOS selecting the Create tab opens the camera immediately; this screen is the tab's home behind the camera, revealed on close. Both import rows now build real projects rather than staging a blend: "Import a video" registers a video project keeping the file's own name and the date it was SHOT, and "Import photos to stack…" registers an interval project whose frames.timestamps, frames.exposure and capture_log.json are rebuilt from the frames' own EXIF — see create-home.photo-source.portrait.svg for the chooser it opens and create-home.importing.portrait.svg for the progress card.</desc>
+  <desc>Mirrors App/CreateView.swift (effect cards grid, source rows) + App/DesignSystem.swift (FloatingTabBar). On iOS selecting the Create tab opens the camera immediately; this screen is the tab's home behind the camera, revealed on close. Both import rows now build real projects rather than staging a blend: "Import a video" registers a video project keeping the file's own name and the date it was SHOT, and "Import photos to stack…" registers an interval project whose frames.timestamps, frames.exposure and capture_log.json are rebuilt from the frames' own EXIF — see create-home.photo-source.portrait.svg for the chooser it opens and create-home.importing.portrait.svg for the progress card. 2026-09-03: a fifth source row, "Interval ladders" (CreateView.laddersRow, sunset.fill on LL.accentDeep, iOS only), opens the Interval ladders sheet (interval-ladders.portrait.svg) — Ladder MODE's tables, managed here as well as from the capture screen's ladder chip. The card is now 256 pt and its last row runs under the floating tab bar at rest; the page scrolls it clear. Screenshot via LL_TAB=create.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -71,7 +71,7 @@
 
       <!-- source rows card -->
       <g id="source-rows">
-        <rect x="16" y="500" width="361" height="205" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="500" width="361" height="256" rx="18" fill="#FFF" filter="url(#soft)"/>
         <g id="row-record-now">
           <rect x="32" y="511" width="30" height="30" rx="8" fill="#C36A00"/>
           <circle cx="47" cy="526" r="8" fill="none" stroke="#FFF" stroke-width="1.8" data-symbol="record.circle"/><circle cx="47" cy="526" r="3.4" fill="#FFF"/>
@@ -98,6 +98,18 @@
           <g data-symbol="shippingbox" stroke="#FFF" stroke-width="1.6" fill="none" stroke-linejoin="round"><path d="M47 670 l8 4 v8 l-8 4 -8 -4 v-8 z M39 674 l8 4 8 -4 M47 678 v8"/></g>
           <text x="74" y="684" font-size="16" fill="#000">Import a LetsLapse project…</text>
           <path d="M363 672 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
+        <line x1="74" y1="704" x2="377" y2="704" stroke="#000" stroke-opacity="0.08"/>
+        <!-- fifth row (2026-09-03): opens the Interval ladders sheet. iOS
+             only. At rest it runs under the floating bar and scrolls clear -->
+        <g id="row-interval-ladders">
+          <rect x="32" y="715" width="30" height="30" rx="8" fill="#8A4A00"/>
+          <g data-symbol="sunset.fill" fill="#FFF" stroke="#FFF" stroke-width="1.3" stroke-linecap="round">
+            <path d="M41 733 a6 6 0 0 1 12 0 z" stroke="none"/>
+            <path d="M38 733 h18 M40.5 736.5 h13 M47 722.5 v3 M40.5 725.5 l2 2 M53.5 725.5 l-2 2"/>
+          </g>
+          <text x="74" y="735" font-size="16" fill="#000">Interval ladders</text>
+          <path d="M363 723 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         </g>
       </g>
 
@@ -135,5 +147,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create (tab home) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — EffectCard grid · SourceRow card · FloatingTabBar</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — EffectCard grid · SourceRow card (5 rows) · FloatingTabBar</text>
 </svg>

@@ -1,0 +1,53 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Framing review · measuring · portrait</title>
+  <desc>Mirrors App/FramingReviewView.swift in its MEASURING state: LetsLapseKit.FramingMeasurement running off the main actor over the project's stills (half-size raw decode, 30-photo anchor chunks, two workers on a phone), progress = photos measured ÷ total, the time-left estimate from the run pace. Cancel stops the measurement and leaves no review behind (an earlier review, if any, is untouched until a new one completes). The report state is framing-review.portrait.svg. Done is present but the sheet stays until the run ends or is cancelled.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <!-- the project detail, pushed back behind the sheet -->
+      <rect x="0" y="0" width="393" height="852" fill="#000"/>
+      <rect x="14" y="12" width="365" height="60" rx="14" fill="#F2F2F7" opacity="0.22"/>
+      <!-- the sheet -->
+      <g id="sheet">
+        <rect x="0" y="30" width="393" height="822" rx="12" fill="#F2F2F7"/>
+        <rect x="178.5" y="36" width="36" height="5" rx="2.5" fill="#C6C6CB"/>
+        <text x="196.5" y="70" font-size="17" class="sb" fill="#000" text-anchor="middle">Framing review</text>
+        <text x="377" y="70" font-size="17" class="sb" fill="#C36A00" text-anchor="end">Done</text>
+        <line x1="0" y1="86" x2="393" y2="86" stroke="#000" stroke-opacity="0.08"/>
+        <text x="196.5" y="106" font-size="12" fill="#6D6D72" text-anchor="middle">Interval — harbour dusk · 184 photos · 4032×3024</text>
+        <g id="progress-card">
+          <rect x="16" y="120" width="361" height="192" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="150" font-size="16" class="sb" fill="#000">Measuring the framing</text>
+          <!-- 6pt capsule, accent fill; the system ProgressView tints correctly on iOS but the capsule keeps the two platforms' specs identical -->
+          <rect x="32" y="166" width="329" height="6" rx="3" fill="#000" fill-opacity="0.12"/>
+          <rect x="32" y="166" width="129" height="6" rx="3" fill="#C36A00"/>
+          <text x="32" y="192" font-size="13" class="mono" fill="#000">Photo 72 of 184</text>
+          <text x="361" y="192" font-size="13" class="mono" fill="#6D6D72" text-anchor="end">About 20 seconds left</text>
+          <text x="32" y="222" font-size="12" fill="#6D6D72">Each photo is matched against its neighbours to</text>
+          <text x="32" y="237" font-size="12" fill="#6D6D72">find where the framing moved. Nothing on disk</text>
+          <text x="32" y="252" font-size="12" fill="#6D6D72">changes — the review is written beside the photos</text>
+          <text x="32" y="267" font-size="12" fill="#6D6D72">and the fix is metadata until you apply it.</text>
+          <text x="361" y="298" font-size="14" class="sb" fill="#C36A00" text-anchor="end">Cancel</text>
+        </g>
+      </g>
+      <!-- status bar -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+    </g>
+  </g>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Framing review · measuring · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/FramingReviewView.swift — progress over LetsLapseKit.FramingMeasurement, cancellable</text>
+</svg>
