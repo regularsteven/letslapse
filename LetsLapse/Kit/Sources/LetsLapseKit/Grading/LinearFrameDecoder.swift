@@ -122,11 +122,18 @@ public final class LinearFrameDecoder {
     /// `.cirawFilter` path and nowhere else: a caller that caches decoded
     /// frames must key on the recipe's white balance under that path, or a
     /// temperature drag will hand back yesterday's pixels.
+    ///
+    /// `transform`, when given, runs over the decoded `CIImage` before it is
+    /// rendered to the texture — the framing lock's shift-crop-scale
+    /// (`FramingLock.levelled`) goes here, so a stabilised blend costs one
+    /// Core Image pass per frame and no second read of the texture. It must
+    /// keep the image's extent (same size out as in).
     public func decode(
         url: URL,
         scale: Float = 1,
         path: RawDecodePath = .bradfordAdaptation,
-        recipe: GradeRecipe = .neutral
+        recipe: GradeRecipe = .neutral,
+        transform: ((CIImage) -> CIImage)? = nil
     ) throws -> Frame {
         // The scaffolded path renders as the default one rather than failing;
         // `DCPDecoder` is the thing that reports it is not implemented.
@@ -183,9 +190,10 @@ public final class LinearFrameDecoder {
                 lastConverterBalanceFallbackReason = nil
             }
 
-            guard let image = raw.outputImage else {
+            guard var image = raw.outputImage else {
                 throw LapseError.imageLoadFailed(url)
             }
+            if let transform { image = transform(image) }
             var texture = try render(image)
             if effective == .dcpProfile {
                 texture = try applyDCPProfile(to: texture, url: url, temperatureK: Float(asShotK))
@@ -217,6 +225,7 @@ public final class LinearFrameDecoder {
         if scale != 1 {
             image = image.transformed(by: CGAffineTransform(scaleX: CGFloat(scale), y: CGFloat(scale)))
         }
+        if let transform { image = transform(image) }
         // Not raw: there is no converter to balance inside, so the frame
         // reports `.bradfordAdaptation` however it was asked for. Reporting
         // the requested path instead would tell `ToneMath.wbMatrix` the pixels

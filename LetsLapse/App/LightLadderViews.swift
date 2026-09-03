@@ -57,6 +57,10 @@ struct LadderLightPanel: View {
     /// The actuation clamp the light panel states at arm, e.g.
     /// "blend 10 → 6 in RAW on this camera". Nil when the rung runs as asked.
     let clampNote: String?
+    /// The Mac: the rung's ISO, shutter and white balance are not applied
+    /// (a Mac camera meters for itself) and nothing meters the step, so the
+    /// lever line says so and the "next" line drops its EV threshold.
+    var exposureIsAutomatic = false
     let onClose: () -> Void
 
     private var rung: Rung { ladder.rungs[rungIndex] }
@@ -110,7 +114,10 @@ struct LadderLightPanel: View {
     }
 
     private var leverLine: String {
-        "every \(LightLadderFormat.seconds(rung.intervalSeconds)) · \(rung.blendSummary) · ISO \(rung.iso.summary) · shutter \(rung.shutter.summary)"
+        let pacing = "every \(LightLadderFormat.seconds(rung.intervalSeconds)) · \(rung.blendSummary)"
+        return exposureIsAutomatic
+            ? "\(pacing) · exposure by the camera"
+            : "\(pacing) · ISO \(rung.iso.summary) · shutter \(rung.shutter.summary)"
     }
 
     private var costLine: String {
@@ -125,9 +132,14 @@ struct LadderLightPanel: View {
     }
 
     private var nextLine: String? {
-        guard rungIndex + 1 < ladder.rungs.count, let threshold = rung.lowerBoundEV else { return nil }
+        guard rungIndex + 1 < ladder.rungs.count else { return nil }
         let next = ladder.rungs[rungIndex + 1]
         let look = next.blendFrames > 1 ? "blend \(next.blendFrames)" : "no stacking"
+        if exposureIsAutomatic {
+            // What the step does, and the when left to the operator.
+            return "\(next.name) is next — every \(LightLadderFormat.seconds(next.intervalSeconds)), \(look). Step down as the light fades."
+        }
+        guard let threshold = rung.lowerBoundEV else { return nil }
         return "\(next.name) is next, below EV \(LightLadderFormat.ev(threshold)) — shutter \(next.shutter.summary), \(look)"
     }
 
@@ -264,6 +276,14 @@ struct LadderPickerSheet: View {
                 Button("Manage") { onManage() }
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundStyle(LL.amber)
+                #if os(macOS)
+                // A Mac sheet has no swipe to leave by: Done (and Escape)
+                // closes it without changing the arm.
+                Button("Done") { dismiss() }
+                    .font(.system(size: 15, weight: .semibold))
+                    .keyboardShortcut(.cancelAction)
+                    .padding(.leading, 6)
+                #endif
             }
             .padding(.top, 6)
             VStack(spacing: 0) {
@@ -310,6 +330,12 @@ struct LadderPickerSheet: View {
         .padding(.top, 10)
         .presentationDetents([.medium, .large])
         .presentationDragIndicator(.visible)
+        #if os(macOS)
+        // A Mac sheet takes its size from its content and is never
+        // user-resizable, so it opens at a size the list reads at.
+        .frame(minWidth: 440, minHeight: 360)
+        .padding(.bottom, 16)
+        #endif
     }
 
     private func isSelected(_ ladder: LightLadder) -> Bool {

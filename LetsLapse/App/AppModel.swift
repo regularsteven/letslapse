@@ -666,13 +666,19 @@ final class AppModel: ObservableObject {
         case combining(clips: Int)
         case grading
         case slicing
+        /// The poster fast path: `frames` master frames of `of` rendered
+        /// straight from the stills for `posters` posters — blending, at
+        /// depth, with no encode to follow.
+        case posterFrames(frames: Int, of: Int, posters: Int)
         case saving
     }
 
     var processingStage: ProcessingStage {
         switch processingPhase {
         case .preparing: return .preparing
-        case .blending: return .blending
+        // A poster run blends its frames and then saves; it encodes nothing,
+        // so the checklist must not tick an "Encoding video" row for it.
+        case .blending, .posterFrames: return .blending
         case .combining, .grading, .slicing: return .encoding
         case .saving: return .saving
         }
@@ -786,6 +792,15 @@ final class AppModel: ObservableObject {
     /// Frame indices to exclude from the blend. Set before `startProcessing`;
     /// filtered out of the `.photos` URL list. Never deletes the originals.
     @Published var excludedFrameIndices: Set<Int> = []
+    /// The open interval project's committed framing lock (`source/framing.json`
+    /// with a stabilisation), loaded off the main actor when the project opens
+    /// in Adjust. Nil when the photos were never reviewed or stabilised.
+    @Published var framingLock: FramingLock?
+    /// Adjust › Advanced › "Apply stabilisation". Per blend, not per project:
+    /// ON by default whenever `framingLock` exists, OFF (and disabled in the
+    /// sheet) when it does not. Every stills render reads it.
+    @Published var applyStabilisation = false
+    private var framingLockLoad: Task<Void, Never>?
 
     // Blend options
     /// Which codec each source clip contributes to the blend. `nil` = automatic
@@ -2747,6 +2762,7 @@ final class AppModel: ObservableObject {
             // Seed from the project's persistent frame nominations so the
             // user doesn't have to re-exclude them each blend session.
             excludedFrameIndices = nominatedExcludedIndices(for: capture)
+            loadFramingLock(for: capture)
             tailFramesToExclude = 0
             totalIntervalFrames = 0
             resultBlendID = nil
@@ -2791,6 +2807,7 @@ final class AppModel: ObservableObject {
             clearWarpHistory()
             // Seed from the project's persistent frame nominations.
             excludedFrameIndices = nominatedExcludedIndices(for: capture)
+            loadFramingLock(for: capture)
             tailFramesToExclude = 0
             totalIntervalFrames = 0
             resultBlendID = blend.id
@@ -4419,6 +4436,29 @@ final class AppModel: ObservableObject {
                                 outputFPS: fps)
                         }.value
                     }
+                    // The poster fast path (docs/time-slicing-poster-fast-path.md
+                    // §2): a run that keeps nothing but a time-slice poster
+                    // renders only the master frames the ladder needs, each
+                    // still blended at depth, and never encodes, verifies or
+                    // re-decodes a clip. Gated on the resolved job inputs;
+                    // everything else falls through to the path below
+                    // unchanged. The schedule is the SAME one the full render
+                    // would run — the compiled warp's windows, else the
+                    // constant-depth schedule — so the ladder points at the
+                    // same photographs (§3.1).
+                    if let sliceSettings, sliceSettings.output == .image,
+                       !sliceSettings.includeRegularClip,
+                       photoDepth < filteredURLs.count {
+                        let windows = intervalCompiled?.windows
+                            ?? WindowSchedule.make(
+                                totalInputFrames: filteredURLs.count, ramp: .constant(photoDepth))
+                        try await self.renderPosterFastPath(
+                            urls: filteredURLs, windows: windows, linear: linear, grade: grade,
+                            baseline: sliceSettings, variations: sliceVariations,
+                            captureID: captureID, parameters: parameters,
+                            posterSourceURL: posterSourceURL)
+                        return
+                    }
                     // Stills bake their grade frame by frame inside the blend,
                     // so no separate grade band exists on this path.
                     self.beginProgressPlan(.make(
@@ -4853,6 +4893,197 @@ final class AppModel: ObservableObject {
                 self?.stage = .configure
             }
         }
+    }
+
+    /// The time-slice poster fast path — `docs/time-slicing-poster-fast-path.md`
+    /// §3.5. Renders the poster (or a batch of posters) straight from the
+    /// stills: the union of the recipes' ladders is walked once, each master
+    /// frame it names rendered through the stacker's own window primitive —
+    /// decoded, accumulated at depth, graded at the window's centre, levelled
+    /// and overlaid in the per-output-frame hook — and its bands copied into
+    /// every poster that wants it. No temp master, nothing to verify, nothing
+    /// to clean up but the poster scratch files `storeBlend` copies. Ends the
+    /// run itself: registers every poster, fronts the first, and flips the
+    /// stage to done.
+    private func renderPosterFastPath(
+        urls: [URL],
+        windows: [Int],
+        linear: Bool,
+        grade: PhotoGrade,
+        baseline: TimeSliceSettings,
+        variations: TimeSliceVariationPlan?,
+        captureID: UUID,
+        parameters: BlendProject,
+        posterSourceURL: URL?
+    ) async throws {
+        let masterFrames = windows.count
+        // The cost isn't known until the provider has sized the stack and the
+        // batch has been generated against that size, both inside the render
+        // task; a provisional plan over every still keeps the bar honest
+        // until the real one replaces it.
+        beginProgressPlan(.make(
+            clipFrames: [urls.count], hasStitch: false, hasGrade: false, hasSlice: false))
+        processingPhase = .posterFrames(frames: 0, of: masterFrames, posters: 1)
+        statusMessage = "Preparing the poster..."
+        // The project's text overlays and level, resolved up front — mask and
+        // all — by the captureID this job STARTED with (same rule as the
+        // sequence path: a selection change mid-render must not retarget it).
+        let overlayBake = await makeOverlayExportBake(for: captures.first { $0.id == captureID })
+        let renderer = TimeSliceRenderer()
+        // iOS holds at most four poster buffers at once (~49 MB each at
+        // 12 MP); the Mac takes the whole batch in one walk (§3.4).
+        #if os(macOS)
+        let chunkSize = Int.max
+        #else
+        let chunkSize = 4
+        #endif
+
+        struct Rendered: Sendable {
+            let recipe: TimeSliceSettings
+            let url: URL
+            let result: TimeSliceRenderResult
+            /// Distinct master frames this recipe's own ladder named.
+            let framesRendered: Int
+        }
+
+        // Same lock as the clip's render, so a poster's frame stays the
+        // clip's frame with the stabilisation on.
+        let lock = applyStabilisation ? framingLock : nil
+        let renderTask = Task.detached(priority: .utility) { [weak self] () throws -> [Rendered] in
+            let core = try BlendCore()
+            let decode: StillsWindowProvider.Decode
+            if linear {
+                // The engine path, exactly as the sequence render stages it:
+                // reuse `blendSupport`, never rebuild its closures (§10).
+                let support = try PhotoGrader.blendSupport(grade: grade, lock: lock)
+                decode = .linear(decode: support.decode, grade: support.hook)
+            } else {
+                let loader = PhotoGrader.stabilisedLoader(lock, base: Self.gradedFrameLoader(grade, over: urls))
+                decode = .gamma(
+                    load: { url in try loader?(url) ?? ImageStacker.loadImage(at: url) },
+                    linearLight: false)
+            }
+            // Progress is reported in stills decoded, because decodes are
+            // the cost; the denominator is replaced once the union is known.
+            final class Expected: @unchecked Sendable {
+                var decodes: Int
+                init(_ decodes: Int) { self.decodes = decodes }
+            }
+            let expected = Expected(urls.count)
+            let provider = try StillsWindowProvider(
+                core: core, urls: urls, windows: windows, decode: decode,
+                overlayComposite: overlayBake?.stackerHook(),
+                onStillDecoded: { decoded in
+                    let fraction = min(0.999, Double(decoded) / Double(max(1, expected.decodes)))
+                    Task { @MainActor in
+                        self?.reportClipProgress(0, fraction: fraction)
+                    }
+                },
+                isCancelled: { renderer.isCancelled })
+            let width = provider.width
+            let height = provider.height
+
+            // The batch, generated against inputs that are all known BEFORE
+            // rendering — which the tail pass could not do (§3.5).
+            var recipes = [baseline]
+            if let variations, masterFrames > 1 {
+                let generated = TimeSliceVariationGenerator.variations(
+                    plan: variations, baseline: baseline, masterFrames: masterFrames,
+                    width: width, height: height)
+                if !generated.isEmpty { recipes = generated }
+            }
+            var chunks: [[TimeSliceSettings]] = []
+            var cursor = 0
+            while cursor < recipes.count {
+                let end = min(recipes.count, cursor + chunkSize)
+                chunks.append(Array(recipes[cursor..<end]))
+                cursor = end
+            }
+            // The real cost: every chunk's union, in stills. Still 0 was
+            // decoded for the size and is reused only by the first chunk's
+            // window 0; later chunks decode it again (§3.4: no caching across
+            // chunks by design).
+            var totalDecodes = 1
+            var unionFrames = 0
+            for (index, chunk) in chunks.enumerated() {
+                let union = try TimeSliceRenderer.posterFrameIndices(
+                    recipes: chunk, masterFrames: masterFrames, width: width, height: height)
+                unionFrames += union.count
+                totalDecodes += union.reduce(0) { $0 + provider.sourceRange(of: $1).count }
+                if index == 0, union.first == 0 { totalDecodes -= 1 }
+            }
+            expected.decodes = max(1, totalDecodes)
+            let posterCount = recipes.count
+            let frames = unionFrames
+            Task { @MainActor in
+                guard let self else { return }
+                self.beginProgressPlan(.make(
+                    clipFrames: [expected.decodes], hasStitch: false, hasGrade: false, hasSlice: false))
+                self.processingPhase = .posterFrames(
+                    frames: frames, of: masterFrames, posters: posterCount)
+                self.statusMessage = posterCount > 1
+                    ? "Rendering \(frames) of \(masterFrames) frames for \(posterCount) posters..."
+                    : "Rendering \(frames) of \(masterFrames) frames for the poster..."
+            }
+
+            let temp = FileManager.default.temporaryDirectory
+            let metadata = posterSourceURL.flatMap { ImageExporter.carryoverMetadata(from: $0) }
+            var rendered: [Rendered] = []
+            for chunk in chunks {
+                let urls = chunk.map { _ in
+                    temp.appendingPathComponent("LetsLapse-poster-\(UUID().uuidString).png")
+                }
+                let results = try renderer.renderPosters(
+                    provider: provider, recipes: chunk, posterURLs: urls, posterMetadata: metadata)
+                for (index, recipe) in chunk.enumerated() {
+                    let own = try TimeSliceRenderer.posterFrameIndices(
+                        recipes: [recipe], masterFrames: masterFrames, width: width, height: height)
+                    rendered.append(Rendered(
+                        recipe: recipe, url: urls[index], result: results[index],
+                        framesRendered: own.count))
+                }
+            }
+            return rendered
+        }
+        let rendered = try await withTaskCancellationHandler {
+            try await renderTask.value
+        } onCancel: {
+            renderer.cancel()
+        }
+
+        processingPhase = .saving
+        processingETADate = nil
+        var primary: (ProcessingOutput, BlendProject)?
+        for item in rendered {
+            var posterParameters = parameters
+            posterParameters.id = UUID()
+            posterParameters.createdAt = Date()
+            posterParameters.timeSlice = item.recipe
+            let geometryNote = item.result.grid.map { " · \($0.summary)" } ?? ""
+            let output = ProcessingOutput(
+                kind: .image,
+                url: item.url,
+                image: nil,
+                summary: "\(item.recipe.posterDisplayName) · \(item.result.width)×\(item.result.height)"
+                    + " · \(item.framesRendered) of \(masterFrames) frames rendered" + geometryNote,
+                inputFrames: urls.count,
+                outputFrames: nil,
+                width: item.result.width,
+                height: item.result.height)
+            let blend = try storeBlend(output, captureID: captureID, parameters: posterParameters)
+            // The FIRST variation fronts the result screen; the rest are in
+            // the library beside it.
+            if primary == nil { primary = (output, blend) }
+            // Scratch: storeBlend copied it.
+            try? FileManager.default.removeItem(at: item.url)
+        }
+        guard let primary else {
+            throw LapseError.timeSliceInvalid("the run produced no poster")
+        }
+        apply(primary.0, from: primary.1)
+        progress = 1
+        processingStartedAt = nil
+        stage = .done
     }
 
     /// Photo mode's one-tap path: turn a freshly captured burst into a single
@@ -5922,6 +6153,10 @@ final class AppModel: ObservableObject {
     ) async throws -> ProcessingOutput {
         let output = FileManager.default.temporaryDirectory
             .appendingPathComponent("LetsLapse-\(UUID().uuidString).mp4")
+        // The framing lock rides into the detached render as a value: every
+        // source frame is put back on the reference framing on its way into
+        // the accumulator, on both decode paths.
+        let lock = applyStabilisation ? framingLock : nil
         // `.utility`: the run takes minutes and its workers must sit below
         // touch handling — `.userInitiated` here is what let a blend starve
         // the Cancel button on 6-core phones.
@@ -5945,14 +6180,14 @@ final class AppModel: ObservableObject {
                     frameTimes: frameTimes,
                     customWindows: customWindows,
                     customWindowTimes: customWindowTimes,
-                    loadFrame: Self.gradedFrameLoader(grade, over: urls),
+                    loadFrame: PhotoGrader.stabilisedLoader(lock, base: Self.gradedFrameLoader(grade, over: urls)),
                     overlayComposite: overlayBake?.stackerHook(),
                     progress: progress)
             }
             // The engine path: linear half-float decode straight to the
             // accumulator, the grade applied once per OUTPUT frame after the
             // average — the order Lightroom would grade the blended still in.
-            let support = try PhotoGrader.blendSupport(grade: grade)
+            let support = try PhotoGrader.blendSupport(grade: grade, lock: lock)
             return try stacker.stackSequenceLinear(
                 imageURLs: urls,
                 ramp: ramp,
@@ -5980,6 +6215,9 @@ final class AppModel: ObservableObject {
         if grade.isKeyframed {
             let moments = grade.timeline.keyframes.count
             summary += " · \(moments) keyframe\(moments == 1 ? "" : "s")"
+        }
+        if let lock {
+            summary += " · framing locked (\(String(format: "%.1f", lock.cropFraction * 100))% crop)"
         }
         if let overlayBake, overlayBake.hasOverlays {
             summary += overlayBake.masks.isEmpty
@@ -6087,6 +6325,7 @@ final class AppModel: ObservableObject {
                 height: image.height
             )
         }
+        let lock = applyStabilisation ? framingLock : nil
         // `.utility`, like the sequence path above — same reasoning.
         let image = try await Task.detached(priority: .utility) { [weak self] () throws -> CGImage in
             let core = try BlendCore()
@@ -6094,7 +6333,7 @@ final class AppModel: ObservableObject {
             let stacked = try stacker.stack(
                 imageURLs: urls,
                 linearLight: linear,
-                loadFrame: Self.gradedFrameLoader(grade, over: urls),
+                loadFrame: PhotoGrader.stabilisedLoader(lock, base: Self.gradedFrameLoader(grade, over: urls)),
                 progress: { fraction in
                     Task { @MainActor in
                         self?.reportClipProgress(0, fraction: fraction)
@@ -6112,6 +6351,9 @@ final class AppModel: ObservableObject {
         var summary = "\(urls.count) photos stacked · \(image.width)×\(image.height)"
         if !grade.isColorIdentity {
             summary += " · \(grade.preset.displayName) grade baked in"
+        }
+        if lock != nil {
+            summary += " · framing locked"
         }
         if grade.hasRotation {
             summary += Self.levelSummary(grade)
@@ -7052,6 +7294,38 @@ final class AppModel: ObservableObject {
 
     private func captureFolderURL(for id: UUID) -> URL {
         projectsRootURL.appendingPathComponent(id.uuidString, isDirectory: true)
+    }
+
+    /// Where a project's stills and their sidecars live — `frames.timestamps`,
+    /// `frames.exposure`, `capture_log.json` and the framing review.
+    func sourceFolderURL(for capture: CaptureProject) -> URL {
+        captureFolderURL(for: capture.id).appendingPathComponent("source", isDirectory: true)
+    }
+
+    /// Re-reads the lock when the project screen commits or withdraws one
+    /// while the same project is open in Adjust.
+    func refreshFramingLockIfOpen(_ capture: CaptureProject) {
+        guard currentCaptureID == capture.id else { return }
+        loadFramingLock(for: capture)
+    }
+
+    /// Reads the project's framing lock off the main actor and seeds the
+    /// Advanced switch from it. The lock is a few hundred kilobytes of JSON
+    /// for a five-thousand-photo shoot — never on the main thread, and never
+    /// left over from the previous project while it loads.
+    func loadFramingLock(for capture: CaptureProject) {
+        framingLockLoad?.cancel()
+        framingLock = nil
+        applyStabilisation = false
+        guard capture.kind == .photos, !capture.isPhotoCapture else { return }
+        let folder = sourceFolderURL(for: capture)
+        let captureID = capture.id
+        framingLockLoad = Task { [weak self] in
+            let lock = await Task.detached(priority: .utility) { FramingLock.load(inSourceFolder: folder) }.value
+            guard !Task.isCancelled, let self, self.currentCaptureID == captureID else { return }
+            self.framingLock = lock
+            self.applyStabilisation = lock != nil
+        }
     }
 
     private func blendOutputURL(for blend: BlendProject) -> URL {

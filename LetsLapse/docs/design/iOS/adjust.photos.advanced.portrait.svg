@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Adjust (photos) · Advanced sheet · portrait</title>
+  <desc>Mirrors App/AdjustView.swift (`AdvancedOptionsSheet`, the stills branch — no Speed ramp or Trim sections, those are video vocabulary) as a medium/large-detent sheet over the Adjust screen. New 2026-09-03 (design-first): the STABILISATION section between Blending and Excluded frames — one toggle, "Apply stabilisation", ON by default whenever the project carries a committed framing lock (`FramingLock.load(inSourceFolder:)` non-nil), its subtitle the lock's own crop; OFF and DISABLED — grey title, grey track, no thumb travel — when the photos have not been reviewed and stabilised, with the footer reading "Review and stabilise the photos on the project screen to enable this." The choice is per blend (it rides `AppModel` next to `linearLight`, not the project) and the estimate card's summary line gains "· stabilised" while it is on. Rendering: every stills path composes `FramingLock.levelled` into its per-frame decode, so the lock — and the fine rotation — resample once, before the accumulator.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+      <!-- the project detail, pushed back behind the sheet -->
+      <rect x="0" y="0" width="393" height="852" fill="#000"/>
+      <rect x="14" y="12" width="365" height="60" rx="14" fill="#F2F2F7" opacity="0.22"/>
+      <!-- the sheet -->
+      <g id="sheet">
+        <rect x="0" y="30" width="393" height="822" rx="12" fill="#F2F2F7"/>
+        <rect x="178.5" y="36" width="36" height="5" rx="2.5" fill="#C6C6CB"/>
+        <text x="196.5" y="70" font-size="17" class="sb" fill="#000" text-anchor="middle">Advanced</text>
+        <text x="377" y="70" font-size="17" class="sb" fill="#C36A00" text-anchor="end">Done</text>
+        <line x1="0" y1="86" x2="393" y2="86" stroke="#000" stroke-opacity="0.08"/>
+        <!-- Blending -->
+        <text x="32" y="122" font-size="13" fill="#6D6D72" letter-spacing="0.4">BLENDING</text>
+        <g id="blending-card">
+          <rect x="16" y="130" width="361" height="60" rx="12" fill="#FFF"/>
+          <text x="32" y="155" font-size="16" fill="#000">True-light blending</text>
+          <text x="32" y="172" font-size="12" fill="#6D6D72">Blends in linear light — smoother highlights</text>
+          <rect x="310" y="145" width="51" height="31" rx="15.5" fill="#34C759"/><circle cx="345.5" cy="160.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <!-- Stabilisation (2026-09-03): ON by default once the photos are stabilised;
+             OFF and DISABLED (grey title, grey track, footer explains) before -->
+        <text x="32" y="222" font-size="13" fill="#6D6D72" letter-spacing="0.4">STABILISATION</text>
+        <g id="stabilisation-card">
+          <rect x="16" y="230" width="361" height="60" rx="12" fill="#FFF"/>
+          <text x="32" y="255" font-size="16" fill="#000">Apply stabilisation</text>
+          <text x="32" y="272" font-size="12" fill="#6D6D72">Locks the framing · crops 0.4%</text>
+          <rect x="310" y="245" width="51" height="31" rx="15.5" fill="#34C759"/><circle cx="345.5" cy="260.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+        <text x="32" y="308" font-size="12" fill="#6D6D72">Reviewed and stabilised on the project screen. Off</text>
+        <text x="32" y="323" font-size="12" fill="#6D6D72">blends the photos exactly as captured. The originals</text>
+        <text x="32" y="338" font-size="12" fill="#6D6D72">are never changed.</text>
+        <!-- Excluded frames -->
+        <text x="32" y="375" font-size="13" fill="#6D6D72" letter-spacing="0.4">EXCLUDED FRAMES</text>
+        <g id="excluded-card">
+          <rect x="16" y="383" width="361" height="46" rx="12" fill="#FFF"/>
+          <text x="32" y="411" font-size="16" fill="#6D6D72">Every photo is included in the blend.</text>
+        </g>
+        <text x="32" y="447" font-size="12" fill="#6D6D72">Tail-frame review drops the flagged shaky frames from</text>
+        <text x="32" y="462" font-size="12" fill="#6D6D72">the blend. The photos stay on disk either way.</text>
+      </g>
+      <!-- status bar -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.35"/>
+    </g>
+  </g>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust (photos) · Advanced sheet · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift — AdvancedOptionsSheet (stills): Blending · Stabilisation · Excluded frames</text>
+</svg>

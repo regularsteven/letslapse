@@ -138,6 +138,26 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
 
     /// Whether the Holy Grail servo drives the exposure in this mode.
     var usesRampEngine: Bool { self == .holyGrail || self == .ladder }
+
+    /// Whether this platform can run the mode. Dynamic Light and Scanner need
+    /// manual exposure, a numeric ISO/shutter envelope and RAW — iOS/iPadOS
+    /// only. Basic runs anywhere. Ladder runs on the Mac too, **stepped by
+    /// hand**: a rung's spacing and blend are the Mac's to apply, its ISO,
+    /// shutter and white balance stay with the camera's own automatic
+    /// exposure (a Mac camera accepts none and reports none), and the scene
+    /// EV that steps a rung on the phone has no source on a webcam — so the
+    /// operator steps it, from the dial row while armed and from the rail
+    /// while running. Hidden on the Mac was never the intent (2026-09-03).
+    var isAvailableOnThisPlatform: Bool {
+        #if os(macOS)
+        return self == .basic || self == .ladder
+        #else
+        return true
+        #endif
+    }
+
+    /// The MODE dial's rows on this platform, in declaration order.
+    static var availableCases: [IntervalCaptureMode] { allCases.filter(\.isAvailableOnThisPlatform) }
 }
 
 /// Output format for Interval shooting. DNG blends Bayer RAW captures into

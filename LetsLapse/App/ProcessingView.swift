@@ -159,6 +159,12 @@ struct ProcessingView: View {
             return "Applying the colour grade..."
         case .slicing:
             return "Time slicing..."
+        case .posterFrames(0, _, _):
+            return "Preparing the poster..."
+        case .posterFrames(let frames, let of, 1):
+            return "Rendering \(frames) of \(of) frames for the poster..."
+        case .posterFrames(let frames, let of, let posters):
+            return "Rendering \(frames) of \(of) frames for \(posters) posters..."
         case .saving:
             return "Almost done"
         }

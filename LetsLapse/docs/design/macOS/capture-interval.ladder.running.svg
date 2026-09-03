@@ -1,0 +1,111 @@
+<svg viewBox="0 0 1000 800" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Capture · Interval · Ladder running, stepped by hand · 960×720 sheet</title>
+  <desc>Mirrors App/CaptureView.swift (landscapeLayout → landscapeIntervalRow's running branch: intervalRunningPills, holyGrailReadout's ladder-only branch, ladderRunningRungDial; ladderViewfinderOverlays → LadderRail) with App/LightLadderViews.swift (LadderRail) on the macOS capture sheet. Drawn from the Debug build's window buffer on 2026-09-03 (LL_CAPTURE=1 LL_LADDER=running, which stages the Mac-truthful state: 823 outputs, 41 min in, Dusk). The live image is indicative — the build had no camera grant.
+
+WHAT DIFFERS FROM THE PHONE'S RUNNING STATE (../iOS/capture-interval.ladder-running.portrait.svg): (1) THE READOUT'S THIRD LINE STANDS ALONE. The phone's readout leads with the ramp's exposure pair ("1/8 · ISO 1250", "scene EV 5.2 · 823 frames") and puts the ladder line under them; a Mac run has no ramp and so no HolyGrailState, and holyGrailReadout's ladder-only branch draws "Dusk · every 2 s · blend 3" by itself — the rung's pacing as asked, no governor note (there is no processing governor on the JPEG path). (2) A RUNG DIAL UNDER THE READOUT (ladderRunningRungDial): the same captioned pull-down the armed row carries — "RUNG · Dusk", menu Daylight · Fading · Dusk ✓ · Night — is how the operator steps the running ladder. Picking a rung calls CameraController.setLadderRung, which hands the rung's interval and blend depth to the live blend controller for the NEXT window (never the one in flight — the rule the phone's boundary step keeps), republishes LadderState, appends a line to Logs/ladder-&lt;run&gt;.jsonl (sceneEV null, changed true, no yieldedBy) and so moves the rail and fires the "Stepped down to Night" toast. It sits in the dial-row slot, outside the viewfinder's swipe and pinch gestures, because a menu placed on the rail — inside them — did not reliably open from a click. (3) THE RAIL IS PICTURE on every platform: one bar per rung with heights proportional to the ladder's EV spans (Daylight 3 · Fading 5 · Dusk 4 · Night 6 of the 16 … −2 drawing window → 30 · 50 · 40 · 60 pt of 180), the active rung widened to 22 pt and ringed in amber, its name in a chip beside it; allowsHitTesting(false). The Mac's LadderState carries no smoothedEV, so the rail's thresholds are the table's, not a meter's.
+
+Unchanged from the phone: the run pills (the burst indicator's bar and count, the elapsed clock), the toast (3 s, "Stepped down to Night"), and the rest of the sheet's chrome (see capture-interval.ladder.svg). The RUNG menu itself is a system menu and is mirrored as a note in INDEX.md.</desc>
+  <defs>
+    <clipPath id="capsheet"><rect x="20" y="20" width="960" height="720" rx="11"/></clipPath>
+    <linearGradient id="thumb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E7F98"/><stop offset="0.55" stop-color="#5B6472"/><stop offset="1" stop-color="#3A3530"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-family:'SF Mono',Menlo,monospace}</style>
+
+  <rect x="0" y="0" width="1000" height="800" fill="#F2F2F7"/>
+  <g clip-path="url(#capsheet)">
+    <rect x="20" y="20" width="960" height="720" fill="#000000"/>
+    <rect x="128" y="20" width="734" height="720" fill="#161616"/>
+    <text x="495" y="330" font-size="12" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.18" letter-spacing="1.2">LIVE PREVIEW</text>
+
+    <!-- Left rail: close, schedule -->
+    <g data-symbol="xmark">
+      <circle cx="74" cy="55" r="18" fill="#2B2B2E" fill-opacity="0.9"/>
+      <path d="M68 49 L80 61 M80 49 L68 61" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="clock">
+      <circle cx="74" cy="111" r="18" fill="#2B2B2E" fill-opacity="0.9"/>
+      <circle cx="74" cy="111" r="7.5" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M74 106.5 V111 H77.5" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- Mode rail, top-right -->
+    <text x="951" y="46" font-size="11" class="b" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55" letter-spacing="1.2">PHOTO</text>
+    <text x="951" y="70" font-size="11" class="b" text-anchor="end" fill="#FFB340" letter-spacing="1.2">INTERVAL</text>
+    <text x="951" y="94" font-size="11" class="b" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55" letter-spacing="1.2">VIDEO</text>
+
+    <!-- Format pill (clipped at the sheet edge — pre-existing, see capture-interval.ladder.svg) and headroom chip -->
+    <g id="format-pill">
+      <rect x="8" y="357" width="145" height="30" rx="15" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="20" y="377" font-size="13" class="sb" fill="#FFFFFF">1552×1552 · JPEG</text>
+      <path d="M134 370 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+    </g>
+    <g id="headroom-chip" data-symbol="internaldrive">
+      <rect x="30" y="397" width="88" height="28" rx="14" fill="#2B2B2E" fill-opacity="0.9"/>
+      <rect x="41" y="407" width="12" height="8" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+      <text x="58" y="416" font-size="12.5" class="sb" fill="#FFFFFF">≈2118k</text>
+    </g>
+    <rect x="44" y="664" width="60" height="60" rx="12" fill="url(#thumb)"/>
+
+    <!-- Shutter (a run is under way: the stop) -->
+    <circle cx="921" cy="314" r="38" fill="none" stroke="#B4B4B4" stroke-width="3"/>
+    <circle cx="921" cy="314" r="30" fill="#FF3B30"/>
+
+    <!-- Right rail accessories -->
+    <g data-symbol="hand.raised">
+      <circle cx="921" cy="552" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <path d="M914 556 V546 M918 555 V543 M922 555 V544 M926 556 V547 M914 556 c0 6 3 9 8 9 c5 0 8 -3 8 -9" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="timer">
+      <circle cx="921" cy="602" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <circle cx="921" cy="603" r="8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M921 598 V603 L924.5 605.5 M918 592.5 H924" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="grid">
+      <circle cx="921" cy="652" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <circle cx="921" cy="652" r="8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M921 641 V663 M910 652 H932" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="lock.open">
+      <circle cx="921" cy="702" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <rect x="915" y="701" width="12" height="9" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M918 701 V697 a3.5 3.5 0 0 1 7 0" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- ============ The rail (LadderRail): picture, trailing-centre of the viewfinder ============ -->
+    <g id="ladder-rail">
+      <rect x="756" y="370" width="50" height="20" rx="6" fill="#000000" fill-opacity="0.55"/>
+      <text x="781" y="384" font-size="11" class="sb" text-anchor="middle" fill="#FFB340">Dusk</text>
+      <rect x="813" y="274" width="34" height="211" rx="17" fill="#000000" fill-opacity="0.45"/>
+      <!-- Daylight 30 · Fading 50 · Dusk 40 (active) · Night 60 -->
+      <rect x="823" y="282" width="14" height="30" rx="7" fill="#FFB340" fill-opacity="0.3"/>
+      <rect x="823" y="317" width="14" height="50" rx="7" fill="#C36A00" fill-opacity="0.3"/>
+      <rect x="819" y="372" width="22" height="40" rx="11" fill="#8A4A00"/>
+      <rect x="819" y="372" width="22" height="40" rx="11" fill="none" stroke="#FFB340" stroke-width="2"/>
+      <rect x="823" y="417" width="14" height="60" rx="7" fill="#1C1C1E" fill-opacity="0.6" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="1"/>
+    </g>
+
+    <!-- ============ The running row: pills · readout · RUNG dial ============ -->
+    <g id="running-row">
+      <!-- Burst status indicator (249 pt): the bar and the output count; the elapsed clock pill beside it -->
+      <rect x="150" y="653" width="170" height="4" rx="2" fill="#FFB340"/>
+      <text x="352" y="659" font-size="11" class="mono" fill="#FFB340">823</text>
+      <text x="410" y="659" font-size="11" class="mono" fill="#FFFFFF" fill-opacity="0.7">41:12</text>
+      <!-- holyGrailReadout, ladder-only branch: no ramp, so no exposure pair above it -->
+      <rect x="142" y="675" width="196" height="22" rx="8" fill="#000000" fill-opacity="0.5"/>
+      <text x="152" y="690" font-size="10.5" class="mono" fill="#FFB340">Dusk · every 2 s · blend 3</text>
+      <!-- ladderRunningRungDial: the hand step, mid-run -->
+      <rect x="138" y="706" width="140" height="24" rx="12" fill="#000000" fill-opacity="0.5"/>
+      <text x="150" y="722" font-size="10" class="b" fill="#FFFFFF" fill-opacity="0.45" letter-spacing="0.8">RUNG</text>
+      <path d="M197 716 l4 4 l4 -4" stroke="#FFB340" stroke-opacity="0.8" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+      <text x="211" y="723" font-size="12.5" class="sb" fill="#FFB340">Dusk</text>
+      <path d="M245 716 l4 4 l4 -4" stroke="#FFB340" stroke-opacity="0.8" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+    </g>
+  </g>
+  <rect x="20" y="20" width="960" height="720" rx="11" fill="none" stroke="#000000" stroke-opacity="0.25"/>
+
+  <!-- Caption strip -->
+  <text x="20" y="770" font-size="12" fill="#6D6D72">macOS · Capture · Interval · Ladder running, stepped by hand · 960×720 sheet · 1 unit = 1 pt</text>
+  <text x="20" y="788" font-size="11" fill="#6D6D72">Readout is the rung's line alone (no ramp) · RUNG dial steps the run from the next window · rail is picture</text>
+</svg>

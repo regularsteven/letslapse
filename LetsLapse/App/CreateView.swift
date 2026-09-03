@@ -66,8 +66,6 @@ struct CreateView: View {
     /// than as two entries that would have to explain the difference in their
     /// titles.
     @State private var choosingImportSource = false
-    #if os(iOS)
-    @State private var showDeviceImport = false
     /// Interval ladders — Ladder MODE's tables, managed from here as well as
     /// from the capture screen's ladder chip. The selection is the capture
     /// screen's; it is mirrored here so "Use this ladder" arms the next shoot.
@@ -76,6 +74,8 @@ struct CreateView: View {
     /// Where the ladders sheet opens — empty for the list; the `LL_LADDERS`
     /// hook pushes an editor or a rung (DEBUG only, set on appear).
     @State private var laddersInitialPath: [LadderRoute] = []
+    #if os(iOS)
+    @State private var showDeviceImport = false
     #else
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -203,6 +203,7 @@ struct CreateView: View {
             if let hook = environment["LL_TRANSFER"], hook != "0" {
                 showDeviceImport = true
             }
+            #endif
             // `LL_LADDERS=list|editor|rung` — the Interval ladders sheet on the
             // requested screen. `editor` opens the built-in; `rung` opens its
             // Dusk rung, the one every `LL_LADDER` capture state stands on.
@@ -225,7 +226,6 @@ struct CreateView: View {
                 }
                 showLadders = true
             }
-            #endif
         }
         #endif
         .capturePresentation(isPresented: $showCapture, intent: captureIntent)
@@ -320,20 +320,18 @@ struct CreateView: View {
 
             importProjectRow
 
-            #if os(iOS)
             Divider().padding(.leading, 58)
 
             laddersRow
-            #endif
         }
         .llCard(cornerRadius: 18)
     }
 
-    #if os(iOS)
     /// Interval's Ladder MODE tables. A sheet here as on the capture screen:
     /// the list owns its own navigation (editor, rung), so it presents the
-    /// same way from both doors. iOS only, with the state above it: Ladder
-    /// MODE rides the ramp engine, which macOS cameras cannot run.
+    /// same way from both doors — and on every platform: the Mac steps its
+    /// ladder by hand (`CaptureView.ladderStepsByHand`) and is the best
+    /// place to author one.
     private var laddersRow: some View {
         Button {
             showLadders = true
@@ -350,7 +348,6 @@ struct CreateView: View {
         }
         .onChange(of: selectedLadderID) { id in RecordingSettingsStore.save(ladderID: id) }
     }
-    #endif
 
     private var importProjectRow: some View {
         Button {

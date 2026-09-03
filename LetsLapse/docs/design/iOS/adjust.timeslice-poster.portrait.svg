@@ -1,0 +1,149 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Adjust — Time slicing, poster only (the fast path) · portrait</title>
+  <desc>Mirrors the `timeSlicingSection` of App/AdjustView.swift in the poster-only state (docs/time-slicing-poster-fast-path.md §6): count 1, Shape Vertical, Time starts Left, Segments Fine, Output = Image (the Spread group leaves with it), Include regular timelapse OFF, and the readout gains the cost line — "Poster only: renders 24 of 1,480 frames" — because the run takes the fast path and renders only the ladder's frames. With the toggle on the line reads "Poster + regular timelapse: blends all 1,480 frames"; choosing Image never flips the toggle (decision 1: cost line only). Drawn code-first 2026-09-02, awaiting sign-off. Same scroll position as the batch spec; the card is 463 pt tall here (Time starts takes the slot the batch spec gave Segments, Output takes Spread's, and the readout gains its 15 pt cost line).</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+    <filter id="knob" x="-60%" y="-60%" width="220%" height="220%"><feDropShadow dx="0" dy="1.5" stdDeviation="1.5" flood-color="#000" flood-opacity="0.2"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- estimate card tail (scrolled) -->
+      <g id="estimate-tail">
+        <rect x="16" y="60" width="361" height="131" rx="16" fill="#1C1C1E"/>
+        <rect x="32" y="119" width="180" height="6" rx="3" fill="#48484A"/>
+        <text x="222" y="125" font-size="11" fill="#FFF" opacity="0.45">00:02</text>
+        <text x="256" y="125" font-size="11" fill="#FFF" opacity="0.45">→</text>
+        <rect x="272" y="119" width="50" height="6" rx="3" fill="#FFB340"/>
+        <text x="361" y="126" font-size="12" class="sb" fill="#FFB340" text-anchor="end">7.4s</text>
+        <g font-size="11" fill="#FFF" opacity="0.45">
+          <text x="32" y="148">Never a trim — every photo lands in the clip. A stretch's depth is</text>
+          <text x="32" y="161">how many photos average into each frame: 1:1 keeps every</text>
+          <text x="32" y="174">photo as shot, deeper is a rolling long exposure.</text>
+        </g>
+      </g>
+
+      <!-- flow header (over the scroll) -->
+      <g id="flow-header">
+        <rect x="0" y="0" width="393" height="106" fill="#F2F2F7"/>
+        <circle cx="33" cy="88" r="17" fill="#FFF" filter="url(#soft)"/>
+        <path d="M37 80 l-8 8 8 8" stroke="#C36A00" stroke-width="2.4" fill="none" stroke-linecap="round" data-symbol="chevron.left"/>
+        <text x="196.5" y="93" font-size="16" class="sb" fill="#000" text-anchor="middle">New blended clip</text>
+      </g>
+
+      <!-- Advanced row -->
+      <g id="advanced-row">
+        <rect x="16" y="207" width="361" height="44" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="234" font-size="15.5" fill="#000">Advanced</text>
+        <text x="345" y="233" font-size="12" fill="#6D6D72" text-anchor="end">True-light</text>
+        <path d="M356 223 l5 6 -5 6" stroke="#C7C7CC" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      </g>
+
+      <!-- Time slicing card, one poster-only slice -->
+      <g id="time-slicing-card">
+        <rect x="16" y="265" width="361" height="463" rx="16" fill="#FFF" filter="url(#soft)"/>
+
+        <g id="header-row">
+          <text x="32" y="297" font-size="15.5" fill="#000">Time slicing</text>
+          <text x="32" y="313" font-size="11.5" fill="#6D6D72">Vertical bands</text>
+          <g id="count-segment" data-symbol="LLInkSegment">
+            <rect x="211" y="283" width="158" height="33" rx="9" fill="#E9E9EB"/>
+            <rect x="252" y="285" width="37" height="29" rx="7" fill="#1C1C1E"/>
+            <g font-size="14" class="b" text-anchor="middle">
+              <text x="231.5" y="304.5" fill="#000">0</text>
+              <text x="270.5" y="304.5" fill="#FFB340">1</text>
+              <text x="309.5" y="304.5" fill="#000">4</text>
+              <text x="348.5" y="304.5" fill="#000">8</text>
+            </g>
+          </g>
+        </g>
+        <line x1="32" y1="334" x2="361" y2="334" stroke="#000" stroke-opacity="0.09"/>
+
+        <g id="shape">
+          <text x="32" y="364" font-size="14" fill="#000">Shape</text>
+          <rect x="32" y="376" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="34" y="378" width="107.7" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="86.8" y="396" class="sb">Vertical</text>
+            <text x="196.5" y="396">Horizontal</text>
+            <text x="306.2" y="396">Grid</text>
+          </g>
+        </g>
+
+        <g id="time-starts">
+          <text x="32" y="436" font-size="14" fill="#000">Time starts</text>
+          <rect x="32" y="448" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="34" y="450" width="162.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="114.25" y="468" class="sb">Left</text>
+            <text x="278.75" y="468">Right</text>
+          </g>
+        </g>
+
+        <g id="segments">
+          <text x="32" y="508" font-size="14" fill="#000">Segments</text>
+          <rect x="32" y="520" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="34" y="522" width="80.25" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="73" y="540" class="sb">Fine</text>
+            <text x="155.5" y="540">Medium</text>
+            <text x="237.5" y="540">Bold</text>
+            <text x="320" y="540">Custom</text>
+          </g>
+        </g>
+
+        <g id="output">
+          <text x="32" y="580" font-size="14" fill="#000">Output</text>
+          <rect x="32" y="592" width="329" height="31" rx="8" fill="#E9E9EB"/>
+          <rect x="34" y="594" width="108.5" height="27" rx="7" fill="#FFF" filter="url(#knob)"/>
+          <g font-size="13" fill="#000" text-anchor="middle">
+            <text x="86" y="612" class="sb">Image</text>
+            <text x="196.5" y="612">Animation</text>
+            <text x="307" y="612">Both</text>
+          </g>
+        </g>
+
+        <g id="include-regular">
+          <text x="32" y="659" font-size="14" fill="#000">Include regular timelapse</text>
+          <g data-symbol="Toggle (off)"><rect x="310" y="639" width="51" height="31" rx="15.5" fill="#E9E9EB"/><circle cx="325.5" cy="654.5" r="13.5" fill="#FFF" filter="url(#knob)"/></g>
+        </g>
+
+        <g id="readout" font-size="12" fill="#6D6D72">
+          <text x="32" y="695">Ready — 24 bands</text>
+          <text x="32" y="710">Poster only: renders 24 of 1,480 frames</text>
+        </g>
+      </g>
+
+      <!-- bottom bar -->
+      <g id="bottom-bar">
+        <rect x="0" y="726" width="393" height="126" fill="#F2F2F7"/>
+        <rect x="16" y="735" width="305" height="50" rx="14" fill="#C36A00"/>
+        <text x="168.5" y="766" font-size="15" class="b" fill="#FFF" text-anchor="middle">Create time-slice poster</text>
+        <rect x="329" y="735" width="48" height="50" rx="12" fill="#C36A00"/>
+        <path d="M347 757 l6 -6.5 6 6.5" stroke="#FFF" stroke-width="2.2" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.up"/>
+        <text x="16" y="806" font-size="11" fill="#6D6D72">Your original is kept — you can always make another…</text>
+        <text x="377" y="806" font-size="11" class="sb" fill="#C36A00" text-anchor="end">+ Field note</text>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Adjust — Time slicing, poster only · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AdjustView.swift `timeSlicingSection` — count 1 · Shape · Time starts · Segments · Output = Image · Include regular OFF · readout + cost line (`timeSlicePosterCost`) · CTA</text>
+</svg>

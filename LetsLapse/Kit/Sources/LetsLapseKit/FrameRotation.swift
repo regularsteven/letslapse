@@ -148,22 +148,55 @@ public enum FrameRotation {
     /// the same kernel the reframe and canvas croppers already use, so a
     /// rotated blend is filtered the way every other geometry pass is.
     public static func rotated(_ image: CIImage, degrees: Double) -> CIImage {
-        guard isActive(degrees) else { return image }
+        levelled(image, degrees: degrees, offset: .zero, lockInset: .zero)
+    }
+
+    /// The general form: rotation composed with a framing lock — the
+    /// content put back by `offset` (how far it moved, y-down source pixels,
+    /// as `FramingReview` measures it) and the crop shrunk by `lockInset` on
+    /// each side (the lock's margin, source pixels) so every photo of a shoot
+    /// lands on one framing without a black edge. One graph, so a levelled
+    /// AND locked shoot resamples once. With a zero offset and inset this is
+    /// exactly `rotated(_:degrees:)`, pixel for pixel.
+    ///
+    /// The inset is measured against the rotation's own inscribed crop, so
+    /// the margin survives the rotation's shrink: at 10° the crop is already
+    /// 77% of the frame, and an inset expressed in whole-frame pixels would
+    /// leave 23% too little room for the shift.
+    public static func levelled(
+        _ image: CIImage, degrees: Double, offset: CGVector, lockInset: CGSize
+    ) -> CIImage {
+        let rotating = isActive(degrees)
+        let shifting = abs(offset.dx) >= 0.01 || abs(offset.dy) >= 0.01
+        let insetting = lockInset.width >= 0.01 || lockInset.height >= 0.01
+        guard rotating || shifting || insetting else { return image }
         let extent = image.extent
         guard extent.width > 0, extent.height > 0 else { return image }
-        let scale = inscribedScale(width: extent.width, height: extent.height, degrees: degrees)
+        let rotationScale = inscribedScale(width: extent.width, height: extent.height, degrees: degrees)
+        guard rotationScale > 0 else { return image }
+        let lockScale = lockScale(
+            width: extent.width * rotationScale, height: extent.height * rotationScale, inset: lockInset)
+        let scale = rotationScale * lockScale
         guard scale > 0 else { return image }
         let center = CGPoint(x: extent.midX, y: extent.midY)
-        // Core Image is y-up: a positive CGAffineTransform angle turns
-        // counter-clockwise on screen, and this API promises clockwise.
-        let spin = CGAffineTransform(translationX: center.x, y: center.y)
-            .rotated(by: CGFloat(-degrees * .pi / 180))
-            .translatedBy(x: -center.x, y: -center.y)
+        // Put the content back first — Core Image is y-up, so a scene that
+        // moved DOWN by dy (y-down) moved by -dy here and comes back by +dy —
+        // then spin about the centre. A positive CGAffineTransform angle
+        // turns counter-clockwise on screen, and this API promises clockwise.
+        var transform = CGAffineTransform(translationX: -offset.dx, y: offset.dy)
+        if rotating {
+            let spin = CGAffineTransform(translationX: center.x, y: center.y)
+                .rotated(by: CGFloat(-degrees * .pi / 180))
+                .translatedBy(x: -center.x, y: -center.y)
+            transform = transform.concatenating(spin)
+        }
         // Sample beyond the source edge with the edge itself rather than
         // transparent black: the crop below never reaches those pixels, but
         // the Lanczos kernel's support does, and a transparent fringe would
         // darken the outermost row of the output.
-        let rotated = image.clampedToExtent().transformed(by: spin)
+        let moved = transform.isIdentity
+            ? image.clampedToExtent()
+            : image.clampedToExtent().transformed(by: transform)
         // The crop is snapped INWARD to whole pixels. Core Image's clamp
         // replicates the edge of an image's integral extent, so a crop with a
         // fractional origin leaves a sliver of transparency between the true
@@ -182,7 +215,7 @@ public enum FrameRotation {
         guard crop.width >= 2, crop.height >= 2 else { return image }
         // Cropped, then clamped again, so the resample below reads replicated
         // picture past the crop's edge rather than transparent black.
-        let cropped = rotated.cropped(to: crop).clampedToExtent()
+        let cropped = moved.cropped(to: crop).clampedToExtent()
         // Per-axis, because the pixel snap above can leave the two axes a
         // fraction of a pixel apart in aspect; the output must be exactly
         // the input's size.
@@ -207,4 +240,15 @@ public enum FrameRotation {
         return scaled.transformed(by: back).cropped(to: extent)
     }
     #endif
+
+    /// The same-aspect shrink that keeps `inset` of margin on each side of a
+    /// `width × height` crop: 1 when the inset is zero, 0 when nothing would
+    /// be left. The tighter axis wins, as with the rotation's own inscribed
+    /// scale.
+    public static func lockScale(width: Double, height: Double, inset: CGSize) -> Double {
+        guard width > 0, height > 0 else { return 1 }
+        let byWidth = 1 - 2 * Double(inset.width) / width
+        let byHeight = 1 - 2 * Double(inset.height) / height
+        return min(max(min(byWidth, byHeight), 0), 1)
+    }
 }

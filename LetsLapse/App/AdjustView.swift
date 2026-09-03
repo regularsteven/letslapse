@@ -1357,10 +1357,35 @@ struct AdjustView: View {
             } else {
                 Text("Ready — \(settings.segments) bands")
             }
+            if let cost = timeSlicePosterCost(settings) {
+                Text(cost)
+            }
         }
         .font(.system(size: 12))
         .foregroundStyle(.secondary)
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// The cost line under an Image output on a stills source
+    /// (docs/time-slicing-poster-fast-path.md §6): with the regular
+    /// timelapse off the run takes the fast path and renders only the
+    /// ladder's frames; with it on, every still is blended. The toggle stays
+    /// the user's — the line makes the difference visible, it never flips it.
+    private func timeSlicePosterCost(_ settings: TimeSliceSettings) -> String? {
+        guard model.source?.isVideo != true, settings.output == .image,
+              let masterFrames = timeSliceMasterFrames, masterFrames > 0,
+              let stills = model.currentCapture?.sourceMediaCount, stills > 0
+        else { return nil }
+        guard !settings.includeRegularClip else {
+            return "Poster + regular timelapse: blends all \(stills) frames"
+        }
+        let recipes = model.timeSliceVariations == nil ? [settings] : timeSliceBatch
+        guard let size = timeSliceOutputSize, !recipes.isEmpty,
+              let union = try? TimeSliceRenderer.posterFrameIndices(
+                recipes: recipes, masterFrames: masterFrames,
+                width: Int(size.width.rounded()), height: Int(size.height.rounded()))
+        else { return nil }
+        return "Poster only: renders \(union.count) of \(masterFrames) frames"
     }
 
     /// "24 × 14 grid" once the grid has a frame to resolve against, else the
@@ -1408,11 +1433,12 @@ struct AdjustView: View {
             if model.trimVideoEnds { active.append("Trim on") }
         }
         if model.linearLight { active.append("True-light") }
+        if !isVideo, model.applyStabilisation, model.framingLock != nil { active.append("Stabilised") }
         if !isVideo, !model.excludedFrameIndices.isEmpty {
             active.append("\(model.excludedFrameIndices.count) excluded")
         }
         if active.isEmpty {
-            return isVideo ? "Ramp · Trim · True-light" : "True-light · Excluded frames"
+            return isVideo ? "Ramp · Trim · True-light" : "True-light · Stabilisation · Excluded frames"
         }
         return active.joined(separator: " · ")
     }
@@ -1740,6 +1766,29 @@ struct AdvancedOptionsSheet: View {
                 }
 
                 if model.source?.isVideo != true {
+                    // Stabilisation (docs/framing-lock.md): ON by default once
+                    // the project carries a committed framing lock, OFF and
+                    // disabled before. Per blend, like True-light.
+                    Section {
+                        Toggle(isOn: $model.applyStabilisation) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Apply stabilisation")
+                                Text(model.framingLock.map {
+                                    "Locks the framing · crops \(FramingReviewStore.percent($0.cropFraction))"
+                                } ?? "Not reviewed or stabilised yet")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .disabled(model.framingLock == nil)
+                    } header: {
+                        Text("Stabilisation")
+                    } footer: {
+                        Text(model.framingLock == nil
+                             ? "Review and stabilise the photos on the project screen to enable this."
+                             : "Reviewed and stabilised on the project screen. Off blends the photos exactly as captured. The originals are never changed.")
+                    }
+
                     Section {
                         if model.excludedFrameIndices.isEmpty {
                             Text("Every photo is included in the blend.")

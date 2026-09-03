@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Project detail (interval) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, originalsSection, versionRow, managementCard) for an interval capture — kind == .photos and NOT isPhotoCapture. The card previews the shoot's FIRST SOURCE FRAME rendered through the project's preset + PhotoAdjustments (not its hero: once a stacked image blended clip exists that clip is the hero, and it is a finished render that already carries the grade that made it). An interval project's card carries TWO affordances, because it has both a sequence to watch and a frame to grade. The circular button in the middle is play: it opens FullscreenMediaSheet on `.intervalMotion`, which plays the shoot's own frames as motion at the frame rate of its newest rendered blended clip (12 fps until one exists) — the preview that used to cost a full render to see (see player.portrait.svg). Bottom-left, over the image, an "Edit" pill (slider.horizontal.3) opens App/PhotoViewerView.swift on that frame — presets, sliders, white balance — so an interval project grades there rather than in the card; see project-photo.viewer.portrait.svg. The pill carries the same one-word label in every mode (GradingCard.editPill takes no title): the hero underneath it already shows what is about to be edited, and naming the noun only made Photo, Interval and Video read as three different affordances. Beneath the preset strip the results lead: the Blended clips rows (the whole section hides while the shoot has none — the button below is the empty state), then New blended clip, then — where the video variant shows its Source Clips card — the Originals card: a "Source photos" row carrying the batched Save all to Photos export (deliberately ungraded — it hands over the captured files byte for byte), and a "View all photos" row that presents CapturePhotoGrid over the individual frames, every tile rendered through the same grade. Save-all states replace the trailing control in place: Save all to Photos → spinner → "Saved" (checkmark, secondary) → "Retry" with the error as the row subtitle. A blended-clip row swipes left to reveal a 72pt red trash action (SwipeToDelete.swift) that raises the same delete-confirm alert as its context menu. The scroll content ends with 96pt bottom clearance so the management card's Delete row comes to rest fully above the floating tab bar (this canvas draws the at-rest scroll top, where the card still sits behind the bar). The grade is baked into the timelapse the blend writes, frame by frame; the stills on disk are never rewritten.</desc>
+  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, originalsSection, versionRow, managementCard) for an interval capture — kind == .photos and NOT isPhotoCapture. The card previews the shoot's FIRST SOURCE FRAME rendered through the project's preset + PhotoAdjustments (not its hero: once a stacked image blended clip exists that clip is the hero, and it is a finished render that already carries the grade that made it). An interval project's card carries TWO affordances, because it has both a sequence to watch and a frame to grade. The circular button in the middle is play: it opens FullscreenMediaSheet on `.intervalMotion`, which plays the shoot's own frames as motion at the frame rate of its newest rendered blended clip (12 fps until one exists) — the preview that used to cost a full render to see (see player.portrait.svg). Bottom-left, over the image, an "Edit" pill (slider.horizontal.3) opens App/PhotoViewerView.swift on that frame — presets, sliders, white balance — so an interval project grades there rather than in the card; see project-photo.viewer.portrait.svg. The pill carries the same one-word label in every mode (GradingCard.editPill takes no title): the hero underneath it already shows what is about to be edited, and naming the noun only made Photo, Interval and Video read as three different affordances. Beneath the preset strip the results lead: the Blended clips rows (the whole section hides while the shoot has none — the button below is the empty state), then New blended clip, then — where the video variant shows its Source Clips card — the Originals card: a "Source photos" row carrying the batched Save all to Photos export (deliberately ungraded — it hands over the captured files byte for byte), and a "View all photos" row that presents CapturePhotoGrid over the individual frames, every tile rendered through the same grade. Save-all states replace the trailing control in place: Save all to Photos → spinner → "Saved" (checkmark, secondary) → "Retry" with the error as the row subtitle. A blended-clip row swipes left to reveal a 72pt red trash action (SwipeToDelete.swift) that raises the same delete-confirm alert as its context menu. The scroll content ends with 96pt bottom clearance so the management card's Delete row comes to rest fully above the floating tab bar (this canvas draws the at-rest scroll top, where the card still sits behind the bar). The grade is baked into the timelapse the blend writes, frame by frame; the stills on disk are never rewritten. The Originals card (2026-09-03, design-first) carries two more rows between Source photos and View all photos: **Review photos** — the trailing control runs the framing review (App/FramingReviewView, over LetsLapseKit.FramingMeasurement) and, once one exists, opens its report, the subtitle carrying the verdict ("3 knocks · largest 5.6 px · locking crops 0.4% · today", or "Framing held within 1.2 px"); and **Stabilise photos** — disabled (grey title, grey control, subtitle "Review the photos first") until a review exists, then an accent "Stabilise" that commits the review's plan as metadata (`source/framing.json` → stabilisation), never a pixel on disk; committed, the row reads "Stabilised" with a checkmark, the crop in its subtitle, and "Undo". The card grows from 96 to 206 pt and the management card moves down 110 pt (Delete now rests under the tab bar at the scroll top, exactly as the clearance rule allows).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -91,35 +91,48 @@
         <text x="142" y="512" font-size="16" class="b" fill="#FFF">New blended clip</text>
       </g>
 
-      <!-- originals card: batch export + the per-frame browser -->
+      <!-- originals card: batch export, the framing review pair, the per-frame browser -->
       <text x="20" y="558" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">ORIGINALS</text>
       <g id="originals-card">
-        <rect x="16" y="567" width="361" height="96" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="567" width="361" height="206" rx="16" fill="#FFF" filter="url(#soft)"/>
         <g id="row-source-photos">
           <text x="32" y="592" font-size="16" fill="#000">Source photos</text>
           <text x="32" y="607" font-size="11.5" fill="#6D6D72">184 photos</text>
           <text x="363" y="596" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Save all to Photos</text>
         </g>
         <line x1="32" y1="619" x2="377" y2="619" stroke="#000" stroke-opacity="0.08"/>
+        <!-- Review photos: measures where every photo sits against one framing.
+             Not reviewed yet — the trailing control starts the review (progress,
+             then the report: framing-review.*.portrait.svg) -->
+        <g id="row-review-photos">
+          <text x="32" y="647" font-size="16" fill="#000">Review photos</text>
+          <text x="32" y="662" font-size="11.5" fill="#6D6D72">Finds knocks and drift in the framing</text>
+          <text x="363" y="651" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Review</text>
+        </g>
+        <line x1="32" y1="674" x2="377" y2="674" stroke="#000" stroke-opacity="0.08"/>
+        <!-- Stabilise photos: DISABLED until a review exists — title and control in
+             the disabled grey, the subtitle saying why -->
+        <g id="row-stabilise-photos" opacity="1">
+          <text x="32" y="702" font-size="16" fill="#C6C6CB">Stabilise photos</text>
+          <text x="32" y="717" font-size="11.5" fill="#C6C6CB">Review the photos first</text>
+          <text x="363" y="706" font-size="12.5" class="sb" fill="#C6C6CB" text-anchor="end">Stabilise</text>
+        </g>
+        <line x1="32" y1="729" x2="377" y2="729" stroke="#000" stroke-opacity="0.08"/>
         <g id="row-view-all">
-          <text x="32" y="647" font-size="16" fill="#000">View all photos</text>
-          <path d="M363 634 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <text x="32" y="757" font-size="16" fill="#000">View all photos</text>
+          <path d="M363 744 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
         </g>
       </g>
-
       <!-- management card: at-rest scroll top — the scroll ends with 96pt clearance so the Delete row clears the tab bar -->
       <g id="management-card">
-        <rect x="16" y="679" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="707" font-size="16" fill="#000">Rename</text>
-        <path d="M363 695 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
-        <line x1="32" y1="723" x2="377" y2="723" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="748" font-size="16" fill="#000">Storage</text>
-        <text x="32" y="763" font-size="11.5" fill="#6D6D72">original + blended clips</text>
-        <text x="361" y="752" font-size="14" fill="#6D6D72" text-anchor="end">3.1 GB</text>
-        <line x1="32" y1="775" x2="377" y2="775" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="801" font-size="16" fill="#FF3B30">Delete…</text>
+        <rect x="16" y="789" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="817" font-size="16" fill="#000">Rename</text>
+        <path d="M363 805 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        <line x1="32" y1="833" x2="377" y2="833" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="858" font-size="16" fill="#000">Storage</text>
+        <text x="32" y="873" font-size="11.5" fill="#6D6D72">original + blended clips</text>
+        <text x="361" y="862" font-size="14" fill="#6D6D72" text-anchor="end">3.1 GB</text>
       </g>
-
       <!-- floating tab bar (Projects selected) over content -->
       <g id="tab-bar" opacity="0.98">
         <rect x="6.5" y="755" width="380" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>

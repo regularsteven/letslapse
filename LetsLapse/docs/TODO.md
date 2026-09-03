@@ -73,10 +73,17 @@ exposure never steps; interval and blend step at the boundary. Built-in
 in place; `light_ladders.json` beside `custom_presets.json`. Twelve
 decisions taken 2026-09-03 by recommendation (Night shutter auto ≤ 1 s not
 pinned; governor may lengthen a rung's interval, never shorten; WB auto =
-tracked; ribbon editor; iPhone + iPad first, Mac hidden). Acceptance bench
-= the monitor test card's brightness ramp, designed before the engine hook.
-The seven SVGs and the Create-row edit are mirrored (iOS INDEX ✅, sim
-screenshots); the device pass that signs them off is not.
+tracked; ribbon editor; iPhone + iPad first). "Mac hidden" was taken by
+recommendation too and **reversed the same evening** (Steven: never
+intentional) — the Mac has Ladder **stepped by hand**: availability is per
+mode, the rung's spacing and blend apply, exposure stays the camera's own,
+the operator steps the rung from a RUNG dial in the row — armed, and under
+the run's readout — and ladders are authored on the Mac (D13, §6.7;
+`macOS/capture-interval.ladder*.svg`).
+Acceptance bench = the monitor test card's brightness ramp, designed before
+the engine hook. The seven SVGs and the Create-row edit are mirrored (iOS
+INDEX ✅, sim screenshots); the device pass that signs them off is not, nor
+is a real-camera Mac run that steps mid-run, nor the macOS SVG's sign-off.
 
 ---
 

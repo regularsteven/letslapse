@@ -1,8 +1,54 @@
 # Time-slice poster fast path — implementation plan
 
 **Raised:** 2026-09-02 (Steven, in conversation) ·
-**Status: planned, not started.** Companion to `time-slicing.md`; §2 of that
-plan is the decision this one carves an exception out of.
+**Status: implemented 2026-09-02 (stages 1–6; the §7 stage-6 iPhone DNG
+run is still owed), uncommitted.** Companion to `time-slicing.md`; §2 of
+that plan is the decision this one carves an exception out of.
+
+**Implementation notes (2026-09-02).**
+
+- Kit: `BlendWindowRenderer` (in `ImageStacker.swift`) is the extracted
+  per-window primitive — both `stackSequence` and `stackSequenceLinear` now
+  run it per window and append; the sequence output decodes pixel-identical
+  to the pre-refactor build (40 real stills, window 4, raw YUV md5 equal;
+  the MP4 containers differ only in file metadata).
+  `ImageStacker.sourcePosition` is the one place the hooks' position is
+  computed. `TimeSlicePoster.swift` holds `IndexedFrameProvider`,
+  `StillsWindowProvider` (Kit, not app — it takes the decode/grade/overlay
+  closures, so the CLI and the app share the prefix-sum and still-0 sizing
+  logic) and `TimeSliceRenderer.renderPosters` /
+  `posterFrameIndices`. Tests: `TimeSlicePosterTests` (window means, the
+  fast poster byte-identical to the tail pass over the same master, batch
+  union = solo renders, short masters, still-0 sizing, floor refusals).
+- CLI: `lapse poster <stills…> --depth D --segments S [--grid] [--variations]`.
+- App: `AppModel.renderPosterFastPath` behind the §2 gate in
+  `startProcessing`'s `.photos` case; `ProcessingPhase.posterFrames` (maps
+  to the Blending checklist row — nothing encodes); the Adjust card's cost
+  line (`timeSlicePosterCost`); mirror
+  `docs/design/iOS/adjust.timeslice-poster.portrait.svg` (drawn
+  code-first, awaiting sign-off).
+- Decisions taken (§9), Steven to overrule: (1) cost line only, the toggle
+  is never flipped; (2) iOS chunks of 4 posters, the Mac takes the batch
+  whole; (3) the `lapse poster` CLI was built — it is what produced the
+  table below; (4) accepted — fast posters are one compressed generation
+  better than tail-pass posters (measured PSNR ≈ 48 dB against them, with
+  identical band ladders).
+- The fast path always renders through the 8-bit BGRA/709 policy, even for
+  a run whose format menu said 10-bit HEVC: the poster is an 8-bit PNG
+  composed from BGRA bands either way, and 709 = sRGB is the tag the PNG
+  carries.
+
+**Measured on the Mac (M4 Max), 1,480 stills at 1,920×1,440, 24 bands:**
+
+| Depth | Fast path (`lapse poster`) | Full path (`lapse stackseq` + `lapse slice --poster`) |
+|---|---|---|
+| 1 | 0.5 s (24 stills decoded) | 19.8 s + 2.6 s |
+| 8 | 2.7 s (192 stills decoded) | 19.5 s + 0.4 s |
+| 8, 4-variation mixed batch | 11.0 s (784 stills; the union was 98 of 185 masters per take) | 19.5 s + 1.5 s |
+
+Fast vs full poster at depth 1: PSNR 48.8 dB, mean |Δ| 0.63, band means
+within 0.1; at depth 8: 48.3 dB, mean |Δ| 0.68. The ladders are the same
+frames; the difference is the H.264 generation the tail pass reads through.
 
 **The ask.** When a time slice is armed with *Output = Image* and *Include
 regular timelapse* off, the run should not blend and encode the whole shoot.

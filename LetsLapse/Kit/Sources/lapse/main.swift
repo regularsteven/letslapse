@@ -20,6 +20,22 @@ USAGE:
   lapse stack <image...> -o <output> [options]  Average stills into one image
       --format NAME         png | jpeg | heic (default: inferred from output path)
       --gamma               Average gamma-encoded values instead of linear light
+      --lock                Apply the committed framing lock (framing.json beside
+                            the stills) to every still before averaging
+
+  lapse framing <project-or-source-dir> [options]   Review the framing of an
+                            interval shoot's stills: where each sits against one
+                            locked reference, the knocks, and the crop that would
+                            hold it still. Writes framing.json beside the stills
+                            and prints the report; prints the existing review
+                            when there is one.
+      --apply               Commit the plan ("Stabilise photos")
+      --withdraw            Remove a committed plan
+      --force               Re-measure even when a review exists
+      --scale S             Decode scale for the measurement (default 0.5)
+      --workers N           Parallel chunks (default: half the cores, max 4)
+      --range A-B           Measure only stills A…B (0-based); printed, not written
+      --json PATH           Also write the review here
 
   lapse synth -o <output> [options]             Render a synthetic test clip
       --frames N            Frame count (default 120)
@@ -51,6 +67,22 @@ USAGE:
       --variation-mode NAME horizontal | vertical | grid | mixed (default mixed)
       --seed N              The batch's seed, for reproducibility (default random)
       --codec NAME          h264 | hevc | prores | jpeg (default h264)
+
+  lapse poster <image...> -o <output.png> [options]
+                                                Time-slice poster straight from stills:
+                                                renders only the master frames the
+                                                ladder needs (each blended at --depth)
+                                                and never encodes a clip
+      --depth N             Stills per master frame — the blend depth (default 1)
+      --segments N          Band count, or column count with --grid (default 24)
+      --newest EDGE         left | right | top | bottom (default right)
+      --grid CORNER         topLeft | topRight | bottomLeft | bottomRight
+      --metric NAME         manhattan | euclidean (default manhattan)
+      --variations N        A batch of N posters from one walk over the stills
+      --variation-mode NAME horizontal | vertical | grid | mixed (default mixed)
+      --seed N              The batch's seed (default random)
+      --recipe JSON         Grade recipe, as for `lapse grade`
+      --gamma               Average gamma-encoded values (the legacy 8-bit path)
 
   lapse grade <image> [options]                 Grade one frame through the tone engine
       --recipe JSON         Slider values, Lightroom-style ±100 numbers, e.g.
@@ -174,6 +206,7 @@ do {
         guard let outputPath = takeOption(["-o", "--output"]) else { fail("stack needs -o <output>") }
         let formatName = takeOption(["--format"])
         let gamma = takeFlag(["--gamma"])
+        let lock = takeFlag(["--lock"])
         guard !args.isEmpty else { fail("stack needs at least one input image") }
         let output = URL(fileURLWithPath: outputPath)
         let format: ImageFormat
@@ -189,8 +222,17 @@ do {
         let core = try BlendCore()
         let stacker = ImageStacker(core: core)
         let started = Date()
+        var loadFrame: ((URL) throws -> CGImage)?
+        if lock {
+            guard let folder = inputs.first?.deletingLastPathComponent(),
+                  let framingLock = FramingLock.load(inSourceFolder: folder) else {
+                fail("--lock needs a committed framing.json beside the stills (lapse framing <dir> --apply)")
+            }
+            printErr(String(format: "framing lock: %d photos measured, crop %.2f%%", framingLock.frameCount, framingLock.cropFraction * 100))
+            loadFrame = framingLock.loader(base: { try ImageStacker.loadImage(at: $0) })
+        }
         let image = try stacker.stack(
-            imageURLs: inputs, linearLight: !gamma, progress: { progressToStderr($0) })
+            imageURLs: inputs, linearLight: !gamma, loadFrame: loadFrame, progress: { progressToStderr($0) })
         try ImageExporter.write(image, to: output, format: format)
         let elapsed = Date().timeIntervalSince(started)
         print("stacked \(inputs.count) images (\(image.width)x\(image.height)) in \(String(format: "%.1f", elapsed))s")
@@ -342,6 +384,63 @@ do {
                 url: inputURL, recipeJSON: recipeJSON, outPath: outPath, scale: scale,
                 quality: min(max(quality, 1), 100) / 100)
         }
+
+    case "poster":
+        guard let outputPath = takeOption(["-o", "--output"]) else { fail("poster needs -o <output.png>") }
+        let depth = Int(takeOption(["--depth"]) ?? "1") ?? 0
+        let segments = Int(takeOption(["--segments"]) ?? "24") ?? 0
+        let newestName = takeOption(["--newest"]) ?? TimeSliceSettings().newestEdge.rawValue
+        let gridName = takeOption(["--grid"])
+        let metricName = takeOption(["--metric"]) ?? TimeSliceGridMetric.manhattan.rawValue
+        let variationCount = Int(takeOption(["--variations"]) ?? "0") ?? 0
+        let variationModeName = takeOption(["--variation-mode"]) ?? TimeSliceVariationMode.mixed.rawValue
+        let seed = UInt64(takeOption(["--seed"]) ?? "") ?? TimeSliceVariationPlan.freshSeed()
+        let recipeJSON = takeOption(["--recipe"])
+        let gamma = takeFlag(["--gamma"])
+        guard depth >= 1 else { fail("--depth needs a positive integer") }
+        guard segments >= 2 else { fail("--segments needs an integer ≥ 2") }
+        guard args.count >= 1 else { fail("poster needs at least one input image") }
+        guard let newest = TimeSliceEdge(rawValue: newestName) else {
+            fail("unknown edge '\(newestName)' — choose from: \(TimeSliceEdge.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        guard let metric = TimeSliceGridMetric(rawValue: metricName) else {
+            fail("unknown metric '\(metricName)' — choose from: \(TimeSliceGridMetric.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        guard let variationMode = TimeSliceVariationMode(rawValue: variationModeName) else {
+            fail("unknown variation mode '\(variationModeName)' — choose from: \(TimeSliceVariationMode.allCases.map(\.rawValue).joined(separator: ", "))")
+        }
+        var settings = TimeSliceSettings(
+            newestEdge: newest, segments: segments, offsetFrames: 1,
+            output: .image, includeRegularClip: false)
+        if let gridName {
+            guard let origin = TimeSliceGridOrigin(rawValue: gridName) else {
+                fail("unknown grid corner '\(gridName)' — choose from: \(TimeSliceGridOrigin.allCases.map(\.rawValue).joined(separator: ", "))")
+            }
+            settings.grid = TimeSliceGrid(origin: origin, metric: metric)
+        }
+        try runPoster(
+            urls: args.map { URL(fileURLWithPath: $0) }, outputPath: outputPath, depth: depth,
+            settings: settings, variations: variationCount, variationMode: variationMode,
+            seed: seed, recipeJSON: recipeJSON, gamma: gamma)
+
+    case "framing":
+        let apply = takeFlag(["--apply"])
+        let withdraw = takeFlag(["--withdraw"])
+        let force = takeFlag(["--force"])
+        let jsonPath = takeOption(["--json"])
+        let scale = Double(takeOption(["--scale"]) ?? "0.5") ?? 0
+        let workers = takeOption(["--workers"]).map { Int($0) ?? 0 }
+        var range: ClosedRange<Int>?
+        if let text = takeOption(["--range"]) {
+            let parts = text.split(separator: "-").compactMap { Int($0) }
+            guard parts.count == 2, parts[0] <= parts[1] else { fail("--range needs A-B") }
+            range = parts[0]...parts[1]
+        }
+        guard scale > 0, scale <= 1 else { fail("--scale needs a value in (0, 1]") }
+        guard args.count == 1 else { fail("framing needs one project or source directory") }
+        try runFraming(
+            path: args[0], apply: apply, withdraw: withdraw, force: force, jsonPath: jsonPath,
+            scale: scale, workers: workers, range: range)
 
     case "stackseq":
         guard let outputPath = takeOption(["-o", "--output"]) else { fail("stackseq needs -o <output>") }

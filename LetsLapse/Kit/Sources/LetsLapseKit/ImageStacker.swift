@@ -294,74 +294,48 @@ public final class ImageStacker {
             if writer.status == .writing { writer.cancelWriting() }
         }
 
-        let accumulator = FrameAccumulator(core: core)
         let srgb = linearLight
-        // One half-float mean texture, reused per output frame: the average
-        // stays at full precision until `encodeGamma` quantizes it — with
-        // dither — as it lands in the writer's buffer.
-        let meanTexture = try core.makeMeanTexture(width: width, height: height)
+        // The per-window primitive — shared with the poster fast path, so a
+        // poster's frame and this file's frame are the same render.
+        let windowRenderer = try BlendWindowRenderer.gamma(
+            core: core, width: width, height: height, policy: encodePolicy, linearLight: srgb)
         var inputIndex = 0
         var outputFrames = 0
 
         for window in schedule {
-            // Average this window's stills into the accumulator.
-            for offset in 0..<window {
-                let index = inputIndex + offset
-                try autoreleasepool {
+            let windowStart = inputIndex
+            // Finalize happens inside the renderer's own drain, for the reason
+            // the linear path documents: autoreleased Core Image temporaries
+            // from the overlay bake otherwise accumulate across the entire
+            // render and get the app jetsam-killed on iOS partway through a
+            // long shoot.
+            guard let pool = adaptor.pixelBufferPool else {
+                throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
+            }
+            // The frame's source position, mid-window — the value the linear
+            // path hands its grade and overlay hooks.
+            let sourcePosition = ImageStacker.sourcePosition(
+                windowStart: windowStart, window: window, totalFrames: imageURLs.count)
+            let appendBuffer = try windowRenderer.render(
+                frameCount: window,
+                texture: { offset in
+                    let index = windowStart + offset
                     let image = index == 0 ? firstImage : try load(imageURLs[index])
                     guard image.width == width, image.height == height else {
                         throw LapseError.sizeMismatch(
                             expectedWidth: width, expectedHeight: height,
                             actualWidth: image.width, actualHeight: image.height)
                     }
-                    let texture = try uploadTexture(for: image, srgb: srgb)
-                    guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
-                        throw LapseError.gpuSetupFailed("could not create a command buffer")
-                    }
-                    if offset == 0 {
-                        try accumulator.reset(width: width, height: height, commandBuffer: commandBuffer)
-                    }
-                    try accumulator.accumulate(texture, commandBuffer: commandBuffer)
-                    commandBuffer.commit()
-                    commandBuffer.waitUntilCompleted()
-                    if let error = commandBuffer.error {
-                        throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
-                    }
-                }
-            }
+                    return try self.uploadTexture(for: image, srgb: srgb)
+                },
+                sourcePosition: sourcePosition,
+                frameIndex: outputFrames,
+                pool: pool,
+                outputGrade: nil,
+                overlayComposite: overlayComposite)
             inputIndex += window
 
-            // Finalize the window into a pooled pixel buffer and append it —
-            // inside its own drain, for the reason the linear path documents:
-            // autoreleased Core Image temporaries from the overlay bake
-            // otherwise accumulate across the entire render and get the app
-            // jetsam-killed on iOS partway through a long shoot.
             try autoreleasepool {
-                guard let pool = adaptor.pixelBufferPool else {
-                    throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
-                }
-                var outBuffer: CVPixelBuffer?
-                let poolStatus = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
-                guard poolStatus == kCVReturnSuccess, let outBuffer else {
-                    throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
-                }
-                // Non-sRGB view: `encodeGamma` applies the transfer curve itself.
-                let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: false)
-                guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
-                    throw LapseError.gpuSetupFailed("could not create a command buffer")
-                }
-                try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
-                try core.encodeGamma(
-                    from: meanTexture, to: destination,
-                    ditherLSB: 1.0 / 255.0, frameIndex: outputFrames, applySRGB: srgb,
-                    commandBuffer: commandBuffer)
-                commandBuffer.commit()
-                commandBuffer.waitUntilCompleted()
-                if let error = commandBuffer.error {
-                    throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
-                }
-                _ = destinationHolder
-
                 while !writerInput.isReadyForMoreMediaData {
                     if writer.status == .failed {
                         throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
@@ -373,19 +347,6 @@ public final class ImageStacker {
                 let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
                     ?? Double(outputFrames) / outputFPS
                 let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
-                VideoEncodePolicy.tagColor(outBuffer)
-                var appendBuffer = outBuffer
-                if let overlayComposite {
-                    // The frame's source position, mid-window — the value the
-                    // linear path hands its grade and overlay hooks.
-                    let sourcePosition = imageURLs.count > 1
-                        ? min(max(Double(inputIndex - window / 2) / Double(imageURLs.count - 1), 0), 1)
-                        : 0
-                    if let composited = try overlayComposite(outBuffer, sourcePosition, pool) {
-                        VideoEncodePolicy.tagColor(composited)
-                        appendBuffer = composited
-                    }
-                }
                 guard adaptor.append(appendBuffer, withPresentationTime: time) else {
                     throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
                 }
@@ -499,78 +460,44 @@ public final class ImageStacker {
             if writer.status == .writing { writer.cancelWriting() }
         }
 
-        let accumulator = FrameAccumulator(core: core)
-        let meanTexture = try core.makeMeanTexture(width: width, height: height)
-        let gamut = policy.gamutMatrixFromDisplayP3
-        let ditherLSB: Float = policy.profile == .h264High8Bit ? 1.0 / 255.0 : 0
+        // The per-window primitive. Extracted rather than duplicated
+        // (docs/time-slicing-poster-fast-path.md §3.3): the poster fast path
+        // renders single windows through the same object, so its frame is
+        // this file's frame minus the codec.
+        let windowRenderer = try BlendWindowRenderer.linear(
+            core: core, width: width, height: height, policy: policy)
         var inputIndex = 0
         var outputFrames = 0
 
         for window in schedule {
-            for offset in 0..<window {
-                let index = inputIndex + offset
-                try autoreleasepool {
+            let windowStart = inputIndex
+            guard let pool = adaptor.pixelBufferPool else {
+                throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
+            }
+            // The middle of the window this frame averaged, as a fraction
+            // of the whole sequence: the moment the output frame shows.
+            let sourcePosition = ImageStacker.sourcePosition(
+                windowStart: windowStart, window: window, totalFrames: imageURLs.count)
+            let appendBuffer = try windowRenderer.render(
+                frameCount: window,
+                texture: { offset in
+                    let index = windowStart + offset
                     let texture = index == 0 ? firstTexture : try decodeLinear(imageURLs[index])
                     guard texture.width == width, texture.height == height else {
                         throw LapseError.sizeMismatch(
                             expectedWidth: width, expectedHeight: height,
                             actualWidth: texture.width, actualHeight: texture.height)
                     }
-                    guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
-                        throw LapseError.gpuSetupFailed("could not create a command buffer")
-                    }
-                    if offset == 0 {
-                        try accumulator.reset(width: width, height: height, commandBuffer: commandBuffer)
-                    }
-                    try accumulator.accumulate(texture, commandBuffer: commandBuffer)
-                    commandBuffer.commit()
-                    commandBuffer.waitUntilCompleted()
-                    if let error = commandBuffer.error {
-                        throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
-                    }
-                }
-            }
+                    return texture
+                },
+                sourcePosition: sourcePosition,
+                frameIndex: outputFrames,
+                pool: pool,
+                outputGrade: outputGrade,
+                overlayComposite: overlayComposite)
             inputIndex += window
 
-            // The output frame gets its own pool, exactly like the
-            // accumulate loop above. Core Image's temporaries (the overlay
-            // bake's, and any a future hook adds) are autoreleased, and
-            // without a drain per frame they pile up for the WHOLE render:
-            // measured 2026-08-31 at ~55 MB per frame on a 4032×3024 blend,
-            // which macOS absorbs on swap and iOS answers with a jetsam kill
-            // a minute into a long shoot. Nothing here escapes the pool —
-            // `outputFrames` is the only state that survives it.
             try autoreleasepool {
-                guard let pool = adaptor.pixelBufferPool else {
-                    throw LapseError.writerFailed("no pixel buffer pool (writer status \(writer.status.rawValue))")
-                }
-                var outBuffer: CVPixelBuffer?
-                let poolStatus = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
-                guard poolStatus == kCVReturnSuccess, let outBuffer else {
-                    throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
-                }
-                let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: false)
-                guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
-                    throw LapseError.gpuSetupFailed("could not create a command buffer")
-                }
-                try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
-                // The middle of the window this frame averaged, as a fraction
-                // of the whole sequence: the moment the output frame shows.
-                let sourcePosition = imageURLs.count > 1
-                    ? min(max(Double(inputIndex - window / 2) / Double(imageURLs.count - 1), 0), 1)
-                    : 0
-                let graded = try outputGrade?(meanTexture, commandBuffer, sourcePosition) ?? meanTexture
-                try core.encodeGamma(
-                    from: graded, to: destination,
-                    ditherLSB: ditherLSB, frameIndex: outputFrames, applySRGB: true,
-                    gamut: gamut, commandBuffer: commandBuffer)
-                commandBuffer.commit()
-                commandBuffer.waitUntilCompleted()
-                if let error = commandBuffer.error {
-                    throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
-                }
-                _ = destinationHolder
-
                 while !writerInput.isReadyForMoreMediaData {
                     if writer.status == .failed {
                         throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
@@ -580,15 +507,6 @@ public final class ImageStacker {
                 let seconds = windowStartTimes.flatMap { $0.indices.contains(outputFrames) ? $0[outputFrames] : nil }
                     ?? Double(outputFrames) / outputFPS
                 let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
-                // Tag before the overlay pass so its reader sees the buffer's
-                // true color identity, and tag the replacement it hands back.
-                policy.tagColor(outBuffer)
-                var appendBuffer = outBuffer
-                if let overlayComposite,
-                   let composited = try overlayComposite(outBuffer, sourcePosition, pool) {
-                    policy.tagColor(composited)
-                    appendBuffer = composited
-                }
                 guard adaptor.append(appendBuffer, withPresentationTime: time) else {
                     throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
                 }
@@ -610,6 +528,27 @@ public final class ImageStacker {
         progress?(1.0)
 
         return StackSequenceResult(outputFrames: outputFrames, width: width, height: height)
+    }
+
+    /// Where an output frame sits in the source, 0…1: the middle of the
+    /// window it averaged, as a fraction of the whole sequence. The value
+    /// both sequence paths hand their grade and overlay hooks — and the value
+    /// a keyframed grade's position ladder is quantised from, so the poster
+    /// fast path must compute it identically (plan §10, "keyframed grade
+    /// position"), which is why it lives here rather than in each caller.
+    public static func sourcePosition(windowStart: Int, window: Int, totalFrames: Int) -> Double {
+        guard totalFrames > 1 else { return 0 }
+        let end = windowStart + window
+        return min(max(Double(end - window / 2) / Double(totalFrames - 1), 0), 1)
+    }
+
+    /// Uploads a decoded still as a texture the window renderer accepts —
+    /// the gamma-domain path's input step, public so the poster fast path's
+    /// legacy provider can feed its graded CGImages the way `stackSequence`
+    /// does. `srgb` marks the texture sRGB so reads linearise (true-light
+    /// averaging); false averages the gamma-encoded bytes as they are.
+    public func makeInputTexture(_ image: CGImage, srgb: Bool) throws -> MTLTexture {
+        try uploadTexture(for: image, srgb: srgb)
     }
 
     // MARK: - CPU <-> GPU transfer
@@ -823,6 +762,179 @@ public final class ImageStacker {
         context.draw(image, in: CGRect(x: 0, y: 0, width: width, height: height))
         guard let result = context.makeImage() else { return image }
         return result
+    }
+}
+
+// MARK: - One window, rendered
+
+/// One output frame of a stills blend, rendered on its own: the window's
+/// frames accumulated, the mean finalised at half-float precision, graded
+/// once at the window's centre, transfer-encoded with the profile's dither
+/// and gamut into a pooled pixel buffer, colour-tagged, and handed to the
+/// overlay hook (where the level and the text go on — once per OUTPUT frame,
+/// never per input). `stackSequence` / `stackSequenceLinear` run this per
+/// window and append the result to their writer; the time-slice poster fast
+/// path runs it for just the windows a poster needs and never touches a
+/// writer. One object, so the two cannot drift
+/// (docs/time-slicing-poster-fast-path.md §3.3).
+public final class BlendWindowRenderer {
+    public let width: Int
+    public let height: Int
+    public let policy: VideoEncodePolicy
+
+    private let core: BlendCore
+    private let accumulator: FrameAccumulator
+    /// One half-float mean texture, reused per output frame: the average
+    /// stays at full precision until `encodeGamma` quantises it — with
+    /// dither — as it lands in the output buffer.
+    private let meanTexture: MTLTexture
+    private let gamut: simd_float3x3
+    private let ditherLSB: Float
+    private let applySRGB: Bool
+    /// The legacy 8-bit path tags with the static 709 tagger (its pixels
+    /// carry sRGB/709 primaries by construction); the linear path tags with
+    /// the policy's own primaries.
+    private let legacyColorTag: Bool
+
+    private init(
+        core: BlendCore, width: Int, height: Int, policy: VideoEncodePolicy,
+        gamut: simd_float3x3, ditherLSB: Float, applySRGB: Bool, legacyColorTag: Bool
+    ) throws {
+        self.core = core
+        self.width = width
+        self.height = height
+        self.policy = policy
+        self.gamut = gamut
+        self.ditherLSB = ditherLSB
+        self.applySRGB = applySRGB
+        self.legacyColorTag = legacyColorTag
+        accumulator = FrameAccumulator(core: core)
+        meanTexture = try core.makeMeanTexture(width: width, height: height)
+    }
+
+    /// The tone-engine era renderer: scene-linear Display P3 half-float
+    /// inputs, the profile's gamut conversion and dither on the way out.
+    public static func linear(
+        core: BlendCore, width: Int, height: Int, policy: VideoEncodePolicy
+    ) throws -> BlendWindowRenderer {
+        try BlendWindowRenderer(
+            core: core, width: width, height: height, policy: policy,
+            gamut: policy.gamutMatrixFromDisplayP3,
+            ditherLSB: policy.profile == .h264High8Bit ? 1.0 / 255.0 : 0,
+            applySRGB: true, legacyColorTag: false)
+    }
+
+    /// The legacy 8-bit renderer behind `stackSequence`: sRGB-uploaded
+    /// (`linearLight`) or raw gamma-byte inputs, identity gamut, always
+    /// dithered, tagged 709.
+    public static func gamma(
+        core: BlendCore, width: Int, height: Int, policy: VideoEncodePolicy, linearLight: Bool
+    ) throws -> BlendWindowRenderer {
+        try BlendWindowRenderer(
+            core: core, width: width, height: height, policy: policy,
+            gamut: matrix_identity_float3x3, ditherLSB: 1.0 / 255.0,
+            applySRGB: linearLight, legacyColorTag: true)
+    }
+
+    /// A pool this renderer's output buffers can come from, for a caller
+    /// with no writer to borrow one from.
+    public func makePixelBufferPool() throws -> CVPixelBufferPool {
+        var pool: CVPixelBufferPool?
+        let status = CVPixelBufferPoolCreate(
+            kCFAllocatorDefault, nil, policy.pixelBufferAttributes as CFDictionary, &pool)
+        guard status == kCVReturnSuccess, let pool else {
+            throw LapseError.writerFailed("pixel buffer pool creation failed (\(status))")
+        }
+        return pool
+    }
+
+    /// Renders one window. `texture(offset)` hands back the window's
+    /// `offset`-th input (0..<frameCount), already sized `width × height` —
+    /// the caller decodes, so it decides what is cached and what is read.
+    /// `sourcePosition` is the window's centre in the source (see
+    /// `ImageStacker.sourcePosition`), `frameIndex` seeds the dither.
+    ///
+    /// Every input, and the finalise, runs in its own autorelease drain.
+    /// Core Image's temporaries (the overlay bake's, and any a future hook
+    /// adds) are autoreleased, and without a drain per frame they pile up
+    /// for the WHOLE render: measured 2026-08-31 at ~55 MB per frame on a
+    /// 4032×3024 blend, which macOS absorbs on swap and iOS answers with a
+    /// jetsam kill a minute into a long shoot. Only the returned buffer
+    /// escapes.
+    public func render(
+        frameCount: Int,
+        texture: (Int) throws -> MTLTexture,
+        sourcePosition: Double,
+        frameIndex: Int,
+        pool: CVPixelBufferPool,
+        outputGrade: ((MTLTexture, MTLCommandBuffer, Double) throws -> MTLTexture)?,
+        overlayComposite: ((CVPixelBuffer, Double, CVPixelBufferPool) throws -> CVPixelBuffer?)?
+    ) throws -> CVPixelBuffer {
+        guard frameCount >= 1 else { throw LapseError.noInputFrames }
+        for offset in 0..<frameCount {
+            try autoreleasepool {
+                let input = try texture(offset)
+                guard input.width == width, input.height == height else {
+                    throw LapseError.sizeMismatch(
+                        expectedWidth: width, expectedHeight: height,
+                        actualWidth: input.width, actualHeight: input.height)
+                }
+                guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+                    throw LapseError.gpuSetupFailed("could not create a command buffer")
+                }
+                if offset == 0 {
+                    try accumulator.reset(width: width, height: height, commandBuffer: commandBuffer)
+                }
+                try accumulator.accumulate(input, commandBuffer: commandBuffer)
+                commandBuffer.commit()
+                commandBuffer.waitUntilCompleted()
+                if let error = commandBuffer.error {
+                    throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+                }
+            }
+        }
+
+        return try autoreleasepool { () throws -> CVPixelBuffer in
+            var outBuffer: CVPixelBuffer?
+            let poolStatus = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &outBuffer)
+            guard poolStatus == kCVReturnSuccess, let outBuffer else {
+                throw LapseError.writerFailed("output buffer allocation failed (\(poolStatus))")
+            }
+            // Non-sRGB view: `encodeGamma` applies the transfer curve itself.
+            let (destination, destinationHolder) = try core.makeTexture(from: outBuffer, srgb: false)
+            guard let commandBuffer = core.commandQueue.makeCommandBuffer() else {
+                throw LapseError.gpuSetupFailed("could not create a command buffer")
+            }
+            try accumulator.finalizeMean(into: meanTexture, commandBuffer: commandBuffer)
+            let graded = try outputGrade?(meanTexture, commandBuffer, sourcePosition) ?? meanTexture
+            try core.encodeGamma(
+                from: graded, to: destination,
+                ditherLSB: ditherLSB, frameIndex: frameIndex, applySRGB: applySRGB,
+                gamut: gamut, commandBuffer: commandBuffer)
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            if let error = commandBuffer.error {
+                throw LapseError.gpuSetupFailed("GPU error: \(error.localizedDescription)")
+            }
+            _ = destinationHolder
+
+            // Tag before the overlay pass so its reader sees the buffer's
+            // true color identity, and tag the replacement it hands back.
+            tagColor(outBuffer)
+            guard let overlayComposite,
+                  let composited = try overlayComposite(outBuffer, sourcePosition, pool)
+            else { return outBuffer }
+            tagColor(composited)
+            return composited
+        }
+    }
+
+    private func tagColor(_ buffer: CVPixelBuffer) {
+        if legacyColorTag {
+            VideoEncodePolicy.tagColor(buffer)
+        } else {
+            policy.tagColor(buffer)
+        }
     }
 }
 

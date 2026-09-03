@@ -165,7 +165,7 @@ public final class TimeSliceRenderer {
         cancelLock.unlock()
     }
 
-    private var isCancelled: Bool {
+    public var isCancelled: Bool {
         cancelLock.lock()
         defer { cancelLock.unlock() }
         return cancelFlag
@@ -661,7 +661,7 @@ public final class TimeSliceRenderer {
 
     /// Band → band, buffer to buffer (the lag-0 band comes straight from the
     /// current frame, never through the spool).
-    private static func copyBandDirect(
+    static func copyBandDirect(
         from source: UnsafeRawPointer, sourceBytesPerRow: Int,
         to dest: UnsafeMutableRawPointer, destBytesPerRow: Int, rect: BandRect
     ) {
@@ -675,7 +675,7 @@ public final class TimeSliceRenderer {
 
     // MARK: - Poster image
 
-    private static func makeImage(fromBGRA pixels: [UInt8], width: Int, height: Int) throws -> CGImage {
+    static func makeImage(fromBGRA pixels: [UInt8], width: Int, height: Int) throws -> CGImage {
         let data = Data(pixels)
         guard let providerRef = CGDataProvider(data: data as CFData),
               let colorSpace = CGColorSpace(name: CGColorSpace.sRGB),
@@ -697,7 +697,7 @@ public final class TimeSliceRenderer {
     /// draws y-up, so the transform is conjugated by vertical flips on both
     /// sides. Verify against a real portrait project on the Mac before
     /// trusting rotated posters (plan §7 stage 6).
-    private static func displayOriented(_ image: CGImage, transform: CGAffineTransform) throws -> CGImage {
+    static func displayOriented(_ image: CGImage, transform: CGAffineTransform) throws -> CGImage {
         guard transform != .identity else { return image }
         let sourceRect = CGRect(x: 0, y: 0, width: image.width, height: image.height)
         let bounds = sourceRect.applying(transform)

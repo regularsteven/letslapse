@@ -7367,9 +7367,111 @@ final class CameraController: NSObject, ObservableObject {
 
     /// macOS has no manual exposure, no per-format ISO envelope and no RAW
     /// photo capture, so there is no ramp to run and no Scanner to run it
-    /// beside. Neither is offered in the MODE dial there; these exist so the
-    /// shared teardown paths still compile.
-    private func endHolyGrailIfActive() {}
+    /// beside. Neither is offered in the MODE dial there; the Scanner stubs
+    /// exist so the shared teardown paths still compile.
+
+    // MARK: Light Ladder on the Mac — stepped by hand, sessionQueue-confined
+    // The phone's ladder is a box of constraints handed to the ramp per
+    // window (`advanceLadder`); without a ramp the Mac keeps the half a
+    // table still says on its own — the rung's spacing and depth — and lets
+    // the operator do the stepping. Same `LadderState` for the rail and
+    // toast, same `Logs/ladder-*.jsonl` for the bench.
+
+    private var ladderRequestedForRun: LightLadder?
+    private var ladderRungIndex: Int?
+    private var ladderChangeCount = 0
+    private var ladderWriter: LadderWindowWriter?
+
+    /// A Mac camera reports no exposure, so there is nothing to meter: the
+    /// light panel draws without a scene EV and the rung is the operator's.
+    func setLadderPreview(enabled: Bool) {}
+
+    /// sessionQueue-confined. The opening rung is the one the operator
+    /// picked; a table with no such index opens on its brightest rung.
+    private func armLadderByHand(_ ladder: LightLadder, rung index: Int) -> Rung {
+        let normalized = ladder.normalized()
+        let opening = normalized.rungs.indices.contains(index) ? index : 0
+        ladderRequestedForRun = normalized
+        ladderRungIndex = opening
+        ladderChangeCount = 0
+        let rung = normalized.rungs[opening]
+        ladderWriter = LadderWindowWriter(runStartedAt: Date())
+        ladderWriter?.writeHeader(ladder: normalized, rungIndex: opening, sceneEV: nil, pipeline: "jpeg")
+        ladderWriter?.append(window: 0, rungIndex: opening, rung: rung, sceneEV: nil,
+                             pacing: LightLadderPacing(rung: rung), changed: false)
+        DispatchQueue.main.async { self.activeIntervalSeconds = rung.intervalSeconds }
+        LLog("ladder: armed '\(normalized.name)' on '\(rung.name)' by hand — every \(rung.intervalSeconds)s, blend \(rung.blendFrames), exposure auto")
+        return rung
+    }
+
+    /// The operator stepped the running ladder. The rung's spacing and depth
+    /// go to the blend controller for the next window — never the one in
+    /// flight, the rule the phone's boundary step keeps too — and the rail
+    /// and toast follow through `ladderState`. Idle, there is no run to
+    /// step; the capture screen holds the armed rung itself.
+    func setLadderRung(_ index: Int) {
+        sessionQueue.async {
+            guard let ladder = self.ladderRequestedForRun, ladder.rungs.indices.contains(index),
+                  index != self.ladderRungIndex else { return }
+            let before = self.ladderRungIndex ?? index
+            self.ladderRungIndex = index
+            self.ladderChangeCount += 1
+            let rung = ladder.rungs[index]
+            self.liveBlendController?.setIntervalSeconds(rung.intervalSeconds)
+            self.liveBlendController?.setFrameTarget(rung.blendFrames)
+            DispatchQueue.main.async { self.activeIntervalSeconds = rung.intervalSeconds }
+            self.ladderWriter?.append(
+                window: self.photoURLs.count, rungIndex: index, rung: rung, sceneEV: nil,
+                pacing: LightLadderPacing(rung: rung), changed: true)
+            LLog("ladder: stepped \(before < index ? "down" : "up") to '\(rung.name)' by hand at output \(self.photoURLs.count) — every \(rung.intervalSeconds)s, blend \(rung.blendFrames)")
+            self.publishLadderState()
+        }
+    }
+
+    /// sessionQueue-confined. No smoothed EV and no governor here: the pacing
+    /// is the rung's as asked, and the rung below is a suggestion, not a
+    /// threshold.
+    private func publishLadderState() {
+        guard let ladder = ladderRequestedForRun, let index = ladderRungIndex,
+              index < ladder.rungs.count else {
+            DispatchQueue.main.async { self.ladderState = nil }
+            return
+        }
+        let rung = ladder.rungs[index]
+        let pacing = LightLadderPacing(rung: rung)
+        let state = LadderState(
+            ladderName: ladder.name,
+            rungIndex: index,
+            rungNames: ladder.rungs.map(\.name),
+            spans: ladder.drawingSpans(),
+            smoothedEV: nil,
+            intervalSeconds: pacing.intervalSeconds,
+            blendFrames: pacing.blendFrames,
+            readoutLine: pacing.readoutLine(rungName: rung.name),
+            changeCount: ladderChangeCount,
+            nextRungName: index + 1 < ladder.rungs.count ? ladder.rungs[index + 1].name : nil,
+            nextRungThresholdEV: rung.lowerBoundEV,
+            previousRungName: index > 0 ? ladder.rungs[index - 1].name : nil)
+        DispatchQueue.main.async {
+            if self.ladderState != state { self.ladderState = state }
+        }
+    }
+
+    /// No ramp to end on the Mac; what ends here is the hand-stepped ladder.
+    private func endHolyGrailIfActive() {
+        if let ladder = ladderRequestedForRun {
+            LLog("ladder: end of '\(ladder.name)' after \(ladderChangeCount) rung change(s) by hand")
+        }
+        ladderRequestedForRun = nil
+        ladderRungIndex = nil
+        ladderWriter?.close()
+        ladderWriter = nil
+        DispatchQueue.main.async {
+            self.activeIntervalSeconds = nil
+            self.ladderState = nil
+        }
+    }
+
     var isScannerActive: Bool { false }
     var scannerDeviceIsSteady: (() -> Bool)? {
         get { nil }
@@ -7894,7 +7996,10 @@ final class CameraController: NSObject, ObservableObject {
     /// spacing and depth the run opens at (the EVERY and BLEND dials are not
     /// drawn under Ladder and are not consulted), the ramp is implied, and
     /// every window re-resolves the rung — see `advanceLadder(window:)`.
-    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false, ladder: LightLadder? = nil) {
+    /// `ladderRung` is the operator's rung where the ladder is stepped by
+    /// hand (the Mac — `armLadderByHand`); the phone resolves the rung from
+    /// the light and ignores it.
+    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false, ladder: LightLadder? = nil, ladderRung: Int? = nil) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
             var interval = interval
@@ -7912,11 +8017,20 @@ final class CameraController: NSObject, ObservableObject {
                 self.ladderRequestedForRun = nil
             }
             #else
-            // The ladder rides the ramp engine, which is iOS/iPadOS-only (see
-            // the region comment above `holyGrailSettleSeconds`), and so does
-            // its state: a Mac run ignores the table rather than pretending a
-            // webcam can climb it.
-            _ = ladder
+            // No ramp on a Mac camera (see the region comment above
+            // `holyGrailSettleSeconds`), so the ladder is stepped by hand:
+            // the operator's rung sets the spacing and depth the run opens
+            // at, `setLadderRung` moves them mid-run, and exposure stays the
+            // camera's own — a plain live blend, paced by a table.
+            if let ladder {
+                let rung = self.armLadderByHand(ladder, rung: ladderRung ?? 0)
+                interval = rung.intervalSeconds
+                depth = .fixed(rung.blendFrames)
+            } else {
+                self.ladderRequestedForRun = nil
+            }
+            holyGrail = false
+            autoInterval = false
             #endif
             if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
                 LLog("capture: refused to start at thermal critical — the lens stabiliser parks there; let the device cool")
@@ -8210,6 +8324,11 @@ final class CameraController: NSObject, ObservableObject {
             }
 
             self.liveBlendController = controller
+            #if os(macOS)
+            // The hand-stepped ladder's rail and toast — published only once
+            // the run really has a controller to step.
+            self.publishLadderState()
+            #endif
             #if os(iOS)
             // Lock the stream orientation for the whole run, the same way the
             // interval tick orients each photo. Buffers must keep one size and

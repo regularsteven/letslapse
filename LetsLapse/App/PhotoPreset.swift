@@ -852,6 +852,17 @@ enum PhotoGrader {
     /// One frame of a blend, graded — the tone engine at full resolution.
     /// Nothing is cached: a blend reads each frame exactly once, and
     /// full-resolution frames would evict every preview for no gain.
+    /// `base` (or the plain still load) with the framing lock applied to
+    /// every frame it hands back — the gamma-path twin of `blendSupport`'s
+    /// `lock`. Nil in, nil out when there is no lock, so callers keep the
+    /// stacker's own default loader.
+    static func stabilisedLoader(
+        _ lock: FramingLock?, base: ((URL) throws -> CGImage)?
+    ) -> ((URL) throws -> CGImage)? {
+        guard let lock else { return base }
+        return lock.loader(base: base ?? { try ImageStacker.loadImage(at: $0) })
+    }
+
     static func renderForBlend(url: URL, grade: PhotoGrade) throws -> CGImage {
         // Never the rotation here: a blend levels each OUTPUT frame once, in
         // the stacker's frame hook (`OverlayExportBake`), and levelling every
@@ -868,7 +879,13 @@ enum PhotoGrader {
     /// would render blends scene-linear-flat instead of the way the app has
     /// always rendered them. The renderer is anchored to the first decoded
     /// frame's as-shot metadata, which is uniform across a shoot.
-    static func blendSupport(grade: PhotoGrade) throws
+    ///
+    /// `lock` — the project's committed framing lock, when the blend applies
+    /// it — moves each SOURCE frame back onto the reference framing inside
+    /// the decode (before the accumulator, where a knock would otherwise
+    /// ghost every edge of its window). Rotation is not composed here: a
+    /// blend levels each OUTPUT frame once, in the stacker's frame hook.
+    static func blendSupport(grade: PhotoGrade, lock: FramingLock? = nil) throws
         -> (decode: (URL) throws -> MTLTexture,
             hook: (MTLTexture, MTLCommandBuffer, Double) throws -> MTLTexture) {
         guard let decoder = linearDecoder, let engine = gradeEngine else {
@@ -899,7 +916,9 @@ enum PhotoGrader {
                 + "(\(RawDecodePath.cirawFilter.rawValue) bakes white balance at decode time)")
         }
         let decode: (URL) throws -> MTLTexture = { url in
-            let frame = try decoder.decode(url: url, path: path, recipe: grade.recipe)
+            let frame = try decoder.decode(
+                url: url, path: path, recipe: grade.recipe,
+                transform: lock.map { lock in { lock.levelled($0, name: url.lastPathComponent) } })
             if box.renderer == nil {
                 box.renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
                 box.step = 0

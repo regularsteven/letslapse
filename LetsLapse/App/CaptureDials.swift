@@ -79,7 +79,7 @@ enum BlendMenuOrder {
 }
 
 /// The small caps label ahead of each dial ("EVERY", "BLEND").
-private struct DialCaption: View {
+struct DialCaption: View {
     let text: String
 
     var body: some View {
@@ -163,6 +163,12 @@ struct IntervalDialsRow: View, Equatable {
     let ladderName: String?
     /// The swatch on that chip — the colour of the rung the light is on.
     let ladderSwatch: Color
+    /// The rung, where the operator steps the ladder by hand (the Mac: no
+    /// scene EV to step it from). A second unlabelled chip after the ladder,
+    /// a menu of the ladder's rungs. Nil where the light steps the ladder.
+    let rungName: String?
+    /// The menu behind that chip, brightest first.
+    let rungNames: [String]
     let onSelectInterval: (Double) -> Void
     let onSelectAutoInterval: () -> Void
     let onSelectFixedBlend: (Int) -> Void
@@ -171,11 +177,14 @@ struct IntervalDialsRow: View, Equatable {
     let onSelectAuto: () -> Void
     let onSelectMode: (IntervalCaptureMode) -> Void
     let onSelectLadder: () -> Void
+    let onSelectRung: (Int) -> Void
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.intervalSeconds == rhs.intervalSeconds
             && lhs.ladderName == rhs.ladderName
             && lhs.ladderSwatch == rhs.ladderSwatch
+            && lhs.rungName == rhs.rungName
+            && lhs.rungNames == rhs.rungNames
             && lhs.intervalIsAuto == rhs.intervalIsAuto
             && lhs.blendDepth == rhs.blendDepth
             && lhs.safeDepthAvailable == rhs.safeDepthAvailable
@@ -197,6 +206,7 @@ struct IntervalDialsRow: View, Equatable {
             HStack(spacing: 8) {
                 if modeAvailable { modePicker }
                 if let ladderName { ladderChip(ladderName) }
+                if let rungName { rungChip(rungName) }
                 if showsEveryPicker { everyPicker }
                 if showsBlendPicker { blendPicker }
                 caption
@@ -205,6 +215,7 @@ struct IntervalDialsRow: View, Equatable {
                 HStack(spacing: 8) {
                     if modeAvailable { modePicker }
                     if let ladderName { ladderChip(ladderName) }
+                    if let rungName { rungChip(rungName) }
                     if showsEveryPicker { everyPicker }
                 }
                 if showsBlendPicker || captionText != nil {
@@ -243,14 +254,47 @@ struct IntervalDialsRow: View, Equatable {
         .accessibilityLabel("Ladder: \(name)")
     }
 
+    /// The rung, where it is the operator's to choose: a dial in the row's
+    /// own grammar — caption, then a menu of the ladder's rungs with a check
+    /// on the one armed. A dial rather than a second unlabelled chip because
+    /// this only ever draws on the Mac, where AppKit renders a menu's label
+    /// as a plain pull-down and drops a capsule and swatch on the floor
+    /// (verified 2026-09-03): a bare "Dusk" beside the ladder chip named
+    /// nothing, and "RUNG · Dusk" does. The panel above carries the swatch.
+    private func rungChip(_ name: String) -> some View {
+        HStack(spacing: 8) {
+            DialCaption(text: "RUNG")
+            Menu {
+                ForEach(Array(rungNames.enumerated()), id: \.offset) { index, rung in
+                    Button {
+                        onSelectRung(index)
+                    } label: {
+                        if rung == name {
+                            Label(rung, systemImage: "checkmark")
+                        } else {
+                            Text(rung)
+                        }
+                    }
+                }
+            } label: {
+                PickerMenuLabel(text: name)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Rung: \(name)")
+        }
+    }
+
     /// The MODE dial. "Basic" is the plain timer shoot; "Holy Grail" hands
     /// shutter and ISO to the ramp so a shoot can run from daylight into night
-    /// in one take; "Scanner" hands the shutter itself to the scene.
+    /// in one take; "Scanner" hands the shutter itself to the scene; "Ladder"
+    /// follows a table of rungs. Only the modes this platform can run are
+    /// offered (`IntervalCaptureMode.availableCases`).
     private var modePicker: some View {
         HStack(spacing: 8) {
             DialCaption(text: "MODE")
             Menu {
-                ForEach(IntervalCaptureMode.allCases) { option in
+                ForEach(IntervalCaptureMode.availableCases) { option in
                     Button {
                         onSelectMode(option)
                     } label: {

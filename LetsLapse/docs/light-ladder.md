@@ -276,8 +276,10 @@ extra work: standby arms whatever is selected.
 ## 6. The UI
 
 All screens are plain SwiftUI lists and overlays — that is what makes
-iPhone + iPad one build (D8). macOS hides Ladder from the MODE menu in v1
-(the model and store are universal; the screens follow once drawn).
+iPhone + iPad one build (D8), and what let the Mac take the same screens
+the evening of 2026-09-03 (§6.7, D13): the list, editor, rung and picker
+present as Mac sheets, and the capture screen's MODE dial offers Ladder
+beside Basic — stepped by hand, since a Mac camera has no ramp to step it.
 
 ### 6.1 Capture — Interval, Ladder armed (design 2a)
 
@@ -347,6 +349,61 @@ brighter, stepper, "Shown as EV 4 to 8 because Fading sits above it");
 **EXPOSURE — HANDED TO THE SERVO** (ISO, Shutter, White balance rows with
 their resolved subtitles); **PACING — STEPS AT THE BOUNDARY** (Every,
 Blend steppers). The §3.3 messages at the foot.
+
+### 6.7 The Mac — the same ladder, stepped by hand (2026-09-03 evening, D13)
+
+Hiding Ladder from the Mac was recorded as a decision (D8) but was never the
+intent — the Mac is not the usual camera, and it should still be there. What
+the Mac cannot do is the ramp: `AVCaptureDevice` there has no manual
+exposure, no ISO/shutter envelope, no RAW and no exposure readings at all
+(the region comment above `holyGrailSettleSeconds`), so a rung's ISO,
+shutter and WB cannot be applied and the scene EV that steps a rung on the
+phone has no source. What a rung still says on its own — **its spacing and
+its blend depth** — the Mac applies, and **the operator does the stepping**:
+
+- **Availability is per mode now** (`IntervalCaptureMode.isAvailableOnThisPlatform`,
+  `availableCases`): the Mac's MODE dial draws Basic and Ladder; Dynamic and
+  Scanner stay iOS/iPadOS. `CaptureView.holyGrailAvailable` is the narrower
+  ramp question and stays false on the Mac; `ladderStepsByHand` is its
+  complement. `holyGrailArmed` is false under Ladder on the Mac, so the lock
+  button, the readout and the exposure panel keep their plain meanings.
+- **Armed:** the dial row is MODE · ladder chip · **RUNG dial** — a fourth
+  dial in the row's own grammar (caption + pull-down of the ladder's rungs,
+  `IntervalDialsRow.rungChip`), not a second unlabelled chip: AppKit draws a
+  menu's label as a plain pull-down and drops a capsule and swatch on the
+  floor, so a bare "Dusk" beside the ladder chip named nothing. The panel
+  above carries the swatch. In landscape — every Mac window — the light
+  panel stacks **above** the dial row inside `landscapeIntervalRow` (capped
+  at `landscapeReadoutMaxWidth`) rather than over it: that corner is the
+  row's. The panel draws without a scene EV; its lever line reads "every
+  3 s · blend 2 · exposure by the camera" and its amber line "Dusk is next
+  — every 5 s, blend 3. Step down as the light fades."
+  (`LadderLightPanel.exposureIsAutomatic`). The chosen rung is remembered
+  for the launch (`ladderRungByHand`), like the panel.
+- **Running:** `startLiveBlend(ladder:ladderRung:)` — the Mac branch
+  (`armLadderByHand`) opens the plain live blend at the rung's spacing and
+  depth with `holyGrail` false; `setLadderRung` applies a step to the next
+  window through the same `setIntervalSeconds` / `setFrameTarget` pair the
+  phone's boundary step uses, never the window in flight. The operator
+  steps from the **same RUNG dial under the run's readout**
+  (`ladderRunningRungDial`), not from the rail: the rail is picture on every
+  platform, and it sits inside the viewfinder's swipe and pinch gestures,
+  where a menu's mouse-down proved not to be its own (a scripted click on a
+  rail menu never opened it; the dial row, outside those gestures, always
+  does). The readout's third line stands alone there — no ramp, so no
+  exposure pair above it (`holyGrailReadout`'s ladder-only branch). The
+  toast reports the step, and the same `LadderState` and
+  `Logs/ladder-*.jsonl` carry it — `sceneEV` null, `changed` true on every
+  hand step, no `yieldedBy` (there is no governor on the JPEG path).
+- **Authoring:** the Create tab's "Interval ladders" row is on every
+  platform; the list is a 560×640 Mac sheet (a Mac sheet is never
+  user-resizable; its footers wrap only with an explicit `lineLimit(nil)`),
+  the picker 440×360 with a Done button (Escape) since there is no swipe to
+  leave a Mac sheet by. Manage's dismiss-then-present hand-off works on the
+  Mac as on iOS.
+- **Not done, deliberately:** stepping from preview brightness. A webcam's
+  own AE flattens the image, so mean luma is not a scene EV and would step
+  the wrong way at the wrong time. The rung is the operator's.
 
 ### 6.6 Watch and remote (follow-up, not v1)
 
@@ -505,11 +562,12 @@ Taken by recommendation after the review, approved together.
 | D5 | Switching band is a Kit constant, 0.5 EV, read-only row in v1. |
 | D6 | Editor = ribbon header + list (2c-ii). The EV-axis variant is not built. |
 | D7 | The name is **Ladder**; *Profile* retired (collides with blend profiles). |
-| D8 | iPhone + iPad in v1, same list screens, picker as a popover on iPad. Ladder hidden from the Mac MODE menu until drawn. |
+| D8 | iPhone + iPad in v1, same list screens, picker as a popover on iPad. ~~Ladder hidden from the Mac MODE menu until drawn.~~ Reversed the same evening — D13. |
 | D9 | This file is the job document; the brief's decisions are reconstructed and marked. |
 | D10 | Light panel: open by default when armed, remembered per launch once closed, re-opens on a rung change while armed. Running uses the toast + readout line. |
 | D11 | The monitor test card's brightness ramp is the acceptance bench; the run is designed before the engine hook is written. |
 | D12 | Build order as §10; Kit model and tests first; card run at depth 1 before any depth above it. |
+| D13 | **The Mac has Ladder too, stepped by hand** (Steven, 2026-09-03 evening: hiding it was never intentional). Availability is per mode; the rung's spacing and blend apply, exposure stays the camera's own, the operator steps the rung from the dial row and the rail. Authoring on the Mac. Brightness-keyed stepping rejected (§6.7). |
 
 ## 12. Still open
 
@@ -523,6 +581,10 @@ Taken by recommendation after the review, approved together.
   sidecar once its on-device path is confirmed (`capture_log.json` and
   `frames.timestamps` were not at `Projects/<id>/` or `…/source/`).
 
+- **The Mac's hand-stepped ladder on a real shoot** (§6.7): built and
+  Mac-verified against the dials, the sheets and a run's rail with no camera
+  grant; a run with a real Mac camera that steps mid-run and lands the new
+  spacing from the next window is still owed, as is the macOS SVG's sign-off.
 - The written brief itself (see the note at the top).
 - Whether the panel's "re-opens on a rung change while armed" is right
   once seen on a device waiting for sunset — a judgement call, cheap to

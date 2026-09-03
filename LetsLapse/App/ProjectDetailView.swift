@@ -54,6 +54,10 @@ struct ProjectDetailView: View {
     @State private var isRotating = false
     @State private var rotateFailure: String?
     @State private var isBrowsingOriginals = false
+    /// The framing review, presented as a sheet on iOS (a window on macOS —
+    /// `FramingReviewWindowRequest`).
+    @State private var framingReviewRequest: FramingReviewRequest?
+    @ObservedObject private var framingStore = FramingReviewStore.shared
     /// Field notes: the project's saved notes (newest first), the "+ Field
     /// note" flow sheet, inline audio playback, and the per-note delete
     /// confirmation.
@@ -728,6 +732,10 @@ struct ProjectDetailView: View {
                     originalsControl(for: capture)
                 }
 
+                if !isBurst {
+                    framingRows(for: capture)
+                }
+
                 Button {
                     isBrowsingOriginals = true
                 } label: {
@@ -742,7 +750,93 @@ struct ProjectDetailView: View {
                 .disabled(capture.sourceMediaCount == 0)
             }
             .llCard()
+            .onAppear {
+                if !isBurst {
+                    framingStore.load(id: capture.id, sourceFolder: model.sourceFolderURL(for: capture))
+                }
+            }
+            #if os(iOS)
+            .sheet(item: $framingReviewRequest) { request in
+                FramingReviewView(captureID: request.id)
+                    .environmentObject(model)
+            }
+            #endif
         }
+    }
+
+    struct FramingReviewRequest: Identifiable {
+        let id: UUID
+    }
+
+    /// The framing review pair (docs/framing-lock.md; specs
+    /// project-detail.interval[.reviewed].portrait.svg): **Review photos**
+    /// measures where every photo sits against one framing and reports the
+    /// knocks; **Stabilise photos** commits the report's plan as metadata —
+    /// disabled until a review exists, "Stabilised · Undo" once committed.
+    /// Nothing here rewrites a photo.
+    @ViewBuilder private func framingRows(for capture: AppModel.CaptureProject) -> some View {
+        let review = framingStore.review(for: capture.id)
+        let measuring = framingStore.isMeasuring(capture.id)
+        let disabledColor = Color.secondary.opacity(0.55)
+
+        LLRow(title: "Review photos", subtitle: reviewSubtitle(review: review, measuring: measuring, captureID: capture.id)) {
+            Button(measuring ? "Open" : (review == nil ? "Review" : "Report")) {
+                presentReview(for: capture)
+            }
+            .font(.system(size: 12.5, weight: .semibold))
+            .foregroundStyle(LL.accent)
+            .buttonStyle(.plain)
+        }
+
+        if let review, review.isStabilisationCurrent {
+            LLRow(title: "Stabilised", subtitle: "Locked to one framing · crops \(FramingReviewStore.percent(review.plan.cropFraction))") {
+                Button("Undo") {
+                    framingStore.withdraw(id: capture.id, sourceFolder: model.sourceFolderURL(for: capture))
+                    model.refreshFramingLockIfOpen(capture)
+                }
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(LL.accent)
+                .buttonStyle(.plain)
+            }
+        } else if let review, review.verdict != .inconclusive {
+            LLRow(title: "Stabilise photos", subtitle: review.isStabilised
+                    ? "Re-apply after the new review · crops \(FramingReviewStore.percent(review.plan.cropFraction))"
+                    : "Locks every photo to one framing · crops \(FramingReviewStore.percent(review.plan.cropFraction))") {
+                Button("Stabilise") {
+                    framingStore.stabilise(id: capture.id, sourceFolder: model.sourceFolderURL(for: capture))
+                    model.refreshFramingLockIfOpen(capture)
+                }
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(LL.accent)
+                .buttonStyle(.plain)
+            }
+        } else {
+            LLRow(title: "Stabilise photos", subtitle: "Review the photos first", titleColor: disabledColor) {
+                Text("Stabilise")
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundStyle(disabledColor)
+            }
+        }
+    }
+
+    private func reviewSubtitle(review: FramingReview?, measuring: Bool, captureID: UUID) -> String {
+        if measuring, let run = framingStore.run(for: captureID) {
+            return "Measuring photo \(max(1, Int(run.progress * Double(run.total)))) of \(run.total)…"
+        }
+        if let failure = framingStore.failure(for: captureID) {
+            return failure
+        }
+        guard let review else { return "Finds knocks and drift in the framing" }
+        return FramingReviewStore.rowSummary(review)
+    }
+
+    private func presentReview(for capture: AppModel.CaptureProject) {
+        #if os(macOS)
+        openWindow(value: FramingReviewWindowRequest(
+            captureID: capture.id, title: "Framing review — \(capture.displayTitle)"))
+        #else
+        framingReviewRequest = FramingReviewRequest(id: capture.id)
+        #endif
     }
 
     private func originalsSubtitle(for capture: AppModel.CaptureProject) -> String {

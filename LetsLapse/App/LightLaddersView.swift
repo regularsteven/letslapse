@@ -40,6 +40,9 @@ struct LightLaddersView: View {
                     Text("Built in")
                 } footer: {
                     Text("Open to read it or duplicate it. The built-in is never edited in place, so a shoot from six months ago still means what it meant.")
+                        // A Mac list truncates a footer to one line; iOS wraps it anyway.
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Section {
@@ -66,6 +69,9 @@ struct LightLaddersView: View {
                     Text("Your ladders")
                 } footer: {
                     Text("Ladders are portable: a rung stores ISO as min, max, auto or a value, resolved for whichever device and lens arms it.")
+                        // A Mac list truncates a footer to one line; iOS wraps it anyway.
+                        .lineLimit(nil)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
             .navigationTitle("Interval ladders")
@@ -88,6 +94,11 @@ struct LightLaddersView: View {
                 path = initialPath
             }
         }
+        #if os(macOS)
+        // A Mac sheet is never user-resizable, so it opens at a size the
+        // editor's ribbon and the rung's form both fit.
+        .frame(minWidth: 560, minHeight: 640)
+        #endif
     }
 
     private func isSelected(_ ladder: LightLadder) -> Bool {
@@ -590,6 +601,9 @@ struct LightRungView: View {
                 Text("Applies at")
             } footer: {
                 Text(appliesFooter)
+                    // A Mac list truncates a footer to one line; iOS wraps it anyway.
+                    .lineLimit(nil)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Section {

@@ -1,0 +1,125 @@
+<svg viewBox="0 0 1000 800" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Capture · Interval · Ladder armed, stepped by hand · 960×720 sheet</title>
+  <desc>Mirrors App/CaptureView.swift (landscapeLayout → landscapeIntervalRow → ladderArmedPanel + intervalPickerRow) with App/CaptureDials.swift (IntervalDialsRow: modePicker, ladderChip, rungChip) and App/LightLadderViews.swift (LadderLightPanel with exposureIsAutomatic) on the macOS capture sheet — CreateView presents CaptureView at ≥960×720, and a Mac window is always the landscape branch. Drawn from the Debug build's own window buffer on 2026-09-03 (LL_CAPTURE=1 LL_LADDER=armed); that build carries no camera grant, so the live image is indicative here (the app showed its "Camera access is needed" message in the middle of the viewfinder, which is not part of this spec).
+
+WHY THE MAC HAS THIS AT ALL — decision D13 in docs/light-ladder.md §11: hiding Ladder from the Mac's MODE dial (D8) was never intended. A Mac camera has no ramp — AVFoundation on macOS offers no manual exposure, no ISO/shutter envelope, no RAW and no exposure readings — so a rung's ISO, shutter and white balance cannot be applied and the scene EV that steps a rung on the phone has no source. What a rung still says on its own, its spacing and its blend depth, the Mac applies, and THE OPERATOR STEPS THE RUNG. IntervalCaptureMode.isAvailableOnThisPlatform makes availability per mode: the Mac's MODE menu offers "Basic · a frame on the timer" and "Ladder · a table of light states" only (verified in the open menu); Dynamic Light and Scanner stay iOS/iPadOS. CaptureView.holyGrailAvailable is the narrower ramp question and stays false here, so under Ladder the lock button, readout and exposure panel keep their plain meanings.
+
+THE DIAL ROW — four items in the viewfinder's lower-left corner, the landscape row's slot: MODE (caption + pull-down reading "Ladder"), the LADDER CHIP (the armed ladder's short name, "Bright &amp; Fast" for "Bright &amp; Fast, Dark &amp; Slow", cut at its first comma, on a capsule with the rung's swatch — a Button, so AppKit leaves its capsule alone), then RUNG — a fourth dial in the row's own grammar (caption + pull-down of the ladder's rungs, Daylight · Fading · Dusk · Night, check on the armed one). It is a captioned dial rather than the second unlabelled chip the phone would have drawn because AppKit renders a Menu's label as a plain pull-down and drops both the capsule and the swatch: a bare "Dusk" beside the ladder chip named nothing, "RUNG · Dusk" does. The pull-downs draw as the Mac's other dials do — amber text between two chevrons, no capsule (PickerMenuLabel under .menuStyle(.borderlessButton)). EVERY and BLEND are not drawn: Ladder owns both (ownsInterval, ownsBlend), as on the phone.
+
+THE LIGHT PANEL stacks ABOVE the dial row inside landscapeIntervalRow, capped at landscapeReadoutMaxWidth (560 pt) — in landscape that corner is the row's, and the first Mac build drew the panel over the dials. Mac-specific copy (LadderLightPanel.exposureIsAutomatic): no "scene EV" beside the name (nothing meters); the lever line is "every 2 s · blend 3 · exposure by the camera" instead of the phone's ISO and shutter; the amber line is "Night is next — every 2 s, no stacking. Step down as the light fades." instead of "Night is next, below EV 4 — …", because nothing meters the step here. The close (×) collapses it to the rung pill, remembered per launch (D10), as on iOS.
+
+Also on this sheet, unchanged by the feature: the left rail (close, schedule, format pill, headroom chip, recent-capture thumbnail), the PHOTO / INTERVAL / VIDEO rail top-right, the shutter and the right rail's four accessories (steady, delay, grid, exposure lock). The format pill overflows the 108 pt left rail and is clipped at the sheet's edge ("552×1552 · JPEG") — a pre-existing landscape-rail defect, drawn as the app draws it and flagged in INDEX.md, not part of this change.
+
+Not drawn: the MODE and RUNG menus themselves (system menus — mirrored as notes in INDEX.md, the way the Camera menu is); the ladder picker sheet (shares ../iOS/capture-interval.ladder-picker.portrait.svg at 440×360 with a Mac-only Done button); the running state, which is capture-interval.ladder.running.svg.</desc>
+  <defs>
+    <clipPath id="capsheet"><rect x="20" y="20" width="960" height="720" rx="11"/></clipPath>
+    <linearGradient id="thumb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#6E7F98"/><stop offset="0.55" stop-color="#5B6472"/><stop offset="1" stop-color="#3A3530"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-family:'SF Mono',Menlo,monospace}</style>
+
+  <rect x="0" y="0" width="1000" height="800" fill="#F2F2F7"/>
+  <g clip-path="url(#capsheet)">
+    <!-- The capture sheet: a dark surface (CaptureView carries .preferredColorScheme(.dark)). -->
+    <rect x="20" y="20" width="960" height="720" fill="#000000"/>
+    <!-- Live image, indicative: the 4:3 viewfinder between the two rails (108 pt left, 118 pt right). -->
+    <rect x="128" y="20" width="734" height="720" fill="#161616"/>
+    <text x="495" y="330" font-size="12" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.18" letter-spacing="1.2">LIVE PREVIEW</text>
+
+    <!-- Left rail: close, schedule -->
+    <g data-symbol="xmark">
+      <circle cx="74" cy="55" r="18" fill="#2B2B2E" fill-opacity="0.9"/>
+      <path d="M68 49 L80 61 M80 49 L68 61" stroke="#FFFFFF" stroke-width="2.2" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="clock">
+      <circle cx="74" cy="111" r="18" fill="#2B2B2E" fill-opacity="0.9"/>
+      <circle cx="74" cy="111" r="7.5" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M74 106.5 V111 H77.5" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- Mode rail, top-right. INTERVAL selected in LL.amber. -->
+    <text x="951" y="46" font-size="11" class="b" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55" letter-spacing="1.2">PHOTO</text>
+    <text x="951" y="70" font-size="11" class="b" text-anchor="end" fill="#FFB340" letter-spacing="1.2">INTERVAL</text>
+    <text x="951" y="94" font-size="11" class="b" text-anchor="end" fill="#FFFFFF" fill-opacity="0.55" letter-spacing="1.2">VIDEO</text>
+
+    <!-- Format pill (overflows the rail; clipped at the sheet edge — pre-existing, see desc) and headroom chip -->
+    <g id="format-pill">
+      <rect x="8" y="357" width="145" height="30" rx="15" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="20" y="377" font-size="13" class="sb" fill="#FFFFFF">1552×1552 · JPEG</text>
+      <path d="M134 370 l4 4 l4 -4" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+    </g>
+    <g id="headroom-chip" data-symbol="internaldrive">
+      <rect x="30" y="397" width="88" height="28" rx="14" fill="#2B2B2E" fill-opacity="0.9"/>
+      <rect x="41" y="407" width="12" height="8" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+      <text x="58" y="416" font-size="12.5" class="sb" fill="#FFFFFF">≈2118k</text>
+    </g>
+
+    <!-- Recent capture thumbnail, lower-left of the rail -->
+    <rect x="44" y="664" width="60" height="60" rx="12" fill="url(#thumb)"/>
+
+    <!-- Shutter -->
+    <circle cx="921" cy="314" r="38" fill="none" stroke="#B4B4B4" stroke-width="3"/>
+    <circle cx="921" cy="314" r="30" fill="#FF3B30"/>
+
+    <!-- Right rail accessories: steady, delay, grid, exposure lock -->
+    <g data-symbol="hand.raised">
+      <circle cx="921" cy="552" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <path d="M914 556 V546 M918 555 V543 M922 555 V544 M926 556 V547 M914 556 c0 6 3 9 8 9 c5 0 8 -3 8 -9" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="timer">
+      <circle cx="921" cy="602" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <circle cx="921" cy="603" r="8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M921 598 V603 L924.5 605.5 M918 592.5 H924" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="grid">
+      <circle cx="921" cy="652" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <circle cx="921" cy="652" r="8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M921 641 V663 M910 652 H932" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
+    </g>
+    <g data-symbol="lock.open">
+      <circle cx="921" cy="702" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
+      <rect x="915" y="701" width="12" height="9" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
+      <path d="M918 701 V697 a3.5 3.5 0 0 1 7 0" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+    </g>
+
+    <!-- ============ The light panel (LadderLightPanel, exposureIsAutomatic) ============ -->
+    <g id="light-panel">
+      <rect x="138" y="586" width="550" height="94" rx="12" fill="#000000" fill-opacity="0.6"/>
+      <rect x="152" y="598" width="9" height="9" rx="2" fill="#8A4A00"/>
+      <text x="168" y="608" font-size="15" class="sb" fill="#FFFFFF">Dusk</text>
+      <g data-symbol="xmark">
+        <circle cx="673" cy="602" r="11" fill="#FFFFFF" fill-opacity="0.12"/>
+        <path d="M669.5 598.5 L676.5 605.5 M676.5 598.5 L669.5 605.5" stroke="#FFFFFF" stroke-opacity="0.8" stroke-width="1.8" stroke-linecap="round"/>
+      </g>
+      <text x="152" y="630" font-size="10.5" class="mono" fill="#FFFFFF" fill-opacity="0.75">every 2 s · blend 3 · exposure by the camera</text>
+      <text x="152" y="650" font-size="10.5" fill="#FFFFFF" fill-opacity="0.6">≈1 800 frames an hour · motion softened by 3-frame stacking</text>
+      <text x="152" y="670" font-size="10.5" fill="#FFB340">Night is next — every 2 s, no stacking. Step down as the light fades.</text>
+    </g>
+
+    <!-- ============ The dial row: MODE · ladder chip · RUNG (IntervalDialsRow) ============ -->
+    <g id="dial-row">
+      <rect x="138" y="696" width="400" height="28" rx="14" fill="#000000" fill-opacity="0.5"/>
+      <text x="151" y="714" font-size="10" class="b" fill="#FFFFFF" fill-opacity="0.45" letter-spacing="0.8">MODE</text>
+      <!-- Mac pull-down: PickerMenuLabel under .borderlessButton — AppKit's leading chevron, amber label, trailing chevron -->
+      <path d="M200 708 l4 4 l4 -4" stroke="#FFB340" stroke-opacity="0.8" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+      <text x="214" y="715" font-size="12.5" class="sb" fill="#FFB340">Ladder</text>
+      <path d="M259 708 l4 4 l4 -4" stroke="#FFB340" stroke-opacity="0.8" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+      <!-- Ladder chip (a Button, so its capsule survives): swatch of the armed rung + short name -->
+      <rect x="282" y="697" width="136" height="27" rx="13.5" fill="#2B2B2E" fill-opacity="0.9"/>
+      <rect x="295" y="706" width="9" height="9" rx="2" fill="#8A4A00"/>
+      <text x="310" y="715" font-size="12.5" class="sb" fill="#FFFFFF">Bright &amp; Fast</text>
+      <path d="M400 709 l3.5 3.5 l3.5 -3.5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+      <!-- RUNG dial: the Mac's hand step -->
+      <text x="427" y="714" font-size="10" class="b" fill="#FFFFFF" fill-opacity="0.45" letter-spacing="0.8">RUNG</text>
+      <path d="M475 708 l4 4 l4 -4" stroke="#FFB340" stroke-opacity="0.8" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+      <text x="489" y="715" font-size="12.5" class="sb" fill="#FFB340">Dusk</text>
+      <path d="M523 708 l4 4 l4 -4" stroke="#FFB340" stroke-opacity="0.8" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+    </g>
+  </g>
+  <rect x="20" y="20" width="960" height="720" rx="11" fill="none" stroke="#000000" stroke-opacity="0.25"/>
+
+  <!-- Caption strip -->
+  <text x="20" y="770" font-size="12" fill="#6D6D72">macOS · Capture · Interval · Ladder armed, stepped by hand · 960×720 sheet · 1 unit = 1 pt</text>
+  <text x="20" y="788" font-size="11" fill="#6D6D72">MODE Basic | Ladder only on the Mac · RUNG menu: Daylight · Fading · Dusk ✓ · Night · exposure stays the camera's own</text>
+</svg>
