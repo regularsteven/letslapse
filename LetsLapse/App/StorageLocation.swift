@@ -35,7 +35,7 @@ enum StorageRoot {
     static let libraryItemNames = [
         "Projects", "Collections", "Thumbnails", "SceneMasks", "CaptureLogs", "Logs",
         "Incoming",
-        "blend-profiles.json", "custom_presets.json",
+        "blend-profiles.json", "custom_presets.json", "light_ladders.json",
     ]
 
     /// True when a nominated location could not be reached at launch (drive

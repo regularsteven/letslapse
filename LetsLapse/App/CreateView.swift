@@ -67,6 +67,11 @@ struct CreateView: View {
     @State private var choosingImportSource = false
     #if os(iOS)
     @State private var showDeviceImport = false
+    /// Interval ladders — Ladder MODE's tables, managed from here as well as
+    /// from the capture screen's ladder chip. The selection is the capture
+    /// screen's; it is mirrored here so "Use this ladder" arms the next shoot.
+    @State private var showLadders = false
+    @State private var selectedLadderID: UUID? = RecordingSettingsStore.ladderID
     #else
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -288,8 +293,32 @@ struct CreateView: View {
             Divider().padding(.leading, 58)
 
             importProjectRow
+
+            Divider().padding(.leading, 58)
+
+            laddersRow
         }
         .llCard(cornerRadius: 18)
+    }
+
+    /// Interval's Ladder MODE tables. A sheet here as on the capture screen:
+    /// the list owns its own navigation (editor, rung), so it presents the
+    /// same way from both doors.
+    private var laddersRow: some View {
+        Button {
+            showLadders = true
+        } label: {
+            SourceRow(
+                icon: "sunset.fill",
+                iconColor: LL.accentDeep,
+                title: "Interval ladders"
+            )
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showLadders) {
+            LightLaddersView(store: LightLadderStore.shared, selectedID: $selectedLadderID)
+        }
+        .onChange(of: selectedLadderID) { id in RecordingSettingsStore.save(ladderID: id) }
     }
 
     private var importProjectRow: some View {

@@ -158,6 +158,11 @@ struct IntervalDialsRow: View, Equatable {
     /// manual exposure API, no RAW), so it simply isn't drawn there.
     let modeAvailable: Bool
     let intervalMode: IntervalCaptureMode
+    /// Ladder MODE's object: the armed ladder's short name, drawn as an
+    /// unlabelled chip right after MODE. Nil under every other mode.
+    let ladderName: String?
+    /// The swatch on that chip — the colour of the rung the light is on.
+    let ladderSwatch: Color
     let onSelectInterval: (Double) -> Void
     let onSelectAutoInterval: () -> Void
     let onSelectFixedBlend: (Int) -> Void
@@ -165,9 +170,12 @@ struct IntervalDialsRow: View, Equatable {
     let onSelectSafe: () -> Void
     let onSelectAuto: () -> Void
     let onSelectMode: (IntervalCaptureMode) -> Void
+    let onSelectLadder: () -> Void
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.intervalSeconds == rhs.intervalSeconds
+            && lhs.ladderName == rhs.ladderName
+            && lhs.ladderSwatch == rhs.ladderSwatch
             && lhs.intervalIsAuto == rhs.intervalIsAuto
             && lhs.blendDepth == rhs.blendDepth
             && lhs.safeDepthAvailable == rhs.safeDepthAvailable
@@ -178,28 +186,61 @@ struct IntervalDialsRow: View, Equatable {
             && lhs.streamFPS == rhs.streamFPS
     }
 
-    /// Scanner fires from the scene, so the shoot has no spacing to show.
+    /// Scanner fires from the scene, so the shoot has no spacing to show;
+    /// Ladder's spacing is the rung's.
     private var showsEveryPicker: Bool { !intervalMode.ownsInterval }
+    /// Ladder's depth is the rung's too — the ladder chip stands in for both.
+    private var showsBlendPicker: Bool { !intervalMode.ownsBlend }
 
     var body: some View {
         ViewThatFits(in: .horizontal) {
             HStack(spacing: 8) {
                 if modeAvailable { modePicker }
+                if let ladderName { ladderChip(ladderName) }
                 if showsEveryPicker { everyPicker }
-                blendPicker
+                if showsBlendPicker { blendPicker }
                 caption
             }
             VStack(alignment: .leading, spacing: 6) {
                 HStack(spacing: 8) {
                     if modeAvailable { modePicker }
+                    if let ladderName { ladderChip(ladderName) }
                     if showsEveryPicker { everyPicker }
                 }
-                HStack(spacing: 8) {
-                    blendPicker
-                    caption
+                if showsBlendPicker || captionText != nil {
+                    HStack(spacing: 8) {
+                        if showsBlendPicker { blendPicker }
+                        caption
+                    }
                 }
             }
         }
+    }
+
+    /// MODE's object when MODE is Ladder. Unlabelled on purpose — the one
+    /// exception to `DialCaption`: it reads as the answer to MODE, not as a
+    /// dial of its own. A tap opens the ladder picker; the sheet never edits.
+    private func ladderChip(_ name: String) -> some View {
+        Button(action: onSelectLadder) {
+            HStack(spacing: 7) {
+                RoundedRectangle(cornerRadius: 2, style: .continuous)
+                    .fill(ladderSwatch)
+                    .frame(width: 9, height: 9)
+                Text(name)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.4))
+            }
+            .foregroundStyle(.white)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 7)
+            .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel("Ladder: \(name)")
     }
 
     /// The MODE dial. "Basic" is the plain timer shoot; "Holy Grail" hands

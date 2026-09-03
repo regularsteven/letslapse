@@ -520,6 +520,18 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
     }
 
+    /// Ladder MODE: the depth the next window opens at. A rung says a number,
+    /// so fixed counts only; applied from the next window boundary like
+    /// `setIntervalSeconds`, never to the window in flight.
+    func setFrameTarget(_ frames: Int) {
+        videoQueue.async {
+            let next = BlendDepth.fixed(max(1, frames))
+            guard self.configuration.blendDepth != next else { return }
+            LLog("liveblend: depth \(self.configuration.blendDepth.token) → \(next.token)")
+            self.configuration.blendDepth = next
+        }
+    }
+
     /// Graceful stop keeps a ≥1-frame partial window (unless `keepPartial`
     /// is false — a scheduled "stop at N" wants exactly N) and hands the run
     /// over; discard drops queued work, deletes the temp frames, and never

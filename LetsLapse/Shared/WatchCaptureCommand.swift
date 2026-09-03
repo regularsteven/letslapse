@@ -44,6 +44,11 @@ enum WatchCaptureCommand: String {
     /// but only if someone had already armed the dial by hand, which is
     /// exactly the walk to the tripod the remote exists to avoid.
     case setIntervalMode
+    /// Ladder MODE's object: `WatchMessageKey.ladder` names a Light Ladder by
+    /// id, by name, or `builtin`. Arms Ladder as a side effect, the way
+    /// `setIntervalMode` switches to Interval — the bench's
+    /// `setLadder:builtin` is one verb, not two. Idle-only.
+    case setLadder
     /// EVERY on Auto: the MODE paces the shoot instead of a fixed spacing.
     /// Refused when the mode can't pace (Off) — the phone owns that rule, and
     /// the refusal is reported rather than silently accepted.
@@ -121,7 +126,7 @@ extension WatchCaptureCommand {
              .lockExposure, .unlockExposure, .setISO, .setLensPosition,
              .setCaptureMode, .setIntervalSeconds, .setFramesPerBlend,
              .setBlendStrategy, .scheduleStart,
-             .setIntervalMode, .setAutoInterval, .deleteLastFrame,
+             .setIntervalMode, .setLadder, .setAutoInterval, .deleteLastFrame,
              .setBurstFPS, .setBaseFPS, .setSequenceMode, .toggleMark,
              .scheduleStop, .cancelScheduledStop, .setDimDuringShoot,
              .armCamera, .cancelExport, .simulateTooHot:
@@ -158,6 +163,8 @@ extension WatchCaptureCommand {
             return "No start is scheduled."
         case .setIntervalMode:
             return "The shoot mode is unchanged."
+        case .setLadder:
+            return "The ladder is unchanged."
         case .setAutoInterval:
             return "The interval is unchanged."
         case .deleteLastFrame:

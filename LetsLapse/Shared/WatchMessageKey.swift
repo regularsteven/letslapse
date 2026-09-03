@@ -68,8 +68,12 @@ enum WatchMessageKey {
     // remote drawing "ISO 0" would be stating something false about a camera it
     // cannot see.
 
-    /// `off` · `holyGrail` · `scanner` (`IntervalCaptureMode.rawValue`).
+    /// `off` · `holyGrail` · `scanner` · `ladder` (`IntervalCaptureMode.rawValue`).
     static let intervalMode = "intervalMode"
+    /// Ladder MODE: the armed Light Ladder's id (`setLadder` also accepts a
+    /// name or `builtin`), and in state payloads the active rung's name.
+    static let ladder = "ladder"
+    static let ladderRung = "ladderRung"
     /// EVERY is on Auto — the mode paces the shoot. The remote shows "Auto"
     /// where it would show a spacing, and `intervalSeconds` then reports what
     /// the pacing has *arrived at* rather than what anyone chose.

@@ -109,6 +109,26 @@ struct CaptureView: View {
     /// EVERY is on Auto: the mode paces the shoot. Only meaningful with a MODE
     /// that can pace — see `IntervalCaptureMode.supportsAutoInterval`.
     @AppStorage("letslapse.capture.intervalAuto") private var intervalAutoEnabled = false
+    /// Ladder MODE's object. The built-in is nil here (it needs no id); a
+    /// user ladder's id is remembered through `RecordingSettingsStore` and
+    /// falls back to the built-in whenever it no longer resolves.
+    @State private var selectedLadderID: UUID? = RecordingSettingsStore.ladderID
+    @ObservedObject private var ladders = LightLadderStore.shared
+    @State private var showLadderPicker = false
+    @State private var showLadderManager = false
+    /// The light panel: open by default when Ladder is armed, remembered for
+    /// the app launch once closed, re-opened by a rung change while armed
+    /// (decision D10). While running the toast and readout carry it instead.
+    @State private var ladderPanelOpen = !CaptureView.ladderPanelDismissedThisLaunch
+    private static var ladderPanelDismissedThisLaunch = false
+    /// The armed panel's own selector — the same 3-window average and ±0.5
+    /// switching band the run uses, so the rung it names is the rung the
+    /// shoot would open on, not a flicker of the preview meter.
+    @State private var ladderPreviewSelector: LightLadderSelector?
+    @State private var showLadderToast = false
+    @State private var ladderToastDown = true
+    @State private var ladderToastTask: Task<Void, Never>?
+    @State private var lastLadderRungIndex: Int?
     /// Scanner's PAPER dial — the stock the flat object is, for the perspective
     /// correction taken at export. Persisted like the MODE dial (a shooting
     /// intent, not part of the remembered format snapshot) and read back by the
@@ -153,7 +173,12 @@ struct CaptureView: View {
     /// can ramp — the state in which exposure belongs to the ramp and the
     /// lock button, the readout and the ±EV control all change meaning.
     private var holyGrailArmed: Bool {
-        mode == .interval && intervalMode == .holyGrail
+        mode == .interval && intervalMode.usesRampEngine
+    }
+    /// True while Interval's MODE dial is on Ladder — the ramp drives, inside
+    /// the active rung's box, and EVERY and BLEND belong to the rung.
+    private var ladderArmed: Bool {
+        mode == .interval && intervalMode == .ladder
     }
     /// True while Interval's MODE dial is on Scanner.
     private var scannerArmed: Bool {
@@ -406,8 +431,37 @@ struct CaptureView: View {
                 startTargetCapture(plan)
             }
         }
+        .sheet(isPresented: $showLadderPicker) {
+            LadderPickerSheet(store: ladders, selectedID: $selectedLadderID) {
+                showLadderPicker = false
+                showLadderManager = true
+            }
+        }
+        .sheet(isPresented: $showLadderManager) {
+            LightLaddersView(store: ladders, selectedID: $selectedLadderID)
+        }
+        .onChange(of: selectedLadderID) { id in
+            RecordingSettingsStore.save(ladderID: id)
+            ladderPreviewSelector = nil
+            advanceLadderPreview(ev: camera.previewSceneEV)
+        }
+        .onChange(of: ladderPreviewWanted) { wanted in
+            camera.setLadderPreview(enabled: wanted)
+            if !wanted { ladderPreviewSelector = nil }
+        }
+        .onChange(of: camera.previewSceneEV) { ev in advanceLadderPreview(ev: ev) }
+        .onChange(of: camera.ladderState?.rungIndex) { index in
+            // Down the ladder is darker (a higher index); the toast says which
+            // way the step went. The first index of a run is the opening rung,
+            // not a step.
+            defer { lastLadderRungIndex = index }
+            guard let index, let previous = lastLadderRungIndex, previous != index else { return }
+            flashLadderToast(down: index > previous)
+        }
         .onAppear(perform: configureOnAppear)
+        .onAppear { camera.setLadderPreview(enabled: ladderPreviewWanted) }
         .onDisappear(perform: cleanUpOnDisappear)
+        .onDisappear { camera.setLadderPreview(enabled: false) }
         // Keep the recent-capture tile current: a new project (any mode) takes
         // the slot, and a Photo shot's blend replaces its own hero moments after
         // the capture itself lands.
@@ -810,6 +864,7 @@ struct CaptureView: View {
         applyStandbyPreviewHook()
         applyHolyGrailPreviewHook()
         applyScannerPreviewHook()
+        applyLadderPreviewHook()
         applyBurstPreviewHook()
         applyFocusPreviewHook()
         applyRecordingPreviewHook()
@@ -1764,6 +1819,7 @@ struct CaptureView: View {
                         .transition(.opacity)
                 }
                 #endif
+                ladderViewfinderOverlays
             }
             .animation(.easeInOut(duration: 0.16), value: camera.isSwitchingLens)
             // Corner-to-corner interpolation, so a page being nudged reads as
@@ -2866,6 +2922,8 @@ struct CaptureView: View {
             streamFPS: blendStreamFPS,
             modeAvailable: Self.intervalModesAvailable,
             intervalMode: intervalMode,
+            ladderName: ladderArmed ? ladderChipName : nil,
+            ladderSwatch: LadderPalette.color(rung: previewRungIndex, of: selectedLadder.rungs.count),
             onSelectInterval: { seconds in
                 intervalAutoEnabled = false
                 lastFixedInterval = seconds
@@ -2879,9 +2937,172 @@ struct CaptureView: View {
             onSelectPsycho: selectPsychoDepth,
             onSelectSafe: { blendDepth = .throttled },
             onSelectAuto: { blendDepth = .auto },
-            onSelectMode: { intervalModeToken = $0.rawValue }
+            onSelectMode: { intervalModeToken = $0.rawValue },
+            onSelectLadder: { showLadderPicker = true }
         )
         .equatable()
+    }
+
+    // MARK: - Light Ladder (armed)
+
+    /// The armed ladder — the remembered selection, or the built-in.
+    private var selectedLadder: LightLadder { ladders.resolve(id: selectedLadderID).normalized() }
+
+    /// "Bright & Fast" for "Bright & Fast, Dark & Slow": the chip has one
+    /// line, so the name is cut at its first comma.
+    private var ladderChipName: String {
+        let name = selectedLadder.name
+        let short = name.split(separator: ",", maxSplits: 1).first.map(String.init) ?? name
+        return short.trimmingCharacters(in: .whitespaces)
+    }
+
+    /// The rung the armed panel names: the preview selector's answer, or the
+    /// plain lookup before it has one, or the top rung with no meter at all.
+    private var previewRungIndex: Int {
+        let ladder = selectedLadder
+        if let index = ladderPreviewSelector?.currentIndex, index < ladder.rungs.count { return index }
+        if let ev = camera.previewSceneEV { return LightLadderSelector.plainIndex(forEV: ev, in: ladder) }
+        return 0
+    }
+
+    /// Whether the 1 Hz preview metering should run: Ladder armed, idle.
+    private var ladderPreviewWanted: Bool { ladderArmed && !isCapturing }
+
+    /// What the light panel states at arm when the rung's blend cannot run as
+    /// asked on this pipeline — the actuation clamp, visible rather than
+    /// silent (decision D4). Modelled here; the run's governor has the last
+    /// word and the HUD's third line reports it.
+    private var ladderClampNote: String? {
+        let ladder = selectedLadder
+        let rung = ladder.rungs[min(previewRungIndex, ladder.rungs.count - 1)]
+        guard rung.blendFrames > 1 else { return nil }
+        let wantsDNG = model.intervalOutputFormat == .dng && camera.liveBlendDNGSupport.isSupported
+        if wantsDNG {
+            // A RAW capture costs about twice a stream frame's hand-off.
+            let ceiling = LightLadderAdvice.blendCeiling(intervalSeconds: rung.intervalSeconds, perFrameSeconds: 0.45)
+            return ceiling < rung.blendFrames ? "blend \(rung.blendFrames) → ≈\(ceiling) in RAW on this camera" : nil
+        }
+        if let fps = blendStreamFPS,
+           !StreamRatePlan.isAttainable(frames: rung.blendFrames, intervalSeconds: rung.intervalSeconds, streamFPS: fps) {
+            let most = max(1, Int((fps * rung.intervalSeconds).rounded(.down)))
+            return "blend \(rung.blendFrames) → \(most) — the stream gives \(Int(fps.rounded())) fps"
+        }
+        return nil
+    }
+
+    /// Feeds the armed panel's selector from the preview meter. A rung change
+    /// while armed re-opens a closed panel (D10): "you are about to shoot in
+    /// Dusk, not Fading" is worth interrupting for.
+    private func advanceLadderPreview(ev: Double?) {
+        guard ladderArmed, let ev else { return }
+        var selector = ladderPreviewSelector ?? LightLadderSelector(ladder: selectedLadder)
+        let before = selector.currentIndex
+        selector.resolve(ev: ev)
+        ladderPreviewSelector = selector
+        if before != nil, selector.changedOnLastResolve, !ladderPanelOpen {
+            ladderPanelOpen = true
+        }
+    }
+
+    /// The viewfinder's ladder overlays: the light panel (or its pill) while
+    /// armed, the rail and the toast while running.
+    @ViewBuilder
+    private var ladderViewfinderOverlays: some View {
+        if ladderArmed, !isCapturing, camera.ladderState == nil, !selectedLadder.rungs.isEmpty {
+            let ladder = selectedLadder
+            let index = min(previewRungIndex, ladder.rungs.count - 1)
+            Group {
+                if ladderPanelOpen {
+                    LadderLightPanel(
+                        ladder: ladder, rungIndex: index, sceneEV: camera.previewSceneEV,
+                        clampNote: ladderClampNote,
+                        onClose: {
+                            ladderPanelOpen = false
+                            Self.ladderPanelDismissedThisLaunch = true
+                        })
+                } else {
+                    LadderRungPill(
+                        name: ladder.rungs[index].name,
+                        color: LadderPalette.color(rung: index, of: ladder.rungs.count),
+                        onOpen: {
+                            ladderPanelOpen = true
+                            Self.ladderPanelDismissedThisLaunch = false
+                        })
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+            .padding(16)
+            .transition(.opacity)
+        }
+        if let state = camera.ladderState {
+            LadderRail(state: state)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                .padding(.trailing, 14)
+                .allowsHitTesting(false)
+            if showLadderToast {
+                LadderToast(state: state, steppedDown: ladderToastDown)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                    .padding(.bottom, 28)
+                    .allowsHitTesting(false)
+                    .transition(.opacity)
+            }
+        }
+    }
+
+    /// A rung change landed: show the toast for three seconds.
+    private func flashLadderToast(down: Bool) {
+        ladderToastTask?.cancel()
+        ladderToastDown = down
+        withAnimation(.easeOut(duration: 0.2)) { showLadderToast = true }
+        ladderToastTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeIn(duration: 0.3)) { showLadderToast = false }
+        }
+    }
+
+    /// `LL_LADDER=armed|closed|picker|running` arms the MODE dial on Ladder
+    /// and stages the state the simulator cannot reach on its own — it has no
+    /// camera to meter, so the panel's scene EV and the running rail are
+    /// fabricated here from the design's own numbers (Dusk, EV 5.2, 41 min in,
+    /// 823 frames, the governor at blend 3 → 2). Implies Interval mode; pair
+    /// with `LL_CAPTURE=1`.
+    private func applyLadderPreviewHook() {
+        guard let raw = ProcessInfo.processInfo.environment["LL_LADDER"] else { return }
+        mode = .interval
+        intervalModeToken = IntervalCaptureMode.ladder.rawValue
+        reconcileIntervalAuto()
+        updateAspectPreview()
+        selectedLadderID = nil
+        camera.previewSceneEV = 5.2
+        var selector = LightLadderSelector(ladder: .builtIn)
+        selector.resolve(ev: 5.2)
+        ladderPreviewSelector = selector
+        switch raw {
+        case "closed":
+            ladderPanelOpen = false
+        case "picker":
+            ladderPanelOpen = true
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 400_000_000)
+                showLadderPicker = true
+            }
+        case "running":
+            let ladder = LightLadder.builtIn
+            camera.holyGrailState = CameraController.HolyGrailState(
+                shutterSeconds: 1.0 / 8, iso: 1250, sceneEV: 5.2, frames: 823,
+                isISORamping: false, isClipped: false, isCapturingRAW: false)
+            camera.ladderState = CameraController.LadderState(
+                ladderName: ladder.name, rungIndex: 2, rungNames: ladder.rungs.map(\.name),
+                spans: ladder.drawingSpans(), smoothedEV: 5.2, intervalSeconds: 2, blendFrames: 2,
+                readoutLine: "Dusk · every 2 s · blend 3 → 2, thermal", changeCount: 1,
+                nextRungName: "Night", nextRungThresholdEV: 4, previousRungName: "Fading")
+            framingStartedAt = Date().addingTimeInterval(-(41 * 60 + 8))
+            mountBurstPill(taken: 823, total: nil)
+            flashLadderToast(down: true)
+        default:
+            ladderPanelOpen = true
+        }
     }
 
     /// Keeps the EVERY/MODE pair valid after a MODE change.
@@ -2916,6 +3137,7 @@ struct CaptureView: View {
         switch intervalMode {
         case .scanner: return "Interval · Scanner"
         case .holyGrail: return "Interval · Holy Grail"
+        case .ladder: return "Interval · Ladder"
         // Deliberately not renamed alongside the dial: this string is stamped
         // into projects on disk and read back by the rest of the app, so it is
         // data, not a label. The dial says "Basic"; the file keeps saying what
@@ -2948,7 +3170,7 @@ struct CaptureView: View {
         // Scanner has no caption. It used to explain two greyed dials; EVERY
         // is now simply absent under it and BLEND does what it says, so there
         // is nothing left to apologise for.
-        if scannerArmed { return nil }
+        if scannerArmed || ladderArmed { return nil }
         switch blendDepth {
         case .fixed:
             return nil
@@ -3007,6 +3229,13 @@ struct CaptureView: View {
                 } else if state.isISORamping {
                     Text("shutter at max · ISO ramping")
                         .foregroundStyle(LL.amber)
+                } else if let ladder = camera.ladderState {
+                    // The ladder's line shares this slot; a pinned shutter is
+                    // the more urgent fact, so the amber warning above wins.
+                    Text(ladder.readoutLine)
+                        .foregroundStyle(LL.amber)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
                 }
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
@@ -3897,6 +4126,21 @@ struct CaptureView: View {
                 framesPerPose: blendDepth.fixedFrames ?? 1)
             return
         }
+        if ladderArmed {
+            // The rung decides the spacing and depth; the values passed here
+            // are placeholders the controller overrides from the opening rung.
+            steadiness.resetLog()
+            steadiness.start()
+            camera.startLiveBlend(
+                every: interval,
+                depth: .fixed(1),
+                preferDNG: wantsDNG,
+                options: liveBlendDNGOptions,
+                holyGrail: true,
+                autoInterval: false,
+                ladder: selectedLadder)
+            return
+        }
         if holyGrailArmed {
             steadiness.resetLog()
             steadiness.start()
@@ -4300,7 +4544,17 @@ struct CaptureView: View {
     /// button beside the shutter (`exposureLockCircle`).
     @ViewBuilder
     private var exposurePanel: some View {
-        if holyGrailArmed {
+        if ladderArmed {
+            // The band the ±EV slider occupies under Dynamic is simply empty:
+            // a rung already states the exposure box (design 2a). The focus
+            // slider still applies once focus is held.
+            if camera.isFocusLocked {
+                VStack(spacing: 10) {
+                    exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+                }
+                .padding(.horizontal, 16)
+            }
+        } else if holyGrailArmed {
             // No locked exposure to report and none to offer: the ramp is
             // driving. What the operator gets instead is where the ramp sits
             // relative to the camera's own metering — over or under — plus
@@ -4496,6 +4750,27 @@ struct CaptureView: View {
             intervalModeToken = newMode.rawValue
             reconcileIntervalAuto()
             updateAspectPreview()
+            return true
+        case .setLadder:
+            // Ladder MODE's object, by id, by name, or "builtin". Arms Ladder
+            // too: a ladder with the dial elsewhere would name nothing.
+            guard !isCapturing, Self.intervalModesAvailable,
+                  let token = payload[WatchMessageKey.ladder] as? String else { return false }
+            let wanted = token.trimmingCharacters(in: .whitespaces)
+            let match: LightLadder?
+            if ["builtin", "built-in", "built in"].contains(wanted.lowercased()) {
+                match = .builtIn
+            } else if let id = UUID(uuidString: wanted) {
+                match = ladders.ladder(id: id)
+            } else {
+                match = ladders.ladders.first { $0.name.caseInsensitiveCompare(wanted) == .orderedSame }
+            }
+            guard let match else { return false }
+            mode = .interval
+            intervalModeToken = IntervalCaptureMode.ladder.rawValue
+            reconcileIntervalAuto()
+            updateAspectPreview()
+            selectedLadderID = match.isBuiltIn ? nil : match.id
             return true
         case .setAutoInterval:
             guard !isCapturing, let value else { return false }

@@ -31,11 +31,34 @@ Venv setup is the same as `capture_metrics.py`:
 |---|---|
 | `?script=i25x100,b100x5,i25x100` | capture script encoded into the session QR (default shown) |
 | `?t=12345` | freeze the card at elapsed ms — for testing/screenshots |
+| `?light=h0x60,r-3x180,…` | scripted brightness ramp in stops below full — see below |
 
 Script grammar (for the future app-side executor): comma-separated
 segments, `i<fps>x<seconds>` = interval mode, `b<fps>x<seconds>` = burst.
 Max ~100 chars (QR version 6 limit); the card shows `SCRIPT TOO LONG` if
 exceeded.
+
+### Brightness ramp (`?light=`)
+
+`?light=h0x60,r-3x180,h-3x90,r-6x180,h-6x90,r-9x180,h-9x120,r0x600` dims the
+**whole card** on a script, in stops below full brightness: `h<stops>x<s>`
+holds, `r<stops>x<s>` ramps linearly to `<stops>` over `<s>` seconds, a
+trailing `loop` repeats, and past the end the last level holds. The level
+is printed under the header (`LIGHT −3.00 EV`) and applied as a CSS
+`brightness()` on the canvas with the display's ~2.2 gamma folded in, so a
+stop is a stop. Contrast is preserved — black stays black — which keeps the
+QRs and strip decodable for the first few stops and lets the analyzer
+anchor the card clock before the dark phases.
+
+This is the **Light Ladder bench** (`docs/light-ladder.md` §9): a
+repeatable light curve that walks a ladder's rungs in minutes instead of a
+sunset. Two limits worth knowing before scripting one: a 300-nit panel at
+full white meters around **EV 11**, so the built-in's Daylight rung (EV 13)
+is out of reach unless the display is HDR-bright — bench a clone with
+thresholds shifted under the measured full-white EV — and the display's
+own dynamic range caps the walk at roughly nine stops. Pass the same script
+to `testcard_report.py report --light <script>` and every decoded frame's
+scripted level lands in the CSV as `light_stops`, beside its card time.
 
 ## Channels (the machine-readable spec)
 

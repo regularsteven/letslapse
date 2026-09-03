@@ -11,6 +11,30 @@ live inline.
 
 ## Open
 
+### Light Ladder — a fourth Interval MODE (Basic · Dynamic · Scanner · Ladder)
+
+**Raised:** 2026-09-03 (Steven — Claude Design handoff "Light Ladder
+interval profile", Turn 2) · **Built 2026-09-03** (Kit model + 21 tests,
+store, engine hook, capture screen, list/editor/rung, test-card ramp; two
+16 Pro runs — the pressure-floor fix from the first is unproven until a run
+reaches serious). Owed: the seven SVGs, an `LL_LADDERS` hook, the §9 card
+bench, one real dusk, sign-off. Plan, model, decisions and the bench:
+`docs/light-ladder.md`.
+
+A shoot follows a user-authored table of **rungs** keyed on scene EV; each
+rung fixes ISO, shutter, WB, interval and blend depth. The servo stays in
+charge — a rung is a box of constraints handed to the Holy Grail engine, so
+exposure never steps; interval and blend step at the boundary. Built-in
+"Bright & Fast, Dark & Slow" (13 · 8 · 4 · darker), cloneable, never edited
+in place; `light_ladders.json` beside `custom_presets.json`. Twelve
+decisions taken 2026-09-03 by recommendation (Night shutter auto ≤ 1 s not
+pinned; governor may lengthen a rung's interval, never shorten; WB auto =
+tracked; ribbon editor; iPhone + iPad first, Mac hidden). Acceptance bench
+= the monitor test card's brightness ramp, designed before the engine hook.
+Seven SVGs owed, listed in the plan.
+
+---
+
 ### Time-slice poster fast path (image-only, regular clip off)
 
 **Raised:** 2026-09-02 (Steven)

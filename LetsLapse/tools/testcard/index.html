@@ -36,6 +36,17 @@
  * URL params:
  *   ?script=i25x100,b100x5,i25x100   capture script encoded into the session QR
  *   ?t=12345                          freeze the card at elapsed ms (for testing)
+ *   ?light=h0x60,r-3x180,h-3x90,...   scripted BRIGHTNESS RAMP, in stops below
+ *                                     full (h = hold at <stops> for <s>, r = ramp
+ *                                     linearly to <stops> over <s>; a trailing
+ *                                     `loop` repeats). The whole card dims
+ *                                     together — contrast is kept, so the QRs
+ *                                     and strip stay decodable for the first
+ *                                     few stops — which makes the light curve
+ *                                     itself repeatable: the Light Ladder bench
+ *                                     (docs/light-ladder.md §9). The level is
+ *                                     printed under the header and is what
+ *                                     `testcard_report.py --light` reconstructs.
  * Click anywhere to toggle fullscreen.
  */
 
@@ -278,6 +289,47 @@ const params = new URLSearchParams(location.search);
 const scriptStr = (params.get('script') || 'i25x100,b100x5,i25x100').replace(/\s+/g, '');
 const freezeMs = params.has('t') ? Math.max(0, parseInt(params.get('t'), 10) || 0) : null;
 
+// ---------------------------------------------------------------------------
+// Light ramp — `?light=` script → stops below full brightness at any ms.
+// Mirrored by `parse_light_script` / `light_stops_at` in testcard_report.py.
+// ---------------------------------------------------------------------------
+// A display's sRGB code value maps to light roughly as value^2.2, so a
+// brightness() multiplier of k costs k^2.2 in light; 2^(stops/2.2) is the
+// multiplier that costs exactly `stops`.
+const LIGHT_GAMMA = 2.2;
+const lightScript = (() => {
+  const raw = (params.get('light') || '').replace(/\s+/g, '');
+  if (!raw) return null;
+  const segs = [];
+  let loop = false, bad = null;
+  for (const tok of raw.split(',')) {
+    if (!tok) continue;
+    if (tok === 'loop') { loop = true; continue; }
+    const m = /^([hr])(-?\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$/.exec(tok);
+    if (!m) { bad = tok; continue; }
+    segs.push({ kind: m[1], stops: parseFloat(m[2]), ms: parseFloat(m[3]) * 1000 });
+  }
+  const total = segs.reduce((a, g) => a + g.ms, 0);
+  return { raw, segs, loop, total, bad };
+})();
+
+function lightStopsAt(ms) {
+  if (!lightScript || lightScript.segs.length === 0) return 0;
+  const { segs, loop, total } = lightScript;
+  let t = ms;
+  if (loop && total > 0) t = ms % total;
+  let level = segs[0].kind === 'h' ? segs[0].stops : 0;
+  for (const g of segs) {
+    if (t <= g.ms) {
+      if (g.kind === 'h') return g.stops;
+      return level + (g.stops - level) * (g.ms > 0 ? t / g.ms : 1);
+    }
+    t -= g.ms;
+    level = g.stops;
+  }
+  return level;   // past the end: hold the last level
+}
+
 const canvas = document.getElementById('card');
 const ctx = canvas.getContext('2d');
 let viewScale = 1;
@@ -355,6 +407,16 @@ function draw(ms) {
   ctx.fillText('LETSLAPSE TEST CARD v1', LAYOUT.W / 2, 92);
   ctx.font = '28px "SF Mono", Menlo, monospace';
   ctx.fillText(scriptStr, LAYOUT.W / 2, 140);
+  // light ramp level (and the whole-card dim that realises it)
+  const stops = lightStopsAt(ms);
+  canvas.style.filter = Math.abs(stops) < 1e-6 ? '' : 'brightness(' + Math.pow(2, stops / LIGHT_GAMMA).toFixed(4) + ')';
+  if (lightScript) {
+    ctx.font = 'bold 22px "SF Mono", Menlo, monospace';
+    ctx.fillStyle = lightScript.bad ? '#a00' : '#111';
+    ctx.fillText(lightScript.bad ? ('LIGHT SCRIPT BAD TOKEN ' + lightScript.bad)
+                                 : ('LIGHT ' + (stops >= 0 ? '+' : '−') + Math.abs(stops).toFixed(2) + ' EV'),
+                 LAYOUT.W / 2, 168);
+  }
 
   // QR panels (white area doubles as quiet zone)
   panel(20, 180, 420, 420);
@@ -448,7 +510,7 @@ function draw(ms) {
   // footer
   ctx.fillStyle = '#111';
   ctx.font = '24px "SF Mono", Menlo, monospace';
-  ctx.fillText('?script=…&t=…   click for fullscreen', LAYOUT.W / 2, 1476);
+  ctx.fillText('?script=…&light=…&t=…   click for fullscreen', LAYOUT.W / 2, 1476);
 }
 
 document.addEventListener('click', () => {

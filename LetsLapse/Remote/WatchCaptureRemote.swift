@@ -680,6 +680,11 @@ final class WatchCaptureRemote: NSObject, ObservableObject {
                 intervalAuto = false
             }
             playHaptic(.click)
+        case .setLadder:
+            // Mirrors nothing on the wrist yet: the armed ladder and its rung
+            // arrive with the next state payload (`WatchMessageKey.ladder`,
+            // `.ladderRung`), and the remote draws neither in v1.
+            break
         case .setIntervalMode:
             if let token = sent[WatchMessageKey.intervalMode] as? String {
                 let mode = IntervalCaptureMode(token: token)

@@ -235,6 +235,37 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// Seconds the processing pipeline demonstrably needs per window; nil
     /// while frame-count reduction still covers it.
     var processingPaceFloorSeconds: Double? { paceFloor.withLock { $0 } }
+    /// The governor as it stood after the last window — read by the Ladder
+    /// hook on the session queue, hence the lock; refreshed at every record.
+    private let ceilingSnapshot = OSAllocatedUnfairLock<ProcessingCeiling>(initialState: ProcessingCeiling())
+
+    /// Ladder MODE: the rung's ask becomes the governor's maximum — raised, it
+    /// is trusted until a window overruns; lowered, it clamps — and the
+    /// governor as it stands comes back for `LightLadderPacing.apply`. The
+    /// snapshot is updated here synchronously so the caller's answer already
+    /// carries the new maximum; the working copy follows on the work queue.
+    func setProcessingCeilingMaximum(_ frames: Int) -> ProcessingCeiling {
+        let snapshot = ceilingSnapshot.withLock { snap -> ProcessingCeiling in
+            if snap.maximum != frames { snap.maximum = frames }
+            return snap
+        }
+        workQueue.async {
+            if self.processingCeiling.maximum != frames { self.processingCeiling.maximum = frames }
+        }
+        return snapshot
+    }
+
+    /// Ladder MODE: the depth the next window opens at — the governed number,
+    /// not the rung's ask (`.fixed` bypasses the ceiling on this path by
+    /// design, so the caller passes what the governor allowed).
+    func setFrameTarget(_ frames: Int) {
+        workQueue.async {
+            let next = BlendDepth.fixed(max(1, frames))
+            guard self.configuration.blendDepth != next else { return }
+            LLog("liveblend-dng: depth \(self.configuration.blendDepth.token) → \(next.token)")
+            self.configuration.blendDepth = next
+        }
+    }
     /// Why the run ended, for `capture_log.json` — "user" unless a guard
     /// says otherwise. The stop reason used to exist only in print-level
     /// logs, invisible on a field device. workQueue.
@@ -1013,6 +1044,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                     """)
             }
             paceFloor.withLock { $0 = processingCeiling.sustainableIntervalSeconds }
+            ceilingSnapshot.withLock { $0 = processingCeiling }
         }
         log.outputs.append(entry)
         rewriteLog()

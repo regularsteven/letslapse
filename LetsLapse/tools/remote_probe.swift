@@ -15,6 +15,9 @@
 //   startRecording              a bare command
 //   setIntervalMode:scanner     a command with its String extra (the key is
 //                               inferred from the command — see `extraKey`)
+//   setLadder:builtin           arms Interval's Ladder MODE on that ladder
+//                               (an id, a name, or `builtin`) — the Light
+//                               Ladder bench, docs/light-ladder.md §9
 //   setAutoInterval#1           a command with a numeric `value`
 //   scheduleStop:minutes#60     both at once — the device owns the deadline
 //                               and stops itself with no link held open
@@ -47,6 +50,7 @@ let script = arguments.count > 1 ? arguments[1] : nil
 func extraKey(for command: String) -> String? {
     switch command {
     case "setIntervalMode": return WatchMessageKey.intervalMode
+    case "setLadder": return WatchMessageKey.ladder
     case "setCaptureMode": return WatchMessageKey.captureMode
     case "setSequenceMode": return WatchMessageKey.sequenceMode
     case "scheduleStop": return WatchMessageKey.stopAtUnit

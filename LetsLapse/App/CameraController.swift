@@ -305,6 +305,24 @@ final class CameraController: NSObject, ObservableObject {
     /// `HolyGrailAutoInterval.isMeaningfulChange`). Nil when EVERY is a fixed
     /// value — Auto is the only mode that re-paces. sessionQueue-confined.
     private var holyGrailAutoIntervalSeconds: Double?
+
+    // MARK: Light Ladder (Interval MODE = Ladder) — sessionQueue-confined
+    // The ladder is a box of constraints handed to the ramp per window; see
+    // `advanceLadder(window:)` and `docs/light-ladder.md` §4.
+
+    /// The ladder this run follows, or nil for a plain Dynamic run. Set by
+    /// `startLiveBlend(ladder:)` before the pipeline is chosen, cleared with
+    /// the rest of the ramp state in `endHolyGrailIfActive`.
+    private var ladderRequestedForRun: LightLadder?
+    private var ladderSelector: LightLadderSelector?
+    private var ladderRungIndex: Int?
+    private var ladderChangeCount = 0
+    private var ladderPacing: LightLadderPacing?
+    private var ladderWriter: LadderWindowWriter?
+    /// 1 Hz preview metering while Ladder is armed and idle — feeds the light
+    /// panel (`setLadderPreview(enabled:)`). Nil when off.
+    private var ladderPreviewTimer: DispatchSourceTimer?
+    private var ladderPreviewEV: Double?
     #endif
     /// How long the seeded exposure needs to take effect before the run's first
     /// frame is worth capturing. Set by `seedHolyGrailRamp` and consumed once by
@@ -758,6 +776,14 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     @Published var holyGrailState: HolyGrailState?
+
+    /// What a Ladder run is on — rung, pacing, the governor's note —
+    /// republished every window. Nil outside a Ladder run.
+    /// Declared in `LightLadderRun.swift`.
+    @Published var ladderState: LadderState?
+    /// The smoothed scene EV of the live preview while Ladder is armed and
+    /// idle (`setLadderPreview(enabled:)`), for the light panel. Nil otherwise.
+    @Published var previewSceneEV: Double?
 
     /// One captured pose: the file(s) a single Scanner fire produced. Kept as a
     /// pair rather than two flat lists so "Delete last" can take a whole pose
@@ -5615,7 +5641,7 @@ final class CameraController: NSObject, ObservableObject {
     /// sessionQueue-confined. Seeds the ramp from the exposure AE is delivering
     /// right now, so the first frame is already correct and the 1/3-stop limit
     /// costs nothing at the head of the shoot.
-    private func seedHolyGrailRamp(interval: TimeInterval) {
+    private func seedHolyGrailRamp(interval: TimeInterval, rung: Rung? = nil) {
         guard let device = videoDevice else {
             holyGrailEngine = nil
             holyGrailLimits = nil
@@ -5623,7 +5649,10 @@ final class CameraController: NSObject, ObservableObject {
             holyGrailSeedNeedsRetry = false
             return
         }
-        let limits = holyGrailHardwareLimits(for: device, interval: interval)
+        let formatLimits = holyGrailHardwareLimits(for: device, interval: interval)
+        // Ladder: the rung's box, cut from the format's envelope. Everything
+        // below — the seed's split, the engine's limits — works inside it.
+        let limits = rung?.exposureBox(within: formatLimits) ?? formatLimits
         holyGrailLimits = limits
         let metered = HolyGrailRampEngine.ExposureTarget(
             shutterSeconds: device.exposureDuration.seconds, iso: device.iso)
@@ -5786,8 +5815,206 @@ final class CameraController: NSObject, ObservableObject {
             shutter: engine.currentTarget.shutterSeconds,
             iso: Double(engine.currentTarget.iso),
             measurement: measurement)
+        advanceLadder(window: index)
         applyHolyGrailExposure()
         repaceHolyGrailAutoInterval()
+    }
+
+    // MARK: - Light Ladder
+
+    /// The rung the run is on, or nil outside a Ladder run. sessionQueue.
+    private var ladderActiveRung: Rung? {
+        guard let ladder = ladderRequestedForRun, let index = ladderRungIndex,
+              index < ladder.rungs.count else { return nil }
+        return ladder.rungs[index]
+    }
+
+    /// sessionQueue-confined. Resolves the opening rung from the live
+    /// preview's metering — the same EV the seed re-splits — so the run opens
+    /// on the rung the light is actually on, never the middle of the table.
+    private func armLadder(_ ladder: LightLadder) -> Rung {
+        let normalized = ladder.normalized()
+        var selector = LightLadderSelector(ladder: normalized)
+        let ev = ladderPreviewEV ?? sceneExposureValue()
+        let index = selector.resolve(ev: ev)
+        ladderRequestedForRun = normalized
+        ladderSelector = selector
+        ladderRungIndex = index
+        ladderChangeCount = 0
+        ladderPacing = nil
+        // A rung states the exposure box; the operator's ±EV bias has no part
+        // in a Ladder run (design 2a) — the slider isn't drawn, and a value
+        // left over from a Dynamic shoot must not leak in.
+        holyGrailBiasStops = 0
+        DispatchQueue.main.async { if self.holyGrailBias != 0 { self.holyGrailBias = 0 } }
+        let rung = normalized.rungs[index]
+        let evText = ev.map { String(format: "%.1f", $0) } ?? "none"
+        LLog("ladder: armed '\(normalized.name)' on '\(rung.name)' (scene EV \(evText)) — every \(rung.intervalSeconds)s, blend \(rung.blendFrames)")
+        return rung
+    }
+
+    /// sessionQueue-confined. One window's rung resolution, as the window
+    /// opens — between frames, never inside one. Which rung the smoothed scene
+    /// EV selects (3-window average, ±0.5 EV switching band); on a change, the
+    /// new exposure box for the servo — which walks there from where it is at
+    /// ≤ ⅓ stop per window, so a boundary never steps the exposure — and the
+    /// rung's pacing through the processing governor: depth yields first, then
+    /// the interval stretches, and a rung's EVERY is never shortened (D2).
+    private func advanceLadder(window index: Int) {
+        guard let ladder = ladderRequestedForRun, var selector = ladderSelector,
+              let engine = holyGrailEngine else { return }
+        let before = ladderRungIndex
+        let next = selector.resolve(ev: engine.smoothedEV)
+        let changed = selector.changedOnLastResolve
+        ladderSelector = selector
+        ladderRungIndex = next
+        let rung = ladder.rungs[next]
+
+        if changed {
+            ladderChangeCount += 1
+            if let device = videoDevice {
+                let format = holyGrailHardwareLimits(for: device, interval: rung.intervalSeconds)
+                let box = rung.exposureBox(within: format)
+                holyGrailLimits = box
+                holyGrailEngine?.reclamp(to: box)
+            }
+            let direction = (before ?? next) < next ? "down" : "up"
+            let evText = String(format: "%.2f", selector.lastSmoothedEV ?? .nan)
+            LLog("ladder: stepped \(direction) to '\(rung.name)' at window \(index) (scene EV \(evText)) — every \(rung.intervalSeconds)s, blend \(rung.blendFrames)")
+        }
+
+        // Pacing. The RAW path's AIMD governor takes the rung's ask as its
+        // maximum and answers with what the pipeline has proven; the JPEG
+        // path has no governor and runs the rung as asked.
+        let ceiling = liveBlendRawController?.setProcessingCeilingMaximum(rung.blendFrames)
+        let pacing = ceiling.map { LightLadderPacing.apply(rung: rung, ceiling: $0) }
+            ?? LightLadderPacing(intervalSeconds: rung.intervalSeconds, blendFrames: rung.blendFrames, yield: nil)
+        if pacing != ladderPacing {
+            let previous = ladderPacing
+            ladderPacing = pacing
+            liveBlendController?.setIntervalSeconds(pacing.intervalSeconds)
+            liveBlendRawController?.setIntervalSeconds(pacing.intervalSeconds)
+            liveBlendController?.setFrameTarget(pacing.blendFrames)
+            liveBlendRawController?.setFrameTarget(pacing.blendFrames)
+            DispatchQueue.main.async { self.activeIntervalSeconds = pacing.intervalSeconds }
+            #if os(iOS)
+            // The JPEG stream's rate follows the depth it has to feed, and the
+            // shutter ceiling follows the spacing.
+            if liveBlendController != nil, previous?.intervalSeconds != pacing.intervalSeconds
+                || previous?.blendFrames != pacing.blendFrames {
+                relaxVideoFrameDurationForBlend(interval: pacing.intervalSeconds)
+                throttleBlendStreamForRun(interval: pacing.intervalSeconds, depth: .fixed(pacing.blendFrames))
+                // The serious-pressure floor is derived from the need at the
+                // moment pressure rose and lifts only at nominal. A rung
+                // change moves the need, so the floor must move with it —
+                // the 2026-09-03 16 Pro ladder run went serious a minute into
+                // Night (need 0.5 fps → the format's 1 fps floor) and every
+                // brighter rung on the way back up then starved on a 1 fps
+                // stream: Dusk 1 of 3, Fading 2 of 5, Daylight 3 of 10, with
+                // processing flat at 100 ms a window the whole time.
+                if let level = lastRunPressureLevel, level == .serious || level == .critical {
+                    applyPressureFloorToStream()
+                    LLog(String(format: "ladder: pressure floor re-derived for %@ — %@",
+                                rung.name, streamFrameRate.map { String(format: "%.2f fps", $0) } ?? "unchanged"))
+                }
+            }
+            #endif
+            if let yield = pacing.yield, yield != previous?.yield {
+                LLog("ladder: governor — \(yield)")
+            }
+        }
+        ladderWriter?.append(
+            window: index, rungIndex: next, rung: rung,
+            sceneEV: selector.lastSmoothedEV, pacing: pacing, changed: changed)
+        publishLadderState()
+    }
+
+    /// sessionQueue-confined.
+    private func publishLadderState() {
+        guard let ladder = ladderRequestedForRun, let index = ladderRungIndex,
+              index < ladder.rungs.count else {
+            DispatchQueue.main.async { self.ladderState = nil }
+            return
+        }
+        let rung = ladder.rungs[index]
+        let pacing = ladderPacing
+            ?? LightLadderPacing(intervalSeconds: rung.intervalSeconds, blendFrames: rung.blendFrames, yield: nil)
+        // The governor reacts to processing cost; when the device is hot that
+        // cost *is* the heat, and "thermal" is the word the operator needs.
+        let thermal = ProcessInfo.processInfo.thermalState
+        let reason = (thermal == .serious || thermal == .critical) ? "thermal" : "processing"
+        let state = LadderState(
+            ladderName: ladder.name,
+            rungIndex: index,
+            rungNames: ladder.rungs.map(\.name),
+            spans: ladder.drawingSpans(),
+            smoothedEV: ladderSelector?.lastSmoothedEV,
+            intervalSeconds: pacing.intervalSeconds,
+            blendFrames: pacing.blendFrames,
+            readoutLine: pacing.readoutLine(rungName: rung.name, reason: reason),
+            changeCount: ladderChangeCount,
+            nextRungName: index + 1 < ladder.rungs.count ? ladder.rungs[index + 1].name : nil,
+            nextRungThresholdEV: rung.lowerBoundEV,
+            previousRungName: index > 0 ? ladder.rungs[index - 1].name : nil)
+        DispatchQueue.main.async {
+            if self.ladderState != state { self.ladderState = state }
+        }
+    }
+
+    /// Ladder armed and idle: meter the live preview at 1 Hz so the light
+    /// panel can name the rung the shoot would open on. Off during runs — the
+    /// ramp's own smoothed EV takes over — and off whenever the dial leaves
+    /// Ladder. Safe to call repeatedly.
+    func setLadderPreview(enabled: Bool) {
+        sessionQueue.async {
+            if enabled {
+                self.publishLadderFormatInfo()
+                guard self.ladderPreviewTimer == nil else { return }
+                let timer = DispatchSource.makeTimerSource(queue: self.sessionQueue)
+                timer.schedule(deadline: .now() + 0.2, repeating: 1.0)
+                timer.setEventHandler { [weak self] in self?.meterLadderPreview() }
+                timer.resume()
+                self.ladderPreviewTimer = timer
+            } else {
+                self.ladderPreviewTimer?.cancel()
+                self.ladderPreviewTimer = nil
+                self.ladderPreviewEV = nil
+                DispatchQueue.main.async { self.previewSceneEV = nil }
+            }
+        }
+    }
+
+    /// sessionQueue-confined. Tells the ladder store which lens Ladder is armed
+    /// on, so the rung screen can resolve "ISO min" to a number.
+    private func publishLadderFormatInfo() {
+        guard let device = videoDevice else { return }
+        let limits = holyGrailHardwareLimits(for: device, interval: 3600)
+        let name: String
+        switch device.deviceType {
+        case .builtInWideAngleCamera: name = "Wide"
+        case .builtInUltraWideCamera: name = "Ultra Wide"
+        case .builtInTelephotoCamera: name = "Tele"
+        default: name = device.localizedName
+        }
+        let info = LightLadderFormatInfo(lensName: name, limits: limits)
+        DispatchQueue.main.async {
+            if LightLadderStore.shared.lastKnownFormat != info {
+                LightLadderStore.shared.lastKnownFormat = info
+            }
+        }
+    }
+
+    /// sessionQueue-confined. An EMA over the preview's metering so a passing
+    /// cloud doesn't flip the panel; the run's own arm reads the same value.
+    private func meterLadderPreview() {
+        guard !holyGrailActive, let ev = sceneExposureValue(), ev.isFinite else { return }
+        let smoothed = ladderPreviewEV.map { $0 + (ev - $0) * 0.3 } ?? ev
+        ladderPreviewEV = smoothed
+        DispatchQueue.main.async {
+            if self.previewSceneEV.map({ abs($0 - smoothed) > 0.05 }) ?? true {
+                self.previewSceneEV = smoothed
+            }
+        }
     }
 
     /// sessionQueue-confined. EVERY=Auto only: asks the pacing policy what this
@@ -5993,8 +6220,9 @@ final class CameraController: NSObject, ObservableObject {
             defer { device.unlockForConfiguration() }
             if device.isWhiteBalanceModeSupported(.locked) {
                 #if os(iOS)
-                if holyGrailPipelineIsRAW {
-                    // DNG: freeze the arm-time illuminant. RAW carries the
+                if holyGrailPipelineIsRAW || ladderActiveRung?.whiteBalance == .locked {
+                    // DNG (or a rung asking for the lock): freeze the
+                    // arm-time illuminant. RAW carries the
                     // grading latitude, and the stability is the feature.
                     device.whiteBalanceMode = .locked
                 } else {
@@ -6061,7 +6289,14 @@ final class CameraController: NSObject, ObservableObject {
             let opening = interval
             DispatchQueue.main.async { self.activeIntervalSeconds = opening }
         }
-        seedHolyGrailRamp(interval: interval)
+        seedHolyGrailRamp(interval: interval, rung: ladderActiveRung)
+        if let ladder = ladderRequestedForRun {
+            ladderWriter = LadderWindowWriter(runStartedAt: Date())
+            ladderWriter?.writeHeader(
+                ladder: ladder, rungIndex: ladderRungIndex ?? 0,
+                sceneEV: ladderSelector?.lastSmoothedEV, pipeline: rawPipeline ? "dng" : "jpeg")
+            publishLadderState()
+        }
         // The apply's own answer is the only report of whether the ramp can
         // actuate — this used to re-ask `isExposureModeSupported(.custom)`
         // separately, which said the right thing while the write that shared
@@ -6108,6 +6343,16 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailAutoIntervalSeconds = nil
         DispatchQueue.main.async { self.activeIntervalSeconds = nil }
         holyGrailAppliedExposure.set(nil)
+        if ladderRequestedForRun != nil {
+            LLog("ladder: end after \(ladderChangeCount) rung change(s)")
+        }
+        ladderRequestedForRun = nil
+        ladderSelector = nil
+        ladderRungIndex = nil
+        ladderPacing = nil
+        ladderWriter?.close()
+        ladderWriter = nil
+        DispatchQueue.main.async { self.ladderState = nil }
         // Both belong to the run that is ending, and a hold that outlives it
         // has nothing left to latch — clear them before the `holyGrailActive`
         // gate, so a run torn down before it ever armed cannot leave the next
@@ -7645,9 +7890,26 @@ final class CameraController: NSObject, ObservableObject {
     /// `autoInterval` means the EVERY dial is on Auto: `interval` is only the
     /// spacing the run *opens* at, and the ramp widens it as the light dies
     /// (see `HolyGrailAutoInterval`). It is meaningless without `holyGrail`.
-    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false) {
+    /// `ladder` puts the run in **Ladder MODE**: the opening rung decides the
+    /// spacing and depth the run opens at (the EVERY and BLEND dials are not
+    /// drawn under Ladder and are not consulted), the ramp is implied, and
+    /// every window re-resolves the rung — see `advanceLadder(window:)`.
+    func startLiveBlend(every interval: Double, depth: BlendDepth, preferDNG: Bool = false, options: LiveBlendCaptureOptions = LiveBlendCaptureOptions(), holyGrail: Bool = false, autoInterval: Bool = false, ladder: LightLadder? = nil) {
         sessionQueue.async {
             guard !self.movieOutput.isRecording, self.intervalTimer == nil, !self.isLiveBlendActive else { return }
+            var interval = interval
+            var depth = depth
+            var holyGrail = holyGrail
+            var autoInterval = autoInterval
+            if let ladder {
+                let rung = self.armLadder(ladder)
+                interval = rung.intervalSeconds
+                depth = .fixed(rung.blendFrames)
+                holyGrail = true
+                autoInterval = false
+            } else {
+                self.ladderRequestedForRun = nil
+            }
             if Self.stopsAtThermalCritical, ProcessInfo.processInfo.thermalState == .critical {
                 LLog("capture: refused to start at thermal critical — the lens stabiliser parks there; let the device cool")
                 CaptureSessionLogger.shared.log("capture_refused", [
@@ -7662,6 +7924,7 @@ final class CameraController: NSObject, ObservableObject {
                 "autoInterval": autoInterval,
                 "framesPerBlend": depth.fixedFrames ?? 0,
                 "preferDNG": preferDNG,
+                "ladder": ladder?.name ?? "",
             ])
             #if os(iOS)
             self.holyGrailRequestedForRun = holyGrail
@@ -8657,6 +8920,9 @@ enum RecordingSettingsStore {
     /// adaptive Psycho/Safe cases Photo doesn't offer).
     private static let photoBlendDepthKey = "letslapse.capture.photoBlendDepth"
     private static let photoBulbModeKey = "letslapse.capture.photoBulbMode"
+    /// Interval's Ladder MODE: the selected Light Ladder's id. The built-in
+    /// is the fallback whenever this is absent or no longer resolves.
+    private static let ladderIDKey = "letslapse.capture.ladderID"
 
     // Settings-owned values, not part of the remembered-shoot snapshot: they
     // apply regardless of `isEnabled` and survive `clear()`.
@@ -8761,6 +9027,19 @@ enum RecordingSettingsStore {
     static func save(photoBulbMode: Bool) {
         guard isEnabled else { return }
         UserDefaults.standard.set(photoBulbMode, forKey: photoBulbModeKey)
+    }
+
+    static var ladderID: UUID? {
+        UserDefaults.standard.string(forKey: ladderIDKey).flatMap(UUID.init(uuidString:))
+    }
+
+    static func save(ladderID: UUID?) {
+        guard isEnabled else { return }
+        if let ladderID {
+            UserDefaults.standard.set(ladderID.uuidString, forKey: ladderIDKey)
+        } else {
+            UserDefaults.standard.removeObject(forKey: ladderIDKey)
+        }
     }
 
     /// Remembered lens stop as its user-facing display factor. Falls back to
@@ -8926,7 +9205,7 @@ enum RecordingSettingsStore {
             resolutionProResKey, frameRateKey, rampFrameRateKey,
             rampResolutionWidthKey, rampResolutionHeightKey, stabilizationKey,
             intervalSecondsKey, liveBlendIntervalSecondsKey, liveBlendFramesPerBlendKey,
-            blendDepthKey, photoBlendDepthKey, photoBulbModeKey,
+            blendDepthKey, photoBlendDepthKey, photoBulbModeKey, ladderIDKey,
         ] {
             defaults.removeObject(forKey: key)
         }

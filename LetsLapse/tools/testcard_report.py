@@ -43,6 +43,7 @@ LAYOUT constants below mirror testcard/index.html — KEEP THEM IN SYNC.
 
 import argparse
 import csv
+import re
 import math
 import os
 import pathlib
@@ -301,9 +302,50 @@ def analyze(path, every=1, max_n=None, detect_every=15):
     return tracker, rows
 
 
+# ---------------------------------------------------------------------------
+# Light ramp (`?light=` on the card) — mirrored from index.html so the CSV can
+# carry the scripted brightness, in stops below full, for every decoded frame.
+# ---------------------------------------------------------------------------
+LIGHT_TOKEN = re.compile(r"^([hr])(-?\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)$")
+
+
+def parse_light_script(text):
+    """`h0x60,r-3x180,h-3x90,...[,loop]` → (segments, loop). Raises on a bad token."""
+    segs, loop = [], False
+    for tok in (text or "").replace(" ", "").split(","):
+        if not tok:
+            continue
+        if tok == "loop":
+            loop = True
+            continue
+        m = LIGHT_TOKEN.match(tok)
+        if not m:
+            raise ValueError(f"bad light token {tok!r}")
+        segs.append((m.group(1), float(m.group(2)), float(m.group(3)) * 1000.0))
+    return segs, loop
+
+
+def light_stops_at(ms, script):
+    """Stops below full at card time `ms` (same walk as `lightStopsAt` in index.html)."""
+    segs, loop = script
+    if not segs:
+        return 0.0
+    total = sum(g[2] for g in segs)
+    t = ms % total if (loop and total > 0) else ms
+    level = segs[0][1] if segs[0][0] == "h" else 0.0
+    for kind, stops, dur in segs:
+        if t <= dur:
+            if kind == "h":
+                return stops
+            return level + (stops - level) * (t / dur if dur > 0 else 1.0)
+        t -= dur
+        level = stops
+    return level
+
+
 def write_csv(rows, out_path):
     cols = ["frame", "src_ms", "card_ms", "card_ms_fine", "tick", "sweep_ms",
-            "qr_ms", "strip_contrast", "ball_x"]
+            "qr_ms", "strip_contrast", "ball_x", "light_stops"]
     patch_cols = [f"p{i}" for i in range(PATCH_N)]
     with open(out_path, "w", newline="") as f:
         w = csv.writer(f)
@@ -525,6 +567,9 @@ def main():
     r.add_argument("--max", type=int, default=None, help="stop after N analyzed frames")
     r.add_argument("--detect-every", type=int, default=15,
                    help="QR/homography refresh cadence in analyzed frames")
+    r.add_argument("--light", default=None,
+                   help="the card's ?light= script, so each frame's scripted brightness "
+                        "(stops below full) lands in the CSV as light_stops")
 
     s = sub.add_parser("selftest", help="render frozen frames via headless Chrome and verify decode")
     s.add_argument("--chrome", default=CHROME)
@@ -538,6 +583,14 @@ def main():
     tracker, rows = analyze(args.input, args.every, args.max, args.detect_every)
     if tracker.script:
         print(f"session script: {tracker.script}")
+    light = parse_light_script(args.light) if args.light else None
+    for r in rows:
+        r["light_stops"] = (round(light_stops_at(r["card_ms"], light), 3)
+                            if light and r.get("card_ms") is not None else None)
+    if light:
+        lit = [r["light_stops"] for r in rows if r["light_stops"] is not None]
+        if lit:
+            print(f"light script: {args.light}  (decoded frames span {min(lit):+.2f} … {max(lit):+.2f} EV)")
     out = args.out or (str(pathlib.Path(args.input).with_suffix("")) + "_testcard.csv")
     write_csv(rows, out)
     print(f"per-frame CSV: {out}")

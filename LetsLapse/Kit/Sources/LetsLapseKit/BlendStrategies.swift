@@ -446,7 +446,22 @@ public struct ProcessingCeiling: Sendable {
     /// of the interval.
     static let comfortableFraction = 0.7
 
-    private(set) public var ceiling = ZoneBlendStrategy.bands[0].frames
+    /// The most frames the ceiling will ever allow — Zone's daylight band by
+    /// default, or a Light Ladder rung's ask, which may exceed it. A rung
+    /// change moves it mid-run: raising it trusts the new ask (the AIMD cuts
+    /// again on the first over-budget window, exactly as it does at start);
+    /// lowering it clamps.
+    public var maximum: Int {
+        didSet {
+            maximum = max(maximum, 1)
+            if maximum > oldValue {
+                ceiling = maximum
+            } else {
+                ceiling = min(ceiling, maximum)
+            }
+        }
+    }
+    private(set) public var ceiling: Int
     private var comfortableStreak = 0
     /// When even a ONE-frame window costs more than the interval, frame
     /// count has no more room to give — pacing must stretch. This is the
@@ -459,7 +474,10 @@ public struct ProcessingCeiling: Sendable {
     /// spacing.
     private(set) public var sustainableIntervalSeconds: Double?
 
-    public init() {}
+    public init(maximum: Int = ZoneBlendStrategy.bands[0].frames) {
+        self.maximum = max(maximum, 1)
+        self.ceiling = self.maximum
+    }
 
     /// Feed one produced window's measured processing cost.
     public mutating func record(windowSeconds: Double, frames: Int, intervalSeconds: Double) {
@@ -493,7 +511,7 @@ public struct ProcessingCeiling: Sendable {
                 sustainableIntervalSeconds = nil
             }
             if comfortableStreak >= Self.growthStreak,
-               ceiling < ZoneBlendStrategy.bands[0].frames {
+               ceiling < maximum {
                 ceiling += 1
                 comfortableStreak = 0
             }

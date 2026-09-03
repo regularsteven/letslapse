@@ -65,6 +65,11 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
     case holyGrail
     /// The camera fires when the scene stops moving: reposition, let go, click.
     case scanner
+    /// The shoot follows a **Light Ladder** — a user-authored table of rungs
+    /// keyed on scene EV, each fixing ISO, shutter, WB, interval and blend.
+    /// The Holy Grail servo still walks the exposure inside each rung's box;
+    /// interval and blend step at the rung boundary. `docs/light-ladder.md`.
+    case ladder
 
     var id: String { rawValue }
 
@@ -90,6 +95,7 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
         case .basic: return "Basic"
         case .holyGrail: return "Dynamic"
         case .scanner: return "Scan"
+        case .ladder: return "Ladder"
         }
     }
 
@@ -105,21 +111,33 @@ enum IntervalCaptureMode: String, CaseIterable, Identifiable {
         case .basic: return "Basic · a frame on the timer"
         case .holyGrail: return "Dynamic Light · Holy Grail"
         case .scanner: return "Scanner · fires when the scene stills"
+        case .ladder: return "Ladder · a table of light states"
         }
     }
 
     /// Whether this mode can pace itself, i.e. whether EVERY may be Auto.
     /// Basic cannot: with nothing deciding the spacing, "Auto" would name no
-    /// behaviour at all, so the dial simply doesn't offer it.
-    var supportsAutoInterval: Bool { self != .basic }
+    /// behaviour at all, so the dial simply doesn't offer it. Ladder cannot
+    /// either: a rung's interval is a number, and EVERY = Auto is unavailable
+    /// by design — the ladder owns the spacing.
+    var supportsAutoInterval: Bool { self == .holyGrail || self == .scanner }
 
-    /// Whether this mode takes the spacing over entirely — Scanner's shutter is
-    /// the scene's, so there is no interval to set and EVERY isn't drawn at all.
-    var ownsInterval: Bool { self == .scanner }
+    /// Whether this mode takes the spacing over entirely, so EVERY isn't drawn
+    /// at all — Scanner's shutter is the scene's; Ladder's spacing is the
+    /// active rung's.
+    var ownsInterval: Bool { self == .scanner || self == .ladder }
 
-    /// Whether this mode *requires* Auto — the same fact as `ownsInterval`,
-    /// named for the reconciliation that reads it (`reconcileIntervalAuto`).
-    var requiresAutoInterval: Bool { ownsInterval }
+    /// Whether this mode takes the blend depth over too. Only Ladder: the rung
+    /// says how many frames a window stacks, so BLEND isn't drawn either.
+    var ownsBlend: Bool { self == .ladder }
+
+    /// Whether this mode *requires* Auto — named for the reconciliation that
+    /// reads it (`reconcileIntervalAuto`). Scanner alone: Ladder owns the
+    /// interval but is not Auto, it is the rung's number.
+    var requiresAutoInterval: Bool { self == .scanner }
+
+    /// Whether the Holy Grail servo drives the exposure in this mode.
+    var usesRampEngine: Bool { self == .holyGrail || self == .ladder }
 }
 
 /// Output format for Interval shooting. DNG blends Bayer RAW captures into
