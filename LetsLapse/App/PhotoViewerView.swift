@@ -149,6 +149,29 @@ struct PhotoViewerView: View {
     @State private var persistedDocument = OverlayDocument()
     /// The layer the preview draws its bounding box and handles around.
     @State private var selectedOverlayID: UUID?
+    /// A short confirmation floated over the media ("Linked — starts after
+    /// …", "Imported Amatic SC"), 1.8 s.
+    @State private var overlayToast: String?
+    @State private var overlayToastTask: Task<Void, Never>?
+    /// The faces this project brought with it (`fonts/`), for the picker.
+    @State private var importedFonts: [OverlayFontStore.ImportedFont] = []
+    /// The copy field being edited and the word it is styling — owned here
+    /// so the iOS accessory bar can be pinned above the keyboard from the
+    /// editor's own safe-area inset, outside the scrolling panel.
+    @State private var overlayRunTarget: OverlayRunTarget?
+
+    /// True while a copy field has the keyboard. The stacked layout gives
+    /// the keyboard its room by collapsing the media to its floor and
+    /// hiding the lanes — the cover shrinks its safe area for the keyboard,
+    /// and without this the picture keeps every point and the field being
+    /// typed into is the part that vanishes.
+    private var isTypingCopy: Bool {
+        #if os(iOS)
+        return railTab == .text && overlayRunTarget != nil
+        #else
+        return false
+        #endif
+    }
     /// The region the Masks tab is inspecting — what "Show semantic mask"
     /// tints and what the mask fetch is for. Editor state: which region is
     /// being LOOKED at says nothing about the piece.
@@ -508,25 +531,88 @@ struct PhotoViewerView: View {
                 }
                 .frame(height: 6)
             }
+        }
+    }
 
-            // The reveal's span, read-only under the strip: authoring happens
-            // through Set Start / Set End in the Text tab, where the playhead
-            // — frame steps, clock label, snap ladder — is already the
-            // precision instrument.
-            if let animation = selectedOverlay?.animation, frames.count > 1 {
-                GeometryReader { geo in
-                    let lead = GradeTimelineView.leadInset(compact: compact)
-                    let trackW = max(1, geo.size.width - lead)
-                    Capsule()
-                        .fill(accentColor.opacity(0.5))
-                        .frame(
-                            width: max(4, trackW * CGFloat(animation.end - animation.start)),
-                            height: 4)
-                        .offset(x: lead + trackW * CGFloat(min(max(animation.start, 0), 1)))
-                }
-                .frame(height: 4)
+    /// The lanes show while the Text tab is the work and there is a layer
+    /// to draw — everywhere else the strip stands alone, as it always has.
+    private var showsOverlayLanes: Bool {
+        railTab == .text && !overlayDocument.overlays.isEmpty
+    }
+
+    /// One band per layer under the strip, aligned to the track: the same
+    /// lead the play control takes, and the same trail the frame steps do.
+    @ViewBuilder private func overlayLanes(compact: Bool) -> some View {
+        let stepSize: CGFloat = compact ? 26 : 30
+        let stepGap: CGFloat = compact ? 6 : 8
+        OverlayLanesView(
+            document: $overlayDocument,
+            selectedID: $selectedOverlayID,
+            position: position,
+            leadInset: GradeTimelineView.leadInset(compact: compact),
+            trailInset: 2 * (stepSize + stepGap),
+            compact: compact,
+            accent: accentColor,
+            onEdited: overlayEdited,
+            onInteract: {
+                stopPlayback()
+                dismissTextEntry()
+            })
+    }
+
+    /// The floating confirmation over the media.
+    @ViewBuilder private var overlayToastView: some View {
+        if let overlayToast {
+            Text(overlayToast)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .padding(.horizontal, 14)
+                .frame(height: 28)
+                .background(Capsule().fill(Color(red: 43 / 255, green: 43 / 255, blue: 46 / 255).opacity(0.92)))
+                .shadow(color: .black.opacity(0.25), radius: 10, y: 6)
+                .padding(.bottom, 24)
+                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                .allowsHitTesting(false)
+        }
+    }
+
+    private func showOverlayToast(_ message: String) {
+        overlayToastTask?.cancel()
+        withAnimation(.easeOut(duration: 0.18)) { overlayToast = message }
+        overlayToastTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(1800))
+            guard !Task.isCancelled else { return }
+            withAnimation(.easeOut(duration: 0.25)) { overlayToast = nil }
+        }
+    }
+
+    /// A span of the shoot as the readouts say it: seconds under a minute,
+    /// m:ss above, frames where the shoot never wrote a clock.
+    private var overlayDurationLabel: (Double) -> String {
+        let span: Double? = {
+            if let last = frameSeconds.last, last > 0 { return last }
+            if let duration = uniformVisibleDuration, duration > 0 { return duration }
+            return nil
+        }()
+        if let span {
+            return { fraction in
+                let seconds = max(0, fraction) * span
+                if seconds < 59.5 { return "\(Int(seconds.rounded()))s" }
+                let whole = Int(seconds.rounded())
+                return String(format: "%d:%02d", whole / 60, whole % 60)
             }
         }
+        let count = frames.count
+        return { fraction in
+            let n = Int((Double(max(count - 1, 0)) * max(0, fraction)).rounded())
+            return "\(n) fr"
+        }
+    }
+
+    /// One frame as a fraction of the shoot — the offset stepper's step.
+    private var overlayFrameStep: Double {
+        frames.count > 1 ? 1 / Double(frames.count - 1) : 0
     }
 
     /// One frame back / one frame on, drawn to match the strip's own play
@@ -597,6 +683,7 @@ struct PhotoViewerView: View {
                             imagePane
                                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                                 .overlay(alignment: .top) { chrome }
+                                .overlay(alignment: .bottom) { overlayToastView }
                             // The scrubber belongs to the media, so it takes the
                             // media pane's width rather than the rail's — which
                             // keeps the rail identical to the photo editor's and
@@ -607,6 +694,14 @@ struct PhotoViewerView: View {
                                     .padding(.horizontal, 18)
                                     .padding(.top, 9)
                                     .padding(.bottom, 4)
+                                // The layer lanes belong to the media too: one
+                                // band per text layer, under the strip's own
+                                // axis, while the Text tab is the work.
+                                if showsOverlayLanes {
+                                    overlayLanes(compact: true)
+                                        .padding(.horizontal, 18)
+                                        .padding(.bottom, 4)
+                                }
                             }
                         }
                         Divider()
@@ -622,6 +717,12 @@ struct PhotoViewerView: View {
         .background(editorBackground)
         #if os(iOS)
         .preferredColorScheme(.dark)
+        // The run toolbar as the keyboard's accessory, laid over the whole
+        // editor and lifted by the keyboard's own frame — this cover keeps
+        // its layout under the keyboard, so a safe-area inset would not.
+        // The cover's safe area already rises with the keyboard, so the
+        // bar lands on top of it with no measuring of its own.
+        .overlay(alignment: .bottom) { overlayRunAccessory }
         #endif
         .task {
             // Seed once from the project, then let this view own the values —
@@ -632,8 +733,12 @@ struct PhotoViewerView: View {
             presetState = model.presetState(for: capture)
             timeline = model.gradeTimeline(for: capture)
             overlayDocument = model.overlayDocument(for: capture)
+            // Sequenced layers are seated after their parents on the way
+            // in, so a sidecar written mid-edit still opens consistent.
+            overlayDocument.resolveFollows()
             persistedDocument = overlayDocument
             selectedOverlayID = overlayDocument.overlays.first?.id
+            importedFonts = model.importedOverlayFonts(for: capture)
             segModelIdentity = CoreMLSceneSegmenter.locate()?.identity
             // An interval shoot's frames — and, where the shoot wrote one, the
             // capture clock they sit on, which is what turns the strip's axis
@@ -676,6 +781,7 @@ struct PhotoViewerView: View {
             }
             applyKeyframeHook()
             applyPerfWiggleHook()
+            applyTextHook()
             #endif
             renderToken += 1
         }
@@ -809,13 +915,14 @@ struct PhotoViewerView: View {
     /// left over — the ordering that keeps a greedy `ScrollView` from claiming
     /// the screen and squeezing the picture to a sliver.
     private func stackedBody(in container: CGSize) -> some View {
-        let media = metrics.frame(in: container, scale: mediaScale)
+        let media = metrics.frame(in: container, scale: isTypingCopy ? 0 : mediaScale)
         let span = metrics.dragSpan(in: container)
         return VStack(spacing: 0) {
             imagePane
                 .frame(width: media.width, height: media.height)
                 .frame(maxWidth: .infinity)
                 .overlay(alignment: .top) { chrome }
+                .overlay(alignment: .bottom) { overlayToastView }
             // Between the media and the controls, and on the media's side of
             // the handle: the strip says which frame is on screen, so it moves
             // with the picture rather than with the panel.
@@ -824,20 +931,37 @@ struct PhotoViewerView: View {
                     .padding(.horizontal, 16)
                     .padding(.top, 12)
                     .padding(.bottom, 2)
+                // Lanes stay with the strip — they belong to the media, on
+                // the picture's side of the grabber.
+                if showsOverlayLanes, !isTypingCopy {
+                    overlayLanes(compact: false)
+                        .padding(.horizontal, 16)
+                        .padding(.bottom, 2)
+                }
             }
-            if span > 0 {
+            if span > 0, !isTypingCopy {
                 MediaResizeHandle(scale: $mediaScale, span: span)
             }
             railTabBar
                 .padding(.horizontal, 16)
                 .padding(.top, 6)
                 .padding(.bottom, 2)
-            ScrollView(.vertical) {
-                controlStack(isWide: false)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 14)
+            ScrollViewReader { scroller in
+                ScrollView(.vertical) {
+                    controlStack(isWide: false)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                }
+                .scrollBounceBehavior(.basedOnSize)
+                .onChange(of: overlayRunTarget?.layer) { _, layer in
+                    // The card being typed into comes up to the top of
+                    // what is left above the keyboard.
+                    guard let layer else { return }
+                    withAnimation(.easeOut(duration: 0.25)) {
+                        scroller.scrollTo(layer, anchor: .top)
+                    }
+                }
             }
-            .scrollBounceBehavior(.basedOnSize)
             .scrollDismissesKeyboard(.interactively)
         }
     }
@@ -989,16 +1113,16 @@ struct PhotoViewerView: View {
         let style = overlay.textStyle
         let fontSize = TextOverlayRasterizer.resolvedSize(
             for: overlay, aspect: drawnAspect(drawn)) * max(drawn.width, drawn.height)
-        Text(overlay.text)
-            .font(proxyFont(style, size: fontSize))
+        // An unrevealed (or already exited) SELECTED layer ghosts at 16%, so
+        // the badge and outline have a target; every other resting proxy
+        // is an invisible hit area over the bake.
+        let ghosted = selectedOverlayID == overlay.id && !overlay.isOnScreen(at: renderedPosition)
+        proxyText(overlay, style: style, fontSize: fontSize)
             .italic(style?.isItalic == true)
-            .underline(style?.isUnderlined == true)
             .multilineTextAlignment(proxyAlignment(style))
-            .foregroundStyle(Color(cgColor: TextOverlayRasterizer.color(
-                fromHex: style?.colorHex ?? "#FFFFFF")))
             .shadow(color: .black.opacity(0.55), radius: fontSize * 0.06)
             .frame(width: overlay.mode == .box ? drawn.width * overlay.boxWidth : nil)
-            .opacity(dragging ? 1 : 0.02)
+            .opacity(dragging ? 1 : (ghosted ? 0.16 : 0.02))
             // The layer's own turn, about its anchor — the rasterizer's
             // rotation, so the proxy sits where the bake will.
             .rotationEffect(.degrees(overlay.rotationDegrees))
@@ -1006,13 +1130,30 @@ struct PhotoViewerView: View {
             .highPriorityGesture(overlayDragGesture(overlay, drawn: drawn))
     }
 
+    /// The proxy's copy, run by run — each word in its own weight, colour
+    /// and underline, the way the bake draws it.
+    private func proxyText(_ overlay: SceneOverlay, style: TextOverlayContent?, fontSize: CGFloat) -> Text {
+        guard let style else { return Text(overlay.text) }
+        var out = Text("")
+        for run in style.runs {
+            var piece = Text(run.text)
+                .font(proxyFont(style, size: fontSize, bold: style.resolvedBold(run)))
+                .foregroundColor(Color(cgColor: TextOverlayRasterizer.color(
+                    fromHex: style.resolvedColorHex(run))))
+            if style.resolvedUnderline(run) { piece = piece.underline() }
+            out = out + piece
+        }
+        return out
+    }
+
     /// The proxy's face. A named family the device lacks falls back to the
     /// system face, the same rule the rasterizer applies.
-    private func proxyFont(_ style: TextOverlayContent?, size: CGFloat) -> Font {
+    private func proxyFont(_ style: TextOverlayContent?, size: CGFloat, bold: Bool) -> Font {
         guard let family = style?.fontFamily, !family.isEmpty else {
-            return .system(size: size, weight: style?.isBold == true ? .bold : .regular)
+            return .system(size: size, weight: bold ? .bold : .regular)
         }
-        return .custom(family, size: size)
+        let base = Font.custom(family, size: size)
+        return bold ? base.weight(.bold) : base
     }
 
     private func proxyAlignment(_ style: TextOverlayContent?) -> TextAlignment {
@@ -1490,11 +1631,68 @@ struct PhotoViewerView: View {
             hasTimeline: hasTimeline,
             position: position,
             label: timelineLabel,
+            durationLabel: overlayDurationLabel,
+            frameStep: overlayFrameStep,
             accent: accentColor,
+            onAccent: pillTextColor,
             frameLongEdgePixels: sourceLongEdgePixels,
             frameAspect: sourceAspect,
+            importedFonts: importedFonts,
             onEdited: overlayEdited,
-            onOpenMasks: { railTab = .masks })
+            onOpenMasks: { railTab = .masks },
+            onImportFont: importOverlayFont,
+            onToast: showOverlayToast,
+            runTarget: $overlayRunTarget)
+    }
+
+    /// iOS: the run toolbar as the keyboard's accessory — B · U · swatches
+    /// and Done, pinned above the keyboard while a copy field is focused.
+    /// Drawn by hand rather than a `.toolbar(placement: .keyboard)`, which
+    /// never appeared inside this full-screen cover's scroll view.
+    @ViewBuilder private var overlayRunAccessory: some View {
+        if railTab == .text, let target = overlayRunTarget,
+           let index = overlayDocument.overlays.firstIndex(where: { $0.id == target.layer }) {
+            HStack(spacing: 10) {
+                OverlayRunToolbarControls(
+                    layer: $overlayDocument.overlays[index],
+                    range: target.range,
+                    accent: accentColor, onAccent: pillTextColor, compact: true,
+                    onEdited: { overlayEdited(commit: true) })
+                Spacer(minLength: 0)
+                Button("Done") {
+                    dismissTextEntry()
+                    overlayRunTarget = nil
+                    overlayEdited(commit: true)
+                }
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(accentColor)
+                .buttonStyle(.plain)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .frame(maxWidth: .infinity)
+            .background(Color(red: 44 / 255, green: 44 / 255, blue: 46 / 255))
+            .overlay(alignment: .top) { Rectangle().fill(Color.white.opacity(0.08)).frame(height: 1) }
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// Copies a picked TTF/OTF into the project's `fonts/` folder, registers
+    /// it, and puts the layer being edited in the new face.
+    private func importOverlayFont(_ url: URL) {
+        guard let capture else { return }
+        do {
+            let font = try model.importOverlayFont(from: url, for: capture)
+            importedFonts = model.importedOverlayFonts(for: capture)
+            if let selectedOverlayID,
+               let index = overlayDocument.overlays.firstIndex(where: { $0.id == selectedOverlayID }) {
+                overlayDocument.overlays[index].textStyle?.fontFamily = font.family
+                overlayEdited(commit: true)
+            }
+            showOverlayToast("Imported \(font.family)")
+        } catch {
+            showOverlayToast(error.localizedDescription)
+        }
     }
 
     private var masksTab: some View {
@@ -1981,22 +2179,43 @@ struct PhotoViewerView: View {
 
     // MARK: - Playback
 
-    /// Source-rate preview: a constant sweep across the whole shoot, so the
-    /// ease between two moments can be watched landing without leaving the
-    /// screen. Deliberately not the output's speed — that belongs to the speed
-    /// and blend layer, and claiming it here would be a lie about the render.
+    /// How long one sweep of the strip takes: the project's own output
+    /// length where a blended clip has been rendered — the pace the text
+    /// reveals will actually play at — and a 14 s tour of the shoot before
+    /// one exists. Floored so a very short clip still sweeps rather than
+    /// flickers.
+    private var playbackSweepSeconds: Double {
+        if let capture,
+           let clip = model.blends(for: capture)
+               .sorted(by: { $0.createdAt > $1.createdAt })
+               .first(where: { ($0.outputFrames ?? 0) > 0 && ($0.outputFPS ?? 0) > 0 }),
+           let frames = clip.outputFrames, let fps = clip.outputFPS {
+            return max(Double(frames) / Double(fps), 1)
+        }
+        return 14
+    }
+
+    /// Live playback: the playhead advances in real time at the output's
+    /// pace and loops, so a reveal can be watched landing — and landing
+    /// again — without leaving the screen. Any scrub stops it.
     private func togglePlayback() {
         guard !isPlaying else { stopPlayback(); return }
         let from = position >= 0.999 ? 0 : position
         position = from
         isPlaying = true
+        let sweep = playbackSweepSeconds
         playback = Task { @MainActor in
-            let started = Date()
-            let sweep = 14.0
+            var started = Date()
+            var origin = from
             while !Task.isCancelled {
                 let elapsed = Date().timeIntervalSince(started)
-                let next = from + elapsed / sweep
-                guard next < 1 else { break }
+                var next = origin + elapsed / sweep
+                if next >= 1 {
+                    // Loop: back to the head, on the same clock.
+                    origin = 0
+                    started = Date()
+                    next = 0
+                }
                 position = next
                 let quantised = renderPosition(for: next)
                 if quantised != renderedPosition {
@@ -2005,11 +2224,6 @@ struct PhotoViewerView: View {
                 }
                 try? await Task.sleep(for: .milliseconds(33))
             }
-            guard !Task.isCancelled else { return }
-            position = 1
-            isPlaying = false
-            renderedPosition = 1
-            renderToken += 1
         }
     }
 
@@ -2154,6 +2368,9 @@ struct PhotoViewerView: View {
     /// A Text-tab edit. Motion re-renders; a finished gesture also persists —
     /// the `fieldEditingChanged` discipline, applied to overlays.
     private func overlayEdited(commit: Bool) {
+        // Every edit re-seats the sequenced layers after their parents, so
+        // a moved band carries its children with it.
+        overlayDocument.resolveFollows()
         scheduleUpdate()
         if commit { persistOverlays() }
     }
@@ -2554,6 +2771,60 @@ struct PhotoViewerView: View {
     /// two — and `LL_KEYFRAMES=empty` the first-run state the empty spec draws.
     /// Neither is reachable by automation: making them for real means scrubbing
     /// a two-hour shoot and dragging sliders at three separate moments.
+    /// `LL_TEXT=story[,toast]` — stages the design pass's four-layer Prague
+    /// story on a project that has NO text yet (a project with layers is
+    /// left alone: the 2 s safety net would otherwise write the staging
+    /// over real work), opens the Text tab, and parks the playhead at 13%
+    /// so the first line is mid-bounce. `toast` also floats the link
+    /// confirmation. Reveal timings and links are the mock's own, so the
+    /// lanes drawn in `photo-viewer.text.svg` are measured from this.
+    private func applyTextHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_TEXT"], frames.count > 1 else { return }
+        let parts = hook.split(separator: ",").map(String.init)
+        guard parts.contains("story"), overlayDocument.overlays.isEmpty else { return }
+        func layer(
+            _ runs: [TextRun], label: String = "", size: Double, x: Double, y: Double, bold: Bool,
+            color: String = "#FFFFFF", reveal: OverlayReveal, exit: OverlayReveal?
+        ) -> SceneOverlay {
+            var content = TextOverlayContent(runs: runs)
+            content.isBold = bold
+            content.colorHex = color
+            var out = SceneOverlay(content: .text(content))
+            out.label = label
+            out.size = size
+            out.centerX = x
+            out.centerY = y
+            out.animation = OverlayAnimation(reveal: reveal, exit: exit)
+            return out
+        }
+        let fadeOut = OverlayReveal(unit: .element, style: .fade, start: 0.80, end: 0.86)
+        var l1 = layer(
+            [TextRun(text: "Don't "), TextRun(text: "you", isBold: true), TextRun(text: " think")],
+            label: "Intro top", size: 0.056, x: 0.277, y: 0.155, bold: false,
+            reveal: OverlayReveal(unit: .character, style: .bounce, start: 0.08, end: 0.20), exit: fadeOut)
+        var l2 = layer(
+            [TextRun(text: "Prague")], size: 0.16, x: 0.55, y: 0.245, bold: true,
+            reveal: OverlayReveal(unit: .element, style: .fade, start: 0.20, end: 0.28), exit: fadeOut)
+        var l3 = layer(
+            [TextRun(text: "is worth a "), TextRun(text: "LITTLE", colorHex: "#3A3A3C"), TextRun(text: " visit?")],
+            size: 0.056, x: 0.70, y: 0.385, bold: true,
+            reveal: OverlayReveal(unit: .character, style: .bounce, start: 0.28, end: 0.40), exit: fadeOut)
+        var l4 = layer(
+            [TextRun(text: "visitprague.com")], size: 0.072, x: 0.70, y: 0.925, bold: true, color: "#F3E37C",
+            reveal: OverlayReveal(unit: .element, style: .fade, start: 0.42, end: 0.48), exit: nil)
+        l1.textStyle?.isBold = true
+        l2.animation?.follows = OverlayFollow(layerID: l1.id, gap: 0)
+        l3.animation?.follows = OverlayFollow(layerID: l2.id, gap: 0)
+        l4.animation?.follows = OverlayFollow(layerID: l3.id, gap: 0.02)
+        overlayDocument.overlays = [l1, l2, l3, l4]
+        overlayDocument.resolveFollows()
+        selectedOverlayID = l1.id
+        railTab = .text
+        position = 0.13
+        renderedPosition = 0.13
+        if parts.contains("toast") { showOverlayToast("Linked — starts after “\(l1.displayName)”") }
+    }
+
     private func applyKeyframeHook() {
         guard let hook = ProcessInfo.processInfo.environment["LL_KEYFRAMES"],
               frames.count > 1 else { return }

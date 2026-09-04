@@ -368,7 +368,11 @@ enum SceneAwareCompositor {
         /// The rotation `base` has already been levelled by. Overlays live in
         /// the levelled frame and need nothing; the masks are grids over the
         /// SOURCE frame and are levelled the same way so sky stays over sky.
-        rotationDegrees: Double = 0
+        rotationDegrees: Double = 0,
+        /// True to draw every layer at its resting layout regardless of
+        /// `position` — the whole-shoot still, where a layer that has
+        /// already exited is still part of the piece.
+        settled: Bool = false
     ) -> CIImage? {
         var image = base
         var drewAnything = false
@@ -380,7 +384,7 @@ enum SceneAwareCompositor {
             guard overlay.isVisible || onion else { continue }
             guard let spec = TextOverlayRasterizer.spec(
                     for: overlay, frameSize: frameSize, position: position,
-                    ignoringAnimation: onion),
+                    ignoringAnimation: onion || settled),
                   let raster = TextOverlayRasterizer.render(spec) else { continue }
             var layer = CIImage(cgImage: raster)
             if !overlay.isVisible {
@@ -483,8 +487,9 @@ enum SceneAwareCompositor {
     }
 
     /// Bakes overlays into a single finished still (the long-exposure PNG).
-    /// A stack folds the whole shoot into one frame, so the overlay renders
-    /// at its resolved final state — position 1, every reveal complete.
+    /// A stack folds the whole shoot into one frame, so every overlay
+    /// renders at its resolved final state — every reveal complete, and no
+    /// exit taken, since the still holds the whole shoot at once.
     /// Returns nil when there is nothing to draw.
     static func bakeStill(
         _ image: CGImage,
@@ -500,7 +505,7 @@ enum SceneAwareCompositor {
             frameSize: CGSize(width: image.width, height: image.height),
             overlays: overlays, suppressing: nil, position: 1,
             masks: masks, settings: settings, debugRegion: nil,
-            editorPreview: false, rotationDegrees: rotationDegrees)
+            editorPreview: false, rotationDegrees: rotationDegrees, settled: true)
         guard composited != nil || levelling else { return nil }
         return renderCGImage(composited ?? base, colorSpace: image.colorSpace)
     }

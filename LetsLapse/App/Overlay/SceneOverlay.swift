@@ -24,8 +24,16 @@ struct SceneOverlay: Identifiable, Codable, Equatable, Sendable {
     var size: Double = 0.08
     /// Which semantic region of the scene is allowed to occlude this overlay.
     var placement: OverlayPlacement = .none
-    /// nil = shown at full strength throughout.
+    /// How and when the layer arrives, leaves, and what it waits for. nil =
+    /// shown at full strength throughout — the same thing as a hard cut at
+    /// 0:00 with no exit, which is what `effectiveAnimation` reads it as.
     var animation: OverlayAnimation?
+    /// The user's own name for the layer ("Intro top", "Byline", "Main
+    /// message") — blank when unset. It names the layer in the list, the
+    /// After-layer picker, the lane gutter and toasts, and it is what
+    /// programmatic copy will address a layer by later, so it must stay
+    /// stable across rewrites of the text itself.
+    var label: String = ""
 
     // MARK: Layer chrome
 
@@ -72,7 +80,7 @@ struct SceneOverlay: Identifiable, Codable, Equatable, Sendable {
              isVisible = "v", onionSkin = "on", mode = "md",
              boxWidth = "bw", boxHeight = "bh",
              autoSize = "as", minSize = "mn", maxSize = "mx",
-             rotationDegrees = "r"
+             rotationDegrees = "r", label = "l"
     }
 
     init(content: OverlayContent) {
@@ -102,6 +110,7 @@ struct SceneOverlay: Identifiable, Codable, Equatable, Sendable {
         minSize = try c.decodeIfPresent(Double.self, forKey: .minSize) ?? 0.04
         maxSize = try c.decodeIfPresent(Double.self, forKey: .maxSize) ?? 0.18
         rotationDegrees = try c.decodeIfPresent(Double.self, forKey: .rotationDegrees) ?? 0
+        label = try c.decodeIfPresent(String.self, forKey: .label) ?? ""
     }
 
     /// This layer re-expressed after the project's rotation changes from
@@ -162,6 +171,30 @@ struct SceneOverlay: Identifiable, Codable, Equatable, Sendable {
             .trimmingCharacters(in: .whitespaces)
         return title.isEmpty ? "Empty layer" : title
     }
+
+    /// The ID when the user gave one, else the copy itself.
+    var displayName: String {
+        let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? listTitle : trimmed
+    }
+
+    /// The animation as the render reads it: an absent one is a hard cut at
+    /// 0:00 that holds to the end of the shoot.
+    var effectiveAnimation: OverlayAnimation { animation ?? .alwaysOn }
+
+    /// True when something actually animates — a reveal style, or an exit.
+    /// A cut-in with no exit is "no animation" as far as the wand and the
+    /// onion skin are concerned.
+    var hasReveal: Bool {
+        guard let animation else { return false }
+        return animation.reveal.style != nil || animation.exit != nil
+    }
+
+    /// True when the layer is on screen at all at `position` — inside its
+    /// span, whether mid-reveal, settled or mid-exit.
+    func isOnScreen(at position: Double) -> Bool {
+        effectiveAnimation.isOnScreen(at: position)
+    }
 }
 
 /// How the overlay's type is laid out.
@@ -210,64 +243,6 @@ enum OverlayContent: Codable, Equatable, Sendable {
     }
 }
 
-/// The overlay's text and how it is set. Typography arrived with the Text
-/// Features design; the spike's single bold-white-system-font rule is now
-/// this struct's default values, so a spike-era sidecar decodes to exactly
-/// what it used to render.
-struct TextOverlayContent: Codable, Equatable, Sendable {
-    var string: String
-    /// PostScript-ish family name, or nil for the system face. Resolved at
-    /// raster time so a project that names a font the device lacks falls
-    /// back rather than failing.
-    var fontFamily: String?
-    var isBold: Bool = true
-    var isItalic: Bool = false
-    var isUnderlined: Bool = false
-    /// `#RRGGBB`. A string because it has to survive a JSON round trip on
-    /// three platforms without a color space sneaking in.
-    var colorHex: String = "#FFFFFF"
-    var alignment: OverlayTextAlignment = .center
-    /// Extra letter spacing, in points at the resolved font size ÷ 100 —
-    /// i.e. a fraction of the em, so it scales with the type.
-    var kerning: Double = 0
-    /// Multiple of the font size.
-    var lineHeight: Double = 1.05
-    /// Extra space between paragraphs, as a multiple of the font size.
-    var paragraphSpacing: Double = 0
-
-    private enum CodingKeys: String, CodingKey {
-        case string = "s", fontFamily = "f", isBold = "b", isItalic = "i",
-             isUnderlined = "u", colorHex = "cl", alignment = "al",
-             kerning = "k", lineHeight = "lh", paragraphSpacing = "ps"
-    }
-
-    init(string: String) {
-        self.string = string
-    }
-
-    /// Same contract as `SceneOverlay.init(from:)`: a spike-era sidecar holds
-    /// only `s`, and must decode to the spike's own look.
-    init(from decoder: Decoder) throws {
-        let c = try decoder.container(keyedBy: CodingKeys.self)
-        string = try c.decode(String.self, forKey: .string)
-        fontFamily = try c.decodeIfPresent(String.self, forKey: .fontFamily)
-        isBold = try c.decodeIfPresent(Bool.self, forKey: .isBold) ?? true
-        isItalic = try c.decodeIfPresent(Bool.self, forKey: .isItalic) ?? false
-        isUnderlined = try c.decodeIfPresent(Bool.self, forKey: .isUnderlined) ?? false
-        colorHex = try c.decodeIfPresent(String.self, forKey: .colorHex) ?? "#FFFFFF"
-        alignment = try c.decodeIfPresent(
-            OverlayTextAlignment.self, forKey: .alignment) ?? .center
-        kerning = try c.decodeIfPresent(Double.self, forKey: .kerning) ?? 0
-        lineHeight = try c.decodeIfPresent(Double.self, forKey: .lineHeight) ?? 1.05
-        paragraphSpacing = try c.decodeIfPresent(
-            Double.self, forKey: .paragraphSpacing) ?? 0
-    }
-}
-
-/// Horizontal alignment inside the layer's own layout box.
-enum OverlayTextAlignment: String, Codable, Equatable, Sendable, CaseIterable {
-    case left, center, right
-}
 
 /// Which scene region composites back over the overlay. "Placement" in the
 /// product sense — the element reads as placed *into* the scene — though the
@@ -363,64 +338,36 @@ struct CustomMask: Identifiable, Codable, Equatable, Sendable {
     var displayName: String { name.isEmpty ? "Untitled" : name }
 }
 
-/// How an overlay arrives at its resolved final state. The animation answers
-/// "how does it get there", never "where is it" — the final layout is the
-/// user's, set by dragging, and every animation ends exactly on it.
-struct OverlayAnimation: Codable, Equatable, Sendable {
-    enum Style: String, Codable, Sendable, CaseIterable {
-        /// Characters fade 0→1 with staggered timing.
-        case characterFade
-        /// Characters slide in from `direction` while fading.
-        case characterSlide
+extension OverlayDocument {
+    /// The layers `id` may NOT follow: itself and everything already
+    /// following it, directly or down a chain — a parent cannot follow one of
+    /// its descendants.
+    func descendants(of id: UUID) -> Set<UUID> {
+        OverlaySequencing.descendants(of: id, in: sequencingLayers)
+    }
 
-        var displayName: String {
-            switch self {
-            case .characterFade: return "Fade"
-            case .characterSlide: return "Slide"
-            }
+    /// Re-seats every linked layer after its parent, front-to-back — see
+    /// `OverlaySequencing.resolve`. Links to a layer that is gone (or to
+    /// itself, or round a cycle) are dropped and the layer keeps its absolute
+    /// times — the same spirit as `pruneDanglingPlacements`.
+    mutating func resolveFollows() {
+        var layers = sequencingLayers
+        OverlaySequencing.resolve(&layers)
+        for (index, layer) in layers.enumerated() where overlays[index].animation != layer.animation {
+            overlays[index].animation = layer.animation
         }
     }
 
-    /// Where a sliding character arrives FROM.
-    enum Direction: String, Codable, Sendable, CaseIterable {
-        case top, bottom, left, right
-        var displayName: String { rawValue.capitalized }
-    }
-
-    var style: Style = .characterFade
-    var direction: Direction = .bottom
-    /// Reveal span, SOURCE position 0…1 — the grade strip's own axis, immune
-    /// to the speed layer for exactly the reason `GradeKeyframe.position` is.
-    /// A future still-photo output timeline feeds output progress here
-    /// instead (source ≡ output for a still), so nothing downstream assumes
-    /// one tick is one captured frame.
-    var start: Double = 0
-    var end: Double = 0.25
-    /// 0 = strict typewriter (each character waits for the last), 1 = every
-    /// character together.
-    var overlap: Double = 0.6
-
-    private enum CodingKeys: String, CodingKey {
-        case style = "st", direction = "d", start = "a", end = "b", overlap = "o"
-    }
-
-    /// Raw per-character progress at `position`, one value per grapheme
-    /// cluster. Easing is applied at raster time, not here.
-    ///
-    /// Character *i* owns the sub-interval `[stride·i, stride·i + width]` of
-    /// the band, sized so character 0 starts at the band's start and the last
-    /// character completes exactly at its end — which is what makes the
-    /// raster at `position ≥ end` byte-identical to a no-animation raster:
-    /// the "final layout is always the end state" guarantee, structurally.
-    func phases(at position: Double, characterCount: Int) -> [Double] {
-        guard characterCount > 0 else { return [] }
-        let band = max(end - start, 0.0001)
-        let t = (position - start) / band
-        let n = Double(characterCount)
-        let width = 1.0 / (1.0 + (n - 1) * (1.0 - overlap))
-        let stride = characterCount > 1 ? (1.0 - width) / (n - 1) : 0
-        return (0..<characterCount).map { i in
-            min(max((t - stride * Double(i)) / width, 0), 1)
+    /// Removes a layer. Its children keep their (already resolved) times and
+    /// stop following.
+    mutating func removeLayer(_ id: UUID) {
+        overlays.removeAll { $0.id == id }
+        for index in overlays.indices where overlays[index].animation?.follows?.layerID == id {
+            overlays[index].animation?.follows = nil
         }
+    }
+
+    private var sequencingLayers: [OverlaySequencing.Layer] {
+        overlays.map { OverlaySequencing.Layer(id: $0.id, animation: $0.animation) }
     }
 }

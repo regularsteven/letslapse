@@ -306,6 +306,62 @@ render. Hand-driving is the same binary — `--help` lists every flag
 LetsLapse/Kit/.build/release/lapse blend ~/Library/Developer/LetsLapseRun/out/cli/test.mov -o /tmp/hand.mp4 --ramp 1:40 --curve ease-in-out
 ```
 
+## Smoke (real-input checks)
+
+Some bugs only exist between SwiftUI and the keyboard. The first Mac run of
+the Text tab's reveals build (2026-09-04) trapped with "String index is out
+of bounds" the moment the "Your text" placeholder was selected and typed over:
+SwiftUI's `TextField(text:selection:)` re-applied the selection it still held
+for the old, longer text. The driver can type into that field for real:
+
+```bash
+python3 .claude/skills/run-letslapse/driver.py smoke text-field --project <capture-uuid> --projects-root /Volumes/letslapse/Projects
+```
+
+It launches the built Mac app on that interval project's editor (no restored
+windows — `-ApplePersistenceIgnoreState`; and the project must have **no**
+text layers, the smoke refuses one with an `overlays.json` rather than park
+someone's work), finds Add Text and the new card's copy field through
+accessibility by pid (`ax.swift`), presses Add Text with a System Events
+click, focuses the field through accessibility, brings its own instance to
+the front (`ax activate`, NSWorkspace) and types through System Events —
+select all + type, select all + delete, retype, select a word + type over it
+— refusing to type unless its instance owns keyboard focus at both ends of a
+burst. PASS needs the app alive after every step **and** the persisted
+sidecar to read `Prague is worth a trip`; an app that stayed alive because
+nothing reached the field is a FAIL (two early versions "passed" that way).
+The layer it typed is removed afterwards. `--trace` captures the window after
+every step into `out/smoke-text-field-<n>-….png`.
+
+**What it proves and what it does not.** It proves typing into the copy
+field works and the app survives it. It does **not** reproduce the
+2026-09-04 trap: an unfixed build passes it too. The trap needs SwiftUI's own
+`selection` binding to hold the old range, and only a real mouse click into
+the field (then ⌘A) fills that binding — accessibility focus and System
+Events keystrokes never do, and posted HID clicks (`hid.swift`) stopped
+arriving from this shell mid-session (the Accessibility grant behind CGEvent
+posting is not reliably this process's). That specific crash stays a
+ten-second hands-on check: add a layer, click into the field, ⌘A, type.
+
+**It takes over the mouse and keyboard for about forty seconds**, and every
+System Events keystroke goes to whichever app is ACTIVE — the focus guard is
+what keeps a burst out of someone's other window (one run typed into
+Steven's before it existed). Do not run it while he is at the machine
+without saying so.
+
+Tools, all compiled on demand into `~/Library/Developer/LetsLapseRun/tools/`:
+`ax.swift <pid> <windowTitlePart> <AXRole> <text>` prints an element's frame;
+`ax focus|setvalue|type|move|activate|frontpid` do what they say (`type` goes
+through the selected-text setter; neither it nor `setvalue` trips the trap).
+`hid.swift click|dblclick|drag|type|key` posts real HID events when the grant
+allows it. Never address the driver's instance through System Events'
+`process whose unix id is` — with Steven's copy running it resolves to his.
+
+The model behind the field — runs, units, phases, sequencing, and the caret
+arithmetic the field leans on — is in the Kit and under `swift test`
+(`TextOverlayModelTests`), so `driver.py test` covers the offset paths on our
+side of that trap.
+
 ## Test
 
 ```bash

@@ -71,6 +71,10 @@ extension AppModel {
     func makeOverlayExportBake(for capture: CaptureProject?) async -> OverlayExportBake? {
         guard let capture else { return nil }
         let document = overlayDocument(for: capture)
+        // Imported faces resolve by family name at raster time, which only
+        // works once the files are registered with this process — a render
+        // that never opened the editor has to do it itself.
+        OverlayFontStore.registerFonts(in: overlayFontsFolderURL(for: capture))
         let grade = photoGrade(for: capture)
         let aspect: Double? = {
             guard let width = capture.sourceWidth, let height = capture.sourceHeight,

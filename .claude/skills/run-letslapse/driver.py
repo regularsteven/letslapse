@@ -15,6 +15,7 @@ Commands
     sim                 install + launch on a booted simulator with LL_* hooks, screenshot
     shot                screenshot a booted simulator
     mac                 launch the macOS app with LL_* hooks, screenshot its own window
+    smoke text-field    real-input regression: type over a new text layer's copy (2026-09-04 crash)
     windows             list on-screen windows (CGWindowID / pid / frame) — see winlist.swift
     winshot             raise + capture one window by CGWindowID
     click               click inside a captured window, in that capture's pixel coords
@@ -401,7 +402,9 @@ def cmd_mac(args):
     # Direct exec, not `open`: `open` cannot pass environment variables, so the
     # LL_* hooks never fire through it. The trade-off is that a shell-launched
     # Mac app prints nothing, so the console is not a diagnosis channel here.
-    proc = subprocess.Popen([str(binary)], env=env,
+    # -ApplePersistenceIgnoreState: no windows restored from the last run,
+    # so what is on screen is what the hooks asked for (see launch_mac).
+    proc = subprocess.Popen([str(binary), "-ApplePersistenceIgnoreState", "YES"], env=env,
                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"driver: launched {binary.name} pid={proc.pid} "
           f"hooks={sorted(k for k in env if k.startswith('LL_')) or 'none'}", file=sys.stderr)
@@ -608,6 +611,305 @@ def cmd_kill(args):
               else "driver: nothing running on that simulator")
 
 
+# --------------------------------------------------------------------------- smoke
+
+def tool(name):
+    """A compiled helper (hid, ax) — built from <name>.swift into DD_ROOT on
+    first use and whenever the source is newer. Compiled, not `xcrun swift`:
+    events posted from the interpreter never arrived (the posting process
+    macOS attributes them to is the toolchain's, not this shell's), while
+    the same code as a binary clicks and types (measured 2026-09-04)."""
+    source = HERE / f"{name}.swift"
+    binary = DD_ROOT / "tools" / name
+    if not binary.exists() or binary.stat().st_mtime < source.stat().st_mtime:
+        binary.parent.mkdir(parents=True, exist_ok=True)
+        run(["xcrun", "swiftc", "-O", "-o", str(binary), str(source)], capture=True, quiet=True)
+    return binary
+
+
+def se_click(x, y):
+    """A System Events click at a screen point — reaches buttons, rows and,
+    once the window is key, text fields. Unlike a posted CGEvent it does
+    not depend on this shell holding the Accessibility grant for event
+    posting, which came and went mid-session on 2026-09-04."""
+    run(["osascript", "-e", f'tell application "System Events" to click at {{{int(x)}, {int(y)}}}'],
+        check=False, capture=True, quiet=True)
+
+
+def se_keys(*steps):
+    """Keystrokes through System Events into the frontmost app (the one a
+    System Events click just activated). Each step is a text to type, or
+    ("key", name, modifiers…) / ("cmd", "a")-style tuples."""
+    codes = {"return": 36, "delete": 51, "escape": 53, "left": 123, "right": 124, "down": 125, "up": 126}
+    lines = []
+    for step in steps:
+        if isinstance(step, str):
+            escaped = step.replace("\\", "\\\\").replace('"', '\\"')
+            lines.append(f'keystroke "{escaped}"')
+        else:
+            kind, name, *mods = step
+            using = ""
+            if mods:
+                names = {"cmd": "command down", "shift": "shift down", "opt": "option down", "ctrl": "control down"}
+                using = " using {" + ", ".join(names[m] for m in mods) + "}"
+            if kind == "key":
+                lines.append(f"key code {codes[name]}{using}")
+            else:
+                lines.append(f'keystroke "{name}"{using}')
+        lines.append("delay 0.15")
+    script = 'tell application "System Events"\n' + "\n".join(lines) + "\nend tell"
+    run(["osascript", "-e", script], check=False, capture=True, quiet=True)
+
+
+def hid(*words):
+    """Real HID input through hid.swift — see that file for why AppleScript
+    clicks and keystrokes are not enough for a SwiftUI text field."""
+    return run([str(tool("hid")), *[str(w) for w in words]], capture=True, quiet=True).stdout.strip()
+
+
+def ax_frame(pid, window_title, role, text):
+    """Screen frame (x, y, w, h) of the first element of `role` in that window
+    whose title, value or description is `text` — through ax.swift, which
+    asks accessibility by PID. System Events cannot be used for this: its
+    `process whose unix id is <pid>` resolves to the wrong LetsLapse when
+    Steven's own copy is running (it walked his Settings window instead of
+    the driver's editor, 2026-09-04)."""
+    out = run([str(tool("ax")), str(pid), window_title, role, text],
+              check=False, capture=True, quiet=True).stdout.strip()
+    parts = out.split(",")
+    if len(parts) != 4 or not all(p.strip().lstrip("-").isdigit() for p in parts):
+        return None
+    return tuple(int(v) for v in parts)
+
+
+def launch_mac(hooks, wait=12):
+    """Start the built Mac app with LL_* hooks; returns (proc, first window)."""
+    app = require_product("mac", "Debug")
+    binary = app / "Contents/MacOS/LetsLapse"
+    env = dict(os.environ)
+    env.update(hooks_to_env(hooks))
+    # No restored windows: AppKit would otherwise reopen every editor the
+    # app had open last time, and a smoke could type into one of THOSE —
+    # someone else's project — instead of the one LL_EDITOR asked for.
+    proc = subprocess.Popen([str(binary), "-ApplePersistenceIgnoreState", "YES"], env=env,
+                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    deadline = time.time() + wait
+    window = None
+    while time.time() < deadline:
+        time.sleep(1.0)
+        window = first_window(pid=proc.pid)
+        if window:
+            break
+    if not window:
+        proc.terminate()
+        sys.exit(f"driver: no window appeared for pid {proc.pid} within {wait}s")
+    return proc, window
+
+
+def cmd_smoke(args):
+    """UI smokes that a unit test cannot express — real input into the
+    running Mac app, with the process alive AND the typed copy persisted as
+    the verdict.
+
+    text-field — after the 2026-09-04 crash: add a text layer in an interval
+    project's editor, focus its copy field, select all and type over the
+    placeholder, delete, retype, select a word and type over it. SwiftUI's
+    TextField had re-applied a stale selection to the shorter text and
+    trapped ("String index is out of bounds"); the fix re-seats the selection
+    at the caret the edit leaves. KNOWN LIMIT: this smoke exercises typing into
+    the field but does NOT reproduce that trap — an unfixed build passes it.
+    The trap needs SwiftUI's own selection binding to hold the old range,
+    which only a real mouse click into the field followed by ⌘A produces;
+    accessibility focus and System Events keystrokes never fill it. Posted
+    HID clicks would, and they stopped arriving from this shell mid-session
+    (grant), so the crash itself stays a hands-on check. Run it against a
+    layer-free interval project: the layer it adds is removed afterwards.
+    """
+    if args.which != "text-field":
+        sys.exit(f"driver: unknown smoke {args.which!r} (have: text-field)")
+    if not args.project:
+        sys.exit("driver: smoke text-field needs --project <capture-uuid> — an interval "
+                 "shoot you do not mind gaining a text layer")
+    # The scratch project's sidecar: parked before the run so the layer list
+    # is empty (the rail offsets below assume it), read afterwards as the
+    # proof that the typing reached the field, and put back at the end.
+    sidecar = smoke_sidecar(args)
+    if sidecar.exists():
+        # Someone's layers — and Steven's own copy of the app may hold them
+        # open. The smoke never parks a real sidecar (2026-09-04: it parked
+        # and restored his, and any edit made during the run would have
+        # been rolled back). It also needs an empty layer list to start.
+        sys.exit(f"driver: {sidecar} exists — that project already has text layers. "
+                 "Point --project at an interval shoot with none.")
+    proc, _ = launch_mac([f"LL_EDITOR={args.project}", "LL_RAIL=text"], wait=args.wait)
+    time.sleep(3)
+    # launch_mac suppresses restored windows, so every editor window of this
+    # process is the requested project (LL_EDITOR may open it twice — each
+    # hook route opens one); drive the topmost.
+    editors = [w for w in list_windows(pid=proc.pid) if w["title"] != "Create"]
+    if not editors:
+        proc.terminate()
+        sys.exit("driver: no editor window — is that uuid an interval project?")
+    win = editors[0]
+    # Onto the main display first: System Events clicks did not land on a
+    # window sitting at negative x (the left display), and the editor comes
+    # back wherever it was last closed.
+    moved = run([str(tool("ax")), "move", str(proc.pid), win["title"], "60", "60"],
+                check=False, capture=True, quiet=True).stdout.strip().split(",")
+    if len(moved) == 4:
+        win = dict(win, x=int(moved[0]), y=int(moved[1]), w=int(moved[2]), h=int(moved[3]))
+        time.sleep(0.5)
+    if win["w"] < 900 or win["h"] < 600:
+        proc.terminate()
+        sys.exit(f"driver: editor window is {win['w']}×{win['h']} — the smoke needs at "
+                 "least 900×600 (its rail offsets are measured from the right edge)")
+    title_bar = (win["x"] + win["w"] // 2, win["y"] + 12)
+    print(f"driver: smoke text-field on window {win['id']} at {win['x']},{win['y']} "
+          f"{win['w']}×{win['h']}", file=sys.stderr)
+
+    def locate(role, text):
+        # Asked for at the moment of the click: the editor comes back at
+        # whatever size it was last used at, and fixed offsets missed a
+        # 1708×1415 window's Add Text by 50pt (measured).
+        frame = ax_frame(proc.pid, win["title"], role, text)
+        if not frame:
+            proc.terminate()
+            sys.exit(f"driver: smoke text-field could not find the {role} {text!r} in the editor window")
+        x, y, w, h = frame
+        print(f"driver:   {role} {text!r} at {x},{y} {w}×{h}", file=sys.stderr)
+        return (x + w // 2, y + h // 2)
+
+    add_text = locate("AXButton", "Add Text")
+    def trace(name):
+        if args.trace:
+            capture_window(win["id"], out_path(None, f"smoke-text-field-{name}.png"))
+    # Activation click on the title bar first: a click on a non-key window
+    # only makes it key and is not delivered to the field.
+    print(f"driver:   activation click {title_bar}, then Add Text {add_text}", file=sys.stderr)
+    se_click(*title_bar)
+    time.sleep(0.6)
+    se_click(*add_text)
+    time.sleep(1.5)
+    trace("1-added")
+    layers = ax_frame(proc.pid, win["title"], "AXStaticText", "1 layer")
+    print(f"driver:   layer count after Add Text: {'1 layer' if layers else 'not 1 layer'}", file=sys.stderr)
+    # Focus through accessibility: a System Events click activates the
+    # window but places no caret in a SwiftUI text field, and posted HID
+    # clicks depend on a grant this shell does not reliably hold.
+    focused = None
+    for role in ("AXTextField", "AXTextArea"):
+        out = run([str(tool("ax")), "focus", str(proc.pid), win["title"], role, "Your text"],
+                  check=False, capture=True, quiet=True).stdout.strip()
+        if len(out.split(",")) == 4:
+            focused = (role, out)
+            break
+    if not focused:
+        proc.terminate()
+        sys.exit("driver: smoke text-field — Add Text did not produce a card with a 'Your text' field")
+    role = focused[0]
+    print(f"driver:   focused {role} at {focused[1]}", file=sys.stderr)
+    time.sleep(0.8)
+    trace("2-focused")
+
+    def front_pid():
+        out = run([str(tool("ax")), "frontpid"], check=False, capture=True, quiet=True).stdout.strip()
+        return int(out) if out.isdigit() else None
+
+    def guarded_keys(label, *steps):
+        # Real keystrokes are the ONLY input that reproduces the trap: both
+        # accessibility routes (whole value, selected text) passed on the
+        # unfixed build. System Events types into whichever app is active,
+        # so the app is activated right before, and the burst is refused
+        # unless this instance owns keyboard focus at both ends — a run on
+        # 2026-09-04 had typed into Steven's other windows.
+        # NSRunningApplication.activate — a System Events click on the
+        # title bar never brought the app forward (buttons accept first
+        # mouse; the app itself stayed behind).
+        run([str(tool("ax")), "activate", str(proc.pid)], check=False, capture=True, quiet=True)
+        time.sleep(0.3)
+        # Focus the field again now that the app is frontmost: focus set
+        # while it was behind did not survive activation as the key
+        # window's first responder. Only by a non-empty value — an empty
+        # lookup lands on the ID field, which is also empty.
+        if current_text[0]:
+            run([str(tool("ax")), "focus", str(proc.pid), win["title"], role, current_text[0]],
+                check=False, capture=True, quiet=True)
+            time.sleep(0.3)
+        if front_pid() != proc.pid:
+            proc.terminate()
+            sys.exit(f"driver: smoke text-field ABORTED before '{label}' — another app holds keyboard "
+                     "focus; run it while nothing else is being used")
+        se_keys(*steps)
+        if proc.poll() is None and front_pid() != proc.pid:
+            print(f"driver:   WARNING: keyboard focus left the app during '{label}' — "
+                  "some keystrokes may have gone elsewhere", file=sys.stderr)
+
+    current_text = ["Your text"]
+
+    def typed(label, expected, *keys):
+        guarded_keys(label, *keys)
+        current_text[0] = expected
+
+    steps = [
+        ("select all + type", lambda: typed("select all + type", "H", ("cmd", "a", "cmd"), "H")),
+        ("select all + delete", lambda: typed("select all + delete", "", ("cmd", "a", "cmd"), ("key", "delete"))),
+        ("retype", lambda: typed("retype", "Prague is worth a visit", "Prague is worth a visit")),
+        ("select a word + type over it", lambda: typed(
+            "select a word + type over it", "Prague is worth a trip",
+            ("key", "left", "opt"), ("key", "left", "opt", "shift"), "trip")),
+    ]
+    for n, (label, action) in enumerate(steps, start=3):
+        action()
+        time.sleep(0.6)
+        trace(f"{n}-{label.replace(' ', '-').replace('+', 'and')}")
+        if proc.poll() is not None:
+            report = sorted((Path.home() / "Library/Logs/DiagnosticReports").glob("LetsLapse-*.ips"))
+            sys.exit(f"driver: smoke text-field FAILED — the app died during '{label}'"
+                     + (f"\n  crash report: {report[-1]}" if report else ""))
+    # The editor persists 2 s after the last edit; the sidecar is the proof
+    # the keystrokes reached the field rather than a window that had lost
+    # focus — every earlier "pass" of this smoke was exactly that.
+    time.sleep(3)
+    shot = out_path(args.shot, "smoke-text-field.png")
+    capture_window(win["id"], shot)
+    typed = sidecar.read_text() if sidecar.exists() else ""
+    if args.keep:
+        print(f"driver: pid {proc.pid} left running", file=sys.stderr)
+    else:
+        proc.terminate()
+        proc.wait(timeout=10)
+        # Leave the scratch project as it was found: without a sidecar.
+        if sidecar.exists():
+            sidecar.unlink()
+    if "Prague is worth a trip" not in typed:
+        sys.exit("driver: smoke text-field FAILED — the app stayed alive but the typed copy never "
+                 f"reached the layer (sidecar holds {typed[:120]!r}); the clicks did not focus the field. "
+                 f"See {shot} and --trace.")
+    print(f"driver: smoke text-field PASSED — app alive after every step and the layer reads the typed copy; {shot}")
+
+
+def smoke_sidecar(args):
+    """The scratch project's overlays.json. Projects live under the storage
+    root's Projects/ — the default Application Support one, or wherever
+    Settings ▸ Storage moved it (pass --projects-root for that)."""
+    roots = []
+    if args.projects_root:
+        roots.append(Path(args.projects_root).expanduser())
+    # Settings ▸ Storage's nominated root (StorageRoot.customPathKey), when
+    # the library has been moved — the usual case on this Mac.
+    nominated = run(["defaults", "read", BUNDLE_ID, "storage.libraryRootPath"],
+                    check=False, capture=True, quiet=True)
+    if nominated.returncode == 0 and nominated.stdout.strip():
+        roots.append(Path(nominated.stdout.strip()) / "Projects")
+    roots.append(Path.home() / "Library/Application Support/LetsLapse/Projects")
+    for root in roots:
+        folder = root / args.project
+        if folder.is_dir():
+            return folder / "overlays.json"
+    sys.exit("driver: could not find the project folder for that uuid under "
+             + ", ".join(str(r) for r in roots) + " — pass --projects-root <…/Projects>")
+
+
 # --------------------------------------------------------------------------- args
 
 def main():
@@ -692,6 +994,16 @@ def main():
     p.add_argument("--force", action="store_true",
                    help="click even if another window is on top at that point")
     p.set_defaults(func=cmd_click)
+
+    p = sub.add_parser("smoke", help="UI regression smokes with real input (text-field)")
+    p.add_argument("which", choices=["text-field"])
+    p.add_argument("--project", help="capture uuid of a SCRATCH interval project")
+    p.add_argument("--wait", type=int, default=12)
+    p.add_argument("--shot")
+    p.add_argument("--keep", action="store_true", help="leave the app running afterwards")
+    p.add_argument("--trace", action="store_true", help="capture the window after every step")
+    p.add_argument("--projects-root", help="the storage root's Projects folder when it is not the default")
+    p.set_defaults(func=cmd_smoke)
 
     p = sub.add_parser("kill", help="terminate what the driver started")
     p.add_argument("--pid", type=int)

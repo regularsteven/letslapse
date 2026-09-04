@@ -201,17 +201,31 @@ Masks tab with project-level custom masks, and archive travel (`masks/` is
 in `ProjectArchive.transferableSubfolders`; `overlays.json` was already in
 `transferableFiles`).
 
+Closed by the "Photo viewer text transitions" build (2026-09-03,
+[text-reveals.md](text-reveals.md)): **font upload** (Import font… in the
+picker, `fonts/` travels), **draggable range-band handles** (the lanes under
+the strip), and the iOS layout pass in the simulator (stacked lanes, the
+keyboard accessory bar, the typing layout).
+
 Still owed, roughly in value order: **VideoEditorView overlay rendering**
-(its Text tab is still an honest placeholder); **iOS pass** — the panels
-compile and the iOS build is green, but the layer list, the popover and the
-box handles have never been touched on a device, and the rail is 339pt of
-macOS width; **font upload** (the design's type list includes a "(uploaded)"
-face — the picker ships six system families and no import path); promote
+(its Text tab is still an honest placeholder — and the reveals, exits and
+sequencing above only bake through the stills path); **device pass** — the
+reveal panel, the lanes' finger-sized trim handles and the accessory bar
+were exercised in the iPhone 16 Pro simulator, not on a phone; promote
 `overlays.json` into a `CaptureProject` field; detail-patch/loupe render
-without overlays; SceneMasks **and the new per-project `masks/` folder** on
-the storage card's clear-cache path; draggable range-band handles;
-SegFormer-B0 ADE20K conversion for true sky probabilities (DETR is 0/1
-argmax).
+without overlays; SceneMasks **and the per-project `masks/` and `fonts/`
+folders** on the storage card's clear-cache path; SegFormer-B0 ADE20K
+conversion for true sky probabilities (DETR is 0/1 argmax).
+
+Follow-ups from the reveals build itself: the **Blur** style renders each
+unit through a Core Image pass (a 4000 px character-unit blur on a long
+line is the slow case — measure on an export before shipping a blur-heavy
+title); per-word styling needs iOS 18 / macOS 15 for the caret read-back
+(`TextSelection`) — on the 17/14 floors the bar acts on the whole layer;
+`LL_EDITOR` on macOS opens the editor window **two or three times** over the
+same project (each hook route opens one), which the persist guard tolerates
+but a screenshot run has to trim; and playback runs at the newest blended
+clip's output length only once one exists (14 s tour before).
 
 ### Sky mask quality: guided-filter refinement, then a better model
 

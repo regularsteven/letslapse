@@ -1,20 +1,21 @@
 <svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Photo viewer / grading editor · Text tab · 1000×700</title>
-  <desc>Mirrors App/PhotoViewerView.swift (textTab) hosting App/Overlay/OverlayEditingPanel.swift — the Text page of the editor rail, rebuilt 2026-08-31 from the Claude Design &quot;Text Features&quot; spec (multiple layers, type fundamentals, bounding boxes, a Masks tab). Window, media column and timeline strip are photo-viewer.svg's (same staged project, same moment); only the rail differs. THE PAGE edits a LIST of text layers stored in the per-project overlays.json sidecar (OverlayDocument: overlays + customMasks + mask dials; persisted on finished gestures plus a 2s safety net, exit and window close; a second window on the same project can never bulldoze the sidecar because persists no-op when unchanged; every field past the spike's original five decodes with decodeIfPresent, so a sidecar written before the schema grew keeps its text instead of reading as empty). ORDER IS STACKING ORDER: row 1 is the frontmost layer, and the compositor walks the array in reverse so row 1 paints last. Drag a card by its grip to reorder. LAYER ROW: grip · visibility eye · title (the text itself, newlines shown as ↵) · an animation indicator (accent when the layer has a reveal) · onion skin · expand chevron. Hidden layers are skipped in the preview AND the export. Onion skin draws a layer at full strength ignoring its animation — editor-only scaffolding, never baked — and is disabled without an animation, because with no reveal the text is always drawn; a hidden layer with onion on ghosts at 34%. EXPANDED, four disclosures (a card opens with TEXT &amp; SIZE showing): TEXT &amp; SIZE — the string (multi-line; Return inserts a newline, so on iOS the keyboard toolbar's Done is the exit), Mode Free · Box, and Size as a fraction of the frame's LONG edge with the readout in px of the DELIVERED file (the preview is capped at 2000px / 1100px mid-scrub, so quoting against it would change as you scrub). Then Angle (2026-09-02): the layer's own rotation about its anchor, the SAME RotationSlider the Edit tab levels the whole picture with (±10°, centre-snapped, degrees readout, double-click the label to zero) in its inline shape. Layers live in the LEVELLED frame's space: when the project's rotation moves, every existing layer is re-expressed to stay pinned to the scene — anchor remapped, angle carried, size and box grown by the crop-in — so a layer that was already on the project tilts with the picture and its Angle reads the project's angle; a layer added afterwards starts at 0° and reads level. The rasterizer turns the whole block (lines, slide offsets, underlines) about the anchor with one CTM rotation; the preview proxy, the outline and the eight box handles turn with it, and a handle drag is read along the box's own axes. Auto-size in box mode dims this slider and turns the readout amber. TYPE — family (SF Pro · Helvetica Neue · Georgia · Avenir Next · Futura · Courier New; an absent family falls back to the system face at raster time), B/I/U, alignment, five swatches (White · Ink · Accent · Amber · Sky), and More… — a popover holding Kerning (a fraction of the em, so it scales with the type), Line height, Paragraph, and Auto-Size font with Min/Max, all three box-only. Auto-size solves BOTH axes by bisection against a FIXED reference long edge, so the chosen step is a property of the layer and cannot differ between a 1100px scrub and a 2000px settled render. INTELLIGENT PLACEMENT — None, then the project's regions (Sky · Land, or a custom mask's names), then Custom, which is a route to the Masks tab rather than a value. ANIMATION — None · Fade · Slide, a From direction for Slide, and Set Start / Set End pinning the band to the playhead (the playhead is the precision instrument, so there are no draggable band handles); reveals are per-character with overlap 0.6, eased by the house cubic, and the settled raster is byte-identical to no animation — the resting layout IS the end state. REMOVE TEXT — red, per layer. ON THE PREVIEW (this tab only): every visible layer is draggable — baked at rest, a SwiftUI proxy takes over during the drag (frozen committed centre + translation ÷ drawn size, unit-clamped, committed and persisted on release; a cancelled drag heals back), and dragging a layer selects it. A centre snap within 0.018 pins the axis and draws an amber guide (desc-only). The SELECTED layer gets chrome: a solid accent outline for FREE, a dashed amber box with eight resize handles for BOX (each handle moves its own edge and leaves the opposite one put), a mode+text badge, and — with auto-size on — an AUTO chip reading the resolved px and where it sits in the Min…Max bracket. STAGED HERE: 4 layers. Row 1 &quot;LetsLapse&quot; is selected, FREE, Sky-placed, with a fade whose reveal has not started at this playhead (so the composite draws nothing and only the chrome marks the spot). Row 2 is BOX + auto-size + onion skin, Georgia italic, Land-placed. Row 3 is hidden. Row 4 is Courier with wide tracking. Exports bake exactly this page's state — same compositing core, same masks, dials from the sidecar; hidden layers and onion skin are the two things the export deliberately does not carry. Hooks: LL_EDITOR=&lt;uuid|latest&gt;, LL_RAIL=text, LL_SEG_MODEL=&lt;path&gt;. Verified against the running Mac app 2026-08-31; Angle row verified 2026-09-02 (project "Day to night 5k dng i16" levelled +4.9°: the pre-existing box layer read +4.9°, a freshly added layer read 0°).</desc>
+  <desc>Mirrors App/PhotoViewerView.swift (textTab, overlayLanes, overlayRunAccessory) hosting App/Overlay/OverlayEditingPanel.swift, App/Overlay/OverlayLanesView.swift and App/Overlay/OverlayCopyField.swift — the Text page of the editor rail, rebuilt 2026-09-03 from the Claude Design handoff &quot;Photo viewer text transitions&quot; (Text Workflow · direction 1a: timing lives in the rail, the lanes are its read-mostly mirror). Window 1000×700; media column 660 (black), rail 340. STAGED: LL_EDITOR=&lt;interval project with no text&gt; LL_RAIL=text LL_TEXT=story — the design's four-layer Prague story: row 1 &quot;Don't you think&quot; (ID &quot;Intro top&quot;, Character · Bounce 8→20%, Fade out 80→86%), row 2 &quot;Prague&quot; (Element · Fade, starts after row 1), row 3 &quot;is worth a LITTLE visit?&quot; (Character · Bounce, the word LITTLE charcoal inside white copy, after row 2), row 4 &quot;visitprague.com&quot; (Lemon, Element · Fade, after row 3 with a +2% offset, no exit). Playhead parked at 13%, so row 1 is mid-bounce: the composite shows &quot;Don't y&quot; with the y still dropping in; the three later layers are not on screen yet. Row 1 is selected and, here, expanded with TEXT, TYPE and REVEAL IN open (a card opens with TEXT alone; the others are a click each). MEDIA COLUMN: picture 660×495 letterboxed at y=22 in a 540 pane — the pane gave up 78pt for the lanes. Text layers composite live at the playhead through the same rasterizer the export bakes with; the SELECTED layer draws a solid accent 1.5pt outline and a &quot;FREE · first 18 chars&quot; badge (10/600 white on accent, 18pt capsule) 22pt above it; a selected layer that is not on screen at the playhead (before its reveal, after its exit) ghosts at 16% so the badge has a target; every other resting layer is an invisible hit area over the bake. Click a layer to select it, drag to place it (existing). TRANSPORT + LANES (top 568, padding 8/18/0): row 1 is GradeTimelineView(compact: true) — 26pt white play/pause disc with the accent glyph, the 3pt track with the 3×20 ink playhead and the rgba(43,43,46,.9) clock pill (10/600 white, tabular), then the two 26pt frame-step discs (‹ ›, 6pt gaps); play now LOOPS and advances the playhead in real time at the project's own output length (the newest blended clip's frames ÷ fps; a 14 s tour before one exists), any scrub or lane drag stops it. Row 2: end labels 10pt #6D6D72 tabular, indented to the track (34 left / 64 right). Row 3: the LANES, 18pt per lane, top lane = front layer (list order), height from the layer count (6 lanes before the block scrolls): a hairline (black 6%) at mid-height; the layer's displayName 9pt #8A8A8E right-aligned in the 26pt gutter left of the track; the BAND = the layer's on-screen span [reveal.start, exit.end ?? 1], 12pt tall, radius 6, accent when selected (with a 1.5pt white ring inside a 1pt accent ring) and accent 42% otherwise; darker heads (black 22%) mark the reveal-in and reveal-out spans inside it (a cut has no head). Trim handles at both ends (8×16 hit, ew-resize cursor): the left edge is reveal.start (dragging it breaks a link), the right edge is exit.end (only drawn with an exit on). Dragging the body moves the whole layer in time — reveal and exit together, clamped to 0…1 — and breaks its own link while its children keep following it. A LINKED layer draws a dotted 2pt accent connector from parent.reveal.end to its band start (invisible at a 0 offset, as for rows 2 and 3 here; the +2% offset on row 4 shows one) and a 14pt white disc with arrow.turn.down.right (accent, accent-50% ring) on the band start. The playhead line (1pt rgba(28,28,30,.55)) spans all lanes. Clicking a band selects the layer. RAIL (x 676, 308 inner): RailTabBar [Editor · Text · Frames · Masks] unchanged; header &quot;Text Layers · 4 layers&quot;. LAYER ROW (38pt): grip · eye · title · (linked) 16pt capsule ⤷ accent on accent-10% · wand (accent when the layer has a reveal style or an exit) · onion skin (needs a reveal) · chevron. When the ID is set the title reads &quot;ID · copy&quot; with the copy at 50%. EXPANDED CARD, sections in order, 12pt side padding, 9pt gaps, hairline dividers, titles 11/600 +0.5 #6D6D72: 1 TEXT — the copy field (min 30pt, 1px black-22% border, radius 6, 14pt; multi-line, Return = newline). It is a RICH field: each run of the copy can carry its own colour, weight and underline. Placing the caret in a word (or selecting a range) opens the MINI TOOLBAR directly under the field — ink #1C1C1E bar, radius 9, 6/8 padding: the run label &quot;“you”&quot; 10.5pt white 65% · B 22pt square (accent when on) · U 22pt (#2C2C2E) · six 14pt swatches (White · Ink · Accent · Amber · Lemon · Charcoal; selected ring 2 white + 1.5 accent) · ✕. Typed text inherits the style of the run it lands at the end of; a run edited to nothing merges away. (The caret read-back needs macOS 15 / iOS 18; on the 14/17 floors the bar acts on the whole layer.) Then Mode (Free · Box), Size (px of the delivered file) and Angle — exactly as shipped. 2 TYPE — the font field (26pt, #F2F2F7, radius 7, the family name in its own face, an IMPORTED tag 9/700 accent on accent-10% for a face the project brought with it, ⌃⌄) opens a POPOVER list, not a menu (AppKit drops a menu label's chrome): six system faces · divider · imported faces (IMPORTED tag) · divider · &quot;+ Import font… TTF · OTF&quot; (square.and.arrow.down) → file importer; the file is copied into the project's fonts/ folder (ProjectArchive.transferableSubfolders), registered with CTFontManager for the process, listed by family, and the layer being edited switches to it (toast &quot;Imported &lt;family&gt;&quot;). B · I · U 26pt squares (radius 7; accent fill when on, #F2F2F7 off), alignment ≡ ☰ ≡, six 16pt swatches (the TYPE row's swatch is the LAYER colour and clears every run's own), More… (kerning / line height / paragraph / auto-size popover, unchanged). 3 INTELLIGENT PLACEMENT — unchanged and mandatory: None, the project's regions (Sky · Land or a custom mask's names), Custom → the Masks tab. 4 REVEAL IN — the header trails &quot;start → end · duration&quot; 10.5pt #8A8A8E tabular (&quot;Cut · appears at 0:05:45&quot; when no style is on). Segmented Element · Word · Character (26pt track #F2F2F7, accent fill). Style chips 24pt radius 12 11.5/600 (#F2F2F7 / accent when on): Fade · Slide · Bounce · Pop · Blur · Wipe — tapping the active chip CLEARS it (no chip = hard cut). Slide adds the From row. Stagger slider (Word/Character only) with its word readout: one at a time (&lt;0.2) · overlapping · almost together (&gt;0.85). Set Start / Set End 40pt (Set Start clears a link; Set End only changes the duration and keeps it). Starts: At time · After layer; with After: the parent field (⤷ displayName ⌃⌄ → popover listing the other layers except this one's own descendants, ✓ on the current) + the offset stepper − +0s + (one FRAME per step, tabular, −10%…+30%) and the footnote &quot;Moves with its parent. Offset is measured from the parent's reveal end; negative overlaps them.&quot; Picking a parent floats the toast &quot;Linked — starts after “…”&quot; (28pt dark capsule over the media, 1.8 s). 5 REVEAL OUT — the header carries a 30×16 toggle (accent / #E9E9EB). Off: &quot;Off: the text holds on screen until the end of the shoot.&quot; On (seeded at reveal.end + 30%, 6% long): unit segmented · style chips Fade · Slide · Pop · Blur · Wipe (no bounce out; tapping the active chip = hard cut at exit.end) · From for Slide · Stagger · Set Out Start / Set Out End (readouts &quot;start → end&quot; and the duration) · the footnote. 6 ID — one row: &quot;ID&quot; label (12/600, 36 wide) + a single-line field (26pt) with the placeholder &quot;e.g. Intro top · Byline · Main message&quot;. 7 Remove Text — unchanged. Add Text 44pt (a shoot with length opens the new layer's reveal at the playhead: a 6% fade, whole element, no exit). Footnote: &quot;Get the layout right first, then time the reveals. Drag text on the preview to place it; drag a band in the lanes to move it in time. The top layer sits in front.&quot; MODEL: OverlayAnimation = reveal (OverlayReveal: unit · style? · direction · start · end · overlap) + exit? + follows? (parent id + gap); a layer with no animation reads as a cut at 0:00 that holds. Sequencing resolves after EVERY edit (OverlayDocument.resolveFollows: reveal.start = parent.reveal.end + gap, duration kept, exit shifted by the same delta; as many passes as layers so chains resolve in any list order; cycles and dangling links dropped; removing a parent leaves its children at their resolved times). Units generalise the old per-character phases: characters as before, words = whitespace-delimited with the spaces travelling with the preceding word, element = one unit; the rasterizer draws unit by unit — Fade alpha · Slide alpha + 0.6em travel from the direction · Bounce 0.9em drop through ease-out-back · Pop scale through ease-out-back about the baseline centre · Blur alpha + a Core Image gaussian on the unit (radius 0.22em at t=0) · Wipe a left-to-right clip; the house cubic eases everything but Bounce/Pop. At any position ≥ reveal.end and &lt; exit.start the raster is byte-identical to no animation (same cache entry). Exports bake reveal, exit and resolved times through the same compositor; the whole-shoot still bakes every layer settled. TextOverlayContent.string became runs: [TextRun] (text · colorHex? · isBold? · isUnderlined?, nil = inherit); the sidecar writes the joined string under the old key as well, so older builds read plain copy, and a plain-string sidecar decodes as one run; the spike's single band (st/d/a/b/o) decodes as a Character reveal of the same style and span. Hooks: LL_EDITOR, LL_RAIL=text, LL_TEXT=story[,toast]. Verified against the running Mac app 2026-09-03 (dark appearance on the bench; this drawing is the light window the tokens name): staging, lanes, band drag re-seating its children and breaking its link, the run toolbar on a caret with B and a swatch applied to one word, the font popover, the parent picker and offset stepper, live looping playback.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
-    <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
+    <clipPath id="photo"><rect x="20" y="70" width="660" height="495"/></clipPath>
+    <clipPath id="rail"><rect x="676" y="104" width="324" height="616"/></clipPath>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8FA3B8"/>
-      <stop offset="0.45" stop-color="#E8B98C"/>
-      <stop offset="1" stop-color="#F6DFB2"/>
+      <stop offset="0" stop-color="#5D7EA3"/>
+      <stop offset="0.5" stop-color="#9DB8D2"/>
+      <stop offset="1" stop-color="#F0D2A8"/>
     </linearGradient>
     <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#D9A45E"/>
-      <stop offset="1" stop-color="#5C666E"/>
+      <stop offset="0" stop-color="#C9B9A4"/>
+      <stop offset="1" stop-color="#3C3F44"/>
     </linearGradient>
   </defs>
-  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}.sec{font-size:11px;font-weight:600;letter-spacing:.5px;fill:#6D6D72}</style>
 
   <g clip-path="url(#win)">
     <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
@@ -22,222 +23,205 @@
     <g id="titlebar">
       <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
       <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
-      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River and bridge sunset jpeg i12</text>
     </g>
 
-    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
-         control bottom-trailing. The picture is a flat approximation of the
-         staged frame: sunset sky, the overlay text, then skyline / bridge /
-         river / quay — the skyline is drawn AFTER the text on purpose, so
-         the drawing occludes the descenders the way the composite does. -->
+    <!-- Media column: 540 tall now (was 618) — the 78pt below went to the
+         lanes. Picture 660×495 at y=22 of the pane. The scene is a flat
+         approximation of the staged frame: dusk sky, a boat and quay at
+         left, the bridge piers at right, the river below. -->
     <g id="media">
-      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
+      <rect x="20" y="48" width="660" height="540" fill="#000000"/>
       <g clip-path="url(#photo)">
-        <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
-        <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
-        <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
-        <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
-        <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
-        <!-- Layer 1 at its resting layout. Its reveal has not started at
-             this playhead, so the composite draws nothing — the chrome below
-             is all that marks where it will land. (Drawn faint here so the
-             spec shows the placement the badge refers to.) -->
-        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF" fill-opacity="0.16">LetsLapse</text>
-        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
-             descenders sink behind the rooftops, the way the composite cuts. -->
-        <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
-        <!-- Bridge deck with piers at the river head. -->
-        <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
-        <rect x="20" y="388" width="660" height="6" fill="#6E6152"/>
-        <g fill="#524A40">
-          <rect x="252" y="394" width="10" height="12"/><rect x="316" y="394" width="10" height="12"/>
-          <rect x="380" y="394" width="10" height="12"/><rect x="444" y="394" width="10" height="12"/>
-        </g>
-        <!-- River with the sunset's reflection. -->
-        <rect x="20" y="394" width="660" height="146" fill="url(#river)"/>
-        <rect x="120" y="410" width="260" height="6" rx="3" fill="#EBC27E" opacity="0.5"/>
-        <rect x="90" y="430" width="330" height="6" rx="3" fill="#E0B26B" opacity="0.4"/>
-        <rect x="140" y="452" width="240" height="6" rx="3" fill="#D2A45F" opacity="0.3"/>
-        <!-- Quay diagonal, crowd, railing — the right embankment. -->
-        <path d="M330 540 L680 436 L680 605 L240 605 Z" fill="#8A7A55"/>
-        <path d="M500 605 L680 470 L680 605 Z" fill="#3F4438"/>
-        <g fill="#221F1C">
-          <circle cx="380" cy="560" r="4"/><circle cx="416" cy="550" r="4"/><circle cx="452" cy="540" r="4"/>
-          <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
-        </g>
+        <rect x="20" y="70" width="660" height="495" fill="url(#sky)"/>
+        <ellipse cx="150" cy="120" rx="120" ry="18" fill="#FFFFFF" opacity="0.35"/>
+        <ellipse cx="330" cy="200" rx="200" ry="20" fill="#FFFFFF" opacity="0.28"/>
+        <ellipse cx="240" cy="290" rx="160" ry="14" fill="#F6DDB8" opacity="0.5"/>
+        <!-- Row 1 mid-bounce at 13%: the first characters have landed, the
+             y is still dropping in, the rest are not drawn yet. -->
+        <text x="61" y="160" font-size="37" class="b" fill="#FFFFFF">Don't</text>
+        <text x="163" y="152" font-size="37" class="b" fill="#FFFFFF" fill-opacity="0.72">y</text>
+        <!-- Bridge piers and deck at right, skyline at the horizon, quay at left. -->
+        <path d="M500 70 L680 70 L680 400 L560 400 L540 300 Z" fill="#3E3B3A"/>
+        <path d="M470 70 L520 70 L560 400 L540 400 Z" fill="#2B2A2A"/>
+        <path d="M260 330 L260 322 L300 322 L300 316 L360 316 L360 324 L420 324 L420 318 L470 318 L470 330 Z" fill="#8A7A6A"/>
+        <rect x="20" y="330" width="660" height="235" fill="url(#river)"/>
+        <path d="M20 300 L60 296 L150 290 L290 306 L290 340 L20 380 Z" fill="#2A2A2C"/>
+        <path d="M20 430 L120 470 L20 560 Z" fill="#7A7570"/>
       </g>
-      <g clip-path="url(#photo)">
-        <!-- Layer 2: BOX mode, Georgia italic, auto-sized to its box, onion
-             skin ON — so it draws at full strength even though its slide
-             reveal has not run at this playhead. Placed in Land, so the sky
-             would occlude it; nothing here is sky. -->
-        <text x="98" y="512" font-size="34" font-family="Georgia, serif" font-style="italic" fill="#FFFFFF">River Sunset</text>
-        <text x="98" y="548" font-size="34" font-family="Georgia, serif" font-style="italic" fill="#FFFFFF">to Dusk</text>
-        <!-- Layer 4: Courier, wide tracking, centred. Layer 3 is hidden and
-             is deliberately absent. -->
-        <text x="350" y="588" font-size="17" font-family="'Courier New', monospace" letter-spacing="3.2" text-anchor="middle" fill="#FFFFFF">12 Aug 2026 · 55 min</text>
-      </g>
-
-      <!-- Selection chrome for the SELECTED layer, Text tab only. Solid
-           accent outline = FREE (the line flows from the anchor); a BOX
-           layer draws a dashed amber box with eight resize handles and, with
-           auto-size on, an AUTO chip reading the resolved px. The badge
-           names the mode and the first 18 characters. -->
-      <g id="selection-chrome">
-        <rect x="222.5" y="290.5" width="245" height="90" fill="none" stroke="#C36A00" stroke-width="1.5" rx="2"/>
-        <rect x="222" y="268" width="126" height="18" rx="9" fill="#C36A00"/>
-        <text x="230" y="281" font-size="10" class="sb" fill="#FFFFFF">FREE · LetsLapse</text>
-      </g>
-
-      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+      <!-- Selected-layer chrome: solid accent outline around the resting
+           line, the FREE badge 22pt above. -->
+      <rect x="47" y="122" width="312" height="50" fill="none" stroke="#C36A00" stroke-width="1.5" rx="2"/>
+      <rect x="47" y="100" width="128" height="18" rx="9" fill="#C36A00"/>
+      <text x="55" y="113" font-size="10" class="sb" fill="#FFFFFF">FREE · Don't you think</text>
+      <text x="662" y="580" font-size="14" fill="#FFFFFF" text-anchor="end">⤢</text>
     </g>
 
-    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
-    <g id="strip">
-      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
-      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
-      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
-      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
-      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
-      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
-      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
-      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
-      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
-      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
-      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
-      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
-      <!-- The SELECTED layer's reveal span, read-only. Selecting another
-           layer moves the band; authoring it is Set Start / Set End. -->
-      <rect x="107" y="700" width="68" height="4" rx="2" fill="#C36A00"/>
+    <!-- Transport + lanes: 660 wide, top 568 (+8 padding), 18 side. -->
+    <g id="transport">
+      <circle cx="51" cy="609" r="13" fill="#FFFFFF"/>
+      <path d="M48 603 L48 615 L58 609 Z" fill="#C36A00"/>
+      <rect x="72" y="607.5" width="526" height="3" rx="1.5" fill="#000" fill-opacity="0.18"/>
+      <rect x="138.5" y="599" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
+      <rect x="118" y="588" width="44" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="140" y="599" font-size="10" class="sb mono" fill="#FFFFFF" text-anchor="middle">0:09:21</text>
+      <circle cx="617" cy="609" r="13" fill="#FFFFFF"/><text x="617" y="613.5" font-size="12.5" class="sb" fill="#B5B5BA" text-anchor="middle">‹</text>
+      <circle cx="649" cy="609" r="13" fill="#FFFFFF"/><text x="649" y="613.5" font-size="12.5" class="sb" fill="#C36A00" text-anchor="middle">›</text>
+      <text x="72" y="634" font-size="10" class="mono" fill="#6D6D72">0:00:00</text>
+      <text x="598" y="634" font-size="10" class="mono" fill="#6D6D72" text-anchor="end">1:11:54</text>
     </g>
 
-    <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
+    <!-- Lanes: 4 × 18pt from y=640, track 72…598 (526 wide). Band =
+         [reveal.start, exit.end ?? 1]; darker heads = the reveal in / out. -->
+    <g id="lanes" font-size="9" fill="#8A8A8E">
+      <g id="lane-1">
+        <rect x="72" y="649.5" width="526" height="1" fill="#000" fill-opacity="0.06"/>
+        <text x="68" y="652" text-anchor="end">Intro t…</text>
+        <rect x="114" y="644" width="410" height="12" rx="6" fill="#C36A00"/>
+        <path d="M120 644 L177 644 L177 656 L120 656 A6 6 0 0 1 114 650 A6 6 0 0 1 120 644 Z" fill="#000" fill-opacity="0.22"/>
+        <path d="M492 644 L518 644 A6 6 0 0 1 524 650 A6 6 0 0 1 518 656 L492 656 Z" fill="#000" fill-opacity="0.22"/>
+        <rect x="112.5" y="642.5" width="413" height="15" rx="7.5" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+        <rect x="111.5" y="641.5" width="415" height="17" rx="8.5" fill="none" stroke="#C36A00" stroke-width="1"/>
+      </g>
+      <g id="lane-2">
+        <rect x="72" y="667.5" width="526" height="1" fill="#000" fill-opacity="0.06"/>
+        <text x="68" y="670" text-anchor="end">Prague</text>
+        <rect x="177" y="662" width="347" height="12" rx="6" fill="#C36A00" fill-opacity="0.42"/>
+        <path d="M183 662 L219 662 L219 674 L183 674 A6 6 0 0 1 177 668 A6 6 0 0 1 183 662 Z" fill="#000" fill-opacity="0.22"/>
+        <path d="M492 662 L518 662 A6 6 0 0 1 524 668 A6 6 0 0 1 518 674 L492 674 Z" fill="#000" fill-opacity="0.22"/>
+        <circle cx="177" cy="668" r="7" fill="#FFFFFF" stroke="#C36A00" stroke-opacity="0.5" stroke-width="1"/>
+        <text x="177" y="671" font-size="8" class="b" fill="#C36A00" text-anchor="middle" data-symbol="arrow.turn.down.right">⤷</text>
+      </g>
+      <g id="lane-3">
+        <rect x="72" y="685.5" width="526" height="1" fill="#000" fill-opacity="0.06"/>
+        <text x="68" y="688" text-anchor="end">is w…</text>
+        <rect x="219" y="680" width="305" height="12" rx="6" fill="#C36A00" fill-opacity="0.42"/>
+        <path d="M225 680 L282 680 L282 692 L225 692 A6 6 0 0 1 219 686 A6 6 0 0 1 225 680 Z" fill="#000" fill-opacity="0.22"/>
+        <path d="M492 680 L518 680 A6 6 0 0 1 524 686 A6 6 0 0 1 518 692 L492 692 Z" fill="#000" fill-opacity="0.22"/>
+        <circle cx="219" cy="686" r="7" fill="#FFFFFF" stroke="#C36A00" stroke-opacity="0.5" stroke-width="1"/>
+        <text x="219" y="689" font-size="8" class="b" fill="#C36A00" text-anchor="middle" data-symbol="arrow.turn.down.right">⤷</text>
+      </g>
+      <g id="lane-4">
+        <rect x="72" y="703.5" width="526" height="1" fill="#000" fill-opacity="0.06"/>
+        <text x="68" y="706" text-anchor="end">visit…</text>
+        <!-- +2% offset from the parent's reveal end: the dotted connector. -->
+        <line x1="282" y1="704" x2="293" y2="704" stroke="#C36A00" stroke-width="2" stroke-dasharray="2 3"/>
+        <rect x="293" y="698" width="305" height="12" rx="6" fill="#C36A00" fill-opacity="0.42"/>
+        <path d="M299 698 L325 698 L325 710 L299 710 A6 6 0 0 1 293 704 A6 6 0 0 1 299 698 Z" fill="#000" fill-opacity="0.22"/>
+        <circle cx="293" cy="704" r="7" fill="#FFFFFF" stroke="#C36A00" stroke-opacity="0.5" stroke-width="1"/>
+        <text x="293" y="707" font-size="8" class="b" fill="#C36A00" text-anchor="middle" data-symbol="arrow.turn.down.right">⤷</text>
+      </g>
+      <rect x="139.5" y="642" width="1" height="74" fill="#1C1C1E" fill-opacity="0.55"/>
+    </g>
 
-    <!-- Control rail · Text tab (OverlayEditingPanel). -->
-    <g id="rail">
-      <g id="railtabs">
-        <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
-        <rect x="775" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
-        <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Editor</text>
-        <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Text</text>
-        <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
-        <text x="964" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
-      </g>
+    <rect x="680" y="48" width="1" height="672" fill="#000" fill-opacity="0.1"/>
 
-      <!-- Layer list header: the count is the model's, not a guess. -->
-      <g id="layers-header">
-        <text x="698" y="123" font-size="13" class="sb" fill="#6D6D72">Text Layers</text>
-        <text x="1002" y="123" font-size="11" class="mono" text-anchor="end" fill="#6D6D72">4 layers</text>
-      </g>
+    <!-- Rail tab bar -->
+    <g id="railtabs">
+      <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
+      <text x="737" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Editor</text>
+      <rect x="775" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
+      <text x="812" y="82.5" font-size="13" class="sb" fill="#FFFFFF" text-anchor="middle">Text</text>
+      <text x="888" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Frames</text>
+      <text x="964" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Masks</text>
+    </g>
 
-      <!-- Layer 1 — selected and expanded, TEXT &amp; SIZE open (a card
-           opens with its text showing; the other sections start shut). -->
-      <g id="layer-1">
-        <rect x="696" y="137" width="308" height="357" rx="12" fill="#FFFFFF"/>
-        <rect x="696" y="137" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <rect x="696" y="137" width="308" height="38" rx="12" fill="#C36A00" fill-opacity="0.06"/>
-        <rect x="696.5" y="137.5" width="307" height="37" rx="11.5" fill="none" stroke="#C36A00" stroke-opacity="0.55"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="151" width="10" height="1.6" rx="0.8"/><rect x="706" y="155.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="159.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 156c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="156" r="2.1" fill="#3A3A3C"/></g>
-        <text x="750" y="160.5" font-size="13" class="sb" fill="#000000">LetsLapse</text>
-        <g data-symbol="wand.and.stars" stroke="#C36A00" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 161 L933 153 M931.4 151.2 L934.8 154.6"/></g>
-        <g data-symbol="circle.dashed" fill="none" stroke="#8A8A8E" stroke-width="1.3"><ellipse cx="952" cy="156" rx="6.2" ry="4"/><ellipse cx="952" cy="156" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <rect x="969" y="146" width="20" height="20" rx="5" fill="#F2F2F7"/>
-        <path d="M976 152 L981 156 L976 160" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right" transform="rotate(90 979 156)"/>
-        <line x1="696" y1="185" x2="1004" y2="185" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 193 L712 197 L708 201" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" transform="rotate(90 711 197)"/>
-        <text x="720" y="201" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">TEXT &amp; SIZE</text>
-        <rect x="708.5" y="208.5" width="283" height="24" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.22"/>
-        <text x="717" y="225" font-size="14" fill="#000000">LetsLapse</text>
-        <!-- Free vs Box: the mode is what decides whether there is a
-             bounding box to fit type into at all. -->
-        <text x="708" y="258" font-size="12" class="sb" fill="#6D6D72">Mode</text>
-        <rect x="744" y="245" width="86" height="26" rx="13" fill="#F2F2F7"/>
-        <rect x="746" y="247" width="42" height="22" rx="11" fill="#C36A00"/>
-        <text x="767" y="262" font-size="11.5" class="sb" text-anchor="middle" fill="#FFFFFF">Free</text>
-        <text x="808" y="262" font-size="11.5" class="sb" text-anchor="middle" fill="#C36A00">Box</text>
-        <text x="1002" y="258" font-size="10.5" text-anchor="end" fill="#8A8A8E">Flows from the anchor</text>
-        <!-- Size is a fraction of the frame's LONG edge; the readout is
-             px of the DELIVERED file, never of the capped preview. -->
-        <text x="708" y="291" font-size="12" class="sb" fill="#6D6D72">Size</text>
-        <rect x="744" y="289" width="186" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="744" y="289" width="121" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="865" cy="291" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="1002" y="295" font-size="12" class="sb mono" text-anchor="end" fill="#C36A00">585 px</text>
-        <!-- Angle: this layer's own turn about its anchor — the shared
-             RotationSlider (App/RotationSlider.swift) in its inline shape,
-             ±10°, resting at centre, "0°" in secondary until it moves. A
-             layer that was on the project when the picture was levelled
-             carries the project's angle here; one added afterwards reads 0. -->
-        <text x="708" y="320" font-size="12" class="sb" fill="#6D6D72">Angle</text>
-        <rect x="744" y="318" width="186" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
-        <rect x="744" y="318" width="93" height="4" rx="2" fill="#C36A00"/>
-        <circle cx="837" cy="320" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
-        <text x="1002" y="324" font-size="12" class="sb mono" text-anchor="end" fill="#6D6D72">0°</text>
-        <line x1="696" y1="342" x2="1004" y2="342" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 350 L712 354 L708 358" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="720" y="358" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">TYPE</text>
-        <line x1="696" y1="375" x2="1004" y2="375" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 383 L712 387 L708 391" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="720" y="391" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">INTELLIGENT PLACEMENT</text>
-        <line x1="696" y1="408" x2="1004" y2="408" stroke="#000" stroke-opacity="0.07"/>
-        <path d="M708 416 L712 420 L708 424" stroke="#8A8A8E" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-        <text x="720" y="424" font-size="11" class="sb" letter-spacing="0.5" fill="#6D6D72">ANIMATION</text>
-        <line x1="696" y1="441" x2="1004" y2="441" stroke="#000" stroke-opacity="0.07"/>
-        <rect x="708" y="449" width="284" height="36" rx="9" fill="#FF3B30" fill-opacity="0.08"/>
-        <path d="M772 457.5 H783 M774.5 457.5 V426.5 H780.5 V428.5 M773.4 457.5 L774.1 468 H781 L781.7 457.5" stroke="#FF3B30" stroke-width="1.3" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="trash"/>
-        <text x="792" y="472" font-size="13.5" class="sb" fill="#FF3B30">Remove Text</text>
-      </g>
+    <g id="rail" clip-path="url(#rail)">
+      <text x="698" y="123" font-size="13" class="sb" fill="#6D6D72">Text Layers</text>
+      <text x="1002" y="123" font-size="11" class="mono" fill="#6D6D72" text-anchor="end">4 layers</text>
 
-      <!-- Layers 2–4, collapsed. Row 2 is a BOX layer with a slide reveal
-           and onion skin ON (amber) — onion is disabled without an
-           animation, which is why rows 3 and 4 show it greyed. Row 3 is
-           hidden: the eye is struck through and the title greys, and the
-           compositor skips it in the preview AND the export. -->
-      <g id="layer-2">
-        <rect x="696" y="507" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="521" width="10" height="1.6" rx="0.8"/><rect x="706" y="525.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="529.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 526c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="526" r="2.1" fill="#3A3A3C"/></g>
-        <text x="750" y="530.5" font-size="13" class="sb" fill="#000000">River Sunset to Dusk</text>
-        <g data-symbol="wand.and.stars" stroke="#C36A00" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 531 L933 523 M931.4 521.2 L934.8 524.6"/></g>
-        <rect x="943" y="517" width="18" height="18" rx="5" fill="#FFB340"/>
-        <g data-symbol="circle.dashed" fill="none" stroke="#FFFFFF" stroke-width="1.3"><ellipse cx="952" cy="526" rx="6.2" ry="4"/><ellipse cx="952" cy="526" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <path d="M976 522 L981 526 L976 530" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
+      <!-- Card 1: selected, expanded. -->
+      <rect x="696" y="136" width="308" height="640" rx="12" fill="#FFFFFF"/>
+      <rect x="696.5" y="136.5" width="307" height="639" rx="12" fill="none" stroke="#C36A00" stroke-opacity="0.55"/>
+      <g id="row-1">
+        <rect x="696" y="136" width="308" height="38" rx="12" fill="#C36A00" fill-opacity="0.06"/>
+        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="709" y="151" width="10" height="1.6"/><rect x="709" y="155" width="10" height="1.6"/><rect x="709" y="159" width="10" height="1.6"/></g>
+        <text x="732" y="159" font-size="12" fill="#3A3A3C" data-symbol="eye">◉</text>
+        <text x="750" y="160" font-size="13" class="sb" fill="#000">Intro top<tspan font-weight="400" fill-opacity="0.5"> · Don't you thi…</tspan></text>
+        <text x="931" y="159" font-size="11" fill="#C36A00" text-anchor="middle" data-symbol="wand.and.stars">✦</text>
+        <text x="953" y="159.5" font-size="12" fill="#8A8A8E" text-anchor="middle" data-symbol="circle.dashed">◌</text>
+        <rect x="974" y="145" width="20" height="20" rx="5" fill="#F2F2F7"/>
+        <text x="984" y="159" font-size="11" fill="#8A8A8E" text-anchor="middle" data-symbol="chevron.right">⌄</text>
       </g>
-      <g id="layer-3">
-        <rect x="696" y="555" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="569" width="10" height="1.6" rx="0.8"/><rect x="706" y="573.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="577.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye.slash" fill="none" stroke="#B5B5BA" stroke-width="1.3"><path d="M726 574c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="574" r="2.1" fill="#B5B5BA"/><path d="M727 579 L741 569"/></g>
-        <text x="750" y="578.5" font-size="13" class="sb" fill="#9A9A9E">Shot on iPhone 16 Pro</text>
-        <g data-symbol="wand.and.stars" stroke="#C7C7CC" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 579 L933 571 M931.4 569.2 L934.8 572.6"/></g>
-        <g data-symbol="circle.dashed" fill="none" stroke="#DCDCE0" stroke-width="1.3"><ellipse cx="952" cy="574" rx="6.2" ry="4"/><ellipse cx="952" cy="574" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <path d="M976 570 L981 574 L976 578" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
-      </g>
-      <g id="layer-4">
-        <rect x="696" y="603" width="308" height="38" rx="12" fill="#FFFFFF"/>
-        <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="706" y="617" width="10" height="1.6" rx="0.8"/><rect x="706" y="621.2" width="10" height="1.6" rx="0.8"/><rect x="706" y="625.4" width="10" height="1.6" rx="0.8"/></g>
-        <g data-symbol="eye" fill="none" stroke="#3A3A3C" stroke-width="1.3"><path d="M726 622c2.4-3 5-4.8 8-4.8s5.6 1.8 8 4.8c-2.4 3-5 4.8-8 4.8s-5.6-1.8-8-4.8z"/><circle cx="734" cy="622" r="2.1" fill="#3A3A3C"/></g>
-        <text x="750" y="626.5" font-size="13" class="sb" fill="#000000">12 Aug 2026 · 55 min</text>
-        <g data-symbol="wand.and.stars" stroke="#C7C7CC" stroke-width="1.4" fill="none" stroke-linecap="round"><path d="M925 627 L933 619 M931.4 617.2 L934.8 620.6"/></g>
-        <g data-symbol="circle.dashed" fill="none" stroke="#DCDCE0" stroke-width="1.3"><ellipse cx="952" cy="622" rx="6.2" ry="4"/><ellipse cx="952" cy="622" rx="3.4" ry="2.1" stroke-opacity="0.75"/></g>
-        <path d="M976 618 L981 622 L976 626" stroke="#8A8A8E" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.right"/>
-      </g>
+      <rect x="696" y="174" width="308" height="1" fill="#000" fill-opacity="0.07"/>
 
-      <g id="add-text">
-        <rect x="696" y="651" width="308" height="44" rx="12" fill="#FFFFFF"/>
-        <path d="M819 665 V652 M811 673 H827" stroke="#C36A00" stroke-width="1.7" stroke-linecap="round" data-symbol="plus"/>
-        <text x="838" y="678" font-size="15" class="sb" fill="#C36A00">Add Text</text>
+      <!-- TEXT -->
+      <text x="708" y="196" class="sec"><tspan font-size="9">▾</tspan> TEXT</text>
+      <rect x="708.5" y="206.5" width="283" height="29" rx="6" fill="#FFFFFF" stroke="#000" stroke-opacity="0.22"/>
+      <text x="717" y="226" font-size="14" fill="#1C1C1E">Don't you think</text>
+      <text x="708" y="256" font-size="12" class="sb" fill="#6D6D72">Mode</text>
+      <rect x="752" y="239" width="86" height="26" rx="13" fill="#F2F2F7"/>
+      <rect x="754" y="241" width="42" height="22" rx="11" fill="#C36A00"/>
+      <text x="775" y="256" font-size="11.5" class="sb" fill="#FFFFFF" text-anchor="middle">Free</text>
+      <text x="816" y="256" font-size="11.5" class="sb" fill="#C36A00" text-anchor="middle">Box</text>
+      <text x="992" y="256" font-size="10.5" fill="#8A8A8E" text-anchor="end">Flows from the anchor</text>
+      <text x="708" y="285" font-size="12" class="sb" fill="#6D6D72">Size</text>
+      <rect x="752" y="279" width="180" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/><rect x="752" y="279" width="40" height="4" rx="2" fill="#C36A00"/>
+      <circle cx="792" cy="281" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+      <text x="992" y="285" font-size="12" class="sb mono" fill="#C36A00" text-anchor="end">226 px</text>
+      <text x="708" y="313" font-size="12" class="sb" fill="#6D6D72">Angle</text>
+      <rect x="752" y="307" width="180" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/><rect x="752" y="307" width="90" height="4" rx="2" fill="#C36A00"/>
+      <circle cx="842" cy="309" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+      <text x="992" y="313" font-size="12" class="sb mono" fill="#6D6D72" text-anchor="end">0°</text>
+      <rect x="696" y="326" width="308" height="1" fill="#000" fill-opacity="0.07"/>
+
+      <!-- TYPE -->
+      <text x="708" y="348" class="sec"><tspan font-size="9">▾</tspan> TYPE</text>
+      <rect x="708" y="358" width="178" height="26" rx="7" fill="#F2F2F7"/>
+      <text x="717" y="375" font-size="12.5" fill="#1C1C1E">SF Pro</text>
+      <text x="878" y="375" font-size="9" fill="#8A8A8E" text-anchor="end" data-symbol="chevron.up.chevron.down">⌃⌄</text>
+      <rect x="893" y="358" width="26" height="26" rx="7" fill="#C36A00"/><text x="906" y="375.5" font-size="12.5" font-weight="800" fill="#FFFFFF" text-anchor="middle">B</text>
+      <rect x="926" y="358" width="26" height="26" rx="7" fill="#F2F2F7"/><text x="939" y="375.5" font-size="12.5" font-style="italic" fill="#1C1C1E" text-anchor="middle">I</text>
+      <rect x="959" y="358" width="26" height="26" rx="7" fill="#F2F2F7"/><text x="972" y="375.5" font-size="12.5" text-decoration="underline" fill="#1C1C1E" text-anchor="middle">U</text>
+      <rect x="708" y="393" width="26" height="26" rx="7" fill="#F2F2F7"/><text x="721" y="410" font-size="12" fill="#1C1C1E" text-anchor="middle" data-symbol="text.alignleft">≡</text>
+      <rect x="741" y="393" width="26" height="26" rx="7" fill="#C36A00"/><text x="754" y="410" font-size="12" fill="#FFFFFF" text-anchor="middle" data-symbol="text.aligncenter">☰</text>
+      <rect x="774" y="393" width="26" height="26" rx="7" fill="#F2F2F7"/><text x="787" y="410" font-size="12" fill="#1C1C1E" text-anchor="middle" data-symbol="text.alignright">≡</text>
+      <g id="swatches">
+        <circle cx="822" cy="406" r="8" fill="#FFFFFF" stroke="#C36A00" stroke-width="1.5"/><circle cx="822" cy="406" r="9.5" fill="none" stroke="#FFFFFF" stroke-width="2"/><circle cx="822" cy="406" r="11" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+        <circle cx="844" cy="406" r="8" fill="#1C1C1E"/><circle cx="866" cy="406" r="8" fill="#C36A00"/><circle cx="888" cy="406" r="8" fill="#FFB340"/><circle cx="910" cy="406" r="8" fill="#F3E37C"/><circle cx="932" cy="406" r="8" fill="#3A3A3C"/>
       </g>
-      <text x="698" y="712" font-size="11.5" fill="#6D6D72">Drag the text on the preview to place it. Where it rests</text>
-      <text x="698" y="726" font-size="11.5" fill="#6D6D72">is where every animation ends. Drag a layer by its grip</text>
-      <text x="698" y="740" font-size="11.5" fill="#6D6D72">to reorder — the top layer sits in front.</text>
+      <rect x="947" y="393" width="45" height="26" rx="8" fill="#F2F2F7"/><text x="969.5" y="410" font-size="11.5" class="sb" fill="#C36A00" text-anchor="middle">More…</text>
+      <rect x="696" y="430" width="308" height="1" fill="#000" fill-opacity="0.07"/>
+
+      <!-- INTELLIGENT PLACEMENT (collapsed; unchanged since 2026-08-31) -->
+      <text x="708" y="452" class="sec"><tspan font-size="9">▸</tspan> INTELLIGENT PLACEMENT</text>
+      <rect x="696" y="464" width="308" height="1" fill="#000" fill-opacity="0.07"/>
+
+      <!-- REVEAL IN -->
+      <text x="708" y="486" class="sec"><tspan font-size="9">▾</tspan> REVEAL IN</text>
+      <text x="992" y="486" font-size="10.5" class="mono" fill="#8A8A8E" text-anchor="end">0:05:45 → 0:14:24 · 8:38</text>
+      <rect x="708" y="496" width="284" height="26" rx="13" fill="#F2F2F7"/>
+      <text x="756" y="513" font-size="11.5" class="sb" fill="#C36A00" text-anchor="middle">Element</text>
+      <text x="850" y="513" font-size="11.5" class="sb" fill="#C36A00" text-anchor="middle">Word</text>
+      <rect x="898" y="498" width="92" height="22" rx="11" fill="#C36A00"/>
+      <text x="944" y="513" font-size="11.5" class="sb" fill="#FFFFFF" text-anchor="middle">Character</text>
+      <g id="chips" font-size="11.5" class="sb">
+        <rect x="708" y="530" width="44" height="24" rx="12" fill="#F2F2F7"/><text x="730" y="546" fill="#1C1C1E" text-anchor="middle">Fade</text>
+        <rect x="757" y="530" width="46" height="24" rx="12" fill="#F2F2F7"/><text x="780" y="546" fill="#1C1C1E" text-anchor="middle">Slide</text>
+        <rect x="808" y="530" width="60" height="24" rx="12" fill="#C36A00"/><text x="838" y="546" fill="#FFFFFF" text-anchor="middle">Bounce</text>
+        <rect x="873" y="530" width="40" height="24" rx="12" fill="#F2F2F7"/><text x="893" y="546" fill="#1C1C1E" text-anchor="middle">Pop</text>
+        <rect x="918" y="530" width="40" height="24" rx="12" fill="#F2F2F7"/><text x="938" y="546" fill="#1C1C1E" text-anchor="middle">Blur</text>
+        <rect x="708" y="559" width="44" height="24" rx="12" fill="#F2F2F7"/><text x="730" y="575" fill="#1C1C1E" text-anchor="middle">Wipe</text>
+      </g>
+      <text x="708" y="599" font-size="12" class="sb" fill="#6D6D72">Stagger</text>
+      <rect x="768" y="593" width="120" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/><rect x="768" y="593" width="72" height="4" rx="2" fill="#C36A00"/>
+      <circle cx="840" cy="595" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+      <text x="992" y="599" font-size="10.5" fill="#8A8A8E" text-anchor="end">overlapping</text>
+      <rect x="708" y="610" width="137" height="40" rx="10" fill="#F2F2F7"/>
+      <text x="776.5" y="627" font-size="12.5" class="sb" fill="#C36A00" text-anchor="middle">Set Start</text>
+      <text x="776.5" y="641" font-size="10.5" class="mono" fill="#6D6D72" text-anchor="middle">0:05:45</text>
+      <rect x="855" y="610" width="137" height="40" rx="10" fill="#F2F2F7"/>
+      <text x="923.5" y="627" font-size="12.5" class="sb" fill="#C36A00" text-anchor="middle">Set End</text>
+      <text x="923.5" y="641" font-size="10.5" class="mono" fill="#6D6D72" text-anchor="middle">0:14:24</text>
+      <!-- Starts: row 1 is the root of the chain, so After layer has no candidate and is dimmed. -->
+      <text x="708" y="677" font-size="12" class="sb" fill="#6D6D72">Starts</text>
+      <rect x="752" y="660" width="152" height="26" rx="13" fill="#F2F2F7"/>
+      <rect x="754" y="662" width="62" height="22" rx="11" fill="#C36A00"/>
+      <text x="785" y="677" font-size="11.5" class="sb" fill="#FFFFFF" text-anchor="middle">At time</text>
+      <text x="859" y="677" font-size="11.5" class="sb" fill="#C36A00" fill-opacity="0.45" text-anchor="middle">After layer</text>
+      <rect x="696" y="698" width="308" height="1" fill="#000" fill-opacity="0.07"/>
+      <text x="708" y="719" class="sec"><tspan font-size="9">▸</tspan> REVEAL OUT</text>
+      <rect x="962" y="711" width="30" height="16" rx="8" fill="#C36A00"/><circle cx="984" cy="719" r="7" fill="#FFFFFF"/>
     </g>
   </g>
-
-  <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
-  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Text tab · 1000×700 pt window</text>
-  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (textTab) + App/Overlay/OverlayEditingPanel.swift — Editor, Frames and Masks rail pages in photo-viewer.svg / photo-viewer.frames.svg / photo-viewer.masks.svg</text>
 </svg>
