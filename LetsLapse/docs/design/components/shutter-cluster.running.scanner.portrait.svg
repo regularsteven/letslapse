@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 -50 180 100" width="180" height="100" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · scanner run · portrait</title>
+  <desc>A Scanner run: stop square inside a ring that fills with POSES BANKED rather than elapsed time (12 of 36 here), every toggle hidden, and the manual pose shutter — black camera.fill on amber — in slot 4 (scannerManualCaptureButton). Slot 3 stays empty on purpose (leadingControl).</desc>
+<!-- LetsLapse design component · shutter cluster · portrait.
+     Coordinate contract: origin (0,0) is the CENTRE of the shutter ring; viewBox -90 -50 180 100, 1 unit = 1 pt.
+     Place from a screen mirror with
+       <image href="../components/shutter-cluster.<state>.portrait.svg" x="cx-90" y="cy-50" width="180" height="100"/>
+     where (cx,cy) is the ring centre on that screen. Slots (portrait offsets, ≈9 pt clear of the ring):
+     1 grid (-66,-26) · 2 delay (+66,-26) · 3 lock (-66,+26) · 4 steady (+66,+26).
+     The two orientations differ ONLY in these offsets. See components/README.md for the whole contract. -->
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+  <g id="shutter-cluster" data-state="running.scanner" data-orientation="portrait">
+    <g id="shutter" data-symbol="stop button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><path d="M0 -38 A38 38 0 0 1 32.9 19" fill="none" stroke="#FFB340" stroke-width="4" stroke-linecap="round"/><rect x="-16" y="-16" width="32" height="32" rx="8" fill="#FF3B30"/></g><g id="pose-shutter" data-symbol="camera.fill" transform="translate(66,26)"><circle cx="0" cy="0" r="22" fill="#FFB340"/><path d="M-8 -3 h4 l2 -3 h4 l2 3 h4 a2 2 0 0 1 2 2 v8 a2 2 0 0 1 -2 2 h-16 a2 2 0 0 1 -2 -2 v-8 a2 2 0 0 1 2 -2 z" fill="#000"/><circle cy="3" r="3" fill="#FFB340"/></g>
+  </g>
+</svg>

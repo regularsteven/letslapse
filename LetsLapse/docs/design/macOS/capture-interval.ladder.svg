@@ -58,30 +58,9 @@ Not drawn: the MODE and RUNG menus themselves (system menus — mirrored as note
     <!-- Recent capture thumbnail, lower-left of the rail -->
     <rect x="44" y="664" width="60" height="60" rx="12" fill="url(#thumb)"/>
 
-    <!-- Shutter -->
-    <circle cx="921" cy="314" r="38" fill="none" stroke="#B4B4B4" stroke-width="3"/>
-    <circle cx="921" cy="314" r="30" fill="#FF3B30"/>
-
-    <!-- Right rail accessories: steady, delay, grid, exposure lock -->
-    <g data-symbol="hand.raised">
-      <circle cx="921" cy="552" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
-      <path d="M914 556 V546 M918 555 V543 M922 555 V544 M926 556 V547 M914 556 c0 6 3 9 8 9 c5 0 8 -3 8 -9" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-    </g>
-    <g data-symbol="timer">
-      <circle cx="921" cy="602" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
-      <circle cx="921" cy="603" r="8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
-      <path d="M921 598 V603 L924.5 605.5 M918 592.5 H924" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-    </g>
-    <g data-symbol="grid">
-      <circle cx="921" cy="652" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
-      <circle cx="921" cy="652" r="8" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
-      <path d="M921 641 V663 M910 652 H932" stroke="#FFFFFF" stroke-width="1.8" stroke-linecap="round"/>
-    </g>
-    <g data-symbol="lock.open">
-      <circle cx="921" cy="702" r="22" fill="#2B2B2E" fill-opacity="0.9"/>
-      <rect x="915" y="701" width="12" height="9" rx="2" fill="none" stroke="#FFFFFF" stroke-width="1.8"/>
-      <path d="M918 701 V697 a3.5 3.5 0 0 1 7 0" stroke="#FFFFFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
-    </g>
+    <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.idle.landscape.svg,
+         not this file; placement = ring centre (894, 314) minus (80, 60). Contract: components/README.md -->
+    <image id="shutter-cluster" href="../components/shutter-cluster.idle.landscape.svg" x="814" y="254" width="160" height="120"/>
 
     <!-- ============ The light panel (LadderLightPanel, exposureIsAutomatic) ============ -->
     <g id="light-panel">

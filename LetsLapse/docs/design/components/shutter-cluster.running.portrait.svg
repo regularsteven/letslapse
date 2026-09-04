@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 -50 180 100" width="180" height="100" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · shoot running · portrait</title>
+  <desc>Any shoot under way (isCapturing: video, interval, live blend, photo burst): the disc becomes the stop square and ALL FOUR toggles hide — the slots stay reserved but empty, so the cluster's footprint never changes. Interval runs and Photo bursts show exactly this; Video and Scanner runs put run-time controls in the bottom slots, see running.video and running.scanner.</desc>
+<!-- LetsLapse design component · shutter cluster · portrait.
+     Coordinate contract: origin (0,0) is the CENTRE of the shutter ring; viewBox -90 -50 180 100, 1 unit = 1 pt.
+     Place from a screen mirror with
+       <image href="../components/shutter-cluster.<state>.portrait.svg" x="cx-90" y="cy-50" width="180" height="100"/>
+     where (cx,cy) is the ring centre on that screen. Slots (portrait offsets, ≈9 pt clear of the ring):
+     1 grid (-66,-26) · 2 delay (+66,-26) · 3 lock (-66,+26) · 4 steady (+66,+26).
+     The two orientations differ ONLY in these offsets. See components/README.md for the whole contract. -->
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+  <g id="shutter-cluster" data-state="running" data-orientation="portrait">
+    <g id="shutter" data-symbol="stop button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><rect x="-16" y="-16" width="32" height="32" rx="8" fill="#FF3B30"/></g>
+  </g>
+</svg>

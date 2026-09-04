@@ -4,7 +4,7 @@ SVG mirrors of every screen of the Swift app, one file per screen per orientatio
 
 These files are a **contract**, not decoration: whenever the app's UI and these SVGs disagree, one of them is wrong and the mismatch must be resolved as part of the work that caused it.
 
-Viewable directly in Finder (Quick Look), GitHub, VS Code, and any browser.
+Viewable directly in Finder (Quick Look), GitHub, VS Code, and any browser — except that shared **components** (see below) are referenced across files, and GitHub's file view shows an SVG as an image, which never loads references: open those mirrors in Quick Look or a browser.
 
 ---
 
@@ -73,6 +73,10 @@ docs/design/
 - Orientation suffix is `portrait` or `landscape`. Landscape files exist **only where the layout is bespoke** (today: the iOS capture screen's side-rail layout). Screens that merely reflow don't get a landscape file.
 - Variants (a screen's meaningfully different states) are part of the filename: `capture-interval.running.portrait.svg`, `project-detail.photo.portrait.svg`.
 - Each platform folder has an `INDEX.md`: one row per screen with the file, the Swift view(s) it mirrors, and a sync status (✅ Synced · ⚠️ Stale · 🟡 Planned).
+
+## Components (shared chrome)
+
+Chrome that several screens draw identically lives once in `components/` and is **referenced** from the screen mirrors with `<image href="../components/<name>.<state>.svg" …/>` — one file per state, placed by a documented coordinate contract. Today: the capture screen's **shutter cluster** (record/stop ring plus its four framing slots), referenced by every capture mirror on iOS and macOS. The contract, the per-viewer support table and the rendering caveat (`rsvg-convert` will not follow `../`; use Quick Look, `qlmanage -t`, or a browser) are in [components/README.md](components/README.md). When a piece of chrome appears on a third screen, make it a component rather than a third copy.
 
 ## Canvas & device conventions
 
@@ -145,6 +149,6 @@ What they deliberately don't promise:
 
 1. Copy the nearest existing SVG in the platform folder as a template (device frame + caption strip).
 2. Name it `<screen>[.<variant>].<orientation>.svg`; set `<title>`, `<desc>` (mirrored Swift views), caption text.
-3. Draw at 1 unit = 1 pt using the tokens above; tag icon stand-ins with `data-symbol`.
+3. Draw at 1 unit = 1 pt using the tokens above; tag icon stand-ins with `data-symbol`. Reference shared chrome from `components/` instead of redrawing it.
 4. Add a row to the platform `INDEX.md` with status.
 5. If the screen exists in code already, verify against a simulator screenshot (launch hooks above).

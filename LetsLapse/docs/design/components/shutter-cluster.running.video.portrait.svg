@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 -50 180 100" width="180" height="100" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · video recording · portrait</title>
+  <desc>A Video take: stop square, the four toggles hidden, and the run-time pair in the bottom slots — slot 3 the speed-burst / marker trigger (leadingControl: the ramp rate in amber on graphite; black on amber while a burst is live), slot 4 the burst count (trailingControl: rampIntervalCount, amber once above zero).</desc>
+<!-- LetsLapse design component · shutter cluster · portrait.
+     Coordinate contract: origin (0,0) is the CENTRE of the shutter ring; viewBox -90 -50 180 100, 1 unit = 1 pt.
+     Place from a screen mirror with
+       <image href="../components/shutter-cluster.<state>.portrait.svg" x="cx-90" y="cy-50" width="180" height="100"/>
+     where (cx,cy) is the ring centre on that screen. Slots (portrait offsets, ≈9 pt clear of the ring):
+     1 grid (-66,-26) · 2 delay (+66,-26) · 3 lock (-66,+26) · 4 steady (+66,+26).
+     The two orientations differ ONLY in these offsets. See components/README.md for the whole contract. -->
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+  <g id="shutter-cluster" data-state="running.video" data-orientation="portrait">
+    <g id="shutter" data-symbol="stop button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><rect x="-16" y="-16" width="32" height="32" rx="8" fill="#FF3B30"/></g><g id="burst-trigger" data-symbol="ramp trigger (rate label)" transform="translate(-66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><text y="4" font-size="12" class="b" fill="#FFB340" text-anchor="middle">120</text></g><g id="interval-count" transform="translate(66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><text y="5" font-size="14" class="b" fill="#FFB340" text-anchor="middle" font-family="ui-monospace,'SF Mono',Menlo,monospace">3</text></g>
+  </g>
+</svg>

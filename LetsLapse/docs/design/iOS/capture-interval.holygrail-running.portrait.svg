@@ -106,29 +106,9 @@
           </g>
           <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
         </g>
-        <g id="grid-toggle" data-symbol="grid.circle">
-          <circle cx="108" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <circle cx="108" cy="732" r="10" fill="none" stroke="#FFF" stroke-width="1.6"/>
-          <path d="M101.5 728.7 h13 M101.5 735.3 h13 M104.7 725.5 v13 M111.3 725.5 v13" stroke="#FFF" stroke-width="1.2"/>
-        </g>
-        <g id="exposure-lock" data-symbol="lock.open">
-          <circle cx="108" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <rect x="102" y="783" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/>
-          <path d="M105 783 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/>
-        </g>
-        <g id="shutter" data-symbol="stop button">
-          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
-          <rect x="180.5" y="742" width="32" height="32" rx="8" fill="#FF3B30"/>
-        </g>
-        <g id="delay-toggle" data-symbol="timer">
-          <circle cx="285" cy="732" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <circle cx="285" cy="733" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/>
-          <path d="M285 733 v-6 M282 723 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/>
-        </g>
-        <g id="steady-toggle" data-symbol="hand.raised">
-          <circle cx="285" cy="784" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <path d="M280 789 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/>
-        </g>
+        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.portrait.svg,
+             not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md -->
+        <image id="shutter-cluster" href="../components/shutter-cluster.running.portrait.svg" x="106.5" y="708" width="180" height="100"/>
       </g>
 
       <!-- hardware -->

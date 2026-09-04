@@ -1242,3 +1242,34 @@ and a travelling level carries them per moment). Owed:
 - **Loupe / 1:1 patch under a level** is levelled by turning a larger
   source patch about the window centre (`PhotoGrader.renderDetail`);
   verified on Mac only at fit scale — pixel-peep a levelled DNG on device.
+
+## Shutter cluster — code mirror of the 2026-09-04 design (iOS · iPadOS · macOS)
+
+Design side done first: `docs/design/components/shutter-cluster.*.svg` (contract in
+`docs/design/components/README.md`), referenced by every capture mirror. The app still
+draws the 2026-08 layout. The job:
+
+1. **One cluster view** — ring plus four 44 pt slots, offsets by orientation: portrait
+   (±66, ±26), landscape (±56, ±36), the Mac taking landscape — replacing portrait's
+   `leadingControl` / `trailingControl` columns in the shutter row and the landscape rail's
+   `landscapeExposureControl` column (`App/CaptureView.swift` ≈1585, ≈1674, ≈4604).
+2. **Pin the ring to the device**: 94 pt from the home-indicator edge on the centreline in
+   every orientation — notch-right landscape puts it on the LEFT edge, upside-down portrait at
+   the top (all four orientations are enabled). The rest of the chrome keeps reflowing. Rotate
+   the group about the ring or hold it and counter-rotate the glyphs (same picture); the
+   orientation feed already exists (`orientationDidChangeNotification` handler ≈752).
+   Decided 2026-09-04: the ring is what stays put; the four circles re-seat to the
+   orientation's offsets (Steven dropped the diamond that would have kept them fixed).
+3. **Padlock in every mode**: drop the `camera.metering.*` glyph swap in `exposureLockCircle`
+   (≈4393). Behaviour is unchanged (focus-only under the ramp); the accessibility label still
+   says which.
+4. **Hide all four toggles while `isCapturing`**, not just `camera.isRecording` (≈4337):
+   Interval runs and Photo bursts currently keep them on screen and live, and a mid-run lock tap
+   toggles exposure. Slots stay reserved: Video keeps the burst/marker trigger (slot 3) and the
+   count (slot 4); Scanner keeps the manual pose shutter (slot 4); Interval and Photo runs show
+   nothing there.
+5. **macOS** shares the landscape tree: widen the rail or let the cluster overhang the viewfinder
+   by 46 pt, as drawn at ring (894, 314) on the 960×720 sheet (landscape offsets).
+6. Verify with `LL_CAPTURE=1` + `LL_MODE` in both orientations, `LL_RECORDING=1`,
+   `LL_SCANNER=settled`, `LL_HOLYGRAIL=armed` (padlock, not metering), then flip the INDEX rows
+   to synced.

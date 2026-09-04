@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-80 -60 160 120" width="160" height="120" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · idle · landscape</title>
+  <desc>Mirrors App/CaptureView.swift shutterButton + gridToggleCircle · shutterDelayCircle · exposureLockCircle · steadyToggleCircle. Every mode, before a shoot: red record disc; four framing toggles off (white glyph on graphite). The lock keeps the padlock glyph in every mode, including Interval's Dynamic and Ladder modes where it locks focus only.</desc>
+<!-- LetsLapse design component · shutter cluster · landscape.
+     Coordinate contract: origin (0,0) is the CENTRE of the shutter ring; viewBox -80 -60 160 120, 1 unit = 1 pt.
+     Place from a screen mirror with
+       <image href="../components/shutter-cluster.<state>.landscape.svg" x="cx-80" y="cy-60" width="160" height="120"/>
+     where (cx,cy) is the ring centre on that screen. Slots (landscape offsets, ≈4.6 pt clear of the ring):
+     1 grid (-56,-36) · 2 delay (+56,-36) · 3 lock (-56,+36) · 4 steady (+56,+36).
+     The two orientations differ ONLY in these offsets. See components/README.md for the whole contract. -->
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+  <g id="shutter-cluster" data-state="idle" data-orientation="landscape">
+    <g id="shutter" data-symbol="record button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><circle r="30" fill="#FF3B30"/></g><g id="grid-toggle" data-symbol="grid.circle" transform="translate(-56,-36)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle r="10" fill="none" stroke="#FFF" stroke-width="1.6"/><path d="M-6.5 -3.3 h13 M-6.5 3.3 h13 M-3.3 -6.5 v13 M3.3 -6.5 v13" stroke="#FFF" stroke-width="1.2"/></g><g id="delay-toggle" data-symbol="timer" transform="translate(56,-36)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle cy="1" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/><path d="M0 1 v-6 M-3 -9 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/></g><g id="exposure-lock" data-symbol="lock.open" transform="translate(-56,36)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><rect x="-6" y="-1" width="12" height="9" rx="2" fill="none" stroke="#FFF" stroke-width="1.8"/><path d="M-3 -1 v-4 a3.5 3.5 0 0 1 7 -1" fill="none" stroke="#FFF" stroke-width="1.8"/></g><g id="steady-toggle" data-symbol="hand.raised" transform="translate(56,36)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><path d="M-5 5 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g>
+  </g>
+</svg>

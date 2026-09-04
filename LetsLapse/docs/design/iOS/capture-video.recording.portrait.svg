@@ -81,18 +81,9 @@
           </g>
           <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
         </g>
-        <g id="burst-trigger" data-symbol="ramp trigger (rate label)">
-          <circle cx="108" cy="758" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <text x="108" y="762" font-size="12" class="b" fill="#FFB340" text-anchor="middle">120</text>
-        </g>
-        <g id="shutter" data-symbol="stop button">
-          <circle cx="196.5" cy="758" r="38" fill="none" stroke="#FFF" stroke-width="4"/>
-          <rect x="180.5" y="742" width="32" height="32" rx="8" fill="#FF3B30"/>
-        </g>
-        <g id="interval-count">
-          <circle cx="285" cy="758" r="22" fill="#2B2B2E" opacity="0.9"/>
-          <text x="285" y="763" font-size="14" class="b m" fill="#FFB340" text-anchor="middle">3</text>
-        </g>
+        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.video.portrait.svg,
+             not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md -->
+        <image id="shutter-cluster" href="../components/shutter-cluster.running.video.portrait.svg" x="106.5" y="708" width="180" height="100"/>
       </g>
 
       <!-- hardware -->
