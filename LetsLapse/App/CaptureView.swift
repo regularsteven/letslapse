@@ -117,11 +117,12 @@ struct CaptureView: View {
     @ObservedObject private var ladders = LightLadderStore.shared
     @State private var showLadderPicker = false
     @State private var showLadderManager = false
-    /// The light panel: open by default when Ladder is armed, remembered for
-    /// the app launch once closed, re-opened by a rung change while armed
-    /// (decision D10). While running the toast and readout carry it instead.
-    @State private var ladderPanelOpen = !CaptureView.ladderPanelDismissedThisLaunch
-    private static var ladderPanelDismissedThisLaunch = false
+    /// The light panel: COLLAPSED by default when Ladder is armed (design
+    /// 2026-09-04 — the rung pill is the armed screen, top-leading in both
+    /// orientations), opened by a tap on the pill or by itself on a rung
+    /// change while armed (decision D10), which is the one moment it earns
+    /// the space. While running the toast and readout carry it instead.
+    @State private var ladderPanelOpen = false
     /// The armed panel's own selector — the same 3-window average and ±0.5
     /// switching band the run uses, so the rung it names is the rung the
     /// shoot would open on, not a flicker of the preview meter.
@@ -406,6 +407,8 @@ struct CaptureView: View {
                         portraitLayout(in: geometry.size)
                     }
                 }
+
+                shutterClusterLayer(in: geometry)
             }
             // The preview layer fills this stack exactly (it is an unsized ZStack
             // child), so a point named here reaches the layer's own coordinates
@@ -1576,74 +1579,46 @@ struct CaptureView: View {
             exposurePanel
             #endif
 
-            // Shutter row, Apple-camera order: recent capture · accessories ·
-            // shutter · accessories. A 60 pt tile plus two 44 pt circles a side
-            // doesn't fit either side of a centered shutter on a 393 pt screen,
-            // so the accessory pairs stack into single columns here (they are
-            // already single buttons in the landscape rail). The trailing clear
-            // block mirrors the tile so the shutter stays centered.
+            // Shutter row. The shutter cluster itself — ring plus its four
+            // slots — is not laid out here: `shutterClusterLayer` pins it to
+            // the device so rotation never moves it. This row only reserves
+            // the cluster's height and keeps the recent-capture tile on the
+            // ring's centreline, 16 pt in.
             HStack(spacing: 0) {
                 recentCaptureButton
                     .frame(width: Self.recentTileSize)
-                Spacer(minLength: 10)
-                leadingControl
-                    .frame(width: 44)
                 Spacer()
-                shutterButton
-                Spacer()
-                trailingControl
-                    .frame(width: 44)
-                Spacer(minLength: 10)
-                Color.clear
-                    .frame(width: Self.recentTileSize, height: 1)
             }
+            .frame(height: Self.shutterRowHeight)
             .padding(.horizontal, 16)
         }
     }
 
     // MARK: - Landscape (side rails: thumbs on edges, image untouched)
 
+    /// Which long edge the pinned shutter cluster sits on in landscape: the
+    /// home-indicator edge, which is the LEADING edge when the interface is
+    /// `.landscapeLeft` (phone turned clockwise, notch on the right). The two
+    /// rails swap sides with it, the way the system camera's do, so the
+    /// close/format/tile rail never lands under the cluster. Never on the
+    /// Mac: no edge to pin to, the cluster keeps the trailing side.
+    private var shutterClusterLeads: Bool {
+        #if os(iOS)
+        _ = orientation
+        return currentInterfaceOrientation() == .landscapeLeft
+        #else
+        return false
+        #endif
+    }
+
     private func landscapeLayout(in size: CGSize) -> some View {
-        HStack(spacing: 0) {
-            // Left rail: status + format
-            VStack {
-                if camera.isRecording {
-                    recordingPill
-                } else {
-                    CameraChromeButton(systemImage: "xmark") {
-                        closeCapture()
-                    }
-                    scheduleShootButton
-                        .padding(.top, 10)
-                }
-                Spacer()
-                VStack(spacing: 8) {
-                    formatPill
-                    headroomChip(compact: true)
-                }
-                Spacer()
-                if !isCapturing {
-                    zoomChips
-                }
-                // The rail is 108pt wide, far too narrow for the chip's
-                // horizontal form, so landscape gets it stacked instead of
-                // squeezed. Same content, same tokens.
-                remoteLinkChip
-                    .fixedSize()
-                    .scaleEffect(0.85)
-                    .padding(.top, 10)
-                // Same narrow-rail treatment; the compact form carries the
-                // heat word, the full sentence lives in portrait.
-                thermalWarningChip(compact: true)
-                    .fixedSize()
-                    .scaleEffect(0.85)
-                    .padding(.top, 6)
-                // Lower-left corner, same as portrait.
-                recentCaptureButton
-                    .padding(.top, 14)
+        let clusterLeads = shutterClusterLeads
+        return HStack(spacing: 0) {
+            if clusterLeads {
+                landscapeModeRail
+            } else {
+                landscapeChromeRail(anchor: .leading)
             }
-            .padding(.vertical, 16)
-            .frame(width: 108)
 
             // Viewfinder with the estimate/interval chips in the safe corner
             viewfinder(in: size)
@@ -1671,35 +1646,102 @@ struct CaptureView: View {
                     .padding(10)
                 }
 
-            // Right rail: mode + shutter, exposure lock below (the burst/
-            // marker trigger takes that slot while recording).
-            VStack {
-                landscapeModeToggle
-
-                Spacer()
-                shutterButton
-                Spacer()
-
-                if scannerRunInProgress {
-                    // The rail's one accessory slot, given to the manual pose
-                    // shutter for the same reason the portrait row's is (see
-                    // `leadingControl`): during a scan the exposure control
-                    // below the shutter would toggle a lock the run holds.
-                    scannerManualCaptureButton
-                } else if camera.isRecording {
-                    leadingControl
-                } else {
-                    landscapeExposureControl
-                }
+            if clusterLeads {
+                landscapeChromeRail(anchor: .trailing)
+            } else {
+                landscapeModeRail
             }
-            .padding(.vertical, 16)
-            .frame(width: 118)
         }
         .overlay {
             if camera.isAuthorized == false {
                 authorizationMessage
             }
         }
+    }
+
+    /// The chrome rail: close (or the recording pill) and schedule, the format
+    /// pill and headroom chip, the lens chips, the remote and thermal chips,
+    /// the recent-capture tile. Normally the leading rail; it moves to the
+    /// trailing side when the cluster takes the leading edge.
+    ///
+    /// The pills and chips are ANCHORED to the rail's outer edge, not centred
+    /// (design 2026-09-04): the rail is 108 pt and a format string is often
+    /// wider, and a centred pill spilt off the screen — "3840×2160 · JPEG"
+    /// lost its first digit on every phone, iPad and Mac. Anchored 16 pt in
+    /// from the outer edge (the safe area's own inset sits outside this
+    /// stack) and aligned with each other, a wide pill overhangs the
+    /// viewfinder instead, which is allowed. The rail's other items keep
+    /// their centred seats.
+    private func landscapeChromeRail(anchor: HorizontalAlignment) -> some View {
+        VStack(alignment: anchor) {
+            // The centred seats are given the column's own width, not
+            // `maxWidth: .infinity`: the stack is as wide as its widest
+            // pill, and an infinite frame would centre them in THAT.
+            if camera.isRecording {
+                recordingPill
+                    .frame(width: Self.chromeRailWidth)
+            } else {
+                CameraChromeButton(systemImage: "xmark") {
+                    closeCapture()
+                }
+                .frame(width: Self.chromeRailWidth)
+                scheduleShootButton
+                    .padding(.top, 10)
+                    .frame(width: Self.chromeRailWidth)
+            }
+            Spacer()
+            VStack(alignment: anchor, spacing: 8) {
+                formatPill
+                headroomChip(compact: true)
+            }
+            .railAnchored(anchor)
+            Spacer()
+            if !isCapturing {
+                zoomChips
+                    .frame(width: Self.chromeRailWidth)
+            }
+            // Same edge, full size: the 0.85 scale it used to wear existed
+            // only because the rail was too narrow for it.
+            remoteLinkChip
+                .railAnchored(anchor)
+                .padding(.top, 10)
+            // The compact form carries the heat word, the full sentence
+            // lives in portrait.
+            thermalWarningChip(compact: true)
+                .railAnchored(anchor)
+                .padding(.top, 6)
+            // The rail's bottom corner, as portrait's lower-left.
+            recentCaptureButton
+                .padding(.top, 14)
+                .frame(width: Self.chromeRailWidth)
+        }
+        .padding(.vertical, 16)
+        // The stack is as wide as its widest pill; the column is 108 pt.
+        // Aligned by the anchor edge, the stack's overflow all goes inward —
+        // a plain `.frame(width:)` would centre it and push the pills (and
+        // everything else) outward, off the screen, which is exactly the
+        // clipping this rail is here to end.
+        .frame(width: Self.chromeRailWidth, alignment: Alignment(horizontal: anchor, vertical: .center))
+        // Over the viewfinder column, so an overhanging pill draws above the
+        // chrome in that corner rather than under it.
+        .zIndex(1)
+    }
+
+    /// The landscape chrome rail's column: what the viewfinder is laid out
+    /// against, whatever a pill inside it measures.
+    private static let chromeRailWidth: CGFloat = 108
+
+    /// The mode rail: the stacked PHOTO / INTERVAL / VIDEO labels. The shutter
+    /// cluster that used to hang under them is pinned to the device by
+    /// `shutterClusterLayer` now (its ring lands mid-height on this edge), so
+    /// the rail only keeps the column's width for the viewfinder's sake.
+    private var landscapeModeRail: some View {
+        VStack {
+            landscapeModeToggle
+            Spacer()
+        }
+        .padding(.vertical, 16)
+        .frame(width: 118)
     }
 
     /// Stacked upright mode labels for the rail — the words must stay readable
@@ -1845,11 +1887,10 @@ struct CaptureView: View {
                         .transition(.opacity)
                 }
                 #endif
-                // Portrait draws the armed light panel here, in the
-                // viewfinder's lower-left; landscape (every Mac window) puts
-                // the dial row in that corner, so the panel rides above the
-                // row inside `landscapeIntervalRow` instead.
-                ladderViewfinderOverlays(armedPanel: screenSize.width <= screenSize.height)
+                // The armed light panel (or its pill) rides the viewfinder's
+                // top-leading corner in both orientations — see
+                // `ladderViewfinderOverlays` for the two insets.
+                ladderViewfinderOverlays(portrait: screenSize.width <= screenSize.height)
             }
             .animation(.easeInOut(duration: 0.16), value: camera.isSwitchingLens)
             // Corner-to-corner interpolation, so a page being nudged reads as
@@ -2582,12 +2623,9 @@ struct CaptureView: View {
             }
         } else {
             VStack(alignment: .leading, spacing: 6) {
-                // Ladder's light panel sits above the dials here rather than
-                // over them: this corner is the dial row's in landscape.
-                // Capped like the recording readout, so a wide Mac window
-                // doesn't stretch its lines across the viewfinder.
-                ladderArmedPanel
-                    .frame(maxWidth: Self.landscapeReadoutMaxWidth, alignment: .leading)
+                // Ladder's light panel used to stack above the dials here;
+                // since 2026-09-04 it rides the viewfinder's top-leading
+                // corner in every orientation (`ladderViewfinderOverlays`).
                 intervalPickerRow
                     .padding(.horizontal, 12)
                     .padding(.vertical, 5)
@@ -3066,9 +3104,10 @@ struct CaptureView: View {
         }
     }
 
-    /// The light panel, or its pill, while Ladder is armed and idle. Portrait
-    /// lays it over the viewfinder's lower-left; landscape stacks it above
-    /// the dial row (`landscapeIntervalRow`), where that corner already is.
+    /// The light panel, or its pill, while Ladder is armed and idle. Both
+    /// orientations lay it over the viewfinder's top-leading corner
+    /// (`ladderViewfinderOverlays`): under the close/schedule row in portrait,
+    /// right of the rail's close/schedule buttons in landscape.
     @ViewBuilder
     private var ladderArmedPanel: some View {
         if ladderArmed, !isCapturing, camera.ladderState == nil, !selectedLadder.rungs.isEmpty {
@@ -3080,18 +3119,12 @@ struct CaptureView: View {
                         ladder: ladder, rungIndex: index, sceneEV: camera.previewSceneEV,
                         clampNote: ladderClampNote,
                         exposureIsAutomatic: Self.ladderStepsByHand,
-                        onClose: {
-                            ladderPanelOpen = false
-                            Self.ladderPanelDismissedThisLaunch = true
-                        })
+                        onClose: { ladderPanelOpen = false })
                 } else {
                     LadderRungPill(
                         name: ladder.rungs[index].name,
                         color: LadderPalette.color(rung: index, of: ladder.rungs.count),
-                        onOpen: {
-                            ladderPanelOpen = true
-                            Self.ladderPanelDismissedThisLaunch = false
-                        })
+                        onOpen: { ladderPanelOpen = true })
                 }
             }
             .transition(.opacity)
@@ -3099,15 +3132,20 @@ struct CaptureView: View {
     }
 
     /// The viewfinder's ladder overlays: the light panel (or its pill) while
-    /// armed — portrait only, see `ladderArmedPanel` — and the rail and the
-    /// toast while running.
+    /// armed, and the rail and the toast while running. The armed panel is
+    /// top-leading in both orientations (design 2026-09-04): 16 pt in, and in
+    /// portrait 4 pt under the top bar — 12 pt below its buttons — so the
+    /// close and schedule buttons stay clear; landscape's region begins at
+    /// the rail's edge, so 16 pt all round puts it right of those buttons.
+    /// Width-capped like the recording readout, so a wide Mac window doesn't
+    /// stretch the panel's lines across the viewfinder.
     @ViewBuilder
-    private func ladderViewfinderOverlays(armedPanel: Bool) -> some View {
-        if armedPanel {
-            ladderArmedPanel
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                .padding(16)
-        }
+    private func ladderViewfinderOverlays(portrait: Bool) -> some View {
+        ladderArmedPanel
+            .frame(maxWidth: Self.landscapeReadoutMaxWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .padding(.horizontal, 16)
+            .padding(.top, portrait ? 4 : 16)
         if let state = camera.ladderState {
             LadderRail(state: state)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -3170,7 +3208,7 @@ struct CaptureView: View {
         }
     }
 
-    /// `LL_LADDER=armed|closed|picker|running` arms the MODE dial on Ladder
+    /// `LL_LADDER=armed|open|picker|running` arms the MODE dial on Ladder
     /// and stages the state the simulator cannot reach on its own — it has no
     /// camera to meter, so the panel's scene EV and the running rail are
     /// fabricated here from the design's own numbers (Dusk, EV 5.2, 41 min in,
@@ -3195,10 +3233,14 @@ struct CaptureView: View {
             ladderPreviewSelector = selector
         }
         switch raw {
+        case "open":
+            ladderPanelOpen = true
         case "closed":
+            // The pre-2026-09-04 name for what is now the default; kept so
+            // older screenshot recipes still land on the pill.
             ladderPanelOpen = false
         case "picker":
-            ladderPanelOpen = true
+            ladderPanelOpen = false
             Task { @MainActor in
                 try? await Task.sleep(nanoseconds: 400_000_000)
                 showLadderPicker = true
@@ -3234,7 +3276,8 @@ struct CaptureView: View {
                 flashLadderToast(down: true)
             }
         default:
-            ladderPanelOpen = true
+            // `armed`: the rung pill, collapsed — the default since 2026-09-04.
+            ladderPanelOpen = false
         }
     }
 
@@ -3887,6 +3930,10 @@ struct CaptureView: View {
 
     /// Side of the lower-left recent-capture tile.
     private static let recentTileSize: CGFloat = 60
+    /// The portrait shutter row's reserved height: the cluster's box less its
+    /// 2 pt margins, so the tile's centre and the pinned ring's agree (758 pt
+    /// on a 393×852 screen, with the row's 12 pt bottom padding).
+    private static let shutterRowHeight: CGFloat = 96
 
     /// The newest project, whatever its kind, as a tappable tile — the camera's
     /// way out to everything already shot, the way Apple's camera does it. It
@@ -4316,56 +4363,167 @@ struct CaptureView: View {
     }
 
     /// A Scanner run is under way — the shutter row's accessories step aside
-    /// for it (see `leadingControl`).
+    /// for it (see `clusterSlot`).
     private var scannerRunInProgress: Bool { camera.scannerState != nil }
 
-    /// Left of the shutter: the burst/marker trigger while recording,
-    /// the exposure lock otherwise.
-    @ViewBuilder
-    private var leadingControl: some View {
-        if scannerRunInProgress {
-            // **Nothing, on purpose.** All four accessories answer questions a
-            // running scan has already settled: `startScanner` locks exposure,
-            // focus and white balance for the whole set (so the AE/AF lock would
-            // toggle a lock that is already held), the steadiness gate is wired
-            // into the fire path itself, and a 2 s self-timer means nothing to a
-            // shutter the scene is pressing. The grid goes with them: it belongs
-            // to framing, which happens before the run. What is left is a stop
-            // button and one manual shutter — see `trailingControl`.
-            Color.clear.frame(width: 44, height: 44)
-        } else if camera.isRecording {
-            Button {
-                camera.triggerLiveMoment()
-            } label: {
-                Group {
-                    switch camera.activeSequenceMode ?? sequenceMode {
-                    case .ramp:
-                        Text("\(camera.selectedRampFrameRate)")
-                            .font(.system(size: 12, weight: .bold))
-                    case .marker:
-                        Image(systemName: "flag.fill")
-                            .font(.system(size: 15, weight: .semibold))
-                    }
+    // MARK: - Shutter cluster
+
+    /// The slot offsets round the ring, per orientation — the numbers in
+    /// docs/design/components/shutter-cluster.<state>.<orientation>.svg.
+    /// Portrait keeps the four 44 pt circles ≈9 pt clear of the ring;
+    /// landscape is 10 pt narrower and 10 pt taller (Steven, 2026-09-04),
+    /// spending the rail's height instead of its width. The Mac takes the
+    /// landscape set: its capture window is the landscape tree.
+    private struct ShutterClusterGeometry {
+        let dx: CGFloat
+        let dy: CGFloat
+        let isLandscape: Bool
+        static let portrait = ShutterClusterGeometry(dx: 66, dy: 26, isLandscape: false)
+        static let landscape = ShutterClusterGeometry(dx: 56, dy: 36, isLandscape: true)
+        /// The cluster's box — the component's viewBox: 180×100 / 160×120.
+        var box: CGSize { CGSize(width: 2 * (dx + 22) + 4, height: 2 * (dy + 22) + 4) }
+    }
+
+    /// Where the ring's centre sits, in the stage's coordinates, and which
+    /// slot geometry goes with it. The ring is PINNED TO THE DEVICE: 94 pt in
+    /// from the home-indicator edge on the screen's centreline, whichever
+    /// way the interface is turned — a rotation moves every other piece of
+    /// chrome and not this one. The stage is inset by the safe area, so the
+    /// point is found on the full screen and slid back by the leading/top
+    /// insets. The scene's own interface orientation says which edge the
+    /// home indicator is on (rotation lock included); the stage's shape
+    /// says whether the turn has actually happened yet. On the Mac there is
+    /// no edge to pin to: a landscape-shaped window fits the cluster 8 pt
+    /// inside its trailing edge at mid-height (the mirrors' 86 pt), a
+    /// portrait-shaped one follows the phone's rule.
+    private func shutterClusterPin(in geometry: GeometryProxy) -> (center: CGPoint, geometry: ShutterClusterGeometry) {
+        let insets = geometry.safeAreaInsets
+        let full = CGSize(
+            width: geometry.size.width + insets.leading + insets.trailing,
+            height: geometry.size.height + insets.top + insets.bottom)
+        let landscape = full.width > full.height
+        let physical: CGPoint
+        #if os(iOS)
+        // `orientation` is read so a rotation re-evaluates this.
+        _ = orientation
+        switch currentInterfaceOrientation() {
+        case .landscapeLeft where landscape:
+            physical = CGPoint(x: 94, y: full.height / 2)
+        case .portraitUpsideDown where !landscape:
+            physical = CGPoint(x: full.width / 2, y: 94)
+        default:
+            physical = landscape
+                ? CGPoint(x: full.width - 94, y: full.height / 2)
+                : CGPoint(x: full.width / 2, y: full.height - 94)
+        }
+        #else
+        physical = landscape
+            ? CGPoint(x: full.width - 86, y: full.height / 2)
+            : CGPoint(x: full.width / 2, y: full.height - 94)
+        #endif
+        return (CGPoint(x: physical.x - insets.leading, y: physical.y - insets.top),
+                landscape ? .landscape : .portrait)
+    }
+
+    /// The shutter cluster — ring plus its four slots — pinned to the device
+    /// (`shutterClusterPin`) over both layouts' chrome, so the ring never
+    /// moves on rotation and one view serves every mode and both
+    /// orientations. Landscape hangs the exposure readout under it, where
+    /// the rail's column used to carry it; portrait's lives in `exposurePanel`.
+    private func shutterClusterLayer(in geometry: GeometryProxy) -> some View {
+        let pin = shutterClusterPin(in: geometry)
+        return shutterCluster(pin.geometry)
+            .overlay(alignment: .top) {
+                if pin.geometry.isLandscape {
+                    landscapeClusterReadout
+                        .frame(width: pin.geometry.box.width)
+                        .offset(y: pin.geometry.box.height + 6)
                 }
-                .foregroundStyle(camera.isRampActive ? .black : LL.amber)
-                .frame(width: 44, height: 44)
-                .background(
-                    camera.isRampActive ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
-                    in: Circle()
-                )
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel((camera.activeSequenceMode ?? sequenceMode) == .ramp ? "Toggle speed burst" : "Toggle marker")
-        } else {
-            // The grid toggle lives here now (moved from the shutter row's
-            // trailing slot), beside the AE/AF lock — the left-side controls.
-            // Stacked, not side by side: the recent-capture tile took the
-            // outer half of this slot.
-            VStack(spacing: 8) {
-                gridToggleCircle
-                exposureLockCircle
+            .position(pin.center)
+    }
+
+    /// Ring in the middle, four 44 pt circles on the diagonals. Slot 1 is
+    /// top-leading, 2 top-trailing, 3 bottom-leading, 4 bottom-trailing —
+    /// the viewer's frame, in both orientations.
+    private func shutterCluster(_ g: ShutterClusterGeometry) -> some View {
+        ZStack {
+            shutterButton
+            clusterSlot(1).offset(x: -g.dx, y: -g.dy)
+            clusterSlot(2).offset(x: g.dx, y: -g.dy)
+            clusterSlot(3).offset(x: -g.dx, y: g.dy)
+            clusterSlot(4).offset(x: g.dx, y: g.dy)
+        }
+        .frame(width: g.box.width, height: g.box.height)
+    }
+
+    /// What a slot holds. Idle: 1 grid · 2 delay · 3 AE/AF lock · 4 steady.
+    /// Once a shoot is under way — any shoot, `isCapturing`, not only a movie
+    /// — all four hide (design 2026-09-04): the slots stay reserved, so the
+    /// cluster's footprint never changes, and the run-time controls take the
+    /// bottom pair. A Video take: the speed-burst / marker trigger in 3, the
+    /// burst count in 4. A Scanner run: the manual pose shutter in 4, and 3
+    /// empty on purpose — every idle toggle answers a question `startScanner`
+    /// has already settled (AE/AF/WB locked for the set, the steadiness gate
+    /// wired into the fire path, a self-timer meaningless to a shutter the
+    /// scene is pressing). Interval runs and Photo bursts show nothing here:
+    /// they used to keep all four live, and a mid-run lock tap toggled the
+    /// exposure of a running shoot.
+    @ViewBuilder
+    private func clusterSlot(_ slot: Int) -> some View {
+        if scannerRunInProgress {
+            if slot == 4 { scannerManualCaptureButton }
+        } else if camera.isRecording {
+            if slot == 3 {
+                liveMomentTrigger
+            } else if slot == 4 {
+                rampIntervalCountBadge
+            }
+        } else if !isCapturing {
+            switch slot {
+            case 1: gridToggleCircle
+            case 2: shutterDelayCircle
+            case 3: exposureLockCircle
+            default: steadyToggleCircle
             }
         }
+    }
+
+    /// The speed-burst / marker trigger of a Video take: the ramp rate, black
+    /// on amber while a burst is live, amber on graphite between.
+    private var liveMomentTrigger: some View {
+        Button {
+            camera.triggerLiveMoment()
+        } label: {
+            Group {
+                switch camera.activeSequenceMode ?? sequenceMode {
+                case .ramp:
+                    Text("\(camera.selectedRampFrameRate)")
+                        .font(.system(size: 12, weight: .bold))
+                case .marker:
+                    Image(systemName: "flag.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                }
+            }
+            .foregroundStyle(camera.isRampActive ? .black : LL.amber)
+            .frame(width: 44, height: 44)
+            .background(
+                camera.isRampActive ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
+                in: Circle()
+            )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel((camera.activeSequenceMode ?? sequenceMode) == .ramp ? "Toggle speed burst" : "Toggle marker")
+    }
+
+    /// How many bursts / markers the take holds so far; amber once above zero.
+    private var rampIntervalCountBadge: some View {
+        let count = camera.rampIntervalCount
+        return Text("\(count)")
+            .font(.system(size: 14, weight: .bold).monospacedDigit())
+            .foregroundStyle(count > 0 ? LL.amber : .white.opacity(0.4))
+            .frame(width: 44, height: 44)
+            .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
     }
 
     /// Rule-of-thirds grid toggle — a left-side control matching the exposure
@@ -4400,9 +4558,10 @@ struct CaptureView: View {
                 toggleExposureLock()
             }
         } label: {
-            Image(systemName: ramping
-                  ? (isLocked ? "camera.metering.spot" : "camera.metering.center.weighted")
-                  : (isLocked ? "lock.fill" : "lock.open"))
+            // The padlock in every mode (design 2026-09-04): under the ramp it
+            // means focus only — the accessibility label says so — but the
+            // glyph no longer turns into a metering target.
+            Image(systemName: isLocked ? "lock.fill" : "lock.open")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(isLocked ? .black : .white)
                 .frame(width: 44, height: 44)
@@ -4415,30 +4574,6 @@ struct CaptureView: View {
         .accessibilityLabel(ramping
             ? (isLocked ? "Unlock focus" : "Lock focus")
             : (isLocked ? "Unlock exposure and focus" : "Lock exposure and focus"))
-    }
-
-    /// Right of the shutter: the manual pose shutter during a scan, delay +
-    /// capture-when-steady toggles idle, the interval/marker count while
-    /// recording.
-    @ViewBuilder
-    private var trailingControl: some View {
-        if scannerRunInProgress {
-            scannerManualCaptureButton
-        } else if camera.isRecording {
-            let count = camera.rampIntervalCount
-            Text("\(count)")
-                .font(.system(size: 14, weight: .bold).monospacedDigit())
-                .foregroundStyle(count > 0 ? LL.amber : .white.opacity(0.4))
-                .frame(width: 44, height: 44)
-                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
-        } else {
-            // Stacked to match the leading column (see `leadingControl`).
-            VStack(spacing: 8) {
-                shutterDelayCircle
-                // Capture-when-steady toggle, in the grid button's old slot.
-                steadyToggleCircle
-            }
-        }
     }
 
     /// 2 s self-timer toggle — its own control so the portrait shutter row and
@@ -4597,34 +4732,24 @@ struct CaptureView: View {
 
     // MARK: - Manual exposure
 
-    /// Landscape-rail variant: all four framing toggles — grid, AE/AF lock,
-    /// 2 s delay and capture-when-steady — plus the frozen readout, matching
-    /// portrait's shutter-row pair of columns. Fine brightness/focus tuning
-    /// lives in portrait or on the Watch crown.
-    private var landscapeExposureControl: some View {
-        VStack(spacing: 6) {
-            steadyToggleCircle
-            shutterDelayCircle
-            gridToggleCircle
-            exposureLockCircle
-
-            // The rail carries whichever readout is true of this mode: the
-            // frozen pair under a lock, the ramp's live pair under Holy Grail.
-            if holyGrailArmed, !holyGrailExposureReadout.isEmpty {
-                Text(holyGrailExposureReadout)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(LL.amber)
-                    .lineLimit(2)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: 96)
-            } else if camera.isExposureLocked {
-                Text(exposureReadout)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundStyle(LL.amber)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.6)
-                    .frame(maxWidth: 96)
-            }
+    /// Under the landscape cluster: whichever readout is true of this mode —
+    /// the frozen pair under a lock, the ramp's live pair under Holy Grail.
+    /// Fine brightness/focus tuning lives in portrait or on the Watch crown.
+    @ViewBuilder
+    private var landscapeClusterReadout: some View {
+        if holyGrailArmed, !holyGrailExposureReadout.isEmpty {
+            Text(holyGrailExposureReadout)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(LL.amber)
+                .lineLimit(2)
+                .minimumScaleFactor(0.6)
+                .multilineTextAlignment(.center)
+        } else if camera.isExposureLocked {
+            Text(exposureReadout)
+                .font(.system(size: 10, design: .monospaced))
+                .foregroundStyle(LL.amber)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
         }
     }
 
@@ -6295,3 +6420,16 @@ struct CameraPreview: NSViewRepresentable {
     }
 }
 #endif
+
+private extension View {
+    /// Landscape chrome-rail items that hang off the rail's outer edge — 16 pt
+    /// in from it — and may overhang the viewfinder on the other side. Never
+    /// squeezed (`fixedSize`), never clipped at the screen edge: the rail's
+    /// stack aligns them by that edge, so a pill wider than the 108 pt column
+    /// simply runs past it inward. (A flexible frame with a leading alignment
+    /// does NOT do this — it centres a child wider than itself.)
+    func railAnchored(_ anchor: HorizontalAlignment) -> some View {
+        fixedSize()
+            .padding(anchor == .trailing ? .trailing : .leading, 16)
+    }
+}

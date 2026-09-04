@@ -8730,11 +8730,17 @@ final class CameraController: NSObject, ObservableObject {
 
 #if os(iOS)
 func currentCaptureOrientation() -> AVCaptureVideoOrientation {
-    let interface = UIApplication.shared.connectedScenes
+    effectiveCaptureOrientation(interface: currentInterfaceOrientation())
+}
+
+/// The foreground scene's interface orientation — which way the chrome is
+/// drawn, rotation lock included; portrait when no scene is active. The
+/// shutter cluster pins itself to the home-indicator edge with it.
+func currentInterfaceOrientation() -> UIInterfaceOrientation {
+    UIApplication.shared.connectedScenes
         .compactMap { $0 as? UIWindowScene }
         .first { $0.activationState == .foregroundActive }?
         .interfaceOrientation ?? .portrait
-    return effectiveCaptureOrientation(interface: interface)
 }
 
 /// Map an interface orientation to a capture orientation. Straight case-for-case

@@ -51,8 +51,8 @@ Unchanged from the phone: the run pills (the burst indicator's bar and count, th
     <rect x="44" y="664" width="60" height="60" rx="12" fill="url(#thumb)"/>
 
     <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.landscape.svg,
-         not this file; placement = ring centre (894, 314) minus (80, 60). Contract: components/README.md -->
-    <image id="shutter-cluster" href="../components/shutter-cluster.running.landscape.svg" x="814" y="254" width="160" height="120"/>
+         not this file; placement = ring centre (894, 380) minus (80, 60). Contract: components/README.md -->
+    <image id="shutter-cluster" href="../components/shutter-cluster.running.landscape.svg" x="814" y="320" width="160" height="120"/>
 
     <!-- ============ The rail (LadderRail): picture, trailing-centre of the viewfinder ============ -->
     <g id="ladder-rail">

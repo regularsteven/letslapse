@@ -61,8 +61,8 @@ Not drawn: the MODE and RUNG menus themselves (system menus — mirrored as note
     <rect x="44" y="664" width="60" height="60" rx="12" fill="url(#thumb)"/>
 
     <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.idle.landscape.svg,
-         not this file; placement = ring centre (894, 314) minus (80, 60). Contract: components/README.md -->
-    <image id="shutter-cluster" href="../components/shutter-cluster.idle.landscape.svg" x="814" y="254" width="160" height="120"/>
+         not this file; placement = ring centre (894, 380) minus (80, 60). Contract: components/README.md -->
+    <image id="shutter-cluster" href="../components/shutter-cluster.idle.landscape.svg" x="814" y="320" width="160" height="120"/>
 
     <!-- ============ Rung pill (LadderRungPill) — the DEFAULT while Ladder is armed (2026-09-04: collapsed, top-leading) ============
          16 pt inside the viewfinder column's top-left corner, clear of the rail's close and schedule buttons; a click opens the light panel here. -->
