@@ -1273,3 +1273,32 @@ draws the 2026-08 layout. The job:
 6. Verify with `LL_CAPTURE=1` + `LL_MODE` in both orientations, `LL_RECORDING=1`,
    `LL_SCANNER=settled`, `LL_HOLYGRAIL=armed` (padlock, not metering), then flip the INDEX rows
    to synced.
+
+## Landscape left rail alignment + Ladder panel default — code mirror of the 2026-09-04 design (iOS · iPadOS · macOS)
+
+Design side done first (`docs/design/iOS/capture-*.landscape.svg`, `iOS/capture-interval.ladder*.svg`,
+`macOS/capture-interval.ladder*.svg`; INDEX notes dated 2026-09-04, second pass). Two jobs:
+
+1. **Left rail, landscape** (`App/CaptureView.swift` `landscapeLayout` ≈1608, the 108 pt rail): the
+   format pill, headroom chip and remote chip are **leading-anchored at safe-area + 16 pt and
+   left-aligned** with each other — one `.leading` alignment for those three, not the rail's centre.
+   They may overhang the viewfinder to the right and must never be clipped at the screen edge:
+   the centred rail clips every wide format string ("552×1552 · JPEG", "3840×2160 · JPEG",
+   "12MP 4:3 · DNG") on iPhone, iPad and Mac (screenshots 2026-09-04). Drop the remote chip's
+   `scaleEffect(0.85)` — it exists only because the rail was too narrow. Close/schedule, lens
+   chips and the recent tile keep their centred seats (unchanged in the mirrors).
+2. **Ladder panel** (`ladderArmedPanel` ≈3073, `ladderPanelOpen` ≈123, `ladderViewfinderOverlays`
+   ≈3103): **collapsed by default** — the rung pill is the armed screen; the per-launch
+   "open until dismissed" default goes (keep the auto-open on a rung change while armed, it is
+   the one moment the panel earns its space; confirm with Steven). **Top-leading in both
+   orientations**: portrait 16 pt in, 12 pt under the top bar's buttons (mirror: 16, 119) — the
+   overlay anchor moves from `.bottomLeading` to `.topLeading` with a top inset that clears the
+   close/schedule row; landscape 16 pt inside the viewfinder region, right of the rail (mirror:
+   183, 16), so it leaves `landscapeIntervalRow`'s bottom-left capsule and rides the viewfinder
+   overlay like portrait does. The opened panel anchors in the same corner and grows down.
+   Then rename the hook value: `LL_LADDER=closed` → `open` (the default no longer needs staging)
+   and fix its README line; mirrors `capture-interval.ladder.portrait.svg` (pill),
+   `…ladder-panel-open.portrait.svg` (panel), `…ladder.landscape.svg` (new), macOS
+   `capture-interval.ladder.svg`.
+3. Verify: `LL_CAPTURE=1 LL_MODE=interval` in landscape on the iPad Pro sim (widest format
+   string), `LL_LADDER=armed` in both orientations, the Mac window; then flip the INDEX rows.

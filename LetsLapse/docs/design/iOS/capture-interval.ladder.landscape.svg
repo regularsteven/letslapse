@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Interval (idle, DNG) · landscape</title>
-  <desc>Mirrors App/CaptureHeadroom.swift (CaptureHeadroomChip, stacked under the format pill in the 108pt rail) and App/CaptureView.swift (landscapeLayout): left rail (close, format pill, zoom chips, recent tile), centered 4:3 viewfinder with the interval dials in the bottom-leading corner on a dark capsule, right rail (stacked mode labels, shutter, steady/delay/grid/lock column). Left rail (2026-09-04): format pill, headroom chip and remote chip leading-anchored at safe-area + 16 pt and left-aligned; they may overhang the viewfinder, never the screen edge.</desc>
+  <title>iOS · Capture — Interval (idle, Ladder armed) · landscape</title>
+  <desc>Mirrors App/CaptureView.swift (landscapeLayout, landscapeIntervalRow, ladderViewfinderOverlays) + App/CaptureDials.swift (IntervalDialsRow, ladderChip) + App/LightLadderViews.swift (LadderRungPill). Interval with MODE = Ladder in landscape. 2026-09-04 design (ahead of code): the rung pill is the default and sits top-leading of the viewfinder region, 16 pt in, to the right of the rail's close and schedule buttons; a tap opens the light panel in that corner. The dial capsule keeps MODE + the ladder chip (EVERY and BLEND belong to the rung). Left rail: format pill, headroom chip and remote chip leading-anchored at safe-area + 16 pt and left-aligned. Shutter cluster as capture-interval.landscape.svg.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="83" y="296" width="60" height="60" rx="12"/></clipPath>
@@ -81,22 +81,30 @@
         </g>
       </g>
 
-      <!-- interval dials on a dark capsule, bottom-leading corner of the
-           viewfinder: MODE / EVERY / BLEND, bare values, no caption -->
+      <!-- interval dials on a dark capsule, bottom-leading corner of the viewfinder: MODE + the ladder chip.
+           EVERY and BLEND are not drawn — the armed rung owns them -->
       <g id="interval-dials">
-        <rect x="177" y="325" width="354" height="37" rx="18.5" fill="#000" opacity="0.5"/>
+        <rect x="177" y="325" width="288" height="37" rx="18.5" fill="#000" opacity="0.5"/>
           <text x="189" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">MODE</text>
-          <rect x="228" y="330" width="78" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-          <text x="240" y="348" font-size="12.5" class="sb" fill="#FFF">Basic</text>
-          <path d="M286 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
-          <text x="314" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">EVERY</text>
-          <rect x="356" y="330" width="56" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-          <text x="368" y="348" font-size="12.5" class="sb" fill="#FFF">2 s</text>
-          <path d="M392 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
-          <text x="420" y="348" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
-          <rect x="466" y="330" width="53" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
-          <text x="478" y="348" font-size="12.5" class="sb" fill="#FFF">10</text>
-          <path d="M499 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <rect x="228" y="330" width="81" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="240" y="348" font-size="12.5" class="sb" fill="#FFF">Ladder</text>
+          <path d="M290 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          <g id="ladder-chip">
+            <rect x="317" y="330" width="136" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+            <rect x="329" y="339" width="9" height="9" rx="2" fill="#8A4A00"/>
+            <text x="345" y="348" font-size="12.5" class="sb" fill="#FFF">Bright &amp; Fast</text>
+            <path d="M434 341 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+          </g>
+      </g>
+
+      <!-- RUNG PILL — LadderRungPill, the DEFAULT while Ladder is armed: top-leading of the viewfinder region
+           (which begins at the rail's edge, x 167), 16 pt in → (183, 16); the rail's close and schedule buttons
+           stay clear to its left. A tap opens the light panel in this corner. -->
+      <g id="ladder-rung-pill">
+        <rect x="183" y="16" width="88" height="30" rx="15" fill="#000" opacity="0.6"/>
+        <rect x="195" y="26.5" width="9" height="9" rx="2" fill="#8A4A00"/>
+        <text x="212" y="35.5" font-size="12.5" class="sb" fill="#FFF">Dusk</text>
+        <path d="M251 33.5 l4 -4 l4 4" stroke="#FFF" stroke-opacity="0.5" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up"/>
       </g>
 
       <!-- right rail -->
@@ -117,6 +125,6 @@
     </g>
   </g>
 
-  <text x="450" y="450" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (idle, DNG) · landscape · 852×393 pt</text>
-  <text x="450" y="468" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — landscapeLayout · landscapeIntervalRow · landscapeModeToggle</text>
+  <text x="450" y="450" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (idle, Ladder armed) · landscape · 852×393 pt</text>
+  <text x="450" y="468" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — landscapeLayout · ladderViewfinderOverlays · App/LightLadderViews.swift — LadderRungPill</text>
 </svg>

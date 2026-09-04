@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Video (idle) · landscape</title>
-  <desc>Mirrors App/CaptureView.swift (landscapeLayout, landscapeEstimateChips): left rail (close, format pill, zoom chips, recent tile), centered 16:9 viewfinder with the neighbor + current speed estimate chips in the bottom-leading corner, right rail (mode labels; the shared shutter cluster, pinned where portrait's shutter physically sits — components/README.md). Landscape is a known WIP area.</desc>
+  <desc>Mirrors App/CaptureView.swift (landscapeLayout, landscapeEstimateChips): left rail (close, format pill, zoom chips, recent tile), centered 16:9 viewfinder with the neighbor + current speed estimate chips in the bottom-leading corner, right rail (mode labels; the shared shutter cluster, pinned where portrait's shutter physically sits — components/README.md). Left rail (2026-09-04): format pill, headroom chip and remote chip leading-anchored at safe-area + 16 pt and left-aligned; they may overhang the viewfinder, never the screen edge.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="83" y="296" width="60" height="60" rx="12"/></clipPath>
@@ -30,14 +30,18 @@
           <circle cx="113" cy="40" r="19" fill="#2B2B2E" opacity="0.9"/>
           <path d="M107.5 34.5 L118.5 45.5 M118.5 34.5 L107.5 45.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
         </g>
-        <g id="format-pill">
+        <!-- Left rail rule (2026-09-04): the format pill, headroom chip and remote chip are LEADING-anchored at
+             safe-area + 16 pt (59 + 16 here, the Dynamic Island's inset) and left-aligned with each other. They may
+             run over the viewfinder's edge to the right; they never run off the screen to the left, which is what
+             the centred 108 pt rail did to every wide format string. -->
+        <g id="format-pill" transform="translate(37,0)">
           <rect x="38" y="133" width="150" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
           <text x="52" y="155" font-size="13" class="sb" fill="#FFF">1080p · 30</text>
           <text x="122" y="155" font-size="13" class="sb" fill="#FFB340">· Stab</text>
           <path d="M167 148 l4.5 5 l4.5 -5" stroke="#FFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
         <!-- storage headroom: what is left of the disk in the armed format -->
-        <g id="headroom-chip">
+        <g id="headroom-chip" transform="translate(7,0)">
           <rect x="68" y="176" width="91" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
           <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
             <rect x="79" y="186.5" width="12" height="10" rx="2.5"/>
@@ -52,6 +56,14 @@
           <text x="113" y="246" font-size="12" class="sb" fill="#FFB340" text-anchor="middle">1×</text>
           <circle cx="151" cy="242" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
           <text x="151" y="246" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">3×</text>
+        </g>
+        <!-- remote link chip (RemoteLinkChip, advertising): the pairing code a Mac has to be told. Same leading
+             edge as the pills; drawn where the rail stacks it, under the lens chips, at full size (no 0.85 scale) -->
+        <g id="remote-chip">
+          <rect x="75" y="259" width="142" height="26" rx="13" fill="#2B2B2E" opacity="0.9"/>
+          <circle cx="87" cy="272" r="3.5" fill="#FFB340"/>
+          <text x="96" y="276.5" font-size="12.5" fill="#FFF" font-weight="500">Remote</text>
+          <text x="149" y="276.5" font-size="12.5" class="b m" fill="#FFF" letter-spacing="1.5">931156</text>
         </g>
         <g id="recent-tile">
           <g clip-path="url(#tile)">

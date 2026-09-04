@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (idle, Ladder armed, light panel open) · portrait</title>
-  <desc>Mirrors App/CaptureDials.swift (IntervalDialsRow — modePicker + ladderChip; EVERY and BLEND are hidden because IntervalCaptureMode.ladder ownsInterval and ownsBlend) + App/CaptureView.swift (ladderViewfinderOverlays, intervalPickerRow) + App/LightLadderViews.swift (LadderLightPanel) over LetsLapseKit's LightLadder / LightLadderSelector. MODE = Ladder: the row is two dials, MODE then the unlabelled ladder chip (the one exception to DialCaption — it reads as MODE's object, swatch + name + chevron; a tap opens the ladder picker, capture-interval.ladder-picker.portrait.svg). With no EVERY/BLEND and an empty ±EV band the control stack collapses: the dial row sits at 653 and the PHOTO · INTERVAL · VIDEO row at 692, directly above the shutter row. The LIGHT PANEL is an overlay on the viewfinder (bottom-leading, 16 pt in), not part of the control stack: rung swatch + name, "scene EV 5.2" (the preview meter's smoothed EV), the rung's levers in a mono line, what it costs ("≈1 800 frames an hour · motion softened by 3-frame stacking"), and which rung is next, in amber. The ✕ collapses it to the rung pill (capture-interval.ladder-panel-closed.portrait.svg); it re-opens on a rung change while armed. Not drawn: the amber clamp note under the cost line ("blend 10 → 6 in RAW on this camera") that appears when the device ceiling cannot hold the rung's ask. Staged by LL_LADDER=armed with LL_CAPTURE=1 — the built-in ladder on its Dusk rung at scene EV 5.2 (the simulator has no camera to meter; there the overlays sit over a full-height black preview, on a device over the 4:3 frame drawn here). Top bar as capture-interval.holygrail.portrait.svg. iOS/iPadOS only — macOS has no MODE dial.</desc>
+  <desc>Mirrors App/CaptureDials.swift (IntervalDialsRow, ladderChip) + App/CaptureView.swift (ladderViewfinderOverlays) + App/LightLadderViews.swift (LadderRungPill). Interval with MODE = Ladder, idle. 2026-09-04 design (ahead of code): the light panel is COLLAPSED by default — the rung pill (swatch · rung name · chevron.up) sits top-leading, 16 pt in and 12 pt under the top bar so the close and schedule buttons stay clear; tapping it opens the panel in the same corner (capture-interval.ladder-panel-open.portrait.svg). The dial row keeps MODE + the ladder chip only: EVERY and BLEND belong to the rung. Code today opens the panel on first arm and parks it bottom-leading; LL_LADDER=closed stages the nearest state.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -52,20 +52,13 @@
         </g>
       </g>
 
-      <!-- LIGHT PANEL — LadderLightPanel, bottom-leading of the viewfinder,
-           16 pt in. Black @60% r12, padding 14/12, rows 7 pt apart -->
-      <g id="ladder-light-panel">
-        <rect x="16" y="410" width="361" height="100" rx="12" fill="#000" opacity="0.6"/>
-        <rect x="30" y="424.5" width="9" height="9" rx="2" fill="#8A4A00"/>
-        <text x="47" y="434" font-size="15" class="sb" fill="#FFF">Dusk</text>
-        <text x="90" y="433" font-size="10.5" class="m" fill="#FFF" opacity="0.55">scene EV 5.2</text>
-        <g id="panel-close" data-symbol="xmark">
-          <circle cx="352" cy="429" r="11" fill="#FFF" opacity="0.12"/>
-          <path d="M348.5 425.5 l7 7 M355.5 425.5 l-7 7" stroke="#FFF" stroke-opacity="0.8" stroke-width="1.8" stroke-linecap="round"/>
-        </g>
-        <text x="30" y="455" font-size="10.5" class="m" fill="#FFF" opacity="0.75">every 2 s · blend 3 · ISO auto · shutter auto ≤ 1 s</text>
-        <text x="30" y="474" font-size="10.5" fill="#FFF" opacity="0.6">≈1 800 frames an hour · motion softened by 3-frame stacking</text>
-        <text x="30" y="493" font-size="10.5" fill="#FFB340">Night is next, below EV 4 — shutter auto ≤ 1 s, no stacking</text>
+      <!-- RUNG PILL — LadderRungPill, the DEFAULT while Ladder is armed (2026-09-04: collapsed by default, top-leading):
+           16 pt in, 12 pt under the top bar's buttons → (16, 119). A tap opens the light panel in the same corner. -->
+      <g id="ladder-rung-pill" transform="translate(0,-361)">
+        <rect x="16" y="480" width="88" height="30" rx="15" fill="#000" opacity="0.6"/>
+        <rect x="28" y="490.5" width="9" height="9" rx="2" fill="#8A4A00"/>
+        <text x="45" y="499.5" font-size="12.5" class="sb" fill="#FFF">Dusk</text>
+        <path d="M84 497.5 l4 -4 l4 4" stroke="#FFF" stroke-opacity="0.5" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up"/>
       </g>
 
       <!-- interval dials: MODE + the ladder chip, centred as a pair. EVERY
@@ -112,5 +105,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (idle, Ladder armed) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors CaptureDials (MODE · ladder chip) · LightLadderViews (LadderLightPanel) · LL_LADDER=armed</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors CaptureDials (MODE · ladder chip) · LightLadderViews (LadderRungPill) — collapsed by default · LL_LADDER=closed until the code mirror lands</text>
 </svg>

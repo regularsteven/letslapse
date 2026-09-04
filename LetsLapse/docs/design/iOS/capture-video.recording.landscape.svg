@@ -36,7 +36,11 @@
           <text x="99" y="37" font-size="14" class="b m" fill="#FFF">02:12</text>
         </g>
         <!-- formatPill: dimmed and padlocked — format is frozen mid-take -->
-        <g id="format-pill">
+        <!-- Left rail rule (2026-09-04): the format pill, headroom chip and remote chip are LEADING-anchored at
+             safe-area + 16 pt (59 + 16 here, the Dynamic Island's inset) and left-aligned with each other. They may
+             run over the viewfinder's edge to the right; they never run off the screen to the left, which is what
+             the centred 108 pt rail did to every wide format string. -->
+        <g id="format-pill" transform="translate(17,0)">
           <rect x="58" y="150" width="110" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
           <text x="70" y="172" font-size="13" class="sb" fill="#FFF" opacity="0.55">1080p · 30</text>
           <g data-symbol="lock.fill" opacity="0.4">
@@ -45,7 +49,7 @@
           </g>
         </g>
         <!-- storage headroom: what is left of the disk in the armed format -->
-        <g id="headroom-chip">
+        <g id="headroom-chip" transform="translate(11,0)">
           <rect x="64" y="193" width="99" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
           <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
             <rect x="75" y="203.5" width="12" height="10" rx="2.5"/>

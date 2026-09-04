@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Interval (idle, Ladder armed, panel closed) · portrait</title>
-  <desc>Mirrors App/LightLadderViews.swift (LadderRungPill) inside App/CaptureView.swift (ladderViewfinderOverlays). The same screen as capture-interval.ladder.portrait.svg after the light panel's ✕: the panel collapses to a rung pill — swatch, rung name, chevron.up — at the viewfinder's bottom-leading corner, so the shoot never stops naming its state. A tap reopens the panel. Persistence: open by default when Ladder is armed; once closed, closed for the rest of the app launch (CaptureView.ladderPanelDismissedThisLaunch); it re-opens by itself on a rung change while armed, and while running the toast and readout carry the state instead of the panel. Everything else — dial row, mode row, shutter row, top bar — is unchanged. Staged by LL_LADDER=closed with LL_CAPTURE=1.</desc>
+  <title>iOS · Capture — Interval (idle, Ladder armed, panel open) · portrait</title>
+  <desc>Mirrors App/LightLadderViews.swift (LadderLightPanel) inside App/CaptureView.swift (ladderViewfinderOverlays). The same screen as capture-interval.ladder.portrait.svg after a tap on the rung pill: the light panel opens in the pill's corner — top-leading, 16 pt in and 12 pt under the top bar — and grows down over the viewfinder: rung name + scene EV, the rung's line, the frames-an-hour line, and the amber "what is next" line; its ✕ collapses it back to the pill. 2026-09-04 design (ahead of code): collapsed is the default; the panel still re-opens by itself on a rung change while armed. Renamed from ladder-panel-closed the same day, when the default flipped.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -50,13 +50,20 @@
         </g>
       </g>
 
-      <!-- RUNG PILL — LadderRungPill: capsule 30 pt tall, black @60%,
-           padding 12; swatch 9 · name 12.5 semibold · chevron.up @50% -->
-      <g id="ladder-rung-pill">
-        <rect x="16" y="480" width="88" height="30" rx="15" fill="#000" opacity="0.6"/>
-        <rect x="28" y="490.5" width="9" height="9" rx="2" fill="#8A4A00"/>
-        <text x="45" y="499.5" font-size="12.5" class="sb" fill="#FFF">Dusk</text>
-        <path d="M84 497.5 l4 -4 l4 4" stroke="#FFF" stroke-opacity="0.5" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up"/>
+      <!-- LIGHT PANEL — LadderLightPanel, opened from the rung pill; anchored where the pill was, top-leading under
+           the top bar (16, 119), and grows downward over the viewfinder. Black @60% r12, padding 14/12, rows 7 pt apart -->
+      <g id="ladder-light-panel" transform="translate(0,-291)">
+        <rect x="16" y="410" width="361" height="100" rx="12" fill="#000" opacity="0.6"/>
+        <rect x="30" y="424.5" width="9" height="9" rx="2" fill="#8A4A00"/>
+        <text x="47" y="434" font-size="15" class="sb" fill="#FFF">Dusk</text>
+        <text x="90" y="433" font-size="10.5" class="m" fill="#FFF" opacity="0.55">scene EV 5.2</text>
+        <g id="panel-close" data-symbol="xmark">
+          <circle cx="352" cy="429" r="11" fill="#FFF" opacity="0.12"/>
+          <path d="M348.5 425.5 l7 7 M355.5 425.5 l-7 7" stroke="#FFF" stroke-opacity="0.8" stroke-width="1.8" stroke-linecap="round"/>
+        </g>
+        <text x="30" y="455" font-size="10.5" class="m" fill="#FFF" opacity="0.75">every 2 s · blend 3 · ISO auto · shutter auto ≤ 1 s</text>
+        <text x="30" y="474" font-size="10.5" fill="#FFF" opacity="0.6">≈1 800 frames an hour · motion softened by 3-frame stacking</text>
+        <text x="30" y="493" font-size="10.5" fill="#FFB340">Night is next, below EV 4 — shutter auto ≤ 1 s, no stacking</text>
       </g>
 
       <g id="interval-dials">
@@ -96,6 +103,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (Ladder armed, panel closed) · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLadderViews (LadderRungPill) — the light panel collapsed · LL_LADDER=closed</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (Ladder armed, panel open) · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLadderViews (LadderLightPanel) — opened from the rung pill, top-leading · LL_LADDER=armed until the code mirror lands</text>
 </svg>
