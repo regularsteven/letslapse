@@ -88,7 +88,7 @@ Implementation is elegant: **there is no conversion code in the shaders.** The e
 Stills follow the same math with two shapes (`Kit/Sources/LetsLapseKit/ImageStacker.swift`):
 
 - **Stack to one image** — all stills averaged into one `CGImage` (synthetic long exposure). Streams one image at a time inside an autorelease pool, so hundreds of stills never sit in memory together. EXIF orientation is baked at load (`kCGImageSourceCreateThumbnailWithTransform`), so portrait shots stack upright. Export as PNG/JPEG/HEIC. Derived images keep their provenance: `ImageExporter.carryoverMetadata` lifts the source frame's EXIF/GPS/TIFF blocks (minus orientation, already baked into the pixels) into the output, so a stacked shot keeps its capture time and geotag.
-- **Stack to a sequence** — a `WindowSchedule` over the stills produces a blended timelapse video (always H.264/.mp4). Window depth 1 gives a crisp timelapse; deeper windows add motion blur; depth ≥ photo count collapses to the single-image case (the UI presents this as one continuous "Blend depth" slider from "Crisp" to "Long exposure").
+- **Stack to a sequence** — a `WindowSchedule` over the stills produces a blended timelapse video (H.264 or 10-bit HEVC `.mp4`, per the project's clip format). Window depth 1 gives a crisp timelapse; deeper windows add motion blur; depth ≥ photo count collapses to the single-image case (the UI presents this as one continuous "Blend depth" slider from "Crisp" to "Long exposure").
 
 Both shapes accept an injected `loadFrame` closure, which is how the colour grade reaches the engine: `AppModel.gradedFrameLoader(_:)` hands `ImageStacker` a loader that runs each still through `PhotoGrader.renderForBlend` on its way into the accumulator (§4.5). An identity grade passes nil and the plain loader runs, so an ungraded blend costs exactly what it always did.
 
@@ -179,13 +179,13 @@ The engine is UI-free: frames in → blend schedule → frames out. The GUI, the
 
 | Situation | Path | Character |
 |---|---|---|
-| iOS/iPadOS, any blend; macOS with a **ramp or a warp timeline** | `VideoBlender` (Kit) | In-memory streaming GPU pipeline; flat memory; cancellable; output forced to H.264/.mp4 in the app |
+| iOS/iPadOS, any blend; macOS with a **ramp or a warp timeline** | `VideoBlender` (Kit) | In-memory streaming GPU pipeline; flat memory; cancellable; encoded through the shared `VideoEncodePolicy` (H.264 or 10-bit HEVC `.mp4`) |
 | macOS with a **constant** window and no warp | `MacVideoJobRunner` (App) | Disk-backed, resumable job with a visible job folder, manifest, and logs (see §5.2). The runner only speaks constant windows, so a warped blend bypasses it |
 | Interval/imported photos, depth ≥ count | `ImageStacker.stack` | One long-exposure image (PNG) |
-| Interval/imported photos, depth < count | `ImageStacker.stackSequence` | Blended timelapse video (H.264/.mp4) |
+| Interval/imported photos, depth < count | `ImageStacker.stackSequenceLinear` (True-light, default) / `stackSequence` (gamma) | Blended timelapse video (H.264 or 10-bit HEVC `.mp4`) |
 | Live capture sequence (ramp/marker "moments") | `blendLiveSequence` / `blendMarkerSequence` in AppModel | Per-segment/per-slice blends stitched with `AVMutableComposition`, then burst-ramped or warped (see §4.3, §4.4) |
 
-`OutputCodec` (`Kit/Sources/LetsLapseKit/VideoBlender.swift`) supports `h264`, `hevc`, `prores` (ProRes 422), `jpeg` — `.mp4` for the first two, `.mov` for the rest. The CLI exposes all four for blends; the app currently pins blend output to H.264 and uses HEVC/ProRes in the *source conversion* feature (§4.10) instead.
+`OutputCodec` (`Kit/Sources/LetsLapseKit/VideoBlender.swift`) supports `h264`, `hevc`, `prores` (ProRes 422), `jpeg` — `.mp4` for the first two, `.mov` for the rest. The CLI exposes all four for blends; the app offers H.264 and 10-bit HEVC at blend time (Settings › New clip format, or the Create button's carat) through the shared `VideoEncodePolicy`, ProRes output is CLI-only, and the *source conversion* feature (§4.10) is where ProRes originals become H.264/HEVC.
 
 ### 3.3 The streaming pipeline in detail (`VideoBlender`)
 
@@ -454,6 +454,8 @@ Two ways to shoot flat, for grading latitude later:
 - **`FlatCapture`** (in `App/PhotoPreset.swift`) is the JPEG still path: a low-contrast log-ish grade (highlights −0.20, shadows +0.15, saturation ×0.80, contrast ×0.90) rendered *at save time* into the written JPEG, orientation baked and the GPS dictionary carried across. It returns false rather than throwing, so a failure falls back to writing the original bytes untouched. Driven by the `capture.captureFlat` setting.
 - **`VideoFlatten`** covers video on hardware without Apple Log (a sensor-level colour space on iPhone 15 Pro and newer). Where `camera.appleLogEnabled` can't be used, the recorded movie is post-processed through the same flat grade with an `AVVideoComposition` and written back over the original. It re-encodes (ProRes falls back to H.264/HEVC), which is the accepted trade for giving non-Log hardware the flat profile; a failed export leaves the original untouched so a recording is never lost to it.
 
+**Neutral is not a no-op for raw — and is one for everything else.** The tone engine decodes DNGs through `CIRAWFilter` with Apple's boost off and EDR 2, then applies a hidden base look at neutral (`ToneMath.baseCurve`, a neutral highlight roll-off and a near-white desaturation floor) so an untouched DNG renders the way DNG consumers render it by default. JPEG, HEIF and PNG sources — imported or captured — are already rendered pictures: `LinearFrameDecoder` flags them `displayReferred` on the frame's `GradeReference`, and for them the neutral kernel is a true identity (pixels in, pixels out) on every surface that builds a renderer from a decoded frame: editor, hero, grid, fullscreen, JPEG export, blend hook, time-slice posters and the `lapse` CLI. This was corrected on 2026-09-04 (engine version 6); grades saved on JPEG/HEIF projects before then were authored against the lifted look and now sit on identity — an accepted change, not migrated.
+
 ### 4.6 Geotagging
 
 Every capture kind can carry a GPS fix, and the fix lives *in the file* rather than in a side table — so it survives sharing, export, and re-import. Gated by the Settings → Location **"Geotag captures"** toggle.
@@ -514,7 +516,7 @@ This replaced the old `ProjectMediaPreviewSheet` in `ProjectDetailView`; the old
 - **Rotate 90°** — a metadata-only transform via `Kit/.../MediaRotator.swift`; no re-encode, and the thumbnail cache is invalidated by generation counter so a same-URL content change still re-decodes.
 - Rename, storage totals, delete project, and **Share project** — the entire project folder (manifest, originals, blended clips, sidecar logs) packed into a `.lapse` AppleArchive via `App/ProjectArchive.swift` + `Kit/.../DirectoryArchive.swift`. The Create tab's "Import a LetsLapse project…" row unpacks one on any platform, minting fresh project/blended-clip IDs so imports never collide — the workflow that moves device test captures onto a Mac for analysis (§6.6).
 - **Per-clip encoding management.** ProRes originals are wonderful capture masters and terrible distribution files, so each source clip can hold multiple codec variants (`ClipEncoding` in `App/AppModel.swift`, persisted per clip in the manifest):
-  - A **Manage** sheet per ProRes clip lists existing formats with sizes, offers **Convert to H.264 / Convert to HEVC** (HEVC is encoded 10-bit Main10; bitrate heuristics ≈ 0.24 bits/pixel/s for H.264, 0.18 for HEVC; audio passthrough), per-format Save to Photos, and deletion — deleting the ProRes original asks for confirmation, and the last remaining encoding can never be deleted.
+  - A **Manage** sheet per ProRes clip lists existing formats with sizes, offers **Convert to H.264 / Convert to HEVC** (HEVC is encoded 10-bit Main10; bitrate budget 0.24 bits per pixel per *frame* for H.264, 0.18 for HEVC, times the real frame rate — `VideoEncodePolicy`, shared by every writer; the rate is no longer capped at 30 in the budget; audio passthrough), per-format Save to Photos, and deletion — deleting the ProRes original asks for confirmation, and the last remaining encoding can never be deleted.
   - A project-level **"Convert ProRes → H.264, delete originals"** action reclaims storage in one tap.
   - The **"Blend from"** chooser in Adjust (§4.4) appears only when a real choice exists; "Auto" prefers quality (`ProRes → HEVC → H.264`). A converted clip survives deletion of its ProRes master.
 
@@ -612,7 +614,7 @@ The Mac app is the **same target and the same screens** — Create/Gallery/Proje
 For constant-window video blends, macOS routes through `App/MacVideoJobRunner.swift` (~876 lines) instead of the streaming engine — a deliberately different set of trade-offs for desktop-scale footage:
 
 - Creates a visible job folder next to the source: `<name>.letslapse/` containing `manifest.json`, `logs/job.log`, `frames/extracted…/`, `passes/blend-NNN-to-001…/`, and `output/`.
-- Stages are checkpointed in the manifest (`created → extracting → extracted → blending → encoding → completed`). Every source frame is extracted to PNG; windows of N PNGs are averaged via `ImageStacker`; blended PNGs are encoded to H.264/.mp4 at 12 Mbps with the source's orientation transform.
+- Stages are checkpointed in the manifest (`created → extracting → extracted → blending → encoding → completed`). Every source frame is extracted to PNG; windows of N PNGs are averaged via `ImageStacker`; blended PNGs are encoded to H.264/.mp4 through the shared `VideoEncodePolicy` budget (0.24 bits per pixel per frame) with the source's orientation transform.
 - **Resumable**: a re-run reuses extracted frames and skips any window whose output already exists — an interrupted hour-long job continues instead of restarting.
 - **Parallel**: extraction is pipelined with blending; blend batches run concurrently (each with its own `BlendCore`), throttled by the user's Settings → Performance knobs (CPU worker budget, concurrent blend batches).
 - **Disk-aware**: the runner checks `volumeAvailableCapacityForImportantUsage` against the ~8 MB/frame PNG scratch cost before committing to an extraction pass.
@@ -921,7 +923,7 @@ Defined centrally in `App/DesignSystem.swift` (`enum LL`, `SpeedMath`, `LLTab`, 
 Honest notes for whoever picks this up:
 
 - **Frame-averaging blends are video-only.** Audio itself is a shipping, permission-gated feature (§4.3) that survives the live-sequence stitch and per-clip conversion — but a time-compressed blend has no audio, because averaging N frames into one has no audio analogue. A stitched ramp-mode blended clip carries sound; a 100× hyperlapse does not.
-- **App blend output is pinned to H.264**; HEVC/ProRes output exists in the engine and CLI but isn't user-selectable at blend time in the app (per-clip *source* conversion is where HEVC/ProRes live today). Blend-quality controls are a known pending stage of the clip-encodings feature.
+- **Blend output is H.264 or 10-bit HEVC, at one fixed budget.** `VideoEncodePolicy` gives every writer 0.24 (H.264) / 0.18 (HEVC) bits per pixel per frame — 176 / 132 Mbps for 4032×3024 @ 60 — with no quality tier, no constant-quality mode and no ProRes master; the Mac video runner still hardcodes H.264. Those are open jobs in `TODO.md` (encode quality).
 - **Baking a grade into video is a re-encode.** `VideoGrader.bakedCopy` runs `AVAssetExportPresetHighestQuality`, so a graded ProRes source lands as H.264/HEVC. Stills are unaffected — a graded still is rendered at full resolution from the original.
 - **VFR sources** are estimated from nominal fps; the blender adapts if the estimate is off, but the schedule (and therefore the exact ramp shape) is built from the estimate.
 - **HDR input** is tone-mapped to 8-bit SDR by the decoder before blending.

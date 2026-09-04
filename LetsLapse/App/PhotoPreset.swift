@@ -317,7 +317,12 @@ enum PhotoGrader {
             // scratch would only evict a preview-sized one from the pool.
             let renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
             let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
-            return try decoder.cgImage(from: output)
+            // A graded copy of an sRGB JPEG leaves as sRGB — the space it
+            // arrived in, and the one a colour-unmanaged sequence reader
+            // (Resolve, a browser) assumes. Raw keeps Display P3's gamut.
+            return try decoder.cgImage(
+                from: output,
+                colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3)
         }
         return try withReusedRenderer(
             width: frame.texture.width, height: frame.texture.height,
@@ -873,12 +878,15 @@ enum PhotoGrader {
     }
 
     /// The pieces the linear blend path needs: a decode closure handing the
-    /// stacker scene-linear half-float textures, and a hook that grades each
-    /// OUTPUT frame's mean. The hook runs for EVERY grade, identity included:
-    /// the engine's neutral is the hidden base look, not a no-op — skipping it
-    /// would render blends scene-linear-flat instead of the way the app has
-    /// always rendered them. The renderer is anchored to the first decoded
-    /// frame's as-shot metadata, which is uniform across a shoot.
+    /// stacker linear half-float textures, and a hook that grades each OUTPUT
+    /// frame's mean. The hook runs for EVERY grade, identity included. For a
+    /// raw shoot the engine's neutral is the hidden base look, not a no-op —
+    /// skipping it would render blends scene-linear-flat instead of the way
+    /// the app has always rendered them. For a display-referred shoot (JPEG,
+    /// HEIF, PNG — imported or captured) the first frame's reference flags
+    /// it and the neutral kernel is an identity, so an Original blend is the
+    /// plain linear-light mean of its stills. The renderer is anchored to the
+    /// first decoded frame's as-shot metadata, which is uniform across a shoot.
     ///
     /// `lock` — the project's committed framing lock, when the blend applies
     /// it — moves each SOURCE frame back onto the reference framing inside

@@ -152,10 +152,13 @@ def cmd_cli(args):
         run([lapse, "stack", *stills, "-o", work / "stacked.png"])
         run([lapse, "grade", stills[0], "--recipe",
              '{"highlights":-100,"shadows":49,"vibrance":53}', "--out", work / "graded.jpg"])
+        # Neutral on a JPEG must be an identity (display-referred gate) — the
+        # numeric guard is DisplayReferredNeutralTests; this keeps the path warm.
+        run([lapse, "grade", stills[0], "--recipe", "{}", "--out", work / "neutral.jpg"])
     else:
         print("driver: ffmpeg not on PATH — skipping stack/grade (they need stills)", file=sys.stderr)
 
-    for name in ("test.mov", "ramped.mp4", "timelapse.mp4", "stacked.png", "graded.jpg"):
+    for name in ("test.mov", "ramped.mp4", "timelapse.mp4", "stacked.png", "graded.jpg", "neutral.jpg"):
         target = work / name
         state = f"{target.stat().st_size} bytes" if target.exists() else "MISSING"
         print(f"  {name:16} {state}")

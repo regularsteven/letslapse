@@ -86,13 +86,15 @@ final class GradeEngineTests: XCTestCase {
         let output = try renderer.apply(to: texture)
         let gpu = readBack(output)
 
-        let lut = ToneMath.toneLUT(for: recipe)
+        let lut = ToneMath.toneLUT(for: recipe, displayReferred: reference.displayReferred)
         let wb = ToneMath.whiteBalanceMatrix(recipe: recipe, reference: reference)
         var worst: Float = 0
         for pixel in 0..<(width * height) {
             let base = pixel * 4
             let rgb = SIMD3<Float>(Float(input[base]), Float(input[base + 1]), Float(input[base + 2]))
-            let expected = ToneMath.evaluate(rgb, recipe: recipe, whiteBalance: wb, lut: lut)
+            let expected = ToneMath.evaluate(
+                rgb, recipe: recipe, whiteBalance: wb, lut: lut,
+                displayReferred: reference.displayReferred)
             let actual = SIMD3<Float>(Float(gpu[base]), Float(gpu[base + 1]), Float(gpu[base + 2]))
             worst = max(worst, simd_reduce_max(simd_abs(expected - actual)))
         }
@@ -109,7 +111,7 @@ final class GradeEngineTests: XCTestCase {
     private func assertUniformParity(recipe: GradeRecipe, reference: GradeReference = GradeReference(),
                                      file: StaticString = #filePath, line: UInt = #line) throws {
         let engine = try GradeEngine()
-        let lut = ToneMath.toneLUT(for: recipe)
+        let lut = ToneMath.toneLUT(for: recipe, displayReferred: reference.displayReferred)
         let wb = ToneMath.whiteBalanceMatrix(recipe: recipe, reference: reference)
         let levels: [SIMD3<Float>] = [
             SIMD3(0.004, 0.004, 0.004),
@@ -132,7 +134,9 @@ final class GradeEngineTests: XCTestCase {
             // the GPU actually read.
             let stored = SIMD3<Float>(
                 Float(Float16(level.x)), Float(Float16(level.y)), Float(Float16(level.z)))
-            let expected = ToneMath.evaluate(stored, recipe: recipe, whiteBalance: wb, lut: lut)
+            let expected = ToneMath.evaluate(
+                stored, recipe: recipe, whiteBalance: wb, lut: lut,
+                displayReferred: reference.displayReferred)
             let centre = ((height / 2) * width + width / 2) * 4
             let actual = SIMD3<Float>(Float(gpu[centre]), Float(gpu[centre + 1]), Float(gpu[centre + 2]))
             let error = simd_reduce_max(simd_abs(expected - actual))
@@ -665,4 +669,68 @@ final class GradeEngineTests: XCTestCase {
         XCTAssertGreaterThan(drift, 10 * max(worst, 0.001),
                              "the reference long edge must change the footprints")
     }
+
+    // MARK: - Display-referred sources
+
+    func testParityOnTheNeutralRecipeDisplayReferred() throws {
+        try assertRandomParity(
+            recipe: .neutral, reference: GradeReference(displayReferred: true), tolerance: 5e-3)
+    }
+
+    /// A JPEG/HEIF/PNG already carries a rendering: at neutral the kernel must
+    /// hand its pixels back — no base look, no roll-off, no desaturation. This
+    /// is the bug a Lightroom-exported sequence hit (median gray 198 → 228 at
+    /// "Original").
+    func testNeutralIsIdentityForDisplayReferredSources() throws {
+        let engine = try GradeEngine()
+        let width = 64, height = 64
+        var input = randomPixels(width: width, height: height, upTo: 1.0, seed: 7)
+        // One super-white pixel: display-referred input is [0,1] by contract,
+        // and anything above still clamps to the ceiling.
+        input[0] = 1.3; input[1] = 1.3; input[2] = 1.3
+        let texture = try makeTexture(engine, pixels: input, width: width, height: height)
+        let renderer = engine.makeRenderer(.neutral, reference: GradeReference(displayReferred: true))
+        let output = readBack(try renderer.apply(to: texture))
+        var worst: Float = 0
+        for pixel in 1..<(width * height) {
+            let base = pixel * 4
+            for channel in 0..<3 {
+                worst = max(worst, abs(Float(output[base + channel]) - Float(input[base + channel])))
+            }
+        }
+        XCTAssertLessThanOrEqual(worst, 1.5e-3, "neutral moved a display-referred pixel by \(worst)")
+        XCTAssertEqual(Float(output[0]), 1, accuracy: 1e-3)
+    }
+
+    /// The gate is per source: a scene-referred (raw) frame keeps the base
+    /// look, so every DNG project renders exactly as before.
+    func testNeutralStillLiftsSceneReferredSources() throws {
+        let engine = try GradeEngine()
+        let width = 16, height = 16
+        let texture = try makeTexture(
+            engine, pixels: uniformPixels(SIMD3(0.18, 0.18, 0.18), width: width, height: height),
+            width: width, height: height)
+        let renderer = engine.makeRenderer(.neutral, reference: GradeReference())
+        let output = readBack(try renderer.apply(to: texture))
+        let centre = ((height / 2) * width + width / 2) * 4
+        XCTAssertGreaterThan(Float(output[centre]), 0.25, "the base look must still lift a raw mid-grey")
+    }
+
+    /// The preview pool re-stages one renderer across frames; the flag must
+    /// travel with the reference so a JPEG never inherits a DNG's look.
+    func testRestageWithReferenceSwitchesTheGate() throws {
+        let engine = try GradeEngine()
+        let width = 16, height = 16
+        let texture = try makeTexture(
+            engine, pixels: uniformPixels(SIMD3(0.18, 0.18, 0.18), width: width, height: height),
+            width: width, height: height)
+        let renderer = engine.makeRenderer(.neutral, reference: GradeReference())
+        let centre = ((height / 2) * width + width / 2) * 4
+        let lifted = Float(readBack(try renderer.apply(to: texture))[centre])
+        renderer.restage(.neutral, reference: GradeReference(displayReferred: true))
+        let identity = Float(readBack(try renderer.apply(to: texture))[centre])
+        XCTAssertGreaterThan(lifted, 0.25)
+        XCTAssertEqual(identity, Float(Float16(0.18)), accuracy: 1.5e-3)
+    }
+
 }

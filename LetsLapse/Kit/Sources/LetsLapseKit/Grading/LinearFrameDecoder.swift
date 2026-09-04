@@ -11,8 +11,11 @@ import Metal
 /// DNGs go through `CIRAWFilter` with `boostAmount 0` (no contrast "look")
 /// and `extendedDynamicRangeAmount 2` — the Stage-0 probe showed EDR defaults
 /// to 0, which silently clamps the headroom the files were authored to carry.
-/// JPEGs decode through ImageIO; their 8-bit pixels gain nothing from the
-/// float path, but all *math* downstream still runs in half-float linear.
+/// JPEGs, HEIFs and PNGs decode through ImageIO; their 8-bit pixels gain
+/// nothing from the float path, but all *math* downstream still runs in
+/// half-float linear. Those frames are flagged `displayReferred`: they already
+/// carry a rendering, so the engine's neutral is an identity for them rather
+/// than the hidden DNG base look (see `GradeReference.displayReferred`).
 public final class LinearFrameDecoder {
     public struct Frame {
         public let texture: MTLTexture
@@ -26,19 +29,27 @@ public final class LinearFrameDecoder {
         /// the white balance is already in the pixels (`.cirawFilter`) or
         /// still owed as a 3×3 (everything else).
         public let decodePath: RawDecodePath
+        /// Whether the pixels are an already-rendered picture (ImageIO decode
+        /// of a JPEG/HEIF/PNG) rather than a scene-linear raw decode. Decided
+        /// by which branch of `decode` ran, not by the file's extension: a raw
+        /// that `CIRAWFilter` declines and ImageIO renders instead is
+        /// display-referred too.
+        public let displayReferred: Bool
 
         public init(
             texture: MTLTexture,
             asShotTemperatureK: Double,
             asShotTint: Double,
             sourceURL: URL? = nil,
-            decodePath: RawDecodePath = .bradfordAdaptation
+            decodePath: RawDecodePath = .bradfordAdaptation,
+            displayReferred: Bool = false
         ) {
             self.texture = texture
             self.asShotTemperatureK = asShotTemperatureK
             self.asShotTint = asShotTint
             self.sourceURL = sourceURL
             self.decodePath = decodePath
+            self.displayReferred = displayReferred
         }
 
         /// The `GradeReference` for this frame, wired to the path that decoded
@@ -50,7 +61,8 @@ public final class LinearFrameDecoder {
                 asShotTint: asShotTint,
                 longEdge: longEdge ?? Double(max(texture.width, texture.height)),
                 sourceURL: sourceURL,
-                decodePath: decodePath)
+                decodePath: decodePath,
+                displayReferred: displayReferred)
         }
     }
 
@@ -209,7 +221,8 @@ public final class LinearFrameDecoder {
                 asShotTint: asShotTint,
                 sourceURL: url,
                 decodePath: Self.reportedPath(
-                    effective, balanceWasAsked: asksForBalance, balancedInConverter: balanced))
+                    effective, balanceWasAsked: asksForBalance, balancedInConverter: balanced),
+                displayReferred: false)
         }
 
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
@@ -236,7 +249,7 @@ public final class LinearFrameDecoder {
         lastConverterBalanceFallbackReason = nil
         return Frame(
             texture: try render(image), asShotTemperatureK: Self.fallbackNeutralK, asShotTint: 0,
-            sourceURL: url, decodePath: .bradfordAdaptation)
+            sourceURL: url, decodePath: .bradfordAdaptation, displayReferred: true)
     }
 
     // MARK: - White balance in the converter
@@ -450,28 +463,37 @@ public final class LinearFrameDecoder {
             .translatedBy(x: 0, y: -image.extent.height))
     }
 
-    /// A display-ready CGImage of a graded texture: 8-bit Display P3, for the
-    /// preview surfaces and CGImage-based exporters.
-    public func cgImage(from texture: MTLTexture) throws -> CGImage {
-        guard let displayP3 = CGColorSpace(name: CGColorSpace.displayP3) else {
-            throw LapseError.gpuSetupFailed("Display P3 unavailable")
+    /// A display-ready CGImage of a graded texture: 8-bit, in `colorSpace`
+    /// (Display P3 by default, for the preview surfaces and the raw
+    /// exporters; sRGB for a graded copy of a display-referred sRGB source, so
+    /// the file leaves tagged the way it arrived and colour-unmanaged
+    /// consumers read it as intended).
+    public func cgImage(
+        from texture: MTLTexture, colorSpace name: CFString = CGColorSpace.displayP3
+    ) throws -> CGImage {
+        guard let space = CGColorSpace(name: name) else {
+            throw LapseError.gpuSetupFailed("colour space \(name) unavailable")
         }
         let image = try image(from: texture)
         guard let rendered = context.createCGImage(
-            image, from: image.extent, format: .RGBA8, colorSpace: displayP3) else {
+            image, from: image.extent, format: .RGBA8, colorSpace: space) else {
             throw LapseError.gpuSetupFailed("CGImage render failed")
         }
         return rendered
     }
 
-    /// Encodes a graded texture as JPEG bytes in Display P3.
-    public func jpegData(from texture: MTLTexture, quality: Double = 0.95) throws -> Data {
-        guard let displayP3 = CGColorSpace(name: CGColorSpace.displayP3) else {
-            throw LapseError.gpuSetupFailed("Display P3 unavailable")
+    /// Encodes a graded texture as JPEG bytes in `colorSpace` (Display P3 by
+    /// default; see `cgImage(from:colorSpace:)`).
+    public func jpegData(
+        from texture: MTLTexture, quality: Double = 0.95,
+        colorSpace name: CFString = CGColorSpace.displayP3
+    ) throws -> Data {
+        guard let space = CGColorSpace(name: name) else {
+            throw LapseError.gpuSetupFailed("colour space \(name) unavailable")
         }
         let image = try image(from: texture)
         guard let data = context.jpegRepresentation(
-            of: image, colorSpace: displayP3,
+            of: image, colorSpace: space,
             options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: quality]) else {
             throw LapseError.gpuSetupFailed("JPEG encode failed")
         }

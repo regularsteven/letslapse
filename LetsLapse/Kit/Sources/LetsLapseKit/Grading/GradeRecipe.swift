@@ -85,7 +85,11 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// 5: luma NR — the bilateral becomes a frequency split (Gaussian base
     ///    kept whole, soft-thresholded detail residual), and `noiseDetail`
     ///    inverts from a range gate into a preservation control.
-    public static let engineVersion = 5
+    /// 6: neutral is identity for display-referred sources — the hidden base
+    ///    look, the neutral highlight roll-off and the desaturation floor are
+    ///    gated on `GradeReference.displayReferred`, so a JPEG/HEIF/PNG renders
+    ///    as its own pixels at Original instead of through a second rendering.
+    public static let engineVersion = 6
 
     /// A short, stable string identifying this grade for cache keys.
     public var cacheToken: String {
@@ -123,18 +127,31 @@ public struct GradeReference: Sendable, Equatable {
     /// white-balance matrix. Defaults to `.bradfordAdaptation` so every
     /// existing call site keeps exactly the behaviour it had.
     public var decodePath: RawDecodePath
+    /// True when the texture is already a rendered picture — a JPEG, HEIF,
+    /// PNG or TIFF that ImageIO decoded, carrying the camera's or Lightroom's
+    /// own tone rendering. The engine's hidden base look, its neutral
+    /// highlight roll-off and its neutral desaturation floor exist to make a
+    /// scene-linear raw decode look the way DNG consumers render it by
+    /// default; on a picture that has already been rendered they are a second
+    /// rendering (measured on a Lightroom JPEG: median gray 198 → 228, blue
+    /// clipped). With this set, `.neutral` is a true identity: output pixels
+    /// are input pixels. Defaults to false (scene-referred) so every
+    /// hand-built reference — and every raw decode — keeps the look it had.
+    public var displayReferred: Bool
 
     public init(
         asShotTemperatureK: Double = 6500,
         asShotTint: Double = 0,
         longEdge: Double = 0,
         sourceURL: URL? = nil,
-        decodePath: RawDecodePath = .bradfordAdaptation
+        decodePath: RawDecodePath = .bradfordAdaptation,
+        displayReferred: Bool = false
     ) {
         self.asShotTemperatureK = asShotTemperatureK
         self.asShotTint = asShotTint
         self.longEdge = longEdge
         self.sourceURL = sourceURL
         self.decodePath = decodePath
+        self.displayReferred = displayReferred
     }
 }

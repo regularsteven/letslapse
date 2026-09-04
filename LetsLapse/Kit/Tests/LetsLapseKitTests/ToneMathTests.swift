@@ -301,6 +301,43 @@ final class ToneMathTests: XCTestCase {
         let out = ToneMath.evaluate(SIMD3(2.0, 1.9, 1.8), recipe: recipe, whiteBalance: wb, lut: lut)
         XCTAssertLessThan(max(out.x, max(out.y, out.z)), 1.0)
     }
+
+    /// A display-referred source (JPEG/HEIF/PNG) is already rendered: for it
+    /// the neutral curve, the neutral roll-off and the desaturation floor are
+    /// all identity, sample for sample.
+    func testNeutralCurveIsIdentityForDisplayReferredSources() {
+        let lut = ToneMath.toneLUT(for: .neutral, displayReferred: true)
+        for (index, value) in lut.enumerated() {
+            XCTAssertEqual(value, Float(index) / Float(lut.count - 1), accuracy: 1e-6)
+        }
+        for y: Float in [0, 0.5, 0.94, 0.96, 1, 1.5, 4] {
+            XCTAssertEqual(
+                ToneMath.recoveredLuminance(y, recovery: 0, displayReferred: true), y, accuracy: 1e-6)
+        }
+        let identity = matrix_identity_float3x3
+        let samples: [SIMD3<Float>] = [
+            SIMD3(0.02, 0.02, 0.02), SIMD3(0.18, 0.18, 0.18), SIMD3(0.7, 0.7, 0.7),
+            SIMD3(0.9, 0.9, 0.9), SIMD3(0.98, 0.98, 0.98),   // the desat floor's band
+            SIMD3(0.9, 0.5, 0.1), SIMD3(0.1, 0.3, 0.95),
+        ]
+        for rgb in samples {
+            let out = ToneMath.evaluate(
+                rgb, recipe: .neutral, whiteBalance: identity, lut: lut, displayReferred: true)
+            XCTAssertEqual(
+                simd_reduce_max(simd_abs(out - rgb)), 0, accuracy: 1e-5,
+                "neutral moved \(rgb) to \(out)")
+        }
+    }
+
+    /// Only the HIDDEN roll-off goes: Highlights pulled by the user still
+    /// compresses super-whites on a display-referred source, and the raw
+    /// neutral still rolls off above its knee.
+    func testDisplayReferredGateLeavesUserRecoveryAlone() {
+        XCTAssertLessThan(ToneMath.recoveredLuminance(2, recovery: 1, displayReferred: true), 1)
+        XCTAssertLessThan(ToneMath.recoveredLuminance(2, recovery: 0), 2)
+        XCTAssertEqual(ToneMath.recoveredLuminance(2, recovery: 0, displayReferred: true), 2)
+    }
+
 }
 
 /// Deterministic generator so test pixels are reproducible run to run.

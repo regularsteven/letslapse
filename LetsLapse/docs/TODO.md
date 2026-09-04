@@ -11,6 +11,105 @@ live inline.
 
 ## Open
 
+### Encode quality — ProRes master, constant-quality mode, and the encode-path secondaries
+
+**Raised:** 2026-09-04 (Steven — Lightroom → Resolve vs LetsLapse comparison on
+`E33ED216` / `76BEF654`) · open · medium · policy:
+`Kit/Sources/LetsLapseKit/VideoEncodePolicy.swift` · tests:
+`VideoEncodePolicyTests`
+
+*Shipped 2026-09-04: the bitrate budget is per pixel per FRAME again — the
+`min(fps, 30)` in the rate term had halved what every 50/60 fps frame got
+(4032×3024 @ 60 measured 0.12 / 0.09 bits per pixel; an encoder-only test on a
+clean reference kept 36 % (H.264 88 Mbps) / 21 % (HEVC 10-bit 66 Mbps) of the
+finest-band detail, 56 % at 250 Mbps, 100 % for ProRes). Ceilings are now
+200 / 160 Mbps.*
+
+Still open, in order:
+
+1. **ProRes 422 HQ master output for blends.** `OutputCodec.prores` exists in
+   the Kit and the CLI (`VideoBlender.swift`), but the app offers only
+   H.264 / 10-bit HEVC. A grade-elsewhere workflow (Resolve) wants a master;
+   48 MP sources cannot be H.264 or HEVC at all (Level 6.2 caps at 8192×4320).
+   `.mov` file type, `blends/<uuid>.mp4` naming, thumbnails and share paths
+   all assume MP4 today.
+2. **Constant-quality encode mode.** `kVTCompressionPropertyKey_Quality` is
+   honoured only by some encoders and an unsupported key raises at
+   `AVAssetWriterInput.init` — probe with `VTCopySupportedPropertyDictionary`
+   first, then expose Standard / High / Maximum.
+3. **Secondaries found in the audit:** `VideoBlender.swift` (~:338-343, :476)
+   and `TimeSliceRenderer.swift` (~:281-286, :395) feed a `32BGRA` pool into
+   a Main10 writer and tag 709 primaries on a P3 stream (8-bit pixels inside
+   the "10-bit" path); `MacVideoJobRunner.swift` (~:696) hardcodes
+   `.h264High8Bit` and ignores the user's HEVC choice; `CollectionExporter.swift`
+   (~:91) still uses `AVAssetExportPresetHighestQuality`, which chooses its
+   own bitrate, writes no colour tags and can bin frames.
+
+### Graded still export — full-chroma JPEG or a lossless format choice
+
+**Raised:** 2026-09-04 (Steven) · open · small–medium · writer:
+`PhotoGrader.renderJPEG` (`App/PhotoPreset.swift`), `LinearFrameDecoder.cgImage`
+
+A graded copy of a Lightroom JPEG (4:4:4, q≈95, 5.9 MB) leaves the app as
+4:2:0 at quality 0.95 (5.1 MB): luma detail is fully kept, chroma resolution
+halves (spectral power at 0.5–1.0 Nyquist keeps 13–26 %). ImageIO writes
+4:4:4 only at quality 1.0, which is ~2.5× the size (11.6 MB) — Steven ruled
+that out. Shipped 2026-09-04: the copy is tagged in the source's space (sRGB
+for a display-referred source, Display P3 for raw). Owed: a 4:4:4 writer at
+Lightroom's size (a non-ImageIO JPEG encoder), or an Export… format choice
+(JPEG max / 16-bit PNG / TIFF) with its design SVGs.
+
+### DNG neutral look — re-fit against Apple's render across the clip, and raw capture sharpening
+
+**Raised:** 2026-09-04 (Steven — the Lightroom comparison) · open · medium ·
+engine: `ToneMath.baseCurvePoints`, `LinearFrameDecoder` (`boostAmount 0`,
+`extendedDynamicRangeAmount 2`)
+
+The hidden base look was quantile-mapped from ONE calibration frame onto
+ImageIO's default render of that DNG. Across `E33ED216` the untouched render
+sits flat next to Lightroom's defaults: for frame 2401, ImageIO's own render
+reads p50 181 / p95 229 against the app's 165 / 196 (that export carries
+Steven's grade, so the gap is an upper bound). Two candidate moves, both
+changing every existing DNG project's look: re-fit the curve across frames
+(or promote the look to a visible preset and make neutral honest), and add a
+Lightroom-style default capture sharpening for raw (amount 40 / radius 1 /
+masking 25 has no counterpart — `sharpen` defaults to 0, and Apple's boost,
+which carries its own sharpening, is off). Give the `lapse grade` rig a
+stored expectation first so the re-fit is measurable.
+
+### Framing lock — resample quality of the per-frame lock
+
+**Raised:** 2026-09-04 (Steven; measured on `E33ED216`) · open · small ·
+engine: `FrameRotation.levelled` · doc: [framing-lock.md](framing-lock.md)
+("sub-pixel resample vs integer copy")
+
+`levelled`'s bypass keys on `rotating || shifting || insetting`, and the
+inset is a whole-shoot constant — so with a lock committed EVERY frame,
+the reference frame included, takes a bilinear sub-pixel translate followed
+by a ~0.7 % `CILanczosScaleTransform` upscale: a full-frame low-pass with no
+magnification benefit. Measured drift inside one 8-still window is 1.2 px
+(frames 2401 → 2408), so an unlocked blend smears by about a pixel anyway;
+the question is how to lock without softening. Options: integer-pixel blit
+(≤ 0.5 px residual, no resample, size unchanged) or one Lanczos pass that
+translates and crops without scaling back (output at the cropped size,
+~4004×2994 for a 0.7 % crop — needs design sign-off). Steven 2026-09-04:
+follow-up, not part of the output-quality fix. A/B today: Adjust › Advanced ›
+Apply stabilisation.
+
+### Display-referred neutral — the accepted behaviour change
+
+**Raised:** 2026-09-04 · **shipped 2026-09-04** (engine version 6) · note only
+
+Every JPEG/HEIF/PNG project — imported and captured (Mac interval is always
+JPEG, iOS JPEG mode) — now renders "Original" as its own pixels on every
+surface; before, the engine's DNG base look lifted them (median gray 198 →
+228 on a Lightroom export, blue clipped). Grades and presets saved on such
+projects were authored against the lifted look and now sit on identity —
+darker and flatter than the day they were made. Not migrated: there is no
+correct slider translation of "lift by the base curve", and the old look was
+a bug on these sources. DNG projects are pixel-identical (guarded by
+`GradeEngineTests` and `DisplayReferredNeutralTests`).
+
 ### Framing lock — post-capture stabilisation of interval shoots
 
 **Raised:** 2026-09-03 · **Engine, design files and app wiring shipped

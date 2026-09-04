@@ -26,7 +26,11 @@ import simd
 /// The spatial inputs (base, neighbourhood chroma) are textures on the GPU;
 /// `evaluate` takes them as explicit parameters so the parity tests can pin
 /// the kernel to this file. Every local term vanishes at slider zero, so a
-/// neutral render is untouched by all of this.
+/// neutral render is untouched by all of this — save the three terms that
+/// make up the hidden base look (`baseCurve`, the neutral roll-off in
+/// `recoveredLuminance`, the desaturation floor), which exist for scene-linear
+/// raw and are gated off with `displayReferred` for an already-rendered
+/// picture, where neutral is a true identity.
 ///
 /// After the tone stage come the detail passes — texture (mid-frequency
 /// band) and sharpen (capture acutance) — then vignette and the optional
@@ -58,7 +62,9 @@ public enum ToneMath {
     static let whitesAmplitude: Float = 0.25
     static let blacksAmplitude: Float = 0.25
     /// Even at neutral, super-whites roll off gently instead of hard-clipping,
-    /// so an untouched render still uses the DNG's headroom gracefully.
+    /// so an untouched render still uses the DNG's headroom gracefully. Part
+    /// of the hidden base look: skipped for display-referred sources, which
+    /// have no headroom to roll off.
     static let recoveryBase: Float = 0.15
     static let desatStrength: Float = 0.5
     static let vibranceStrength: Float = 0.9
@@ -222,7 +228,9 @@ public enum ToneMath {
     /// Fitted by quantile-mapping the engine's linear render of the
     /// calibration frame onto ImageIO's default render of the same DNG
     /// (Apple's "boost" look), so an untouched project keeps the look it has
-    /// always had. Encoded domain in, encoded domain out.
+    /// always had. Encoded domain in, encoded domain out. Raw only: a
+    /// display-referred source (`GradeReference.displayReferred`) is already
+    /// rendered, and `toneCurve` skips this curve for it.
     static let baseCurvePoints: [SIMD2<Float>] = [
         SIMD2(0.000, 0.000),
         SIMD2(0.030, 0.022),
@@ -281,9 +289,15 @@ public enum ToneMath {
     /// Reinhard compression above a knee. The knee drops and the blend
     /// strengthens as recovery rises, pulling the headroom (values up to ~4)
     /// smoothly under 1.0. C¹ at the knee: value and slope are continuous.
-    public static func recoveredLuminance(_ y: Float, recovery: Float) -> Float {
+    ///
+    /// `displayReferred` drops the neutral floor (`recoveryBase`): an
+    /// already-rendered picture rolls off only as far as the user's own
+    /// Highlights move asks.
+    public static func recoveredLuminance(
+        _ y: Float, recovery: Float, displayReferred: Bool = false
+    ) -> Float {
         let r = min(max(recovery, 0), 1)
-        let strength = max(r, recoveryBase)
+        let strength = displayReferred ? r : max(r, recoveryBase)
         let knee = 0.95 - 0.6 * r
         guard y > knee else { return y }
         let u = (y - knee) / (1 - knee)
@@ -321,8 +335,11 @@ public enum ToneMath {
     /// first, then the user's controls on top. Every stage is monotone within
     /// the amplitude bounds above, so the composition is monotone —
     /// `ToneMathTests` sweeps the parameter corners to hold it.
-    static func toneCurve(_ x: Float, recipe: GradeRecipe) -> Float {
-        let based = baseCurve(max(x, 0))
+    ///
+    /// `displayReferred` skips the base look: the user's controls then sit on
+    /// identity, and the neutral curve IS identity.
+    static func toneCurve(_ x: Float, recipe: GradeRecipe, displayReferred: Bool = false) -> Float {
+        let based = displayReferred ? max(x, 0) : baseCurve(max(x, 0))
         let xc = min(based, 1)
         let residual = based - xc
 
@@ -351,9 +368,9 @@ public enum ToneMath {
     /// The tone curve sampled over [0, 1]. The kernel (and `evaluate`) sample
     /// it with linear interpolation and extrapolate above 1 with the end
     /// slope.
-    public static func toneLUT(for recipe: GradeRecipe) -> [Float] {
+    public static func toneLUT(for recipe: GradeRecipe, displayReferred: Bool = false) -> [Float] {
         (0..<lutSize).map { i in
-            toneCurve(Float(i) / Float(lutSize - 1), recipe: recipe)
+            toneCurve(Float(i) / Float(lutSize - 1), recipe: recipe, displayReferred: displayReferred)
         }
     }
 
@@ -393,7 +410,8 @@ public enum ToneMath {
         whiteBalance: simd_float3x3,
         lut: [Float],
         baseLog2: Float? = nil,
-        smoothed: SIMD3<Float>? = nil
+        smoothed: SIMD3<Float>? = nil,
+        displayReferred: Bool = false
     ) -> SIMD3<Float> {
         var v = whiteBalance * rgb
         v = simd_max(v * exp2(recipe.exposure), SIMD3<Float>(repeating: 0))
@@ -419,7 +437,7 @@ public enum ToneMath {
         }
 
         let recovery = max(-recipe.highlights, 0)
-        y1 = recoveredLuminance(y1, recovery: recovery)
+        y1 = recoveredLuminance(y1, recovery: recovery, displayReferred: displayReferred)
         let g = powf(y1, encodeGamma)
         let mapped = sampleLUT(lut, at: g)
         let y2 = powf(max(mapped, 0), 1 / encodeGamma)
@@ -463,11 +481,12 @@ public enum ToneMath {
         var out = ratios * y2
 
         // Desaturation: a constant gentle floor near white (the neutral look,
-        // unchanged), plus a clip-targeted term that only engages where a
-        // channel actually runs past the display ceiling under recovery — so
-        // pulling Highlights down keeps a sunset's colour instead of greying
-        // it.
-        var desat = desatStrength * recoveryBase * smoothstep(0.7, 1.0, y2)
+        // unchanged — raw only, a display-referred source gets none), plus a
+        // clip-targeted term that only engages where a channel actually runs
+        // past the display ceiling under recovery — so pulling Highlights down
+        // keeps a sunset's colour instead of greying it.
+        let floor = displayReferred ? 0 : desatStrength * recoveryBase
+        var desat = floor * smoothstep(0.7, 1.0, y2)
         let maxPre = max(out.x, max(out.y, out.z))
         desat += desatStrength * recovery * smoothstep(1.0, 1.3, maxPre)
         desat = min(desat, 1)

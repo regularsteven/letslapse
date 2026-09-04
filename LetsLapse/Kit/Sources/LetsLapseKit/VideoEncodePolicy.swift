@@ -52,18 +52,27 @@ public struct VideoEncodePolicy: Sendable {
         profile == .h264High8Bit ? .h264 : .hevc
     }
 
-    /// Resolution-aware target bitrate. The per-pixel coefficients are the
-    /// clip-transcode utility's, chosen so re-encoding doesn't introduce
-    /// compression banding; fps is capped at 30 in the product so a 50 fps
-    /// timelapse doesn't demand half again the bits of a 30 fps one for the
-    /// same pixel budget per frame.
+    /// Resolution- and rate-aware target bitrate: a fixed budget of bits per
+    /// pixel per FRAME (0.24 for H.264 High, 0.18 for HEVC Main10 — the
+    /// clip-transcode utility's coefficients, chosen so a re-encode doesn't
+    /// band) times the pixels the writer actually emits per second.
+    ///
+    /// The frame rate is NOT capped. An earlier `min(fps, 30)` in the rate
+    /// term meant to keep a 50 fps timelapse from costing more than a 30 fps
+    /// one, but the writer still emits every frame, so it halved what each
+    /// frame got: 4032×3024 @ 60 measured 0.12 / 0.09 bits per pixel, and an
+    /// encoder-only test on a clean reference kept only 36 % (H.264) / 21 %
+    /// (HEVC 10-bit) of the finest-band detail against 100 % for ProRes.
+    /// The ceilings sit under the H.264 High Level 6.0 bound (300 Mbps) and
+    /// the HEVC Level 6.1 High-tier bound (480 Mbps), and bind only above
+    /// 12 MP @ 68 fps.
     public var averageBitRate: Int {
-        let pixelsPerSecond = Double(width * height) * min(fps, 30)
+        let pixelsPerSecond = Double(width * height) * max(fps, 1)
         switch profile {
         case .h264High8Bit:
-            return Int(min(max(pixelsPerSecond * 0.24, 8_000_000), 100_000_000))
+            return Int(min(max(pixelsPerSecond * 0.24, 8_000_000), 200_000_000))
         case .hevcMain10:
-            return Int(min(max(pixelsPerSecond * 0.18, 6_000_000), 80_000_000))
+            return Int(min(max(pixelsPerSecond * 0.18, 6_000_000), 160_000_000))
         }
     }
 

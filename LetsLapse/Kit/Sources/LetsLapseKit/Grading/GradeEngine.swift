@@ -169,10 +169,17 @@ public final class GradeRenderer {
         self.commandQueue = commandQueue
         self.recipe = recipe
         self.reference = reference
+        (self.lut, self.params) = Self.staged(recipe: recipe, reference: reference)
+    }
 
-        let lut = ToneMath.toneLUT(for: recipe)
-        self.lut = lut
-        self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)
+    /// The recipe-dependent state — the tone LUT and the kernel coefficients
+    /// — built in exactly one place, so the reference's `displayReferred`
+    /// gate cannot be dropped by one of the three paths that stage a renderer.
+    private static func staged(
+        recipe: GradeRecipe, reference: GradeReference
+    ) -> (lut: [Float], params: GPUGradeParams) {
+        let lut = ToneMath.toneLUT(for: recipe, displayReferred: reference.displayReferred)
+        return (lut, gpuParams(recipe: recipe, reference: reference, lut: lut))
     }
 
     /// Points this renderer at a different recipe, keeping its scratch
@@ -186,9 +193,7 @@ public final class GradeRenderer {
     public func restage(_ recipe: GradeRecipe) {
         guard recipe != self.recipe else { return }
         self.recipe = recipe
-        let lut = ToneMath.toneLUT(for: recipe)
-        self.lut = lut
-        self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)
+        (lut, params) = Self.staged(recipe: recipe, reference: reference)
     }
 
     /// `restage` for a caller that also moves to a different frame: the
@@ -199,16 +204,16 @@ public final class GradeRenderer {
         guard recipe != self.recipe || reference != self.reference else { return }
         self.recipe = recipe
         self.reference = reference
-        let lut = ToneMath.toneLUT(for: recipe)
-        self.lut = lut
-        self.params = Self.gpuParams(recipe: recipe, reference: reference, lut: lut)
+        (lut, params) = Self.staged(recipe: recipe, reference: reference)
     }
 
     private static func gpuParams(
         recipe: GradeRecipe, reference: GradeReference, lut: [Float]
     ) -> GPUGradeParams {
         let recovery = max(-recipe.highlights, 0)
-        let strength = max(recovery, ToneMath.recoveryBase)
+        // The neutral roll-off and desaturation floor are the raw base look;
+        // a display-referred source gets only what the user asked for.
+        let strength = reference.displayReferred ? recovery : max(recovery, ToneMath.recoveryBase)
         let endSlope = (lut[lut.count - 1] - lut[lut.count - 2]) * Float(lut.count - 1)
         let usesBase = recipe.shadows != 0 || recipe.highlights != 0 || recipe.clarity != 0
         let highlightAmp = recipe.highlights >= 0
@@ -227,7 +232,7 @@ public final class GradeRenderer {
             exposureGain: exp2(recipe.exposure),
             kneeK: 0.95 - 0.6 * recovery,
             recoveryStrength: strength,
-            desatFloor: ToneMath.desatStrength * ToneMath.recoveryBase,
+            desatFloor: reference.displayReferred ? 0 : ToneMath.desatStrength * ToneMath.recoveryBase,
             clipDesat: ToneMath.desatStrength * recovery,
             saturationGain: 1 + ToneMath.saturationStrength * recipe.saturation,
             vibranceCoeff: ToneMath.vibranceStrength * recipe.vibrance,
@@ -244,7 +249,9 @@ public final class GradeRenderer {
 
     /// Encodes the whole grade into `commandBuffer` and returns the output
     /// texture (renderer-owned scratch, valid until the next `encode` call).
-    /// Input: scene-linear Display P3, rgba16Float. Output: display-referred
+    /// Input: linear Display P3, rgba16Float — scene-linear with headroom for
+    /// a raw decode, display-linear [0,1] for a `reference.displayReferred`
+    /// frame, which neutral hands back unchanged. Output: display-referred
     /// [0,1] linear, same primaries, rgba16Float.
     ///
     /// `ditherFor8Bit` adds one TPDF pass at a 1/255 amplitude — pass true

@@ -130,7 +130,7 @@ what **other** means:
 | iOS / iPadOS app | `driver.py sim` | the product, on a booted simulator, driven into any screen by hook |
 | macOS app | `driver.py mac` | the same target built for the Mac, captured by window id |
 | `lapse` CLI | `driver.py cli` | the blend engine with no UI in the way |
-| LetsLapseKit | `driver.py test` | 243 unit + real-Metal GPU tests |
+| LetsLapseKit | `driver.py test` | unit + real-Metal GPU tests |
 
 ## Prerequisites
 
@@ -368,7 +368,7 @@ side of that trap.
 python3 .claude/skills/run-letslapse/driver.py test
 ```
 
-**243 tests, 242 pass, 1 fails — and the failure is not yours.**
+**Every test but one passes — and the failure is not yours.**
 `LinearDNGTests.testBlendsRealUntouchedSequence` writes its output to a
 hard-coded absolute scratchpad path from a long-dead session
 (`Kit/Tests/LetsLapseKitTests/LinearDNGTests.swift:156`) and dies with

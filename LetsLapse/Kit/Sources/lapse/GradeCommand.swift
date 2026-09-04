@@ -79,7 +79,11 @@ func runGradeRender(
     let output = try renderer.apply(to: frame.texture)
     let gradeSeconds = Date().timeIntervalSince(gradeStarted)
 
-    let data = try decoder.jpegData(from: output, quality: quality)
+    // The app's export rule: a display-referred source leaves in sRGB, the
+    // space it arrived in; raw keeps Display P3's gamut.
+    let data = try decoder.jpegData(
+        from: output, quality: quality,
+        colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3)
     let outputURL = URL(fileURLWithPath: outPath)
     try data.write(to: outputURL)
     print("graded \(frame.texture.width)x\(frame.texture.height) "

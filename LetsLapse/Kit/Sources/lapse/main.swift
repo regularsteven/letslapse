@@ -88,7 +88,8 @@ USAGE:
       --recipe JSON         Slider values, Lightroom-style ±100 numbers, e.g.
                             '{"highlights":-100,"shadows":49,"vibrance":53}'
                             (exposure is EV; temperature is a mired offset)
-      --out PATH            Write the graded Display P3 JPEG here
+      --out PATH            Write the graded JPEG here (Display P3 for raw,
+                            sRGB for a JPEG/HEIF/PNG source)
       --scale N             Decode scale, 1 = full resolution (default 1)
       --quality N           JPEG quality 1…100 (default 95)
       --decode-path NAME    Raw decode pipeline: bradford | forwardmatrix |
