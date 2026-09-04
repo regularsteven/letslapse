@@ -50,9 +50,9 @@ Unchanged from the phone: the run pills (the burst indicator's bar and count, th
     </g>
     <rect x="44" y="664" width="60" height="60" rx="12" fill="url(#thumb)"/>
 
-    <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.landscape.svg,
+    <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.mac.landscape.svg,
          not this file; placement = ring centre (894, 380) minus (80, 60). Contract: components/README.md -->
-    <image id="shutter-cluster" href="../components/shutter-cluster.running.landscape.svg" x="814" y="320" width="160" height="120"/>
+    <image id="shutter-cluster" href="../components/shutter-cluster.running.mac.landscape.svg" x="814" y="320" width="160" height="120"/>
 
     <!-- ============ The rail (LadderRail): picture, trailing-centre of the viewfinder ============ -->
     <g id="ladder-rail">
@@ -67,12 +67,9 @@ Unchanged from the phone: the run pills (the burst indicator's bar and count, th
       <rect x="823" y="417" width="14" height="60" rx="7" fill="#1C1C1E" fill-opacity="0.6" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="1"/>
     </g>
 
-    <!-- ============ The running row: pills · readout · RUNG dial ============ -->
+    <!-- ============ The running row: readout · RUNG dial (2026-09-04 third pass: the pills row is gone;
+         the Mac has no exposure pair, so the rung's line is its amber line; frames/elapsed sit behind Info) ============ -->
     <g id="running-row">
-      <!-- Burst status indicator (249 pt): the bar and the output count; the elapsed clock pill beside it -->
-      <rect x="150" y="653" width="170" height="4" rx="2" fill="#FFB340"/>
-      <text x="352" y="659" font-size="11" class="mono" fill="#FFB340">823</text>
-      <text x="410" y="659" font-size="11" class="mono" fill="#FFFFFF" fill-opacity="0.7">41:12</text>
       <!-- holyGrailReadout, ladder-only branch: no ramp, so no exposure pair above it -->
       <rect x="142" y="675" width="196" height="22" rx="8" fill="#000000" fill-opacity="0.5"/>
       <text x="152" y="690" font-size="10.5" class="mono" fill="#FFB340">Dusk · every 2 s · blend 3</text>

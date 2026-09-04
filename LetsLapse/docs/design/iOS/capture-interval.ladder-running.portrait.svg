@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Interval (running, Ladder) · portrait</title>
-  <desc>Mirrors App/LightLadderViews.swift (LadderRail, LadderToast) inside App/CaptureView.swift (ladderViewfinderOverlays, intervalRunningPills, holyGrailReadout) over CameraController.LadderState and the Holy Grail engine — the handoff's 2f state, 41:08 into a Ladder shoot. The Holy Grail readout keeps its geometry: line 1 the exposure the servo has arrived at ("1/8 · ISO 1250"), line 2 the smoothed scene EV and the frame count, and line 3 — the slot that reads "shutter at max · ISO ramping" under Dynamic — now carries the ladder: "Dusk · every 2 s · blend 3 → 2, thermal" in amber (the active rung, its pacing, and the governor's clamp; when a pinned shutter also applies, that amber warning wins the line). The RAIL sits at the viewfinder's trailing edge, 14 pt in, vertically centred: one bar per rung, heights proportional to EV span inside the 16 … −2 window (Daylight 3 · Fading 5 · Dusk 4 · Night 6 of a 180 pt total, 5 pt apart, 14 pt wide at 30% — the last at 60% with a faint ring), the ACTIVE rung widened to 22 pt, opaque, ringed 2 pt in LL.amber, its name in an amber chip beside it (black 55%, r6, 11 semibold, max 90 pt). The TOAST — "Stepped down to Dusk" (or "Stepped up to …"), a capsule 34 pt tall, black 65%, with a four-line ladder glyph whose active line is amber — appears for 3 s on a rung change, 28 pt above the viewfinder's bottom edge. The burst pill runs open-ended (823 outputs — a zebra this dense reads as a solid amber bar); the elapsed pill keeps the run clock. Mode row hidden and the shutter is the stop square while capturing. Staged by LL_LADDER=running with LL_CAPTURE=1: the simulator has no camera to meter, so the hook fabricates the built-in on Dusk at scene EV 5.2, 823 frames, 41:08, the governor at blend 3 → 2 and fires the toast 2 s in — there the session is not truly recording, so the sim screenshot keeps the mode row and record button that a real run hides; the overlays are drawn here on the device's 4:3 frame.</desc>
+  <title>iOS · Capture — Interval (running, Ladder, Info off) · portrait</title>
+  <desc>Mirrors App/LightLadderViews.swift (LadderRail, LadderToast) + App/CaptureView.swift (run readout + ±EV slider; shutterClusterLayer). Ladder mid-run, Info OFF — the 2026-09-04 (third pass) default: the rail names the rung over the viewfinder, the toast announces a step, and above the cluster only the amber exposure line (shutter · ISO · scene EV) and the ±EV bias slider. The governor's note (blend 3 → 2, thermal) lives on the Info panel's health row now, not in a second panel. Dim engaged. Staged by LL_LADDER=running. Design ahead of code.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -82,21 +82,18 @@
         <text x="135" y="485.5" font-size="12.5" class="sb" fill="#FFF">Stepped down to Dusk</text>
       </g>
 
-      <!-- running pills + readout -->
-      <g id="interval-running">
-        <g id="running-pills">
-          <rect x="33" y="600" width="249" height="26" rx="13" fill="#000" opacity="0.5"/>
-          <rect x="45" y="610.5" width="170" height="5" rx="2.5" fill="#FFF" opacity="0.16"/>
-          <rect x="45" y="610.5" width="170" height="5" rx="2.5" fill="url(#zebra)"/>
-          <text x="271" y="617.5" font-size="12" class="m" text-anchor="end" fill="#FFB340">823</text>
-          <rect x="294" y="600" width="66" height="26" rx="13" fill="#000" opacity="0.5"/>
-          <text x="327" y="617" font-size="11.5" class="m" fill="#FFF" opacity="0.7" text-anchor="middle">41:08</text>
-        </g>
-        <g id="holy-grail-readout">
-          <rect x="72" y="634" width="249" height="63" rx="8" fill="#000" opacity="0.5"/>
-          <text x="82" y="650" font-size="10.5" class="m" fill="#FFF" opacity="0.75">1/8 · ISO 1250</text>
-          <text x="82" y="666" font-size="10.5" class="m" fill="#FFF" opacity="0.75">scene EV 5.2 · 823 frames</text>
-          <text x="82" y="682" font-size="10.5" class="m" fill="#FFB340">Dusk · every 2 s · blend 3 → 2, thermal</text>
+      <!-- RUN READOUT, Info OFF — the default (design 2026-09-04, third pass): the ±EV bias slider
+           and ONE amber line — current shutter · ISO · scene EV — above the cluster. The output
+           count, elapsed clock and the diagnostics panel sit behind the cluster's Info toggle (slot 2);
+           the ramp readout panel that used to duplicate them is gone. -->
+      <g id="run-readout">
+        <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1/8 · ISO 1250 · EV 5.2</text>
+        <g id="ev-slider" data-symbol="plusminus.circle">
+          <circle cx="26" cy="698" r="7" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.2"/>
+          <path d="M22.5 696 h7 M26 692.5 v7 M22.5 701.5 h7" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.1" stroke-linecap="round"/>
+          <rect x="47" y="695.5" width="330" height="5" rx="2.5" fill="#FFF" opacity="0.25"/>
+          <rect x="47" y="695.5" width="165" height="5" rx="2.5" fill="#FFB340"/>
+          <circle cx="212" cy="698" r="11" fill="#FFF"/>
         </g>
       </g>
 
@@ -120,6 +117,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Ladder) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLadderViews (LadderRail · LadderToast) · holyGrailReadout line 3 · LL_LADDER=running</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Ladder, Info off) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors LightLadderViews (LadderRail · LadderToast) · run readout · ±EV slider · LL_LADDER=running</text>
 </svg>

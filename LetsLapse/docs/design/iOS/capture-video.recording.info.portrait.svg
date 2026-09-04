@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Video (recording, Info off) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (recordingPill, segmentStrip; shutterClusterLayer → clusterSlot). Video mode mid-take, Info OFF — the 2026-09-04 (third pass) default: the speed → playback-seconds marquee is hidden and the segment strip alone sits above the cluster. The cluster: slot 1 screen Dim (engaged, amber), slot 2 Info (off), slot 3 the speed-burst trigger (120, a burst live), slot 4 the burst count. Info on restores the marquee — capture-video.recording.info.portrait.svg. Design ahead of code.</desc>
+  <title>iOS · Capture — Video (recording, Info on) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (recordingPill, speedMarquee, segmentStrip; shutterClusterLayer). The same take as capture-video.recording.portrait.svg with the cluster's Info toggle ON (amber): the speed → playback-seconds marquee — how long the take plays at each speed — returns above the segment strip. Off by default, per take.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -53,18 +53,23 @@
         </g>
       </g>
 
-      <!-- Info OFF (the default, 2026-09-04 third pass): the speed → playback-seconds marquee is
-           hidden; the cluster's Info toggle (slot 2) brings it back (capture-video.recording.info.portrait.svg).
-           The segment strip keeps its seat above the cluster. -->
+      <!-- speed marquee (centered, monospaced) -->
+      <g id="speed-marquee" class="m" font-size="12.5">
+        <text x="196.5" y="633" text-anchor="middle">
+          <tspan fill="#FFF" opacity="0.45">25× → 5.3s</tspan>
+          <tspan dx="14" fill="#FFB340" font-weight="700">50× → 2.6s</tspan>
+          <tspan dx="14" fill="#FFF" opacity="0.45">100× → 1.3s</tspan>
+        </text>
+      </g>
 
       <!-- segment strip -->
       <g id="segment-strip">
-        <rect x="16" y="666" width="361" height="14" rx="4" fill="#3B3B3D"/>
-        <rect x="52" y="668" width="24" height="10" rx="2" fill="#FFB340"/>
-        <rect x="170" y="668" width="38" height="10" rx="2" fill="#FFB340"/>
-        <rect x="344" y="668" width="30" height="10" rx="2" fill="#FFB340"/>
-        <text x="16" y="698" font-size="10" fill="#FFF" opacity="0.45">30 fps base</text>
-        <text x="377" y="698" font-size="10" fill="#FFB340" text-anchor="end">▲ 120 fps burst live · 3</text>
+        <rect x="16" y="646" width="361" height="14" rx="4" fill="#3B3B3D"/>
+        <rect x="52" y="648" width="24" height="10" rx="2" fill="#FFB340"/>
+        <rect x="170" y="648" width="38" height="10" rx="2" fill="#FFB340"/>
+        <rect x="344" y="648" width="30" height="10" rx="2" fill="#FFB340"/>
+        <text x="16" y="678" font-size="10" fill="#FFF" opacity="0.45">30 fps base</text>
+        <text x="377" y="678" font-size="10" fill="#FFB340" text-anchor="end">▲ 120 fps burst live · 3</text>
       </g>
 
       <!-- shutter row (mode row hidden while capturing) -->
@@ -76,9 +81,9 @@
           </g>
           <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
         </g>
-        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.video.portrait.svg,
+        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.video.info.portrait.svg,
              not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md -->
-        <image id="shutter-cluster" href="../components/shutter-cluster.running.video.portrait.svg" x="106.5" y="708" width="180" height="100"/>
+        <image id="shutter-cluster" href="../components/shutter-cluster.running.video.info.portrait.svg" x="106.5" y="708" width="180" height="100"/>
       </g>
 
       <!-- hardware -->
@@ -87,6 +92,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (recording, Info off) · portrait · 393×852 pt</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (recording, Info on) · portrait · 393×852 pt</text>
   <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — recordingPill · speedMarquee · segmentStrip</text>
 </svg>

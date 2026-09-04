@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Interval (running, Holy Grail ramp) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (intervalRunningPills + holyGrailReadout) over App/CameraController.swift's Holy Grail engine and LetsLapseKit's HolyGrailRampEngine. A ramp mid-run, 24 frames in: the burst pill counts frames as an open-ended decay zebra (a Holy Grail shoot has no total), the elapsed pill keeps the run clock, and the monospaced readout below states what the NEXT frame will be taken at — the exposure the ramp has arrived at, the smoothed scene EV it is tracking, and how far the ramp sits from where the camera metered. The third line appears only when it has something to say: amber "shutter at max · ISO ramping" once the shutter is pinned at its 1.0s ceiling and ISO is carrying the ramp (drawn here), or red "past the sensor's limit — frames no longer track" when the scene has outrun max shutter x max ISO. The blend diagnostics readout is absent: a Holy Grail shoot does not run the live-blend engine. Format pill locks; mode row hidden; shutter is the stop square.</desc>
+  <title>iOS · Capture — Interval (running, Holy Grail ramp, Info off) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch → run readout + ±EV slider; shutterClusterLayer). Dynamic (Holy Grail) ramp mid-run, Info OFF — the 2026-09-04 (third pass) default: one amber line carries the ramp's exposure pair, the scene EV it is tracking and, when true, its status — 'ISO ramping' (shutter at max) in amber, 'past the sensor's limit' in red — above the ±EV bias slider the ramp is nudged with. The ramp readout panel and the pills row are gone; frames, cadence, blend health and thermal state are one tap away on the cluster's Info toggle. Dim engaged (amber moon). Design ahead of code.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -51,49 +51,18 @@
         </g>
       </g>
 
-      <!-- running pills + diagnostics -->
-      <g id="interval-running">
-        <g id="running-pills">
-          <!-- burst pill: BurstStatusIndicator, open-ended zebra (24 outputs).
-               249×26 r13 #000@50% · bar 170×5 r2.5 on #FFF@16% · stripes
-               pitch 170/24 · 55% duty · opacity 30% oldest → 100% newest ·
-               SF Mono 12 count, amber, 46 pt trailing column -->
-          <rect x="33" y="600" width="249" height="26" rx="13" fill="#000" opacity="0.5"/>
-          <rect x="45" y="610.5" width="170" height="5" rx="2.5" fill="#FFF" opacity="0.16"/>
-          <rect x="45.00" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.30"/>
-          <rect x="52.08" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.33"/>
-          <rect x="59.17" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.36"/>
-          <rect x="66.25" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.39"/>
-          <rect x="73.33" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.42"/>
-          <rect x="80.42" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.45"/>
-          <rect x="87.50" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.48"/>
-          <rect x="94.58" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.51"/>
-          <rect x="101.67" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.54"/>
-          <rect x="108.75" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.57"/>
-          <rect x="115.83" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.60"/>
-          <rect x="122.92" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.63"/>
-          <rect x="130.00" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.67"/>
-          <rect x="137.08" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.70"/>
-          <rect x="144.17" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.73"/>
-          <rect x="151.25" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.76"/>
-          <rect x="158.33" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.79"/>
-          <rect x="165.42" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.82"/>
-          <rect x="172.50" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.85"/>
-          <rect x="179.58" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.88"/>
-          <rect x="186.67" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.91"/>
-          <rect x="193.75" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.94"/>
-          <rect x="200.83" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.97"/>
-          <rect x="207.92" y="610.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="1.00"/>
-          <text x="271" y="617.5" font-size="12" class="m" text-anchor="end" fill="#FFB340">24</text>
-          <!-- elapsed pill (unchanged vocabulary) -->
-          <rect x="294" y="600" width="66" height="26" rx="13" fill="#000" opacity="0.5"/>
-          <text x="327" y="617" font-size="11.5" class="m" fill="#FFF" opacity="0.7" text-anchor="middle">10:02</text>
-        </g>
-        <g id="holy-grail-readout">
-          <rect x="72" y="634" width="249" height="63" rx="8" fill="#000" opacity="0.5"/>
-          <text x="82" y="650" font-size="10.5" class="m" fill="#FFF" opacity="0.75">1.0s · ISO 1250</text>
-          <text x="82" y="666" font-size="10.5" class="m" fill="#FFF" opacity="0.75">scene EV 1.4 · 24 frames</text>
-          <text x="82" y="682" font-size="10.5" class="m" fill="#FFB340">shutter at max · ISO ramping</text>
+      <!-- RUN READOUT, Info OFF — the default (design 2026-09-04, third pass): the ±EV bias slider
+           and ONE amber line — current shutter · ISO · scene EV (+ the ramp's status: 'ISO ramping' in amber, 'past the sensor's limit' in red) — above the cluster. The output
+           count, elapsed clock and the diagnostics panel sit behind the cluster's Info toggle (slot 2);
+           the ramp readout panel that used to duplicate them is gone. -->
+      <g id="run-readout">
+        <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1.0s · ISO 1250 · EV 1.4 · ISO ramping</text>
+        <g id="ev-slider" data-symbol="plusminus.circle">
+          <circle cx="26" cy="698" r="7" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.2"/>
+          <path d="M22.5 696 h7 M26 692.5 v7 M22.5 701.5 h7" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.1" stroke-linecap="round"/>
+          <rect x="47" y="695.5" width="330" height="5" rx="2.5" fill="#FFF" opacity="0.25"/>
+          <rect x="47" y="695.5" width="165" height="5" rx="2.5" fill="#FFB340"/>
+          <circle cx="212" cy="698" r="11" fill="#FFF"/>
         </g>
       </g>
 
@@ -117,6 +86,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Holy Grail ramp) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — intervalRunningPills · holyGrailReadout</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Holy Grail ramp, Info off) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — run readout (ramp pair · EV · status) · ±EV slider · cluster Dim/Info</text>
 </svg>

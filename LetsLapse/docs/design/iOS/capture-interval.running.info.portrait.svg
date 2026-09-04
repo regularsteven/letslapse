@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Interval (running, DNG blend, Info off) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch → the run readout + ±EV slider; shutterClusterLayer → clusterSlot). Live-blend engine mid-run, Info OFF — the default since 2026-09-04 (third pass): above the cluster only the ±EV bias slider and one amber line, current shutter · ISO · scene EV (a Basic run reads them off the live device; Dynamic and Ladder off the ramp). The cluster holds the run-time toggles: slot 1 screen Dim (engaged, amber — this is the 30 s wake window), slot 2 Info (off). The output count, elapsed clock and diagnostics are behind Info — capture-interval.running.info.portrait.svg. Design ahead of code: the app still draws the pills row and two panels.</desc>
+  <title>iOS · Capture — Interval (running, DNG blend, Info on) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch with the cluster's Info toggle ON; blendDiagnosticsReadout). The same run as capture-interval.running.portrait.svg after a tap on Info (slot 2, amber): ONE panel joins the readout — frames in the window · last, the output cadence against the request, and blend cost · format · health · thermal state (green healthy / amber starved / red thermal). Nothing else is added: the ramp readout panel is gone for good. Off by default, per run.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -56,6 +56,14 @@
            and ONE amber line — current shutter · ISO · scene EV — above the cluster. The output
            count, elapsed clock and the diagnostics panel sit behind the cluster's Info toggle (slot 2);
            the ramp readout panel that used to duplicate them is gone. -->
+      <!-- INFO PANEL — the cluster's Info toggle on: the one diagnostics panel (blendDiagnosticsReadout),
+           frames in the window · last · output cadence · blend cost, format, health and thermal state. -->
+      <g id="info-panel">
+        <rect x="72" y="590" width="249" height="63" rx="8" fill="#000" opacity="0.5"/>
+        <text x="82" y="606" font-size="10.5" class="m" fill="#FFF" opacity="0.75">frames 10/10 · last 10</text>
+        <text x="82" y="622" font-size="10.5" class="m" fill="#FFF" opacity="0.75">out 2.05 s (req 2.0 s)</text>
+        <text x="82" y="638" font-size="10.5" class="m" fill="#FFF" opacity="0.75">blend 312 ms · DNG · <tspan fill="#34C759">healthy</tspan> · nominal</text>
+      </g>
       <g id="run-readout">
         <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1/120 · ISO 200 · EV 9.1</text>
         <g id="ev-slider" data-symbol="plusminus.circle">
@@ -76,9 +84,9 @@
           </g>
           <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
         </g>
-        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.portrait.svg,
+        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.info.portrait.svg,
              not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md -->
-        <image id="shutter-cluster" href="../components/shutter-cluster.running.portrait.svg" x="106.5" y="708" width="180" height="100"/>
+        <image id="shutter-cluster" href="../components/shutter-cluster.running.info.portrait.svg" x="106.5" y="708" width="180" height="100"/>
       </g>
 
       <!-- hardware -->
@@ -87,6 +95,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Info off) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — run readout (shutter · ISO · EV) · ±EV slider · cluster Dim/Info</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Info on) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — run readout · ±EV slider · blendDiagnosticsReadout as the one info panel · cluster Info on</text>
 </svg>

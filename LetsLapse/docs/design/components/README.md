@@ -56,17 +56,22 @@ The padlock is the lock's glyph in **every** mode. Under Interval's Dynamic and 
 
 **Rotation.** The ring never moves: the interface reflows but the cluster's centre stays on the same physical spot. The four circles do **not** keep their physical spots across a turn — the wide portrait 2×2 becomes the narrower, taller landscape 2×2 around the same ring. Steven chose this on 2026-09-04 over a diamond that would have kept them fixed, because the diamond wasted the rail's height in landscape and needed the portrait mode row moved up. Glyphs stay upright in the viewer's frame; slot numbering (1/2 top, 3/4 bottom) is the viewer's frame in both orientations. **Notch-right landscape is the mirror image**: the ring pins to the left edge and the two rails swap sides with it — the chrome rail (close, pills, tile) moves to the trailing edge with its pills trailing-anchored — the way the system camera's do; not drawn. iPhones never rotate to upside-down portrait; on an iPad that pins the ring to the top edge.
 
-**States** — one file each, per orientation (twelve files):
+**Run-time toggles (2026-09-04, third pass).** Once a shoot is under way the top pair holds two toggles in every Interval and Video run: **slot 1 Dim** (`moon` / `moon.fill`, amber while engaged) and **slot 2 Info** (`info.circle` / `.fill`, amber when on). Dim: pressing on floors the screen at once; a touch on the dimmed screen wakes it for 30 s and it re-dims by itself unless the toggle is turned off in that window; Settings' "Dim screen during shoot" seeds the toggle at run start (on by default, so the running mirrors show the amber moon — they are the wake window). Info: off by default, per run; on, Interval shows the ONE diagnostics panel (frames in the window · last · output cadence · blend cost, format, health and thermal state) and Video shows the speed → playback-seconds marquee. The readout under a running Interval is otherwise only the amber line — current shutter · ISO · scene EV, plus the ramp's status when it has one — and the ±EV bias slider; the ramp readout panel and the output-count / elapsed pills row are gone. The Mac has no dimmer, so its running cluster carries Info alone (`running.mac`). Scanner runs are unchanged.
+
+**States** — one file each, per orientation (seventeen files):
 
 | File | Shows | Used by |
 |---|---|---|
 | `idle` | red disc, four toggles off | every idle capture mirror |
 | `armed` | every toggle on plus both badges — the ON reference | no screen directly |
 | `locked` | AE/AF held, the others off | `capture-exposure-locked` |
-| `running` | stop square, **all four slots empty** | Interval runs, Photo bursts |
-| `running.video` | stop square; slot 3 the speed-burst / marker trigger, slot 4 the burst count | `capture-video.recording.*` |
+| `running` | stop square; slot 1 Dim (engaged), slot 2 Info (off); bottom pair empty | Interval runs, Photo bursts |
+| `running.info` | as `running` with Info on | `capture-interval.running.info` |
+| `running.mac` | landscape only: stop square, Info in slot 2, no Dim (iOS-only) | the macOS running mirror |
+| `running.video` | stop square; slot 1 Dim, slot 2 Info (off); slot 3 the speed-burst / marker trigger, slot 4 the burst count | `capture-video.recording.*` |
+| `running.video.info` | as `running.video` with Info on (the marquee shows) | `capture-video.recording.info` |
 | `running.scanner` | stop square in a poses-banked ring; slot 4 the manual pose shutter | `capture-interval.scanner*` |
 
-Once a shoot starts the four framing toggles hide in every mode (decision 2026-09-04); the slots stay reserved, so the footprint never changes. Code mirrored the same day: `clusterSlot` in `App/CaptureView.swift` keys on `isCapturing`, not only a movie recording.
+Once a shoot starts the four framing toggles hide in every mode (decision 2026-09-04); the slots stay reserved, so the footprint never changes. Code mirrored the same day: `clusterSlot` in `App/CaptureView.swift` keys on `isCapturing`, not only a movie recording. The run-time Dim / Info toggles (third pass) are design ahead of code — job in `docs/TODO.md`.
 
 **Mirrors.** `App/CaptureView.swift`: `shutterClusterLayer` (the pin, over both layouts' chrome) → `shutterClusterPin` (94 pt from the home-indicator edge, via the scene's interface orientation) → `shutterCluster` → `clusterSlot` (what each slot holds per state) → `shutterButton`, `shutterBadge`, `gridToggleCircle`, `shutterDelayCircle`, `exposureLockCircle`, `steadyToggleCircle`, `liveMomentTrigger`, `rampIntervalCountBadge`, `scannerManualCaptureButton`; `landscapeClusterReadout` hangs under the landscape cluster. Verified 2026-09-04 on the iPhone 16 Pro simulator (portrait, both landscapes) and the Mac.

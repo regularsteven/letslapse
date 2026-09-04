@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 480" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Video (recording) · landscape</title>
+  <title>iOS · Capture — Video (recording, Info off) · landscape</title>
   <desc>Mirrors App/CaptureView.swift (landscapeLayout, landscapeRecordingReadout, speedMarquee, segmentStrip, leadingControl). The landscape twin of capture-video.recording.portrait.svg: same take, same moment, rails instead of letterbox. Portrait stacks the marquee and the segment strip in the black band under the image; the side rails leave no band here, so the pair rides the viewfinder's bottom-leading corner on the same 50%-black panel the interval row and the estimate chips use to stay legible over live picture. Nothing is dropped for the smaller slot — the burst spans are what let an operator judge and balance the end of a take. The panel takes the width the region gives it, capped at 560 pt of content so a Mac window can't stretch it end to end (measured 464 pt on this canvas). While recording: the red elapsed pill replaces the close button, the format pill locks, the zoom chips hide, and the rail's lower slot swaps the framing toggles for the burst trigger. Geometry measured on the iPhone 17 Pro simulator (874×402 pt, LL_CAPTURE=1 LL_RECORDING=1) and restated on this 852×393 canvas.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="852" height="393" rx="54"/></clipPath>
@@ -67,19 +67,13 @@
         </g>
       </g>
 
-      <!-- landscapeRecordingReadout: marquee over strip on one dark panel, in
+      <!-- landscapeRecordingReadout: strip on one dark panel (the marquee is behind the cluster's Info toggle), in
            the viewfinder region's bottom-leading corner (region 167..675, the
            overlay's own 10 pt inset, then 12/9 inside the panel). -->
       <g id="recording-readout">
-        <rect x="177" y="292.5" width="488" height="70.5" rx="14" fill="#000" opacity="0.5"/>
+        <!-- Info OFF (2026-09-04 third pass): no marquee, so the panel is the strip alone and shrinks from the top -->
+        <rect x="177" y="312.5" width="488" height="50.5" rx="14" fill="#000" opacity="0.5"/>
 
-        <g id="speed-marquee" class="m" font-size="12.5">
-          <text x="189" y="313">
-            <tspan fill="#FFF" opacity="0.45">25× → 5.3s</tspan>
-            <tspan dx="14" fill="#FFB340" font-weight="700">50× → 2.6s</tspan>
-            <tspan dx="14" fill="#FFF" opacity="0.45">100× → 1.3s</tspan>
-          </text>
-        </g>
 
         <!-- segmentStrip: the take's timeline, bursts layered over it. Same
              three spans as the portrait spec at the same fractions of the
@@ -113,6 +107,6 @@
     </g>
   </g>
 
-  <text x="450" y="450" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (recording) · landscape · 852×393 pt</text>
+  <text x="450" y="450" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Video (recording, Info off) · landscape · 852×393 pt</text>
   <text x="450" y="468" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — landscapeLayout · landscapeRecordingReadout · speedMarquee · segmentStrip</text>
 </svg>
