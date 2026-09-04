@@ -52,6 +52,13 @@ struct CaptureView: View {
     /// Watch and the remote may flip it even mid-run (`setDimDuringShoot`).
     @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
     @StateObject private var shootDimmer = ShootScreenDimmer()
+    /// The cluster's run-time toggles (design 2026-09-04, third pass), both
+    /// per run — see `seedRunToggles`. Dim starts from the Settings default:
+    /// on floors the screen at once, a touch on the cover wakes it for 30 s
+    /// and it re-dims by itself unless the toggle is turned off in that
+    /// window. Info starts off and opens the one diagnostics panel.
+    @State private var runDimEngaged = false
+    @State private var showRunInfo = false
 
     @State private var mode: CaptureMode
     @State private var sequenceMode: LiveCaptureSequence.Mode
@@ -479,6 +486,10 @@ struct CaptureView: View {
         .onChange(of: isCapturing) { running in
             if running {
                 beginHeadroomRunSample()
+                // The cluster's run-time toggles start from here — on every
+                // platform, which is why this seat and not the iOS-only
+                // orientation block below.
+                seedRunToggles()
             } else {
                 endHeadroomRunSample(
                     frames: finishedRunFrameCount,
@@ -743,6 +754,9 @@ struct CaptureView: View {
             engage: shootDimmerShouldEngage,
             setting: dimScreenDuringShoot,
             syncRemote: { on in
+                // A flip of the setting mid-run — Settings, the Watch, the
+                // remote — moves the run's own Dim toggle with it.
+                if isCapturing { runDimEngaged = on }
                 // The Watch/remote mirror is iOS-only; the Mac has no panel
                 // worth dimming and no watch link to tell.
                 #if os(iOS)
@@ -1550,7 +1564,12 @@ struct CaptureView: View {
             }
             if mode == .video {
                 if camera.isRecording {
-                    speedMarquee
+                    // The speed → playback-seconds row is behind the cluster's
+                    // Info toggle (design 2026-09-04, third pass); the strip
+                    // always shows.
+                    if showRunInfo {
+                        speedMarquee
+                    }
                     segmentStrip
                         .padding(.horizontal, 16)
                 } else {
@@ -1814,7 +1833,9 @@ struct CaptureView: View {
     /// swaps to the elapsed/target line when a target is set.
     private var landscapeRecordingReadout: some View {
         VStack(alignment: .leading, spacing: 7) {
-            speedMarquee
+            if showRunInfo {
+                speedMarquee
+            }
             segmentStrip
         }
         .frame(maxWidth: Self.landscapeReadoutMaxWidth, alignment: .leading)
@@ -2583,9 +2604,17 @@ struct CaptureView: View {
                 if camera.scannerState != nil {
                     scannerReadout
                 } else {
-                    intervalRunningPills
-                    blendDiagnosticsReadout
-                    holyGrailReadout
+                    // Design 2026-09-04 (third pass): one amber exposure line
+                    // over the bias slider (`exposurePanel` draws the slider,
+                    // right under this row) and the diagnostics panel only
+                    // behind the cluster's Info toggle. The pills row and the
+                    // ramp readout panel that used to stack here are gone —
+                    // the second duplicated the first.
+                    if showRunInfo {
+                        runInfoPanel
+                    }
+                    runExposureLine
+                        .padding(.horizontal, 16)
                     ladderRunningRungDial
                 }
             }
@@ -2615,9 +2644,10 @@ struct CaptureView: View {
                 if camera.scannerState != nil {
                     scannerReadout
                 } else {
-                    intervalRunningPills
-                    blendDiagnosticsReadout
-                    holyGrailReadout
+                    if showRunInfo {
+                        runInfoPanel
+                    }
+                    runReadoutCapsule
                     ladderRunningRungDial
                 }
             }
@@ -2675,17 +2705,6 @@ struct CaptureView: View {
                 if newScanIsNewDocument { scannerPendingNewDocument = true }
             }
             .equatable()
-        }
-    }
-
-    /// Interval's run counter is the burst pill's zebra — open-ended, so no
-    /// total; the count is outputs so far (stills or blends). The elapsed
-    /// pill keeps the run clock beside it; both fade together on settle.
-    private var intervalRunningPills: some View {
-        HStack(spacing: 12) {
-            burstStatusPill
-            CameraPill(text: elapsedIntervalText, tint: .white.opacity(0.7), monospaced: true)
-                .opacity(burstPillFadingOut ? 0 : 1)
         }
     }
 
@@ -2900,6 +2919,12 @@ struct CaptureView: View {
             isCapturingRAW: true)
         framingStartedAt = Date().addingTimeInterval(-602)
         mountBurstPill(taken: 24, total: nil)
+        // Staged as a RUN, so the cluster and the rows read as one — stop
+        // square, the run-time toggles, no mode row. Deferred past
+        // `camera.start()`'s counter reset, as the recording hook is.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+            camera.isIntervalRunning = true
+        }
     }
 
     /// `LL_BURST=7/10` (capped fill) or `LL_BURST=47` (zebra) freezes the
@@ -3274,6 +3299,8 @@ struct CaptureView: View {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
                 framingStartedAt = Date().addingTimeInterval(-(41 * 60 + 8))
                 flashLadderToast(down: true)
+                // Staged as a run, see the Holy Grail hook.
+                camera.isIntervalRunning = true
             }
         default:
             // `armed`: the rung pill, collapsed — the default since 2026-09-04.
@@ -3375,7 +3402,7 @@ struct CaptureView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text("frames \(diagnostics.currentWindowSelectedFrames)\(diagnostics.requestedFramesPerBlend > 0 ? "/\(diagnostics.requestedFramesPerBlend)" : "") · last \(diagnostics.lastCapturedFrames.map(String.init) ?? "–")")
                 Text("out \(diagnostics.lastOutputIntervalSeconds.map { String(format: "%.2f s", $0) } ?? "–") (req \(String(format: "%.1f s", diagnostics.requestedIntervalSeconds)))")
-                Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–")\(diagnostics.outputFormatLabel.map { " · \($0)" } ?? "") · \(diagnostics.status.rawValue)")
+                Text("blend \(diagnostics.lastBlendMillis.map { String(format: "%.0f ms", $0) } ?? "–")\(diagnostics.outputFormatLabel.map { " · \($0)" } ?? "") · \(diagnostics.status.rawValue) · \(thermalWord)")
                     .foregroundStyle(blendStatusTint(diagnostics.status))
             }
             .font(.system(size: 10.5, weight: .medium, design: .monospaced))
@@ -3383,53 +3410,6 @@ struct CaptureView: View {
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
             .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        }
-    }
-
-    /// The Holy Grail ramp's live readout: the exposure the next frame will be
-    /// taken at, the scene EV it is tracking, and — the part that decides
-    /// whether to keep shooting — whether ISO has started carrying the ramp,
-    /// or the scene has run past what the hardware can hold.
-    @ViewBuilder
-    private var holyGrailReadout: some View {
-        if let state = camera.holyGrailState {
-            VStack(alignment: .leading, spacing: 2) {
-                // %.0f, not an Int interpolation: `Text` group-separates an
-                // interpolated number by locale ("ISO 1 250"), which reads as
-                // two values in a monospaced technical line.
-                Text("\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))\(state.isCapturingRAW ? " · RAW" : "")")
-                Text(String(format: "scene EV %.1f · %d frames", state.sceneEV, state.frames))
-                if state.isClipped {
-                    Text("past the sensor's limit — frames no longer track")
-                        .foregroundStyle(Color.red)
-                } else if state.isISORamping {
-                    Text("shutter at max · ISO ramping")
-                        .foregroundStyle(LL.amber)
-                } else if let ladder = camera.ladderState {
-                    // The ladder's line shares this slot; a pinned shutter is
-                    // the more urgent fact, so the amber warning above wins.
-                    Text(ladder.readoutLine)
-                        .foregroundStyle(LL.amber)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-            }
-            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.75))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-        } else if let ladder = camera.ladderState {
-            // A hand-stepped ladder (the Mac) runs with no ramp, so there is
-            // no exposure pair to lead with: the rung's line stands alone.
-            Text(ladder.readoutLine)
-                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-                .foregroundStyle(LL.amber)
-                .lineLimit(1)
-                .minimumScaleFactor(0.8)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
         }
     }
 
@@ -4092,7 +4072,8 @@ struct CaptureView: View {
     /// the same blend engine but last seconds — a black flash there would
     /// read as a fault, and Photo's thermal cost is nil anyway.
     private var shootDimmerShouldEngage: Bool {
-        dimScreenDuringShoot && isCapturing && mode != .photo
+        // The run's own toggle, not the setting: the setting only seeds it.
+        runDimEngaged && isCapturing && mode != .photo
     }
 
     /// Mirror the mode onto the camera for the session log — "Bulb" is Photo
@@ -4366,6 +4347,184 @@ struct CaptureView: View {
     /// for it (see `clusterSlot`).
     private var scannerRunInProgress: Bool { camera.scannerState != nil }
 
+    // MARK: - Run-time toggles and the run readout
+
+    /// A run's own toggles start here — Dim from the Settings default, Info
+    /// off — and the screenshot hooks stage them for the mirrors:
+    /// `LL_RUNINFO=1` opens the info panel, `LL_RUNDIM=off` keeps the screen
+    /// up with the toggle off, `LL_RUNDIM=wake` engages Dim and holds the
+    /// wake window open — the amber-moon state every running mirror draws.
+    private func seedRunToggles() {
+        runDimEngaged = dimScreenDuringShoot
+        showRunInfo = false
+        #if DEBUG
+        let environment = ProcessInfo.processInfo.environment
+        if environment["LL_RUNINFO"] != nil { showRunInfo = true }
+        switch environment["LL_RUNDIM"] {
+        case "off":
+            runDimEngaged = false
+        case "wake":
+            runDimEngaged = true
+            // The cover engages on the next body pass; wake once it has.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                shootDimmer.wake(for: 3600)
+            }
+        default:
+            break
+        }
+        #endif
+    }
+
+    /// Slot 1 of a running cluster: screen dim. On floors the screen at once
+    /// (`ShootDimming` → `setEngaged`); a touch on the cover wakes it for
+    /// 30 s and it re-dims by itself; turning this off inside that window
+    /// cancels the re-dim. iOS only — the Mac has no panel to floor, so its
+    /// slot stays empty.
+    @ViewBuilder
+    private var dimToggleCircle: some View {
+        #if os(iOS)
+        Button {
+            runDimEngaged.toggle()
+        } label: {
+            Image(systemName: runDimEngaged ? "moon.fill" : "moon")
+                .font(.system(size: 18))
+                .foregroundStyle(runDimEngaged ? LL.amber : .white)
+                .frame(width: 44, height: 44)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(runDimEngaged ? "Stop dimming the screen" : "Dim the screen")
+        #endif
+    }
+
+    /// Slot 2 of a running cluster: the info panel, off by default per run.
+    private var runInfoToggleCircle: some View {
+        Button {
+            showRunInfo.toggle()
+        } label: {
+            Image(systemName: showRunInfo ? "info.circle.fill" : "info.circle")
+                .font(.system(size: 18))
+                .foregroundStyle(showRunInfo ? LL.amber : .white)
+                .frame(width: 44, height: 44)
+                .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(showRunInfo ? "Hide run details" : "Show run details")
+    }
+
+    /// The one amber line over a running Interval shoot (design 2026-09-04,
+    /// third pass): the exposure the run is at — shutter · ISO · scene EV —
+    /// and, when the ramp has one, its status on the end: "ISO ramping"
+    /// while the shutter sits at its ceiling, "past the sensor's limit" in
+    /// red once frames stop tracking the light. Dynamic and Ladder read the
+    /// ramp's state; a Basic run reads the pair its last frame was taken at
+    /// (`liveExposure`); the Mac's hand-stepped ladder has no pair and shows
+    /// the rung's line instead.
+    @ViewBuilder
+    private var runExposureLine: some View {
+        if let line = runExposureText {
+            HStack {
+                Text(line.text)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(line.clipped ? Color.red : LL.amber)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer(minLength: 0)
+            }
+        }
+    }
+
+    private var runExposureText: (text: String, clipped: Bool)? {
+        if let state = camera.holyGrailState {
+            var text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))"
+            text += String(format: " · EV %.1f", state.sceneEV)
+            if state.isClipped {
+                text += " · past the sensor's limit"
+            } else if state.isISORamping {
+                text += " · ISO ramping"
+            }
+            return (text, state.isClipped)
+        }
+        if let ladder = camera.ladderState {
+            return (ladder.readoutLine, false)
+        }
+        if let live = camera.liveExposure {
+            var text = "\(shutterText(live.shutterSeconds)) · ISO \(String(format: "%.0f", live.iso))"
+            if let sceneEV = live.sceneEV { text += String(format: " · EV %.1f", sceneEV) }
+            return (text, false)
+        }
+        return nil
+    }
+
+    /// Behind the cluster's Info toggle: the ONE diagnostics panel — the
+    /// blend engine's when it runs (frames in the window · last, cadence,
+    /// cost · format · health · thermal), a plain run's count · cadence ·
+    /// elapsed · thermal otherwise. Nothing else: the ramp readout that used
+    /// to stack under it duplicated every line it had.
+    @ViewBuilder
+    private var runInfoPanel: some View {
+        if camera.isLiveBlendRunning, camera.liveBlendDiagnostics != nil {
+            blendDiagnosticsReadout
+        } else if camera.isIntervalRunning {
+            VStack(alignment: .leading, spacing: 2) {
+                Text("frames \(camera.photoCount) · every \(intervalLabel(interval))")
+                Text("elapsed \(elapsedIntervalText)")
+                Text("thermal \(thermalWord)")
+            }
+            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+            .foregroundStyle(.white.opacity(0.75))
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+    }
+
+    /// The thermal state as the info panel's last word.
+    private var thermalWord: String {
+        switch thermalState {
+        case .nominal: return "nominal"
+        case .fair: return "fair"
+        case .serious: return "serious"
+        case .critical: return "critical"
+        @unknown default: return "unknown"
+        }
+    }
+
+    /// Every iOS Interval run carries the ±EV bias slider mid-run — Scanner
+    /// excepted, its exposure is locked for the set. The Mac has no exposure
+    /// control to offer.
+    private var runHasBiasSlider: Bool {
+        #if os(iOS)
+        return mode == .interval && isCapturing && camera.scannerState == nil
+        #else
+        return false
+        #endif
+    }
+
+    /// Landscape's seat for the run readout: the amber line over the bias
+    /// slider on one dark panel in the viewfinder's corner. Portrait draws
+    /// the line in `intervalStatusRow` and the slider in `exposurePanel`.
+    @ViewBuilder
+    private var runReadoutCapsule: some View {
+        if runExposureText != nil || runHasBiasSlider {
+            VStack(alignment: .leading, spacing: 8) {
+                runExposureLine
+                #if os(iOS)
+                if runHasBiasSlider {
+                    exposureSlider(
+                        icon: "plusminus.circle",
+                        value: holyGrailBiasBinding,
+                        range: Self.exposureStopsRange)
+                }
+                #endif
+            }
+            .frame(maxWidth: 320)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        }
+    }
+
     // MARK: - Shutter cluster
 
     /// The slot offsets round the ring, per orientation — the numbers in
@@ -4466,20 +4625,32 @@ struct CaptureView: View {
     /// empty on purpose — every idle toggle answers a question `startScanner`
     /// has already settled (AE/AF/WB locked for the set, the steadiness gate
     /// wired into the fire path, a self-timer meaningless to a shutter the
-    /// scene is pressing). Interval runs and Photo bursts show nothing here:
-    /// they used to keep all four live, and a mid-run lock tap toggled the
-    /// exposure of a running shoot.
+    /// scene is pressing). Interval runs used to keep all four live — a
+    /// mid-run lock tap toggled the exposure of a running shoot; since the
+    /// 2026-09-04 third pass every Interval and Video run carries the two
+    /// run-time toggles in the top pair instead: 1 screen Dim, 2 Info. A
+    /// Photo burst lasts seconds and has nothing to dim or explain, so its
+    /// slots stay empty.
     @ViewBuilder
     private func clusterSlot(_ slot: Int) -> some View {
         if scannerRunInProgress {
             if slot == 4 { scannerManualCaptureButton }
         } else if camera.isRecording {
-            if slot == 3 {
-                liveMomentTrigger
-            } else if slot == 4 {
-                rampIntervalCountBadge
+            switch slot {
+            case 1: dimToggleCircle
+            case 2: runInfoToggleCircle
+            case 3: liveMomentTrigger
+            default: rampIntervalCountBadge
             }
-        } else if !isCapturing {
+        } else if isCapturing {
+            if mode != .photo {
+                if slot == 1 {
+                    dimToggleCircle
+                } else if slot == 2 {
+                    runInfoToggleCircle
+                }
+            }
+        } else {
             switch slot {
             case 1: gridToggleCircle
             case 2: shutterDelayCircle
@@ -4737,14 +4908,16 @@ struct CaptureView: View {
     /// Fine brightness/focus tuning lives in portrait or on the Watch crown.
     @ViewBuilder
     private var landscapeClusterReadout: some View {
-        if holyGrailArmed, !holyGrailExposureReadout.isEmpty {
+        // Idle only: mid-run the amber run line in the viewfinder's corner
+        // (`runReadoutCapsule`) carries the pair.
+        if !isCapturing, holyGrailArmed, !holyGrailExposureReadout.isEmpty {
             Text(holyGrailExposureReadout)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(LL.amber)
                 .lineLimit(2)
                 .minimumScaleFactor(0.6)
                 .multilineTextAlignment(.center)
-        } else if camera.isExposureLocked {
+        } else if !isCapturing, camera.isExposureLocked {
             Text(exposureReadout)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(LL.amber)
@@ -4816,12 +4989,22 @@ struct CaptureView: View {
     @ViewBuilder
     private var exposurePanel: some View {
         if ladderArmed {
-            // The band the ±EV slider occupies under Dynamic is simply empty:
-            // a rung already states the exposure box (design 2a). The focus
-            // slider still applies once focus is held.
-            if camera.isFocusLocked {
+            // Idle, the band the ±EV slider occupies under Dynamic is simply
+            // empty: a rung already states the exposure box (design 2a).
+            // Mid-run the bias slider is the run readout's (2026-09-04, third
+            // pass): the rung boxes the exposure, the bias nudges it. The
+            // focus slider still applies once focus is held.
+            if isCapturing || camera.isFocusLocked {
                 VStack(spacing: 10) {
-                    exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+                    if isCapturing {
+                        exposureSlider(
+                            icon: "plusminus.circle",
+                            value: holyGrailBiasBinding,
+                            range: Self.exposureStopsRange)
+                    }
+                    if camera.isFocusLocked {
+                        exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+                    }
                 }
                 .padding(.horizontal, 16)
             }
@@ -4831,7 +5014,9 @@ struct CaptureView: View {
             // relative to the camera's own metering — over or under — plus
             // the focus slider once focus is held.
             VStack(spacing: 10) {
-                if !holyGrailExposureReadout.isEmpty {
+                // Mid-run the amber line above (`runExposureLine`) carries
+                // the pair; idle, this readout does.
+                if !isCapturing, !holyGrailExposureReadout.isEmpty {
                     HStack {
                         Text(holyGrailExposureReadout)
                             .font(.system(size: 12, design: .monospaced))
@@ -4866,6 +5051,17 @@ struct CaptureView: View {
                     value: exposureStopsBinding,
                     range: Self.exposureStopsRange)
                 exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
+            }
+            .padding(.horizontal, 16)
+        } else if runHasBiasSlider {
+            // A Basic run: AE is free, so the bias slider is the run's one
+            // exposure control (design 2026-09-04, third pass) — the same
+            // device-side compensation the ramp's slider rides.
+            VStack(spacing: 10) {
+                exposureSlider(
+                    icon: "plusminus.circle",
+                    value: holyGrailBiasBinding,
+                    range: Self.exposureStopsRange)
             }
             .padding(.horizontal, 16)
         }

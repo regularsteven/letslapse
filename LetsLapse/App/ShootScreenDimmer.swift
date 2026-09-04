@@ -16,8 +16,9 @@ import UIKit
 /// system-wide write, so every exit path restores the saved value), and a
 /// black cover over the viewfinder so the OLED content itself goes near-dark
 /// and the preview stops costing compositor work to look at. A tap on the
-/// cover hands the screen back for a few seconds, then re-dims while the run
-/// is still going.
+/// cover hands the screen back for 30 s, then re-dims while the run is still
+/// going; the cluster's Dim toggle (slot 1 of a running cluster) engages and
+/// disengages it mid-run, seeded from the setting below.
 ///
 /// Settings ▸ Advanced ▸ "Dim screen during shoot" (on by default); also
 /// flippable from the Watch and the Camera remote — mid-run too, because it
@@ -68,9 +69,11 @@ final class ShootScreenDimmer: ObservableObject {
         if engage { floorNow() } else { restore() }
     }
 
-    /// A tap on the cover: the operator gets the screen back briefly, then
-    /// the run re-dims itself.
-    func wake(for seconds: Double = 8) {
+    /// A tap on the cover: the operator gets the screen back for 30 s
+    /// (design 2026-09-04 — it was 8), then the run re-dims itself unless
+    /// the cluster's Dim toggle is turned off inside that window, which
+    /// disengages and cancels the re-dim.
+    func wake(for seconds: Double = 30) {
         guard engaged else { return }
         restoreBrightnessOnly()
         covering = false
@@ -108,7 +111,7 @@ final class ShootScreenDimmer: ObservableObject {
     // The Mac has no UIScreen and no thermal veto; the rows and the wire
     // command still exist so a fleet script is portable, they just do nothing.
     func setEngaged(_ engage: Bool) {}
-    func wake(for seconds: Double = 8) {}
+    func wake(for seconds: Double = 30) {}
     #endif
 }
 

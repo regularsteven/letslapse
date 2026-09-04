@@ -785,6 +785,39 @@ final class CameraController: NSObject, ObservableObject {
     /// idle (`setLadderPreview(enabled:)`), for the light panel. Nil otherwise.
     @Published var previewSceneEV: Double?
 
+    /// The exposure a plain (non-ramp) interval run is at — the pair its
+    /// last frame was taken with and the scene EV they imply — for the run
+    /// readout's amber line (design 2026-09-04, third pass). Dynamic and
+    /// Ladder carry theirs in `holyGrailState`; this is the Basic run's
+    /// answer, published per frame and per blend window, never per preview
+    /// frame: the line changes when a frame does.
+    struct LiveExposure: Equatable {
+        var shutterSeconds: Double
+        var iso: Float
+        var sceneEV: Double?
+    }
+    @Published var liveExposure: LiveExposure?
+
+    /// Reads the device's current pair and publishes it — safe from any
+    /// queue (property reads, then a main-queue hop). No-op on the Mac, whose
+    /// AVFoundation offers no exposure readings.
+    func publishLiveExposure() {
+        #if os(iOS)
+        guard let device = videoDevice else { return }
+        let seconds = device.exposureDuration.seconds
+        let iso = device.iso
+        guard seconds > 0, seconds.isFinite, iso > 0 else { return }
+        let offset = Double(device.exposureTargetOffset)
+        let sceneEV = HolyGrailMetering.sceneEV100(
+            shutterSeconds: seconds, iso: iso, aperture: device.lensAperture,
+            exposureTargetOffset: offset.isFinite ? offset : 0)
+        let snapshot = LiveExposure(shutterSeconds: seconds, iso: iso, sceneEV: sceneEV)
+        DispatchQueue.main.async {
+            if self.liveExposure != snapshot { self.liveExposure = snapshot }
+        }
+        #endif
+    }
+
     /// One captured pose: the file(s) a single Scanner fire produced. Kept as a
     /// pair rather than two flat lists so "Delete last" can take a whole pose
     /// away in one step and never leave an orphaned sibling behind.
@@ -5478,6 +5511,7 @@ final class CameraController: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.photoCount = 0
                 self.captureRunStartedAt = Date()
+                self.liveExposure = nil
                 self.isIntervalRunning = true
             }
             let period = frameCap != nil ? max(0.05, seconds) : max(0.5, seconds)
@@ -6574,6 +6608,7 @@ final class CameraController: NSObject, ObservableObject {
             DispatchQueue.main.async {
                 self.photoCount = 0
                 self.captureRunStartedAt = Date()
+                self.liveExposure = nil
                 self.isIntervalRunning = true
             }
             // The opening pose is already framed — fire it rather than making
@@ -8298,6 +8333,7 @@ final class CameraController: NSObject, ObservableObject {
             #endif
             controller.onDiagnostics = { [weak self] snapshot in
                 guard let self else { return }
+                self.publishLiveExposure()
                 if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
                 if self.liveBlendOutputCount != snapshot.outputCount {
                     self.liveBlendOutputCount = snapshot.outputCount
@@ -8563,6 +8599,7 @@ final class CameraController: NSObject, ObservableObject {
         }
         controller.onDiagnostics = { [weak self] snapshot in
             guard let self else { return }
+            self.publishLiveExposure()
             if self.liveBlendDiagnostics != snapshot { self.liveBlendDiagnostics = snapshot }
             if self.liveBlendOutputCount != snapshot.outputCount {
                 self.liveBlendOutputCount = snapshot.outputCount
@@ -8981,6 +9018,7 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                     shutter: shutter,
                     iso: iso))
                 let count = self.photoURLs.count
+                self.publishLiveExposure()
                 DispatchQueue.main.async { self.photoCount = count }
                 // Photo-mode frame cap: the timer stops scheduling once the
                 // burst is requested (intervalTimer == nil); finalize when the
