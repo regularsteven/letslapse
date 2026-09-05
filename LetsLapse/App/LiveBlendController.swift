@@ -71,6 +71,28 @@ struct LiveBlendCaptureResult {
     var droppedTrailingFrames: Int = 0
 }
 
+/// What a closed blend window reported about the scene, handed to the Holy
+/// Grail ramp as the next window opens. Everything here is read off the
+/// window's own frames — the **delivered** exposure and what the scene
+/// looked like under it — never off the ramp's command, which is the one
+/// input a ramp must never be metered through (2026-09-04: a ramp the
+/// camera was refusing chased its own target eight stops into the shutter
+/// floor because its luma was read against that target).
+struct BlendWindowScene {
+    /// Mean linear luma of the sampled frames (video-tap path).
+    var meanLinearLuma: Double?
+    /// Mean EXIF APEX `BrightnessValue` of the frames, when they carry one
+    /// (every RAW still does; iOS video buffers do too).
+    var apexBrightness: Double?
+    /// The pair the window's frames were taken at — the last frame's own
+    /// EXIF, or the device's reading at the window's open where the buffers
+    /// carry none (a UVC camera on the Mac).
+    var deliveredShutterSeconds: Double?
+    var deliveredISO: Double?
+    /// Frames the window collected.
+    var frames: Int
+}
+
 /// The experiment log written to Application Support/LetsLapse/Logs/.
 /// Rewritten atomically after every output so a crash loses nothing.
 struct LiveBlendSessionLog: Codable {
@@ -152,6 +174,10 @@ struct LiveBlendSessionLog: Codable {
         /// Ramped runs (DNG path): worst commanded-vs-delivered exposure
         /// divergence among this window's frames, in stops.
         var exposureDivergenceStops: Double? = nil
+        /// `"applied"` when measured against the exposure the ramp wrote,
+        /// `"engine"` when nothing was written and the ramp's own target
+        /// stood in — the number the readout was showing.
+        var divergenceReference: String? = nil
         /// Alignment-gate readings for this window (video path) — frames
         /// refused for confidently-displaced framing, the largest measured
         /// shift, and whether the gate adopted a persistent new framing.
@@ -206,6 +232,7 @@ extension CaptureExposureLog.WindowPerformance {
             intervalSeconds: entry.requestedIntervalSeconds,
             fileBytes: entry.fileBytes,
             exposureDivergenceStops: entry.exposureDivergenceStops,
+            divergenceReference: entry.divergenceReference,
             rejectedByAlignment: entry.rejectedByAlignment,
             peakAlignmentShiftPixels: entry.peakAlignmentShiftPixels)
     }
@@ -282,6 +309,12 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         /// 1.0 s / ISO 97, sensor delivered 1/25 s / ISO 2534, because a
         /// video frame cannot expose for longer than its frame duration).
         var rampExposure: (() -> (duration: CMTime, iso: Float)?)? = nil
+        /// Holy Grail only: the ramp's per-window record — commanded pair,
+        /// smoothed and scene EV, the measurement, whether the write landed
+        /// and why not — read at each window's close and stamped on its
+        /// `capture_log.json` entry. What the 2026-09-04 readout runaway had
+        /// to be reconstructed without.
+        var rampState: (() -> CaptureExposureLog.RampState?)? = nil
         /// Identity and vocabulary for `capture_log.json`.
         var sessionID: String = UUID().uuidString
         var deviceModel: String = ""
@@ -341,14 +374,20 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     /// and darkening the frame "proves" the scene got brighter, which is a
     /// positive feedback loop (it walked a real shoot 9.7 stops into its
     /// shutter floor on 2026-08-15). The delivered image's own brightness is
-    /// the honest signal: darker frame, more light needed.
-    var onWindowOpened: ((Int, Double?) -> Void)?
+    /// the honest signal: darker frame, more light needed — and since
+    /// 2026-09-05 the scene carries the frames' own EXIF pair beside the
+    /// luma, so the luma is read against the exposure that made it, not
+    /// against the command the camera may have refused (2026-09-04).
+    var onWindowOpened: ((Int, BlendWindowScene?) -> Void)?
 
     /// Running mean of the current window's sampled luma. videoQueue.
     private var windowLumaSum: Double = 0
     private var windowLumaCount = 0
-    /// The completed window's mean, handed to `onWindowOpened` for the next.
-    private var lastWindowLuma: Double?
+    /// Running mean of the frames' EXIF brightness, when they carry one.
+    private var windowBrightnessSum: Double = 0
+    private var windowBrightnessCount = 0
+    /// The completed window's scene, handed to `onWindowOpened` for the next.
+    private var lastWindowScene: BlendWindowScene?
     /// Auto's Zone decision state — the same Kit strategy the DNG path's
     /// control arm runs, so the two Auto pipelines cannot drift. videoQueue.
     private var zoneBlend = ZoneBlendStrategy()
@@ -390,9 +429,24 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         var bufferFailures = 0
         var partial = false
         /// What the camera reported it was exposing at when this window
-        /// opened. The video tap's frames carry no EXIF of their own, so this
-        /// is the whole exposure record for the output the window produces.
+        /// opened — the fallback exposure record, and the window's clock.
         var exposure: DNGAuthor.DNGExposure? = nil
+        /// The last selected frame's own EXIF (iOS video buffers carry
+        /// `{Exif}` as an attachment; a Mac UVC stream carries nothing).
+        /// When present it is the exposure the frames were actually taken
+        /// at, which the window-open reading is not on a ramping shoot: that
+        /// reading is made before the window's own write, so it describes
+        /// the previous command.
+        var frameExposure: DNGAuthor.DNGExposure? = nil
+
+        /// The exposure record this window's output carries: the frames'
+        /// own pair when known, on the window-open clock.
+        var deliveredExposure: DNGAuthor.DNGExposure? {
+            guard var delivered = frameExposure else { return exposure }
+            delivered.capturedAt = exposure?.capturedAt ?? delivered.capturedAt
+            if delivered.aperture == nil { delivered.aperture = exposure?.aperture }
+            return delivered
+        }
         /// Alignment-gate tallies. `rejectedByAlignment` counts reject
         /// verdicts; on a single-frame window the flagged frame is still
         /// used (never starve a depth-1 window), which the log's blend
@@ -641,6 +695,17 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 if window.frameTarget != 1 { return }
             }
             window.frameTimes.append(t)
+            // The frame's own exposure, off the buffer's EXIF attachment: the
+            // pair it was really taken at (and its metered brightness). This
+            // is the exposure record the output carries and the pair the
+            // ramp's luma is read against.
+            if let exposure = LiveBlendController.frameExposure(of: sampleBuffer) {
+                window.frameExposure = exposure
+                if let brightness = exposure.brightness {
+                    windowBrightnessSum += brightness
+                    windowBrightnessCount += 1
+                }
+            }
             // Cheap scene measurement for the ramp, taken from the frame the
             // window is about to average — a strided sample, not a full pass.
             if onWindowOpened != nil,
@@ -670,6 +735,19 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
     func captureOutput(_ output: AVCaptureOutput, didDrop sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         guard selecting else { return }
         window.droppedByCamera += 1
+    }
+
+    /// The frame's own EXIF, off the sample buffer's attachments. iOS video
+    /// data output buffers carry `{Exif}` — ExposureTime, ISOSpeedRatings,
+    /// FNumber, BrightnessValue — the same dictionary a photo's metadata
+    /// nests; a UVC camera on the Mac attaches nothing, and nil is the
+    /// honest answer there (the window-open device reading stands in).
+    static func frameExposure(of sampleBuffer: CMSampleBuffer) -> DNGAuthor.DNGExposure? {
+        guard let raw = CMGetAttachment(
+                sampleBuffer, key: kCGImagePropertyExifDictionary, attachmentModeOut: nil),
+              let exif = raw as? [String: Any] else { return nil }
+        let exposure = DNGAuthor.DNGExposure(exifDictionary: exif, capturedAt: nil)
+        return exposure.isEmpty ? nil : exposure
     }
 
     /// Mean linear-light luma of a BGRA buffer, from a strided sample.
@@ -761,10 +839,26 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
         pushDiagnostics { $0.requestedFramesPerBlend = target ?? 0 }
         if onWindowOpened != nil {
-            lastWindowLuma = windowLumaCount > 0 ? windowLumaSum / Double(windowLumaCount) : nil
+            let closing = window
+            let scene: BlendWindowScene?
+            if closing.frameTimes.isEmpty, windowLumaCount == 0 {
+                scene = nil
+            } else {
+                let delivered = closing.deliveredExposure
+                scene = BlendWindowScene(
+                    meanLinearLuma: windowLumaCount > 0 ? windowLumaSum / Double(windowLumaCount) : nil,
+                    apexBrightness: windowBrightnessCount > 0
+                        ? windowBrightnessSum / Double(windowBrightnessCount) : nil,
+                    deliveredShutterSeconds: delivered?.exposureDuration,
+                    deliveredISO: delivered?.iso,
+                    frames: closing.frameTimes.count)
+            }
+            lastWindowScene = scene
             windowLumaSum = 0
             windowLumaCount = 0
-            onWindowOpened?(index, lastWindowLuma)
+            windowBrightnessSum = 0
+            windowBrightnessCount = 0
+            onWindowOpened?(index, scene)
         }
         return WindowRecord(
             index: index,
@@ -884,33 +978,51 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         // and it used to be the one case this guard could not see, because a
         // nil target skipped the whole comparison. Silence now costs an issue.
         let rampTarget = configuration.rampExposure?()
+        let rampRecord = configuration.rampState?()
         if configuration.rampExposure != nil, rampTarget == nil, !issuedRampSilence {
             issuedRampSilence = true
             sessionIssues.append(.init(
                 at: Date(), windowIndex: entry.index,
                 kind: "ramp", severity: "problem",
-                detail: "ramp commanded nothing — exposure is AE-driven"))
+                detail: "ramp commanded nothing — exposure is AE-driven"
+                    + (rampRecord?.applyOutcome.map { " (\($0))" } ?? "")))
             LLog("liveblend: RAMP NOT DRIVING — no commanded exposure at window "
                  + "\(entry.index); this run is AE-exposed and the ramp readout is advisory")
         }
-        if let target = rampTarget,
-           let delivered = record.exposure,
+        // The reference: what the ramp wrote, or — when nothing was written —
+        // what it wanted. The second is the number the operator was looking
+        // at, and until 2026-09-05 a nil target skipped the comparison, so
+        // the one run that needed it stamped nothing.
+        let reference: (shutter: Double, iso: Double, name: String)? = {
+            if let target = rampTarget {
+                return (target.duration.seconds, Double(target.iso), "applied")
+            }
+            if let commanded = rampRecord, let shutter = commanded.commandedShutter,
+               let iso = commanded.commandedISO {
+                return (shutter, iso, "engine")
+            }
+            return nil
+        }()
+        let delivered = record.deliveredExposure
+        if let reference,
+           let delivered,
            let deliveredISO = delivered.iso,
            let deliveredDuration = delivered.exposureDuration,
            let divergence = CaptureExposureLog.WindowPerformance.exposureDivergenceStops(
                actualISO: deliveredISO, actualDuration: deliveredDuration,
-               targetISO: Double(target.iso), targetDuration: target.duration.seconds) {
+               targetISO: reference.iso, targetDuration: reference.shutter) {
             // Under a quarter stop is ISO quantization, not a fault.
             if divergence > 0.25 {
                 entry.exposureDivergenceStops = divergence
+                entry.divergenceReference = reference.name
             }
             if divergence <= 0.5 { lastDivergenceLogged = 0 }
             if divergence > 0.5, abs(divergence - lastDivergenceLogged) > 0.5 {
                 lastDivergenceLogged = divergence
                 LLog(String(format: """
-                    liveblend: EXPOSURE DIVERGENCE %.1f stops — ramp commanded \
+                    liveblend: EXPOSURE DIVERGENCE %.1f stops (vs %@) — ramp \
                     %.4fs ISO %.0f, sensor delivered %.4fs ISO %.0f
-                    """, divergence, target.duration.seconds, Double(target.iso),
+                    """, divergence, reference.name, reference.shutter, reference.iso,
                     deliveredDuration, deliveredISO))
             }
         }
@@ -947,7 +1059,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 // of docs/jpeg-holygrail-wb-brief.md — nothing stripped EXIF;
                 // it was never written.)
                 var metadata = Self.captureMetadata(
-                    exposure: record.exposure, deviceModel: configuration.deviceModel)
+                    exposure: delivered, deviceModel: configuration.deviceModel)
                 if let gps = configuration.gpsMetadata?() {
                     metadata[kCGImagePropertyGPSDictionary] = gps
                 }
@@ -964,15 +1076,16 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 // finalized below, after this append — patched in there.
                 sessionFrameLog.append(CaptureExposureLog.Entry(
                     frameIndex: frameURLs.count,
-                    exposure: record.exposure ?? DNGAuthor.DNGExposure(),
+                    exposure: delivered ?? DNGAuthor.DNGExposure(),
                     capturedAt: record.exposure?.capturedAt ?? Date(),
                     blendCount: entry.capturedFrames,
-                    window: CaptureExposureLog.WindowPerformance(entry: entry)))
+                    window: CaptureExposureLog.WindowPerformance(entry: entry),
+                    ramp: rampRecord))
                 timestampWriter?.append(FrameTimestamps.Entry(
                     frame: frameURLs.count - 1,
                     captureTime: record.exposure?.capturedAt ?? Date(),
-                    shutter: record.exposure?.exposureDuration ?? 0,
-                    iso: record.exposure?.iso ?? 0))
+                    shutter: delivered?.exposureDuration ?? 0,
+                    iso: delivered?.iso ?? 0))
                 outputIndex += 1
                 completedOutputs += 1
                 if entry.capturedFrames == 1 {
@@ -1171,6 +1284,7 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
             // under its own name. No per-capture sidecar on this path: its
             // frames are samples off the preview stream, and a sampled frame
             // has no exposure of its own to record.
+            let rampSummary = CaptureExposureLog.rampSummary(of: sessionFrameLog)
             let session = CaptureExposureLog.Session(
                 sessionID: configuration.sessionID,
                 deviceModel: configuration.deviceModel,
@@ -1198,6 +1312,8 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
                 endReason: endReason ?? "user",
                 failedWindows: failedOutputs > 0 ? failedOutputs : nil,
                 starvedWindows: emptyWindows > 0 ? emptyWindows : nil,
+                rampDriving: rampSummary.driving,
+                rampRefusals: rampSummary.refusals,
                 startedAt: runStartedAt,
                 endedAt: Date(),
                 frames: sessionFrameLog,
@@ -1282,9 +1398,10 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
 
     /// EXIF + TIFF for one blended output — the record a camera-written file
     /// carries and a tapped-frame blend otherwise never gets. Exposure fields
-    /// come from the window-open reading (`WindowRecord.exposure`); during a
-    /// Holy Grail run those are the ramp's commanded values, which is the
-    /// honest answer to "what was this frame shot at".
+    /// come from the frames' own EXIF when the buffers carry it, else the
+    /// window-open reading (`WindowRecord.deliveredExposure`) — what the
+    /// frame was actually shot at, never the ramp's command (2026-09-04: a
+    /// refused ramp's command and the sensor were eight stops apart).
     static func captureMetadata(
         exposure: DNGAuthor.DNGExposure?, deviceModel: String
     ) -> [CFString: Any] {

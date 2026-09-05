@@ -125,6 +125,23 @@ Interval with the dial reset? Today it runs and says so in the log and in
 `issues[]`. Making it visible to the person holding the phone is a UI surface
 and a product call — and it needs the design-sync pass that this job did not.
 
+## Addendum 2026-09-05 — the refusal reached a field shoot
+
+Three Ladder runs on the iPhone 12 Pro (2026-09-04, JPEG live-blend,
+virtual "Back Triple Camera", a build that already armed after the
+constituent lock) were refused on every write, and the arm-after-lock change
+did not prevent it. Worse than the 2026-08-26 case: the luma meter read the
+frames against the *commanded* pair, so the refused ramp chased its own
+steps to the format's shutter floor and the readout showed 1/71429 s in red
+over a correctly exposed dusk. The full account and the fixes are in
+`fieldtests/2026-09-04-ladder-readout-runaway.md`; what matters here is that
+the refusal reason and the device facts (virtual/physical, active
+constituent, switching lock, `.custom` support, exposure mode) now land in
+`capture_log.json`'s `issues[]` on every refusal transition, and the header
+carries `rampDriving` / `rampRefusals` — so the bench verification this
+document owes no longer needs a console to read its own result:
+`tools/ramp_audit.py <project>` prints it.
+
 ## See also
 
 - `jpeg-holygrail-wb-brief.md` — the other half of the JPEG Holy Grail story

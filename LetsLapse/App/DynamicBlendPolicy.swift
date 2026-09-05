@@ -115,6 +115,27 @@ final class HolyGrailAppliedExposureHolder: @unchecked Sendable {
     }
 }
 
+/// The ramp's per-window record for `capture_log.json`, written on the
+/// session queue after every advance/apply and read by the blend controllers
+/// at window close on their own queues — the same one-lock shape as the
+/// applied-exposure holder above, for the same reason.
+final class HolyGrailRecordHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var stored: CaptureExposureLog.RampState?
+
+    var state: CaptureExposureLog.RampState? {
+        lock.lock()
+        defer { lock.unlock() }
+        return stored
+    }
+
+    func set(_ state: CaptureExposureLog.RampState?) {
+        lock.lock()
+        stored = state
+        lock.unlock()
+    }
+}
+
 /// The run's current capability profile, shared between the thing that
 /// measures it (the profiler, on its own queue), the thing that replaces it
 /// when conditions move (the thermal observer, on whatever queue Foundation

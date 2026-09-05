@@ -15,7 +15,84 @@ let captureDiagEnabled = true
 @inline(__always) func LLog(_ message: @autoclosure () -> String) {
     if captureDiagEnabled {
         let t = ProcessInfo.processInfo.systemUptime.truncatingRemainder(dividingBy: 1000)
-        print(String(format: "🎥LL %7.3f %@", t, message()))
+        let line = String(format: "🎥LL %7.3f %@", t, message())
+        print(line)
+        LLogFileSink.shared.append(line)
+    }
+}
+
+/// The console, kept: every `LLog` line also lands in
+/// `Logs/console-<launch>.log` under the storage root, so a run's narrative
+/// survives the run. Until 2026-09-05 the diagnostics that name WHY a
+/// Holy Grail write was refused, which physical lens a virtual camera was
+/// locked to, and whether a ramp ever recovered existed only on an attached
+/// Xcode console — and the one shoot that needed them had nobody attached
+/// (`docs/fieldtests/2026-09-04-ladder-readout-runaway.md`).
+///
+/// One file per process launch, appended on a serial background queue (the
+/// callers are the session queue and the blend queues; nothing here blocks
+/// them), capped at `byteLimit` so a runaway logger cannot fill the disk,
+/// and the oldest files pruned so the folder holds the last `keepFiles`
+/// launches. Wall-clock stamps go in beside the uptime one `LLog` already
+/// carries, because the uptime re-anchors around 1000 s and has been misread
+/// as an app restart before.
+final class LLogFileSink {
+    static let shared = LLogFileSink()
+
+    static let byteLimit = 8 << 20
+    static let keepFiles = 12
+
+    private let queue = DispatchQueue(label: "com.letslapse.llog.sink", qos: .utility)
+    private var handle: FileHandle?
+    private var bytesWritten = 0
+    private var opened = false
+    private var capped = false
+    private let stamp: DateFormatter = {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "HH:mm:ss.SSS"
+        return f
+    }()
+
+    func append(_ line: String) {
+        let wall = stamp.string(from: Date())
+        queue.async { self.write("\(wall) \(line)\n") }
+    }
+
+    private func write(_ text: String) {
+        if !opened { open() }
+        guard let handle, !capped, let data = text.data(using: .utf8) else { return }
+        if bytesWritten + data.count > Self.byteLimit {
+            capped = true
+            try? handle.write(contentsOf: Data("…console log capped at \(Self.byteLimit) bytes\n".utf8))
+            return
+        }
+        try? handle.write(contentsOf: data)
+        bytesWritten += data.count
+    }
+
+    private func open() {
+        opened = true
+        let directory = StorageRoot.current.appendingPathComponent("Logs", isDirectory: true)
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyyMMdd-HHmmss"
+        let url = directory.appendingPathComponent("console-\(formatter.string(from: Date())).log")
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        handle = try? FileHandle(forWritingTo: url)
+        prune(in: directory, keeping: url)
+    }
+
+    /// Oldest console logs beyond `keepFiles` go; nothing else in `Logs/`
+    /// is touched (the experiment and ladder logs are the bench's).
+    private func prune(in directory: URL, keeping current: URL) {
+        guard let names = try? FileManager.default.contentsOfDirectory(atPath: directory.path) else { return }
+        let logs = names.filter { $0.hasPrefix("console-") && $0.hasSuffix(".log") }
+            .sorted(by: >)
+        for name in logs.dropFirst(Self.keepFiles) where name != current.lastPathComponent {
+            try? FileManager.default.removeItem(at: directory.appendingPathComponent(name))
+        }
     }
 }
 
@@ -272,6 +349,26 @@ final class CameraController: NSObject, ObservableObject {
     /// runs to auto-exposure brackets resolving against an AE loop that
     /// `.custom` mode had frozen. nil outside holy-grail runs.
     private let holyGrailAppliedExposure = HolyGrailAppliedExposureHolder()
+    /// The ramp's per-window record for `capture_log.json` — snapshotted on
+    /// the session queue after every advance/apply, read by the blend
+    /// controllers at window close. See `HolyGrailRecordHolder`.
+    private let holyGrailRecord = HolyGrailRecordHolder()
+    /// The refusal trail's bookkeeping: the last write's failure reason (nil
+    /// = it landed), whether any write has been attempted this run, and how
+    /// many were refused. Issues are recorded on TRANSITIONS — a refusal
+    /// that persists for 500 windows is one line, a recovery is one more —
+    /// so `issues[]` stays readable. All sessionQueue-confined.
+    private var holyGrailLastApplyReason: String?
+    private var holyGrailApplyAttempted = false
+    private var holyGrailRefusals = 0
+    /// The last closed window: the pair its frames were taken at, the AE's
+    /// absolute scene EV they imply, and the measurement the engine consumed.
+    /// The readout, the Ladder and the log all read these, never the target.
+    private var holyGrailLastDelivered: (shutter: Double, iso: Double)?
+    private var holyGrailLastSceneEV: Double?
+    #if os(iOS)
+    private var holyGrailLastMeasurement: HolyGrailMeasurement?
+    #endif
     private var holyGrailActive = false
     private var holyGrailPending = false
     private var holyGrailRawPixelFormat: OSType?
@@ -773,6 +870,16 @@ final class CameraController: NSObject, ObservableObject {
         var isCapturingRAW: Bool
         /// The operator's over/under exposure, in stops.
         var bias: Double = 0
+        /// Whether the ramp's last command reached the device. False is the
+        /// 2026-09-04 case — every write refused, the sensor on AE — and the
+        /// readout must then show `delivered…`, not the pair above, which is
+        /// a number the camera is not on.
+        var isDriving: Bool = true
+        /// The pair the last window's frames were actually taken at.
+        var deliveredShutterSeconds: Double? = nil
+        var deliveredISO: Float? = nil
+        /// Why the last write was refused, when it was.
+        var notDrivingReason: String? = nil
     }
 
     @Published var holyGrailState: HolyGrailState?
@@ -5770,61 +5877,70 @@ final class CameraController: NSObject, ObservableObject {
         case apexBrightness(Double)
     }
 
-    /// Mid-grey in linear light — the reference the luma measurement is read
-    /// against. Its absolute value doesn't matter (the ramp's anchor folds any
-    /// constant out on the first frame); it only has to stay fixed.
-    private static let holyGrailReferenceLuma = 0.18
-
     /// sessionQueue-confined. The one place the ramp moves: measure, step,
     /// write the sidecar line, publish.
+    ///
+    /// `delivered` is the pair the window's frames were actually taken at
+    /// (the buffers' own EXIF). Without it the device's pair *right now*
+    /// stands in — the next window's write has not been made yet, so that is
+    /// still the exposure the closed window ran at. **Never the engine's
+    /// target.** Read against the target, the luma route is scene-referred
+    /// only while the camera obeys; on 2026-09-04 a refused ramp chased its
+    /// own steps 7.9 stops into the 12 Pro's shutter floor over a correctly
+    /// exposed dusk (`docs/fieldtests/2026-09-04-ladder-readout-runaway.md`).
     private func advanceHolyGrailRamp(
-        frame: Int, shutter: Double, iso: Double, measurement: HolyGrailMeasurement?
+        frame: Int, delivered: (shutter: Double, iso: Double)?, measurement: HolyGrailMeasurement?
     ) {
-        guard let limits = holyGrailLimits, let engine = holyGrailEngine,
+        guard let limits = holyGrailLimits, holyGrailEngine != nil,
               let measurement
         else { return }
+        let pair: (shutter: Double, iso: Double)? = delivered ?? videoDevice.flatMap { device in
+            let shutter = device.exposureDuration.seconds
+            let iso = Double(device.iso)
+            return shutter > 0 && shutter.isFinite && iso > 0 ? (shutter, iso) : nil
+        }
         // Both routes end in "the EV that would correctly expose this scene".
         let measuredEV: Double
         switch measurement {
         case .apexBrightness(let brightness):
             measuredEV = HolyGrailMetering.sceneEV100(apexBrightness: brightness)
         case .luma(let luma):
-            // The exposure we used says what EV this frame *assumed*; how far
-            // the delivered image sits from mid-grey says how wrong that
-            // assumption was. Darken by a stop and both terms move a stop in
-            // opposite directions — so a still scene reads as a still scene,
-            // which is precisely what makes the loop stable.
-            let gain = HolyGrailRampEngine.lightGain(
-                shutterSeconds: shutter > 0 ? shutter : engine.currentTarget.shutterSeconds,
-                iso: iso > 0 ? Float(iso) : engine.currentTarget.iso)
-            measuredEV = HolyGrailRampEngine.sceneEV100(forGain: gain, aperture: limits.aperture)
-                + log2(max(luma, 1e-6) / Self.holyGrailReferenceLuma)
+            guard let pair else {
+                LLog("holygrail: window \(frame) has no delivered exposure to read its luma against — holding")
+                return
+            }
+            measuredEV = HolyGrailMetering.sceneEV100(
+                meanLinearLuma: luma, deliveredShutterSeconds: pair.shutter,
+                iso: Float(pair.iso), aperture: limits.aperture)
         }
 
         // The device AE's own opinion of the scene — absolute, bias-inclusive
-        // and available even under custom exposure. This is the reference the
-        // anchor drifts toward; without a reading the anchor simply holds.
+        // and available even under custom exposure. The anchor drifts toward
+        // it, the Ladder resolves its rungs on it, and the readout prints it;
+        // without a reading the anchor simply holds and the rung stays.
         var aeSceneEV: Double?
-        if let device = videoDevice {
+        if let device = videoDevice, let pair {
             let offset = Double(device.exposureTargetOffset)
-            let readShutter = shutter > 0 ? shutter : device.exposureDuration.seconds
-            let readISO = iso > 0 ? iso : Double(device.iso)
-            if offset.isFinite, readShutter > 0, readISO > 0 {
-                aeSceneEV = HolyGrailMetering.sceneEV100(
-                    shutterSeconds: readShutter, iso: Float(readISO),
-                    aperture: limits.aperture, exposureTargetOffset: offset)
-            }
+            aeSceneEV = HolyGrailMetering.sceneEV100(
+                shutterSeconds: pair.shutter, iso: Float(pair.iso),
+                aperture: limits.aperture, exposureTargetOffset: offset.isFinite ? offset : 0)
         }
         holyGrailEngine?.advance(measuredEV: measuredEV, limits: limits, aeSceneEV: aeSceneEV)
         if let gap = holyGrailEngine?.aeGapEV, abs(gap) > 0.5, frame % 100 == 0 {
             LLog(String(format: "holygrail: anchor drifting — aim sits %+.2f stops off AE", gap))
         }
+        holyGrailLastDelivered = pair
+        holyGrailLastSceneEV = aeSceneEV
+        holyGrailLastMeasurement = measurement
 
+        // The sidecar carries the DELIVERED pair — what its schema says an
+        // exposure time is. It used to carry the command, silently, which is
+        // how the runaway had to be reconstructed by pairing two files.
         holyGrailWriter?.append(FrameTimestamps.Entry(
             frame: frame,
             captureTime: Date(),
-            shutter: shutter,
-            iso: iso,
+            shutter: pair?.shutter ?? 0,
+            iso: pair?.iso ?? 0,
             ev: holyGrailEngine?.smoothedEV ?? measuredEV))
 
         publishHolyGrailState()
@@ -5838,20 +5954,31 @@ final class CameraController: NSObject, ObservableObject {
     /// the ISP latches (~0.3 s). The ramp moves at most 1/3 stop per window,
     /// which bounds that error to a third of a stop on a minority of the
     /// window's frames — visible in the log, not in the picture.
-    private func rampHolyGrailBlendWindow(index: Int, measurement: HolyGrailMeasurement?) {
-        guard holyGrailActive, let engine = holyGrailEngine else { return }
+    private func rampHolyGrailBlendWindow(index: Int, scene: BlendWindowScene?) {
+        guard holyGrailActive, holyGrailEngine != nil else { return }
         // Measure the window that just ended — it ran at the exposure we set
         // last time — then step, then apply for the window now opening. With
         // no measurement (a window that saw no frames) the ramp holds where it
-        // is rather than guessing.
-        advanceHolyGrailRamp(
-            frame: index,
-            shutter: engine.currentTarget.shutterSeconds,
-            iso: Double(engine.currentTarget.iso),
-            measurement: measurement)
+        // is rather than guessing. RAW frames carry a meter reading of their
+        // own (APEX brightness); the video tap's meter is the sampled luma,
+        // read against the pair the frames were taken at.
+        let measurement: HolyGrailMeasurement? = scene.flatMap { scene in
+            if holyGrailPipelineIsRAW, let brightness = scene.apexBrightness {
+                return .apexBrightness(brightness)
+            }
+            if let luma = scene.meanLinearLuma { return .luma(luma) }
+            return nil
+        }
+        let delivered: (shutter: Double, iso: Double)? = scene.flatMap { scene in
+            guard let shutter = scene.deliveredShutterSeconds, let iso = scene.deliveredISO,
+                  shutter > 0, iso > 0 else { return nil }
+            return (shutter, iso)
+        }
+        advanceHolyGrailRamp(frame: index, delivered: delivered, measurement: measurement)
         advanceLadder(window: index)
-        applyHolyGrailExposure()
+        noteHolyGrailApply(applyHolyGrailExposure(), stage: "window \(index)")
         repaceHolyGrailAutoInterval()
+        snapshotHolyGrailRecord(scene: scene)
     }
 
     // MARK: - Light Ladder
@@ -5896,9 +6023,14 @@ final class CameraController: NSObject, ObservableObject {
     /// the interval stretches, and a rung's EVERY is never shortened (D2).
     private func advanceLadder(window index: Int) {
         guard let ladder = ladderRequestedForRun, var selector = ladderSelector,
-              let engine = holyGrailEngine else { return }
+              holyGrailEngine != nil else { return }
         let before = ladderRungIndex
-        let next = selector.resolve(ev: engine.smoothedEV)
+        // Resolved on the AE's absolute scene EV (the delivered pair plus the
+        // meter's offset) — the scale the rungs are authored on. The engine's
+        // smoothed EV is anchored: right about CHANGE, offset in level, and
+        // on a refused ramp it follows the engine's own steps — on 2026-09-04
+        // it read 19.6 mid-dusk and stepped the Ladder up to Daylight.
+        let next = selector.resolve(ev: holyGrailLastSceneEV)
         let changed = selector.changedOnLastResolve
         ladderSelector = selector
         ladderRungIndex = next
@@ -5915,6 +6047,9 @@ final class CameraController: NSObject, ObservableObject {
             let direction = (before ?? next) < next ? "down" : "up"
             let evText = String(format: "%.2f", selector.lastSmoothedEV ?? .nan)
             LLog("ladder: stepped \(direction) to '\(rung.name)' at window \(index) (scene EV \(evText)) — every \(rung.intervalSeconds)s, blend \(rung.blendFrames)")
+            noteRunIssue(
+                kind: "ladder", severity: "info",
+                detail: "stepped \(direction) to '\(rung.name)' (scene EV \(evText)) — every \(rung.intervalSeconds)s, blend \(rung.blendFrames)")
         }
 
         // Pacing. The RAW path's AIMD governor takes the rung's ask as its
@@ -6280,6 +6415,90 @@ final class CameraController: NSObject, ObservableObject {
         return .applied
     }
 
+    /// The refusal trail. sessionQueue. Records transitions only: the first
+    /// refusal (with the reason and the device facts), a recovery, a fresh
+    /// refusal after one — never one line per window.
+    private func noteHolyGrailApply(_ outcome: HolyGrailApplyOutcome, stage: String) {
+        let reason = outcome.failureReason
+        if reason != nil { holyGrailRefusals += 1 }
+        let changed = !holyGrailApplyAttempted || reason != holyGrailLastApplyReason
+        let wasRefused = holyGrailApplyAttempted && holyGrailLastApplyReason != nil
+        holyGrailApplyAttempted = true
+        holyGrailLastApplyReason = reason
+        guard changed else { return }
+        if let reason {
+            let detail = "exposure write refused at \(stage) — \(reason) · \(holyGrailDeviceFacts())"
+            LLog("holygrail: \(detail)")
+            noteRunIssue(kind: "ramp", severity: "problem", detail: detail)
+        } else if wasRefused {
+            let detail = "ramp driving from \(stage)"
+            LLog("holygrail: \(detail)")
+            noteRunIssue(kind: "ramp", severity: "info", detail: detail)
+        }
+    }
+
+    /// What the camera is, for a refusal line: the one set of facts the
+    /// 2026-08-27 hypothesis ("a virtual device with switching unlocked
+    /// refuses `.custom`") could have been tested against, had they been
+    /// recorded anywhere a project carries.
+    private func holyGrailDeviceFacts() -> String {
+        guard let device = videoDevice else { return "no capture device" }
+        var parts = [device.localizedName]
+        if device.isVirtualDevice {
+            let active = device.activePrimaryConstituent?.deviceType.rawValue
+                .replacingOccurrences(of: "AVCaptureDeviceTypeBuiltIn", with: "") ?? "none"
+            parts.append("virtual on \(active), switching \(constituentSwitchRestore == nil ? "unlocked" : "locked")")
+        } else {
+            parts.append("physical")
+        }
+        parts.append("custom exposure \(device.isExposureModeSupported(.custom) ? "supported" : "unsupported")")
+        let mode: String
+        switch device.exposureMode {
+        case .locked: mode = "locked"
+        case .autoExpose: mode = "autoExpose"
+        case .continuousAutoExposure: mode = "continuousAutoExposure"
+        case .custom: mode = "custom"
+        @unknown default: mode = "unknown"
+        }
+        parts.append("mode \(mode)")
+        return parts.joined(separator: " · ")
+    }
+
+    /// Hands a camera-layer observation to whichever blend controller is
+    /// writing this run's `capture_log.json`. sessionQueue.
+    private func noteRunIssue(kind: String, severity: String, detail: String) {
+        liveBlendController?.noteExternalIssue(kind: kind, severity: severity, detail: detail)
+        liveBlendRawController?.noteExternalIssue(kind: kind, severity: severity, detail: detail)
+    }
+
+    /// The ramp's record for the window now open, for the controllers to
+    /// stamp on its `capture_log.json` entry at close. sessionQueue.
+    private func snapshotHolyGrailRecord(scene: BlendWindowScene?) {
+        guard let engine = holyGrailEngine else {
+            holyGrailRecord.set(nil)
+            return
+        }
+        var luma: Double?
+        var brightness = scene?.apexBrightness
+        switch holyGrailLastMeasurement {
+        case .luma(let value)?: luma = value
+        case .apexBrightness(let value)?: brightness = value
+        case nil: break
+        }
+        holyGrailRecord.set(CaptureExposureLog.RampState(
+            commandedShutter: engine.currentTarget.shutterSeconds,
+            commandedISO: Double(engine.currentTarget.iso),
+            smoothedEV: engine.smoothedEV,
+            aimEV: engine.smoothedEV.map { engine.aimEV(from: $0) },
+            sceneEV: holyGrailLastSceneEV,
+            measuredLuma: luma,
+            apexBrightness: brightness,
+            aeGapEV: engine.aeGapEV,
+            applied: holyGrailApplyAttempted ? holyGrailLastApplyReason == nil : nil,
+            applyOutcome: holyGrailLastApplyReason,
+            rung: ladderActiveRung?.name))
+    }
+
     /// sessionQueue-confined. One bounded second attempt at the seed write, for
     /// the case where the camera was not ready to take a custom exposure at arm
     /// time. Runs when the settle hold elapses, so it costs nothing when the
@@ -6287,8 +6506,11 @@ final class CameraController: NSObject, ObservableObject {
     private func retryHolyGrailSeedIfNeeded() {
         guard holyGrailSeedNeedsRetry else { return }
         holyGrailSeedNeedsRetry = false
-        let reason = applyHolyGrailExposure().failureReason
-        guard let reason else {
+        let outcome = applyHolyGrailExposure()
+        noteHolyGrailApply(outcome, stage: "retry")
+        snapshotHolyGrailRecord(scene: nil)
+        publishHolyGrailState()
+        guard let reason = outcome.failureReason else {
             LLog("holygrail: seed exposure applied on retry")
             return
         }
@@ -6335,13 +6557,16 @@ final class CameraController: NSObject, ObservableObject {
         // actuate — this used to re-ask `isExposureModeSupported(.custom)`
         // separately, which said the right thing while the write that shared
         // the predicate returned silently and the run shot on AE anyway.
-        if let reason = applyHolyGrailExposure().failureReason {
+        let seedOutcome = applyHolyGrailExposure()
+        noteHolyGrailApply(seedOutcome, stage: "arm")
+        if let reason = seedOutcome.failureReason {
             LLog("holygrail: the seed exposure did not reach the camera (\(reason))"
                  + " — retrying once before the first frame")
             holyGrailSeedNeedsRetry = true
             holyGrailSeedSettleSeconds = max(holyGrailSeedSettleSeconds,
                                              Self.holyGrailSettleSeconds)
         }
+        snapshotHolyGrailRecord(scene: nil)
         publishHolyGrailState()
         LLog("holygrail: blending ramp armed, every \(interval)s\(autoInterval ? " (auto)" : "")"
              + " seed=\(holyGrailEngine.map { String(format: "%.4fs ISO %.0f", $0.currentTarget.shutterSeconds, $0.currentTarget.iso) } ?? "none")")
@@ -6353,15 +6578,27 @@ final class CameraController: NSObject, ObservableObject {
             DispatchQueue.main.async { self.holyGrailState = nil }
             return
         }
+        // The scene EV shown is the AE's absolute one when a window has
+        // reported it — the scale the Ladder resolves on and the frames'
+        // EXIF approximates — and the engine's own (anchored) EV before that.
+        let delivered = holyGrailLastDelivered ?? videoDevice.flatMap { device in
+            let shutter = device.exposureDuration.seconds
+            let iso = Double(device.iso)
+            return shutter > 0 && shutter.isFinite && iso > 0 ? (shutter, iso) : nil
+        }
         let state = HolyGrailState(
             shutterSeconds: engine.currentTarget.shutterSeconds,
             iso: engine.currentTarget.iso,
-            sceneEV: engine.smoothedEV ?? 0,
+            sceneEV: holyGrailLastSceneEV ?? engine.smoothedEV ?? 0,
             frames: photoURLs.count,
             isISORamping: engine.isISORamping(limits: limits),
             isClipped: engine.isClipped(limits: limits),
             isCapturingRAW: holyGrailRawPixelFormat != nil,
-            bias: holyGrailBiasStops)
+            bias: holyGrailBiasStops,
+            isDriving: !holyGrailApplyAttempted || holyGrailLastApplyReason == nil,
+            deliveredShutterSeconds: delivered?.shutter,
+            deliveredISO: delivered.map { Float($0.iso) },
+            notDrivingReason: holyGrailLastApplyReason)
         DispatchQueue.main.async {
             if self.holyGrailState != state { self.holyGrailState = state }
         }
@@ -6377,6 +6614,17 @@ final class CameraController: NSObject, ObservableObject {
         holyGrailAutoIntervalSeconds = nil
         DispatchQueue.main.async { self.activeIntervalSeconds = nil }
         holyGrailAppliedExposure.set(nil)
+        holyGrailRecord.set(nil)
+        if holyGrailApplyAttempted {
+            LLog("holygrail: \(holyGrailRefusals) refused exposure write(s) this run"
+                 + (holyGrailLastApplyReason.map { " — last: \($0)" } ?? ""))
+        }
+        holyGrailLastApplyReason = nil
+        holyGrailApplyAttempted = false
+        holyGrailRefusals = 0
+        holyGrailLastDelivered = nil
+        holyGrailLastSceneEV = nil
+        holyGrailLastMeasurement = nil
         if ladderRequestedForRun != nil {
             LLog("ladder: end after \(ladderChangeCount) rung change(s)")
         }
@@ -6768,6 +7016,10 @@ final class CameraController: NSObject, ObservableObject {
     /// Above the line the torch is worse than nothing — it flattens the page,
     /// throws a specular sheen off coated stock, and heats the phone through a
     /// job that takes minutes.
+    ///
+    /// The scale above is EV at ISO 100 — which `sceneExposureValue()` only
+    /// reports since 2026-09-05; before that its ISO term was inverted, so
+    /// this line sat two stops of ISO away from where it was written.
     private static let scannerTorchEVThreshold: Double = 5
 
     /// The scene's brightness in APEX EV at ISO 100, from what the meter is
@@ -6777,13 +7029,23 @@ final class CameraController: NSObject, ObservableObject {
     /// and a locked pair describes the decision rather than the room. Returns
     /// nil when the device can't be metered (no aperture, a zero duration, an
     /// ISO of zero), which is the honest answer rather than a fabricated EV.
+    /// The scene's EV at ISO 100 as the device is exposing it right now —
+    /// the same scale `DNGAuthor.DNGExposure.exposureValue` and
+    /// `HolyGrailMetering` use, so a Ladder's rung thresholds, the light
+    /// panel and the ramp's AE opinion all read one number.
+    ///
+    /// Until 2026-09-05 this ADDED the ISO term (`+ log2(iso/100)`) where
+    /// EV100 subtracts it: 3.2 stops low at ISO 33, ten stops high at ISO
+    /// 3200 — a night scene would have armed the Ladder on Daylight. The
+    /// Scanner torch threshold was tuned against the wrong scale and was
+    /// re-based with the fix (`scannerTorchEVThreshold`).
     private func sceneExposureValue() -> Double? {
         guard let device = videoDevice else { return nil }
         let aperture = Double(device.lensAperture)
         let seconds = device.exposureDuration.seconds
         let iso = Double(device.iso)
         guard aperture > 0, seconds > 0, iso > 0, seconds.isFinite else { return nil }
-        return log2(aperture * aperture / seconds) + log2(iso / 100)
+        return log2(aperture * aperture / seconds) - log2(iso / 100)
     }
 
     /// sessionQueue-confined. Lights the page for a document run **if the room
@@ -8294,6 +8556,9 @@ final class CameraController: NSObject, ObservableObject {
                 rampExposure: self.holyGrailRequestedForRun
                     ? { [weak self] in self?.holyGrailAppliedExposure.target ?? nil }
                     : nil,
+                rampState: self.holyGrailRequestedForRun
+                    ? { [weak self] in self?.holyGrailRecord.state ?? nil }
+                    : nil,
                 sessionID: UUID().uuidString,
                 deviceModel: LiveBlendController.deviceModelIdentifier(),
                 gpsMetadata: { [weak self] in
@@ -8322,11 +8587,10 @@ final class CameraController: NSObject, ObservableObject {
             #if os(iOS)
             // Holy Grail: one exposure per blend window, chosen by the ramp.
             if self.holyGrailRequestedForRun {
-                controller.onWindowOpened = { [weak self] index, luma in
+                controller.onWindowOpened = { [weak self] index, scene in
                     guard let self else { return }
                     self.sessionQueue.async {
-                        self.rampHolyGrailBlendWindow(
-                            index: index, measurement: luma.map { .luma($0) })
+                        self.rampHolyGrailBlendWindow(index: index, scene: scene)
                     }
                 }
             }
@@ -8564,6 +8828,9 @@ final class CameraController: NSObject, ObservableObject {
             rampExposure: holyGrailRequestedForRun
                 ? { [weak self] in self?.rampExposureForBracket() }
                 : nil,
+            rampState: holyGrailRequestedForRun
+                ? { [weak self] in self?.holyGrailRecord.state ?? nil }
+                : nil,
             sessionID: UUID().uuidString,
             deviceModel: LiveBlendController.deviceModelIdentifier(),
             gpsProvider: { [weak self] in
@@ -8582,11 +8849,10 @@ final class CameraController: NSObject, ObservableObject {
             captureExecutor: { [weak self] block in self?.sessionQueue.async(execute: block) })
         controller.onLearningSample = Self.learningRecorder(pipeline: "dng", interval: interval)
         if holyGrailRequestedForRun {
-            controller.onWindowOpened = { [weak self] index, brightness in
+            controller.onWindowOpened = { [weak self] index, scene in
                 guard let self else { return }
                 self.sessionQueue.async {
-                    self.rampHolyGrailBlendWindow(
-                        index: index, measurement: brightness.map { .apexBrightness($0) })
+                    self.rampHolyGrailBlendWindow(index: index, scene: scene)
                 }
             }
             beginHolyGrailForBlendRun(

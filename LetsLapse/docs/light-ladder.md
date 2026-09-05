@@ -46,7 +46,7 @@ Vocabulary, used everywhere (code, copy, files):
 |---|---|
 | **Ladder** | the object — one table of rungs, read top-down. Dusk descends it, dawn climbs it; there is never a second table for the other direction. (The handoff's working name *Profile* is retired: it collides with `BlendProfileStore` / `blend-profiles.json`.) |
 | **Rung** | one threshold plus five levers. Stores a **lower bound** only — the ladder is gap-free by construction and the last rung is "and darker". Ranges are shown, never stored. |
-| **Scene EV** | the measured EV at ISO 100 — the same `smoothedEV` the Holy Grail engine already tracks. |
+| **Scene EV** | the scene's EV at ISO 100 as the device AE reads it — the delivered pair plus `exposureTargetOffset` (`HolyGrailMetering.sceneEV100(shutterSeconds:iso:aperture:exposureTargetOffset:)`), the same number the arming preview meters and the running readout prints. Until 2026-09-05 the selector read the engine's own `smoothedEV`, which is anchored (right about change, offset in level) and, on a ramp the camera was refusing, followed the engine's phantom steps to EV 19.6 and stepped the Ladder up to Daylight in the middle of dusk. |
 
 The thesis, and the one sentence that decides most of the design:
 

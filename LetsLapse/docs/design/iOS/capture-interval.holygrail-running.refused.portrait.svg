@@ -1,0 +1,92 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (running, Holy Grail ramp refused by the camera, Info off) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (runExposureText, the not-driving branch; rampRefusedNote behind the Info toggle; shutterClusterLayer). Dynamic (Holy Grail) or Ladder mid-run whose custom-exposure writes the camera is REFUSING, so the sensor is on its own AE — the 2026-09-04 iPhone 12 Pro case (docs/fieldtests/2026-09-04-ladder-readout-runaway.md). The one amber line prints what the sensor is DELIVERING (the last window's own EXIF pair and the AE's scene EV) and says 'ramp not driving'; it never prints the engine's target (1/71429 s that evening) and never goes red for a limit the camera is not near. Info OFF: the refusal reason ('ramp refused · this camera does not accept a custom exposure right now · frames are on the camera's AE') is one tap away on the cluster's Info toggle. Everything else is the ramped running screen. Staged by LL_HOLYGRAIL=refused. Code first, 2026-09-05; mirror drawn the same day.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- viewfinder 4:3 (DNG) -->
+      <g id="viewfinder">
+        <rect x="0" y="115" width="393" height="524" fill="url(#sky)"/>
+        <circle cx="132" cy="300" r="28" fill="#FFB340" opacity="0.9"/>
+        <circle cx="132" cy="300" r="48" fill="#FFB340" opacity="0.15"/>
+        <polygon points="0,440 70,392 150,432 235,366 310,424 393,382 393,639 0,639" fill="#141A24"/>
+        <polygon points="0,510 85,470 185,516 268,482 393,510 393,639 0,639" fill="#0B0E14"/>
+        <rect x="0" y="562" width="393" height="77" fill="#080A0E"/>
+      </g>
+
+      <!-- top bar: close stays; format pill locked -->
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <rect x="198" y="70" width="179" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="212" y="92" font-size="13" class="sb" fill="#FFF" opacity="0.55">12MP 4:3</text>
+          <text x="274" y="92" font-size="13" class="sb" fill="#FFF" opacity="0.55">· JPEG</text>
+          <g data-symbol="lock.fill" transform="translate(356,80)">
+            <rect x="0" y="5" width="10" height="8" rx="1.5" fill="#FFF" opacity="0.4"/>
+            <path d="M2 5 v-1.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.6"/>
+          </g>
+        </g>
+        <!-- storage headroom: what is left of the disk in the armed format -->
+        <g id="headroom-chip">
+          <rect x="106" y="72" width="84" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="117" y="82.5" width="12" height="10" rx="2.5"/>
+            <path d="M119.5 89.5 h7 M119.5 91.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="134" y="92.0" font-size="12.5" class="sb" fill="#FFF">≈10.5k</text>
+        </g>
+      </g>
+
+      <!-- RUN READOUT, Info OFF, ramp REFUSED (2026-09-05): the ±EV bias slider and ONE amber line —
+           the DELIVERED shutter · ISO (the last window's own EXIF) · the AE's scene EV · 'ramp not driving'.
+           Never the engine's target, never red: the limit flag describes a target the camera is not on.
+           The refusal reason lives behind the cluster's Info toggle (slot 2), on one line under the
+           diagnostics panel: 'ramp refused · <reason> · frames are on the camera's AE'. -->
+      <g id="run-readout">
+        <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1/121 · ISO 71 · EV 8.8 · ramp not driving</text>
+        <g id="ev-slider" data-symbol="plusminus.circle">
+          <circle cx="26" cy="698" r="7" fill="none" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.2"/>
+          <path d="M22.5 696 h7 M26 692.5 v7 M22.5 701.5 h7" stroke="#FFF" stroke-opacity="0.6" stroke-width="1.1" stroke-linecap="round"/>
+          <rect x="47" y="695.5" width="330" height="5" rx="2.5" fill="#FFF" opacity="0.25"/>
+          <rect x="47" y="695.5" width="165" height="5" rx="2.5" fill="#FFB340"/>
+          <circle cx="212" cy="698" r="11" fill="#FFF"/>
+        </g>
+      </g>
+
+      <!-- shutter row (mode row hidden while capturing) -->
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#3A3123"/>
+            <polygon points="16,772 40,750 62,768 76,758 76,788 16,788" fill="#241E15"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.running.portrait.svg,
+             not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md -->
+        <image id="shutter-cluster" href="../components/shutter-cluster.running.portrait.svg" x="106.5" y="708" width="180" height="100"/>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, Holy Grail ramp, Info off) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — run readout (ramp pair · EV · status) · ±EV slider · cluster Dim/Info</text>
+</svg>

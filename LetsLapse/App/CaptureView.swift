@@ -1061,9 +1061,16 @@ struct CaptureView: View {
             }
             camera.stop()
             dismiss()
-            // The experiment log rides along as a JSON sidecar (the project
-            // model filters .json from media), so shared/imported projects
-            // carry their own capture diagnostics.
+            // The experiment log rides along as a sidecar under its own
+            // `liveblend-…json` name: parked beside the frames, where
+            // registration picks named sidecars up. Appended to the frame
+            // list instead (as it was until 2026-09-05) it was renumbered
+            // into `frame-00501.json` — a session document nobody could find.
+            if let staging = result.frameURLs.first?.deletingLastPathComponent() {
+                let parked = staging.appendingPathComponent(result.logURL.lastPathComponent)
+                try? FileManager.default.removeItem(at: parked)
+                try? FileManager.default.copyItem(at: result.logURL, to: parked)
+            }
             let format = result.outputFormat == "dng" ? "DNG" : "JPEG"
             let blend: String
             switch blendDepth {
@@ -1077,7 +1084,7 @@ struct CaptureView: View {
                 blend = " · Auto blend"
             }
             model.setSource(
-                .photos(result.frameURLs + [result.logURL]),
+                .photos(result.frameURLs),
                 mode: "Interval · \(format)\(blend)")
         }
         revalidateSafeDepth()
@@ -2902,21 +2909,40 @@ struct CaptureView: View {
     /// `LL_HOLYGRAIL=armed` arms the MODE dial on Holy Grail;
     /// `LL_HOLYGRAIL=running` also freezes a mid-ramp state on screen — the
     /// readout the simulator can never produce for itself, since it has no
-    /// camera to ramp. Implies Interval mode. Pair with `LL_CAPTURE=1`.
+    /// camera to ramp; `LL_HOLYGRAIL=refused` freezes the run whose ramp the
+    /// camera is refusing — the 2026-09-04 12 Pro numbers: the engine at its
+    /// 14 µs floor and "clipped", the sensor on AE at 1/121 · ISO 71 — which
+    /// is what the amber line must print. Implies Interval mode. Pair with
+    /// `LL_CAPTURE=1`.
     private func applyHolyGrailPreviewHook() {
         guard let raw = ProcessInfo.processInfo.environment["LL_HOLYGRAIL"] else { return }
         mode = .interval
         intervalModeToken = IntervalCaptureMode.holyGrail.rawValue
         updateAspectPreview()
-        guard raw == "running" else { return }
-        camera.holyGrailState = CameraController.HolyGrailState(
-            shutterSeconds: 1.0,
-            iso: 1250,
-            sceneEV: 1.4,
-            frames: 24,
-            isISORamping: true,
-            isClipped: false,
-            isCapturingRAW: true)
+        guard raw == "running" || raw == "refused" else { return }
+        if raw == "refused" {
+            camera.holyGrailState = CameraController.HolyGrailState(
+                shutterSeconds: 1.0 / 71429,
+                iso: 33,
+                sceneEV: 8.8,
+                frames: 443,
+                isISORamping: false,
+                isClipped: true,
+                isCapturingRAW: false,
+                isDriving: false,
+                deliveredShutterSeconds: 1.0 / 121,
+                deliveredISO: 71,
+                notDrivingReason: "this camera does not accept a custom exposure right now")
+        } else {
+            camera.holyGrailState = CameraController.HolyGrailState(
+                shutterSeconds: 1.0,
+                iso: 1250,
+                sceneEV: 1.4,
+                frames: 24,
+                isISORamping: true,
+                isClipped: false,
+                isCapturingRAW: true)
+        }
         framingStartedAt = Date().addingTimeInterval(-602)
         mountBurstPill(taken: 24, total: nil)
         // Staged as a RUN, so the cluster and the rows read as one — stop
@@ -4436,6 +4462,22 @@ struct CaptureView: View {
 
     private var runExposureText: (text: String, clipped: Bool)? {
         if let state = camera.holyGrailState {
+            // A ramp the camera is refusing: print what the sensor IS
+            // delivering and say so. The target above it is a number the
+            // camera is not on, and its limit flag describes nothing real —
+            // on 2026-09-04 that pair read 1/71429 in red over a correctly
+            // exposed dusk, and the shoot was stopped for it.
+            guard state.isDriving else {
+                var text: String
+                if let shutter = state.deliveredShutterSeconds, let iso = state.deliveredISO {
+                    text = "\(shutterText(shutter)) · ISO \(String(format: "%.0f", iso))"
+                    text += String(format: " · EV %.1f", state.sceneEV)
+                } else {
+                    text = "on AE"
+                }
+                text += " · ramp not driving"
+                return (text, false)
+            }
             var text = "\(shutterText(state.shutterSeconds)) · ISO \(String(format: "%.0f", state.iso))"
             text += String(format: " · EV %.1f", state.sceneEV)
             if state.isClipped {
@@ -4464,18 +4506,25 @@ struct CaptureView: View {
     @ViewBuilder
     private var runInfoPanel: some View {
         if camera.isLiveBlendRunning, camera.liveBlendDiagnostics != nil {
-            blendDiagnosticsReadout
-        } else if camera.isIntervalRunning {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("frames \(camera.photoCount) · every \(intervalLabel(interval))")
-                Text("elapsed \(elapsedIntervalText)")
-                Text("thermal \(thermalWord)")
+            VStack(alignment: .leading, spacing: 4) {
+                blendDiagnosticsReadout
+                rampRefusedNote
             }
-            .font(.system(size: 10.5, weight: .medium, design: .monospaced))
-            .foregroundStyle(.white.opacity(0.75))
-            .padding(.horizontal, 10)
-            .padding(.vertical, 6)
-            .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        } else if camera.isIntervalRunning {
+            VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("frames \(camera.photoCount) · every \(intervalLabel(interval))")
+                    Text("elapsed \(elapsedIntervalText)")
+                    Text("thermal \(thermalWord)")
+                }
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(.white.opacity(0.75))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                // A ramped stills run (no blend engine) can be refused too.
+                rampRefusedNote
+            }
         }
     }
 
@@ -4899,6 +4948,23 @@ struct CaptureView: View {
     private var elapsedRecordingTime: String {
         guard let startedAt = camera.recordingStartedAt else { return "00:00" }
         return DurationFormatter.recordingTime(from: max(0, now.timeIntervalSince(startedAt)))
+    }
+
+    /// The Info panel's one line about a refused ramp: why the last write
+    /// was refused, in the camera's own words. The amber line above only
+    /// says that it was.
+    @ViewBuilder
+    private var rampRefusedNote: some View {
+        if let state = camera.holyGrailState, !state.isDriving {
+            Text("ramp refused · \(state.notDrivingReason ?? "no exposure written") · frames are on the camera's AE")
+                .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                .foregroundStyle(LL.amber)
+                .lineLimit(2)
+                .multilineTextAlignment(.leading)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.black.opacity(0.5), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
     }
 
     // MARK: - Manual exposure

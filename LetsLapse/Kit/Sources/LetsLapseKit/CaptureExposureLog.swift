@@ -73,6 +73,12 @@ public struct CaptureExposureLog {
         /// the guard the 2026-08-20 field test lacked, when command and
         /// delivery drifted ~6 stops apart in silence.
         public var exposureDivergenceStops: Double?
+        /// What `exposureDivergenceStops` was measured against: `"applied"`
+        /// (the exposure the ramp actually wrote to the device) or
+        /// `"engine"` (the ramp's own target, when nothing was applied — the
+        /// number the operator was looking at). Absent when no divergence
+        /// was stamped.
+        public var divergenceReference: String?
         /// Frames the alignment gate refused to stack because their framing
         /// had confidently moved (2026-08-23: OIS sag at thermal critical
         /// ghosted stacked windows). On a single-frame window the flagged
@@ -114,6 +120,7 @@ public struct CaptureExposureLog {
             intervalSeconds: Double? = nil,
             fileBytes: Int? = nil,
             exposureDivergenceStops: Double? = nil,
+            divergenceReference: String? = nil,
             rejectedByAlignment: Int? = nil,
             peakAlignmentShiftPixels: Double? = nil
         ) {
@@ -135,8 +142,72 @@ public struct CaptureExposureLog {
             self.intervalSeconds = intervalSeconds
             self.fileBytes = fileBytes
             self.exposureDivergenceStops = exposureDivergenceStops
+            self.divergenceReference = divergenceReference
             self.rejectedByAlignment = rejectedByAlignment
             self.peakAlignmentShiftPixels = peakAlignmentShiftPixels
+        }
+    }
+
+    /// What the Holy Grail ramp believed and did for one window — the
+    /// engine's side of the record, beside the delivered exposure the entry
+    /// itself carries. Absent on unramped runs.
+    ///
+    /// This is the record the 2026-09-04 readout runaway had to be
+    /// reconstructed without: the commanded pair lived only in
+    /// `frames.timestamps` (undocumented as such), the engine's EV only in a
+    /// device-side ladder log, and whether a write ever reached the sensor
+    /// only on a console nobody was attached to. With it, `commanded` against
+    /// the entry's own `iso`/`exposureDuration` says at a glance whether the
+    /// ramp was driving, and `applyOutcome` says why not.
+    public struct RampState: Codable, Equatable, Sendable {
+        /// The exposure the engine wanted this window shot at.
+        public var commandedShutter: Double?
+        public var commandedISO: Double?
+        /// The engine's smoothed measurement (its own, anchored scale).
+        public var smoothedEV: Double?
+        /// The EV the engine is aiming at — the smoothed measurement with
+        /// the anchor folded out.
+        public var aimEV: Double?
+        /// The device AE's absolute opinion of the scene (EV at ISO 100,
+        /// from the delivered pair plus `exposureTargetOffset`) — the scale
+        /// the Ladder resolves rungs on and the readout prints.
+        public var sceneEV: Double?
+        /// The window's measurement, whichever meter produced it.
+        public var measuredLuma: Double?
+        public var apexBrightness: Double?
+        /// The engine's smoothed aim-vs-AE disagreement, when drift is on.
+        public var aeGapEV: Double?
+        /// Whether the commanded pair was actually written to the device.
+        public var applied: Bool?
+        /// Why not, when it wasn't — `applyHolyGrailExposure`'s own reason.
+        public var applyOutcome: String?
+        /// The Ladder rung this window ran on, on a Ladder run.
+        public var rung: String?
+
+        public init(
+            commandedShutter: Double? = nil,
+            commandedISO: Double? = nil,
+            smoothedEV: Double? = nil,
+            aimEV: Double? = nil,
+            sceneEV: Double? = nil,
+            measuredLuma: Double? = nil,
+            apexBrightness: Double? = nil,
+            aeGapEV: Double? = nil,
+            applied: Bool? = nil,
+            applyOutcome: String? = nil,
+            rung: String? = nil
+        ) {
+            self.commandedShutter = commandedShutter
+            self.commandedISO = commandedISO
+            self.smoothedEV = smoothedEV
+            self.aimEV = aimEV
+            self.sceneEV = sceneEV
+            self.measuredLuma = measuredLuma
+            self.apexBrightness = apexBrightness
+            self.aeGapEV = aeGapEV
+            self.applied = applied
+            self.applyOutcome = applyOutcome
+            self.rung = rung
         }
     }
 
@@ -146,7 +217,9 @@ public struct CaptureExposureLog {
     /// word; current vocabulary: `thermal` (state at start / transitions),
     /// `framingGlitch` (alignment gate rejected frames), `framingChanged`
     /// (gate re-anchored — a real reframe), `constituentSwitch` (the virtual
-    /// camera changed its active physical lens mid-run).
+    /// camera changed its active physical lens mid-run), `ramp` (a
+    /// custom-exposure write refused or recovered, with the reason and the
+    /// device facts), `ladder` (a rung change and the EV that caused it).
     public struct Issue: Codable, Equatable, Sendable {
         public var at: Date
         /// The blend window it happened in, where one applies.
@@ -190,6 +263,8 @@ public struct CaptureExposureLog {
         /// output frame, whatever the depth, so fixed-depth runs can show
         /// their shortfalls too.
         public var window: WindowPerformance?
+        /// The ramp's side of this window on a Holy Grail / Ladder run.
+        public var ramp: RampState?
 
         public init(
             frameIndex: Int,
@@ -200,7 +275,8 @@ public struct CaptureExposureLog {
             ev: Double? = nil,
             blendCount: Int? = nil,
             strategy: BlendStrategyDecision? = nil,
-            window: WindowPerformance? = nil
+            window: WindowPerformance? = nil,
+            ramp: RampState? = nil
         ) {
             self.frameIndex = frameIndex
             self.capturedAt = capturedAt
@@ -211,6 +287,7 @@ public struct CaptureExposureLog {
             self.blendCount = blendCount
             self.strategy = strategy
             self.window = window
+            self.ramp = ramp
         }
 
         /// Builds an entry from a capture's own reported exposure.
@@ -220,7 +297,8 @@ public struct CaptureExposureLog {
             capturedAt: Date? = nil,
             blendCount: Int? = nil,
             strategy: BlendStrategyDecision? = nil,
-            window: WindowPerformance? = nil
+            window: WindowPerformance? = nil,
+            ramp: RampState? = nil
         ) {
             self.init(
                 frameIndex: frameIndex,
@@ -231,7 +309,8 @@ public struct CaptureExposureLog {
                 ev: exposure.exposureValue,
                 blendCount: blendCount,
                 strategy: strategy,
-                window: window)
+                window: window,
+                ramp: ramp)
         }
     }
 
@@ -268,6 +347,12 @@ public struct CaptureExposureLog {
         public var endReason: String?
         public var failedWindows: Int?
         public var starvedWindows: Int?
+        /// Ramped runs: whether any window's commanded exposure reached the
+        /// device, and how many windows were refused. One field to grep for
+        /// the 2026-09-04 failure class — a run that logged a ramp and shot
+        /// on AE — instead of pairing two sidecars by hand.
+        public var rampDriving: Bool?
+        public var rampRefusals: Int?
         public var startedAt: Date?
         public var endedAt: Date?
         public var frames: [Entry]
@@ -290,6 +375,8 @@ public struct CaptureExposureLog {
             endReason: String? = nil,
             failedWindows: Int? = nil,
             starvedWindows: Int? = nil,
+            rampDriving: Bool? = nil,
+            rampRefusals: Int? = nil,
             startedAt: Date? = nil,
             endedAt: Date? = nil,
             frames: [Entry] = [],
@@ -309,11 +396,24 @@ public struct CaptureExposureLog {
             self.endReason = endReason
             self.failedWindows = failedWindows
             self.starvedWindows = starvedWindows
+            self.rampDriving = rampDriving
+            self.rampRefusals = rampRefusals
             self.startedAt = startedAt
             self.endedAt = endedAt
             self.frames = frames
             self.issues = issues
         }
+    }
+
+    /// `rampDriving` / `rampRefusals` as the entries themselves say: driving
+    /// if any window's command was applied, refusals = windows whose command
+    /// was not. Both nil when no entry carries a ramp record (unramped run).
+    public static func rampSummary(of frames: [Entry]) -> (driving: Bool?, refusals: Int?) {
+        let states = frames.compactMap(\.ramp)
+        guard !states.isEmpty else { return (nil, nil) }
+        let applied = states.filter { $0.applied == true }.count
+        let refused = states.filter { $0.applied == false }.count
+        return (applied > 0, refused > 0 ? refused : nil)
     }
 
     /// Per-capture NDJSON sidecar, alongside `FrameTimestamps.fileName`.

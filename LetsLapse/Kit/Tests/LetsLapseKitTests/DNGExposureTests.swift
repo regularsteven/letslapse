@@ -173,4 +173,56 @@ final class DNGExposureTests: XCTestCase {
         XCTAssertEqual(loaded.frames.first?.blendCount, 3)
         XCTAssertEqual(loaded.frames.first?.aperture, 1.78)
     }
+
+    /// The ramp's own record travels with the session and the header sums it
+    /// up — what the 2026-09-04 readout runaway had to be reconstructed
+    /// without (the commanded pair lived only in `frames.timestamps`, the
+    /// refusal reason only on a console).
+    func testTheRampRecordTravelsWithTheSession() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("capture-log-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let refused = CaptureExposureLog.Entry(
+            frameIndex: 1, exposure: exposure, blendCount: 5,
+            window: CaptureExposureLog.WindowPerformance(
+                exposureDivergenceStops: 7.9, divergenceReference: "engine"),
+            ramp: CaptureExposureLog.RampState(
+                commandedShutter: 1.0 / 71429, commandedISO: 33, smoothedEV: 19.6,
+                sceneEV: 8.8, measuredLuma: 0.26, applied: false,
+                applyOutcome: "this camera does not accept a custom exposure right now",
+                rung: "Daylight"))
+        let driving = CaptureExposureLog.Entry(
+            frameIndex: 2, exposure: exposure, blendCount: 5,
+            ramp: CaptureExposureLog.RampState(
+                commandedShutter: 1.0 / 121, commandedISO: 71, applied: true))
+        let plain = CaptureExposureLog.Entry(frameIndex: 3, exposure: exposure, blendCount: 5)
+
+        let summary = CaptureExposureLog.rampSummary(of: [refused, driving, plain])
+        XCTAssertEqual(summary.driving, true)
+        XCTAssertEqual(summary.refusals, 1)
+        XCTAssertNil(CaptureExposureLog.rampSummary(of: [plain]).driving)
+        XCTAssertEqual(CaptureExposureLog.rampSummary(of: [refused]).driving, false)
+
+        let session = CaptureExposureLog.Session(
+            sessionID: "abc", deviceModel: "iPhone13,3",
+            captureMode: "dynamic", blendMode: "5",
+            rampDriving: summary.driving, rampRefusals: summary.refusals,
+            frames: [refused, driving, plain],
+            issues: [.init(at: Date(), windowIndex: 0, kind: "ramp", severity: "problem",
+                           detail: "exposure write refused at arm")])
+        let url = try XCTUnwrap(CaptureExposureLog.write(session, toDirectory: directory))
+        let loaded = try CaptureExposureLog.loadSession(from: url)
+        XCTAssertEqual(loaded.rampDriving, true)
+        XCTAssertEqual(loaded.rampRefusals, 1)
+        XCTAssertEqual(loaded.frames[0].ramp?.applied, false)
+        XCTAssertEqual(loaded.frames[0].ramp?.rung, "Daylight")
+        XCTAssertEqual(loaded.frames[0].ramp?.applyOutcome,
+                       "this camera does not accept a custom exposure right now")
+        XCTAssertEqual(loaded.frames[0].window?.divergenceReference, "engine")
+        XCTAssertEqual(loaded.frames[1].ramp?.applied, true)
+        XCTAssertNil(loaded.frames[2].ramp)
+        XCTAssertEqual(loaded.issues?.first?.kind, "ramp")
+    }
 }

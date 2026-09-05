@@ -11,6 +11,54 @@ live inline.
 
 ## Open
 
+### Ramp readout runaway on a non-driving ramp — measurement, readout honesty, Ladder EV, logging
+
+**Detail:** [fieldtests/2026-09-04-ladder-readout-runaway.md](fieldtests/2026-09-04-ladder-readout-runaway.md) ·
+**Raised:** 2026-09-05 (Steven — 12 Pro Ladder dusk shoot 2026-09-04, project
+`8BC64DBE`) · open · **high** (a false alarm stopped a good shoot; the Ladder
+re-paced the clip on a phantom EV)
+
+The ramp never drove the 12 Pro's virtual camera (`ramp commanded nothing`
+at window 0, refusal reason console-only), the run shot on AE — and the
+engine then chased itself: the JPEG path measures
+`EV(commanded pair) + log2(luma/0.18)`, which is scene-referred only while
+the camera obeys, so every phantom step was read back as the scene moving.
+Target 1/305 → 1/71429 s, "scene EV" 11.6 → 19.6, while the frames went
+1/296 → 1/121 and EV 11.2 → 8.8. The amber line printed the target, the red
+"past the sensor's limit" fired on it, and the Ladder stepped Fading →
+Daylight at 17:37:53 (pacing 2 s × 5 → 3 s × 10, in the finished clip). All
+three Ladder runs that evening ran on AE; the second project (`0F387359`)
+walked the other way (1/45 → 1/26 while AE went 1/121 → 1/50) and opened on
+Dusk then stepped to Fading at window 1 from two disagreeing EV scales. Dim
+only hid it. Side finding:
+`sceneExposureValue()` adds `log2(ISO/100)` where EV100 subtracts it (3.2
+stops low at ISO 33, 10 stops high at ISO 3200) — the Ladder's arming EV and
+the idle light panel read it, and the Scanner torch threshold is tuned to it.
+
+*Shipped 2026-09-05 (uncommitted, Kit tests green, iOS build green):*
+**(1)** the luma measurement reads through the DELIVERED pair — each
+video-tap frame's own EXIF off the sample buffer (`BlendWindowScene`), never
+the engine's target — with five regression tests including the runaway
+itself; **(2)** `HolyGrailState.isDriving` + delivered pair + reason: the
+amber line prints `1/121 · ISO 71 · EV 8.8 · ramp not driving`, never red,
+the reason behind the Info toggle; mirror
+`capture-interval.holygrail-running.refused.portrait.svg`,
+`LL_HOLYGRAIL=refused`; **(3)** the Ladder resolves on the AE's scene EV and
+`sceneExposureValue()`'s sign is fixed (the torch threshold was written on
+the right scale — no re-tune); **(4)** `capture_log.json` gains per-window
+`ramp` records, `divergenceReference`, `rampDriving`/`rampRefusals`,
+refusal/recovery/rung-change issues on both pipelines (device facts on the
+refusal line), `frames.timestamps` carries the delivered pair, the
+experiment log keeps its `liveblend-` name, and `Logs/console-<launch>.log`
+keeps every `LLog` line; `tools/ramp_audit.py` reads it all.
+
+Owed: **(5)** the 12 Pro run — the refusal reason now lands in `issues[]`
+with the device facts, so one Ladder run and `ramp_audit.py` on its project
+answers what the 2026-08-27 hypothesis could not; the simulator check of the
+amber line's fit; Steven's sign-off of the mirror; and the product call on
+whether a run whose ramp is refused should say so in a toast at arm time
+rather than only on the readout.
+
 ### Encode quality — ProRes master, constant-quality mode, and the encode-path secondaries
 
 **Raised:** 2026-09-04 (Steven — Lightroom → Resolve vs LetsLapse comparison on

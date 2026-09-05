@@ -519,6 +519,45 @@ public enum HolyGrailMetering {
         apexBrightness + 5
     }
 
+    /// Mid-grey in linear light — the reference a delivered frame's mean luma
+    /// is read against. Its absolute value never matters (the ramp's anchor
+    /// folds any constant out on the first frame); it only has to stay fixed.
+    public static let referenceLuma = 0.18
+
+    /// Scene EV at ISO 100 from a delivered frame's mean linear luma and the
+    /// exposure that frame was **actually taken at** — the video-tap path's
+    /// meter, where the frames carry no APEX brightness of their own.
+    ///
+    /// The exposure says what EV the frame assumed; how far its luma sits
+    /// from mid-grey says how wrong that assumption was. Both terms are read
+    /// off the same frame, so a stop of exposure moves them a stop in
+    /// opposite directions and the sum is a property of the scene alone.
+    ///
+    /// **The pair must be the delivered one, never the commanded one.** Fed
+    /// the ramp's own target instead, the derivation is scene-referred only
+    /// while the camera obeys: on 2026-09-04 an iPhone 12 Pro refused every
+    /// custom-exposure write, shot a whole dusk on AE, and the luma never
+    /// answered a step — so each step the engine took was read back as the
+    /// scene moving the same way, and the target walked from 1/305 s to the
+    /// format's 14 µs floor while the frames stayed correctly exposed
+    /// (`docs/fieldtests/2026-09-04-ladder-readout-runaway.md`). With the
+    /// delivered pair the same run reads a 2.2-stop darkening, which is what
+    /// the frames show. The ISP's exposure quantization stops leaking into
+    /// the measurement for the same reason: the luma was made at the
+    /// latched exposure, and so is the EV term.
+    public static func sceneEV100(
+        meanLinearLuma luma: Double,
+        deliveredShutterSeconds shutterSeconds: Double,
+        iso: Float,
+        aperture: Float,
+        referenceLuma: Double = HolyGrailMetering.referenceLuma
+    ) -> Double {
+        let gain = HolyGrailRampEngine.lightGain(
+            shutterSeconds: max(shutterSeconds, 1e-6), iso: max(iso, 1))
+        return HolyGrailRampEngine.sceneEV100(forGain: gain, aperture: aperture)
+            + log2(max(luma, 1e-6) / max(referenceLuma, 1e-6))
+    }
+
     /// Scene EV at ISO 100 inferred from the exposure a frame was taken at
     /// plus the device's metering offset.
     ///

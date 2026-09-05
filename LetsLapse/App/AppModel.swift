@@ -6507,11 +6507,22 @@ final class AppModel: ObservableObject {
             // names — a sidecar renamed `frame-000NN.json` is a sidecar nobody
             // can find.
             if let staging = urls.first?.deletingLastPathComponent() {
-                for name in [
+                var sidecarNames = [
                     FrameTimestamps.fileName,
                     CaptureExposureLog.sessionFileName,
                     CaptureExposureLog.sidecarFileName,
-                ] {
+                ]
+                // The blend engine's experiment log, when the capture screen
+                // parked it beside the frames — by its own `liveblend-…json`
+                // name. It used to arrive in `urls` and leave as
+                // `frame-00501.json`, exactly the renamed sidecar the comment
+                // above warns about.
+                if let names = try? FileManager.default.contentsOfDirectory(atPath: staging.path) {
+                    sidecarNames += names.filter {
+                        $0.hasPrefix("liveblend-") && $0.hasSuffix(".json")
+                    }.sorted()
+                }
+                for name in sidecarNames {
                     let sidecar = staging.appendingPathComponent(name)
                     guard FileManager.default.fileExists(atPath: sidecar.path) else { continue }
                     try? copyReplacingItem(

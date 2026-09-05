@@ -65,6 +65,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         /// honesty guard. nil on plain runs (brackets stay auto there — a
         /// live AE is exactly what they should follow).
         var rampExposure: (() -> (duration: CMTime, iso: Float)?)? = nil
+        /// Holy Grail only: the ramp's per-window record for
+        /// `capture_log.json` — see the twin in `LiveBlendController`.
+        var rampState: (() -> CaptureExposureLog.RampState?)? = nil
         /// Identity and vocabulary for `capture_log.json`.
         var sessionID: String = UUID().uuidString
         var deviceModel: String = ""
@@ -130,11 +133,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// something the ramp's own exposure choice cannot influence — here that
     /// is the metered scene brightness rather than sampled luma, since these
     /// frames are Bayer RAW and carry a meter reading of their own.
-    var onWindowOpened: ((Int, Double?) -> Void)?
+    var onWindowOpened: ((Int, BlendWindowScene?) -> Void)?
 
     /// Scene brightness reported by this window's frames. workQueue.
     private var windowBrightnessSum: Double = 0
     private var windowBrightnessCount = 0
+    /// The closed window's last delivered exposure and frame count, for
+    /// the scene handed to `onWindowOpened` (the frame arrays are reset
+    /// before the next window opens).
+    private var lastWindowExposure: DNGAuthor.DNGExposure?
+    private var lastWindowFrameCount = 0
     var onFinished: ((LiveBlendCaptureResult?) -> Void)?
     /// Fired on the work queue for each completed unthrottled window — what
     /// the learning profiles are built from.
@@ -207,10 +215,17 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// (so 700 diverging frames make a handful of lines, not a flood).
     /// workQueue.
     private var windowExposureDivergenceMax: Double = 0
+    /// What the window's worst divergence was measured against — see
+    /// `CaptureExposureLog.WindowPerformance.divergenceReference`. workQueue.
+    private var windowDivergenceReference: String?
     private var lastDivergenceLogged: Double = 0
     /// One "the ramp commanded nothing" report per session — the condition is a
     /// property of the run, not of a frame.
     private var issuedRampSilence = false
+    /// The shoot's recorded issue trail for `capture_log.json` — parity with
+    /// the JPEG path, which had one since 2026-08-23 and this path did not.
+    /// workQueue.
+    private var sessionIssues: [CaptureExposureLog.Issue] = []
     /// Windows handed to `processingQueue` whose commit hasn't landed yet.
     /// Backpressure: ≥2 pauses new captures so frame Data can't pile up.
     private var pendingProcessingWindows = 0
@@ -440,7 +455,14 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 ? windowBrightnessSum / Double(windowBrightnessCount) : nil
             windowBrightnessSum = 0
             windowBrightnessCount = 0
-            onWindowOpened?(windowIndex, mean)
+            let scene: BlendWindowScene? = (mean == nil && lastWindowFrameCount == 0) ? nil
+                : BlendWindowScene(
+                    meanLinearLuma: nil,
+                    apexBrightness: mean,
+                    deliveredShutterSeconds: lastWindowExposure?.exposureDuration,
+                    deliveredISO: lastWindowExposure?.iso,
+                    frames: lastWindowFrameCount)
+            onWindowOpened?(windowIndex, scene)
         }
         windowFrameBytes = 0
         windowMemoryCapped = false
@@ -813,22 +835,42 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         // branch existed that case skipped the comparison entirely and read as
         // a clean run.
         let rampTarget = configuration.rampExposure?()
+        let rampRecord = configuration.rampState?()
         if configuration.rampExposure != nil, rampTarget == nil, !issuedRampSilence {
             issuedRampSilence = true
+            sessionIssues.append(.init(
+                at: Date(), windowIndex: windowIndex,
+                kind: "ramp", severity: "problem",
+                detail: "ramp commanded nothing — exposure is AE-driven"
+                    + (rampRecord?.applyOutcome.map { " (\($0))" } ?? "")))
             LLog("liveblend-dng: RAMP NOT DRIVING — no commanded exposure; this run is "
                  + "AE-exposed and bracketed off AE, and the ramp readout is advisory")
         }
-        if let target = rampTarget,
+        // The reference: what the ramp wrote, else what it wanted (the number
+        // the operator was looking at). Until 2026-09-05 a nil target skipped
+        // the comparison, which is how a refused ramp read as a clean run.
+        let reference: (shutter: Double, iso: Double, name: String)? = {
+            if let target = rampTarget {
+                return (target.duration.seconds, Double(target.iso), "applied")
+            }
+            if let commanded = rampRecord, let shutter = commanded.commandedShutter,
+               let iso = commanded.commandedISO {
+                return (shutter, iso, "engine")
+            }
+            return nil
+        }()
+        if let reference,
            let iso = exposure.iso, let duration = exposure.exposureDuration,
            let divergence = CaptureExposureLog.WindowPerformance.exposureDivergenceStops(
                actualISO: iso, actualDuration: duration,
-               targetISO: Double(target.iso), targetDuration: target.duration.seconds) {
+               targetISO: reference.iso, targetDuration: reference.shutter) {
             // Devices quantize the commanded ISO to a neighbouring supported
             // value and EXIF reports the quantized one (measured: commanded
             // 33 → EXIF 32, 54 → 50, 18 → 16), a constant ≤⅙-stop offset.
             // Below a ¼ stop nothing is wrong — don't stamp the log.
             if divergence > 0.25 {
                 windowExposureDivergenceMax = max(windowExposureDivergenceMax, divergence)
+                windowDivergenceReference = reference.name
             }
             if divergence <= 0.5 {
                 // Recovered: re-arm the limiter so a recurrence at the same
@@ -838,9 +880,9 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             if divergence > 0.5, abs(divergence - lastDivergenceLogged) > 0.5 {
                 lastDivergenceLogged = divergence
                 LLog(String(format: """
-                    liveblend-dng: EXPOSURE DIVERGENCE %.1f stops — ramp \
-                    commanded %.4fs ISO %.0f, sensor delivered %.4fs ISO %.0f
-                    """, divergence, target.duration.seconds, Double(target.iso),
+                    liveblend-dng: EXPOSURE DIVERGENCE %.1f stops (vs %@) — ramp \
+                    %.4fs ISO %.0f, sensor delivered %.4fs ISO %.0f
+                    """, divergence, reference.name, reference.shutter, reference.iso,
                     duration, iso))
             }
         }
@@ -881,6 +923,16 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
     /// Snapshots the window's stats, resets window state so the next burst
     /// can fire immediately, and hands the heavy blend/author work to
     /// `processingQueue`; `commitOutput` lands the result back here.
+    /// Records an issue observed outside this controller (the camera layer:
+    /// a refused ramp write, a rung change). Safe from any queue.
+    func noteExternalIssue(kind: String, severity: String, detail: String? = nil) {
+        workQueue.async {
+            self.sessionIssues.append(.init(
+                at: Date(), windowIndex: self.windowIndex,
+                kind: kind, severity: severity, detail: detail))
+        }
+    }
+
     private func closeWindow() {
         let frames = windowFrameDNGs
         // The window's own AE decision — the first frame's, because the
@@ -922,7 +974,13 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         }
         if windowExposureDivergenceMax > 0 {
             entry.exposureDivergenceStops = windowExposureDivergenceMax
+            entry.divergenceReference = windowDivergenceReference
         }
+        // The ramp's side of this window, read now: the engine has advanced
+        // and applied for it at its open, and the next open re-steps it.
+        let ramp = configuration.rampState?()
+        lastWindowExposure = windowFrameExposures.last
+        lastWindowFrameCount = frames.count
 
         windowIndex += 1
         windowStartUptime += configuration.intervalSeconds
@@ -933,6 +991,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         windowPartial = false
         windowSawBackpressure = false
         windowExposureDivergenceMax = 0
+        windowDivergenceReference = nil
         windowFrameDNGs = []
         windowFrameExposures = []
         openWindowState()
@@ -968,7 +1027,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 self.workQueue.async {
                     self.commitOutput(
                         processed, url: url, exposure: exposure,
-                        stats: stats, decision: decision)
+                        stats: stats, decision: decision, ramp: ramp)
                 }
             }
         }
@@ -980,7 +1039,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
         url: URL?,
         exposure: DNGAuthor.DNGExposure,
         stats: FrameLuminanceStats?,
-        decision: BlendStrategyDecision?
+        decision: BlendStrategyDecision?,
+        ramp: CaptureExposureLog.RampState? = nil
     ) {
         pendingProcessingWindows = max(0, pendingProcessingWindows - 1)
         var entry = processed
@@ -1007,7 +1067,8 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 capturedAt: exposure.capturedAt ?? Date(),
                 blendCount: entry.capturedFrames,
                 strategy: decision,
-                window: CaptureExposureLog.WindowPerformance(entry: entry)))
+                window: CaptureExposureLog.WindowPerformance(entry: entry),
+                ramp: ramp))
             timestampWriter?.append(FrameTimestamps.Entry(
                 frame: frameURLs.count - 1,
                 captureTime: exposure.capturedAt ?? Date(),
@@ -1432,6 +1493,7 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
             // frames live in so it travels with the project. Written once, at
             // the end, because it describes the finished sequence; the
             // crash-safe per-capture story is the NDJSON sidecar's job.
+            let rampSummary = CaptureExposureLog.rampSummary(of: sessionFrameLog)
             let session = CaptureExposureLog.Session(
                 sessionID: configuration.sessionID,
                 deviceModel: configuration.deviceModel,
@@ -1451,9 +1513,12 @@ final class LiveBlendRawController: NSObject, AVCapturePhotoCaptureDelegate {
                 endReason: endReason,
                 failedWindows: failedOutputs > 0 ? failedOutputs : nil,
                 starvedWindows: skippedStarvedWindows > 0 ? skippedStarvedWindows : nil,
+                rampDriving: rampSummary.driving,
+                rampRefusals: rampSummary.refusals,
                 startedAt: runStartedAt,
                 endedAt: Date(),
-                frames: sessionFrameLog)
+                frames: sessionFrameLog,
+                issues: sessionIssues.isEmpty ? nil : sessionIssues)
             // Written into the staging directory, which is where project
             // registration looks for named sidecars — so it lands in the
             // project's `source/` folder under its own name.

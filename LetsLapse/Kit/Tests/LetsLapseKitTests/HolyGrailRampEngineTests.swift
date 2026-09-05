@@ -345,6 +345,137 @@ final class HolyGrailRampEngineTests: XCTestCase {
         XCTAssertEqual(log2(engine.currentTarget.lightGain / seed), 3, accuracy: 0.05)
     }
 
+    // MARK: - The 2026-09-04 open-loop runaway (a camera that ignores the ramp)
+
+    /// An iPhone 12 Pro wide as the 2026-09-04 run had it: a 14 µs floor
+    /// (`format.minExposureDuration`), the 1.0 s ceiling, ISO 33 on the floor.
+    private let twelvePro = HolyGrailRampEngine.HardwareLimits(
+        minShutter: CMTime(value: 14, timescale: 1_000_000),
+        maxShutter: CMTime(value: 1, timescale: 1),
+        minISO: 33, maxISO: 3072, aperture: 1.6)
+
+    /// The engine exactly as `CameraController.seedHolyGrailRamp` ships it:
+    /// anchored, drifting at 1/20 stop, deadband 0.12, three-window dwell,
+    /// ten-window refractory.
+    private func shippingEngine(
+        shutter: Double, iso: Float, limits: HolyGrailRampEngine.HardwareLimits
+    ) -> HolyGrailRampEngine {
+        var engine = HolyGrailRampEngine(
+            seed: .init(shutterSeconds: shutter, iso: iso), limits: limits)
+        engine.anchorDriftPerStep = 0.05
+        engine.deadbandStops = 0.12
+        engine.dwellSteps = 3
+        engine.reversalRefractorySteps = 10
+        return engine
+    }
+
+    /// A camera on AE that never takes the ramp's command: it exposes at its
+    /// own pair and renders the scene at whatever luma its metering lands
+    /// on, whatever the engine asked for.
+    private struct RefusingCamera {
+        var shutter: Double
+        var iso: Float
+        var luma: Double
+    }
+
+    /// **The 2026-09-04 regression.** Metered through the pair the frames
+    /// were actually taken at, a ramp the camera is refusing reads a still
+    /// scene as still — for 500 windows, the length of the field run — and
+    /// its target never leaves the seed. The real run's target walked 7.9
+    /// stops in that time.
+    func testARefusedRampMeteredThroughTheDeliveredPairNeverWalks() {
+        var engine = shippingEngine(shutter: 1.0 / 305, iso: 33, limits: twelvePro)
+        let seed = engine.currentTarget.lightGain
+        let camera = RefusingCamera(shutter: 1.0 / 296, iso: 33, luma: 0.24)
+        for _ in 0..<500 {
+            let measured = HolyGrailMetering.sceneEV100(
+                meanLinearLuma: camera.luma, deliveredShutterSeconds: camera.shutter,
+                iso: camera.iso, aperture: 1.6)
+            let ae = HolyGrailMetering.sceneEV100(
+                shutterSeconds: camera.shutter, iso: camera.iso, aperture: 1.6,
+                exposureTargetOffset: 0)
+            engine.advance(measuredEV: measured, limits: twelvePro, aeSceneEV: ae)
+        }
+        XCTAssertEqual(log2(engine.currentTarget.lightGain / seed), 0, accuracy: 0.01)
+    }
+
+    /// …and the small luma drift that started the real walk (AE's rendering
+    /// crept 0.14 stops brighter over the first hundred windows) moves it by
+    /// that drift at most, because the drift is all there is: nothing the
+    /// engine commands feeds back into what it measures.
+    func testARefusedRampFollowsOnlyTheLumaDriftItIsShown() {
+        var engine = shippingEngine(shutter: 1.0 / 305, iso: 33, limits: twelvePro)
+        let seed = engine.currentTarget.lightGain
+        var camera = RefusingCamera(shutter: 1.0 / 296, iso: 33, luma: 0.24)
+        for window in 0..<600 {
+            if window < 100 { camera.luma *= pow(2, 0.14 / 100) }
+            let measured = HolyGrailMetering.sceneEV100(
+                meanLinearLuma: camera.luma, deliveredShutterSeconds: camera.shutter,
+                iso: camera.iso, aperture: 1.6)
+            engine.advance(measuredEV: measured, limits: twelvePro)
+        }
+        XCTAssertLessThanOrEqual(abs(log2(engine.currentTarget.lightGain / seed)), 0.2)
+    }
+
+    /// Pinned so it cannot come back: read the luma against the ENGINE's
+    /// pair and the same camera is a runaway. Each step the engine takes
+    /// raises the commanded-pair term by the step, the luma never answers,
+    /// and the error re-crosses the deadband every ~1/α windows — the
+    /// 0.12-stop staircase in the field sidecar, 1/305 s to 1/71429 s.
+    func testMeteringThroughTheCommandedPairIsTheRunaway() {
+        var engine = shippingEngine(shutter: 1.0 / 305, iso: 33, limits: twelvePro)
+        let seed = engine.currentTarget.lightGain
+        var camera = RefusingCamera(shutter: 1.0 / 296, iso: 33, luma: 0.24)
+        for window in 0..<600 {
+            if window < 100 { camera.luma *= pow(2, 0.14 / 100) }
+            let measured = HolyGrailMetering.sceneEV100(
+                meanLinearLuma: camera.luma,
+                deliveredShutterSeconds: engine.currentTarget.shutterSeconds,  // the bug
+                iso: engine.currentTarget.iso, aperture: 1.6)
+            engine.advance(measuredEV: measured, limits: twelvePro)
+        }
+        XCTAssertLessThan(log2(engine.currentTarget.lightGain / seed), -1.5)
+    }
+
+    /// The same meter on a DRIVING camera is scene-referred across the ISP's
+    /// quantization: the sensor latches a pair a sixth of a stop off the
+    /// command, the luma is made at the latched pair, and the measurement
+    /// is the scene's EV to the last digit — the quantization never leaks in.
+    func testTheDeliveredPairMeterIsExactAcrossAnISPLatch() {
+        let sceneEV = 11.0
+        // A frame at the correctly exposing gain sits on mid-grey.
+        func luma(atGain gain: Double) -> Double {
+            HolyGrailMetering.referenceLuma * gain
+                / HolyGrailRampEngine.requiredGain(sceneEV100: sceneEV, aperture: 1.6)
+        }
+        for latched in [1.0 / 305, 1.0 / 280, 1.0 / 340, 1.0 / 121] {
+            let gain = HolyGrailRampEngine.lightGain(shutterSeconds: latched, iso: 33)
+            let measured = HolyGrailMetering.sceneEV100(
+                meanLinearLuma: luma(atGain: gain), deliveredShutterSeconds: latched,
+                iso: 33, aperture: 1.6)
+            XCTAssertEqual(measured, sceneEV, accuracy: 1e-9)
+        }
+    }
+
+    /// A refused ramp still tracks the light — which is what its readout
+    /// must print. AE walks its pair down 2.2 stops through a dusk; the
+    /// engine's smoothed EV falls by the same.
+    func testARefusedRampReadsAFadingSceneAsFading() {
+        var engine = shippingEngine(shutter: 1.0 / 305, iso: 33, limits: twelvePro)
+        var camera = RefusingCamera(shutter: 1.0 / 296, iso: 33, luma: 0.24)
+        var first: Double?
+        for window in 0..<500 {
+            // AE keeps its rendering and pays for the dusk in exposure.
+            camera.shutter = (1.0 / 296) * pow(2, 2.2 * Double(window) / 499)
+            let measured = HolyGrailMetering.sceneEV100(
+                meanLinearLuma: camera.luma, deliveredShutterSeconds: camera.shutter,
+                iso: camera.iso, aperture: 1.6)
+            engine.advance(measuredEV: measured, limits: twelvePro)
+            if first == nil { first = engine.smoothedEV }
+        }
+        XCTAssertEqual((first ?? 0) - (engine.smoothedEV ?? 0), 2.2, accuracy: 0.15)
+    }
+
     /// The loop must also survive the operator: a bias dialled mid-run settles
     /// at exactly that offset and then stops, rather than drifting on.
     func testTheClosedLoopSettlesAfterABiasChange() {
