@@ -90,6 +90,20 @@ build_jxl() {
   rm -rf include-jxl/jxl
   cp -R libjxl/lib/include/jxl include-jxl/
   cp -R build-jxl-${${=SLICES}[1]}/lib/include/jxl/* include-jxl/jxl/ 2>/dev/null || true
+  # A module map so Swift can `import CJXL` straight from the xcframework.
+  cat > include-jxl/module.modulemap <<'MAP'
+module CJXL {
+    header "jxl/encode.h"
+    header "jxl/decode.h"
+    header "jxl/thread_parallel_runner.h"
+    header "jxl/resizable_parallel_runner.h"
+    header "jxl/color_encoding.h"
+    header "jxl/codestream_header.h"
+    header "jxl/types.h"
+    header "jxl/version.h"
+    export *
+}
+MAP
   rm -rf CJXL.xcframework
   local args=()
   for slice in ${=SLICES}; do args+=(-library "out-jxl-$slice/libjxl_all.a" -headers include-jxl); done
@@ -121,6 +135,22 @@ build_libraw() {
   done
   mkdir -p include-libraw/libraw
   cp "LibRaw-$LIBRAW_VERSION"/libraw/*.h include-libraw/libraw/
+  # Module map plus a shim: Swift does not import C arrays past 4096
+  # elements, and `cblack` is 4102.
+  cat > include-libraw/libraw_shim.h <<'SHIM'
+#include "libraw/libraw.h"
+
+static inline unsigned letslapse_libraw_cblack(const libraw_data_t *data, int index) {
+    return data->color.cblack[index];
+}
+SHIM
+  cat > include-libraw/module.modulemap <<'MAP'
+module CLibRaw {
+    header "libraw/libraw.h"
+    header "libraw_shim.h"
+    export *
+}
+MAP
   rm -rf CLibRaw.xcframework
   local args=()
   for slice in ${=SLICES}; do args+=(-library "out-libraw-$slice/libraw_r.a" -headers include-libraw); done
@@ -134,9 +164,51 @@ for lib in ${=ONLY}; do
   esac
 done
 
+# The Kit ships ONE xcframework holding both libraries with one module map
+# declaring the two modules: Xcode flattens every static xcframework's headers
+# into a single include folder, so two frameworks cannot both carry a root
+# module.modulemap (the build fails with "Multiple commands produce
+# …/include/module.modulemap").
+merge_codecs() {
+  [[ -d CJXL.xcframework && -d CLibRaw.xcframework ]] || return 0
+  rm -rf merge && mkdir -p merge/headers
+  cp -R include-jxl/jxl merge/headers/
+  cp -R include-libraw/libraw merge/headers/
+  cp include-libraw/libraw_shim.h merge/headers/
+  cat > merge/headers/module.modulemap <<'MAP'
+module CJXL {
+    header "jxl/encode.h"
+    header "jxl/decode.h"
+    header "jxl/thread_parallel_runner.h"
+    header "jxl/resizable_parallel_runner.h"
+    header "jxl/color_encoding.h"
+    header "jxl/codestream_header.h"
+    header "jxl/types.h"
+    header "jxl/version.h"
+    export *
+}
+
+module CLibRaw {
+    header "libraw/libraw.h"
+    header "libraw_shim.h"
+    export *
+}
+MAP
+  local args=()
+  for slice in ${=SLICES}; do
+    mkdir -p "merge/$slice"
+    libtool -static -o "merge/$slice/libLetsLapseCodecs.a" "out-jxl-$slice/libjxl_all.a" "out-libraw-$slice/libraw_r.a"
+    args+=(-library "merge/$slice/libLetsLapseCodecs.a" -headers merge/headers)
+  done
+  rm -rf CLetsLapseCodecs.xcframework
+  xcodebuild -create-xcframework "${args[@]}" -output CLetsLapseCodecs.xcframework
+  echo "Kit copy: rm -rf ../../Kit/Binaries/CLetsLapseCodecs.xcframework && cp -R CLetsLapseCodecs.xcframework ../../Kit/Binaries/"
+}
+merge_codecs
+
 {
   echo "built $(date)"
-  for f in CJXL.xcframework CLibRaw.xcframework; do
+  for f in CJXL.xcframework CLibRaw.xcframework CLetsLapseCodecs.xcframework; do
     [[ -d $f ]] && du -sh "$f" && find "$f" -name "*.a" -exec ls -la {} \;
   done
 } | tee sizes.txt

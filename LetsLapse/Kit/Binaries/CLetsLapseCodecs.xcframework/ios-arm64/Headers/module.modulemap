@@ -1,0 +1,20 @@
+// One module map for the codec archive: Xcode flattens every static
+// xcframework's headers into one include folder, so two frameworks cannot
+// each carry a root module.modulemap — the two libraries travel as one.
+module CJXL {
+    header "jxl/encode.h"
+    header "jxl/decode.h"
+    header "jxl/thread_parallel_runner.h"
+    header "jxl/resizable_parallel_runner.h"
+    header "jxl/color_encoding.h"
+    header "jxl/codestream_header.h"
+    header "jxl/types.h"
+    header "jxl/version.h"
+    export *
+}
+
+module CLibRaw {
+    header "libraw/libraw.h"
+    header "libraw_shim.h"
+    export *
+}

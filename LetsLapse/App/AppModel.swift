@@ -6977,6 +6977,137 @@ final class AppModel: ObservableObject {
     }
 
 
+    // MARK: - Duplicating a project as a DNG archive
+
+    /// The projects the DNG archive can take: an interval shoot (captured or
+    /// imported) whose frames are raw files. A Photo-mode capture is one frame
+    /// and a video has none.
+    func canArchiveAsDNG(_ capture: CaptureProject) -> Bool {
+        guard capture.kind == .photos, !capture.isPhotoCapture else { return false }
+        let frames = sourceFrameURLs(for: capture)
+        return frames.count >= 2 && frames.allSatisfy { ImportedStills.isRaw($0) }
+    }
+
+    /// Creates a new project beside `capture` whose frames are DNG archives of
+    /// the original's — each converted through `DNGArchive.Converter` with
+    /// `strategy` (docs/dng-archive-spike/) — and carries everything else
+    /// across: the manifest (grade, timeline, tags, mode), the source sidecars
+    /// (timestamps, exposure, capture log), notes, masks, fonts and overlays.
+    /// Blends are not copied; they are renders of the original's frames. The
+    /// original is only read. `progress` arrives on the main actor after every
+    /// frame; a `shouldContinue` that turns false stops the run, removes the
+    /// half-made folder and throws `CancellationError`.
+    func duplicateAsDNGArchive(
+        _ capture: CaptureProject,
+        strategy: DNGArchive.Strategy,
+        nameSuffix: String,
+        limit: Int? = nil,
+        inFlight: Int = 2,
+        shouldContinue: @escaping @Sendable () -> Bool = { true },
+        progress: @escaping @MainActor (DNGArchive.Converter.SequenceProgress) -> Void = { _ in }
+    ) async throws -> CaptureProject {
+        guard canArchiveAsDNG(capture) else {
+            throw DNGArchive.ConversionError.unsupported("only an interval shoot of raw frames can be archived as DNG")
+        }
+        var inputs = sourceFrameURLs(for: capture)
+        if let limit, limit > 0, limit < inputs.count { inputs = Array(inputs.prefix(limit)) }
+        let originalSource = captureFolderURL(for: capture.id).appendingPathComponent("source", isDirectory: true)
+        let originalRoot = captureFolderURL(for: capture.id)
+
+        beginActivity(.importingArchive)
+        defer { endActivity(.importingArchive) }
+
+        let id = UUID()
+        let root = captureFolderURL(for: id)
+        let sourceFolder = root.appendingPathComponent("source", isDirectory: true)
+        try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
+        do {
+            // A quarter of the originals is generous for a lossy archive and
+            // right for the lossless mosaic; the check is about not filling
+            // the disk, not about precision.
+            let inputBytes = inputs.reduce(Int64(0)) { $0 + Int64((try? $1.resourceValues(forKeys: [.fileSizeKey]))?.fileSize ?? 0) }
+            try Self.checkStorageHeadroom(for: max(inputBytes / 4, 50_000_000), at: projectsRootURL)
+
+            let converter = DNGArchive.Converter()
+            let files = inputs
+            let result = await Task.detached(priority: .userInitiated) {
+                converter.convert(files: files, to: sourceFolder, strategy: strategy, inFlight: max(1, inFlight),
+                                  shouldContinue: shouldContinue) { snapshot in
+                    Task { @MainActor in progress(snapshot) }
+                }
+            }.value
+            guard shouldContinue() else { throw CancellationError() }
+            guard result.failures.isEmpty else {
+                let (url, why) = result.failures[0]
+                throw DNGArchive.ConversionError.encode("\(url.lastPathComponent): \(why)")
+            }
+            guard result.reports.count == files.count else {
+                throw DNGArchive.ConversionError.encode("\(files.count - result.reports.count) frames did not convert")
+            }
+
+            // Sidecars and the rest of the project, but not the frames and not
+            // the blends. framing.json names frames; it only travels when the
+            // names survive (our own DNGs do, an ARW becomes .dng).
+            let frameNames = Set(inputs.map(\.lastPathComponent))
+            let namesSurvive = inputs.allSatisfy { $0.pathExtension.lowercased() == "dng" }
+            for item in (try? FileManager.default.contentsOfDirectory(at: originalSource, includingPropertiesForKeys: nil)) ?? [] {
+                guard !frameNames.contains(item.lastPathComponent), !ImportedStills.isStill(item) else { continue }
+                if item.lastPathComponent == FramingReview.fileName, !namesSurvive { continue }
+                try? FileManager.default.copyItem(at: item, to: sourceFolder.appendingPathComponent(item.lastPathComponent))
+            }
+            for folder in ProjectArchive.transferableSubfolders where folder != "source" && folder != "blends" {
+                let from = originalRoot.appendingPathComponent(folder, isDirectory: true)
+                guard FileManager.default.fileExists(atPath: from.path) else { continue }
+                try? FileManager.default.copyItem(at: from, to: root.appendingPathComponent(folder, isDirectory: true))
+            }
+            for file in ProjectArchive.transferableFiles {
+                let from = originalRoot.appendingPathComponent(file)
+                guard FileManager.default.fileExists(atPath: from.path) else { continue }
+                try? FileManager.default.copyItem(at: from, to: root.appendingPathComponent(file))
+            }
+
+            // The record of what was done, beside the frames it describes.
+            let ledger: [String: Any] = [
+                "sourceProjectID": capture.id.uuidString,
+                "strategy": strategy.label,
+                "convertedAt": ISO8601DateFormatter().string(from: Date()),
+                "frames": result.reports.count,
+                "inputBytes": result.inputBytes,
+                "outputBytes": result.outputBytes,
+                "elapsedSeconds": result.elapsedSeconds,
+                "framesPerSecond": result.framesPerSecond,
+                "perFrame": result.reports.map { report -> [String: Any] in
+                    var stages: [String: Double] = [:]
+                    for (name, ms) in report.stages { stages[name, default: 0] += ms }
+                    return ["file": report.output.lastPathComponent, "width": report.width, "height": report.height,
+                            "totalMs": report.totalMilliseconds, "outBytes": report.outputBytes, "decode": report.decodePath, "stages": stages]
+                },
+            ]
+            if let data = try? JSONSerialization.data(withJSONObject: ledger, options: [.prettyPrinted, .sortedKeys]) {
+                try? data.write(to: root.appendingPathComponent("dng-archive.json"))
+            }
+
+            var clone = capture
+            clone.id = id
+            clone.name = "\(capture.displayTitle) · \(nameSuffix)"
+            clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).dng" }
+            clone.clipEncodings = nil
+            clone.importedFromID = nil
+            if let first = result.reports.first, first.width > 0, first.height > 0 {
+                clone.sourceWidth = first.width
+                clone.sourceHeight = first.height
+            }
+            captures.insert(clone, at: 0)
+            captures.sort { $0.createdAt > $1.createdAt }
+            try persistLibrary()
+            Task { [weak self] in await self?.refreshStillsMetadata(for: clone.id) }
+            return clone
+        } catch {
+            try? FileManager.default.removeItem(at: root)
+            throw error
+        }
+    }
+
     // MARK: - Importing a movie shot outside the app
 
     /// Brings a movie file in as a video project.

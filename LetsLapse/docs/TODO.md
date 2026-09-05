@@ -41,20 +41,32 @@ Apple's decoder rules that decide the container shape are in the report's
 §4 (per-sample levels on LinearRaw; table vs polynomial depends on the
 codec; no whole-frame tiles; one crashing tile layout).
 
-**Folding it into the app:** libjxl as a binary target
-(`tools/dng-spike/scripts/build-xcframeworks.sh`; sizes in the report);
-move the Metal demosaic/resizer, the stored-value curves and the tile
-encoders from `tools/dng-spike/Sources/dngspike` into the Kit with a test
-each (the writer, decoder and probe are already Kit); Float16/UInt16
-intermediates for the iPhone memory budget; measure libjxl on the A18 and
-the M3 iPad (effort 3–5 is the lever); decide the BaselineExposure source
-for third-party raws (a per-camera table, or measured against Apple's own
-decode); a Settings ▸ Storage "Archive as lossy DNG (N MP)" job over a
-project's source folder. LibRaw (CDDL) only for third-party raws, Mac
-first. Still owed from the spike: the iPhone 12 Pro / iPad Air 5 probes
-(`LL_DNGPROBE=1`; the iPhone 16 Pro and iPad M3 both answered "no JPEG XL
-encoder"), Lightroom opening our files, a flicker report over a converted
-sequence.
+**Folded into the app (2026-09-05 evening):** the pipeline moved into the
+Kit (`Kit/Sources/LetsLapseKit/Archive/`, `DNGArchive.Converter` /
+`Strategy`, tests in `DNGArchiveConverterTests`), libjxl + LibRaw travel as
+one static `CLetsLapseCodecs.xcframework` binary target (`Kit/Binaries/`,
+19 MB, one module map for both — Xcode cannot take two static xcframeworks
+each with a root module map), and an interval project's ⋯ menu gained
+**Duplicate as DNG archive…** (`App/ProjectDNGArchive.swift` sheet — size
+Keep/12/10/8/6 MP, quality standard d0.5 / compact d1.0 / lossless /
+lossless mosaic — and `AppModel.duplicateAsDNGArchive`, which clones the
+manifest, sidecars, notes, masks, fonts and overlays, converts the frames
+two in flight, writes a `dng-archive.json` ledger and registers the new
+project). `LL_DNGARCHIVE=<id>|latest` (+`_MP`, `_DISTANCE`, `_LIMIT`,
+`_INFLIGHT`) runs it headless and prints per-frame timings. **iPhone 16 Pro
+measured:** 0.50 s per 8 MP frame (libjxl 280 ms), 1.9–2.1 frames/s, 12 MP
+at 1.6 frames/s — seven times faster than the 3.6 s shoot cadence. Design
+SVGs for the sheet and the menu row are OWED after the Mac sign-off
+(app-code-first by Steven's instruction).
+
+**Still open:** the Mac clone test on `E854D311` (ARW → 10 MP) and
+`F6387DFA` (DNG → 8 MP) and the SVG mirrors; Float16/UInt16 intermediates
+for the iPhone memory budget (Float32 today); the BaselineExposure source
+for third-party raws (`DNGArchive.Strategy.knownBaselineExposures` holds
+the ILCE-7M4's 0.35 for now); a "Delete originals" companion once an
+archive has been checked; the iPhone 12 Pro / iPad Air 5 probes
+(`LL_DNGPROBE=1`); Lightroom opening our files; a flicker report over a
+converted sequence.
 
 ### Settings ▸ Display: blackout, reduce brightness, and the scheduled peek
 

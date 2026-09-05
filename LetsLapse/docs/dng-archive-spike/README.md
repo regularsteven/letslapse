@@ -170,6 +170,26 @@ decodes and should be read from the throughput rows only. Thermal state
 stayed `nominal` throughout on the Mac. (*the first Set 1 throughput row
 inherited the footprint of the Apple-decode row before it.)
 
+### 2.5 On the iPhone 16 Pro (A18 Pro, iOS 26.6, optimised Debug build)
+
+Measured through the app's `LL_DNGARCHIVE` hook on a 12 MP Bayer interval
+project of 11 frames (`duplicateAsDNGArchive`, the shipped code path, libjxl
+from the static xcframework, two frames in flight unless stated):
+
+| run | per frame (wall) | decode | Metal | curve | libjxl e5 d0.5 | frames/s | out |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 8 MP, one in flight | **0.50 s** | 62 ms | 63 ms | 85 ms | **280 ms** | 1.9 | 1.5–1.8 MB |
+| 8 MP, two in flight | 0.7–0.9 s each | 90–130 ms | 75–90 ms | 120–140 ms | 370–560 ms | **2.1** | same |
+| 12 MP (source size), two in flight | 0.9–1.2 s each | 85–130 ms | 75–90 ms | 190–220 ms | 520–770 ms | 1.6 | 2.0–2.5 MB |
+
+The phone converts an 8 MP frame in half a second — libjxl on the A18 Pro's
+six cores is within 20% of the M4 Max (280 vs 235–250 ms) because the tiles
+already saturate both; a second frame in flight buys only 10%. Set 1's
+cadence of one frame every 3.6 s is beaten seven times over; a 486-frame
+shoot archives in about four minutes on the phone. The unoptimised Debug
+build is 4–6 s per frame — 2 s of it the Kit's lossless-JPEG decode running
+without `-O` — so device timings must come from an optimised build.
+
 ## 3. Quality
 
 Method, as in `LossyLinearDNGTests`: output and source decoded through the
@@ -286,9 +306,8 @@ tags and BaselineExposure.
 - **Why not the mosaic:** lossy JPEG XL on the Bayer plane is competitive at
   dusk but drifts on the night frame and on clean blended frames (§2.2), and
   Apple only reads it through the MapPolynomial shape.
-- **Open:** (1) libjxl speed on the A18 / M3 iPad — the xcframework build in
-  `scripts/build-xcframeworks.sh` is the next step, and effort 3–5 is the
-  lever if it is 3× slower per core; (2) BaselineExposure for third-party
+- **Open:** (1) ~~libjxl speed on the A18~~ measured (§2.5): 280 ms per 8 MP
+  frame, 0.5 s end to end; the M3 iPad is still owed; (2) BaselineExposure for third-party
   raws — Adobe's per-camera value is not in LibRaw or the DCP; candidates
   are a small table for the bodies we care about, or measuring it once per
   camera against Apple's own decode; (3) memory — Float16/UInt16

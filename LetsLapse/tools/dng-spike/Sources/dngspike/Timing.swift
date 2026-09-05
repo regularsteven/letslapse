@@ -1,35 +1,6 @@
 import Darwin
 import Foundation
 
-/// Named laps around the stages of one conversion, in milliseconds.
-struct Stopwatch {
-    private var last = ProcessInfo.processInfo.systemUptime
-    private let started = ProcessInfo.processInfo.systemUptime
-    private(set) var laps: [(name: String, milliseconds: Double)] = []
-
-    mutating func lap(_ name: String) {
-        let now = ProcessInfo.processInfo.systemUptime
-        laps.append((name, (now - last) * 1000))
-        last = now
-    }
-
-    /// Records a sub-stage measured elsewhere without moving the lap clock,
-    /// so the enclosing `lap` still accounts for the whole wall time.
-    mutating func add(_ name: String, milliseconds: Double) {
-        laps.append((name, milliseconds))
-    }
-
-    var totalMilliseconds: Double { (ProcessInfo.processInfo.systemUptime - started) * 1000 }
-
-    func milliseconds(_ name: String) -> Double {
-        laps.filter { $0.name == name }.reduce(0) { $0 + $1.milliseconds }
-    }
-
-    var summary: String {
-        laps.map { String(format: "%@ %.0f", $0.name, $0.milliseconds) }.joined(separator: " · ") + String(format: " · total %.0f ms", totalMilliseconds)
-    }
-}
-
 enum Memory {
     /// The process's physical footprint right now, in MB.
     static func footprintMB() -> Double {

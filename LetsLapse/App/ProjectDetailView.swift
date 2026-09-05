@@ -64,6 +64,8 @@ struct ProjectDetailView: View {
     @State private var fieldNotes: [FieldNote] = []
     @State private var showFieldNoteFlow = false
     @StateObject private var notePlayer = FieldNotePlayer()
+    @State private var showingDNGArchive = false
+    @StateObject private var dngArchive = DNGArchiveJob()
     @State private var fieldNoteToDelete: FieldNote?
     /// Save-to-Photos progress, tracked separately for the photo asset and
     /// the originals row so one export doesn't repaint the other.
@@ -225,6 +227,14 @@ struct ProjectDetailView: View {
                 #if os(macOS)
                 .frame(minWidth: 520, minHeight: 480)
                 #endif
+            }
+        }
+        .sheet(isPresented: $showingDNGArchive) {
+            if let capture {
+                DNGArchiveSheet(capture: capture, job: dngArchive) { clone in
+                    model.openCapture(clone)
+                }
+                .environmentObject(model)
             }
         }
         .sheet(isPresented: $showFieldNoteFlow) {
@@ -436,6 +446,14 @@ struct ProjectDetailView: View {
                         Label("Share project", systemImage: "square.and.arrow.up")
                     }
                     .disabled(isExportingArchive)
+                    if model.canArchiveAsDNG(capture) {
+                        Button {
+                            showingDNGArchive = true
+                        } label: {
+                            Label("Duplicate as DNG archive…", systemImage: "doc.zipper")
+                        }
+                        .disabled(dngArchive.isRunning)
+                    }
                     #if os(macOS)
                     Button {
                         revealInFinder(capture)

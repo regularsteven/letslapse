@@ -9,16 +9,16 @@ exist on iOS, measured. The report it produced lives in
 
 ```bash
 cd LetsLapse/tools/dng-spike
-swift build -c release                          # the iOS-ready core, no third-party code
-swift build -c release --traits JXL,LibRaw      # + libjxl and LibRaw from Homebrew
-swift test --traits JXL,LibRaw                  # package tests (real-file tests skip without the volume)
+swift build -c release        # links the Kit, which carries libjxl and LibRaw as static binary targets
+swift test                    # package tests (real-file tests skip without the volume)
 ```
 
-The two codecs are SwiftPM package traits so the core stays visible: without
-them `--encode jxl` and `--decode libraw` fail with a message and everything
-else runs. Homebrew (`brew install jpeg-xl libraw`) supplies the Mac builds;
-`scripts/build-xcframeworks.sh` builds both as static XCFrameworks for iOS,
-the simulator and macOS from their release sources.
+The conversion pipeline itself lives in the Kit (`Kit/Sources/LetsLapseKit/Archive/`),
+with libjxl (BSD-3) and LibRaw (CDDL-1.0) as `binaryTarget` XCFrameworks under
+`Kit/Binaries/`, built from their release sources by
+`scripts/build-xcframeworks.sh`; this package is the measuring instrument
+around it. The app's "Duplicate as DNG archive…" (project menu) and the
+`LL_DNGARCHIVE` launch hook run the same `DNGArchive.Converter`.
 
 ## Commands
 
@@ -44,15 +44,16 @@ launch hook (`xcrun devicectl device process launch --console -e
 
 | piece | file |
 |---|---|
-| decoders — Apple (`CIRAWFilter`), native Kit parse + lossless JPEG, LibRaw | `AppleDecoder.swift`, `NativeDecoder.swift`, `LibRawDecoder.swift` |
-| Metal demosaic (Malvar-He-Cutler), 2×2 superpixel, MPS Lanczos resize | `Demosaic.swift` |
-| stored-value curves and the DNG levels that undo them | `StoredEncoding.swift` |
-| tile codecs — Kit lossless JPEG, libjxl, ImageIO JPEG, VideoToolbox JPEG | `Encoders.swift`, `JXLEncoder.swift` |
-| the pipeline and the strategy vocabulary | `Pipeline.swift` |
+| decoders — Apple (`CIRAWFilter`), native Kit parse + lossless JPEG, LibRaw | Kit `Archive/DNGArchiveDecoders.swift` |
+| Metal demosaic (Malvar-He-Cutler), 2×2 superpixel, MPS Lanczos resize | Kit `Archive/DNGArchiveDemosaic.swift` |
+| stored-value curves and the DNG levels that undo them | Kit `Archive/DNGArchiveCurves.swift` |
+| tile codecs — Kit lossless JPEG, libjxl, ImageIO JPEG, VideoToolbox JPEG | Kit `Archive/DNGArchiveEncoders.swift`, `DNGArchiveJXL.swift` |
+| the pipeline (`DNGArchive.Strategy` / `Converter`), sequence conversion | Kit `Archive/DNGArchiveConverter.swift` |
 | quality (means, PSNR/SSIM, white-balance pushes) and compatibility | `Verify.swift` |
 | the matrix and the CSV | `Bench.swift` |
+| the report tables from the CSV | `scripts/report-tables.py` |
 
-Kit pieces this spike added (reused by the app): `LosslessJPEGDecoder`, the
+Kit pieces the spike added and the app reuses: `LosslessJPEGDecoder`, the
 interleaved-component `LosslessJPEG.encode`, `DNGArchive` (the DNG 1.4/1.7
 tiled writer), `DNGCapabilityProbe`, public `DNGDocument.parseDirectories`
 and the `DNGTagValue` value readers.

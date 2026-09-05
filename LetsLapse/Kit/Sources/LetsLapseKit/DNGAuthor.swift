@@ -6,7 +6,7 @@ import Compression
 /// One TIFF/DNG directory entry, carried verbatim (type, count and raw
 /// payload bytes) so authored files reproduce the camera's own values —
 /// color matrices, as-shot neutral, black levels — without reinterpretation.
-public struct DNGTagValue: Equatable {
+public struct DNGTagValue: Equatable, Sendable {
     public let tag: UInt16
     public let type: UInt16
     public let count: UInt32
