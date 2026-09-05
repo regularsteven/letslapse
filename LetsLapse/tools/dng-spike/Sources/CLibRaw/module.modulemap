@@ -1,0 +1,4 @@
+module CLibRaw [system] {
+    header "shim.h"
+    export *
+}

@@ -11,6 +11,50 @@ live inline.
 
 ## Open
 
+### DNG archive conversion — raw → lossy / resized DNG, in-app one day
+
+**Detail:** [dng-archive-spike-brief.md](dng-archive-spike-brief.md) (the
+brief) · [dng-archive-spike/README.md](dng-archive-spike/README.md) (the
+report, with `matrix.csv` / `matrix.md`) · `tools/dng-spike` (the CLI) ·
+**Raised:** 2026-09-05 (Steven) · **SPIKE DONE 2026-09-05** · next step
+**medium** (fold into the app), large only if third-party raws on iOS matter
+
+Long-term: convert third-party camera raws (ARW, CR2, …) and LetsLapse's own
+captured DNGs to smaller DNGs — lossy JPEG XL and resize to N megapixels, the
+way Adobe DNG Converter does — inside LetsLapse on iPhone, iPad and Mac, fast
+enough that storage stops being the bottleneck on long shoots.
+
+**What the spike found (2026-09-05, M4 Max + iPhone 16 Pro probe):** there is
+no JPEG XL *encoder* in any Apple framework — not ImageIO, not VideoToolbox,
+not on iOS 26.6 on an A18 Pro — so libjxl (BSD-3) is the encoder. With it,
+the chosen direction (report §6.1) is **camera-native LinearRaw JPEG XL**:
+Kit parse (or LibRaw) → Metal demosaic → Lanczos → gamma table / cubic →
+libjxl d0.5–1.0 e5 in 512-px tiles → the new `DNGArchive` writer.
+1.28 MB per 8 MP frame at d0.5 (49 dB against lossless, 0.4% from Apple's
+render of the source, Adobe re-decodes within 0.3%), 0.46 s per frame and
+6 fps with three in flight on the Mac (486 frames in 81 s) — Adobe's size
+at Adobe's quality, reading correctly in Apple's decoder *directly*.
+Lossless JPEG XL on the Bayer plane is a free 9% over the Kit's lossless
+JPEG (15.6 vs 17.1 MB, 90 ms). Lossy on the mosaic drifts at night. The
+8-bit JPEG route (no third-party code) is the proxy tier, not the archive.
+Apple's decoder rules that decide the container shape are in the report's
+§4 (per-sample levels on LinearRaw; table vs polynomial depends on the
+codec; no whole-frame tiles; one crashing tile layout).
+
+**Folding it into the app:** libjxl as a binary target
+(`tools/dng-spike/scripts/build-xcframeworks.sh`; sizes in the report);
+move the Metal demosaic/resizer, the stored-value curves and the tile
+encoders from `tools/dng-spike/Sources/dngspike` into the Kit with a test
+each (the writer, decoder and probe are already Kit); Float16/UInt16
+intermediates for the iPhone memory budget; measure libjxl on the A18 and
+the M3 iPad (effort 3–5 is the lever); decide the BaselineExposure source
+for third-party raws (a per-camera table, or measured against Apple's own
+decode); a Settings ▸ Storage "Archive as lossy DNG (N MP)" job over a
+project's source folder. LibRaw (CDDL) only for third-party raws, Mac
+first. Still owed from the spike: the iPad M3 / iPhone 12 Pro / iPad Air 5
+probes (`LL_DNGPROBE=1`, the build is installed on the iPad M3), Lightroom
+opening our files, a flicker report over a converted sequence.
+
 ### Settings ▸ Display: blackout, reduce brightness, and the scheduled peek
 
 **Detail:** `docs/design/iOS/settings.display.portrait.svg`,

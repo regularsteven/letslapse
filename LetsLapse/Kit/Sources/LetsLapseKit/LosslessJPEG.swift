@@ -1,51 +1,73 @@
 import Foundation
 
-/// Lossless JPEG (ITU-T T.81 Annex H, process 14) encoder for 16-bit
-/// single-component tiles — the standard codec inside camera DNGs
-/// (Compression 7). Bit-exact by definition: predictive coding plus Huffman,
-/// no transform, no quantisation. Implemented from the public standard.
+/// Lossless JPEG (ITU-T T.81 Annex H, process 14) encoder for 16-bit tiles —
+/// the standard codec inside camera DNGs (Compression 7). Bit-exact by
+/// definition: predictive coding plus Huffman, no transform, no
+/// quantisation. Implemented from the public standard.
+///
+/// One component is the Bayer case (a CFA mosaic is a single plane). Three
+/// interleaved components is the LinearRaw case — a demosaiced DNG stores
+/// R, G, B per pixel and the standard codes them as one interleaved scan,
+/// each component predicted from its own neighbours with its own Huffman
+/// table. `LosslessJPEGDecoder` is the inverse.
 public enum LosslessJPEG {
     /// Encodes one component with predictor 1 (left neighbour; first row
     /// seeds from 2^(P-1), later rows seed from the sample above).
     /// `samples` is row-major, `width * height` values.
     public static func encode(samples: [UInt16], width: Int, height: Int) throws -> Data {
-        guard samples.count == width * height, width > 0, height > 0 else {
-            throw DNGError.sizeMismatch(expected: "\(width * height) samples", actual: "\(samples.count)")
+        try encode(interleaved: samples, width: width, height: height, components: 1)
+    }
+
+    /// Encodes `components` interleaved planes (`samples[(y*width + x)*components + c]`)
+    /// as one lossless scan, predictor 1, one Huffman table per component.
+    /// Byte-identical to the single-component form when `components == 1`.
+    public static func encode(interleaved samples: [UInt16], width: Int, height: Int, components: Int) throws -> Data {
+        guard components >= 1, components <= 4 else {
+            throw DNGError.unsupportedBuffer("\(components) components (1…4 supported)")
+        }
+        guard samples.count == width * height * components, width > 0, height > 0 else {
+            throw DNGError.sizeMismatch(expected: "\(width * height * components) samples", actual: "\(samples.count)")
         }
 
-        // Pass 1: category histogram for the Huffman table.
-        var frequencies = [Int](repeating: 0, count: 17)
-        forEachDifference(samples: samples, width: width, height: height) { difference in
-            frequencies[category(of: difference)] += 1
+        // Pass 1: per-component category histograms for the Huffman tables.
+        var frequencies = [[Int]](repeating: [Int](repeating: 0, count: 17), count: components)
+        forEachDifference(samples: samples, width: width, height: height, components: components) { component, difference in
+            frequencies[component][category(of: difference)] += 1
         }
-        let table = HuffmanTable(frequencies: frequencies)
+        let tables = frequencies.map { HuffmanTable(frequencies: $0) }
 
         var output = Data()
         output.append(contentsOf: [0xFF, 0xD8]) // SOI
 
-        // DHT
-        var dht = Data()
-        dht.append(0) // class 0 (DC), id 0
-        dht.append(contentsOf: table.bits)
-        dht.append(contentsOf: table.values)
-        appendSegment(&output, marker: 0xC4, payload: dht)
+        // DHT — one table per component (class 0, id = component index).
+        for (index, table) in tables.enumerated() {
+            var dht = Data()
+            dht.append(UInt8(index)) // class 0 (DC), id
+            dht.append(contentsOf: table.bits)
+            dht.append(contentsOf: table.values)
+            appendSegment(&output, marker: 0xC4, payload: dht)
+        }
 
         // SOF3 (lossless)
         var sof = Data()
         sof.append(16) // precision
         sof.append(UInt8(height >> 8)); sof.append(UInt8(height & 0xFF))
         sof.append(UInt8(width >> 8)); sof.append(UInt8(width & 0xFF))
-        sof.append(1)  // components
-        sof.append(1)  // component id
-        sof.append(0x11) // sampling 1x1
-        sof.append(0)  // quant table (unused)
+        sof.append(UInt8(components))
+        for index in 0..<components {
+            sof.append(UInt8(index + 1)) // component id
+            sof.append(0x11)             // sampling 1x1
+            sof.append(0)                // quant table (unused)
+        }
         appendSegment(&output, marker: 0xC3, payload: sof)
 
         // SOS
         var sos = Data()
-        sos.append(1)  // components in scan
-        sos.append(1)  // component id
-        sos.append(0)  // DC table 0
+        sos.append(UInt8(components))
+        for index in 0..<components {
+            sos.append(UInt8(index + 1))   // component id
+            sos.append(UInt8(index << 4))  // DC table = component index, AC unused
+        }
         sos.append(1)  // Ss = predictor 1
         sos.append(0)  // Se
         sos.append(0)  // Ah/Al (no point transform)
@@ -53,7 +75,8 @@ public enum LosslessJPEG {
 
         // Entropy-coded data with FF byte stuffing.
         var writer = BitWriter()
-        forEachDifference(samples: samples, width: width, height: height) { difference in
+        forEachDifference(samples: samples, width: width, height: height, components: components) { component, difference in
+            let table = tables[component]
             let ssss = category(of: difference)
             writer.append(bits: table.codes[ssss], count: table.lengths[ssss])
             if ssss > 0 && ssss < 16 {
@@ -70,28 +93,36 @@ public enum LosslessJPEG {
 
     // MARK: - Prediction
 
-    /// Predictor 1 differences in scan order, mod 2^16, mapped to
-    /// [-32768, 32767].
-    private static func forEachDifference(samples: [UInt16], width: Int, height: Int, _ body: (Int) -> Void) {
+    /// Predictor 1 differences in scan order (pixel-major, component-minor),
+    /// mod 2^16, mapped to [-32768, 32767].
+    private static func forEachDifference(
+        samples: [UInt16], width: Int, height: Int, components: Int,
+        _ body: (Int, Int) -> Void
+    ) {
         samples.withUnsafeBufferPointer { buffer in
             let pointer = buffer.baseAddress!
+            let rowStride = width * components
             for row in 0..<height {
-                let base = row * width
+                let base = row * rowStride
                 for column in 0..<width {
-                    let predicted: UInt16
-                    if row == 0 && column == 0 {
-                        predicted = 32768
-                    } else if column == 0 {
-                        predicted = pointer[base - width]
-                    } else {
-                        predicted = pointer[base + column - 1]
+                    let pixel = base + column * components
+                    for component in 0..<components {
+                        let index = pixel + component
+                        let predicted: UInt16
+                        if row == 0 && column == 0 {
+                            predicted = 32768
+                        } else if column == 0 {
+                            predicted = pointer[index - rowStride]
+                        } else {
+                            predicted = pointer[index - components]
+                        }
+                        let difference = Int(pointer[index]) - Int(predicted)
+                        // Mod-2^16 wrap into signed range.
+                        var wrapped = difference
+                        if wrapped > 32767 { wrapped -= 65536 }
+                        if wrapped < -32768 { wrapped += 65536 }
+                        body(component, wrapped)
                     }
-                    let difference = Int(pointer[base + column]) - Int(predicted)
-                    // Mod-2^16 wrap into signed range.
-                    var wrapped = difference
-                    if wrapped > 32767 { wrapped -= 65536 }
-                    if wrapped < -32768 { wrapped += 65536 }
-                    body(wrapped)
                 }
             }
         }

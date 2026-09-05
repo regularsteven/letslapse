@@ -81,13 +81,15 @@ public enum DNGDocument {
     /// Bayer author. A reader looking for a *demosaiced* image — the
     /// LinearRaw directory an Adobe lossy DNG keeps in a SubIFD — needs the
     /// same walk without that verdict, which is all this is.
-    struct Directories {
-        let ifd0: [DNGTagValue]
-        let subIFDs: [[DNGTagValue]]
-        let exif: [DNGTagValue]
+    public struct Directories {
+        public let ifd0: [DNGTagValue]
+        public let subIFDs: [[DNGTagValue]]
+        public let exif: [DNGTagValue]
+        /// The GPS IFD when IFD0 points at one (tag 34853), else empty.
+        public let gps: [DNGTagValue]
     }
 
-    static func parseDirectories(_ data: Data) throws -> Directories {
+    public static func parseDirectories(_ data: Data) throws -> Directories {
         let reader = TIFFReader(data: data)
         guard try reader.readHeader() else {
             throw DNGError.malformedDNG("not a TIFF")
@@ -104,7 +106,12 @@ public enum DNGDocument {
            let offset = Self.longValues(of: exifPointer).first {
             exif = (try? reader.readIFD(at: Int(offset))) ?? []
         }
-        return Directories(ifd0: ifd0, subIFDs: subIFDs, exif: exif)
+        var gps: [DNGTagValue] = []
+        if let gpsPointer = ifd0.first(where: { $0.tag == 34853 }),
+           let offset = Self.longValues(of: gpsPointer).first {
+            gps = (try? reader.readIFD(at: Int(offset))) ?? []
+        }
+        return Directories(ifd0: ifd0, subIFDs: subIFDs, exif: exif, gps: gps)
     }
 
     public static func longValues(of entry: DNGTagValue) -> [UInt32] {
@@ -1089,6 +1096,22 @@ public enum DNGAuthor {
             stamp.append(0)
             tags.append(DNGTagValue(
                 tag: 36867, type: 2, count: UInt32(stamp.count), payload: stamp))
+            // SubSecTimeOriginal (37521): the fraction as digits, to the
+            // millisecond. Interval pacing is read back from these stamps
+            // (`ImportedStills.captureDate`), and a 3.6 s cadence quantised
+            // to whole seconds gains half a second of jitter nothing in the
+            // scene explains.
+            let milliseconds = Int(((capturedAt.timeIntervalSince1970 - capturedAt.timeIntervalSince1970.rounded(.down)) * 1000).rounded(.down))
+            var subsec = Data(String(format: "%03d", max(0, min(999, milliseconds))).utf8)
+            subsec.append(0)
+            tags.append(DNGTagValue(tag: 37521, type: 2, count: UInt32(subsec.count), payload: subsec))
+            // OffsetTimeOriginal (36881): the zone the stamp above was
+            // written in, so a reader in another zone reads the same instant.
+            let offsetSeconds = calendar.timeZone.secondsFromGMT(for: capturedAt)
+            let sign = offsetSeconds < 0 ? "-" : "+"
+            var offset = Data(String(format: "%@%02d:%02d", sign, abs(offsetSeconds) / 3600, (abs(offsetSeconds) % 3600) / 60).utf8)
+            offset.append(0)
+            tags.append(DNGTagValue(tag: 36881, type: 2, count: UInt32(offset.count), payload: offset))
         }
         if let brightness {
             tags.append(DNGTagValue(
@@ -1374,7 +1397,7 @@ public enum DNGAuthor {
 
 // MARK: - IFD serialization
 
-private final class IFDBuilder {
+final class IFDBuilder {
     private var entries: [UInt16: DNGTagValue] = [:]
 
     func add(_ entry: DNGTagValue) {

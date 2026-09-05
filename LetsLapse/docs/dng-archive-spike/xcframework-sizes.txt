@@ -1,0 +1,9 @@
+built Sat Sep  5 17:32:35 CEST 2026
+ 15M	CJXL.xcframework
+-rw-r--r--@ 1 stevenwright  wheel  4965816 Sep  5 17:31 CJXL.xcframework/ios-arm64-simulator/libjxl_all.a
+-rw-r--r--@ 1 stevenwright  wheel  4966752 Sep  5 17:32 CJXL.xcframework/macos-arm64/libjxl_all.a
+-rw-r--r--@ 1 stevenwright  wheel  4951784 Sep  5 17:31 CJXL.xcframework/ios-arm64/libjxl_all.a
+4.4M	CLibRaw.xcframework
+-rw-r--r--@ 1 stevenwright  wheel  1409728 Sep  5 17:32 CLibRaw.xcframework/ios-arm64-simulator/libraw_r.a
+-rw-r--r--@ 1 stevenwright  wheel  1410184 Sep  5 17:32 CLibRaw.xcframework/macos-arm64/libraw_r.a
+-rw-r--r--@ 1 stevenwright  wheel  1402416 Sep  5 17:32 CLibRaw.xcframework/ios-arm64/libraw_r.a

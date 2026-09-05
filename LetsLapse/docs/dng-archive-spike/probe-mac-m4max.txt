@@ -1,0 +1,36 @@
+DNG capability probe — 2026-09-05T15:05:56Z
+  hardware      Mac16,6 / arm64 · Apple M4 Max · 14 cores · 36.0 GB
+  os            macOS 15.6.1 · thermal nominal
+  metal         Apple M4 Max · apple9, metal3, common3
+  imageio       21 encoders · decodes JPEG XL: true · encodes JPEG XL: false
+                com.ilm.openexr-image public.heic public.heics public.jpeg public.jpeg-2000 public.png public.tiff
+  videotoolbox  27 encoders · jxlc: false · JPEG hw: true · HEVC hw: true
+                0x00000018  Apple 24-bit RGB hw=no   com.apple.videotoolbox.videoencoder.24rgb
+                0x00000020  Apple 32-bit ARGB hw=no   com.apple.videotoolbox.videoencoder.32argb
+                apcn  Apple ProRes 422 hw=no   com.apple.videotoolbox.videoencoder.prores-422
+                apch  Apple ProRes 422 HQ hw=no   com.apple.videotoolbox.videoencoder.prores-422hq
+                apcs  Apple ProRes 422 LT hw=no   com.apple.videotoolbox.videoencoder.prores-422lt
+                apco  Apple ProRes 422 Proxy hw=no   com.apple.videotoolbox.videoencoder.prores-422proxy
+                ap4h  Apple ProRes 4444 hw=no   com.apple.videotoolbox.videoencoder.prores-4444
+                ap4x  Apple ProRes 4444 XQ hw=no   com.apple.videotoolbox.videoencoder.prores-4444xq
+                apcn  AppleProResHW 422 hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422
+                apch  AppleProResHW 422 HQ hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422hq
+                apcs  AppleProResHW 422 LT hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422lt
+                apco  AppleProResHW 422 Proxy hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422proxy
+                ap4h  AppleProResHW 4444 hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.4444
+                ap4x  AppleProResHW 4444 XQ hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.4444xq
+                deph  Apple Depth (HEVC)-Apple HEVC (HW) hw=yes  com.apple.videotoolbox.videoencoder.depth-hevc:com.apple.videotoolbox.videoencoder.ave.hevc
+                deph  Apple Depth (HEVC)-Apple HEVC (SW) hw=no   com.apple.videotoolbox.videoencoder.depth-hevc:com.apple.videotoolbox.videoencoder.hevc.vcp
+                dish  Apple Disparity (HEVC)-Apple HEVC (HW) hw=yes  com.apple.videotoolbox.videoencoder.disparity-hevc:com.apple.videotoolbox.videoencoder.ave.hevc
+                dish  Apple Disparity (HEVC)-Apple HEVC (SW) hw=no   com.apple.videotoolbox.videoencoder.disparity-hevc:com.apple.videotoolbox.videoencoder.hevc.vcp
+                h263  Apple H.263 (SW) hw=no   com.apple.videotoolbox.videoencoder.h263
+                avc1  Apple H.264 (HW) hw=yes  com.apple.videotoolbox.videoencoder.ave.avc
+                avc1  Apple H.264 (SW) hw=no   com.apple.videotoolbox.videoencoder.h264
+                hvc1  Apple HEVC (HW) hw=yes  com.apple.videotoolbox.videoencoder.ave.hevc
+                hvc1  Apple HEVC (SW) hw=no   com.apple.videotoolbox.videoencoder.hevc.vcp
+                jpeg  Apple JPEG hw=no   com.apple.videotoolbox.videoencoder.jpeg
+                jpeg  JPEG (HW) hw=yes  com.apple.videotoolbox.videoencoder.jpeg.ajpeg
+                muxa  Apple Muxed Alpha-Apple HEVC (HW) hw=yes  com.apple.videotoolbox.videoencoder.hevc-with-alpha:com.apple.videotoolbox.videoencoder.ave.hevc
+                muxa  Apple Muxed Alpha-Apple HEVC (SW) hw=no   com.apple.videotoolbox.videoencoder.hevc-with-alpha:com.apple.videotoolbox.videoencoder.hevc.vcp
+  jxlc session  VTCompressionSessionCreate(jxlc) → -12908 (no jxlc encoder listed)
+  third-party   libjxl 0.12.0 · LibRaw 0.22.1-Release

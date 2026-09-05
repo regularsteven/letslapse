@@ -547,7 +547,7 @@ struct ContentView: View {
         // LL_PROBE_FORMATS is in this list for a different reason than the
         // rest: the probe drives its own capture session, and the camera the
         // launch would otherwise open owns the device while it does.
-        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM"]
+        let hookKeys = ["LL_TAB", "LL_OPEN", "LL_SEED", "LL_DETAIL", "LL_PUSH", "LL_CAPTURE", "LL_AUTO", "LL_COLLECTIONS", "LL_ADJUST", "LL_REFRAME", "LL_GUIDED", "LL_PROBE_FORMATS", "LL_SECTIONS", "LL_VIEWER", "LL_KEYFRAMES", "LL_PROJECT_SCANNER", "LL_TRANSFER", "LL_TIMESLICE", "LL_SCANS", "LL_SCANS_EMPTY", "LL_SCANS_DETAIL", "LL_SCANS_CORRECTED", "LL_SCANS_AUTOCORRECT", "LL_SCANS_DELETED", "LL_SCANS_DOCS", "LL_SCANS_EXPORT", "LL_LAYOUT", "LL_EDITOR", "LL_RAIL", "LL_MASK", "LL_IMPORT_STILLS", "LL_IMPORT_VIDEO", "LL_LADDERS", "LL_TEXT", "LL_RUNINFO", "LL_RUNDIM", "LL_DNGPROBE"]
         if hookKeys.contains(where: { environment[$0] != nil }) { return false }
         #endif
         guard selectedTab == .create, model.stage == .home else { return false }
@@ -561,6 +561,19 @@ struct ContentView: View {
     /// so screens can be screenshot-verified without tap automation.
     private func applyUIPreviewHooks() {
         let environment = ProcessInfo.processInfo.environment
+        // `LL_DNGPROBE=1` — print the DNG archive capability table (ImageIO
+        // and VideoToolbox encoders, a `jxlc` session attempt, Metal family)
+        // to the console and carry on. The Mac and the simulators cannot
+        // answer the JPEG XL encoder question; only a device can, and this is
+        // how `docs/dng-archive-spike-brief.md` §6.1 asks it. `--console` on
+        // `devicectl device process launch` shows the output.
+        if let hook = environment["LL_DNGPROBE"], hook != "0" {
+            let report = DNGCapabilityProbe.run(tryJPEGXLSession: true)
+            print(DNGCapabilityProbe.text(report))
+            print("LL_DNGPROBE_JSON_BEGIN")
+            print(DNGCapabilityProbe.json(report))
+            print("LL_DNGPROBE_JSON_END")
+        }
         #if os(macOS)
         // Both remote hooks open the window, because it is behind ⌘⇧R and no
         // headless run can press that. They are mutually exclusive in practice:

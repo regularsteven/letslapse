@@ -1,0 +1,196 @@
+{
+  "chip" : "Apple M4 Max",
+  "date" : "2026-09-05T15:05:56Z",
+  "hardwareModel" : "Mac16,6",
+  "hasHardwareHEVC" : true,
+  "hasHardwareJPEG" : true,
+  "hasVideoToolboxJPEGXL" : false,
+  "imageIODecodesJPEGXL" : true,
+  "imageIOEncoderCount" : 21,
+  "imageIOEncoders" : [
+    "com.ilm.openexr-image",
+    "public.heic",
+    "public.heics",
+    "public.jpeg",
+    "public.jpeg-2000",
+    "public.png",
+    "public.tiff"
+  ],
+  "imageIOEncodesJPEGXL" : false,
+  "jpegXLSession" : "VTCompressionSessionCreate(jxlc) → -12908 (no jxlc encoder listed)",
+  "machine" : "arm64",
+  "metalDevice" : "Apple M4 Max",
+  "metalFamilies" : [
+    "apple9",
+    "metal3",
+    "common3"
+  ],
+  "os" : "macOS 15.6.1",
+  "physicalMemoryGB" : 36,
+  "processorCount" : 14,
+  "thermalState" : "nominal",
+  "videoEncoders" : [
+    {
+      "codec" : "0x00000018",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.24rgb",
+      "hardware" : false,
+      "name" : "Apple 24-bit RGB"
+    },
+    {
+      "codec" : "0x00000020",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.32argb",
+      "hardware" : false,
+      "name" : "Apple 32-bit ARGB"
+    },
+    {
+      "codec" : "apcn",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores-422",
+      "hardware" : false,
+      "name" : "Apple ProRes 422"
+    },
+    {
+      "codec" : "apch",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores-422hq",
+      "hardware" : false,
+      "name" : "Apple ProRes 422 HQ"
+    },
+    {
+      "codec" : "apcs",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores-422lt",
+      "hardware" : false,
+      "name" : "Apple ProRes 422 LT"
+    },
+    {
+      "codec" : "apco",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores-422proxy",
+      "hardware" : false,
+      "name" : "Apple ProRes 422 Proxy"
+    },
+    {
+      "codec" : "ap4h",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores-4444",
+      "hardware" : false,
+      "name" : "Apple ProRes 4444"
+    },
+    {
+      "codec" : "ap4x",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores-4444xq",
+      "hardware" : false,
+      "name" : "Apple ProRes 4444 XQ"
+    },
+    {
+      "codec" : "apcn",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422",
+      "hardware" : true,
+      "name" : "AppleProResHW 422"
+    },
+    {
+      "codec" : "apch",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422hq",
+      "hardware" : true,
+      "name" : "AppleProResHW 422 HQ"
+    },
+    {
+      "codec" : "apcs",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422lt",
+      "hardware" : true,
+      "name" : "AppleProResHW 422 LT"
+    },
+    {
+      "codec" : "apco",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422proxy",
+      "hardware" : true,
+      "name" : "AppleProResHW 422 Proxy"
+    },
+    {
+      "codec" : "ap4h",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.4444",
+      "hardware" : true,
+      "name" : "AppleProResHW 4444"
+    },
+    {
+      "codec" : "ap4x",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.4444xq",
+      "hardware" : true,
+      "name" : "AppleProResHW 4444 XQ"
+    },
+    {
+      "codec" : "deph",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.depth-hevc:com.apple.videotoolbox.videoencoder.ave.hevc",
+      "hardware" : true,
+      "name" : "Apple Depth (HEVC)-Apple HEVC (HW)"
+    },
+    {
+      "codec" : "deph",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.depth-hevc:com.apple.videotoolbox.videoencoder.hevc.vcp",
+      "hardware" : false,
+      "name" : "Apple Depth (HEVC)-Apple HEVC (SW)"
+    },
+    {
+      "codec" : "dish",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.disparity-hevc:com.apple.videotoolbox.videoencoder.ave.hevc",
+      "hardware" : true,
+      "name" : "Apple Disparity (HEVC)-Apple HEVC (HW)"
+    },
+    {
+      "codec" : "dish",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.disparity-hevc:com.apple.videotoolbox.videoencoder.hevc.vcp",
+      "hardware" : false,
+      "name" : "Apple Disparity (HEVC)-Apple HEVC (SW)"
+    },
+    {
+      "codec" : "h263",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.h263",
+      "hardware" : false,
+      "name" : "Apple H.263 (SW)"
+    },
+    {
+      "codec" : "avc1",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.ave.avc",
+      "hardware" : true,
+      "name" : "Apple H.264 (HW)"
+    },
+    {
+      "codec" : "avc1",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.h264",
+      "hardware" : false,
+      "name" : "Apple H.264 (SW)"
+    },
+    {
+      "codec" : "hvc1",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.ave.hevc",
+      "hardware" : true,
+      "name" : "Apple HEVC (HW)"
+    },
+    {
+      "codec" : "hvc1",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.hevc.vcp",
+      "hardware" : false,
+      "name" : "Apple HEVC (SW)"
+    },
+    {
+      "codec" : "jpeg",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.jpeg",
+      "hardware" : false,
+      "name" : "Apple JPEG"
+    },
+    {
+      "codec" : "jpeg",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.jpeg.ajpeg",
+      "hardware" : true,
+      "name" : "JPEG (HW)"
+    },
+    {
+      "codec" : "muxa",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.hevc-with-alpha:com.apple.videotoolbox.videoencoder.ave.hevc",
+      "hardware" : true,
+      "name" : "Apple Muxed Alpha-Apple HEVC (HW)"
+    },
+    {
+      "codec" : "muxa",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.hevc-with-alpha:com.apple.videotoolbox.videoencoder.hevc.vcp",
+      "hardware" : false,
+      "name" : "Apple Muxed Alpha-Apple HEVC (SW)"
+    }
+  ]
+}
