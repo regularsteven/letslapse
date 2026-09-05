@@ -302,7 +302,7 @@ enum ProjectThumbnailGenerator {
     /// `CIRAWFilter` cannot open it, so the ImageIO path stays the fallback
     /// rather than the picture disappearing.
     private static func rawImage(for url: URL, maxPixelSize: Int) -> CGImage? {
-        guard let raw = CIRAWFilter(imageURL: url) else { return nil }
+        guard let raw = LossyLinearDNG.rawFilter(for: url) else { return nil }
         let native = max(raw.nativeSize.width, raw.nativeSize.height)
         if native > 0 {
             raw.scaleFactor = Float(min(1, Double(maxPixelSize) / native))

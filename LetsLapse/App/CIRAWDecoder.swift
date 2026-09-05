@@ -78,7 +78,7 @@ public enum CIRAWDecoder {
         extendedDynamicRange: Float = 2,
         scale: Float = 1
     ) throws -> CIImage {
-        guard let raw = CIRAWFilter(imageURL: url) else { throw Error.notRaw(url) }
+        guard let raw = LossyLinearDNG.rawFilter(for: url) else { throw Error.notRaw(url) }
         raw.boostAmount = boostAmount
         raw.extendedDynamicRangeAmount = extendedDynamicRange
         raw.scaleFactor = scale
@@ -115,7 +115,7 @@ public enum CIRAWDecoder {
 
     /// The as-shot illuminant a file reports, for anchoring a `GradeReference`.
     public static func asShotNeutral(url: URL) -> (temperatureK: Double, tint: Double)? {
-        guard let raw = CIRAWFilter(imageURL: url) else { return nil }
+        guard let raw = LossyLinearDNG.rawFilter(for: url) else { return nil }
         return (Double(raw.neutralTemperature), Double(raw.neutralTint))
     }
 

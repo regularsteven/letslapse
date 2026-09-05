@@ -197,7 +197,7 @@ func runGradeProbe(url: URL) {
         print("TIFF make/model: \(tiff[kCGImagePropertyTIFFMake] ?? "?") \(tiff[kCGImagePropertyTIFFModel] ?? "?")")
     }
 
-    guard let raw = CIRAWFilter(imageURL: url) else {
+    guard let raw = LossyLinearDNG.rawFilter(for: url) else {
         print("CIRAWFilter could not open \(url.lastPathComponent)")
         return probeImageIO(url: url, context: context, colorSpace: linearP3)
     }
@@ -214,7 +214,7 @@ func runGradeProbe(url: URL) {
         ("defaults untouched", { _ in }),
     ]
     for variant in variants {
-        guard let filter = CIRAWFilter(imageURL: url) else { continue }
+        guard let filter = LossyLinearDNG.rawFilter(for: url) else { continue }
         filter.scaleFactor = 0.5
         variant.configure(filter)
         guard let output = filter.outputImage else {

@@ -300,7 +300,7 @@ public final class FramingLumaDecoder: @unchecked Sendable {
     }
 
     private func decode(_ url: URL) throws -> CIImage {
-        if ImportedStills.isRaw(url), let raw = CIRAWFilter(imageURL: url) {
+        if ImportedStills.isRaw(url), let raw = LossyLinearDNG.rawFilter(for: url) {
             raw.scaleFactor = Float(scale)
             raw.isDraftModeEnabled = true
             raw.boostAmount = 0

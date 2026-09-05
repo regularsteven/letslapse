@@ -72,6 +72,41 @@ public enum DNGDocument {
         return DNGReference(ifd0: ifd0, raw: raw, exif: exif)
     }
 
+    /// Every directory a DNG carries, without deciding which one is "the"
+    /// image: IFD0, each SubIFD in order, and the EXIF IFD when IFD0 points
+    /// at one. Payloads are little-endian-normalised exactly as
+    /// `parseReference` returns them.
+    ///
+    /// `parseReference` insists on a CFA directory because it feeds the
+    /// Bayer author. A reader looking for a *demosaiced* image — the
+    /// LinearRaw directory an Adobe lossy DNG keeps in a SubIFD — needs the
+    /// same walk without that verdict, which is all this is.
+    struct Directories {
+        let ifd0: [DNGTagValue]
+        let subIFDs: [[DNGTagValue]]
+        let exif: [DNGTagValue]
+    }
+
+    static func parseDirectories(_ data: Data) throws -> Directories {
+        let reader = TIFFReader(data: data)
+        guard try reader.readHeader() else {
+            throw DNGError.malformedDNG("not a TIFF")
+        }
+        let ifd0 = try reader.readIFD(at: Int(try reader.u32(at: 4)))
+        var subIFDs: [[DNGTagValue]] = []
+        if let pointer = ifd0.first(where: { $0.tag == 330 }) {
+            for offset in Self.longValues(of: pointer) {
+                subIFDs.append(try reader.readIFD(at: Int(offset)))
+            }
+        }
+        var exif: [DNGTagValue] = []
+        if let exifPointer = ifd0.first(where: { $0.tag == 34665 }),
+           let offset = Self.longValues(of: exifPointer).first {
+            exif = (try? reader.readIFD(at: Int(offset))) ?? []
+        }
+        return Directories(ifd0: ifd0, subIFDs: subIFDs, exif: exif)
+    }
+
     public static func longValues(of entry: DNGTagValue) -> [UInt32] {
         var values: [UInt32] = []
         let stride = entry.type == 3 ? 2 : 4

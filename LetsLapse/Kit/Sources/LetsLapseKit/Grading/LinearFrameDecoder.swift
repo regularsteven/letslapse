@@ -155,7 +155,10 @@ public final class LinearFrameDecoder {
         // itself: an imported Sony ARW that misses this branch is decoded by
         // ImageIO instead, which on iOS hands back the file's embedded preview.
         let isRAW = ImportedStills.isRaw(url)
-        if isRAW, let raw = CIRAWFilter(imageURL: url) {
+        // Through `LossyLinearDNG`, never `CIRAWFilter(imageURL:)` directly:
+        // an Adobe lossy DNG opened by URL renders as a green wash on every
+        // Apple OS measured, and the repack is the only thing that fixes it.
+        if isRAW, let raw = LossyLinearDNG.rawFilter(for: url) {
             raw.boostAmount = 0
             raw.extendedDynamicRangeAmount = 2
             raw.scaleFactor = scale
@@ -401,10 +404,22 @@ public final class LinearFrameDecoder {
         let flipped = image
             .transformed(by: CGAffineTransform(scaleX: 1, y: -1)
                 .translatedBy(x: -extent.origin.x, y: -extent.maxY))
+        // On our own command buffer, and waited for: a `Frame` promises
+        // finished pixels, and every consumer reads them straight away — the
+        // grade kernel on another queue, `crop` with a blit, tests with
+        // `getBytes`. With `commandBuffer: nil` Core Image commits to a queue
+        // of its own and returns, and a texture read before that work lands
+        // is zeros (measured: a whole-frame mean of exactly 0 in
+        // `LossyLinearDNGTests`, intermittently).
+        guard let commandBuffer = commandQueue.makeCommandBuffer() else {
+            throw LapseError.gpuSetupFailed("could not create a decode command buffer")
+        }
         context.render(
-            flipped, to: texture, commandBuffer: nil,
+            flipped, to: texture, commandBuffer: commandBuffer,
             bounds: CGRect(x: 0, y: 0, width: CGFloat(width), height: CGFloat(height)),
             colorSpace: workingSpace)
+        commandBuffer.commit()
+        commandBuffer.waitUntilCompleted()
         return texture
     }
 

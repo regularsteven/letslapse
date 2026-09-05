@@ -252,8 +252,10 @@ enum DiskThumbnailStore {
     /// instead of ImageIO, which on iOS was persisting the file's embedded
     /// preview — a 189×252 blob for a 12 MP frame — under the key of a
     /// full-size thumbnail. Without the bump those survive the fix on disk,
-    /// which is precisely how the bug outlived two rebuilds.
-    private static let generatorVersion = 2
+    /// which is precisely how the bug outlived two rebuilds. Version 3: Adobe
+    /// lossy DNGs decode through `LossyLinearDNG`'s repack — every thumbnail
+    /// of one generated before it is a green wash and must not survive.
+    private static let generatorVersion = 3
 
     static func key(for url: URL) -> String {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?

@@ -11,6 +11,44 @@ live inline.
 
 ## Open
 
+### Lossy DNG stage 2 — a camera-space decode that renders like Lightroom
+
+**Raised:** 2026-09-05 (Steven — archival Sony ARW → Adobe DNG Converter
+lossy JPEG XL at 10 MP, projects `E854D311` ARW / `93F772E0` lossless DNG /
+`8E67730E` lossy full / `B91FD599` lossy 10 MP) · open · **medium**
+
+Stage 1 shipped the same day: `LossyLinearDNG` (Kit, `Grading/`) repacks an
+Adobe lossy DNG in memory — ImageIO decodes the JPEG XL tiles, the Kit runs
+the DNG stage-2 arithmetic (per-plane black, white, `MapPolynomial`) itself
+keeping sub-black noise negative, re-quantises onto a uniform 2048 pedestal
+and hands an uncompressed LinearRaw DNG to `CIRAWFilter(imageData:)`. That
+routes around Apple's decoder, which mishandles `BlackLevel` whenever
+`MapPolynomial` opcodes are present (green wash; measured identical on macOS
+15.6, iOS 18.6 and iOS 26.1 simulators). Every raw decode — editor, blend,
+thumbnails, framing measurement, `lapse` — opens its converter through
+`LossyLinearDNG.rawFilter(for:)`. `LossyLinearDNGTests` holds the lossy
+containers to the ARW gold standard within a few points of what the lossless
+DNG achieves.
+
+Stage 1 renders a lossy frame the way Apple renders the lossless conversion
+of it, which is what the app shows for every other DNG. It does not render
+the way *Lightroom* does: Apple's profile handling, not Adobe's, and the
+embedded Adobe Standard hue/sat map and look table go unused. The files are
+already demosaiced and carry ForwardMatrix1/2, so a genuine camera-space
+decode needs no demosaicer: tiles → stage 2 (as stage 1 does) → AsShotNeutral
+white balance → ForwardMatrix (`ForwardMatrixDecoder` already interpolates
+by illuminant) → XYZ D50 → linear P3, with the embedded profile tables
+applied through `DCPProfileApplier.Tables.lookAndHueSat` — the "genuine
+camera-space decode" the DCP path was scaffolded for. Also on iOS, where no
+Adobe profile directory exists, because the tables are in the file.
+
+Open questions for that job: where dng_sdk clips the noise floor (stage 1
+keeps negatives through to Apple's matrix, which matches the ARW; Lightroom
+may clip earlier), whether the legacy 8-bit lossy JPEG flavour (compression
+34892) decodes right through stage 1 — it is accepted but only JPEG XL was
+verified — and a Settings-level way to see which decode a frame took.
+Related memory: `adobe-lossy-dng-apple-decoder-bug`.
+
 ### Ramp readout runaway on a non-driving ramp — measurement, readout honesty, Ladder EV, logging
 
 **Detail:** [fieldtests/2026-09-04-ladder-readout-runaway.md](fieldtests/2026-09-04-ladder-readout-runaway.md) ·
