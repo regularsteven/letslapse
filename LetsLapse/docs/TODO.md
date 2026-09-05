@@ -51,9 +51,10 @@ the M3 iPad (effort 3–5 is the lever); decide the BaselineExposure source
 for third-party raws (a per-camera table, or measured against Apple's own
 decode); a Settings ▸ Storage "Archive as lossy DNG (N MP)" job over a
 project's source folder. LibRaw (CDDL) only for third-party raws, Mac
-first. Still owed from the spike: the iPad M3 / iPhone 12 Pro / iPad Air 5
-probes (`LL_DNGPROBE=1`, the build is installed on the iPad M3), Lightroom
-opening our files, a flicker report over a converted sequence.
+first. Still owed from the spike: the iPhone 12 Pro / iPad Air 5 probes
+(`LL_DNGPROBE=1`; the iPhone 16 Pro and iPad M3 both answered "no JPEG XL
+encoder"), Lightroom opening our files, a flicker report over a converted
+sequence.
 
 ### Settings ▸ Display: blackout, reduce brightness, and the scheduled peek
 

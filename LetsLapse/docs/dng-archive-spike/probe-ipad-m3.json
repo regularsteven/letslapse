@@ -1,0 +1,155 @@
+{
+  "chip" : "iPad15,5",
+  "date" : "2026-09-05T16:25:53Z",
+  "hardwareModel" : "J637AP",
+  "hasHardwareHEVC" : true,
+  "hasHardwareJPEG" : true,
+  "hasVideoToolboxJPEGXL" : false,
+  "imageIODecodesJPEGXL" : true,
+  "imageIOEncoderCount" : 22,
+  "imageIOEncoders" : [
+    "com.ilm.openexr-image",
+    "public.avif",
+    "public.heic",
+    "public.heics",
+    "public.jpeg",
+    "public.jpeg-2000",
+    "public.png",
+    "public.tiff"
+  ],
+  "imageIOEncodesJPEGXL" : false,
+  "jpegXLSession" : "VTCompressionSessionCreate(jxlc) → -12908 (no jxlc encoder listed)",
+  "machine" : "iPad15,5",
+  "metalDevice" : "Apple M3 GPU",
+  "metalFamilies" : [
+    "apple9",
+    "metal3",
+    "common3"
+  ],
+  "os" : "iOS 26.6.1",
+  "physicalMemoryGB" : 7.4,
+  "processorCount" : 8,
+  "thermalState" : "nominal",
+  "videoEncoders" : [
+    {
+      "codec" : "deph",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.depth-hevc:com.apple.videotoolbox.videoencoder.hevc",
+      "hardware" : true,
+      "name" : "Apple Depth (HEVC)-Dynamically Registered hvc1 Video Encoder"
+    },
+    {
+      "codec" : "dish",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.disparity-hevc:com.apple.videotoolbox.videoencoder.hevc",
+      "hardware" : true,
+      "name" : "Apple Disparity (HEVC)-Dynamically Registered hvc1 Video Encoder"
+    },
+    {
+      "codec" : "muxa",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.hevc-with-alpha:com.apple.videotoolbox.videoencoder.hevc",
+      "hardware" : true,
+      "name" : "Apple Muxed Alpha-Dynamically Registered hvc1 Video Encoder"
+    },
+    {
+      "codec" : "ap4h",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.4444",
+      "hardware" : true,
+      "name" : "Dynamically Registered ap4h Video Encoder"
+    },
+    {
+      "codec" : "ap4h",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores.sw.ap4h",
+      "hardware" : false,
+      "name" : "Dynamically Registered ap4h Video Encoder"
+    },
+    {
+      "codec" : "ap4x",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.4444xq",
+      "hardware" : true,
+      "name" : "Dynamically Registered ap4x Video Encoder"
+    },
+    {
+      "codec" : "ap4x",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores.sw.ap4x",
+      "hardware" : false,
+      "name" : "Dynamically Registered ap4x Video Encoder"
+    },
+    {
+      "codec" : "apch",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores.sw.apch",
+      "hardware" : false,
+      "name" : "Dynamically Registered apch Video Encoder"
+    },
+    {
+      "codec" : "apch",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422hq",
+      "hardware" : true,
+      "name" : "Dynamically Registered apch Video Encoder"
+    },
+    {
+      "codec" : "apcn",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores.sw.apcn",
+      "hardware" : false,
+      "name" : "Dynamically Registered apcn Video Encoder"
+    },
+    {
+      "codec" : "apcn",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422",
+      "hardware" : true,
+      "name" : "Dynamically Registered apcn Video Encoder"
+    },
+    {
+      "codec" : "apco",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422proxy",
+      "hardware" : true,
+      "name" : "Dynamically Registered apco Video Encoder"
+    },
+    {
+      "codec" : "apco",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores.sw.apco",
+      "hardware" : false,
+      "name" : "Dynamically Registered apco Video Encoder"
+    },
+    {
+      "codec" : "apcs",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.appleproreshw.422lt",
+      "hardware" : true,
+      "name" : "Dynamically Registered apcs Video Encoder"
+    },
+    {
+      "codec" : "apcs",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.prores.sw.apcs",
+      "hardware" : false,
+      "name" : "Dynamically Registered apcs Video Encoder"
+    },
+    {
+      "codec" : "avc1",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.h264",
+      "hardware" : true,
+      "name" : "Dynamically Registered avc1 Video Encoder"
+    },
+    {
+      "codec" : "h263",
+      "encoderID" : "anon-3",
+      "hardware" : false,
+      "name" : "Dynamically Registered h263 Video Encoder"
+    },
+    {
+      "codec" : "hvc1",
+      "encoderID" : "com.apple.videotoolbox.videoencoder.hevc",
+      "hardware" : true,
+      "name" : "Dynamically Registered hvc1 Video Encoder"
+    },
+    {
+      "codec" : "jpeg",
+      "encoderID" : "anon-1",
+      "hardware" : true,
+      "name" : "Dynamically Registered jpeg Video Encoder"
+    },
+    {
+      "codec" : "sjpg",
+      "encoderID" : "anon-2",
+      "hardware" : true,
+      "name" : "Dynamically Registered sjpg Video Encoder"
+    }
+  ]
+}

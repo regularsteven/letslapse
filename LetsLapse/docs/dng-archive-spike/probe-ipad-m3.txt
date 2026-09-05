@@ -1,0 +1,28 @@
+DNG capability probe — 2026-09-05T16:25:53Z
+  hardware      J637AP / iPad15,5 · iPad15,5 · 8 cores · 7.4 GB
+  os            iOS 26.6.1 · thermal nominal
+  metal         Apple M3 GPU · apple9, metal3, common3
+  imageio       22 encoders · decodes JPEG XL: true · encodes JPEG XL: false
+                com.ilm.openexr-image public.avif public.heic public.heics public.jpeg public.jpeg-2000 public.png public.tiff
+  videotoolbox  20 encoders · jxlc: false · JPEG hw: true · HEVC hw: true
+                deph  Apple Depth (HEVC)-Dynamically Registered hvc1 Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.depth-hevc:com.apple.videotoolbox.videoencoder.hevc
+                dish  Apple Disparity (HEVC)-Dynamically Registered hvc1 Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.disparity-hevc:com.apple.videotoolbox.videoencoder.hevc
+                muxa  Apple Muxed Alpha-Dynamically Registered hvc1 Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.hevc-with-alpha:com.apple.videotoolbox.videoencoder.hevc
+                ap4h  Dynamically Registered ap4h Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.4444
+                ap4h  Dynamically Registered ap4h Video Encoder hw=no   com.apple.videotoolbox.videoencoder.prores.sw.ap4h
+                ap4x  Dynamically Registered ap4x Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.4444xq
+                ap4x  Dynamically Registered ap4x Video Encoder hw=no   com.apple.videotoolbox.videoencoder.prores.sw.ap4x
+                apch  Dynamically Registered apch Video Encoder hw=no   com.apple.videotoolbox.videoencoder.prores.sw.apch
+                apch  Dynamically Registered apch Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422hq
+                apcn  Dynamically Registered apcn Video Encoder hw=no   com.apple.videotoolbox.videoencoder.prores.sw.apcn
+                apcn  Dynamically Registered apcn Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422
+                apco  Dynamically Registered apco Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422proxy
+                apco  Dynamically Registered apco Video Encoder hw=no   com.apple.videotoolbox.videoencoder.prores.sw.apco
+                apcs  Dynamically Registered apcs Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.appleproreshw.422lt
+                apcs  Dynamically Registered apcs Video Encoder hw=no   com.apple.videotoolbox.videoencoder.prores.sw.apcs
+                avc1  Dynamically Registered avc1 Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.h264
+                h263  Dynamically Registered h263 Video Encoder hw=no   anon-3
+                hvc1  Dynamically Registered hvc1 Video Encoder hw=yes  com.apple.videotoolbox.videoencoder.hevc
+                jpeg  Dynamically Registered jpeg Video Encoder hw=yes  anon-1
+                sjpg  Dynamically Registered sjpg Video Encoder hw=yes  anon-2
+  jxlc session  VTCompressionSessionCreate(jxlc) → -12908 (no jxlc encoder listed)
