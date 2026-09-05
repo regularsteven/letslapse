@@ -580,6 +580,10 @@ struct ContentView: View {
         // default keep), `LL_DNGARCHIVE_DISTANCE` (default 0.5, 0 = lossless),
         // `LL_DNGARCHIVE_LIMIT` (first N frames) shape the run.
         if let hook = environment["LL_DNGARCHIVE"], hook != "0" {
+            // stdout is a file when the Mac binary is launched from a shell
+            // with a redirect, and then fully buffered — the last frames and
+            // the totals would sit in the buffer until exit.
+            setlinebuf(stdout)
             let megapixels = environment["LL_DNGARCHIVE_MP"].flatMap(Double.init)
             let distance = environment["LL_DNGARCHIVE_DISTANCE"].flatMap(Float.init) ?? 0.5
             let limit = environment["LL_DNGARCHIVE_LIMIT"].flatMap(Int.init)

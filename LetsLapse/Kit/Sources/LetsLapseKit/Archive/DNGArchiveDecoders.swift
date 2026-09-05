@@ -151,12 +151,21 @@ extension DNGArchive {
                         guard range.upperBound <= data.count else { errors[index] = "tile \(index) past end"; return }
                         do {
                             let tile = try LosslessJPEGDecoder.decode(data.subdata(in: range))
-                            guard tile.components == 1 else { errors[index] = "tile \(index) has \(tile.components) components"; return }
+                            // A CFA tile is commonly coded as an N-component
+                            // JPEG of 1/N the width (Apple's and Canon's DNGs
+                            // use two: one CFA column pair per JPEG pixel).
+                            // Interleaved, the samples are the mosaic row in
+                            // order, so the layout is the same either way.
+                            let tileColumns = tile.width * tile.components
+                            guard tileColumns == tileWidth else {
+                                errors[index] = "tile \(index) is \(tile.width)×\(tile.components) components for a \(tileWidth)-wide tile"
+                                return
+                            }
                             let x0 = (index % across) * tileWidth, y0 = (index / across) * tileHeight
-                            let columns = min(tile.width, width - x0), rows = min(tile.height, height - y0)
+                            let columns = min(tileColumns, width - x0), rows = min(tile.height, height - y0)
                             tile.samples.withUnsafeBufferPointer { source in
                                 for y in 0..<rows {
-                                    let sourceRow = source.baseAddress! + y * tile.width
+                                    let sourceRow = source.baseAddress! + y * tileColumns
                                     let destinationRow = output.baseAddress! + (y0 + y) * width + x0
                                     destinationRow.update(from: sourceRow, count: columns)
                                 }

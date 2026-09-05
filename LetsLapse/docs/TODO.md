@@ -55,12 +55,17 @@ two in flight, writes a `dng-archive.json` ledger and registers the new
 project). `LL_DNGARCHIVE=<id>|latest` (+`_MP`, `_DISTANCE`, `_LIMIT`,
 `_INFLIGHT`) runs it headless and prints per-frame timings. **iPhone 16 Pro
 measured:** 0.50 s per 8 MP frame (libjxl 280 ms), 1.9–2.1 frames/s, 12 MP
-at 1.6 frames/s — seven times faster than the 3.6 s shoot cadence. Design
+at 1.6 frames/s — seven times faster than the 3.6 s shoot cadence. **iPad
+Air M3:** 0.4 s per 8 MP frame (libjxl 185 ms), 2.5–3.2 frames/s on its own
+night DNGs. **Mac clone of `E854D311` (483 ARWs → 10 MP standard):** 483
+frames, 8.8 GB → 707 MB, registered as "Vltava_ARW · DNG hook", 2.8–7.5%
+from Apple's ARW render (the Sony-profile gap), Apple opens every frame
+directly. Design
 SVGs for the sheet and the menu row are OWED after the Mac sign-off
 (app-code-first by Steven's instruction).
 
-**Still open:** the Mac clone test on `E854D311` (ARW → 10 MP) and
-`F6387DFA` (DNG → 8 MP) and the SVG mirrors; Float16/UInt16 intermediates
+**Still open:** Steven's own Mac / iPad pass over the sheet and the SVG
+mirrors; Float16/UInt16 intermediates
 for the iPhone memory budget (Float32 today); the BaselineExposure source
 for third-party raws (`DNGArchive.Strategy.knownBaselineExposures` holds
 the ILCE-7M4's 0.35 for now); a "Delete originals" companion once an

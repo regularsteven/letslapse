@@ -190,6 +190,23 @@ shoot archives in about four minutes on the phone. The unoptimised Debug
 build is 4–6 s per frame — 2 s of it the Kit's lossless-JPEG decode running
 without `-O` — so device timings must come from an optimised build.
 
+**iPad Air 13" M3 (iPadOS 26.6.1)**, 24 frames of "Prague dark" — the
+iPad's own 12.8 MP Apple-camera DNGs (4224×3024, night, two-component
+lossless-JPEG tiles), same build and hook:
+
+| run | per frame (wall) | decode | Metal | curve | libjxl e5 d0.5 | frames/s | out |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| 8 MP, one in flight | **0.37–0.44 s** | 45 ms | 50–75 ms | 90–130 ms | **185 ms** | 2.5 | 3.6–3.8 MB |
+| 8 MP, two in flight | 0.6–0.7 s each | 60–90 ms | 70–100 ms | 130–185 ms | 325–360 ms | **3.2** | same |
+| 12.8 MP (source size), two in flight | 0.9–1.1 s each | 45–95 ms | 65–95 ms | 200–345 ms | 540–600 ms | 2.1 | 5.4–5.9 MB |
+
+The M3's eight cores put libjxl at 185 ms per 8 MP frame, under the M4
+Max's 235 ms for the (cleaner) Set 2 frames; the larger files are the
+night noise, which JPEG XL keeps rather than smooths (the Mac's 8 MP Set 2
+frames were 1.3 MB, these 3.7). Apple's own DNGs code each Bayer tile as a
+two-component lossless JPEG of half the width; the Kit's native decoder
+reads that layout since this run (it refused it the first time).
+
 ## 3. Quality
 
 Method, as in `LossyLinearDNGTests`: output and source decoded through the
@@ -306,8 +323,8 @@ tags and BaselineExposure.
 - **Why not the mosaic:** lossy JPEG XL on the Bayer plane is competitive at
   dusk but drifts on the night frame and on clean blended frames (§2.2), and
   Apple only reads it through the MapPolynomial shape.
-- **Open:** (1) ~~libjxl speed on the A18~~ measured (§2.5): 280 ms per 8 MP
-  frame, 0.5 s end to end; the M3 iPad is still owed; (2) BaselineExposure for third-party
+- **Open:** (1) ~~libjxl speed on the A18 / M3 iPad~~ measured (§2.5): 280 /
+  185 ms per 8 MP frame, 0.5 / 0.4 s end to end; (2) BaselineExposure for third-party
   raws — Adobe's per-camera value is not in LibRaw or the DCP; candidates
   are a small table for the bodies we care about, or measuring it once per
   camera against Apple's own decode; (3) memory — Float16/UInt16

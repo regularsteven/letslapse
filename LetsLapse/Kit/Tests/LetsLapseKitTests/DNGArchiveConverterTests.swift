@@ -139,6 +139,37 @@ final class DNGArchiveConverterTests: XCTestCase {
                      a.x, a.y, a.z, b.x, b.y, b.z))
     }
 
+    /// Apple's own DNGs code each Bayer tile as a two-component lossless JPEG
+    /// of half the width; the native decoder must read that layout too.
+    func testNativeDecoderReadsTwoComponentCFATiles() throws {
+        let width = 1024, height = 512, tile = 256
+        var mosaic = [UInt16](repeating: 0, count: width * height)
+        for i in 0..<mosaic.count { mosaic[i] = UInt16((i * 7919) % 65536) }
+        var tiles: [Data] = []
+        for row in 0..<(height / tile) {
+            for column in 0..<(width / tile) {
+                var block = [UInt16](repeating: 0, count: tile * tile)
+                for y in 0..<tile {
+                    for x in 0..<tile { block[y * tile + x] = mosaic[(row * tile + y) * width + column * tile + x] }
+                }
+                // Half the width, two interleaved components: the same samples.
+                tiles.append(try LosslessJPEG.encode(interleaved: block, width: tile / 2, height: tile, components: 2))
+            }
+        }
+        let image = DNGArchive.Image(
+            width: width, height: height, samplesPerPixel: 1, bitsPerSample: 16,
+            photometric: .cfa(pattern: [0, 1, 1, 2], rows: 2, columns: 2), compression: .losslessJPEG,
+            tileWidth: tile, tileHeight: tile, tiles: tiles, levels: .uniform(black: 0, white: 65535))
+        var metadata = DNGArchive.Metadata()
+        metadata.ifd0 = DNGArchive.sRGBColorTags()
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("two-component-\(UUID().uuidString).dng")
+        try DNGArchive.write(image: image, metadata: metadata, to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        XCTAssertTrue(DNGArchive.NativeDecoder.canDecode(url))
+        let decoded = try DNGArchive.NativeDecoder.decode(url: url).frame
+        XCTAssertEqual(decoded.samples, mosaic, "two-component tiles must land as the mosaic")
+    }
+
     func testSequenceConversionReportsProgressAndStops() throws {
         let sources = try (0..<3).map { _ in try makeSource() }
         defer { sources.forEach { try? FileManager.default.removeItem(at: $0) } }
