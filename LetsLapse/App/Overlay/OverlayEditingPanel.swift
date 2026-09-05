@@ -104,6 +104,9 @@ struct OverlayEditingPanel: View {
     let onImportFont: (URL) -> Void
     /// A short confirmation to float over the media (`Linked — starts after …`).
     let onToast: (String) -> Void
+    /// Whether the Crafted Text sheet is up. Owned by the editor so a launch
+    /// hook can open it for a screenshot, the same way `runTarget` is.
+    @Binding var isCrafting: Bool
     /// Which copy field is being edited and which of its characters the run
     /// toolbar styles. Owned by the editor, because on iOS the toolbar is
     /// drawn as the keyboard's accessory bar — pinned above the keyboard by
@@ -177,6 +180,7 @@ struct OverlayEditingPanel: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            craftButton
             header
             VStack(spacing: 10) {
                 ForEach($document.overlays) { $layer in
@@ -186,6 +190,9 @@ struct OverlayEditingPanel: View {
             .task(id: document.overlays.map(\.id)) { seedSectionDefaults() }
             addButton
             footnote(footnoteCopy)
+        }
+        .sheet(isPresented: $isCrafting) {
+            CraftedTextSheet(accent: accent, onAccent: onAccent, onAdd: addCrafted)
         }
         .fileImporter(
             isPresented: $isImportingFont,
@@ -203,9 +210,9 @@ struct OverlayEditingPanel: View {
             return "Drag the text on the preview to place it. Drag a layer by its grip to reorder — the top layer sits in front."
         }
         #if os(iOS)
-        return "Get the layout right first, then time the reveals. Drag text on the preview to place it; drag a band in the lanes to move it in time. Tap a word in the field to style just that word."
+        return "Get the layout right first, then time the reveals. Drag any text on the preview to place it; layers that follow it move with it. Touch and hold a text to link it. Drag a band in the lanes to move it in time. Tap a word in the field to style just that word."
         #else
-        return "Get the layout right first, then time the reveals. Drag text on the preview to place it; drag a band in the lanes to move it in time. The top layer sits in front."
+        return "Get the layout right first, then time the reveals. Drag any text on the preview to place it; layers that follow it move with it. Right-click or ⌃-click a text to link it. Drag a band in the lanes to move it in time. The top layer sits in front."
         #endif
     }
 
@@ -221,6 +228,67 @@ struct OverlayEditingPanel: View {
                 .foregroundStyle(.secondary)
         }
         .padding(.horizontal, 2)
+    }
+
+    /// "Add Crafted Text" — above the list, always there, because it is how
+    /// a piece of copy becomes several timed layers rather than a thing you
+    /// reach for once. Ink and a spark, so it does not compete with the
+    /// accent-on-card Add Text below the list.
+    private var craftButton: some View {
+        Button {
+            isCrafting = true
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 14))
+                    .foregroundStyle(LL.amber)
+                Text("Add Crafted Text")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.white)
+            }
+            .frame(maxWidth: .infinity, minHeight: M.add)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(LL.ink, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .padding(.top, 8)
+        .accessibilityLabel("Add crafted text")
+    }
+
+    /// Lays the parts out and inserts them as linked layers. The typography
+    /// is `CraftedTextLayout`'s; measuring is Core Text's, so the fit is
+    /// against the face that will actually draw the line.
+    private func addCrafted(_ parts: [CraftedTextPart]) {
+        let lines = CraftedTextLayout.lines(
+            for: parts, aspect: frameAspect,
+            measure: { copy, style in
+                TextOverlayRasterizer.emWidth(
+                    of: copy, family: craftedFont(for: style.role), isBold: style.isBold)
+            })
+        let made = document.addCrafted(
+            lines, at: position, hasTimeline: hasTimeline,
+            fontFor: craftedFont(for:))
+        guard let first = made.first else { return }
+        selectedID = first
+        expanded.insert(first)
+        edit(true)
+        onToast(made.count == 1
+            ? "1 line added"
+            : "\(made.count) lines added · each follows the one above")
+    }
+
+    /// The design's three display faces stood in for IMPORTED fonts, so a
+    /// role resolves against what this project actually brought with it:
+    /// the first imported face carries the payoff line, a second (when there
+    /// is one) the lines around it, and the quiet lines stay in the system
+    /// face, which is already a good quiet sans.
+    private func craftedFont(for role: CraftedTextFontRole) -> String? {
+        let families = importedFonts.map(\.family)
+        switch role {
+        case .display: return families.first
+        case .hand: return families.count > 1 ? families[1] : families.first
+        case .sans: return nil
+        }
     }
 
     private var addButton: some View {
@@ -298,6 +366,17 @@ struct OverlayEditingPanel: View {
         .frame(minHeight: M.row)
         .background(isSelectedBackground(id))
         .contentShape(Rectangle())
+        // The same association menu the text on the picture carries, for
+        // when the row is what is under the finger.
+        .contextMenu {
+            OverlayAssociationMenu(
+                document: $document, layerID: id,
+                onEdited: {
+                    selectedID = id
+                    edit(true)
+                },
+                onToast: onToast)
+        }
         .onTapGesture { selectedID = id }
     }
 
@@ -1262,7 +1341,8 @@ struct OverlayEditingPanel: View {
             startsRow(layer, animation: animation)
             if animation.follows != nil {
                 parentRow(layer, animation: animation)
-                footnoteSmall("Moves with its parent. Offset is measured from the parent's reveal end; negative overlaps them.")
+                footnoteSmall("Offset is measured from the parent's reveal end; negative overlaps them.")
+                independentPositionRow(layer, animation: animation)
             }
         }
         .padding(.bottom, 12)
@@ -1454,6 +1534,48 @@ struct OverlayEditingPanel: View {
                     .fill(M.controlFill))
             .accessibilityElement(children: .contain)
             .accessibilityLabel("Offset")
+        }
+    }
+
+    /// "Independent Position" — the one thing about a link that is about
+    /// PLACE rather than time. Off (the default) a follower travels with its
+    /// parent across the picture; on, it keeps the spot it was put in, which
+    /// is what a byline in a corner or a URL along the bottom wants while
+    /// still waiting its turn in the story.
+    private func independentPositionRow(
+        _ layer: Binding<SceneOverlay>, animation: OverlayAnimation
+    ) -> some View {
+        let on = animation.follows?.independentPosition ?? false
+        return VStack(alignment: .leading, spacing: 5) {
+            Button {
+                update(layer) { next in next.follows?.independentPosition.toggle() }
+            } label: {
+                HStack(spacing: 8) {
+                    RoundedRectangle(cornerRadius: 4, style: .continuous)
+                        .fill(on ? accent : .clear)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .strokeBorder(on ? accent : Color.primary.opacity(0.3), lineWidth: 1))
+                        .overlay {
+                            if on {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .foregroundStyle(onAccent)
+                            }
+                        }
+                        .frame(width: 16, height: 16)
+                    Text("Independent Position")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.primary)
+                    Spacer(minLength: 0)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Independent position")
+            .accessibilityValue(on ? "on" : "off")
+            footnoteSmall(
+                "Off: moves with its parent on the picture. On: stays where you put it; only the timing follows.")
         }
     }
 

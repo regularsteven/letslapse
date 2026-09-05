@@ -346,6 +346,13 @@ extension OverlayDocument {
         OverlaySequencing.descendants(of: id, in: sequencingLayers)
     }
 
+    /// The layers that travel with `id` when it is dragged across the
+    /// picture — see `OverlaySequencing.movers`. Everything following it,
+    /// minus the subtrees that hold an independent position.
+    func movers(of id: UUID) -> [UUID] {
+        OverlaySequencing.movers(of: id, in: sequencingLayers)
+    }
+
     /// Re-seats every linked layer after its parent, front-to-back — see
     /// `OverlaySequencing.resolve`. Links to a layer that is gone (or to
     /// itself, or round a cycle) are dropped and the layer keeps its absolute
@@ -356,6 +363,98 @@ extension OverlayDocument {
         for (index, layer) in layers.enumerated() where overlays[index].animation != layer.animation {
             overlays[index].animation = layer.animation
         }
+    }
+
+    /// Turns laid-out crafted lines into layers: stacked in reading order at
+    /// the front of the list, each following the one above it in time, and —
+    /// unlike Add Text — always arriving animated, because a crafted line is
+    /// a piece of the story rather than a label being placed.
+    ///
+    /// `fontFor` resolves the layout's font ROLE against what this project
+    /// actually has. The design mocked the roles with three Google faces
+    /// standing in for imported fonts; nil means the system face, which is
+    /// what a project with no imported font gets.
+    ///
+    /// Returns the new layers' ids, front first.
+    @discardableResult
+    mutating func addCrafted(
+        _ lines: [CraftedTextLayout.Line],
+        at playhead: Double,
+        hasTimeline: Bool,
+        fontFor: (CraftedTextFontRole) -> String?
+    ) -> [UUID] {
+        guard !lines.isEmpty else { return [] }
+        let band = CraftedTextLayout.revealBand(at: playhead)
+        var made: [SceneOverlay] = []
+        for (index, line) in lines.enumerated() {
+            var content = TextOverlayContent(runs: line.runs)
+            content.fontFamily = fontFor(line.style.role)
+            content.isBold = line.style.isBold
+            content.colorHex = line.style.colorHex
+            content.alignment = .center
+            var layer = SceneOverlay(content: .text(content))
+            layer.size = line.size
+            layer.centerX = line.centerX
+            layer.centerY = line.centerY
+            layer.label = "Crafted · line \(index + 1)"
+            if hasTimeline {
+                var animation = OverlayAnimation(
+                    reveal: OverlayReveal(
+                        unit: line.style.unit, style: line.style.style,
+                        start: band.start, end: band.end))
+                // The chain is what keeps a four-line story in step when one
+                // band moves; `resolveFollows` turns it into real times.
+                if let parent = line.followsIndex {
+                    animation.follows = OverlayFollow(layerID: made[parent].id, gap: 0)
+                }
+                layer.animation = animation
+            }
+            made.append(layer)
+        }
+        overlays.insert(contentsOf: made, at: 0)
+        resolveFollows()
+        return made.map(\.id)
+    }
+
+    /// Links `id` after `parentID`, or clears the association when that is
+    /// nil, and re-seats the chain. Returns the line to float over the media.
+    ///
+    /// The offset and the position rule survive a change of parent: picking
+    /// a different layer to follow is a change of WHO, not a reset of how
+    /// this layer behaves once it is following something.
+    @discardableResult
+    mutating func link(_ id: UUID, to parentID: UUID?) -> String {
+        guard let index = overlays.firstIndex(where: { $0.id == id }) else { return "" }
+        var animation = overlays[index].effectiveAnimation
+        if let parentID {
+            animation.follows = OverlayFollow(
+                layerID: parentID,
+                gap: animation.follows?.gap ?? 0,
+                independentPosition: animation.follows?.independentPosition ?? false)
+        } else {
+            animation.follows = nil
+        }
+        overlays[index].animation = animation
+        resolveFollows()
+        guard let parentID, let parent = overlays.first(where: { $0.id == parentID }) else {
+            return "Association removed"
+        }
+        return "Starts after “\(parent.displayName)”"
+    }
+
+    /// Flips whether a follower keeps its own place on the picture. Returns
+    /// the line to float, or nil when the layer follows nothing — where the
+    /// setting has nothing to mean.
+    @discardableResult
+    mutating func toggleIndependentPosition(of id: UUID) -> String? {
+        guard let index = overlays.firstIndex(where: { $0.id == id }),
+              var animation = overlays[index].animation,
+              var follow = animation.follows else { return nil }
+        follow.independentPosition.toggle()
+        animation.follows = follow
+        overlays[index].animation = animation
+        return follow.independentPosition
+            ? "Holds its own position" : "Moves with its parent"
     }
 
     /// Removes a layer. Its children keep their (already resolved) times and

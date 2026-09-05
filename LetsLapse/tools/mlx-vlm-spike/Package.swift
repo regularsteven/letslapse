@@ -30,5 +30,19 @@ let package = Package(
             ],
             path: "Sources/vlm-spike"
         ),
+        // Text-only generation for the Crafted Text path. `lapse craft` owns
+        // the prompt, the parser and the layout (and links no MLX, so CI can
+        // run it anywhere); this owns the weights. Piped together they drive
+        // the whole feature from a shell.
+        .executableTarget(
+            name: "craft-probe",
+            dependencies: [
+                .product(name: "MLX", package: "mlx-swift"),
+                .product(name: "MLXLMCommon", package: "mlx-swift-lm"),
+                .product(name: "MLXVLM", package: "mlx-swift-lm"),
+                .product(name: "Tokenizers", package: "swift-transformers"),
+            ],
+            path: "Sources/craft-probe"
+        ),
     ]
 )

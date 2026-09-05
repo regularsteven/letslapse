@@ -152,6 +152,8 @@ struct PhotoViewerView: View {
     /// A short confirmation floated over the media ("Linked — starts after
     /// …", "Imported Amatic SC"), 1.8 s.
     @State private var overlayToast: String?
+    /// The Crafted Text sheet, owned here so `LL_TEXT=story,craft` can raise it.
+    @State private var railCrafting = false
     @State private var overlayToastTask: Task<Void, Never>?
     /// The faces this project brought with it (`fonts/`), for the picker.
     @State private var importedFonts: [OverlayFontStore.ImportedFont] = []
@@ -220,6 +222,12 @@ struct PhotoViewerView: View {
         /// to this absolute base, never accumulated.
         let base: CGPoint
         var current: CGPoint
+        /// The layers that travel with this one: everything following it
+        /// that has not been given an independent position, each with the
+        /// centre it started from. They take the SAME translation the
+        /// dragged layer took — after its snap, so a story stays in
+        /// formation instead of each line snapping on its own.
+        var followers: [UUID: CGPoint] = [:]
     }
 
     /// The box's geometry when a handle drag began, for the same reason
@@ -1089,7 +1097,14 @@ struct PhotoViewerView: View {
                         overlayProxy(overlay, drawn: drawn)
                     }
                 }
+                // The layers that will travel with the selection if it is
+                // dragged, outlined dashed so the group is visible BEFORE
+                // the gesture rather than as a surprise during it.
                 if let selected = selectedOverlay {
+                    let travelling = overlayDocument.movers(of: selected.id)
+                    ForEach(overlayDocument.overlays.filter { travelling.contains($0.id) }) { follower in
+                        overlayFollowerOutline(follower, drawn: drawn)
+                    }
                     overlayChrome(selected, drawn: drawn)
                 }
                 overlaySnapGuides(drawn: drawn)
@@ -1107,9 +1122,8 @@ struct PhotoViewerView: View {
     @ViewBuilder private func overlayProxy(_ stored: SceneOverlay, drawn: CGSize) -> some View {
         let overlay = displayOverlay(stored)
         let dragging = overlayDrag?.id == overlay.id
-        let center = dragging
-            ? overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY)
-            : CGPoint(x: overlay.centerX, y: overlay.centerY)
+        let carried = overlayDrag?.followers[overlay.id] != nil
+        let center = overlayDragCenter(for: overlay)
         let style = overlay.textStyle
         let fontSize = TextOverlayRasterizer.resolvedSize(
             for: overlay, aspect: drawnAspect(drawn)) * max(drawn.width, drawn.height)
@@ -1122,12 +1136,32 @@ struct PhotoViewerView: View {
             .multilineTextAlignment(proxyAlignment(style))
             .shadow(color: .black.opacity(0.55), radius: fontSize * 0.06)
             .frame(width: overlay.mode == .box ? drawn.width * overlay.boxWidth : nil)
-            .opacity(dragging ? 1 : (ghosted ? 0.16 : 0.02))
+            // A follower is being carried by this drag, so its bake is
+            // suppressed too and the proxy is all there is to see.
+            .opacity(dragging || carried ? 1 : (ghosted ? 0.16 : 0.02))
             // The layer's own turn, about its anchor — the rasterizer's
             // rotation, so the proxy sits where the bake will.
             .rotationEffect(.degrees(overlay.rotationDegrees))
             .position(x: drawn.width * center.x, y: drawn.height * center.y)
             .highPriorityGesture(overlayDragGesture(overlay, drawn: drawn))
+            // Right-click / ⌃-click on the Mac, touch and hold on iOS —
+            // both are what `.contextMenu` already means on its platform.
+            .contextMenu { associationMenu(for: stored) }
+    }
+
+    /// Where a layer is drawn right now: its committed centre, unless this
+    /// drag is carrying it — as the layer being dragged, or as one of the
+    /// followers travelling with it.
+    private func overlayDragCenter(for overlay: SceneOverlay) -> CGPoint {
+        let resting = CGPoint(x: overlay.centerX, y: overlay.centerY)
+        guard let drag = overlayDrag else { return resting }
+        if drag.id == overlay.id { return drag.current }
+        guard let base = drag.followers[overlay.id] else { return resting }
+        // Followers take the translation the dragged layer ended up with,
+        // snap included, and clamp to the frame the same way it does.
+        let delta = CGPoint(x: drag.current.x - drag.base.x, y: drag.current.y - drag.base.y)
+        return CGPoint(x: min(max(base.x + delta.x, 0), 1),
+                       y: min(max(base.y + delta.y, 0), 1))
     }
 
     /// The proxy's copy, run by run — each word in its own weight, colour
@@ -1181,13 +1215,28 @@ struct PhotoViewerView: View {
     /// eight handles that resize it. Free text gets a solid accent outline
     /// around the space its line occupies; boxed text gets the dashed amber
     /// box it is actually constrained by, which is the thing being dragged.
+    /// A layer that travels with the selection: a light dashed ring, no
+    /// badge and no handles. It says "this comes too" and nothing else.
+    @ViewBuilder private func overlayFollowerOutline(_ stored: SceneOverlay, drawn: CGSize) -> some View {
+        let overlay = displayOverlay(stored)
+        let size = chromeSize(overlay, drawn: drawn)
+        let center = overlayDragCenter(for: overlay)
+        RoundedRectangle(cornerRadius: 2, style: .continuous)
+            .strokeBorder(accentColor.opacity(0.6),
+                          style: StrokeStyle(lineWidth: 1, dash: [4, 3]))
+            .frame(width: size.width, height: size.height)
+            .allowsHitTesting(false)
+            .rotationEffect(.degrees(overlay.rotationDegrees))
+            .position(x: drawn.width * center.x, y: drawn.height * center.y)
+    }
+
     @ViewBuilder private func overlayChrome(_ stored: SceneOverlay, drawn: CGSize) -> some View {
         let overlay = displayOverlay(stored)
         let boxed = overlay.mode == .box
-        let center = overlayDrag?.id == overlay.id
-            ? (overlayDrag?.current ?? CGPoint(x: overlay.centerX, y: overlay.centerY))
-            : CGPoint(x: overlay.centerX, y: overlay.centerY)
+        let center = overlayDragCenter(for: overlay)
         let size = chromeSize(overlay, drawn: drawn)
+        // How many layers this one takes with it when it moves.
+        let followerCount = overlayDocument.movers(of: overlay.id).count
         let tint = boxed ? LL.amber : accentColor
         ZStack {
             RoundedRectangle(cornerRadius: 2, style: .continuous)
@@ -1196,7 +1245,12 @@ struct PhotoViewerView: View {
                     style: StrokeStyle(lineWidth: 1.5, dash: boxed ? [5, 4] : []))
                 .frame(width: size.width, height: size.height)
                 .overlay(alignment: .topLeading) {
-                    Text("\(boxed ? "BOX" : "FREE") · \(overlay.text.prefix(18).isEmpty ? "empty" : String(overlay.text.prefix(18)))")
+                    // The layer's own name, and what comes with it. `BOX`
+                    // survives because the dashed outline needs saying;
+                    // `FREE` did not — the name is worth more than the mode.
+                    Text("\(boxed ? "BOX · " : "")\(overlay.displayName.prefix(22))"
+                         + (followerCount > 0
+                            ? " · +\(followerCount) follow\(followerCount > 1 ? "" : "s")" : ""))
                         .font(.system(size: 10, weight: .semibold))
                         .foregroundStyle(.white)
                         .padding(.horizontal, 7)
@@ -1401,10 +1455,21 @@ struct PhotoViewerView: View {
                     dismissTextEntry()
                     // Dragging a layer is a way of choosing it.
                     selectedOverlayID = overlay.id
+                    // Layers that start after this one are part of the same
+                    // thought, so they move with it — unless they hold an
+                    // independent position (a pinned byline, a URL in a
+                    // corner), which keeps its spot and follows in time only.
+                    let travelling = overlayDocument.movers(of: overlay.id)
+                    var followers: [UUID: CGPoint] = [:]
+                    for other in overlayDocument.overlays where travelling.contains(other.id) {
+                        let shown = displayOverlay(other)
+                        followers[other.id] = CGPoint(x: shown.centerX, y: shown.centerY)
+                    }
                     overlayDrag = OverlayDragState(
                         id: overlay.id,
                         base: CGPoint(x: overlay.centerX, y: overlay.centerY),
-                        current: CGPoint(x: overlay.centerX, y: overlay.centerY))
+                        current: CGPoint(x: overlay.centerX, y: overlay.centerY),
+                        followers: followers)
                     // One re-render without this overlay; the proxy carries
                     // it for the rest of the drag.
                     renderToken += 1
@@ -1429,6 +1494,22 @@ struct PhotoViewerView: View {
                     let stored = storedPoint(drag.current)
                     overlayDocument.overlays[index].centerX = stored.x
                     overlayDocument.overlays[index].centerY = stored.y
+                }
+                // The layers that came along keep where they were carried to.
+                for (id, base) in drag.followers {
+                    guard let index = overlayDocument.overlays
+                        .firstIndex(where: { $0.id == id }) else { continue }
+                    let delta = CGPoint(x: drag.current.x - drag.base.x,
+                                        y: drag.current.y - drag.base.y)
+                    let moved = CGPoint(x: min(max(base.x + delta.x, 0), 1),
+                                        y: min(max(base.y + delta.y, 0), 1))
+                    let stored = storedPoint(moved)
+                    overlayDocument.overlays[index].centerX = stored.x
+                    overlayDocument.overlays[index].centerY = stored.y
+                }
+                if !drag.followers.isEmpty {
+                    let count = drag.followers.count
+                    showOverlayToast("Moved with \(count) follower\(count == 1 ? "" : "s")")
                 }
                 overlayDrag = nil
                 overlaySnapX = false
@@ -1642,6 +1723,7 @@ struct PhotoViewerView: View {
             onOpenMasks: { railTab = .masks },
             onImportFont: importOverlayFont,
             onToast: showOverlayToast,
+            isCrafting: $railCrafting,
             runTarget: $overlayRunTarget)
     }
 
@@ -2367,6 +2449,20 @@ struct PhotoViewerView: View {
 
     /// A Text-tab edit. Motion re-renders; a finished gesture also persists —
     /// the `fieldEditingChanged` discipline, applied to overlays.
+    /// The association menu, on the text itself: see
+    /// `OverlayAssociationMenu`. Acting on it also selects the layer, so the
+    /// rail is left describing the line the menu just changed.
+    @ViewBuilder private func associationMenu(for stored: SceneOverlay) -> some View {
+        OverlayAssociationMenu(
+            document: $overlayDocument,
+            layerID: stored.id,
+            onEdited: {
+                selectedOverlayID = stored.id
+                overlayEdited(commit: true)
+            },
+            onToast: showOverlayToast)
+    }
+
     private func overlayEdited(commit: Bool) {
         // Every edit re-seats the sequenced layers after their parents, so
         // a moved band carries its children with it.
@@ -2527,7 +2623,9 @@ struct PhotoViewerView: View {
         // level, carried into a travelling level per frame — the export does
         // the same in `OverlayExportBake.overlays(at:)`).
         let overlays = overlayDocument.overlays.map(displayOverlay)
-        let suppressed = overlayDrag?.id
+        // The dragged layer AND its travelling followers: all of them are
+        // being carried by proxies until the gesture ends.
+        let suppressed = overlayDrag.map { Set([$0.id] + $0.followers.keys) } ?? []
         let compositePosition = renderedPosition
         let maskSettings = overlayDocument.maskSettings
         let masks = previewMaskSet()
@@ -2771,7 +2869,7 @@ struct PhotoViewerView: View {
     /// two — and `LL_KEYFRAMES=empty` the first-run state the empty spec draws.
     /// Neither is reachable by automation: making them for real means scrubbing
     /// a two-hour shoot and dragging sliders at three separate moments.
-    /// `LL_TEXT=story[,toast]` — stages the design pass's four-layer Prague
+    /// `LL_TEXT=story[,toast][,craft]` — stages the design pass's four-layer Prague
     /// story on a project that has NO text yet (a project with layers is
     /// left alone: the 2 s safety net would otherwise write the staging
     /// over real work), opens the Text tab, and parks the playhead at 13%
@@ -2781,6 +2879,14 @@ struct PhotoViewerView: View {
     private func applyTextHook() {
         guard let hook = ProcessInfo.processInfo.environment["LL_TEXT"], frames.count > 1 else { return }
         let parts = hook.split(separator: ",").map(String.init)
+        // `crafted` stages what Add Crafted Text produces — the design's own
+        // beach line, through the real splitter, layout and insert — so the
+        // crafted result can be measured for its mirror without a model
+        // installed and without typing into the sheet.
+        if parts.contains("crafted"), overlayDocument.overlays.isEmpty {
+            stageCraftedText()
+            return
+        }
         guard parts.contains("story"), overlayDocument.overlays.isEmpty else { return }
         func layer(
             _ runs: [TextRun], label: String = "", size: Double, x: Double, y: Double, bold: Bool,
@@ -2815,7 +2921,10 @@ struct PhotoViewerView: View {
         l1.textStyle?.isBold = true
         l2.animation?.follows = OverlayFollow(layerID: l1.id, gap: 0)
         l3.animation?.follows = OverlayFollow(layerID: l2.id, gap: 0)
-        l4.animation?.follows = OverlayFollow(layerID: l3.id, gap: 0.02)
+        // The URL in the corner is the design's own example of a layer that
+        // waits its turn but does NOT travel: dragging the line above it
+        // leaves it pinned bottom-right, where a byline belongs.
+        l4.animation?.follows = OverlayFollow(layerID: l3.id, gap: 0.02, independentPosition: true)
         overlayDocument.overlays = [l1, l2, l3, l4]
         overlayDocument.resolveFollows()
         selectedOverlayID = l1.id
@@ -2823,6 +2932,28 @@ struct PhotoViewerView: View {
         position = 0.13
         renderedPosition = 0.13
         if parts.contains("toast") { showOverlayToast("Linked — starts after “\(l1.displayName)”") }
+        // `craft` opens the Crafted Text sheet over the staged story, which
+        // is the state its own design mirror is measured from.
+        if parts.contains("craft") { railCrafting = true }
+    }
+
+    /// `LL_TEXT=crafted` — runs a brief through the same path the sheet's
+    /// Send does (splitter → `CraftedTextLayout` → `OverlayDocument.addCrafted`)
+    /// and parks the playhead where the copy has arrived.
+    private func stageCraftedText() {
+        let brief = "A little sand between your toes helps wash away the woes"
+        let parts = CraftedTextLayout.split(brief)
+        let lines = CraftedTextLayout.lines(
+            for: parts, aspect: sourceAspect,
+            measure: { copy, style in
+                TextOverlayRasterizer.emWidth(of: copy, family: nil, isBold: style.isBold)
+            })
+        overlayDocument.addCrafted(
+            lines, at: 0.35, hasTimeline: frames.count > 1, fontFor: { _ in nil })
+        selectedOverlayID = overlayDocument.overlays.first?.id
+        railTab = .text
+        position = 0.35
+        renderedPosition = 0.35
     }
 
     private func applyKeyframeHook() {

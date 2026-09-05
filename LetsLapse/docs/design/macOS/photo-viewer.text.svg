@@ -50,10 +50,22 @@
         <path d="M20 430 L120 470 L20 560 Z" fill="#7A7570"/>
       </g>
       <!-- Selected-layer chrome: solid accent outline around the resting
-           line, the FREE badge 22pt above. -->
+           line, the badge 22pt above. The badge names the LAYER (its ID when
+           it has one) and says what travels with it — "FREE" went, because
+           the name is worth more than the mode; BOX still prefixes a boxed
+           layer, whose dashed outline needs saying. -->
       <rect x="47" y="122" width="312" height="50" fill="none" stroke="#C36A00" stroke-width="1.5" rx="2"/>
-      <rect x="47" y="100" width="128" height="18" rx="9" fill="#C36A00"/>
-      <text x="55" y="113" font-size="10" class="sb" fill="#FFFFFF">FREE · Don't you think</text>
+      <rect x="47" y="100" width="150" height="18" rx="9" fill="#C36A00"/>
+      <text x="55" y="113" font-size="10" class="sb" fill="#FFFFFF">Intro top · +2 follow</text>
+      <!-- The layers that TRAVEL with the selection if it is dragged: a 1pt
+           dashed accent-60% ring, no badge and no handles, drawn whether or
+           not the layer is on screen at the playhead. "visitprague.com" is
+           NOT among them — it follows in time but holds an independent
+           position, which is what a URL pinned to a corner wants. -->
+      <g fill="none" stroke="#C36A00" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="4 3">
+        <rect x="196" y="196" width="230" height="86" rx="2"/>
+        <rect x="330" y="316" width="240" height="46" rx="2"/>
+      </g>
       <text x="662" y="580" font-size="14" fill="#FFFFFF" text-anchor="end">⤢</text>
     </g>
 
@@ -127,6 +139,13 @@
     </g>
 
     <g id="rail" clip-path="url(#rail)">
+      <!-- Add Crafted Text: 44pt, ink, always above the list. Ink and an
+           amber spark so it does not compete with the accent-on-card Add
+           Text below the list — the two are different offers. -->
+      <rect x="696" y="112" width="308" height="44" rx="12" fill="#1C1C1E"/>
+      <text x="838" y="140" font-size="14" fill="#FFB340" text-anchor="end" data-symbol="sparkles">✦</text>
+      <text x="848" y="139.5" font-size="14" class="sb" fill="#FFFFFF">Add Crafted Text</text>
+    <g transform="translate(0,52)">
       <text x="698" y="123" font-size="13" class="sb" fill="#6D6D72">Text Layers</text>
       <text x="1002" y="123" font-size="11" class="mono" fill="#6D6D72" text-anchor="end">4 layers</text>
 
@@ -222,6 +241,7 @@
       <rect x="696" y="698" width="308" height="1" fill="#000" fill-opacity="0.07"/>
       <text x="708" y="719" class="sec"><tspan font-size="9">▸</tspan> REVEAL OUT</text>
       <rect x="962" y="711" width="30" height="16" rx="8" fill="#C36A00"/><circle cx="984" cy="719" r="7" fill="#FFFFFF"/>
+    </g>
     </g>
   </g>
 </svg>

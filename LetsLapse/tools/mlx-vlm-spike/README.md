@@ -20,7 +20,31 @@ Binary: `.build/xcode/Build/Products/Release/vlm-spike` (keep its sibling
 First run `vendor/README.md`'s clone+patch recipe — the build depends on a vendored, patched
 mlx-swift-lm (not committed).
 
+## craft-probe — text-only generation for Crafted Text
+
+A second executable in this package, added 2026-09-04. `lapse craft` owns the
+prompt, the parser and the layout and links no MLX (so CI runs anywhere);
+this owns the weights. Together they drive the Crafted Text path end to end:
+
+```
+xcodebuild -scheme craft-probe -configuration Release \
+  -destination 'platform=macOS,arch=arm64' -derivedDataPath .build/xcode build
+
+lapse craft --prompt split --brief "Visit Prague this summer" \
+  | .build/xcode/Build/Products/Release/craft-probe --stats --temperature 0 \
+  | lapse craft --response - --json
+```
+
+Defaults to the Hugging Face cache snapshot for
+`mlx-community/gemma-4-e2b-it-4bit` — the same directory `SceneAnalyser`
+loads. `--framing auto` (the default) is what the app does: `ChatSession`
+hands a `Chat.Message` to the processor, which applies the model's own
+`chat_template.jinja`. `--framing manual` additionally wraps the prompt in
+Gemma's `<start_of_turn>` framing, i.e. templates the turn TWICE — it exists
+so that can be measured rather than assumed. Do not ship it.
+
 ## Run
+
 
 ```
 .build/xcode/Build/Products/Release/vlm-spike \

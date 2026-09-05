@@ -1,0 +1,48 @@
+```json
+{
+  "parts": [
+    {
+      "copy": "Grand opening",
+      "emphasis": [
+        "Grand",
+        "opening"
+      ],
+      "priority": 2
+    },
+    {
+      "copy": "Riverside cafe",
+      "emphasis": [
+        "riverside",
+        "cafe"
+      ],
+      "priority": 3
+    },
+    {
+      "copy": "Saturday 10am",
+      "emphasis": [
+        "Saturday",
+        "10am"
+      ],
+      "priority": 4
+    },
+    {
+      "copy": "Free coffee",
+      "emphasis": [
+        "Free",
+        "coffee"
+      ],
+      "priority": 5
+    },
+    {
+      "copy": "Grand opening, free coffee",
+      "emphasis": [
+        "Grand",
+        "opening",
+        "free",
+        "coffee"
+      ],
+      "priority": 1
+    }
+  ]
+}
+```

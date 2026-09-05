@@ -1,0 +1,15 @@
+```json
+{
+  "parts": [
+    {
+      "copy": "Visit Prague this summer",
+      "emphasis": [
+        "Visit",
+        "Prague",
+        "summer"
+      ],
+      "priority": 1
+    }
+  ]
+}
+```

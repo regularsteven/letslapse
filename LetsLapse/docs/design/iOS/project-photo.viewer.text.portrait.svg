@@ -36,10 +36,17 @@
       <path d="M0 200 L40 197 L95 193 L175 203 L175 225 L0 250 Z" fill="#2A2A2C"/>
       <path d="M0 280 L70 305 L0 354 Z" fill="#7A7570"/>
     </g>
-    <!-- Selected-layer chrome: amber outline, FREE badge 22pt above; the back chevron floats over the corner. -->
+    <!-- Selected-layer chrome: amber outline, the badge 22pt above; the back chevron floats over the corner.
+         The badge names the LAYER and says what travels with it (2026-09-04). -->
     <rect x="16" y="93" width="184" height="30" fill="none" stroke="#FFB340" stroke-width="1.5" rx="2"/>
-    <rect x="16" y="71" width="122" height="18" rx="9" fill="#FFB340"/>
-    <text x="24" y="84" font-size="10" class="sb" fill="#1C1C1E">FREE · Don't you think</text>
+    <rect x="16" y="71" width="118" height="18" rx="9" fill="#FFB340"/>
+    <text x="24" y="84" font-size="10" class="sb" fill="#1C1C1E">Intro top · +2 follow</text>
+    <!-- The two layers that travel with it, dashed amber 60%. Row 4
+         (visitprague.com) is absent: it holds an independent position. -->
+    <g fill="none" stroke="#FFB340" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="4 3">
+      <rect x="118" y="150" width="150" height="52" rx="2"/>
+      <rect x="196" y="222" width="146" height="26" rx="2"/>
+    </g>
     <circle cx="34" cy="89" r="18" fill="#000" fill-opacity="0.4"/>
     <text x="34" y="94.5" font-size="15" class="sb" fill="#FFFFFF" text-anchor="middle" data-symbol="chevron.left">‹</text>
     <circle cx="365" cy="326" r="16" fill="#000" fill-opacity="0.45"/>
@@ -111,7 +118,14 @@
     <text x="240" y="531.5" font-size="13" class="sb" fill="#FFB340" text-anchor="middle">Frames</text>
     <text x="329" y="531.5" font-size="13" class="sb" fill="#FFB340" text-anchor="middle">Masks</text>
 
-    <!-- Scroll: header + four rows + Add Text -->
+    <!-- Scroll: Add Crafted Text, header, four rows, Add Text. The crafted
+         button is 50pt here (touch), ink with an amber spark, and sits above
+         the list at all times. Everything below it moved down 58pt, so the
+         last row and Add Text now sit below the fold — the list scrolls. -->
+    <rect x="16" y="557" width="361" height="50" rx="12" fill="#1C1C1E"/>
+    <text x="176" y="588" font-size="15" fill="#FFB340" text-anchor="end" data-symbol="sparkles">✦</text>
+    <text x="186" y="587.5" font-size="15" class="sb" fill="#FFFFFF">Add Crafted Text</text>
+    <g transform="translate(0,58)">
     <text x="18" y="574" font-size="13" class="sb" fill="#FFFFFF" fill-opacity="0.55">Text Layers</text>
     <text x="375" y="574" font-size="11" class="mono" fill="#FFFFFF" fill-opacity="0.55" text-anchor="end">4 layers</text>
 
@@ -160,6 +174,7 @@
     </g>
     <rect x="16" y="802" width="361" height="50" rx="12" fill="#1C1C1E"/>
     <text x="196.5" y="832" font-size="15" class="sb" fill="#FFB340" text-anchor="middle"><tspan font-size="17" font-weight="400">+ </tspan>Add Text</text>
+    </g>
     <!-- Home indicator -->
     <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.35"/>
   </g>

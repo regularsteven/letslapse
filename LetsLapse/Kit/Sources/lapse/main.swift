@@ -45,6 +45,31 @@ USAGE:
 
   lapse info <video>                            Print duration / fps / frame estimate
 
+  lapse craft [options]                         Drive the Crafted Text path headless
+                            The Text tab's "Add Crafted Text" without the app: a
+                            brief (or a model's raw answer) in, the laid-out
+                            layers out. No model, no device, no window — which is
+                            what makes it testable in CI.
+      --brief TEXT          The brief. On its own this runs the NO-MODEL path —
+                            the same splitter the app uses when nothing is
+                            installed.
+      --response PATH       A model's raw answer to parse instead of splitting;
+                            `-` reads stdin, so a real generation can be piped
+                            in. Exit 65 if it cannot be used.
+      --prompt KIND         Print the prompt that WOULD be sent (split |
+                            candidates) and stop. Needs --brief.
+      --options             Read --response as a "Needs work" answer (three
+                            directions) rather than as parts.
+      --aspect W:H          Output frame aspect (default 4:3)
+      --playhead N          Where the copy lands, 0…1 (default 0.35)
+      --font-display NAME   Imported face for the payoff line (--measure coretext)
+      --font-hand NAME      Imported face for the lines around it
+      --measure NAME        estimate (default, font-free and identical on every
+                            machine) | coretext (real metrics, for a true fit)
+      --json                Machine-readable report
+      --expect-lines N      Exit 65 unless exactly N lines came out
+      --expect-payoff TEXT  Exit 65 unless that line is the priority-1 payoff
+
   lapse slice <blended-clip> [options]          Time-slice a finished blended clip
       -o PATH               Write the sliced animation here (mp4)
       --poster PATH         Write the full-source poster here (png)
@@ -102,6 +127,8 @@ EXAMPLES:
   lapse synth -o test.mov --frames 240 --pattern box
   lapse blend test.mov -o blended.mp4 --ramp 1:40 --curve ease-in-out
   lapse stack shots/*.jpg -o stacked.png
+  lapse craft --brief "A little sand between your toes helps wash away the woes"
+  lapse craft --response reply.json --json --expect-lines 2
 """
 
 func printErr(_ message: String) {
@@ -385,6 +412,37 @@ do {
                 url: inputURL, recipeJSON: recipeJSON, outPath: outPath, scale: scale,
                 quality: min(max(quality, 1), 100) / 100)
         }
+
+    case "craft":
+        let brief = takeOption(["--brief"])
+        let responsePath = takeOption(["--response"])
+        let promptKind = takeOption(["--prompt"])
+        let wantsOptions = takeFlag(["--options"])
+        let aspectText = takeOption(["--aspect"]) ?? "4:3"
+        let playhead = Double(takeOption(["--playhead"]) ?? "0.35") ?? 0.35
+        let measure = takeOption(["--measure"]) ?? "estimate"
+        let asJSON = takeFlag(["--json"])
+        let expectLines = takeOption(["--expect-lines"]).flatMap(Int.init)
+        let expectPayoff = takeOption(["--expect-payoff"])
+        var fonts: [CraftedTextFontRole: String] = [:]
+        if let display = takeOption(["--font-display"]) { fonts[.display] = display }
+        if let hand = takeOption(["--font-hand"]) { fonts[.hand] = hand }
+        // "4:3", "16:9" or a bare ratio — the frame the lines are fitted to.
+        let aspect: Double
+        let parts = aspectText.split(separator: ":")
+        if parts.count == 2, let w = Double(parts[0]), let h = Double(parts[1]), h > 0 {
+            aspect = w / h
+        } else if let ratio = Double(aspectText), ratio > 0 {
+            aspect = ratio
+        } else {
+            fail("--aspect expects W:H (e.g. 4:3) or a ratio")
+        }
+        guard args.isEmpty else { fail("craft takes options only (unexpected: \(args.joined(separator: " ")))") }
+        try runCraft(
+            brief: brief, responsePath: responsePath, promptKind: promptKind,
+            wantsOptions: wantsOptions, aspect: aspect, playhead: playhead,
+            fonts: fonts, measure: measure, asJSON: asJSON,
+            expectLines: expectLines, expectPayoff: expectPayoff)
 
     case "poster":
         guard let outputPath = takeOption(["-o", "--output"]) else { fail("poster needs -o <output.png>") }

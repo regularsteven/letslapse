@@ -1,0 +1,10 @@
+{"parts":[
+  {"copy":"one","emphasis":[],"priority":2},
+  {"copy":"two","emphasis":[],"priority":3},
+  {"copy":"three","emphasis":[],"priority":4},
+  {"copy":"four","emphasis":[],"priority":5},
+  {"copy":"five","emphasis":[],"priority":5},
+  {"copy":"six","emphasis":[],"priority":5},
+  {"copy":"seven","emphasis":[],"priority":5},
+  {"copy":"eight","emphasis":[],"priority":1}
+]}

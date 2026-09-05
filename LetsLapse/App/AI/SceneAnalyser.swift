@@ -142,6 +142,28 @@ actor SceneAnalyser {
         return result
     }
 
+    /// Text in, text out — no image, same resident weights.
+    ///
+    /// Crafted Text asks the model to turn a brief into on-screen copy, which
+    /// is the first thing this app has wanted from a VLM that is not about a
+    /// picture. It shares `loadContainer` deliberately: a second container
+    /// would be another 2.8 GB of weights for a job the loaded ones can do.
+    func compose(prompt: String, maxTokens: Int = 320, temperature: Float = 0.7) async throws -> String {
+        let container = try await loadContainer(status: nil)
+        let session = ChatSession(
+            container,
+            generateParameters: GenerateParameters(
+                maxTokens: maxTokens, temperature: temperature))
+        var text = ""
+        for try await generation in session.streamDetails(to: prompt) {
+            if case .chunk(let chunk) = generation { text += chunk }
+        }
+        // Same housekeeping `analyse` does: MLX keeps a generation's
+        // intermediates in its own cache until something asks for them back.
+        MLX.Memory.clearCache()
+        return text
+    }
+
     private func generate(
         imageURL: URL,
         place: String?,
@@ -295,6 +317,10 @@ actor SceneAnalyser {
         light: String? = nil,
         status: (@Sendable (String) -> Void)? = nil
     ) async throws -> SceneMetadata {
+        throw Failure.unavailable
+    }
+
+    func compose(prompt: String, maxTokens: Int = 320, temperature: Float = 0.7) async throws -> String {
         throw Failure.unavailable
     }
 

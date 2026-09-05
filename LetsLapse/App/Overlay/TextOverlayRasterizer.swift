@@ -358,6 +358,23 @@ enum TextOverlayRasterizer {
         return layout
     }
 
+    /// How wide one line of copy is, in EMs, in the face that will draw it.
+    ///
+    /// Crafted text sizes its lines to fit the frame, and "fit" is a
+    /// question about the actual face: the same sentence is half again as
+    /// wide in a wide poster face as in a condensed one. Measuring at a
+    /// nominal 100 pt and dividing gives a size-independent number the
+    /// layout can solve against before any size has been chosen.
+    static func emWidth(of copy: String, family: String?, isBold: Bool) -> Double {
+        let nominal: CGFloat = 100
+        let font = resolveFont(family: family, size: nominal, bold: isBold, italic: false)
+        let attributed = NSAttributedString(
+            string: copy, attributes: [.font: font])
+        let line = CTLineCreateWithAttributedString(attributed)
+        let width = CTLineGetTypographicBounds(line, nil, nil, nil)
+        return max(Double(width) / Double(nominal), 0.001)
+    }
+
     /// The font a style asks for, falling back to the system face when the
     /// named family is not installed — a project authored on a Mac with a
     /// custom font must still open on a phone that lacks it. Families

@@ -327,7 +327,7 @@ enum SceneAwareCompositor {
     static func compositedPreview(
         base: CGImage,
         overlays: [SceneOverlay],
-        suppressing suppressed: UUID?,
+        suppressing suppressed: Set<UUID>,
         position: Double,
         masks: MaskSet,
         settings: SegmentationSettings,
@@ -359,7 +359,11 @@ enum SceneAwareCompositor {
         base: CIImage,
         frameSize: CGSize,
         overlays: [SceneOverlay],
-        suppressing suppressed: UUID?,
+        /// The layers the EDITOR is carrying itself — a dragged layer and
+        /// the followers travelling with it, drawn by SwiftUI proxies for the
+        /// length of the gesture so they move at pointer rate. Empty for an
+        /// export, which has nothing to drag.
+        suppressing suppressed: Set<UUID>,
         position: Double,
         masks: MaskSet,
         settings: SegmentationSettings,
@@ -379,7 +383,7 @@ enum SceneAwareCompositor {
         // Layers are stored front-to-back (index 0 is frontmost), and each
         // composite paints OVER what came before — so the array is walked in
         // reverse and row 1 of the Text tab lands on top.
-        for overlay in overlays.reversed() where overlay.id != suppressed {
+        for overlay in overlays.reversed() where !suppressed.contains(overlay.id) {
             let onion = editorPreview && overlay.onionSkin
             guard overlay.isVisible || onion else { continue }
             guard let spec = TextOverlayRasterizer.spec(
@@ -464,7 +468,7 @@ enum SceneAwareCompositor {
         let base = FrameRotation.rotated(CIImage(cvPixelBuffer: buffer), degrees: rotationDegrees)
         let composited = composited(
             base: base, frameSize: base.extent.size,
-            overlays: overlays, suppressing: nil, position: position,
+            overlays: overlays, suppressing: [], position: position,
             masks: masks, settings: settings, debugRegion: nil,
             editorPreview: false, rotationDegrees: rotationDegrees)
         // Nothing drawn and nothing levelled: the frame appends untouched.
@@ -503,7 +507,7 @@ enum SceneAwareCompositor {
         let composited = composited(
             base: base,
             frameSize: CGSize(width: image.width, height: image.height),
-            overlays: overlays, suppressing: nil, position: 1,
+            overlays: overlays, suppressing: [], position: 1,
             masks: masks, settings: settings, debugRegion: nil,
             editorPreview: false, rotationDegrees: rotationDegrees, settled: true)
         guard composited != nil || levelling else { return nil }

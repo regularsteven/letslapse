@@ -1,0 +1,79 @@
+<svg viewBox="0 0 393 852" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Interval grading viewer · Text tab · Add Crafted Text · portrait</title>
+  <desc>Mirrors App/Overlay/CraftedTextSheet.swift as raised on iPhone from App/Overlay/OverlayEditingPanel.swift's craftButton — NEW 2026-09-04 from the Claude Design handoff &quot;Photo viewer text transitions&quot; TURN 3. The handoff's iPhone file was NOT re-exported for turns 3 and 4 (it is byte-identical to the version already shipped), so this treatment is DERIVED, not drawn: the sheet is the Mac card's content at touch sizes in the dark editor idiom, agreed with Steven on 2026-09-04 before the build.
+
+PRESENTATION: a sheet with [.medium, .large] detents and a visible drag indicator, forced to .preferredColorScheme(.dark) over LL.ink — the Text tab is the dark full-screen cover, and a sheet raised from it that came up white would look like a different app (it did, on the first simulator run). Content is top-aligned with a trailing Spacer so the brief field cannot stretch to fill the screen; the field is a FIXED height (88 in the prompt state, 96 here) for the same reason.
+
+DRAWN HERE: the SIMPLE state, which is what an iPhone with no LANGUAGE model installed opens — the state the 16 Pro simulator showed on 2026-09-04, where the active catalogue entry was the built-in Vision tagger. Only an MLX entry counts as available (Vision tags scenes and the Core ML entry segments them; neither can write a word), so this state is not an error, it is the honest offer: one line per layer, in the user's own words, laid out and linked exactly as the model's answer would be. Header ✦ CRAFTED TEXT (11/700 +0.5, white 55%) and a 22pt ✕ disc on #2C2C2E; title &quot;Add text&quot; 19/700; the helper line 12pt white 55%; the field (96 tall, radius 8, 1px white-22% border, 14pt, the two-line placeholder); the notice row (amber 8%, radius 10: ✦ &quot;Enable AI to enhance this experience&quot; and &quot;Settings › AI Models ›&quot; 11.5/600 amber); and the Add pill (32pt, amber, #1C1C1E label, 40% while the field is empty) reading &quot;Add line&quot; or &quot;Add N lines&quot;.
+
+THE OTHER THREE STATES are the Mac's, at these sizes — see macOS/photo-viewer.text.crafted.svg for the prompt, thinking and candidates states and for what is done with the parts that come back. WHAT LANDS: LL_TEXT=crafted stages the result on this simulator — the brief &quot;A little sand between your toes helps wash away the woes&quot; through the splitter, the layout and the insert — and it lands as two layers, &quot;Crafted · line 1&quot; (white, the longest word lemon) and &quot;Crafted · line 2&quot; (the payoff: amber, larger, Element · Pop), the second following the first, both fitted to 84% of the frame and stacked on 0.56 of its height. The badge on the picture then reads &quot;Crafted · line 1 · +1 follows&quot;.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="0" y="0" width="393" height="852"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5D7EA3"/>
+      <stop offset="0.55" stop-color="#9DB8D2"/>
+      <stop offset="1" stop-color="#E8CFAA"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#screen)">
+    <rect x="0" y="0" width="393" height="852" fill="#000000"/>
+
+    <!-- Status bar -->
+    <text x="42" y="36" font-size="15" class="sb" fill="#FFFFFF">15:42</text>
+    <rect x="330" y="24" width="24" height="12" rx="3.5" fill="#FFFFFF" fill-opacity="0.9"/>
+
+    <!-- The Text tab behind the sheet: picture and strip, dimmed by the
+         sheet's own scrim the way a system sheet dims what it covers. -->
+    <g id="behind">
+      <rect x="0" y="59" width="393" height="295" fill="url(#sky)"/>
+      <path d="M250 59 L393 59 L393 250 L300 250 Z" fill="#3E3B3A"/>
+      <rect x="0" y="230" width="393" height="124" fill="#4A4E52"/>
+      <rect x="0" y="354" width="393" height="80" fill="#000000"/>
+      <circle cx="31" cy="381" r="15" fill="#1C1C1E"/>
+      <text x="31" y="386" font-size="12" fill="#FFB340" text-anchor="middle" data-symbol="play.fill">▶</text>
+      <rect x="56" y="380" width="250" height="3" rx="1.5" fill="#FFFFFF" fill-opacity="0.25"/>
+      <rect x="0" y="59" width="393" height="375" fill="#000000" fill-opacity="0.45"/>
+    </g>
+
+    <!-- THE SHEET — medium detent, dark, drag indicator. -->
+    <g id="sheet">
+      <rect x="0" y="434" width="393" height="418" rx="14" fill="#1C1C1E"/>
+      <rect x="181" y="444" width="31" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.3"/>
+
+      <!-- Header -->
+      <text x="20" y="474" font-size="13" fill="#FFB340" data-symbol="sparkles">✦</text>
+      <text x="38" y="473.5" font-size="11" class="b" letter-spacing="0.5" fill="#FFFFFF" fill-opacity="0.55">CRAFTED TEXT</text>
+      <circle cx="362" cy="470" r="11" fill="#2C2C2E"/>
+      <text x="362" y="474" font-size="11" fill="#FFFFFF" fill-opacity="0.55" text-anchor="middle" data-symbol="xmark">✕</text>
+
+      <!-- Title + helper -->
+      <text x="20" y="508" font-size="19" class="b" letter-spacing="-0.2" fill="#FFFFFF">Add text</text>
+      <text x="20" y="530" font-size="12" fill="#FFFFFF" fill-opacity="0.55">One line per layer. Lines stack top to bottom and follow</text>
+      <text x="20" y="545" font-size="12" fill="#FFFFFF" fill-opacity="0.55">each other in time.</text>
+
+      <!-- Brief field, fixed 96 -->
+      <rect x="20.5" y="560.5" width="352" height="96" rx="8" fill="none" stroke="#FFFFFF" stroke-opacity="0.22"/>
+      <text x="31" y="582" font-size="14" fill="#FFFFFF" fill-opacity="0.35">A little sand between your toes</text>
+      <text x="31" y="601" font-size="14" fill="#FFFFFF" fill-opacity="0.35">helps wash away the woes</text>
+
+      <!-- Enable AI notice -->
+      <rect x="20" y="672" width="353" height="44" rx="10" fill="#FFB340" fill-opacity="0.08"/>
+      <text x="34" y="699" font-size="12" fill="#FFB340" data-symbol="sparkles">✦</text>
+      <text x="50" y="694" font-size="12.5" fill="#FFFFFF">Enable AI to enhance</text>
+      <text x="50" y="708" font-size="12.5" fill="#FFFFFF">this experience</text>
+      <text x="359" y="699" font-size="11.5" class="sb" fill="#FFB340" text-anchor="end">Settings › AI Models ›</text>
+
+      <!-- Add pill, dimmed while the field is empty -->
+      <rect x="288" y="734" width="85" height="32" rx="16" fill="#FFB340" fill-opacity="0.4"/>
+      <text x="330.5" y="754" font-size="13" class="sb" fill="#1C1C1E" text-anchor="middle">Add line</text>
+
+      <text x="20" y="800" font-size="10.5" fill="#FFFFFF" fill-opacity="0.45">With a language model installed this opens on the PROMPT state instead:</text>
+      <text x="20" y="814" font-size="10.5" fill="#FFFFFF" fill-opacity="0.45">&quot;What would you like to communicate?&quot;, Final copy · Needs work, Send.</text>
+    </g>
+
+    <!-- Home indicator -->
+    <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.35"/>
+  </g>
+</svg>

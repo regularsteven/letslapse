@@ -1,0 +1,164 @@
+<svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Photo viewer · Text tab · association menu · 1000×700</title>
+  <desc>Mirrors App/Overlay/OverlayAssociationMenu.swift, raised by the .contextMenu on App/PhotoViewerView.swift's overlayProxy and on OverlayEditingPanel's layerHeader — NEW 2026-09-04 from the Claude Design handoff &quot;Photo viewer text transitions&quot; TURN 4 (&quot;Association menu + independent position&quot;). STAGED: LL_EDITOR=&lt;interval project&gt; LL_RAIL=text LL_TEXT=story, then right-click the text &quot;Prague&quot; on the picture (the drawing shows the menu for row 2).
+
+WHERE IT COMES FROM: right-click or ⌃-click on the Mac, touch and hold on iOS — which is exactly what .contextMenu already means on each platform, so the menu is NATIVE rather than the hand-drawn 236pt popover the prototype used; a drawn popover would have had to re-earn all three gestures. It opens on the TEXT ITSELF on the picture and on the layer's row in the rail, because the question it answers — what should this line wait for? — is asked while looking at the picture at least as often as while looking at the list.
+
+CONTENTS: one section whose header carries both halves of the design's title block, &quot;&lt;layer name&gt; · starts after&quot; (or &quot;· start after…&quot; when the layer follows nothing) — a native menu has one header where the design drew a title line and a section label. Then the candidates: every other layer EXCEPT this one's own descendants (a parent cannot follow its child — the same rule the rail's After-layer popover uses), named by displayName, so &quot;ID · copy&quot; when an ID is set. A checkmark marks the current parent, and picking it again UNLINKS, which is what the tick invites. When the layer is linked, a second section adds &quot;Independent Position&quot; (ticked when on) and the destructive &quot;Remove association&quot;.
+
+INDEPENDENT POSITION is the one thing about a link that is about PLACE rather than time. Off (the default) a follower travels with its parent when the parent is dragged across the picture; on, it keeps the spot it was put in and only the timing follows — which is what the staged story's &quot;visitprague.com&quot; wants, pinned bottom-right while the headline above it moves. It lives on the ASSOCIATION (OverlayFollow.independentPosition, key &quot;i&quot;, decodeIfPresent, off on every older sidecar), because it has no meaning without one: a layer that follows nothing already holds its own position. Removing the association therefore forgets it — which is what the menu item says it does. The rail draws the same setting as a 16pt checkbox row under the offset stepper, with the footnote &quot;Off: moves with its parent on the picture. On: stays where you put it; only the timing follows.&quot;
+
+WHAT A DRAG NOW CARRIES: OverlaySequencing.movers(of:in:) is the drag's manifest — everything following the dragged layer, down the chain, minus any layer holding an independent position AND minus that layer's own followers, which are pinned to it rather than to the layer being moved. They are drawn dashed (1pt accent 60%) while their parent is selected so the group is visible BEFORE the gesture rather than as a surprise during it, they take the dragged layer's translation after its centre snap so the formation is preserved, and the whole set is suppressed from the composite for the length of the gesture (SceneAwareCompositor.composited(suppressing:) takes a Set now, not one id). The selected layer's badge says what it will take: &quot;&lt;name&gt; · +2 follow&quot;. On release: &quot;Moved with 2 followers&quot;.
+
+TOASTS: &quot;Starts after “…”&quot;, &quot;Association removed&quot;, &quot;Holds its own position&quot; / &quot;Moves with its parent&quot; — 28pt dark capsules centred over the media, 1.8 s, the same ones the rail floats.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <clipPath id="photo"><rect x="20" y="70" width="660" height="495"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5D7EA3"/>
+      <stop offset="0.5" stop-color="#9DB8D2"/>
+      <stop offset="1" stop-color="#F0D2A8"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C9B9A4"/>
+      <stop offset="1" stop-color="#3C3F44"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}.sec{font-size:11px;font-weight:600;letter-spacing:.5px;fill:#6D6D72}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River and bridge sunset jpeg i12</text>
+    </g>
+
+    <!-- Media column. The playhead is parked late enough that all four
+         layers are up, so the menu has something to point at. -->
+    <g id="media">
+      <rect x="20" y="48" width="660" height="540" fill="#000000"/>
+      <g clip-path="url(#photo)">
+        <rect x="20" y="70" width="660" height="495" fill="url(#sky)"/>
+        <ellipse cx="150" cy="120" rx="120" ry="18" fill="#FFFFFF" opacity="0.35"/>
+        <ellipse cx="330" cy="200" rx="200" ry="20" fill="#FFFFFF" opacity="0.28"/>
+        <path d="M500 70 L680 70 L680 400 L560 400 L540 300 Z" fill="#3E3B3A"/>
+        <path d="M470 70 L520 70 L560 400 L540 400 Z" fill="#2B2A2A"/>
+        <rect x="20" y="330" width="660" height="235" fill="url(#river)"/>
+        <path d="M20 300 L60 296 L150 290 L290 306 L290 340 L20 380 Z" fill="#2A2A2C"/>
+
+        <!-- The staged story, settled. -->
+        <text x="61" y="160" font-size="26" class="b" fill="#FFFFFF">Don't you think</text>
+        <text x="120" y="232" font-size="74" class="b" fill="#FFFFFF">Prague</text>
+        <text x="330" y="300" font-size="26" class="b" fill="#FFFFFF">is worth a <tspan fill="#3A3A3C">LITTLE</tspan> visit?</text>
+        <text x="330" y="540" font-size="34" class="b" fill="#F3E37C">visitprague.com</text>
+
+        <!-- Row 2 is the layer the menu was raised on: selected, and its own
+             follower (row 3) dashed. visitprague.com is NOT dashed — it is
+             independent, so it stays where it is when Prague is dragged. -->
+        <rect x="112" y="176" width="300" height="70" fill="none" stroke="#C36A00" stroke-width="1.5" rx="2"/>
+        <rect x="112" y="154" width="132" height="18" rx="9" fill="#C36A00"/>
+        <text x="120" y="167" font-size="10" class="sb" fill="#FFFFFF">Prague · +1 follows</text>
+        <rect x="322" y="272" width="252" height="42" rx="2" fill="none" stroke="#C36A00" stroke-opacity="0.6" stroke-width="1" stroke-dasharray="4 3"/>
+      </g>
+    </g>
+
+    <!-- THE MENU — native, raised at the pointer over "Prague". -->
+    <g id="menu">
+      <rect x="250" y="228" width="236" height="216" rx="10" fill="#FFFFFF" fill-opacity="0.98"/>
+      <rect x="250.5" y="228.5" width="235" height="215" rx="10" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <text x="260" y="248" font-size="11" class="sb" fill="#8A8A8E">Prague · starts after</text>
+
+      <rect x="254" y="256" width="228" height="26" rx="6" fill="#F2F2F7"/>
+      <text x="264" y="273" font-size="11" fill="#C36A00" data-symbol="arrow.turn.down.right">⤷</text>
+      <text x="282" y="273" font-size="12.5" fill="#1C1C1E">Intro top<tspan fill-opacity="0.5"> · Don't you think</tspan></text>
+      <text x="470" y="273" font-size="12" fill="#C36A00" text-anchor="end" data-symbol="checkmark">✓</text>
+
+      <text x="264" y="299" font-size="11" fill="#C36A00" data-symbol="arrow.turn.down.right">⤷</text>
+      <text x="282" y="299" font-size="12.5" fill="#1C1C1E">visitprague.com</text>
+
+      <!-- Row 3 is Prague's own descendant, so it is NOT offered. -->
+      <rect x="254" y="312" width="228" height="1" fill="#000" fill-opacity="0.08"/>
+
+      <text x="282" y="336" font-size="12.5" fill="#1C1C1E">Independent Position</text>
+      <rect x="254" y="348" width="228" height="1" fill="#000" fill-opacity="0.08"/>
+      <text x="282" y="372" font-size="12.5" class="sb" fill="#FF3B30">Remove association</text>
+
+      <text x="264" y="404" font-size="10.5" fill="#8A8A8E">Candidates exclude this layer's own</text>
+      <text x="264" y="418" font-size="10.5" fill="#8A8A8E">descendants — &quot;is worth a LITTLE visit?&quot;</text>
+      <text x="264" y="432" font-size="10.5" fill="#8A8A8E">follows Prague, so it cannot be its parent.</text>
+    </g>
+
+    <g id="railtabs">
+      <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
+      <text x="737" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Editor</text>
+      <rect x="775" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
+      <text x="812" y="82.5" font-size="13" class="sb" fill="#FFFFFF" text-anchor="middle">Text</text>
+      <text x="888" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Frames</text>
+      <text x="964" y="82.5" font-size="13" class="sb" fill="#C36A00" text-anchor="middle">Masks</text>
+    </g>
+
+    <!-- The rail, with the linked layer's card open at the sequencing block:
+         the parent picker, the offset stepper and the Independent Position
+         checkbox the menu mirrors. -->
+    <g id="rail">
+      <rect x="696" y="112" width="308" height="44" rx="12" fill="#1C1C1E"/>
+      <text x="838" y="140" font-size="14" fill="#FFB340" text-anchor="end" data-symbol="sparkles">✦</text>
+      <text x="848" y="139.5" font-size="14" class="sb" fill="#FFFFFF">Add Crafted Text</text>
+
+      <text x="698" y="175" font-size="13" class="sb" fill="#6D6D72">Text Layers</text>
+      <text x="1002" y="175" font-size="11" class="mono" fill="#6D6D72" text-anchor="end">4 layers</text>
+
+      <rect x="696" y="188" width="308" height="240" rx="12" fill="#FFFFFF"/>
+      <rect x="696.5" y="188.5" width="307" height="239" rx="12" fill="none" stroke="#C36A00" stroke-opacity="0.55"/>
+      <rect x="696" y="188" width="308" height="38" rx="12" fill="#C36A00" fill-opacity="0.06"/>
+      <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="709" y="203" width="10" height="1.6"/><rect x="709" y="207" width="10" height="1.6"/><rect x="709" y="211" width="10" height="1.6"/></g>
+      <text x="732" y="211" font-size="12" fill="#3A3A3C" data-symbol="eye">◉</text>
+      <text x="750" y="212" font-size="13" class="sb" fill="#000">Prague</text>
+      <rect x="893" y="200" width="16" height="16" rx="8" fill="#C36A00" fill-opacity="0.1"/>
+      <text x="901" y="212" font-size="9" fill="#C36A00" text-anchor="middle" data-symbol="arrow.turn.down.right">⤷</text>
+      <text x="931" y="211" font-size="11" fill="#C36A00" text-anchor="middle" data-symbol="wand.and.stars">✦</text>
+      <text x="984" y="211" font-size="11" fill="#8A8A8E" text-anchor="middle" data-symbol="chevron.right">⌄</text>
+
+      <!-- Starts: After layer -->
+      <text x="708" y="256" font-size="12" class="sb" fill="#6D6D72">Starts</text>
+      <rect x="752" y="239" width="152" height="26" rx="13" fill="#F2F2F7"/>
+      <text x="785" y="256" font-size="11.5" class="sb" fill="#C36A00" text-anchor="middle">At time</text>
+      <rect x="818" y="241" width="84" height="22" rx="11" fill="#C36A00"/>
+      <text x="860" y="256" font-size="11.5" class="sb" fill="#FFFFFF" text-anchor="middle">After layer</text>
+
+      <!-- Parent picker + offset stepper -->
+      <rect x="708" y="275" width="180" height="26" rx="7" fill="#F2F2F7"/>
+      <text x="720" y="292" font-size="10" fill="#C36A00" data-symbol="arrow.turn.down.right">⤷</text>
+      <text x="736" y="292" font-size="12" fill="#1C1C1E">Intro top</text>
+      <text x="876" y="292" font-size="9" fill="#8A8A8E" text-anchor="middle">⌃⌄</text>
+      <rect x="896" y="275" width="96" height="26" rx="7" fill="#F2F2F7"/>
+      <text x="910" y="292" font-size="11" class="b" fill="#C36A00" text-anchor="middle">−</text>
+      <text x="944" y="292" font-size="11.5" class="sb mono" fill="#1C1C1E" text-anchor="middle">+0s</text>
+      <text x="978" y="292" font-size="11" class="b" fill="#C36A00" text-anchor="middle">+</text>
+      <text x="708" y="317" font-size="10.5" fill="#8A8A8E">Offset is measured from the parent's reveal end;</text>
+      <text x="708" y="330" font-size="10.5" fill="#8A8A8E">negative overlaps them.</text>
+
+      <!-- Independent Position -->
+      <rect x="708.5" y="344.5" width="15" height="15" rx="4" fill="#FFFFFF" stroke="#000" stroke-opacity="0.3"/>
+      <text x="732" y="357" font-size="12" class="sb" fill="#1C1C1E">Independent Position</text>
+      <text x="708" y="377" font-size="10.5" fill="#8A8A8E">Off: moves with its parent on the picture. On:</text>
+      <text x="708" y="390" font-size="10.5" fill="#8A8A8E">stays where you put it; only the timing follows.</text>
+
+      <!-- Row 4, whose own checkbox IS ticked. -->
+      <rect x="696" y="440" width="308" height="38" rx="12" fill="#FFFFFF"/>
+      <g fill="#C7C7CC" data-symbol="line.3.horizontal"><rect x="709" y="455" width="10" height="1.6"/><rect x="709" y="459" width="10" height="1.6"/><rect x="709" y="463" width="10" height="1.6"/></g>
+      <text x="732" y="463" font-size="12" fill="#3A3A3C" data-symbol="eye">◉</text>
+      <text x="750" y="464" font-size="13" class="sb" fill="#000">visitprague.com</text>
+      <rect x="893" y="452" width="16" height="16" rx="8" fill="#C36A00" fill-opacity="0.1"/>
+      <text x="901" y="464" font-size="9" fill="#C36A00" text-anchor="middle" data-symbol="arrow.turn.down.right">⤷</text>
+      <text x="984" y="463" font-size="11" fill="#8A8A8E" text-anchor="middle" data-symbol="chevron.right">›</text>
+      <text x="708" y="498" font-size="10.5" fill="#8A8A8E">Row 4 follows row 3 in time but holds its own</text>
+      <text x="708" y="511" font-size="10.5" fill="#8A8A8E">position, so it is not dashed and does not travel.</text>
+    </g>
+  </g>
+
+  <text x="20" y="750" font-size="12" class="sb" fill="#6D6D72">Association menu · right-click / ⌃-click / touch and hold, on the text or on its row</text>
+  <text x="20" y="770" font-size="11" fill="#8A8A8E">Turn 4 of the &quot;Photo viewer text transitions&quot; handoff. Native menu; Independent Position lives on the association.</text>
+</svg>

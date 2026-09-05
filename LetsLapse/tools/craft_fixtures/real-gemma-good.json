@@ -1,0 +1,21 @@
+```json
+{
+  "parts": [
+    {
+      "copy": "Sand between your toes",
+      "emphasis": [
+        "Sand"
+      ],
+      "priority": 2
+    },
+    {
+      "copy": "Helps wash away woes",
+      "emphasis": [
+        "wash",
+        "woes"
+      ],
+      "priority": 1
+    }
+  ]
+}
+```

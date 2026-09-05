@@ -468,24 +468,40 @@ public struct OverlayReveal: Codable, Equatable, Sendable {
 }
 
 /// "Starts after another layer": this layer's reveal opens `gap` after its
-/// parent's reveal ends, and moves with it.
+/// parent's reveal ends, and — unless it holds its own position — travels
+/// with the parent on the picture too.
 public struct OverlayFollow: Codable, Equatable, Sendable {
     public var layerID: UUID
     /// Source fraction, measured from `parent.reveal.end`; negative overlaps
     /// the parent's reveal.
     public var gap: Double = 0
+    /// On: only the TIMING follows. The layer keeps the spot it was put in
+    /// when its parent is dragged across the picture — which is what a
+    /// pinned byline or a URL in a corner needs, since it belongs to the
+    /// story's clock but not to the headline's place on the frame.
+    ///
+    /// It lives on the association rather than the layer because it has no
+    /// meaning without one: a layer that follows nothing already holds its
+    /// own position. Removing the association therefore forgets it, which is
+    /// the same thing the menu says it does.
+    public var independentPosition: Bool = false
 
-    private enum CodingKeys: String, CodingKey { case layerID = "p", gap = "g" }
+    private enum CodingKeys: String, CodingKey {
+        case layerID = "p", gap = "g", independentPosition = "i"
+    }
 
-    public init(layerID: UUID, gap: Double = 0) {
+    public init(layerID: UUID, gap: Double = 0, independentPosition: Bool = false) {
         self.layerID = layerID
         self.gap = gap
+        self.independentPosition = independentPosition
     }
 
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         layerID = try c.decode(UUID.self, forKey: .layerID)
         gap = try c.decodeIfPresent(Double.self, forKey: .gap) ?? 0
+        independentPosition = try c.decodeIfPresent(
+            Bool.self, forKey: .independentPosition) ?? false
     }
 }
 
@@ -557,11 +573,17 @@ public struct OverlayAnimation: Codable, Equatable, Sendable {
     public static let alwaysOn = OverlayAnimation(
         reveal: OverlayReveal(unit: .element, style: nil, start: 0, end: 0))
 
-    /// The band Add Text opens with: a 6% fade in at the playhead.
+    /// The band Add Text opens with: the copy simply appears at the
+    /// playhead. Plain text arrives with NO reveal style — a hard cut —
+    /// because someone typing a line is placing it, not choreographing it,
+    /// and a style chosen for them is a style they have to notice and
+    /// undo. Crafted lines are the opposite case and always arrive
+    /// animated; the band is kept here either way so choosing a style is a
+    /// tap rather than a re-timing.
     public static func seeded(at playhead: Double) -> OverlayAnimation {
         let start = min(max(playhead, 0), 0.9)
         return OverlayAnimation(
-            reveal: OverlayReveal(unit: .element, style: .fade, start: start, end: min(start + 0.06, 1)))
+            reveal: OverlayReveal(unit: .element, style: nil, start: start, end: min(start + 0.06, 1)))
     }
 
     /// The exit the toggle seeds when there was none: a short fade a while
@@ -666,6 +688,29 @@ public enum OverlaySequencing {
         while let next = frontier.popLast() {
             for layer in layers where layer.animation?.follows?.layerID == next && !out.contains(layer.id) {
                 out.insert(layer.id)
+                frontier.append(layer.id)
+            }
+        }
+        return out
+    }
+
+    /// The layers that travel with `id` when it is DRAGGED across the
+    /// picture: everything following it, down the chain, minus any layer
+    /// holding an independent position — and minus that layer's own
+    /// followers, which are pinned to it rather than to the layer being
+    /// moved. A subtree that opts out opts its children out with it.
+    ///
+    /// Timing is unaffected: an independent layer still re-seats after its
+    /// parent's reveal, which is the whole point of the distinction.
+    public static func movers(of id: UUID, in layers: [Layer]) -> [UUID] {
+        var out: [UUID] = []
+        var frontier: [UUID] = [id]
+        while let next = frontier.popLast() {
+            for layer in layers {
+                guard let follow = layer.animation?.follows, follow.layerID == next,
+                      !follow.independentPosition, !out.contains(layer.id), layer.id != id
+                else { continue }
+                out.append(layer.id)
                 frontier.append(layer.id)
             }
         }

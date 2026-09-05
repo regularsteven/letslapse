@@ -1,0 +1,34 @@
+```json
+{
+  "parts": [
+    {
+      "copy": "Time passes.",
+      "emphasis": [
+        "Time"
+      ],
+      "priority": 2
+    },
+    {
+      "copy": "Whether you watch it",
+      "emphasis": [
+        "you"
+      ],
+      "priority": 3
+    },
+    {
+      "copy": "or not.",
+      "emphasis": [
+        "not"
+      ],
+      "priority": 4
+    },
+    {
+      "copy": "Time passes.",
+      "emphasis": [
+        "Time"
+      ],
+      "priority": 5
+    }
+  ]
+}
+```
