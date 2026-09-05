@@ -60,7 +60,9 @@ Air M3:** 0.4 s per 8 MP frame (libjxl 185 ms), 2.5–3.2 frames/s on its own
 night DNGs. **Mac clone of `E854D311` (483 ARWs → 10 MP standard):** 483
 frames, 8.8 GB → 707 MB, registered as "Vltava_ARW · DNG hook", 2.8–7.5%
 from Apple's ARW render (the Sony-profile gap), Apple opens every frame
-directly. Design
+directly. **Mac clone of `F6387DFA` (207 blended DNGs → 8 MP standard):**
+3.6 GB → 287 MB as "nature · DNG hook", 0.4–0.7% from Apple's render of
+the source, blocks within 8% (the demosaic difference at 8 MP). Design
 SVGs for the sheet and the menu row are OWED after the Mac sign-off
 (app-code-first by Steven's instruction).
 
