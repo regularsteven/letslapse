@@ -295,7 +295,7 @@ final class Verifier {
 
     // MARK: - The whole verification
 
-    func verify(input: URL, output: URL, reference: URL? = nil, whiteBalancePush: Bool, adobeRoundTrip: Bool) throws -> VerifyResult {
+    func verify(input: URL, output: URL, reference: URL? = nil, whiteBalancePush: Bool, adobeRoundTrip: Bool, columnBands: Int = 0) throws -> VerifyResult {
         let reference = reference ?? input
         var result = VerifyResult(input: input, output: output, reference: reference)
         result.repackApplies = LossyLinearDNG.isApplicable(output)
@@ -311,6 +311,36 @@ final class Verifier {
         result.blockAbsolute = gap.absolute
         result.greenRatio = outputMeans.whole.y / max(1e-9, inputMeans.whole.y)
         result.blueRatio = outputMeans.whole.z / max(1e-9, inputMeans.whole.z)
+        // Per-channel means, whole frame + centre + corner blocks, so a cast
+        // can be told from a shading (radial) error.
+        func rgb(_ v: SIMD3<Double>) -> String { String(format: "%.4f %.4f %.4f", v.x, v.y, v.z) }
+        func ratio(_ a: SIMD3<Double>, _ b: SIMD3<Double>) -> String { String(format: "×%.3f ×%.3f ×%.3f", a.x / max(1e-9, b.x), a.y / max(1e-9, b.y), a.z / max(1e-9, b.z)) }
+        let centre = 2 * Means.across + 3, tl = 0, tr = Means.across - 1, bl = (Means.down - 1) * Means.across, br = Means.down * Means.across - 1
+        result.notes.append("channels whole  out \(rgb(outputMeans.whole))  in \(rgb(inputMeans.whole))  \(ratio(outputMeans.whole, inputMeans.whole))")
+        result.notes.append("channels centre out \(rgb(outputMeans.blocks[centre]))  in \(rgb(inputMeans.blocks[centre]))  \(ratio(outputMeans.blocks[centre], inputMeans.blocks[centre]))")
+        for (label, i) in [("TL", tl), ("TR", tr), ("BL", bl), ("BR", br)] {
+            result.notes.append("channels \(label)     out \(rgb(outputMeans.blocks[i]))  in \(rgb(inputMeans.blocks[i]))  \(ratio(outputMeans.blocks[i], inputMeans.blocks[i]))")
+        }
+        if columnBands > 0 {
+            // Green means per vertical band, output over input, to see a
+            // decoder's precision along a ramp.
+            func bands(_ picture: LinearPicture) -> [Double] {
+                var sums = [Double](repeating: 0, count: columnBands), counts = [Int](repeating: 0, count: columnBands)
+                picture.rgb.withUnsafeBufferPointer { p in
+                    for y in 0..<picture.height {
+                        for x in 0..<picture.width {
+                            let band = min(columnBands - 1, x * columnBands / picture.width)
+                            sums[band] += Double(p[(y * picture.width + x) * 3 + 1]); counts[band] += 1
+                        }
+                    }
+                }
+                return zip(sums, counts).map { $0 / Double(max(1, $1)) }
+            }
+            let a = bands(outputPicture), b = bands(inputPicture)
+            result.notes.append("bands out   " + a.map { String(format: "%.5f", $0) }.joined(separator: " "))
+            result.notes.append("bands in    " + b.map { String(format: "%.5f", $0) }.joined(separator: " "))
+            result.notes.append("bands ratio " + zip(a, b).map { String(format: "%.4f", $0 / max(1e-9, $1)) }.joined(separator: " "))
+        }
 
         // (b) Fidelity against the reference (the lossless twin when given).
         let (referencePicture, candidatePicture) = reference == input && outputPicture.width == inputPicture.width
@@ -391,6 +421,27 @@ final class Verifier {
     }
 
     static let adobeConverter = URL(fileURLWithPath: "/Applications/Adobe DNG Converter.app/Contents/MacOS/Adobe DNG Converter")
+
+    /// Adobe DNG Converter's verdict on one file: a `-c` round trip that
+    /// produces a file means it parsed and decoded it.
+    static func adobeAccepts(_ url: URL) -> String {
+        guard FileManager.default.fileExists(atPath: adobeConverter.path) else { return "not installed" }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("dngspike-accept-\(UUID().uuidString)")
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let process = Process()
+        process.executableURL = adobeConverter
+        process.arguments = ["-c", "-p0", "-d", directory.path, "-o", "roundtrip.dng", url.path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = pipe
+        do { try process.run() } catch { return "failed to launch" }
+        process.waitUntilExit()
+        let output = String(data: pipe.fileHandleForReading.readDataToEndOfFile(), encoding: .utf8) ?? ""
+        if FileManager.default.fileExists(atPath: directory.appendingPathComponent("roundtrip.dng").path) { return "accepts" }
+        let reason = output.split(separator: "\n").first { $0.contains("Error") }.map(String.init) ?? "exit \(process.terminationStatus)"
+        return "REFUSES (\(reason.trimmingCharacters(in: .whitespaces)))"
+    }
 
     /// Adobe DNG Converter reads our file (`-c`), then its linear conversions
     /// of our file and of the input are decoded through Apple and compared.

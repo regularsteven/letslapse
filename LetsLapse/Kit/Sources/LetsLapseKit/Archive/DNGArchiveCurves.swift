@@ -12,6 +12,15 @@ extension DNGArchive {
     /// - `gammaLUT`: stored = S_b + (Smax − S_b)·L^(1/γ) above black, a linear
     ///   ramp below it. Carried as a `LinearizationTable`, a DNG 1.0 feature
     ///   every reader implements; keeps noise under black; no opcodes.
+    /// - `toeLUT`: the gamma carrier with a linear toe: slope-matched at `toe`
+    ///   (linear light), the same slope continued below black. The `gammaLUT`
+    ///   shape has an infinite slope at the pedestal, so a lossy codec's
+    ///   symmetric code noise there decodes to a NEGATIVE bias (measured
+    ///   2026-09-05: −4.6 twelve-bit counts on noise around black through
+    ///   Adobe, the noise doubled). Adobe's own lossy JXL uses an 18.6%
+    ///   pedestal with a cubic whose slope at black is 1/16 — 240 codes per
+    ///   twelve-bit count and 90 counts of negative range. A 12288 pedestal
+    ///   with toe 0.0033 gives 160 codes per count and 77 counts of range.
     /// - `cubic`: Adobe's shape — L = c1·x + (1 − c1)·x³, carried as a
     ///   `MapPolynomial` over a zero black level. No pedestal (negatives clip),
     ///   so it depends on Apple handling the polynomial with black = 0, which
@@ -19,12 +28,22 @@ extension DNGArchive {
     public enum Curve: Equatable, Sendable {
         case linear
         case gammaLUT(gamma: Double)
+        case toeLUT(gamma: Double, toe: Double)
         case cubic(c1: Double)
+
+        /// Carried as a `LinearizationTable` (as opposed to opcodes or nothing).
+        public var isTable: Bool {
+            switch self {
+            case .gammaLUT, .toeLUT: return true
+            case .linear, .cubic: return false
+            }
+        }
 
         public var label: String {
             switch self {
             case .linear: return "linear"
             case .gammaLUT(let gamma): return "lut\(String(format: "%.1f", gamma))"
+            case .toeLUT(let gamma, _): return "toe\(String(format: "%.1f", gamma))"
             case .cubic(let c1): return "cubic\(String(format: "%.2f", c1))"
             }
         }
@@ -59,6 +78,8 @@ extension DNGArchive {
                 return DNGArchive.Levels(black: [Double(storedPedestal)], white: [UInt32(storedMax)])
             case .gammaLUT(let gamma):
                 return DNGArchive.Levels(black: [Double(pedestal)], white: [UInt32(linearizedMax)], linearizationTable: table(gamma: gamma))
+            case .toeLUT(let gamma, let toe):
+                return DNGArchive.Levels(black: [Double(pedestal)], white: [UInt32(linearizedMax)], linearizationTable: toeTable(gamma: gamma, toe: toe))
             case .cubic(let c1):
                 return DNGArchive.Levels(black: [0], white: [UInt32(storedMax)],
                                          mapPolynomials: Array(repeating: [0, c1, 0, 1 - c1], count: samplesPerPixel))
@@ -80,6 +101,42 @@ extension DNGArchive {
                     linearized = b * stored / sb
                 }
                 table[s] = UInt16(max(0, min(w, linearized.rounded())))
+            }
+            return table
+        }
+
+        /// The toe curve's constants: F(L) = a·L for L ≤ t, c·L^(1/γ) + d above,
+        /// equal in value and slope at t, F(1) = 1.
+        struct Toe {
+            let a: Double, c: Double, d: Double, t: Double, gamma: Double
+            init(gamma: Double, toe: Double) {
+                let t = max(1e-6, min(0.5, toe))
+                let tg = pow(t, 1 / gamma)
+                let c = 1 / (1 + tg * (1 / gamma - 1))
+                self.gamma = gamma
+                self.t = t
+                self.c = c
+                self.d = 1 - c
+                self.a = (c / gamma) * pow(t, 1 / gamma - 1)
+            }
+            /// linear light → [0, 1] code fraction (negatives continue the toe).
+            func encode(_ l: Double) -> Double { l <= t ? a * l : c * pow(l, 1 / gamma) + d }
+            /// code fraction → linear light.
+            func decode(_ f: Double) -> Double { f <= a * t ? f / a : pow((f - d) / c, gamma) }
+        }
+
+        /// stored → linearized, for the toe carrier: the toe's slope continues
+        /// below the pedestal, so the table bottoms above zero (never negative).
+        private func toeTable(gamma: Double, toe: Double) -> [UInt16] {
+            let curve = Toe(gamma: gamma, toe: toe)
+            let entries = storedMax + 1
+            let sb = Double(storedPedestal), smax = Double(storedMax)
+            let b = Double(pedestal), w = Double(linearizedMax)
+            var table = [UInt16](repeating: 0, count: entries)
+            for s in 0..<entries {
+                let f = (Double(s) - sb) / (smax - sb)          // may be negative
+                let linear = f >= 0 ? curve.decode(f) : f / curve.a
+                table[s] = UInt16(max(0, min(w, (b + (w - b) * linear).rounded())))
             }
             return table
         }
@@ -121,6 +178,8 @@ extension DNGArchive {
                 vDSP_vsmsa(linear, 1, &scale, &offset, &scratch, 1, n)
             case .gammaLUT(let gamma):
                 encodeGamma(linear, count: count, gamma: gamma, into: &scratch)
+            case .toeLUT(let gamma, let toe):
+                encodeToe(linear, count: count, gamma: gamma, toe: toe, into: &scratch)
             case .cubic(let c1):
                 let inverse = cubicInverse(c1: c1)
                 var zero: Float = 0, one: Float = 1
@@ -146,6 +205,8 @@ extension DNGArchive {
             switch curve {
             case .gammaLUT(let gamma):
                 encodeGamma(linear, count: count, gamma: gamma, into: &scratch)
+            case .toeLUT(let gamma, let toe):
+                encodeToe(linear, count: count, gamma: gamma, toe: toe, into: &scratch)
             case .cubic(let c1):
                 let inverse = cubicInverse(c1: c1)
                 var zero: Float = 0, one: Float = 1
@@ -164,6 +225,32 @@ extension DNGArchive {
             var low: Float = 0, high = Float(storedMax)
             vDSP_vclip(scratch, 1, &low, &high, &scratch, 1, n)
             vDSP_vfixru8(scratch, 1, out, 1, n)
+        }
+
+        private func encodeToe(_ linear: UnsafePointer<Float>, count: Int, gamma: Double, toe: Double, into scratch: inout [Float]) {
+            // F(L) = min(a·L, c·pow(max(L, t), 1/γ) + d): the power branch is
+            // concave, so it lies under its tangent (the toe line) on both
+            // sides of t, and clipping its argument at t makes the two equal
+            // below t. Negatives ride the toe line down to the table's floor.
+            let curve = Toe(gamma: gamma, toe: toe)
+            let n = vDSP_Length(count)
+            let sb = Double(storedPedestal), smax = Double(storedMax)
+            var toeLine = [Float](repeating: 0, count: count)
+            var power = [Float](repeating: 0, count: count)
+            var floor = Float(-sb / ((smax - sb) * curve.a)), one: Float = 1
+            vDSP_vclip(linear, 1, &floor, &one, &toeLine, 1, n)
+            var tFloat = Float(curve.t)
+            vDSP_vclip(linear, 1, &tFloat, &one, &power, 1, n)
+            var exponent = Float(1 / gamma)
+            var n32 = Int32(count)
+            vvpowsf(&power, &exponent, power, &n32)
+            var a = Float(curve.a), zero: Float = 0
+            vDSP_vsmsa(toeLine, 1, &a, &zero, &toeLine, 1, n)
+            var c = Float(curve.c), d = Float(curve.d)
+            vDSP_vsmsa(power, 1, &c, &d, &power, 1, n)
+            vDSP_vmin(toeLine, 1, power, 1, &scratch, 1, n)
+            var scale = Float(smax - sb), offset = Float(sb)
+            vDSP_vsmsa(scratch, 1, &scale, &offset, &scratch, 1, n)
         }
 
         private func encodeGamma(_ linear: UnsafePointer<Float>, count: Int, gamma: Double, into scratch: inout [Float]) {

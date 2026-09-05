@@ -25,12 +25,13 @@ USAGE:
       --white-level N                              WhiteLevel override (8-bit experiments)
       --json                                       Machine-readable report
   dngspike verify <in> <out> [--wb] [--adobe] [--json]   Quality + compatibility of one pair
+  dngspike validate <dng…> [--adobe]              Structural DNG checks (+ Adobe DNG Converter's verdict)
   dngspike bench [--set 1|2|both] [--out DIR] [--csv PATH] [--only PATTERN] [--parallel N] [--frames a,b,c]
 """
 
 func parseStrategy(_ args: inout [String]) throws -> Strategy {
     var strategy = Strategy()
-    var distance: Float = 0.5, effort = 7, speed = 4, xyb = true, quality = 0.9, gamma = 2.2, c1 = 0.1
+    var distance: Float = 0.5, effort = 7, speed = 4, xyb = true, quality = 0.9, gamma = 2.2, c1 = 0.1, toe = 0.0033
     var encode = "lj92", curve = "linear"
     var i = 0
     var remaining: [String] = []
@@ -56,6 +57,7 @@ func parseStrategy(_ args: inout [String]) throws -> Strategy {
         case "--megapixels": strategy.megapixels = Double(try value())
         case "--tile": strategy.tile = Int(try value()) ?? 512
         case "--pedestal": strategy.pedestal = Int(try value()) ?? 2048
+        case "--toe": toe = Double(try value()) ?? 0.0033
         case "--libraw-quality": strategy.librawQuality = Int(try value()) ?? 3
         case "--baseline-exposure": strategy.baselineExposure = Double(try value())
         case "--white-level": strategy.whiteLevelOverride = UInt32(try value())
@@ -75,6 +77,7 @@ func parseStrategy(_ args: inout [String]) throws -> Strategy {
     switch curve {
     case "linear": strategy.curve = .linear
     case "lut", "gamma": strategy.curve = .gammaLUT(gamma: gamma)
+    case "toe": strategy.curve = .toeLUT(gamma: gamma, toe: toe)
     case "cubic", "poly": strategy.curve = .cubic(c1: c1)
     default: throw SpikeError.usage("unknown curve \(curve)")
     }
@@ -102,12 +105,35 @@ func main() -> Int32 {
             if json { print(BenchCommand.jsonLine(report)) } else { print(report.summary) }
         case "verify":
             let wb = args.contains("--wb"), adobe = args.contains("--adobe")
+            var bands = 0
+            if let i = args.firstIndex(of: "--bands"), i + 1 < args.count { bands = Int(args[i + 1]) ?? 0; args.removeSubrange(i...(i + 1)) }
             args.removeAll { $0 == "--wb" || $0 == "--adobe" }
             guard args.count >= 2 else { throw SpikeError.usage("verify <in> <out>") }
-            let result = try Verifier().verify(input: URL(fileURLWithPath: args[0]), output: URL(fileURLWithPath: args[1]), whiteBalancePush: wb, adobeRoundTrip: adobe)
+            let result = try Verifier().verify(input: URL(fileURLWithPath: args[0]), output: URL(fileURLWithPath: args[1]), whiteBalancePush: wb, adobeRoundTrip: adobe, columnBands: bands)
             print(json ? result.json : result.text)
         case "bench":
             try BenchCommand.run(arguments: args)
+        case "validate":
+            let adobe = args.contains("--adobe")
+            args.removeAll { $0 == "--adobe" }
+            guard !args.isEmpty else { throw SpikeError.usage("validate <dng…>") }
+            var failures = 0
+            for path in args {
+                let url = URL(fileURLWithPath: path)
+                let issues: [String]
+                do { issues = DNGArchive.validate(try Data(contentsOf: url, options: .mappedIfSafe)) } catch { issues = ["\(error)"] }
+                var verdict = issues.isEmpty ? "ok" : "INVALID: " + issues.joined(separator: "; ")
+                if adobe {
+                    let adobeVerdict = Verifier.adobeAccepts(url)
+                    verdict += " · Adobe DNG Converter: \(adobeVerdict)"
+                    if !adobeVerdict.hasPrefix("accepts") { failures += 1 }
+                }
+                if !issues.isEmpty { failures += 1 }
+                print("\(url.lastPathComponent): \(verdict)")
+            }
+            if failures > 0 { return 65 }
+        case "synth":
+            try Synth.run(args: args)
         case "xlinear":
             // Experiment: the same demosaiced samples through the Kit's shipped
             // LinearRaw writer (uncompressed strip, SHORT[3] white, no black).

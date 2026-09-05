@@ -259,6 +259,8 @@ linear conversions of our file and of the input compared through Apple).
 |---|---|---|
 | LinearRaw, **BlackLevel written once** for three samples | **wrong** — green ×1.6, blue ×2.2, red ×3.8 | writing it per sample renders within 0.5%. `DNGArchive` now always expands levels per sample. |
 | LinearRaw + `LinearizationTable`, black > 0 (pedestal), LJ92 or JXL tiles | right | the gamma carrier of choice for LinearRaw |
+| LinearRaw + **toe table** (`Curve.toeLUT`, pedestal 12288), LJ92 / uncompressed / JXL | right — the uncompressed toe file renders identically to the plain file (0.00%); lossy JXL d0.5 within 0.3% on flat fields and 0.07% along a dark ramp | the lossy carrier since 2026-09-05 late (§8) |
+| **Apple camera original** (single IFD, GainMap in OpcodeList3, BaselineExposure +3.6) through Apple's **own** render | **not a reference**: the vignetted corners render with green ≈ 0 (magenta), the centre 25–50% under Adobe's; renaming the camera changes nothing | judge archives of Apple originals against Adobe DNG Converter's linear conversion, in camera space (§8) |
 | LinearRaw + `LinearizationTable`, **black 0**, JXL tiles | **black picture** | LJ92 with the same table and black 0 renders right; keep a pedestal |
 | LinearRaw + `MapPolynomial` (cubic), black 0, LJ92 / JXL / 8-bit JPEG | right (means within 1.5%) | Adobe's shape minus the pedestal; the Kit repacks these (Adobe-shaped) files, the repack is exact |
 | CFA + `LinearizationTable`, LJ92 | right | |
@@ -405,3 +407,95 @@ raws and can stay a Mac/import-time feature.
 - **`print` through a pipe is block-buffered**; a crash loses the log.
   `setlinebuf(stdout)`.
 - **zsh does not word-split unquoted variables**; `set -- ${=var}`.
+- **Single-IFD Apple originals leak geometry.** Their raw tags live in IFD0
+  (CFAPattern, CFARepeatPatternDim, CFAPlaneColor, ActiveArea, a DefaultCrop
+  for the 4224-wide stored frame); carrying IFD0 wholesale into a 4032-wide
+  LinearRaw made Lightroom refuse 90 files ("cannot be opened") while Apple
+  rendered them without complaint. `DNGArchive.validate` now rejects CFA tags
+  on LinearRaw, a DefaultCrop outside the active area, wrong level counts,
+  a wrong table size and holes in the tile table; `write` refuses an invalid
+  file; `dngspike validate --adobe` adds DNG Converter's verdict.
+- **OpcodeList3 is part of the picture.** Apple's GainMap (lens shading, ×3
+  in the corners of the telephoto) has to be baked in when demosaicing or
+  carried when the geometry is unchanged; dropping it is a 40% error at the
+  frame edge. Its coordinates are normalised to the active area at pixel
+  centres — ours and Adobe's agree to 0.02% on Apple's real 191×65 map.
+- **A value-binned comparison lies when the two demosaics differ.** Binning
+  by the reference's value selects its noise; the candidate's independent
+  noise regresses to the mean (−7% in the shadows and +1 count below black
+  on data whose block means agree to 1%). Compare block means, or bin only
+  when both files share the demosaic.
+- **A table with an infinite slope at the pedestal turns codec noise into
+  bias.** The gamma table's L^(1/γ) has infinite slope at 0, so symmetric
+  JPEG XL code noise around black decoded to −4.6 twelve-bit counts and
+  doubled the noise there. A slope-matched linear toe continued below black
+  (`Curve.toeLUT`) took the bias to 0.0 and the noise back to the source's.
+- **Adobe DNG Converter's lossy flags:** `-lossy` alone writes a lossy linear
+  JPEG XL (LinearRaw, a cubic MapPolynomial per plane in OpcodeList2, black
+  ≈ 18.6%, 240 codes per twelve-bit count, 90 counts of negative range);
+  `-lossyMosaicJXL` a lossy CFA. Adding `-l` to either silently yields a
+  lossless mosaic — the parser gives up at the first combination it does
+  not know.
+
+## 8. Validation against Adobe (2026-09-05, after the fold into the app)
+
+The first in-app clone of an iPhone 16 Pro interval project produced 105
+frames that Apple rendered and **Lightroom refused** ("The files cannot be
+opened by Lightroom", 90 of them imported before the app quit). Steven asked
+for validation; this section is the answer, and it changed the writer, the
+decoder and the lossy carrier.
+
+**The refusal.** The Apple originals are single-IFD DNGs (raw tags in IFD0,
+DNGVersion 1.3, 2-component lossless-JPEG tiles of half width, ActiveArea
+4032 inside a 4224-wide stored frame, BlackLevel 528 / WhiteLevel 4095,
+BaselineExposure +3.62, an OpcodeList3 GainMap of 191×65 points × 3 planes
+with gains 1.0 at the centre and 3.0–3.6 in the corners). The writer carried
+IFD0 wholesale, so a 4032-wide **LinearRaw** archive left with CFAPattern,
+CFARepeatPatternDim, CFAPlaneColor and a 4224-wide DefaultCrop. Adobe's
+reader rejects that; Apple's does not care. Fixes: the raw-owned tags are
+filtered out of the carried IFD0; the native decoder crops to ActiveArea
+(even-aligned, CFA phase kept) and reads 2-component tiles; the GainMap is
+baked by a Metal pass after the demosaic (or the opcode lists are carried
+verbatim on the lossless-mosaic route); `DNGArchive.validate` runs on every
+write. All three shapes of the sample now pass `validate --adobe`.
+
+**The reference.** Apple's own render of the original is not usable as one
+(§4 table, last row), so the yardstick is Adobe DNG Converter's linear
+conversion of the original (`-l -u`: uncompressed 16-bit camera-space RGB,
+black 8450 — the 528/4095 pedestal kept proportionally, GainMap baked,
+BaselineExposure unchanged), compared sample-for-sample in camera space
+with the same conversion of our archive. Adobe's decoder is the one
+Lightroom uses.
+
+| our file (of `prague-00001.dng`, 10.86 MB) | size | Adobe accepts | Adobe's decode of ours vs Adobe's decode of the original |
+|---|---|---|---|
+| lossless mosaic, LJ92, opcode list carried | 10.47 MB | yes | **bit-exact** (0.00%, every pixel) |
+| LinearRaw uncompressed, gain baked | 75.5 MB | yes | whole R ×1.010 G ×0.995 B ×1.006; 8×6 block means 0.95–1.04 (the 0.95s are the vignetted night-sky corners at SNR 0.25); centre fit offset −0.1…−0.3 counts, slopes 1.00–1.05 (Adobe's demosaic vs Malvar-He-Cutler) |
+| JPEG XL d0.5, gamma table, pedestal 2048 (the carrier until today) | 5.79 MB | yes | against our own uncompressed (same demosaic, so bins are fair): noise below black −4.6 counts, 0.002–0.008 −5 to −6%, 0.008–0.016 −1.8%, midtones 0, highlights −5 to −17 counts |
+| JPEG XL d0.5, **toe table, pedestal 12288** (the carrier now) | 5.86 MB | yes | below black +0.8, 0.002–0.016 −0.3 to −0.7 counts (−1.4 to −3.6%), midtones 0.0, highlights −5 to −19 counts; whole vs original R ×1.008 G ×0.994 B ×0.978 |
+| the same at 8 MP | 4.09 MB | yes | — |
+| Adobe's own `-lossy` linear JPEG XL, for scale | 6.67 MB | — | vs its lossless: below black +1.2, 0.004–0.016 −1.0 to −1.5 counts (−4 to −5%), highlights −17 to −22 counts |
+
+Synthetic fields (`dngspike synth`) pin the pieces separately: a flat field
+under a 5×4 GainMap and under Apple's real map decodes through Adobe and
+through our bake to gains equal within 0.02% everywhere (both use pixel
+centres); Gaussian noise fields at 0, +10.7 and +35.7 counts above black
+come back from Adobe's decode of our toe-carrier JPEG XL at +0.00, +10.68
+and +35.60 counts with the noise unchanged (the gamma carrier gave −3.2,
++10.4, +35.6 and doubled the noise around black); Adobe's own demosaic
+lowers a noisy field's mean by 1.7% at SNR 1.2 and 0.5% at SNR 4, ours by
+0.0%.
+
+**Apple's side.** Apple renders the uncompressed toe file identically to the
+plain file, JPEG XL lossless bit-exactly, and lossy JPEG XL within 0.3% on
+flat fields and 0.07% along a dark ramp; the older `full` archive's 16%
+brightening in Apple's render and the toe archive's 8% are the noisy night
+frame passing through Apple's noise-shaped raw pipeline with a different
+noise texture after lossy compression — Adobe's linear decode of the same
+files differs by a fraction of a count. Apple's own render of the
+*original* crushes green in the vignetted corners and sits 25–50% under
+Adobe's in the centre; it is not the file, the renamed camera renders the
+same. The Set 1/2 regressions hold: the ARW archive at 8 MP within 3.3% of
+Apple's ARW render (Sony baseline written), the LetsLapse DNG at 8 MP
+within 0.7%, both accepted by Adobe.
+

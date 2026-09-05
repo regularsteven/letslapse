@@ -26,6 +26,7 @@ extension DNGArchive {
         var queueHandle: MTLCommandQueue { queue }
         private let mhc: MTLComputePipelineState
         private let bin: MTLComputePipelineState
+        private let gain: MTLComputePipelineState
 
         public init() throws {
             guard let device = MTLCreateSystemDefaultDevice(), let queue = device.makeCommandQueue() else {
@@ -35,16 +36,21 @@ extension DNGArchive {
             self.queue = queue
             let library = try device.makeLibrary(source: Self.source, options: nil)
             guard let mhcFunction = library.makeFunction(name: "demosaicMHC"),
-                  let binFunction = library.makeFunction(name: "superpixel2") else {
+                  let binFunction = library.makeFunction(name: "superpixel2"),
+                  let gainFunction = library.makeFunction(name: "applyGainMap") else {
                 throw ConversionError.unsupported("demosaic kernels missing")
             }
             mhc = try device.makeComputePipelineState(function: mhcFunction)
             bin = try device.makeComputePipelineState(function: binFunction)
+            gain = try device.makeComputePipelineState(function: gainFunction)
         }
 
         /// `targetPixels` nil keeps the demosaiced size; otherwise the frame is
         /// Lanczos-resampled to that many pixels (aspect kept).
-        public func run(_ mosaic: MosaicFrame, method: Method, targetPixels: Int?) throws -> Result {
+        /// `gainMaps` (the source's OpcodeList3 GainMaps) are baked into the
+        /// result at the final size — their coordinates are normalised, so
+        /// the size does not matter.
+        public func run(_ mosaic: MosaicFrame, method: Method, targetPixels: Int?, gainMaps: [DNGArchive.GainMap] = []) throws -> Result {
             var clock = ProcessInfo.processInfo.systemUptime
             func lap() -> Double { let now = ProcessInfo.processInfo.systemUptime; defer { clock = now }; return (now - clock) * 1000 }
 
@@ -110,6 +116,10 @@ extension DNGArchive {
                 resizeMs = lap()
             }
 
+            for map in gainMaps {
+                try applyGainMap(map, to: final)
+            }
+
             var rgba = [Float](repeating: 0, count: finalWidth * finalHeight * 4)
             rgba.withUnsafeMutableBytes { bytes in
                 final.getBytes(bytes.baseAddress!, bytesPerRow: finalWidth * 16, from: MTLRegionMake2D(0, 0, finalWidth, finalHeight), mipmapLevel: 0)
@@ -127,6 +137,64 @@ extension DNGArchive {
             metadata.decodePath += "+metal-\(method.rawValue)" + (targetPixels != nil ? "+lanczos" : "")
             let frame = RGBFrame(width: finalWidth, height: finalHeight, samples: rgb, metadata: metadata)
             return Result(frame: frame, uploadMilliseconds: upload, demosaicMilliseconds: demosaicMs, resizeMilliseconds: resizeMs, readbackMilliseconds: readback)
+        }
+
+        private struct GainParams {
+            var originV: Float, originH: Float
+            var spacingV: Float, spacingH: Float
+            var pointsV: UInt32, pointsH: UInt32
+            var plane: UInt32, planes: UInt32
+            var width: UInt32, height: UInt32
+        }
+
+        /// Multiplies `texture` (rgba32Float, in place) by the bilinearly
+        /// interpolated gain map. The map lands in a small float texture with
+        /// its planes in the colour channels; a single-plane map is replicated.
+        /// The opcode's area is taken to be the whole active image, which is
+        /// what Apple writes; a partial area would need the rect scaled.
+        private func applyGainMap(_ map: DNGArchive.GainMap, to texture: MTLTexture) throws {
+            guard map.pointsV > 0, map.pointsH > 0, map.mapPlanes > 0, map.rowPitch == 1, map.colPitch == 1 else {
+                throw ConversionError.unsupported("GainMap with pitch \(map.rowPitch)×\(map.colPitch) or an empty grid")
+            }
+            let descriptor = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .rgba32Float, width: map.pointsH, height: map.pointsV, mipmapped: false)
+            descriptor.usage = [.shaderRead]
+            descriptor.storageMode = .shared
+            guard let mapTexture = device.makeTexture(descriptor: descriptor) else { throw ConversionError.unsupported("gain map texture") }
+            var pixels = [Float](repeating: 1, count: map.pointsV * map.pointsH * 4)
+            for r in 0..<map.pointsV {
+                for c in 0..<map.pointsH {
+                    let base = (r * map.pointsH + c) * map.mapPlanes
+                    for channel in 0..<3 {
+                        let index = map.mapPlanes == 1 ? base : base + min(channel, map.mapPlanes - 1)
+                        pixels[(r * map.pointsH + c) * 4 + channel] = map.gains[index]
+                    }
+                }
+            }
+            pixels.withUnsafeBytes { bytes in
+                mapTexture.replace(region: MTLRegionMake2D(0, 0, map.pointsH, map.pointsV), mipmapLevel: 0, withBytes: bytes.baseAddress!, bytesPerRow: map.pointsH * 16)
+            }
+            let originV = Float(map.originV)
+            let originH = Float(map.originH)
+            let spacingV = Float(map.spacingV)
+            let spacingH = Float(map.spacingH)
+            var params = GainParams(originV: originV, originH: originH, spacingV: spacingV, spacingH: spacingH,
+                                    pointsV: UInt32(map.pointsV), pointsH: UInt32(map.pointsH),
+                                    plane: UInt32(map.plane), planes: UInt32(map.planes),
+                                    width: UInt32(texture.width), height: UInt32(texture.height))
+            guard let commandBuffer = queue.makeCommandBuffer(), let encoder = commandBuffer.makeComputeCommandEncoder() else {
+                throw ConversionError.unsupported("command buffer")
+            }
+            encoder.setComputePipelineState(gain)
+            encoder.setTexture(texture, index: 0)
+            encoder.setTexture(mapTexture, index: 1)
+            encoder.setBytes(&params, length: MemoryLayout<GainParams>.stride, index: 0)
+            let threads = MTLSize(width: 16, height: 16, depth: 1)
+            let groups = MTLSize(width: (texture.width + 15) / 16, height: (texture.height + 15) / 16, depth: 1)
+            encoder.dispatchThreadgroups(groups, threadsPerThreadgroup: threads)
+            encoder.endEncoding()
+            commandBuffer.commit()
+            commandBuffer.waitUntilCompleted()
+            if let error = commandBuffer.error { throw ConversionError.unsupported("gain map failed: \(error)") }
         }
 
         private struct Params {
@@ -203,6 +271,38 @@ extension DNGArchive {
                 rgb = colour == 0 ? float3(c, g, other) : float3(other, g, c);
             }
             dst.write(float4(rgb, 1.0), gid);
+        }
+
+        struct GainParams {
+            float originV, originH;
+            float spacingV, spacingH;
+            uint pointsV, pointsH;
+            uint plane, planes;
+            uint width, height;
+        };
+
+        // DNG GainMap: the pixel's normalised position → map grid coordinates →
+        // bilinear gain per plane, multiplied in place.
+        kernel void applyGainMap(texture2d<float, access::read_write> image [[texture(0)]],
+                                 texture2d<float, access::read> map [[texture(1)]],
+                                 constant GainParams& g [[buffer(0)]],
+                                 uint2 gid [[thread_position_in_grid]]) {
+            if (gid.x >= g.width || gid.y >= g.height) return;
+            float u = (float(gid.x) + 0.5) / float(g.width);
+            float v = (float(gid.y) + 0.5) / float(g.height);
+            float c = clamp((u - g.originH) / g.spacingH, 0.0, float(g.pointsH - 1));
+            float r = clamp((v - g.originV) / g.spacingV, 0.0, float(g.pointsV - 1));
+            uint c0 = uint(floor(c)), r0 = uint(floor(r));
+            uint c1 = min(c0 + 1, g.pointsH - 1), r1 = min(r0 + 1, g.pointsV - 1);
+            float fc = c - float(c0), fr = r - float(r0);
+            float4 g00 = map.read(uint2(c0, r0)), g01 = map.read(uint2(c1, r0));
+            float4 g10 = map.read(uint2(c0, r1)), g11 = map.read(uint2(c1, r1));
+            float4 gain = mix(mix(g00, g01, fc), mix(g10, g11, fc), fr);
+            float4 pixel = image.read(gid);
+            for (uint p = g.plane; p < min(g.plane + g.planes, 3u); p++) {
+                pixel[p] *= gain[p];
+            }
+            image.write(pixel, gid);
         }
 
         // 2×2 superpixel: one RGB pixel per Bayer quad, greens averaged.

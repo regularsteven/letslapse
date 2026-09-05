@@ -108,7 +108,12 @@ extension DNGArchive {
                   let directories = try? DNGDocument.parseDirectories(data) else { return false }
             let candidates = [directories.ifd0] + directories.subIFDs
             guard let raw = candidates.first(where: { $0.int(262) == 32803 }) else { return false }
-            return raw.int(259) == 7 && raw.int(258) == 16 && raw.tag(322) != nil
+            guard raw.int(258) == 16 else { return false }
+            switch raw.int(259) {
+            case 7: return raw.tag(322) != nil
+            case 1: return raw.tag(322) != nil || raw.tag(273) != nil
+            default: return false
+            }
         }
 
         public static func decode(url: URL) throws -> Result {
@@ -119,17 +124,22 @@ extension DNGArchive {
             guard let raw = candidates.first(where: { $0.int(262) == 32803 }) else {
                 throw ConversionError.decode("\(url.lastPathComponent) has no CFA image directory")
             }
-            guard raw.int(259) == 7 else { throw ConversionError.unsupported("compression \(raw.int(259) ?? -1); the native path reads lossless JPEG (7) only") }
-            guard raw.int(258) == 16 else { throw ConversionError.unsupported("\(raw.int(258) ?? 0)-bit CFA") }
-            guard let width = raw.int(256), let height = raw.int(257),
-                  let tileWidth = raw.int(322), let tileHeight = raw.int(323) else {
-                throw ConversionError.unsupported("strips; the native path reads tiled DNGs")
+            let compression = raw.int(259) ?? 1
+            guard compression == 7 || compression == 1 else {
+                throw ConversionError.unsupported("compression \(compression); the native path reads lossless JPEG (7) and uncompressed (1)")
             }
-            let offsets = raw.tag(324)?.ints ?? [], counts = raw.tag(325)?.ints ?? []
+            guard raw.int(258) == 16 else { throw ConversionError.unsupported("\(raw.int(258) ?? 0)-bit CFA") }
+            guard let width = raw.int(256), let height = raw.int(257) else { throw ConversionError.decode("no image size") }
+            // Tiles, or strips read as full-width tiles.
+            let tiled = raw.tag(322) != nil
+            let tileWidth = tiled ? (raw.int(322) ?? width) : width
+            let tileHeight = tiled ? (raw.int(323) ?? height) : (raw.int(278) ?? height)
+            let offsets = raw.tag(tiled ? 324 : 273)?.ints ?? [], counts = raw.tag(tiled ? 325 : 279)?.ints ?? []
             let across = (width + tileWidth - 1) / tileWidth, down = (height + tileHeight - 1) / tileHeight
             guard offsets.count == across * down, counts.count == offsets.count else {
-                throw ConversionError.decode("tile table has \(offsets.count) entries for \(across)×\(down)")
+                throw ConversionError.decode("\(tiled ? "tile" : "strip") table has \(offsets.count) entries for \(across)×\(down)")
             }
+            let bigEndian = data.count >= 2 && data[data.startIndex] == 0x4D
             let dims = raw.tag(33421)?.ints ?? [2, 2]
             let pattern = raw.tag(33422)?.ints.map(UInt8.init) ?? []
             guard dims == [2, 2], pattern.count == 4 else { throw ConversionError.unsupported("CFA pattern \(pattern) with dims \(dims)") }
@@ -149,6 +159,24 @@ extension DNGArchive {
                     DispatchQueue.concurrentPerform(iterations: offsets.count) { index in
                         let range = offsets[index]..<(offsets[index] + counts[index])
                         guard range.upperBound <= data.count else { errors[index] = "tile \(index) past end"; return }
+                        if compression == 1 {
+                            // Uncompressed: 16-bit samples in the file's byte order.
+                            let x0 = (index % across) * tileWidth, y0 = (index / across) * tileHeight
+                            let columns = min(tileWidth, width - x0), rows = min(tileHeight, height - y0)
+                            guard counts[index] >= rows * tileWidth * 2 else { errors[index] = "strip/tile \(index) is short"; return }
+                            data.withUnsafeBytes { (bytes: UnsafeRawBufferPointer) in
+                                let base = bytes.baseAddress!.advanced(by: offsets[index] - data.startIndex)
+                                for y in 0..<rows {
+                                    let destinationRow = output.baseAddress! + (y0 + y) * width + x0
+                                    let sourceRow = base.advanced(by: y * tileWidth * 2)
+                                    for x in 0..<columns {
+                                        let value = sourceRow.loadUnaligned(fromByteOffset: x * 2, as: UInt16.self)
+                                        destinationRow[x] = bigEndian ? value.byteSwapped : value
+                                    }
+                                }
+                            }
+                            return
+                        }
                         do {
                             let tile = try LosslessJPEGDecoder.decode(data.subdata(in: range))
                             // A CFA tile is commonly coded as an N-component
@@ -179,6 +207,31 @@ extension DNGArchive {
             if let failure = failures.compactMap({ $0 }).first { throw ConversionError.decode(failure) }
             let tiles = (ProcessInfo.processInfo.systemUptime - tileStart) * 1000
 
+            // ActiveArea (top, left, bottom, right): the sensor's masked border
+            // is not picture. Cropped here on even offsets so the CFA phase
+            // holds, and never carried — an ActiveArea describes the old image.
+            var outWidth = width, outHeight = height
+            var note: String?
+            let active = raw.tag(50829)?.ints ?? []
+            if active.count == 4 {
+                let top = active[0] & ~1, left = active[1] & ~1
+                let bottom = min(height, active[2]), right = min(width, active[3])
+                if top >= 0, left >= 0, right - left >= 2, bottom - top >= 2, (top, left, bottom, right) != (0, 0, height, width) {
+                    outWidth = right - left
+                    outHeight = bottom - top
+                    var cropped = [UInt16](repeating: 0, count: outWidth * outHeight)
+                    samples.withUnsafeBufferPointer { source in
+                        cropped.withUnsafeMutableBufferPointer { destination in
+                            for y in 0..<outHeight {
+                                (destination.baseAddress! + y * outWidth).update(from: source.baseAddress! + (top + y) * width + left, count: outWidth)
+                            }
+                        }
+                    }
+                    samples = cropped
+                    note = "ActiveArea \(active) applied: \(width)×\(height) → \(outWidth)×\(outHeight)"
+                }
+            }
+
             var metadata = FrameMetadata()
             metadata.colorTags = DNGArchive.carriedIFD0Tags(from: directories.ifd0)
             metadata.rawTags = DNGArchive.carriedRawTags(from: raw)
@@ -186,10 +239,14 @@ extension DNGArchive {
             metadata.gps = directories.gps
             metadata.isCameraNative = true
             metadata.headroomStops = 0
-            metadata.decodePath = "native-lj92"
+            metadata.decodePath = compression == 7 ? "native-lj92" : "native-uncompressed"
             metadata.originalFileName = url.lastPathComponent
             metadata.cameraName = directories.ifd0.tag(50708)?.text ?? InputMetadata.cameraName(for: url)
-            let frame = MosaicFrame(width: width, height: height, samples: samples, cfaPattern: pattern,
+            if let note { metadata.notes.append(note) }
+            for tag: UInt16 in [51008, 51009, 51022] {
+                if let list = raw.tag(tag) { metadata.opcodeLists[tag] = list.payload }
+            }
+            let frame = MosaicFrame(width: outWidth, height: outHeight, samples: samples, cfaPattern: pattern,
                                     black: black, white: white, metadata: metadata)
             return Result(frame: frame, parseMilliseconds: parse, tileMilliseconds: tiles, tileCount: offsets.count)
         }

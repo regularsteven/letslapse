@@ -7017,8 +7017,14 @@ final class AppModel: ObservableObject {
         beginActivity(.importingArchive)
         defer { endActivity(.importingArchive) }
 
+        // The clone is assembled in a hidden staging folder and moved into
+        // place only once it is complete and registered, so a run the app
+        // does not survive leaves no half-project behind. Stale staging
+        // folders from earlier interrupted runs are swept first.
         let id = UUID()
-        let root = captureFolderURL(for: id)
+        let finalRoot = captureFolderURL(for: id)
+        let root = projectsRootURL.appendingPathComponent(".dng-archive-\(id.uuidString)", isDirectory: true)
+        Self.sweepStaleArchiveStaging(in: projectsRootURL)
         let sourceFolder = root.appendingPathComponent("source", isDirectory: true)
         try FileManager.default.createDirectory(at: sourceFolder, withIntermediateDirectories: true)
         do {
@@ -7087,6 +7093,7 @@ final class AppModel: ObservableObject {
                 try? data.write(to: root.appendingPathComponent("dng-archive.json"))
             }
 
+            try FileManager.default.moveItem(at: root, to: finalRoot)
             var clone = capture
             clone.id = id
             clone.name = "\(capture.displayTitle) · \(nameSuffix)"
@@ -7104,7 +7111,17 @@ final class AppModel: ObservableObject {
             return clone
         } catch {
             try? FileManager.default.removeItem(at: root)
+            try? FileManager.default.removeItem(at: finalRoot)
             throw error
+        }
+    }
+
+    /// Removes `.dng-archive-*` staging folders left by runs the app did not
+    /// live to finish.
+    nonisolated static func sweepStaleArchiveStaging(in projectsRoot: URL) {
+        let items = (try? FileManager.default.contentsOfDirectory(at: projectsRoot, includingPropertiesForKeys: nil, options: [])) ?? []
+        for item in items where item.lastPathComponent.hasPrefix(".dng-archive-") {
+            try? FileManager.default.removeItem(at: item)
         }
     }
 

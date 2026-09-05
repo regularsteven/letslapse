@@ -26,6 +26,10 @@ extension DNGArchive {
         public var tile = 512
         public var librawQuality = 3
         public var pedestal = 2048
+        /// The lossy carrier (see `Curve.toeLUT`): 160 codes per twelve-bit
+        /// count at black, 77 counts of negative range.
+        public static let lossyCurve: Curve = .toeLUT(gamma: 2.2, toe: 0.0033)
+        public static let lossyPedestal = 12288
         /// BaselineExposure (EV) to write when the source carries none. Adobe
         /// keeps the per-camera value in its own database, not in the raw
         /// file, and Apple applies its equivalent only to CFA data — so a
@@ -48,7 +52,8 @@ extension DNGArchive {
             strategy.decode = .auto
             strategy.output = .linear
             strategy.codec = .jxl(distance: distance, effort: effort, decodeSpeed: 4, xyb: distance > 0)
-            strategy.curve = distance > 0 ? .gammaLUT(gamma: 2.2) : .linear
+            strategy.curve = distance > 0 ? Strategy.lossyCurve : .linear
+            if distance > 0 { strategy.pedestal = Strategy.lossyPedestal }
             strategy.megapixels = megapixels
             return strategy
         }
@@ -245,7 +250,20 @@ extension DNGArchive {
                 let rgb: RGBFrame
                 switch frame {
                 case .mosaic(let mosaic):
-                    let result = try metal().run(mosaic, method: strategy.demosaic == .bin2 ? .bin2 : .mhc, targetPixels: targetPixels)
+                    // The source's post-demosaic opcodes: GainMaps are baked in,
+                    // anything else is reported rather than silently dropped.
+                    var gainMaps: [GainMap] = []
+                    if let list3 = mosaic.metadata.opcodeLists[51022] {
+                        let parsed = try parseOpcodes(list3)
+                        gainMaps = parsed.gainMaps
+                        if !parsed.unsupported.isEmpty { report.notes.append("OpcodeList3 opcodes \(parsed.unsupported) not baked (unsupported)") }
+                        if !gainMaps.isEmpty { report.notes.append("baked \(gainMaps.count) GainMap(s) from OpcodeList3") }
+                    }
+                    if let list2 = mosaic.metadata.opcodeLists[51009], let parsed = try? parseOpcodes(list2) {
+                        report.notes.append("OpcodeList2 present (\(parsed.gainMaps.count) GainMaps, \(parsed.unsupported) others) — not applied to the mosaic")
+                    }
+                    if mosaic.metadata.opcodeLists[51008] != nil { report.notes.append("OpcodeList1 present — not applied") }
+                    let result = try metal().run(mosaic, method: strategy.demosaic == .bin2 ? .bin2 : .mhc, targetPixels: targetPixels, gainMaps: gainMaps)
                     rgb = result.frame
                     watch.lap("demosaic")
                     report.notes.append(String(format: "Metal upload %.0f + %@ %.0f + resize %.0f + readback %.0f ms", result.uploadMilliseconds, strategy.demosaic.rawValue, result.demosaicMilliseconds, result.resizeMilliseconds, result.readbackMilliseconds))
@@ -265,7 +283,7 @@ extension DNGArchive {
                 if bits == 8, case .linear = curve, strategy.pedestal != 0 {
                     report.notes.append("8-bit linear store: pedestal scaled to \(Int(Double(strategy.pedestal) / 65535 * 255)) of 255")
                 }
-                if bits == 8, case .gammaLUT = curve {
+                if bits == 8, curve != .linear, curve.isTable {
                     // Apple renders an 8-bit lossy JPEG with a LinearizationTable
                     // black (report §4); the cubic is the shape that works.
                     curve = .cubic(c1: 0.1)
@@ -321,6 +339,12 @@ extension DNGArchive {
                 report.notes.append("BaselineExposure \(String(format: "%.2f", (existing ?? 0) + baseline)) written (\(existing == nil ? "source had none" : "source \(existing!) + \(baseline)"))")
             }
             container.raw = metadata.rawTags
+            if strategy.output == .cfa {
+                // Same stored values, same active-area geometry: the source's
+                // opcode lists still describe this image.
+                container.opcodeLists = metadata.opcodeLists
+                if !metadata.opcodeLists.isEmpty { report.notes.append("opcode lists \(metadata.opcodeLists.keys.sorted()) carried") }
+            }
             container.exif = metadata.exif
             container.gps = metadata.gps
             container.software = "LetsLapse DNG archive"

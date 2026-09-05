@@ -66,13 +66,32 @@ the source, blocks within 8% (the demosaic difference at 8 MP). Design
 SVGs for the sheet and the menu row are OWED after the Mac sign-off
 (app-code-first by Steven's instruction).
 
+**Validated against Adobe (2026-09-05 late, report §8):** the first in-app
+clone of an iPhone 16 Pro project (105 frames in the unregistered folder
+`5968F261-…`) was refused by Lightroom — the writer carried the single-IFD
+Apple original's CFA and 4224-wide crop tags into a 4032-wide LinearRaw.
+Fixed and fenced: raw-owned tags filtered, ActiveArea crop, 2-component
+tiles, the OpcodeList3 GainMap baked (Metal) or carried, and
+`DNGArchive.validate` on every write (`dngspike validate --adobe` for the
+Adobe verdict). Measured with Adobe DNG Converter as the yardstick, in
+camera space: the lossless mosaic is bit-exact, the demosaiced archive
+within 1% of Adobe's own linear conversion, and the lossy carrier moved
+from a gamma table over a 2048 pedestal (−4.6 counts of bias in the noise
+below black) to a slope-matched toe table over a 12288 pedestal
+(`Curve.toeLUT`, +0.0), now at or better than Adobe's own lossy JPEG XL.
+
 **Still open:** Steven's own Mac / iPad pass over the sheet and the SVG
-mirrors; Float16/UInt16 intermediates
-for the iPhone memory budget (Float32 today); the BaselineExposure source
-for third-party raws (`DNGArchive.Strategy.knownBaselineExposures` holds
-the ILCE-7M4's 0.35 for now); a "Delete originals" companion once an
-archive has been checked; the iPhone 12 Pro / iPad Air 5 probes
-(`LL_DNGPROBE=1`); Lightroom opening our files; a flicker report over a
+mirrors; Lightroom itself (Adobe DNG Converter accepts every shape now, the
+application was not driven); the in-app viewer renders a lossy archive of a
+*noisy night* frame ~8% differently from its uncompressed twin through
+Apple's raw pipeline (noise texture; Adobe's decode does not) — decoding
+our own JPEG XL for the viewer would remove that; deleting the orphan
+`5968F261-…` folder (~300 MB of invalid frames, not in the library);
+Float16/UInt16 intermediates for the iPhone memory budget (Float32 today);
+the BaselineExposure source for third-party raws
+(`DNGArchive.Strategy.knownBaselineExposures` holds the ILCE-7M4's 0.35 for
+now); a "Delete originals" companion once an archive has been checked; the
+iPhone 12 Pro / iPad Air 5 probes (`LL_DNGPROBE=1`); a flicker report over a
 converted sequence.
 
 ### Settings ▸ Display: blackout, reduce brightness, and the scheduled peek

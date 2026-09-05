@@ -305,3 +305,84 @@ final class DNGArchiveTests: XCTestCase {
         print(DNGCapabilityProbe.text(report))
     }
 }
+
+extension DNGArchiveTests {
+    /// The toe carrier (the lossy default): its LinearizationTable must invert
+    /// the encoder across the whole range, the toe's slope must continue below
+    /// the pedestal down to the table floor (negative noise survives, never
+    /// clipped to black), and Apple must render a toe-carried file like the
+    /// plain file — the same fold-free guarantee the gamma table has.
+    func testToeCarrierRoundTripsAndRendersLikeThePlainFile() throws {
+        let gamma = 2.2, toe = 0.0033, pedestal = 12288
+        let encoding = DNGArchive.StoredEncoding(curve: .toeLUT(gamma: gamma, toe: toe), bitsPerSample: 16, pedestal: pedestal)
+        let levels = encoding.levels(samplesPerPixel: 3)
+        let table = try XCTUnwrap(levels.linearizationTable)
+        XCTAssertEqual(table.count, 65536)
+        XCTAssertEqual(levels.black, [Double(pedestal)])
+
+        // Independent statement of the curve: F(L) = a·L below t, c·L^(1/γ)+d above,
+        // matched in value and slope at t, F(1) = 1.
+        let tg = pow(toe, 1 / gamma)
+        let c = 1 / (1 + tg * (1 / gamma - 1)), d = 1 - c, a = (c / gamma) * pow(toe, 1 / gamma - 1)
+        XCTAssertEqual(a * toe, c * tg + d, accuracy: 1e-12, "value-matched at the toe")
+        XCTAssertEqual(c + d, 1, accuracy: 1e-12)
+        // 160 codes per twelve-bit count at black, ~77 counts of negative range.
+        let codesPerCount = a * Double(65535 - pedestal) / 3567
+        XCTAssertEqual(codesPerCount, 160, accuracy: 5)
+        let floorCounts = Double(pedestal) / (a * Double(65535 - pedestal)) * 3567
+        XCTAssertEqual(floorCounts, 77, accuracy: 3)
+
+        // Encode a ramp from the floor to 1.0 and read it back through the table.
+        let floor = -Double(pedestal) / (a * Double(65535 - pedestal))
+        let count = 4096
+        let ramp = (0..<count).map { Float(floor + (1 - floor) * Double($0) / Double(count - 1)) }
+        var stored = [UInt16](repeating: 0, count: count)
+        ramp.withUnsafeBufferPointer { encoding.encode16($0.baseAddress!, count: count, into: &stored) }
+        XCTAssertEqual(stored[0], 0, "the floor lands on code 0")
+        XCTAssertEqual(stored[count - 1], 65535)
+        var worst = 0.0
+        for i in 0..<count {
+            let back = (Double(table[Int(stored[i])]) - Double(pedestal)) / Double(65535 - pedestal)
+            worst = max(worst, abs(back - Double(ramp[i])))
+        }
+        // The table's output is quantised to 16-bit linearized units (1/53247
+        // ≈ 1.9e-5 of the range) and one stored code at the top of the gamma
+        // branch is worth γ/c ≈ 2.1 linearized codes: the round trip is exact
+        // to that quantisation, measured 2.8e-5.
+        XCTAssertLessThan(worst, 6e-5, "table inverts the encoder to within the 16-bit quantisation")
+        // Monotonic table, and the toe is linear: equal code steps, equal light steps.
+        XCTAssertTrue(zip(table, table.dropFirst()).allSatisfy { $0 <= $1 })
+        let step1 = Double(table[pedestal + 100]) - Double(table[pedestal])
+        let step2 = Double(table[pedestal + 200]) - Double(table[pedestal + 100])
+        XCTAssertEqual(step1, step2, accuracy: 2)
+
+        // Apple renders the toe file like the plain file.
+        let linear = scene()
+        let plainTiles = try tiles(of: linear, components: 3, tile: 256)
+        let plain = DNGArchive.Image(
+            width: width, height: height, samplesPerPixel: 3, bitsPerSample: 16,
+            photometric: .linearRaw, compression: .losslessJPEG, tileWidth: 256, tileHeight: 256,
+            tiles: plainTiles, levels: .uniform(black: 0, white: 65535))
+        var metadata = DNGArchive.Metadata()
+        metadata.ifd0 = DNGArchive.sRGBColorTags()
+        let plainURL = try write(try DNGArchive.makeDNG(image: plain, metadata: metadata), "plain-toe")
+        defer { try? FileManager.default.removeItem(at: plainURL) }
+        let toeTiles = try tiles(of: linear, components: 3, tile: 256) { sample in
+            var one = Float(sample) / 65535
+            var code: UInt16 = 0
+            encoding.encode16(&one, count: 1, into: &code)
+            return code
+        }
+        let toed = DNGArchive.Image(
+            width: width, height: height, samplesPerPixel: 3, bitsPerSample: 16,
+            photometric: .linearRaw, compression: .losslessJPEG, tileWidth: 256, tileHeight: 256,
+            tiles: toeTiles, levels: levels)
+        let toeURL = try write(try DNGArchive.makeDNG(image: toed, metadata: metadata), "toe")
+        defer { try? FileManager.default.removeItem(at: toeURL) }
+        XCTAssertEqual(DNGArchive.validate(try Data(contentsOf: toeURL)), [])
+        let plainMeans = try appleMeans(plainURL), toeMeans = try appleMeans(toeURL)
+        for channel in 0..<3 {
+            XCTAssertEqual(toeMeans[channel], plainMeans[channel], accuracy: plainMeans[channel] * 0.01, "toe carrier channel \(channel)")
+        }
+    }
+}

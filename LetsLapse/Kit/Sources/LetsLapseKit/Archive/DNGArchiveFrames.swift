@@ -29,6 +29,10 @@ extension DNGArchive {
         /// What decoded the pixels — for the report.
         public var decodePath = ""
         public var notes: [String] = []
+        /// The source's OpcodeList1/2/3 (tags 51008/51009/51022), verbatim.
+        /// Carried whole onto a same-geometry mosaic archive; for a demosaiced
+        /// archive the GainMaps of list 3 are baked and the rest reported.
+        public var opcodeLists: [UInt16: Data] = [:]
 
         public init() {}
     }

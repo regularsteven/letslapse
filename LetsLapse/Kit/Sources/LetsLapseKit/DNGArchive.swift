@@ -169,6 +169,10 @@ public enum DNGArchive {
         public var originalRawFileName: String?
         /// Used when `ifd0` carries no UniqueCameraModel (the tag is mandatory).
         public var fallbackUniqueCameraModel = "LetsLapse"
+        /// OpcodeList1/2/3 (51008/51009/51022) to write on the raw IFD, when the
+        /// caller knows they still describe this image (same geometry, same
+        /// stored values). `Levels.mapPolynomials` writes list 2 itself and wins.
+        public var opcodeLists: [UInt16: Data] = [:]
 
         public init() {}
     }
@@ -187,10 +191,95 @@ public enum DNGArchive {
         }
     }
 
+    // MARK: - Validation
+
+    /// Structural checks a DNG reader (Adobe's above all) applies before it
+    /// will open a file. Returns the problems, empty when the container is
+    /// sound. Run on every write, and usable on any file.
+    public static func validate(_ data: Data) -> [String] {
+        var issues: [String] = []
+        let directories: DNGDocument.Directories
+        do {
+            directories = try DNGDocument.parseDirectories(data)
+        } catch {
+            return ["not a readable TIFF: \(error)"]
+        }
+        let candidates = [directories.ifd0] + directories.subIFDs
+        guard let raw = candidates.first(where: { ($0.int(254) ?? 0) == 0 && [32803, 34892].contains($0.int(262) ?? -1) }) else {
+            return ["no raw image directory (NewSubfileType 0 with CFA or LinearRaw photometric)"]
+        }
+        let photometric = raw.int(262) ?? 0
+        let width = raw.int(256) ?? 0, height = raw.int(257) ?? 0
+        let spp = raw.int(277) ?? 1
+        let bits = raw.tag(258)?.ints ?? []
+        if width <= 0 || height <= 0 { issues.append("image size \(width)×\(height)") }
+        if bits.count != spp { issues.append("BitsPerSample has \(bits.count) entries for \(spp) samples") }
+        if photometric == 32803 {
+            if spp != 1 { issues.append("CFA image with \(spp) samples per pixel") }
+            if raw.tag(33422) == nil || raw.tag(33421) == nil { issues.append("CFA image without CFAPattern/CFARepeatPatternDim") }
+        } else {
+            for tag: UInt16 in [33421, 33422, 50710, 50711] where raw.tag(tag) != nil {
+                issues.append("CFA tag \(tag) on a LinearRaw image")
+            }
+            if spp != 3 { issues.append("LinearRaw with \(spp) samples per pixel") }
+        }
+        let blacks = raw.doubles(50714), whites = raw.doubles(50717)
+        if !blacks.isEmpty, blacks.count != 1, blacks.count != spp {
+            let repeatDim = raw.tag(50713)?.ints ?? [1, 1]
+            if blacks.count != repeatDim.reduce(1, *) * spp { issues.append("BlackLevel has \(blacks.count) values for \(spp) samples") }
+        }
+        if !whites.isEmpty, whites.count != 1, whites.count != spp { issues.append("WhiteLevel has \(whites.count) values for \(spp) samples") }
+        if let table = raw.tag(50712), table.count > (1 << (bits.first ?? 16)) {
+            issues.append("LinearizationTable has \(table.count) entries for \(bits.first ?? 16)-bit samples")
+        }
+        var activeTop = 0, activeLeft = 0, activeBottom = height, activeRight = width
+        let active = raw.tag(50829)?.ints ?? []
+        if active.count == 4 {
+            activeTop = active[0]; activeLeft = active[1]; activeBottom = active[2]; activeRight = active[3]
+            if activeTop < 0 || activeLeft < 0 || activeBottom > height || activeRight > width || activeBottom <= activeTop || activeRight <= activeLeft {
+                issues.append("ActiveArea \(active) outside the \(width)×\(height) image")
+            }
+        } else if !active.isEmpty {
+            issues.append("ActiveArea has \(active.count) values")
+        }
+        let cropOrigin = raw.doubles(50719), cropSize = raw.doubles(50720)
+        if cropOrigin.count == 2, cropSize.count == 2 {
+            if cropOrigin[0] + cropSize[0] > Double(activeRight - activeLeft) + 0.5 || cropOrigin[1] + cropSize[1] > Double(activeBottom - activeTop) + 0.5 {
+                issues.append("DefaultCrop \(cropOrigin)+\(cropSize) exceeds the active area \(activeRight - activeLeft)×\(activeBottom - activeTop)")
+            }
+        }
+        let compression = raw.int(259) ?? 1
+        let jxlTags: [UInt16] = [52553, 52554, 52555]
+        if compression != 52546, jxlTags.contains(where: { raw.tag($0) != nil }) { issues.append("JXL tags on a non-JPEG-XL image") }
+        if compression == 52546 || compression == 7 || compression == 34892 {
+            if let tileWidth = raw.int(322), let tileHeight = raw.int(323) {
+                let across = (width + tileWidth - 1) / tileWidth, down = (height + tileHeight - 1) / tileHeight
+                let offsets = raw.tag(324)?.ints ?? [], counts = raw.tag(325)?.ints ?? []
+                if offsets.count != across * down || counts.count != offsets.count {
+                    issues.append("tile table has \(offsets.count)/\(counts.count) entries for \(across)×\(down) tiles")
+                }
+                for (offset, count) in zip(offsets, counts) where offset < 8 || count <= 0 || offset + count > data.count {
+                    issues.append("tile at \(offset)+\(count) lies outside the \(data.count)-byte file")
+                    break
+                }
+            } else if raw.tag(273) == nil {
+                issues.append("compressed image with neither tiles nor strips")
+            }
+        }
+        for tag: UInt16 in [50706, 50708, 50721] where directories.ifd0.tag(tag) == nil {
+            issues.append("IFD0 lacks required tag \(tag)")
+        }
+        let version = directories.ifd0.tag(50706)?.ints ?? []
+        if compression == 52546, version.count == 4, (version[0], version[1]) < (1, 7) { issues.append("JPEG XL payload with DNGVersion \(version)") }
+        return issues
+    }
+
     // MARK: - Writing
 
     public static func write(image: Image, metadata: Metadata, to url: URL) throws {
         let data = try makeDNG(image: image, metadata: metadata)
+        let issues = validate(data)
+        guard issues.isEmpty else { throw WriteError.tags("invalid DNG: " + issues.joined(separator: "; ")) }
         do {
             try data.write(to: url, options: .atomic)
         } catch {
@@ -254,6 +343,9 @@ public enum DNGArchive {
             let list = opcodeList2(mapPolynomials: polynomials, width: image.width, height: image.height)
             rawIFD.add(DNGTagValue(tag: 51009, type: 7, count: UInt32(list.count), payload: list))
         }
+        for (tag, list) in metadata.opcodeLists where [51008, 51009, 51022].contains(tag) && !list.isEmpty {
+            rawIFD.add(DNGTagValue(tag: tag, type: 7, count: UInt32(list.count), payload: list))
+        }
 
         // Crop and scale.
         var defaultScale = Data()
@@ -308,7 +400,7 @@ public enum DNGArchive {
         if let name = metadata.originalRawFileName {
             ifd0.add(ascii(50827, name))
         }
-        for entry in metadata.ifd0 where !ownedIFD0Tags.contains(entry.tag) && !pointerTags.contains(entry.tag) {
+        for entry in metadata.ifd0 where !ownedIFD0Tags.contains(entry.tag) && !ownedRawTags.contains(entry.tag) && !pointerTags.contains(entry.tag) {
             ifd0.add(entry)
         }
         if !ifd0.contains(50708) {
@@ -399,7 +491,15 @@ public enum DNGArchive {
     /// render the file, minus the structural, preview and digest tags that
     /// describe the *old* container.
     public static func carriedIFD0Tags(from ifd0: [DNGTagValue]) -> [DNGTagValue] {
-        ifd0.filter { !ownedIFD0Tags.contains($0.tag) && !pointerTags.contains($0.tag) && !previewOnlyTags.contains($0.tag) }
+        // A single-IFD source (Apple's camera DNGs) keeps its raw geometry —
+        // CFA pattern, ActiveArea, levels, opcode lists, crop — in IFD0 too;
+        // none of it may follow the colour tags onto a new image. That leak
+        // put CFAPattern and an oversize ActiveArea on a LinearRaw archive and
+        // Adobe refused every frame (2026-09-05).
+        ifd0.filter {
+            !ownedIFD0Tags.contains($0.tag) && !ownedRawTags.contains($0.tag)
+                && !pointerTags.contains($0.tag) && !previewOnlyTags.contains($0.tag)
+        }
     }
 
     /// Raw-IFD tags worth carrying (NoiseProfile and the quality hints).
@@ -530,8 +630,12 @@ public enum DNGArchive {
         254, 256, 257, 258, 259, 262, 273, 277, 278, 279, 284, 317, 322, 323, 324, 325,
         33421, 33422, 50710, 50711,       // CFA geometry
         50712, 50713, 50714, 50715, 50716, 50717,   // levels
-        50718, 50719, 50720,              // scale, crop
+        50718, 50719, 50720, 51125,       // scale, crop, user crop
+        50829, 50830,                     // ActiveArea, MaskedAreas — geometry of the old image
+        50733, 50734,                     // ChromaBlurRadius, AntiAliasStrength (raw-only)
+        50738,                            // AntiAliasStrength
         51008, 51009, 51022,              // opcode lists
+        51110,                            // NoiseReductionApplied — describes the old pixels
         52553, 52554, 52555,              // JXL
     ]
     private static let pointerTags: Set<UInt16> = [330, 34665, 34853, 40965, 700]

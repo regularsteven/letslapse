@@ -25,7 +25,11 @@ around it. The app's "Duplicate as DNG archive…" (project menu) and the
 ```
 dngspike probe [--json]                    capability table (ImageIO / VideoToolbox / Metal / jxlc)
 dngspike convert <in> <out> [options]      one frame, one strategy; prints stage timings
-dngspike verify <in> <out> [--wb] [--adobe] quality + compatibility of one pair
+dngspike verify <in> <out> [--wb] [--adobe] [--bands N]  quality + compatibility of one pair
+                                           (--bands: green means per vertical band, for ramps)
+dngspike validate <dng…> [--adobe]         structural checks (DNGArchive.validate) + DNG Converter's verdict
+dngspike synth flat-gain|noise|gradient|flat <out.dng> [--level L] [--mean V] [--sigma S]
+               [--map-from DNG] [--black N] [--white N]   known-content CFA DNGs for decoder tests
 dngspike bench [--set 1|2|both] [--only PATTERN] [--frames a,b] [--throughput N --inflight K]
                [--adobe] [--no-wb] [--out DIR] [--csv PATH] [--resume PATH]
 ```
@@ -33,8 +37,16 @@ dngspike bench [--set 1|2|both] [--only PATTERN] [--frames a,b] [--throughput N 
 `convert` options select a row of the matrix: `--decode apple|native|libraw|
 libraw-demosaic`, `--output cfa|linear`, `--demosaic metal|bin2`, `--encode
 lj92|jxl|jpeg8|hwjpeg|raw`, `--distance/--effort/--speed` (JPEG XL),
-`--curve linear|lut|cubic`, `--megapixels N`, `--tile N` (0 = one tile),
+`--curve linear|lut|toe|cubic` (`--toe T` for the toe's knee, default
+0.0033; the app's lossy default is `toe` over `--pedestal 12288`), `--rgb`
+(JPEG XL without XYB), `--megapixels N`, `--tile N` (0 = one tile),
 `--pedestal N`, `--baseline-exposure EV`, `--headroom N` (Apple path).
+
+Validation against Adobe (report §8) used DNG Converter's own linear
+conversion as the yardstick: `"…/Adobe DNG Converter" -l -u -p0 -d DIR -o
+NAME.dng IN.dng` on the original and on our archive, then a sample-for-sample
+camera-space comparison of the two uncompressed LinearRaws (a 60-line numpy
+script; block-mean grids, not value bins — see the trap in §7).
 
 The same capability probe runs on a device behind the app's `LL_DNGPROBE=1`
 launch hook (`xcrun devicectl device process launch --console -e
@@ -49,7 +61,10 @@ launch hook (`xcrun devicectl device process launch --console -e
 | stored-value curves and the DNG levels that undo them | Kit `Archive/DNGArchiveCurves.swift` |
 | tile codecs — Kit lossless JPEG, libjxl, ImageIO JPEG, VideoToolbox JPEG | Kit `Archive/DNGArchiveEncoders.swift`, `DNGArchiveJXL.swift` |
 | the pipeline (`DNGArchive.Strategy` / `Converter`), sequence conversion | Kit `Archive/DNGArchiveConverter.swift` |
-| quality (means, PSNR/SSIM, white-balance pushes) and compatibility | `Verify.swift` |
+| quality (means, PSNR/SSIM, white-balance pushes, per-channel/region means, bands) and compatibility | `Verify.swift` |
+| synthetic flat / gain-map / noise / gradient CFA DNGs | `Synth.swift` |
+| DNG opcode lists (GainMap parse, the Metal bake) | Kit `Archive/DNGArchiveOpcodes.swift`, `DNGArchiveDemosaic.swift` |
+| structural validation of a written DNG | Kit `DNGArchive.validate` |
 | the matrix and the CSV | `Bench.swift` |
 | the report tables from the CSV | `scripts/report-tables.py` |
 
