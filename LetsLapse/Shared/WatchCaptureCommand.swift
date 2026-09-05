@@ -73,7 +73,8 @@ enum WatchCaptureCommand: String {
     case setSequenceMode
     case scheduleStop
     case cancelScheduledStop
-    /// Settings ▸ Advanced ▸ "Dim screen during shoot", from a distance.
+    /// Settings ▸ Display ▸ "Blackout viewfinder", from a distance. The token
+    /// keeps its old name so every bench script and `shoot.py --dim` still work.
     /// Display-only — the panel is a real slice of the thermal budget on the
     /// OLED phones — so unlike the capture setters this is accepted mid-run:
     /// flipping it live on a bench arm is exactly the A/B it exists for.

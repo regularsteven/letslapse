@@ -688,6 +688,30 @@ final class CameraController: NSObject, ObservableObject {
     @Published var isIntervalRunning = false {
         didSet { publishCaptureBusy() }
     }
+    /// The newest still this run wrote, and when. Only the scheduled peek
+    /// reads it (`ShootPeekCard`): a counter proves frames are landing, and
+    /// this proves they are landing *right*, which is the one thing a number
+    /// cannot say. Published rather than derived because the write path is the
+    /// only place that knows the URL, and cleared when a run starts so a peek
+    /// can never show the previous shoot's last frame.
+    /// One banked output, as a value so `onChange` can compare it.
+    struct BankedFrame: Equatable {
+        var url: URL
+        var at: Date
+    }
+
+    @Published private(set) var latestFrame: BankedFrame?
+
+    /// The blend engine's newest output, mirrored off its diagnostics snapshot
+    /// — the one struct that already crosses to the main actor once a window.
+    /// Deliberately NOT cleared when a run starts: a stale frame is filtered
+    /// by its stamp against `captureRunStartedAt` at the one place that reads
+    /// it, which cannot drift the way five scattered resets would.
+    private func noteBankedOutput(_ url: URL?) {
+        guard let url, url != latestFrame?.url else { return }
+        latestFrame = BankedFrame(url: url, at: Date())
+    }
+
     @Published var photoCount = 0 {
         didSet { checkScheduledStopCount() }
     }
@@ -8602,6 +8626,7 @@ final class CameraController: NSObject, ObservableObject {
                 if self.liveBlendOutputCount != snapshot.outputCount {
                     self.liveBlendOutputCount = snapshot.outputCount
                 }
+                self.noteBankedOutput(snapshot.lastOutputURL)
             }
             controller.onFinished = { [weak self] result in
                 guard let self else { return }
@@ -8870,6 +8895,7 @@ final class CameraController: NSObject, ObservableObject {
             if self.liveBlendOutputCount != snapshot.outputCount {
                 self.liveBlendOutputCount = snapshot.outputCount
             }
+            self.noteBankedOutput(snapshot.lastOutputURL)
         }
         controller.onFinished = { [weak self] result in
             guard let self else { return }
@@ -9285,7 +9311,11 @@ extension CameraController: AVCapturePhotoCaptureDelegate {
                     iso: iso))
                 let count = self.photoURLs.count
                 self.publishLiveExposure()
-                DispatchQueue.main.async { self.photoCount = count }
+                let bankedAt = Date()
+                DispatchQueue.main.async {
+                    self.photoCount = count
+                    self.latestFrame = BankedFrame(url: url, at: bankedAt)
+                }
                 // Photo-mode frame cap: the timer stops scheduling once the
                 // burst is requested (intervalTimer == nil); finalize when the
                 // last requested still has landed.

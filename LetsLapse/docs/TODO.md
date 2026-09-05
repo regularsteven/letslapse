@@ -11,6 +11,93 @@ live inline.
 
 ## Open
 
+### Settings ▸ Display: blackout, reduce brightness, and the scheduled peek
+
+**Detail:** `docs/design/iOS/settings.display.portrait.svg`,
+`capture-interval.running.blackout.portrait.svg`,
+`capture-interval.running.peek.portrait.svg` ·
+**Raised:** 2026-09-05 (Steven) · **SHIPPED 2026-09-05 (design first, then code, signed off between) — device sign-off owed** · medium
+
+Design-first pass, signed off on the SVGs before any Swift. The problem
+Steven put: a blacked-out shoot gives no sign it is going well, and the only
+way to look is to touch a phone that is on a tripod — which is how a run gets
+knocked out of frame.
+
+**Settings.** "Dim screen during shoot" leaves ADVANCED for a new top-level
+**DISPLAY** section between RECORDING and LOCATION, renamed **Blackout
+viewfinder** — the row floors `UIScreen.brightness` *and* covers the
+viewfinder, so "dim" was never what it did. Two levers, split because they are
+opposite on the two panel types: on the OLED iPhones almost all the saving is
+the **cover** (black pixels are off, so the slider is nearly free once the
+panel is covered), and on the LCD iPads it is the **brightness**, because the
+backlight burns whatever is drawn. New **Reduce brightness** (OFF) is that
+second lever, and it is also the level a lifted curtain returns *to* — which
+is why the two are independent rows rather than one three-way picker. Then
+**Scheduled peek** (ON) / **Trigger** (Interval | Clock, default Clock, a
+Clock peek inside the first 60 s of a run suppressed) / **Every** (5m default,
+10m, 15m), shown only while the blackout is on.
+
+**The peek shows a status card, not the viewfinder.** A restored preview
+answers "is it going well?" badly at three metres, and costs the OLED exactly
+what the blackout was turned on to save. The card is legible across a room and
+~94 % black: latest frame + its age, frame count as hero, a cadence verdict
+(On schedule / Falling behind), ELAPSED · THERMAL · SPACE chips, `runExposureLine`
+verbatim, the short blend readout, and a footer saying when the screen goes
+back and when the next peek is — a screen that blacks itself unannounced reads
+as a crash. No controls on it: a tap anywhere is the existing
+`ShootScreenDimmer.wake` (30 s of real screen), which is the only route to stop.
+
+**Two fixes to the blackout itself, in the same unit of work.** (1) The
+brightness floor comes off absolute zero to **0.05** — `UIScreen.brightness`
+caps every pixel on the panel, so at 0 the alive-signal cannot be seen, and on
+OLED the difference between 0.05 and 0 with a black cover up is noise.
+(2) The heartbeat becomes a 6pt `LL.amber` dot resting at 0.12 and **pulsing
+per captured frame**, replacing the 5pt red-at-30 % dot that is invisible in
+the field. It says more than the system indicator can: green means the camera
+is powered, a pulse means LetsLapse took a picture.
+
+**Steven's green-light question, answered and recorded in the blackout
+mirror's `desc`:** the app cannot brighten the system camera indicator.
+`UIScreen.brightness` is a panel-wide hardware write with no per-element
+exemption, so at the floor the dot is dimmed, not off. It reads clearly on
+Dynamic Island phones (the dot sits on the island's black surround at maximum
+contrast) and poorly on the 12 Pro's notch — the difference he saw between the
+two devices. `CaptureView`'s `.statusBarHidden()` is not the cause: it applies
+whether or not the blackout is engaged, and the dot is visible undimmed. The
+app's answer is the heartbeat, not the system's dot. **Worth one dark-room
+confirmation on both phones before the code lands.**
+
+*Shipped: `ShootPeekSchedule` in the Kit (`interval` / `clock`, the 60 s
+opening grace, 14 tests — 578 Kit tests green); `ShootDisplayPlan` +
+`ShootPeekCard` beside a rewritten `ShootScreenDimmer` (one `apply(_:)` entry
+point rather than four setters that can disagree; `runBeganAt` because
+`captureRunStartedAt` is written on the session queue and is not published, so
+the first plan of a run can arrive with it nil); `displayCard` +
+`peekTriggerRow` in Settings; `CameraController.latestFrame`, published from
+the stills write path and mirrored off the blend snapshot's new
+`lastOutputURL`; `DurationFormatter.compactAge`; `LL_PEEK=card`. Four defaults
+keys are new and `ShootScreenDimmer.defaultsKey` is NOT — nor are
+`setDimDuringShoot`, the `dimDuringShoot` state-frame key or `shoot.py --dim`,
+so no bench script breaks; only the Watch row's label moved (Dim Screen →
+Blackout). Verified on the iPhone 16 simulator (393 pt) and both mirrors
+re-measured against it.*
+
+**Three SwiftUI traps the mirror only caught once the app drew it**, all worth
+remembering: a settings `Toggle` needs `.labelsHidden()` or it claims half the
+row and squeezes the subtitle column to ~117 pt against its neighbours' 207 pt
+(every other row in `SettingsView` has it); every settings toggle here carries
+`.tint(.green)`; and a SwiftUI `Menu` label renders in `LL.accent` whatever
+`menuValueLabel` asks for, which also makes `settings.advanced.portrait.svg`
+stale for its two field-test values (noted in the INDEX, not fixed).
+
+**Owed:** device sign-off, and specifically the dark-room check of the green
+indicator on both phones — the reasoning above is sound but unverified. Then
+the peek's alert form (🟡 in the iOS INDEX), the collapsed Display card (🟡),
+and three mirrors this pass found stale and deliberately did not fix:
+`settings.portrait.svg` (missing the ON-DEVICE AI section entirely, and it now
+needs DISPLAY too) and both watchOS controls mirrors (the Dim toggle has never
+been drawn, and now carries the renamed label).
+
 ### Lossy DNG stage 2 — a camera-space decode that renders like Lightroom
 
 **Raised:** 2026-09-05 (Steven — archival Sony ARW → Adobe DNG Converter
@@ -906,8 +993,13 @@ recording controls page, wire command `setDimDuringShoot` (the one setter
 accepted mid-run, by design), `dimDuringShoot` in the state frame, and
 `--dim on|off` in shoot.py run+fleet. Bench-verified: the A/B where dim-ON
 completed a 20-min psycho arm the matched dim-OFF control could not
-(12 Pro, veto at T+18.2).* Owed before this leaves the list: **(a)** SVG
-mirrors after sign-off — settings.advanced + the watch controls page;
+(12 Pro, veto at T+18.2).* **2026-09-05: (a) is superseded for iOS** — the row has been
+redesigned into a Settings ▸ Display section and renamed *Blackout
+viewfinder*; see the Display job at the head of this list, which carries the
+mirrors (including the blacked-out screen itself, drawn for the first time)
+and the answer to Steven's green-indicator question. Owed before this leaves
+the list: **(a)** SVG mirrors after sign-off — the watch controls page, which
+now waits on that rename;
 **(b)** Watch-side verification on the real wrist (toggle round-trip,
 pending states); **(c)** repeat the A/B under the monitor test card's
 constant light (today's evening pair carries an ambient confound the

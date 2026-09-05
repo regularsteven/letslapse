@@ -1,0 +1,110 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (running, scheduled peek) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift + App/ShootScreenDimmer.swift — the card a scheduled peek lifts the blackout to show. Settings ▸ Display ▸ Scheduled peek (settings.display.portrait.svg), on by default, every 5 minutes on the wall clock.
+
+WHY A CARD AND NOT THE VIEWFINDER. The peek exists to answer "is this shoot going well?" from wherever the operator is standing, without a finger on a phone that is on a tripod. A restored live viewfinder answers that badly: at three metres it says the screen is on and nothing else. This card is legible at that distance, and it is also CHEAPER than the viewfinder it replaces — around 94% of the panel stays black, so an OLED phone pays almost nothing for the fifteen seconds, which is what makes a peek affordable on a device that turned the blackout on for thermal reasons in the first place. The blackout is not lifted underneath: the card is drawn on the same black, and brightness is restored to the device level, or to the reduced level when Settings ▸ Display ▸ Reduce brightness is on.
+
+READING ORDER, top to bottom, in the order the operator's questions arrive. (1) The latest frame, 160×120, so "check the shots" is literally answered — this is the one thing a counter cannot tell you, and the caption dates it. (2) The frame count as the hero, in the rounded tabular face the standby countdown uses (capture-standby.portrait.svg — the two screens are deliberately siblings, one before the run and one during it). (3) The health line, which is the verdict: green dot + "On schedule" while the delivered cadence tracks the request; it turns amber + "Falling behind" when it does not, which is the honest reading of a starved window. (4) Three chips in the standby card's shape and geometry — ELAPSED, THERMAL, SPACE. A chip whose value has gone wrong colours its VALUE only, leaving the label grey: thermal serious in #FF9F0A, critical in #FF3B30, and space under an hour of headroom likewise. (5) The exposure line, verbatim the amber string the running readout carries (runExposureLine), so the peek and the live screen never disagree. (6) The blend line, the short form of blendDiagnosticsReadout.
+
+THE FOOTER IS PART OF THE FEATURE. The bar and its countdown say the blackout is coming back on purpose — a screen that goes black on its own with no warning reads as a crash, and this run has two hours left. "next peek 3:20" is the line that means the operator never has to touch the phone at all: it names when they can look again. A tap anywhere hands over the real screen for 30 s (ShootScreenDimmer.wake), which is the existing escape and the only route to the stop control; the card itself carries no controls, deliberately — a shutter-sized target on a screen you are meant to glance at is how a tripod gets nudged.
+
+Sample data is one run: 41 minutes into a 3s interval, blend 3, DNG, nominal. The alert form of the card (falling behind, thermal serious) is listed in INDEX.md rather than drawn. The layout is centred within a max width so it reflows in landscape without a bespoke file.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="thumb"><rect x="116.5" y="222" width="160" height="120" rx="10"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.h{font-weight:800}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- the blackout is NOT lifted: the card is drawn on the same black cover,
+         with the brightness handed back for the window -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- eyebrow — the standby screen's word in the same seat, one state on -->
+      <text x="196.5" y="165" text-anchor="middle" font-size="12" class="h" fill="#C36A00" letter-spacing="2.4">SHOOTING</text>
+
+      <!-- the run's label when the schedule carried one; otherwise the mode word -->
+      <text x="196.5" y="195" text-anchor="middle" font-size="17" class="sb" fill="#FFF">Sunset over the harbour</text>
+
+      <!-- LATEST FRAME — the only element here a counter cannot replace, and the
+           reason the card beats a status line. 4:3, 160pt wide, ~5.7% of the
+           panel: the whole lit cost of the peek is about this rectangle -->
+      <g id="latest-frame">
+        <g clip-path="url(#thumb)">
+          <rect x="116.5" y="222" width="160" height="120" fill="url(#sky)"/>
+          <circle cx="170" cy="264" r="11" fill="#FFB340" opacity="0.9"/>
+          <circle cx="170" cy="264" r="19" fill="#FFB340" opacity="0.15"/>
+          <polygon points="116.5,296 145,285 178,294 213,281 244,295 276.5,286 276.5,342 116.5,342" fill="#141A24"/>
+          <polygon points="116.5,314 151,300 192,318 226,305 276.5,314 276.5,342 116.5,342" fill="#0B0E14"/>
+        </g>
+        <rect x="116.5" y="222" width="160" height="120" rx="10" fill="none" stroke="#FFF" stroke-opacity="0.2"/>
+      </g>
+      <text x="196.5" y="360" text-anchor="middle" font-size="11" fill="#FFF" opacity="0.35">latest frame · 12 s ago</text>
+
+      <!-- HERO — frames banked. Rounded tabular digits, the standby countdown's
+           face, so the number never reflows as it climbs -->
+      <text x="196.5" y="424" text-anchor="middle" font-size="64" class="b" fill="#FFB340"
+            font-family="ui-rounded, -apple-system, 'SF Pro Rounded', sans-serif"
+            style="font-variant-numeric:tabular-nums">1,284</text>
+      <text x="196.5" y="448" text-anchor="middle" font-size="12" fill="#FFF" opacity="0.45">frames</text>
+
+      <!-- VERDICT — delivered cadence against the requested one. Amber
+           "Falling behind" is the same line's other state -->
+      <g id="health">
+        <circle cx="153" cy="481.5" r="4" fill="#34C759"/>
+        <text x="166" y="486" font-size="15" class="sb" fill="#FFF">On schedule</text>
+      </g>
+
+      <!-- three chips, the standby card's geometry exactly (98×53 at 41.5 /
+           147.5 / 253.5). A value that has gone wrong colours itself; the
+           label stays grey so the row still scans -->
+      <g id="chips">
+        <g id="chip-elapsed">
+          <rect x="41.5" y="512" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="90.5" y="535.5" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">ELAPSED</text>
+          <text x="90.5" y="555.5" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">41:08</text>
+        </g>
+        <g id="chip-thermal">
+          <rect x="147.5" y="512" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="196.5" y="535.5" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">THERMAL</text>
+          <text x="196.5" y="555.5" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">nominal</text>
+        </g>
+        <g id="chip-space">
+          <rect x="253.5" y="512" width="98" height="53" rx="12" fill="#FFF" opacity="0.06"/>
+          <text x="302.5" y="535.5" text-anchor="middle" font-size="10" class="h" fill="#FFF" opacity="0.35" letter-spacing="1.2">SPACE</text>
+          <text x="302.5" y="555.5" text-anchor="middle" font-size="15" class="sb" fill="#FFF" opacity="0.85">1,748</text>
+        </g>
+      </g>
+
+      <!-- the running readout's own amber line, verbatim, so the peek and the
+           live screen can never disagree about the exposure -->
+      <text x="196.5" y="601" text-anchor="middle" font-size="14" class="m" fill="#FFB340">1/120 · ISO 200 · EV 9.1</text>
+      <text x="196.5" y="623" text-anchor="middle" font-size="11.5" class="m" fill="#FFF" opacity="0.45">blend 3 · DNG · healthy</text>
+
+      <!-- FOOTER — pinned to the bottom safe area, not part of the centred
+           column: the blackout returning has to look deliberate, and the next
+           peek has to be nameable, or the operator reaches for the phone -->
+      <g id="footer">
+        <rect x="131.5" y="742" width="130" height="3" rx="1.5" fill="#FFF" opacity="0.12"/>
+        <rect x="131.5" y="742" width="104" height="3" rx="1.5" fill="#FFB340" opacity="0.8"/>
+        <text x="196.5" y="768" text-anchor="middle" font-size="12" fill="#FFF" opacity="0.35">Screen returns in 12 s · next peek 3:20</text>
+        <text x="196.5" y="788" text-anchor="middle" font-size="12" fill="#FFF" opacity="0.22">Tap for the viewfinder</text>
+      </g>
+
+      <!-- hardware. The system camera indicator sits beside the island and is
+           drawn at full strength here: the peek has handed the brightness back,
+           which is the only thing that ever made it hard to see -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <circle cx="272" cy="29" r="4" fill="#34C759" opacity="0.9"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, scheduled peek) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ShootScreenDimmer.swift — status card over the blackout · 15 s · tap for the viewfinder</text>
+</svg>

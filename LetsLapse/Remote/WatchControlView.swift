@@ -1060,12 +1060,16 @@ struct WatchControlView: View {
         }
     }
 
-    /// The phone floors its display while a shoot runs (thermal budget on the
-    /// OLED phones). Display-only on the phone, so this is the one setter
-    /// that works mid-run — flip it from the wrist without touching the rig.
+    /// The phone covers its viewfinder while a shoot runs (thermal budget on
+    /// the OLED phones — Settings ▸ Display ▸ Blackout viewfinder). Only the
+    /// LABEL changed in the 2026-09-05 rename: the command is still
+    /// `setDimDuringShoot` and the state-frame key is still `dimDuringShoot`,
+    /// so a fleet script written against either keeps working. Display-only on
+    /// the phone, so this is the one setter that works mid-run — flip it from
+    /// the wrist without touching the rig.
     private var dimScreenRow: some View {
         RemoteToggleRow(
-            title: "Dim Screen",
+            title: "Blackout",
             isOn: remote.dimDuringShoot,
             enabled: !remote.isSending && remote.isReachable,
             isPending: remote.pendingCommand == .setDimDuringShoot

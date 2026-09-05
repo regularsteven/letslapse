@@ -48,10 +48,21 @@ struct CaptureView: View {
     /// idle Video preview for the test card, then runs its script hands-free.
     @StateObject private var testRig = TestCardRigController()
 
-    /// Settings ▸ Advanced ▸ "Dim screen during shoot" — display-only, so the
-    /// Watch and the remote may flip it even mid-run (`setDimDuringShoot`).
-    @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
+    /// Settings ▸ Display. The blackout is display-only, so the Watch and the
+    /// remote may flip it even mid-run (`setDimDuringShoot` — the key and the
+    /// wire token survived the 2026-09-05 rename).
+    @AppStorage(ShootScreenDimmer.defaultsKey) private var blackoutViewfinder = true
+    @AppStorage(ShootScreenDimmer.reduceBrightnessKey) private var reduceBrightness = false
+    @AppStorage(ShootScreenDimmer.peekEnabledKey) private var scheduledPeek = true
+    @AppStorage(ShootScreenDimmer.peekTriggerKey)
+    private var peekTrigger = ShootPeekTrigger.defaultTrigger.rawValue
+    @AppStorage(ShootScreenDimmer.peekEveryMinutesKey)
+    private var peekEveryMinutes = ShootPeekSchedule.defaultEveryMinutes
     @StateObject private var shootDimmer = ShootScreenDimmer()
+    /// The last banked frame, decoded when a peek opens rather than kept warm:
+    /// once every few minutes is not worth a live thumbnail pipeline.
+    @State private var peekThumbnail: Image?
+    @State private var peekThumbnailAge: TimeInterval?
     /// The cluster's run-time toggles (design 2026-09-04, third pass), both
     /// per run — see `seedRunToggles`. Dim starts from the Settings default:
     /// on floors the screen at once, a touch on the cover wakes it for 30 s
@@ -751,8 +762,13 @@ struct CaptureView: View {
         scheduling
         .modifier(ShootDimming(
             dimmer: shootDimmer,
-            engage: shootDimmerShouldEngage,
-            setting: dimScreenDuringShoot,
+            plan: shootDisplayPlan,
+            frameTick: camera.photoCount + camera.liveBlendOutputCount,
+            peek: peekReadout,
+            blackoutSetting: blackoutViewfinder,
+            onPeekChanged: { open in
+                if open { refreshPeekThumbnail() } else { peekThumbnail = nil }
+            },
             syncRemote: { on in
                 // A flip of the setting mid-run — Settings, the Watch, the
                 // remote — moves the run's own Dim toggle with it.
@@ -4094,12 +4110,109 @@ struct CaptureView: View {
         camera.isRecording || camera.isIntervalRunning || camera.isLiveBlendRunning
     }
 
-    /// Dim only the long runs (interval, blend, video). Photo-mode runs ride
-    /// the same blend engine but last seconds — a black flash there would
-    /// read as a fault, and Photo's thermal cost is nil anyway.
-    private var shootDimmerShouldEngage: Bool {
-        // The run's own toggle, not the setting: the setting only seeds it.
-        runDimEngaged && isCapturing && mode != .photo
+    // MARK: - Settings ▸ Display
+
+    /// Everything Settings ▸ Display asked for, as one value the dimmer takes
+    /// whole. Recomputed with the body, compared by the modifier's `onChange`,
+    /// so a flip of any row — Settings, the Watch, the remote, the cluster's
+    /// own Dim toggle — lands the same way.
+    private var shootDisplayPlan: ShootDisplayPlan {
+        let running = isCapturing && mode != .photo
+        return ShootDisplayPlan(
+            runActive: running,
+            // The run's own toggle, not the setting: the setting only seeds it.
+            blackout: running && runDimEngaged,
+            reduceBrightness: running && reduceBrightness,
+            peekEnabled: scheduledPeek,
+            trigger: ShootPeekTrigger(rawValue: peekTrigger) ?? .clock,
+            everyMinutes: peekEveryMinutes,
+            runStartedAt: running ? camera.captureRunStartedAt : nil)
+    }
+
+    /// What a scheduled peek shows. Built here rather than in the card because
+    /// every judgement in it — is the cadence being met, is the thermal state
+    /// worth colouring — is one this screen already makes for the live readout,
+    /// and the two must never disagree.
+    private var peekReadout: ShootPeekReadout {
+        var readout = ShootPeekReadout()
+        readout.title = peekTitle
+        readout.frameCount = camera.isLiveBlendRunning
+            ? camera.liveBlendOutputCount
+            : camera.photoCount
+        readout.thumbnail = peekThumbnail
+        readout.thumbnailAge = peekThumbnailAge
+        readout.elapsed = elapsedIntervalText
+        readout.thermal = thermalWord
+        switch thermalState {
+        case .serious: readout.thermalLevel = .warn
+        case .critical: readout.thermalLevel = .alert
+        default: readout.thermalLevel = .normal
+        }
+        if let frames = headroom?.frames {
+            readout.space = frames.formatted(.number)
+            switch headroom?.level {
+            case .critical: readout.spaceLevel = .alert
+            case .low: readout.spaceLevel = .warn
+            default: readout.spaceLevel = .normal
+            }
+        }
+        readout.exposure = runExposureText?.text
+        if let diagnostics = camera.liveBlendDiagnostics, camera.isLiveBlendRunning {
+            // A blend run is the only one with a cadence it can miss: the
+            // engine already grades every window, so the verdict is its word
+            // rather than a second opinion computed here.
+            readout.onSchedule = diagnostics.status == .healthy
+            var parts = ["blend \(diagnostics.requestedFramesPerBlend)"]
+            if let format = diagnostics.outputFormatLabel { parts.append(format) }
+            parts.append(diagnostics.status.rawValue.lowercased())
+            readout.blendLine = parts.joined(separator: " · ")
+        }
+        return readout
+    }
+
+    /// The shoot's own name when the schedule carried one — otherwise what
+    /// kind of run this is, which is the next most useful thing to read at
+    /// three metres.
+    private var peekTitle: String? {
+        if let label = model.scheduledRecording?.label, !label.isEmpty { return label }
+        if camera.scannerState != nil { return "Scanner" }
+        if camera.holyGrailState != nil { return "Holy Grail" }
+        if camera.ladderState != nil { return "Light Ladder" }
+        switch mode {
+        case .interval: return "Interval"
+        case .video: return "Video"
+        case .photo: return nil
+        }
+    }
+
+    /// Decode the newest banked frame for the card. Once every few minutes, so
+    /// it goes through the same cache the grids use rather than earning a
+    /// pipeline of its own — and a frame stamped before this run started is
+    /// the PREVIOUS shoot's, which the card must never show.
+    private func refreshPeekThumbnail() {
+        peekThumbnail = nil
+        peekThumbnailAge = nil
+        guard let banked = camera.latestFrame else {
+            #if DEBUG
+            // `LL_PEEK` on a simulator: no camera, so no run ever banks a
+            // frame. Borrow the newest project's hero so the mirror can be
+            // drawn against the state the card is really in.
+            if ProcessInfo.processInfo.environment["LL_PEEK"] != nil {
+                peekThumbnail = recentThumbnail
+                peekThumbnailAge = recentThumbnail == nil ? nil : 12
+            }
+            #endif
+            return
+        }
+        if let runStart = camera.captureRunStartedAt, banked.at < runStart { return }
+        peekThumbnailAge = Date().timeIntervalSince(banked.at)
+        Task {
+            let image = await ProjectThumbnailCache.shared.thumbnail(for: banked.url, kind: .image)
+            // The peek may have closed, or a newer frame landed, while this
+            // decoded.
+            guard shootDimmer.peeking, camera.latestFrame?.url == banked.url else { return }
+            peekThumbnail = image
+        }
     }
 
     /// Mirror the mode onto the camera for the session log — "Bulb" is Photo
@@ -4375,13 +4488,14 @@ struct CaptureView: View {
 
     // MARK: - Run-time toggles and the run readout
 
-    /// A run's own toggles start here — Dim from the Settings default, Info
-    /// off — and the screenshot hooks stage them for the mirrors:
+    /// A run's own toggles start here — Dim from Settings ▸ Display ▸ Blackout
+    /// viewfinder, Info off — and the screenshot hooks stage them for the
+    /// mirrors:
     /// `LL_RUNINFO=1` opens the info panel, `LL_RUNDIM=off` keeps the screen
     /// up with the toggle off, `LL_RUNDIM=wake` engages Dim and holds the
     /// wake window open — the amber-moon state every running mirror draws.
     private func seedRunToggles() {
-        runDimEngaged = dimScreenDuringShoot
+        runDimEngaged = blackoutViewfinder
         showRunInfo = false
         #if DEBUG
         let environment = ProcessInfo.processInfo.environment
@@ -4397,6 +4511,15 @@ struct CaptureView: View {
             }
         default:
             break
+        }
+        // `LL_PEEK=card` freezes a scheduled peek open. Same reason as the
+        // hooks either side of it: the simulator has no camera, so no schedule
+        // has frames to fire against and the card is unreachable off-device.
+        if environment["LL_PEEK"] != nil {
+            runDimEngaged = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+                shootDimmer.freezePeekForDesign()
+            }
         }
         #endif
     }

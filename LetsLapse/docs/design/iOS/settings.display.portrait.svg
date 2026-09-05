@@ -1,0 +1,197 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Settings · Display section · portrait</title>
+  <desc>Mirrors App/SettingsView.swift — the new DISPLAY section, drawn between RECORDING and LOCATION because it is about what the screen does during a shoot, not about the engine. It takes over the one row that used to live in ADVANCED as "Dim screen during shoot" (ShootScreenDimmer, settings.advanced.portrait.svg, where it is now gone).
+
+RENAME. "Dim" was never what the row did: it floors UIScreen.brightness AND covers the viewfinder with black, which is a blackout, not a dim. The section splits the two levers apart because they are not the same lever on every device — on the OLED iPhones essentially all the saving comes from the COVER (black pixels are off, so once the panel is covered the brightness slider is nearly free), and on the LCD iPads it is the reverse: the backlight burns whatever is drawn, so brightness is the only lever there and covering the preview saves almost nothing. Reduce brightness is therefore the iPad's row and Blackout viewfinder is the iPhone's, and both are offered everywhere because a rig is whatever is on the tripod.
+
+ROWS. (1) Reduce brightness — OFF by default. Drops the panel to its lowest usable level for the whole run; when a blackout curtain lifts, this is the level it lifts TO, which is why the two rows are independent rather than one three-way picker. (2) Blackout viewfinder — ON by default, the old row's default, its wire command (setDimDuringShoot) and its Watch/remote mirrors unchanged. It is also still the run cluster's Dim toggle, seeded from here. (3) Scheduled peek — ON by default, and only shown while Blackout viewfinder is on; it lifts the blackout on a schedule for 15 s and shows a status card instead of the viewfinder (capture-interval.running.peek.portrait.svg). It exists because the blackout's only escape used to be a tap on a phone that is on a tripod, and a tap is exactly how a shoot gets knocked out of frame. (4) Trigger — a full-width segment rather than a menu, because "Interval" and "Clock" both have to be readable to be chosen between: Interval counts from the moment the run started, Clock aligns to the wall clock so 5m means :00, :05, :10 whatever time the run began. Clock is the default — one rule you learn once, and a fleet lights up together. A Clock peek inside the first 60 s of a run is suppressed, so a run started at 3:14:50 does not flash a card ten seconds in. (5) Every — a trailing menu like Custom frame rate, because it is a value not a mode: 5m (default), 10m, 15m. The subtitle quantifies the cost rather than describing it, in the manner of the storage rows.
+
+Rows 3–5 are a disclosure group: with Blackout viewfinder off, the card is the first two rows only and is 194pt tall instead of 383pt. That state is listed in INDEX.md rather than drawn — it is this file minus its last three rows.
+
+Scroll position: translate(0,-400), which puts the RECORDING header just under the status bar and the whole DISPLAY card in view, with LOCATION starting underneath the floating tab bar. On macOS the whole section is drawn but inert — the Mac has no UIScreen to floor and no thermal veto (ShootScreenDimmer's #else path is a no-op), so the rows exist only so a fleet script reads the same on every platform.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="scroll"><rect x="0" y="58" width="393" height="794"/></clipPath>
+    <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}.hdr{font-size:13px;font-weight:600;fill:#6D6D72;letter-spacing:0.5px}.ttl{font-size:16px;fill:#000}.sub{font-size:11.5px;fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar -->
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+
+      <!-- scrolled content (the screen has no nav bar; content scrolls under the status bar) -->
+      <g clip-path="url(#scroll)">
+        <!-- scrolled 400pt: RECORDING's card sits at the top for context, since
+             where DISPLAY lands in the order is part of what this file specifies -->
+        <g transform="translate(0,-400)">
+
+        <!-- recording — drawn only as the neighbour above -->
+        <text x="20" y="470" class="hdr">RECORDING</text>
+        <g id="recording-card">
+          <rect x="16" y="478" width="361" height="188" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="504" class="ttl">Remember recording settings</text>
+          <text x="32" y="519" class="sub">Start each shoot in your last-used mode with its settings —</text>
+          <text x="32" y="532" class="sub">lens, resolution, frame rate, stabilization, interval spacing…</text>
+          <rect x="316" y="496" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351.5" cy="511.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          <line x1="32" y1="546" x2="377" y2="546" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="572" class="ttl">Manage resolutions</text>
+          <text x="32" y="587" class="sub">Choose which resolutions Capture Format offers —</text>
+          <text x="32" y="600" class="sub">separate lists for stills and video</text>
+          <path d="M363 576 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          <line x1="32" y1="612" x2="377" y2="612" stroke="#000" stroke-opacity="0.08"/>
+          <text x="32" y="636" class="ttl">Record audio</text>
+          <text x="32" y="651" class="sub">Capture microphone sound with video shoots.</text>
+          <rect x="316" y="622" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+          <circle cx="331.5" cy="637.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+
+        <!-- DISPLAY — the new section. Row geometry and every wrap point below
+             are measured off the running app (iPhone 16 simulator, 393 pt),
+             not estimated: the subtitle column on a switch row is narrowed by
+             the toggle for its WHOLE height, so these subtitles are three
+             short lines rather than two long ones. -->
+        <text x="20" y="694" class="hdr">DISPLAY</text>
+        <g id="display-card">
+          <rect x="16" y="702" width="361" height="435" rx="16" fill="#FFF" filter="url(#soft)"/>
+
+          <!-- reduce brightness — OFF by default. The panel lever, and the only
+               one that does anything on an LCD iPad. Also the level a lifted
+               curtain returns TO, which is why it is independent of the row
+               below rather than the low rung of one three-way picker -->
+          <g id="reduce-brightness-row">
+            <text x="32" y="728" class="ttl">Reduce brightness</text>
+            <text x="32" y="743" class="sub">Drops the panel to its lowest level for the</text>
+            <text x="32" y="756" class="sub">whole shoot. On iPad, the only screen saving</text>
+            <text x="32" y="769" class="sub">there is</text>
+            <rect x="316" y="718" width="51" height="31" rx="15.5" fill="#E9E9EB"/>
+            <circle cx="331.5" cy="733.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          </g>
+          <line x1="32" y1="783" x2="377" y2="783" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- blackout viewfinder — ON by default. This IS the old "Dim screen
+               during shoot" row: same defaults key, same wire command, same
+               Watch mirror, same run-cluster toggle. Only the name and the
+               subtitle changed, and the brightness floor it writes moves off
+               absolute zero (see capture-interval.running.blackout) -->
+          <g id="blackout-viewfinder-row">
+            <text x="32" y="809" class="ttl">Blackout viewfinder</text>
+            <text x="32" y="824" class="sub">Covers the preview with black — nearly all</text>
+            <text x="32" y="837" class="sub">the thermal saving on OLED phones. Tap to</text>
+            <text x="32" y="850" class="sub">peek</text>
+            <rect x="316" y="799" width="51" height="31" rx="15.5" fill="#34C759"/>
+            <circle cx="351.5" cy="814.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          </g>
+          <line x1="32" y1="864" x2="377" y2="864" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- scheduled peek — ON by default, and the whole point of the
+               section: it lifts the blackout WITHOUT a finger on a phone that
+               is on a tripod. Present only while the row above is on -->
+          <g id="scheduled-peek-row">
+            <text x="32" y="890" class="ttl">Scheduled peek</text>
+            <text x="32" y="905" class="sub">Lifts the blackout for 15 seconds to show a</text>
+            <text x="32" y="918" class="sub">status card — check the shoot without</text>
+            <text x="32" y="931" class="sub">touching the camera</text>
+            <rect x="316" y="880" width="51" height="31" rx="15.5" fill="#34C759"/>
+            <circle cx="351.5" cy="895.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+          </g>
+          <line x1="32" y1="945" x2="377" y2="945" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- trigger — a full-width segment, not a trailing menu: both words
+               have to be legible to be chosen between, and neither is a value.
+               Clock is the default. Nothing sits beside the subtitle here, so
+               it takes the whole column and wraps at two lines -->
+          <g id="trigger-row">
+            <text x="32" y="971" class="ttl">Trigger</text>
+            <text x="32" y="986" class="sub">Interval counts from the moment the shoot started. Clock</text>
+            <text x="32" y="999" class="sub">aligns to the hour, so a whole fleet lights up together</text>
+            <g id="trigger-segment" data-symbol="Picker(.segmented)">
+              <rect x="32" y="1011" width="329" height="31" rx="8" fill="#E9E9EB"/>
+              <rect x="196.5" y="1013" width="162.5" height="27" rx="7" fill="#FFF" filter="url(#soft)"/>
+              <g font-size="13" fill="#000" text-anchor="middle">
+                <text x="115.25" y="1031">Interval</text>
+                <text x="277.75" y="1031" class="sb">Clock</text>
+              </g>
+            </g>
+          </g>
+          <line x1="32" y1="1056" x2="377" y2="1056" stroke="#000" stroke-opacity="0.08"/>
+
+          <!-- every — a trailing menu, the Custom frame rate shape, because it
+               is a value. The subtitle prices the feature rather than
+               describing it, and the minutes-lit figure is COMPUTED from the
+               chosen period, so it moves with the menu.
+               The value is drawn in LL.accent because that is what a SwiftUI
+               Menu label actually renders as here — `menuValueLabel` asks for
+               .secondary and the accent wins. The two field-test rows in
+               settings.advanced use the same helper and are drawn grey there;
+               that file is stale on this detail (noted in INDEX.md) -->
+          <g id="every-row">
+            <text x="32" y="1082" class="ttl">Every</text>
+            <text x="32" y="1097" class="sub">How often the card appears. At 5 minutes a</text>
+            <text x="32" y="1110" class="sub">two-hour shoot spends about 6 minutes with</text>
+            <text x="32" y="1123" class="sub">the screen lit</text>
+            <text x="351" y="1082" font-size="15" fill="#C36A00" text-anchor="end">5m</text>
+            <path d="M359 1072 l4 -4.5 4 4.5 m-8 5 l4 4.5 4 -4.5" stroke="#C36A00" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="chevron.up.chevron.down"/>
+          </g>
+        </g>
+
+        <!-- location — drawn only as the neighbour below; the tab bar floats over it -->
+        <text x="20" y="1165" class="hdr">LOCATION</text>
+        <g id="location-card">
+          <rect x="16" y="1173" width="361" height="75" rx="16" fill="#FFF" filter="url(#soft)"/>
+          <text x="32" y="1199" class="ttl">Geotag captures</text>
+          <text x="32" y="1214" class="sub">Save GPS coordinates in photo EXIF and write</text>
+          <text x="32" y="1227" class="sub">a GPX track sidecar next to captured video.</text>
+          <rect x="316" y="1189" width="51" height="31" rx="15.5" fill="#34C759"/>
+          <circle cx="351.5" cy="1204.5" r="13.5" fill="#FFF" filter="url(#soft)"/>
+        </g>
+
+        </g>
+      </g>
+
+      <!-- floating tab bar (Settings selected) — floats over the scroll -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g id="tab-create" fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+        </g>
+        <g id="tab-gallery" fill="none" stroke="#8E8E93">
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <g id="tab-projects" fill="none" stroke="#8E8E93">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g id="tab-collections" fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <rect x="303.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g id="tab-settings" fill="none" stroke="#C36A00">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Settings — Display section · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/SettingsView.swift + App/ShootScreenDimmer.swift — Reduce brightness · Blackout viewfinder · Scheduled peek</text>
+</svg>

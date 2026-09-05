@@ -211,7 +211,9 @@ final class WatchRemoteControlReceiver: NSObject, ObservableObject {
     }
 
     /// The pending "stop at…" mirrored to the Watch; all-nil clears it.
-    /// Mirror of Settings ▸ Advanced ▸ "Dim screen during shoot", so the
+    /// Mirror of Settings ▸ Display ▸ "Blackout viewfinder" (called "Dim
+    /// screen during shoot" until 2026-09-05 — the key and this wire token did
+    /// not change with the name), so the
     /// Watch toggle and a scripted A/B can read the truth back.
     private var dimDuringShoot = true
 

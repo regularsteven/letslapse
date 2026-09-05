@@ -41,7 +41,16 @@ struct SettingsView: View {
     /// Field-test selector for BLEND=Auto's decision logic (DNG path).
     /// Stored as the raw strategy id; stamped into every run's capture log.
     @AppStorage(BlendStrategyID.defaultsKey) private var blendStrategy = BlendStrategyID.zone.rawValue
-    @AppStorage(ShootScreenDimmer.defaultsKey) private var dimScreenDuringShoot = true
+    /// Settings ▸ Display. The blackout keeps `ShootScreenDimmer.defaultsKey`
+    /// through the 2026-09-05 rename so the wire command, the Watch mirror and
+    /// `shoot.py --dim` all keep pointing at the same switch.
+    @AppStorage(ShootScreenDimmer.defaultsKey) private var blackoutViewfinder = true
+    @AppStorage(ShootScreenDimmer.reduceBrightnessKey) private var reduceBrightness = false
+    @AppStorage(ShootScreenDimmer.peekEnabledKey) private var scheduledPeek = true
+    @AppStorage(ShootScreenDimmer.peekTriggerKey)
+    private var peekTrigger = ShootPeekTrigger.defaultTrigger.rawValue
+    @AppStorage(ShootScreenDimmer.peekEveryMinutesKey)
+    private var peekEveryMinutes = ShootPeekSchedule.defaultEveryMinutes
     /// Per-idiom default: iPhone on, iPad off — see `CreateCameraSetting`.
     @AppStorage(CreateCameraSetting.key) private var opensCameraOnCreate = CreateCameraSetting.defaultValue
     @AppStorage(RawDecodeSettings.storageKey)
@@ -87,6 +96,13 @@ struct SettingsView: View {
 
                 LLSectionHeader("Recording")
                 recordingCard
+                    .padding(.bottom, 12)
+
+                // What the screen does while a shoot runs — next to Recording
+                // because that is what it is about, and ahead of everything
+                // that is about the engine.
+                LLSectionHeader("Display")
+                displayCard
                     .padding(.bottom, 12)
 
                 LLSectionHeader("Location")
@@ -484,6 +500,121 @@ struct SettingsView: View {
         )
     }
 
+    // MARK: - Display
+
+    /// What the screen does while a shoot runs.
+    ///
+    /// **Two levers, not one dimmer with a volume knob.** On the OLED iPhones
+    /// nearly all the saving is the black *cover* — black pixels are off, so
+    /// once the viewfinder is covered the brightness slider is almost free. On
+    /// the LCD iPads it is the reverse: the backlight burns whatever is drawn,
+    /// so brightness is the only lever there and covering the preview saves
+    /// almost nothing. That is why "Reduce brightness" is its own row rather
+    /// than the low rung of a three-way picker — and it is also the level a
+    /// lifted blackout returns *to*, which the pair could not express as one
+    /// control.
+    ///
+    /// The last three rows are a disclosure group: a peek only means anything
+    /// under a blackout. Mirrored by
+    /// `docs/design/iOS/settings.display.portrait.svg`.
+    private var displayCard: some View {
+        VStack(spacing: 0) {
+            LLRow(
+                title: "Reduce brightness",
+                subtitle: "Drops the panel to its lowest level for the whole shoot. On iPad, the only screen saving there is"
+            ) {
+                Toggle("", isOn: $reduceBrightness)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+
+            LLRow(
+                title: "Blackout viewfinder",
+                subtitle: "Covers the preview with black — nearly all the thermal saving on OLED phones. Tap to peek",
+                showsDivider: blackoutViewfinder
+            ) {
+                Toggle("", isOn: $blackoutViewfinder)
+                    .labelsHidden()
+                    .tint(.green)
+            }
+
+            if blackoutViewfinder {
+                LLRow(
+                    title: "Scheduled peek",
+                    subtitle: "Lifts the blackout for \(Int(ShootPeekSchedule.peekSeconds)) seconds to show a status card — check the shoot without touching the camera",
+                    showsDivider: scheduledPeek
+                ) {
+                    Toggle("", isOn: $scheduledPeek)
+                        .labelsHidden()
+                        .tint(.green)
+                }
+
+                if scheduledPeek {
+                    peekTriggerRow
+                    LLRow(
+                        title: "Every",
+                        subtitle: peekCostSubtitle,
+                        showsDivider: false
+                    ) {
+                        Menu {
+                            ForEach(ShootPeekSchedule.everyMinutesChoices, id: \.self) { minutes in
+                                Button {
+                                    peekEveryMinutes = minutes
+                                } label: {
+                                    if minutes == peekEveryMinutes {
+                                        Label("\(minutes)m", systemImage: "checkmark")
+                                    } else {
+                                        Text("\(minutes)m")
+                                    }
+                                }
+                            }
+                        } label: {
+                            menuValueLabel("\(peekEveryMinutes)m")
+                        }
+                        .menuStyle(.borderlessButton)
+                        .fixedSize()
+                    }
+                }
+            }
+        }
+        .llCard()
+    }
+
+    /// A segment rather than a trailing menu: neither of these is a *value*,
+    /// and both words have to be legible to be chosen between — "Interval" and
+    /// "Clock" mean nothing folded into a menu label.
+    private var peekTriggerRow: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 10) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Trigger")
+                        .font(.system(size: 16))
+                    Text("Interval counts from the moment the shoot started. Clock aligns to the hour, so a whole fleet lights up together")
+                        .font(.system(size: 11.5))
+                        .foregroundStyle(.secondary)
+                }
+                Picker("Trigger", selection: $peekTrigger) {
+                    Text("Interval").tag(ShootPeekTrigger.interval.rawValue)
+                    Text("Clock").tag(ShootPeekTrigger.clock.rawValue)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+
+            Divider().padding(.leading, 16)
+        }
+    }
+
+    /// Prices the choice rather than describing it, the way the storage rows
+    /// do: a peek is cheap, and the operator should be able to see that it is.
+    private var peekCostSubtitle: String {
+        let minutesLit = 120.0 / Double(peekEveryMinutes) * ShootPeekSchedule.peekSeconds / 60
+        return "How often the card appears. At \(peekEveryMinutes) minutes a two-hour shoot spends about \(Int(minutesLit.rounded())) minutes with the screen lit"
+    }
+
     // MARK: - Location
 
     private var locationCard: some View {
@@ -876,12 +1007,6 @@ struct SettingsView: View {
                 .fixedSize()
             }
 
-            LLRow(
-                title: "Dim screen during shoot",
-                subtitle: "Floors the display while a shoot runs — tap to peek. The panel is a real share of the thermal budget on OLED phones"
-            ) {
-                Toggle("", isOn: $dimScreenDuringShoot)
-            }
             #endif
 
             // Field test, like the blend-strategy row above it: four ways to

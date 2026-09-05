@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Interval (running, blacked out) · portrait</title>
+  <desc>Mirrors App/ShootScreenDimmer.swift (ShootDimCover) over a running shoot — the state Settings ▸ Display ▸ Blackout viewfinder puts the screen in, and the state the run cluster's Dim toggle engages and disengages mid-run. The cover is full-bleed over everything: viewfinder, top bar, readout and shutter cluster all go under it. Drawn here for the first time; the row that produces it shipped 2026-08-25 with the thermal work and never had a mirror.
+
+TWO CHANGES FROM WHAT SHIPPED, both about the same thing — a blacked-out screen with no signal on it is indistinguishable from a dead one.
+
+(1) THE BRIGHTNESS FLOOR COMES OFF ABSOLUTE ZERO. ShootScreenDimmer writes UIScreen.main.brightness = 0; this spec writes 0.05, the level CaptureStandby already uses. On OLED the saving is in the COVER, not the slider: with the panel black, lit pixels are the entire power bill, and going from 0.05 to 0.00 saves a fraction of a fraction while capping every pixel on the display at the panel's floor — which is why the 30%-red 5pt dot that shipped is invisible in the field. On the LCD iPads the slider is the lever, and 0.05 is still their floor, so nothing is given up there either.
+
+(2) THE HEARTBEAT PULSES ON CAPTURE, NOT ON A CLOCK. One 6pt dot in LL.amber at the centre, resting at 0.12 and pulsing to 0.55 for ~250 ms on each frame the run banks (drawn here at the peak). Resting glow matters at long intervals — a dot that is dark for 59 of every 60 seconds reads as dead — and pulsing rather than holding also keeps a static lit pixel off a 2-hour OLED shoot. It says more than the system indicator can: green means the camera is powered, a pulse means LetsLapse actually took a picture.
+
+THE SYSTEM CAMERA INDICATOR CANNOT BE FIXED FROM HERE, and it is drawn dimmed to record that. It is the system's own dot, composited onto the same panel, and UIScreen.brightness is a panel-wide hardware write with no per-element exemption — at the floor it is dimmed, not off. It reads clearly on Dynamic Island phones because the dot sits on the island's black surround at maximum contrast, and poorly on the 12 Pro's notch, which is the difference Steven measured between the two devices on 2026-09-05. (CaptureView's .statusBarHidden() is not the cause: it is applied whether or not the blackout is engaged, and the dot is visible undimmed.) The app's answer is the heartbeat above, not the system's dot.
+
+A tap anywhere hands the screen back for 30 s (ShootScreenDimmer.wake) and then re-floors — that is the manual escape, and the one Scheduled peek exists to make unnecessary, because reaching a tripod-mounted phone is how a shoot gets knocked out of frame. Screenshot with LL_CAPTURE=1 LL_HOLYGRAIL=running (the Settings default floors a staged run at once); LL_RUNDIM=off keeps the screen up instead.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <!-- the cover: black to the edges, over the whole capture screen. Brightness
+         floored at 5% rather than 0, so the heartbeat below has somewhere to go -->
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- HEARTBEAT — 6pt, LL.amber, screen centre. Drawn at the pulse peak
+           (0.55); it rests at 0.12 between frames -->
+      <g id="heartbeat">
+        <circle cx="196.5" cy="426" r="9" fill="#FFB340" opacity="0.10"/>
+        <circle cx="196.5" cy="426" r="3" fill="#FFB340" opacity="0.55"/>
+      </g>
+
+      <!-- hardware. The system camera indicator is drawn dimmed, not absent:
+           it is on the same panel as everything else and the brightness write
+           is panel-wide, so the app cannot exempt it. See the description -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <circle cx="272" cy="29" r="4" fill="#34C759" opacity="0.18"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.12"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Interval (running, blacked out) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ShootScreenDimmer.swift — cover + brightness 5% · amber heartbeat pulses per captured frame</text>
+</svg>

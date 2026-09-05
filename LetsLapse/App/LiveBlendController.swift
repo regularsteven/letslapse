@@ -34,6 +34,12 @@ struct LiveBlendDiagnosticsSnapshot: Equatable {
     /// Shown in the running readout so the active output format is visible
     /// during capture, not just before it ("DNG" on the RAW path).
     var outputFormatLabel: String? = nil
+    /// The newest output file this run has written. Only the scheduled peek
+    /// reads it (`ShootPeekCard`): the counter proves frames are landing, the
+    /// picture proves they are landing right. Carried on the snapshot because
+    /// this is the one struct that already crosses from the blend queue to the
+    /// main actor once per window.
+    var lastOutputURL: URL? = nil
 }
 
 /// Capture-experiment toggles for the DNG path. Each is a Settings switch
@@ -1136,7 +1142,9 @@ final class LiveBlendController: NSObject, AVCaptureVideoDataOutputSampleBufferD
         }
 
         let status = status(after: entry)
+        let newestOutput = frameURLs.last
         pushDiagnostics {
+            $0.lastOutputURL = newestOutput
             $0.lastCapturedFrames = entry.capturedFrames
             $0.lastBlendMillis = entry.blendMillis
             $0.lastOutputIntervalSeconds = entry.actualIntervalSeconds
