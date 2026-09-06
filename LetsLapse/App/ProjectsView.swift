@@ -1,7 +1,46 @@
 import SwiftUI
 
-/// One card per original, blended clips always visible as a thumbnail strip —
-/// Library and Blends unified, with no expand/collapse state at all.
+/// What the Projects list can be ordered by.
+///
+/// Three axes because three questions get asked of a library: when was this
+/// shot, when did I last work on it, and what is it costing me. Each has its
+/// own direction words — "oldest" and "smallest" are the same gesture but not
+/// the same sentence — so the triangle's accessibility label comes from here
+/// rather than from a generic ascending/descending.
+enum ProjectSort: String, CaseIterable, Identifiable {
+    case capture
+    case edit
+    case size
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .capture: return "Capture"
+        case .edit: return "Edit"
+        case .size: return "Size"
+        }
+    }
+
+    var ascendingLabel: String {
+        switch self {
+        case .capture: return "Oldest capture first"
+        case .edit: return "Least recently edited first"
+        case .size: return "Smallest first"
+        }
+    }
+
+    var descendingLabel: String {
+        switch self {
+        case .capture: return "Newest capture first"
+        case .edit: return "Most recently edited first"
+        case .size: return "Biggest first"
+        }
+    }
+}
+
+/// One card per original — Library and Blends unified, with no
+/// expand/collapse state at all.
 /// A List (restyled to match the ScrollView look) so cards get native
 /// swipe-to-delete.
 struct ProjectsView: View {
@@ -19,6 +58,16 @@ struct ProjectsView: View {
     /// Typed words and tag chips, together — the two narrow the same list and share one
     /// empty state, so they are one value rather than two pieces of view state.
     @State private var query = SceneQuery.empty
+    /// The sort, remembered. Unlike the transfer picker's filter this is a
+    /// preference rather than a per-visit question: a library somebody sorts by
+    /// size is one they are managing storage on, and re-choosing that on every
+    /// launch is the kind of thing a file browser has never asked of anyone.
+    /// Descending by default, which is the newest-first order the list has
+    /// always opened in.
+    @AppStorage("projects.sortKey") private var sortKeyRaw = ProjectSort.capture.rawValue
+    @AppStorage("projects.sortAscending") private var sortAscending = false
+
+    private var sortKey: ProjectSort { ProjectSort(rawValue: sortKeyRaw) ?? .capture }
     /// Serving this library to another device. Owned here rather than by the
     /// model so it lives exactly as long as the Projects tab does — which is
     /// the whole session, since a `@StateObject` on a tab survives switching
@@ -46,9 +95,10 @@ struct ProjectsView: View {
                     // "View as timelapse". With the tab off they come back
                     // here, because otherwise nothing lists them.
                     let library = sourceCaptures
-                    let visible = library
-                        .filtered(by: filter, isScan: model.isScannerProject)
-                        .matching(query)
+                    let visible = sorted(
+                        library
+                            .filtered(by: filter, isScan: model.isScannerProject)
+                            .matching(query))
                     if library.isEmpty {
                         emptyState
                     } else if visible.isEmpty {
@@ -59,7 +109,6 @@ struct ProjectsView: View {
                                 capture: capture,
                                 onOpen: { path.append(capture.id) },
                                 onNewVersion: { model.openCapture(capture) },
-                                onOpenVersion: { blend in model.openBlend(blend) },
                                 onPreview: { preview(capture) },
                                 onDelete: { delete(capture) }
                             )
@@ -111,6 +160,15 @@ struct ProjectsView: View {
         // in the bar points at.
         .onChange(of: listsScans) { lists in
             if !lists, filter == .scans { filter = .all }
+        }
+        // Sizes are measured only for the sort that needs them, and only for
+        // projects edited since their last measurement — so this is a full
+        // library walk exactly once, and nothing at all on every visit after.
+        // `task(id:)` rather than `onChange` so choosing Size on a cold launch
+        // starts the sweep too.
+        .task(id: sortKey) {
+            guard sortKey == .size else { return }
+            await model.measureProjectSizes()
         }
         .onAppear { consumeDetailRequest(model.requestedProjectDetailID) }
         .onReceive(model.$requestedProjectDetailID) { requested in
@@ -169,26 +227,23 @@ struct ProjectsView: View {
     /// assets rather than projects.
     private var header: some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text("Projects")
-                .font(.system(size: 34, weight: .bold))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 4)
-                .padding(.trailing, 4)
-                .padding(.top, 8)
-
-            // Nothing at all when the server is off: a row saying "not
-            // sharing" would be a permanent reminder of a feature most
-            // sessions never touch. On a Mac this chip carries more weight —
-            // there is no scene-phase stand-down there, so it is the only
-            // visible sign the machine is advertising.
-            if transferServer.isRunning {
-                ProjectSharingChip(server: transferServer) {
-                    sharingEnabled = false
-                    transferServer.stop()
-                }
-                .padding(.top, 10)
-                .padding(.horizontal, 4)
+            // The sharing control sits opposite the title rather than in a row
+            // of its own under it (which is where it lived until 2026-09-06).
+            // A glyph can say the one thing that row said — green on, red off —
+            // in the corner, and everything else it carried (the switch, the
+            // code, the QR, what is being sent) belongs behind it rather than
+            // across the header of every session that never touches sharing.
+            HStack(alignment: .firstTextBaseline) {
+                Text("Projects")
+                    .font(.system(size: 34, weight: .bold))
+                Spacer(minLength: 8)
+                ProjectSharingChip(server: transferServer, isEnabled: $sharingEnabled)
+                    .alignmentGuide(.firstTextBaseline) { $0[VerticalAlignment.center] + 6 }
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.leading, 4)
+            .padding(.trailing, 4)
+            .padding(.top, 8)
 
             // Same segmented filter the Gallery grid uses, so the two tabs
             // narrow a library the same way.
@@ -197,8 +252,14 @@ struct ProjectsView: View {
                 // the empty-state card doesn't butt against the title.
                 Color.clear.frame(height: 8)
             } else {
-                SceneSearchField(text: $query.text)
-                    .padding(.top, 10)
+                // Search and sort share the row: two halves of "which
+                // projects, in what order", and the header has no vertical
+                // room to spare above the filter bar and the tag chips.
+                HStack(spacing: 8) {
+                    SceneSearchField(text: $query.text)
+                    sortControl
+                }
+                .padding(.top, 10)
 
                 CaptureFilterBar(
                     selection: $filter,
@@ -214,6 +275,79 @@ struct ProjectsView: View {
                 }
             }
         }
+    }
+
+    /// The sort menu and its direction triangle, in the search row's trailing
+    /// half.
+    ///
+    /// The menu carries its own capsule rather than taking a `.borderless`
+    /// button style: AppKit drops the capsule behind a `Menu` with a custom
+    /// label, so on the Mac the row would otherwise read as two bare words
+    /// beside a filled search field.
+    private var sortControl: some View {
+        HStack(spacing: 4) {
+            Menu {
+                Picker("Sort by", selection: $sortKeyRaw) {
+                    ForEach(ProjectSort.allCases) { key in
+                        Text(key.label).tag(key.rawValue)
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    if model.isMeasuringSizes, sortKey == .size {
+                        // A size sort on a library that has never been measured
+                        // settles as the walks land; saying so beats a list
+                        // that appears to re-order itself for no reason.
+                        ProgressView().controlSize(.mini)
+                    }
+                    Text(sortKey.label)
+                        .font(.system(size: 14, weight: .medium))
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .foregroundStyle(LL.accent)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 8)
+                .background(Color.primary.opacity(0.06), in: Capsule())
+                .contentShape(Capsule())
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Sort by \(sortKey.label)")
+
+            Button {
+                sortAscending.toggle()
+            } label: {
+                Image(systemName: sortAscending ? "arrowtriangle.up.fill" : "arrowtriangle.down.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(LL.accent)
+                    .frame(width: 30, height: 32)
+                    .background(Color.primary.opacity(0.06), in: Capsule())
+                    .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(sortAscending ? sortKey.ascendingLabel : sortKey.descendingLabel)
+        }
+    }
+
+    /// Search, then the kind filter and tag chips, then this: the order is
+    /// what the human asked of the list, narrowest question last.
+    private func sorted(_ captures: [AppModel.CaptureProject]) -> [AppModel.CaptureProject] {
+        let ascending: [AppModel.CaptureProject]
+        switch sortKey {
+        case .capture:
+            ascending = captures.sorted { $0.createdAt < $1.createdAt }
+        case .edit:
+            ascending = captures.sorted { model.lastEdited($0) < model.lastEdited($1) }
+        case .size:
+            // A project not measured yet sorts as -1 rather than 0, so the
+            // unknowns hold one end of the list and visibly resolve as the
+            // sweep lands instead of pretending to be empty projects.
+            ascending = captures.sorted {
+                ($0.sizeBytes ?? -1, $0.createdAt) < ($1.sizeBytes ?? -1, $1.createdAt)
+            }
+        }
+        return sortAscending ? ascending : ascending.reversed()
     }
 
     /// What this list is built from: the scan-free library, or everything —
@@ -361,7 +495,6 @@ private struct ProjectCard: View {
     var capture: AppModel.CaptureProject
     var onOpen: () -> Void
     var onNewVersion: () -> Void
-    var onOpenVersion: (AppModel.BlendProject) -> Void
     var onPreview: () -> Void
     var onDelete: () -> Void
 
@@ -372,6 +505,10 @@ private struct ProjectCard: View {
     var body: some View {
         let versions = model.blends(for: capture)
 
+        // A one-child stack, and left that way deliberately: the card's
+        // chrome (llCard, the context menu, the size and metadata tasks) hangs
+        // off it, and `.llCard` on the Button itself would put a filled
+        // background inside a button style rather than around it.
         VStack(alignment: .leading, spacing: 0) {
             Button(action: onOpen) {
                 HStack(spacing: 12) {
@@ -455,32 +592,6 @@ private struct ProjectCard: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-
-            // A photo is one asset, and an unblended project has an empty
-            // strip: blending starts inside the project (and from the context
-            // menu), never from a button sitting in everybody's list.
-            if !capture.isPhotoCapture, !versions.isEmpty {
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 8) {
-                        ForEach(versions) { blend in
-                            Button {
-                                onOpenVersion(blend)
-                            } label: {
-                                ZStack(alignment: .bottomLeading) {
-                                    ProjectThumbnailView(url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
-                                        .frame(width: 96, height: 54)
-                                    MediaBadge(text: blend.badgeLabel, tint: LL.amber)
-                                        .scaleEffect(0.78, anchor: .bottomLeading)
-                                        .padding(4)
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                    .padding(.horizontal, 14)
-                    .padding(.bottom, 12)
-                }
-            }
         }
         .llCard(cornerRadius: 18)
         .contextMenu {

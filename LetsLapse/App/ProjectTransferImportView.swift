@@ -28,6 +28,10 @@ struct ProjectTransferImportView: View {
     /// not remembered between sessions: the default answer is the useful one
     /// every time, and a box left unticked weeks ago is a puzzle.
     @State private var hidesImported = true
+    /// Why the last scanned QR was not used — it belongs to another device, or
+    /// the code has rotated since it was drawn. Cleared by any deliberate
+    /// attempt, so it never outlives the mistake it describes.
+    @State private var scanMismatch: String?
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -374,48 +378,117 @@ struct ProjectTransferImportView: View {
     // MARK: - Phase B · pair
 
     private func pair(_ device: DiscoveredLibrary, isConnecting: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Pairing code")
-                .font(.headline)
-            Text("Shown in Projects on \(device.name), while sharing is on.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+        // Scrolls since the scanner arrived: its viewport is 170 pt, which on a
+        // phone with the number pad up is the difference between the Connect
+        // button being reachable and not.
+        ScrollView {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("Pairing code")
+                    .font(.headline)
+                Text("Shown in Projects on \(device.name), while sharing is on.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-            HStack {
-                TextField("000000", text: $code)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(size: 17).monospacedDigit())
-                    .frame(width: 110)
-                    .disabled(isConnecting)
-                    .onSubmit { connect(device) }
-                    #if !os(macOS)
-                    .keyboardType(.numberPad)
-                    .textContentType(.oneTimeCode)
-                    #endif
-                Button(isConnecting ? "Pairing…" : "Connect") { connect(device) }
-                    .disabled(code.filter(\.isNumber).count != 6 || isConnecting)
-                    #if os(macOS)
-                    .keyboardShortcut(.defaultAction)
-                    #endif
-                if isConnecting {
-                    ProgressView().controlSize(.small)
+                HStack {
+                    TextField("000000", text: $code)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(size: 17).monospacedDigit())
+                        .frame(width: 110)
+                        .disabled(isConnecting)
+                        .onSubmit { connect(device) }
+                        #if !os(macOS)
+                        .keyboardType(.numberPad)
+                        .textContentType(.oneTimeCode)
+                        #endif
+                    Button(isConnecting ? "Pairing…" : "Connect") { connect(device) }
+                        .disabled(code.filter(\.isNumber).count != 6 || isConnecting)
+                        #if os(macOS)
+                        .keyboardShortcut(.defaultAction)
+                        #endif
+                    if isConnecting {
+                        ProgressView().controlSize(.small)
+                    }
                 }
-            }
 
-            Text("The code grants access to every project on that device, not just one.")
+                Text("The code grants access to every project on that device, not just one.")
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                scanner(device, isConnecting: isConnecting)
+
+                Spacer(minLength: 0)
+            }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The other way in: point this device's camera at the QR the serving
+    /// device is showing beside its code (Projects ▸ the sharing pill).
+    ///
+    /// Not a different kind of pairing — a scanned code goes through the same
+    /// `connect(to:code:)` a typed one does, so it earns the same
+    /// remembered-code entry and the next visit to that device pairs silently
+    /// whichever way the first one went. What it skips is six digits read off
+    /// one screen and typed into another.
+    ///
+    /// The camera stands down while THIS device is shooting: a second
+    /// `AVCaptureSession` opened under a running interval shoot is a good way
+    /// to lose the shoot, and no pairing is worth that.
+    @ViewBuilder
+    private func scanner(_ device: DiscoveredLibrary, isConnecting: Bool) -> some View {
+        if model.activeLibraryActivities.contains(.capture) {
+            Label(
+                "Camera scanning is off while this device is shooting — type the code instead.",
+                systemImage: "qrcode.viewfinder")
                 .font(.caption2)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
-            Spacer(minLength: 0)
+        } else {
+            VStack(alignment: .leading, spacing: 6) {
+                Text("Or scan the QR code shown beside it")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                PairingQRScannerView { decoded in
+                    scanned(decoded, from: device, isConnecting: isConnecting)
+                }
+                .frame(height: 170)
+                if let scanMismatch {
+                    Text(scanMismatch)
+                        .font(.caption2)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
         }
-        .padding(14)
+    }
+
+    /// A decoded code, checked before it is used.
+    ///
+    /// `pairingID` is a hash of the serving device's LIVE code and travels in
+    /// its TXT record, so a scanned code can be tested against the device that
+    /// was picked without touching the network: a QR belonging to another
+    /// device, or one photographed before the code rotated, fails here with a
+    /// sentence instead of a pairing failure ten seconds later.
+    private func scanned(_ scannedCode: String, from device: DiscoveredLibrary, isConnecting: Bool) {
+        guard !isConnecting else { return }
+        guard device.pairingID.isEmpty
+                || CaptureRemotePairing.pairingID(code: scannedCode) == device.pairingID else {
+            scanMismatch = "That code is for a different device, or it has changed since the code was shown. Ask \(device.name) for its current one."
+            return
+        }
+        scanMismatch = nil
+        code = scannedCode
+        client.connect(to: device, code: scannedCode)
     }
 
     private func connect(_ device: DiscoveredLibrary) {
         let digits = code.filter(\.isNumber)
         code = String(digits.prefix(6))
         guard code.count == 6 else { return }
+        scanMismatch = nil
         client.connect(to: device, code: code)
     }
 

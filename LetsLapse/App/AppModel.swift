@@ -209,6 +209,32 @@ final class AppModel: ObservableObject {
         /// through `AppModel.existingImport(of:)`, which is what catches a
         /// second double-click on an archive already in the library.
         var importedFromID: UUID?
+        /// When a HUMAN last changed this project — the Projects list's "Edit"
+        /// sort, and the freshness test behind `sizeBytes` below.
+        ///
+        /// Deliberately not "when anything last wrote to this record": a
+        /// background metadata probe, a preset-state migration or the silent
+        /// one-frame tagging at capture all mutate a project and are none of
+        /// them edits. It is stamped at the paths a person drives — rename,
+        /// grade, rotate, nominate a bad frame, add or delete a blend or an
+        /// encoding, delete a scan page — and nowhere else, which is why it is
+        /// a curated list rather than a hook on the array.
+        ///
+        /// Nil for everything captured before this existed; read it through
+        /// `AppModel.lastEdited(_:)`, which falls back to the newest blend and
+        /// then to the capture date, so an existing library sorts sensibly on
+        /// day one instead of collapsing into capture order.
+        var modifiedAt: Date?
+        /// The project folder's measured size, and when it was measured.
+        ///
+        /// Stored so the Projects list can sort by size without walking every
+        /// project's directory tree on every tap (a 293-project library is not
+        /// a walk you want on a gesture). It is a *cached measurement*, not a
+        /// running total: `AppModel.needsSizeMeasurement(_:)` re-measures any
+        /// project whose `lastEdited` is newer than the measurement, which is
+        /// exactly the set whose files can have changed.
+        var sizeBytes: Int64?
+        var sizeMeasuredAt: Date?
         /// The capture mode this project came out of (`CaptureProjectMode`),
         /// when it is one the app routes on. Optional in both directions:
         /// absent for everything registered before it existed and for every
@@ -1287,6 +1313,8 @@ final class AppModel: ObservableObject {
             names.insert(fileName)
         }
         captures[index].nominatedBadFrameNames = names.isEmpty ? nil : Array(names).sorted()
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try? persistLibrary()
     }
 
@@ -1327,6 +1355,8 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
         guard captures[index].hideBadFrames != value else { return }
         captures[index].hideBadFrames = value
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try? persistLibrary()
     }
 
@@ -1464,6 +1494,8 @@ final class AppModel: ObservableObject {
     func setScannerPaper(_ paper: PerspectiveAspect, for id: UUID) {
         guard let index = captures.firstIndex(where: { $0.id == id }) else { return }
         captures[index].scannerPaper = paper.rawValue
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try? persistLibrary()
     }
 
@@ -1651,6 +1683,8 @@ final class AppModel: ObservableObject {
         captures[index].sourceFileNames.removeAll { name in
             (name as NSString).lastPathComponent.hasPrefix("\(base).")
         }
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try? persistLibrary()
         ProjectThumbnailCache.shared.invalidate(urls: removed)
         invalidateScannerCache(for: capture.id)
@@ -1720,6 +1754,7 @@ final class AppModel: ObservableObject {
         }
 
         blends.removeAll { $0.id == blend.id }
+        markEdited(blend.captureID)
         removeCollectionEntries(blendIDs: [blend.id])
         try persistLibrary()
 
@@ -3584,6 +3619,8 @@ final class AppModel: ObservableObject {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         captures[index].name = trimmed.isEmpty ? nil : trimmed
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try? persistLibrary()
     }
 
@@ -3601,6 +3638,11 @@ final class AppModel: ObservableObject {
         // Confirmed by a person now, whatever put them there first — so the "tagged automatically"
         // marker comes off the card.
         captures[index].sceneTaggedAutomatically = nil
+        // And an edit for the same reason: this is the ACCEPTED "Auto rename &
+        // tag" proposal, which renames the project. The silent pass that put
+        // tags there in the first place (`applyAutomaticTags`) is not stamped —
+        // nobody chose it.
+        captures[index].modifiedAt = Date()
         try? persistLibrary()
     }
 
@@ -3685,6 +3727,8 @@ final class AppModel: ObservableObject {
         let normalized = seconds.map { min(max(0, $0), BurstRamp.maxDuration) }
         if captures[index].burstRampDuration != normalized {
             captures[index].burstRampDuration = normalized
+            // A person changed this project — see CaptureProject.modifiedAt.
+            captures[index].modifiedAt = Date()
             try? persistLibrary()
         }
         // "Use default" is the absence of a choice — there is nothing to
@@ -3974,11 +4018,91 @@ final class AppModel: ObservableObject {
         }
     }
 
+    // MARK: - When a project was last edited, and how big it is
+
+    /// The date the Projects list's **Edit** sort reads.
+    ///
+    /// `modifiedAt` when a human has changed the project since the field
+    /// existed. Otherwise the newest blended clip's date, which is the best
+    /// retroactive evidence a library has that somebody worked on a shoot —
+    /// and failing that the capture date, so the sort degrades to Capture
+    /// order for a project nobody has ever touched rather than to 1970.
+    func lastEdited(_ capture: CaptureProject) -> Date {
+        if let modifiedAt = capture.modifiedAt { return modifiedAt }
+        let newestBlend = blends.lazy.filter { $0.captureID == capture.id }.map(\.createdAt).max()
+        return newestBlend ?? capture.createdAt
+    }
+
+    /// Records that a human just changed this project. Call it beside the
+    /// mutation, before the `persistLibrary()` that saves it — see
+    /// `CaptureProject.modifiedAt` for what does and does not count.
+    func markEdited(_ captureID: UUID) {
+        guard let index = captures.firstIndex(where: { $0.id == captureID }) else { return }
+        captures[index].modifiedAt = Date()
+    }
+
+    /// Whether the stored size can still be believed: never measured, or
+    /// measured before the last edit, which is the only thing that can have
+    /// changed the files.
+    func needsSizeMeasurement(_ capture: CaptureProject) -> Bool {
+        guard capture.sizeBytes != nil, let measured = capture.sizeMeasuredAt else { return true }
+        return measured < lastEdited(capture)
+    }
+
+    /// True while `measureProjectSizes` is walking. The Projects list says so
+    /// rather than leaving a size sort silently half-ordered.
+    @Published private(set) var isMeasuringSizes = false
+
+    /// Brings every project's stored size up to date, one at a time off the
+    /// main actor.
+    ///
+    /// Called when the Projects list is asked to sort by size. Results land in
+    /// `captures` as they arrive, so the list re-orders visibly rather than
+    /// waiting on the slowest project; the manifest is written ONCE at the end,
+    /// because `persistLibrary` drops the in-memory size cache and doing that
+    /// per project would have each measurement invalidate the next.
+    ///
+    /// Cheap on the second run by construction: only projects edited since
+    /// their last measurement are walked, which on a settled library is none.
+    func measureProjectSizes() async {
+        guard !isMeasuringSizes else { return }
+        let pending = captures.filter(needsSizeMeasurement).map(\.id)
+        guard !pending.isEmpty else { return }
+        isMeasuringSizes = true
+        defer { isMeasuringSizes = false }
+        LLog("project sizes: measuring \(pending.count) of \(captures.count)")
+        var measuredAny = false
+        for id in pending {
+            let folder = captureFolderURL(for: id)
+            guard let bytes = await MediaWorkQueue.shared.run({ Self.directorySize(folder) }) else {
+                continue
+            }
+            // Re-found by id: the library can have moved under a walk that
+            // took a while, and an index captured before the await is a
+            // different project by the time it returns.
+            guard let index = captures.firstIndex(where: { $0.id == id }) else { continue }
+            captures[index].sizeBytes = bytes
+            captures[index].sizeMeasuredAt = Date()
+            measuredAny = true
+        }
+        guard measuredAny else { return }
+        do {
+            try persistLibrary()
+        } catch {
+            LLog("project sizes: could not persist — \(error.localizedDescription)")
+        }
+    }
+
     /// Bytes on disk for one project. Returns nil when the walk was cancelled
     /// (the row scrolled away, the screen closed) — callers must keep whatever
     /// they were showing rather than reading nil as "no files".
     func storageBytes(for capture: CaptureProject) async -> Int64? {
         if let known = projectStorageBytes[capture.id] { return known }
+        // The stored measurement, while nothing has edited the project since
+        // it was taken. `persistLibrary` drops the in-memory cache above on
+        // every library write, so without this a project detail screen paid
+        // for a full directory walk after every unrelated save.
+        if let stored = capture.sizeBytes, !needsSizeMeasurement(capture) { return stored }
         let folder = captureFolderURL(for: capture.id)
         guard let bytes = await MediaWorkQueue.shared.run({ Self.directorySize(folder) }) else {
             return nil
@@ -6470,6 +6594,8 @@ final class AppModel: ObservableObject {
         blend.height = output.height
 
         blends.append(blend)
+        // A new blended clip is the most common edit there is.
+        markEdited(blend.captureID)
         blends.sort { $0.createdAt > $1.createdAt }
         try persistLibrary()
         return blend
@@ -7808,6 +7934,8 @@ final class AppModel: ObservableObject {
         var map = captures[index].clipEncodings ?? [:]
         map[clipFileName] = list
         captures[index].clipEncodings = map
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try persistLibrary()
         return outputURL
     }
@@ -7837,6 +7965,8 @@ final class AppModel: ObservableObject {
         var map = captures[index].clipEncodings ?? [:]
         map[clipFileName] = newList
         captures[index].clipEncodings = map.isEmpty ? nil : map
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         try persistLibrary()
     }
 
@@ -7923,6 +8053,8 @@ final class AppModel: ObservableObject {
                 blends[index].height = width
             }
         }
+        // A person changed this project — see CaptureProject.modifiedAt.
+        markEdited(capture.id)
         try persistLibrary()
         if capture.kind == .video {
             // Belt and braces: re-derive video dimensions from the transforms
@@ -8851,6 +8983,12 @@ final class AppModel: ObservableObject {
         captures[index].adjustments = adjustments
         captures[index].presetState = state
         captures[index].gradeTimeline = stored
+        // A person changed this project — see CaptureProject.modifiedAt. A
+        // grade moves no bytes, so this DOES cost the project's stored size a
+        // needless re-measure on the next size sort; carrying a second
+        // "files changed" timestamp to avoid it would be a worse trade than
+        // one directory walk on a deliberate, occasional gesture.
+        captures[index].modifiedAt = Date()
         // Not `persistLibrary()`: a grade write changes numbers, never files,
         // so it must not clear the size caches — and the editors call this at
         // gesture cadence, so the manifest encode cannot run on the main
@@ -8870,6 +9008,8 @@ final class AppModel: ObservableObject {
         let stored: WhiteBalanceSource? = source.isAsShot ? nil : source
         guard captures[index].whiteBalanceSource != stored else { return }
         captures[index].whiteBalanceSource = stored
+        // A person changed this project — see CaptureProject.modifiedAt.
+        captures[index].modifiedAt = Date()
         Self.forgetWhiteBalanceTrack(capture.id)
         persistLibraryOffMain()
     }

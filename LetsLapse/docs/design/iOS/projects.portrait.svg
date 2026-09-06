@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Projects · portrait</title>
-  <desc>Mirrors App/ProjectsView.swift (header, ProjectCard) + App/CaptureFilterBar.swift (CaptureFilterBar) + App/SceneSearch.swift (SceneSearchField, SceneTagChips, SceneTagLine): manual large title, scene search field, the shared segmented capture filter (All · Photos · Interval · Video) and the subject-tag chip row share one list row — 15pt above the title, 10pt above the 34pt search capsule, 8pt above and below the filter bar, chips flush after it with 8pt below, first card at 238. Search matches a project's name, its subject tags (raw and labelled) and the free-form elements the on-device analysis named; chips narrow to projects carrying EVERY selected tag. Both are hidden while the library is empty, and the chip row is drawn only from tags that actually exist in the library. One card per original with a blended-clip thumbnail strip — clips only: there is no dashed "+" tile (blending starts inside the project, or from this card's context menu), and a project with no blended clips draws no strip at all. Photo captures are one asset, so no strip either way. Every card's size line ends with a SOURCE-FORMAT pill (SourceFormatPill): an icon for what the source assets are (stills / footage), the file type they were written in (DNG · JPG · MOV), and FLAT when the shoot was captured flat — read from the run's own sidecar (stills: `capture_log.json`; video: `sequence.json`, where either the Capture Flat request or the Apple Log that actually engaged counts). The pill is 18pt tall against the size line's 14.3, so it costs 4pt to any card whose text column already outgrows its 64pt thumbnail (cards 1 and 2 here) and nothing at all to the ones the thumbnail still sets (card 3). A VIDEO project's card carries a second 12pt secondary line under its format line — the shoot's source composition: "N source clips" (imports read "1 source clip"), and, when the sequence sidecar records burst segments above the base rate, "· N bursts at R fps" (one burst: "1 burst at…"; mixed burst rates collapse to a range, "120–240 fps"). The line is video-kind only and costs those cards 16pt: interval cards already carry their count in the format line ("Interval · N photos" — bursts can't exist there), and Photo-mode cards stay ONE asset (no counts; their burst frames are stacking material, owned by project detail). An analysed project carries a tag line under its size line (up to 3 chips, then "+N") — without it the chips would filter by something invisible; an unanalysed project's card keeps its original height. A project tagged by the silent Apple Vision pass at capture time ends that same tag line with a 10pt sparkles glyph (accent at 70%, 6pt gap) — it marks "the app guessed this" rather than "you agreed to this", and disappears once an Auto rename &amp; tag proposal is applied; being inside the tag line, it adds no height. Swipe-to-delete on cards; context menu for preview/new blended clip/details/delete. Card rows hang their 14pt rhythm below them (listRowInsets top 0 / bottom 14).</desc>
+  <desc>Mirrors App/ProjectsView.swift (header, ProjectCard) + App/CaptureFilterBar.swift (CaptureFilterBar) + App/SceneSearch.swift (SceneSearchField, SceneTagChips, SceneTagLine): manual large title, scene search field, the shared segmented capture filter (All · Photos · Interval · Video) and the subject-tag chip row share one list row — 15pt above the title, 10pt above the 34pt search capsule, 8pt above and below the filter bar, chips flush after it with 8pt below, first card at 238. **2026-09-06** the title row gained the SHARING PILL opposite it (see below) and the search row gave up its trailing 129pt to SORT: a Capture · Edit · Size menu and a direction triangle, applied after the search, the kind filter and the tag chips — narrowest question last. Capture is the shoot's own date; Edit is `CaptureProject.modifiedAt`, stamped only where a PERSON changes a project (rename, grade, rotate, nominate a frame, add or delete a blend or an encoding) and never by a background metadata probe, falling back to the newest blended clip's date and then to the capture date for a library that predates the field; Size is a stored measurement (`sizeBytes`/`sizeMeasuredAt`) re-taken only for projects edited since it was made, so the first size sort walks the library once and later ones walk only what changed — a mini spinner rides the menu label while it does, and a project not yet measured holds the unknown end of the list rather than posing as an empty one. Both the axis and the direction are remembered between launches. Search matches a project's name, its subject tags (raw and labelled) and the free-form elements the on-device analysis named; chips narrow to projects carrying EVERY selected tag. Both are hidden while the library is empty, and the chip row is drawn only from tags that actually exist in the library. One card per original. **2026-09-06 the blended-clip strip is gone**: the card carried a horizontal scroller of clip thumbnails under the text column, and it cost every blended project ~78pt of list for a jump the project's own screen already offers — Steven's call after living with it. Its removal also takes a macOS bug with it, and by removing the cause rather than working around it: an inner NSScrollView swallows the vertical wheel and trackpad events a nested horizontal scroller has no use for instead of passing them up the responder chain, so the Projects list stuck whenever the pointer crossed a strip. AppKit exposes no switch for that (the fix would have been an NSScrollView subclass forwarding vertical-dominant events to its nextResponder); with no nesting there is nothing to forward. The count line — "2 blended clips · 1.4 GB", accent when there are any — still says they exist. Every card's size line ends with a SOURCE-FORMAT pill (SourceFormatPill): an icon for what the source assets are (stills / footage), the file type they were written in (DNG · JPG · MOV), and FLAT when the shoot was captured flat — read from the run's own sidecar (stills: `capture_log.json`; video: `sequence.json`, where either the Capture Flat request or the Apple Log that actually engaged counts). The pill is 18pt tall against the size line's 14.3, so it costs 4pt to any card whose text column already outgrows its 64pt thumbnail (cards 1 and 2 here) and nothing at all to the ones the thumbnail still sets (card 3). A VIDEO project's card carries a second 12pt secondary line under its format line — the shoot's source composition: "N source clips" (imports read "1 source clip"), and, when the sequence sidecar records burst segments above the base rate, "· N bursts at R fps" (one burst: "1 burst at…"; mixed burst rates collapse to a range, "120–240 fps"). The line is video-kind only and costs those cards 16pt: interval cards already carry their count in the format line ("Interval · N photos" — bursts can't exist there), and Photo-mode cards stay ONE asset (no counts; their burst frames are stacking material, owned by project detail). An analysed project carries a tag line under its size line (up to 3 chips, then "+N") — without it the chips would filter by something invisible; an unanalysed project's card keeps its original height. A project tagged by the silent Apple Vision pass at capture time ends that same tag line with a 10pt sparkles glyph (accent at 70%, 6pt gap) — it marks "the app guessed this" rather than "you agreed to this", and disappears once an Auto rename &amp; tag proposal is applied; being inside the tag line, it adds no height. Swipe-to-delete on cards; context menu for preview/new blended clip/details/delete. Card rows hang their 14pt rhythm below them (listRowInsets top 0 / bottom 14).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -25,15 +25,54 @@
            filter rhythm still matches gallery.portrait.svg) -->
       <text x="20" y="106" font-size="34" class="b" fill="#000">Projects</text>
 
+      <!-- SHARING PILL — opposite the title, and ALWAYS drawn: green while this
+           device is serving its library, RED while it is not. It replaced a
+           full-width row that appeared only while sharing was on and could only
+           ever say one thing; everything that row carried (the switch, the
+           code, the QR, what is being sent) is one tap away in the sheet —
+           projects.sharing.portrait.svg. Amber + exclamationmark.triangle.fill
+           is the third state, desc-only here: sharing on and the server could
+           not start, almost always a refused Local Network prompt. -->
+      <g id="sharing-pill" data-symbol="antenna.radiowaves.left.and.right.slash">
+        <circle cx="357" cy="100" r="16" fill="#FF3B30" fill-opacity="0.12"/>
+        <circle cx="357" cy="100" r="15.5" fill="none" stroke="#FF3B30" stroke-opacity="0.35"/>
+        <g stroke="#FF3B30" stroke-width="1.6" fill="none" stroke-linecap="round">
+          <path d="M350.5 95.5 a5 5 0 0 0 0 9 M363.5 95.5 a5 5 0 0 1 0 9"/>
+          <path d="M353.5 98.5 a2 2 0 0 0 0 3 M360.5 98.5 a2 2 0 0 1 0 3"/>
+          <path d="M357 101 v4.5"/>
+          <path d="M348 92 L366 108" stroke-width="1.7"/>
+        </g>
+      </g>
+
       <!-- scene search — SceneSearchField. Hand-built rather than .searchable:
            Projects hides its navigation bar on iOS, the only place the system
            field can live. Clears with a trailing xmark.circle.fill once typed. -->
       <g id="search">
-        <rect x="16" y="122" width="361" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+        <rect x="16" y="122" width="232" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
         <g transform="translate(29,132)" stroke="#8A8A90" stroke-width="1.6" fill="none" data-symbol="magnifyingglass">
           <circle cx="6" cy="6" r="5"/><path d="M9.8 9.8 L14 14" stroke-linecap="round"/>
         </g>
         <text x="54" y="145" font-size="15" fill="#8A8A90">Search projects</text>
+      </g>
+
+      <!-- SORT — the search row's trailing half: which projects, then in what
+           order. The menu carries its OWN capsule rather than taking a
+           borderless button style, because AppKit drops the capsule behind a
+           Menu with a custom label and the Mac row would otherwise read as two
+           bare words beside a filled field. Capture · Edit · Size; the triangle
+           flips the direction, and its accessibility label comes from the axis
+           ("Oldest capture first" / "Smallest first"), the gesture being the
+           same but the sentence not. Both remembered between launches. -->
+      <g id="sort">
+        <g id="sort-menu">
+          <rect x="256" y="122.5" width="87" height="33" rx="16.5" fill="#000" fill-opacity="0.06"/>
+          <text x="266" y="145" font-size="14" class="sb" fill="#C36A00">Capture</text>
+          <path d="M325 139 l4.5 4.5 l4.5 -4.5" stroke="#C36A00" stroke-width="1.8" fill="none" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+        </g>
+        <g id="sort-direction">
+          <rect x="347" y="123" width="30" height="32" rx="16" fill="#000" fill-opacity="0.06"/>
+          <path d="M356 135.5 h12 l-6 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+        </g>
       </g>
 
       <!-- segmented filter — shared CaptureFilterBar, same geometry as Gallery -->
@@ -72,8 +111,17 @@
            last 4). The source line reads count + bursts:
            "4 source clips · 2 bursts at 120 fps"; a burstless shoot shows just
            "N source clips", an import "1 source clip". -->
+        <!-- No blended-clip strip since 2026-09-06. The card carried one
+             (a horizontal scroller of clip thumbnails) until Steven called it
+             what it was: a row costing every blended project ~78pt of list for
+             a jump you can make from the project itself. Its removal also takes
+             the macOS scroll bug with it — an inner NSScrollView swallowed the
+             vertical wheel events a nested horizontal scroller has no use for,
+             so the list stuck whenever the pointer crossed the strip. The count
+             line ("2 blended clips · 1.4 GB") still says they exist, and the
+             project's own screen lists them. -->
       <g id="card-video-project">
-        <rect x="16" y="238" width="361" height="198" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="238" width="361" height="120" rx="18" fill="#FFF" filter="url(#soft)"/>
         <rect x="30" y="250" width="86" height="64" rx="8" fill="#3D4A5C"/>
         <circle cx="56" cy="270" r="9" fill="#FFB340" opacity="0.85"/>
         <polygon points="30,298 60,282 92,296 116,286 116,314 30,314" fill="#232B36"/>
@@ -107,25 +155,14 @@
           <text x="299" y="340" font-size="10.5" class="sb" fill="#8A4A00" text-anchor="middle">Landmark</text>
           <text x="336" y="340" font-size="10.5" class="sb" fill="#8A8A90">+1</text>
         </g>
-        <!-- blended clips only: the strip has no trailing "+" tile any more, and
-             a project with no blended clips draws no strip at all. Blending
-             starts inside the project (and from this card's context menu). -->
-        <g id="version-strip">
-          <rect x="30" y="360" width="96" height="54" rx="9" fill="#31404E"/>
-          <rect x="34" y="396" width="34" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="51" y="406" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">50×</text>
-          <rect x="134" y="360" width="96" height="54" rx="9" fill="#3B4653"/>
-          <rect x="138" y="396" width="40" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="158" y="406" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">100×</text>
-        </g>
       </g>
 
       <!-- card 2: interval project with 1 blended clip — 14pt below card 1.
            NO source line: its count already lives in the format line
            ("Interval · 184 photos", matching the thumbnail badge), and interval
            shoots cannot carry bursts. -->
-      <g id="card-interval-project">
-        <rect x="16" y="450" width="361" height="182" rx="18" fill="#FFF" filter="url(#soft)"/>
+      <g id="card-interval-project" transform="translate(0,-78)">
+        <rect x="16" y="450" width="361" height="104" rx="18" fill="#FFF" filter="url(#soft)"/>
         <rect x="30" y="462" width="86" height="64" rx="8" fill="#4A3B2E"/>
         <circle cx="60" cy="484" r="8" fill="#FFD9A0" opacity="0.8"/>
         <polygon points="30,510 62,494 94,508 116,500 116,526 30,526" fill="#2E2419"/>
@@ -163,20 +200,15 @@
             <path d="M236 532.5 l0.9 2 2 0.9 -2 0.9 -0.9 2 -0.9 -2 -2 -0.9 2 -0.9 z"/>
           </g>
         </g>
-        <g id="version-strip-2">
-          <rect x="30" y="556" width="96" height="54" rx="9" fill="#463522"/>
-          <rect x="34" y="592" width="52" height="14" rx="7" fill="#000" opacity="0.5"/>
-          <text x="60" y="602" font-size="9" class="sb" fill="#FFB340" text-anchor="middle">18 frames</text>
-        </g>
       </g>
 
-      <!-- card 3: photo project (single asset — no strip), never analysed, so
+      <!-- card 3: photo project (single asset), never analysed, so
            no tag line and the original 88pt height — 14pt below card 2. Its
            height survives the format pill because the 64pt thumbnail, not the
            text column, is what sets it. Stays
            ONE asset: no source count, no burst-frame count (that material is
            owned by project detail's "Frames behind this photo"). -->
-      <g id="card-photo-project">
+      <g id="card-photo-project" transform="translate(0,-156)">
         <rect x="16" y="646" width="361" height="88" rx="18" fill="#FFF" filter="url(#soft)"/>
         <rect x="30" y="658" width="86" height="64" rx="8" fill="#26303C"/>
         <ellipse cx="73" cy="684" rx="26" ry="9" fill="#9FC2E8" opacity="0.4"/>
@@ -233,5 +265,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Projects · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + SceneSearchField + CaptureFilterBar + SceneTagChips) · ProjectCard incl. source/burst line + SourceFormatPill + SceneTagLine · blended-clip strip (clips only, no "+" tile)</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectsView.swift — header (title + SceneSearchField + CaptureFilterBar + SceneTagChips) · ProjectCard incl. source/burst line + SourceFormatPill + SceneTagLine · no blended-clip strip since 2026-09-06</text>
 </svg>
