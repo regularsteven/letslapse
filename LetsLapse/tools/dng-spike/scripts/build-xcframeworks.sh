@@ -1,10 +1,17 @@
 #!/bin/zsh
 # build-xcframeworks.sh — libjxl (with highway, brotli, skcms) and LibRaw as
-# static XCFrameworks for iOS (device), iOS Simulator and macOS, all arm64.
+# static XCFrameworks for iOS (device, arm64), iOS Simulator (arm64) and
+# macOS (arm64 + x86_64 — a Release build of the app is universal, and an
+# arm64-only slice leaves every Jxl*/libraw* symbol undefined in the x86_64
+# link).
 #
 #   scripts/build-xcframeworks.sh            # everything
 #   ONLY=jxl scripts/build-xcframeworks.sh   # one library
 #   SLICES="ios mac" …                       # a subset of slices
+#   FORCE=1 …                                # rebuild slices whose output exists
+#
+# The two macOS slices (`mac` arm64, `macx86` x86_64) are lipo'd into one
+# universal library before the xcframework is assembled.
 #
 # Sources are fetched from the projects' own release points (libjxl's GitHub
 # tag, LibRaw's release tarball). Output lands in .xcframeworks/ next to the
@@ -22,7 +29,7 @@ JXL_VERSION="${JXL_VERSION:-v0.11.1}"
 LIBRAW_VERSION="${LIBRAW_VERSION:-0.21.4}"
 IOS_MIN="${IOS_MIN:-16.0}"
 MACOS_MIN="${MACOS_MIN:-13.0}"
-SLICES="${SLICES:-ios iossim mac}"
+SLICES="${SLICES:-ios iossim mac macx86}"
 ONLY="${ONLY:-jxl libraw}"
 JOBS="${JOBS:-$(sysctl -n hw.ncpu)}"
 
@@ -34,14 +41,40 @@ slice_sysroot() {
   case "$1" in
     ios) echo iphoneos ;;
     iossim) echo iphonesimulator ;;
-    mac) echo macosx ;;
+    mac|macx86) echo macosx ;;
   esac
+}
+slice_host() {
+  case "$1" in
+    macx86) echo x86_64-apple-darwin ;;
+    *) echo aarch64-apple-darwin ;;
+  esac
+}
+# One library per xcframework platform: prints the library for each slice,
+# folding `mac` + `macx86` into a universal `macuni` build with lipo.
+xcf_libs() {
+  local prefix="$1" lib="$2" slice
+  for slice in ${=SLICES}; do
+    case "$slice" in
+      macx86) ;;
+      mac)
+        if [[ " $SLICES " == *" macx86 "* && -f "$prefix-macx86/$lib" ]]; then
+          mkdir -p "$prefix-macuni"
+          lipo -create "$prefix-mac/$lib" "$prefix-macx86/$lib" -output "$prefix-macuni/$lib"
+          echo "$prefix-macuni/$lib"
+        else
+          echo "$prefix-mac/$lib"
+        fi ;;
+      *) echo "$prefix-$slice/$lib" ;;
+    esac
+  done
 }
 slice_cflags() {
   case "$1" in
     ios) echo "-arch arm64 -isysroot $(sdk_path iphoneos) -miphoneos-version-min=$IOS_MIN" ;;
     iossim) echo "-arch arm64 -isysroot $(sdk_path iphonesimulator) -mios-simulator-version-min=$IOS_MIN" ;;
     mac) echo "-arch arm64 -isysroot $(sdk_path macosx) -mmacosx-version-min=$MACOS_MIN" ;;
+    macx86) echo "-arch x86_64 -isysroot $(sdk_path macosx) -mmacosx-version-min=$MACOS_MIN" ;;
   esac
 }
 slice_cmake_flags() {
@@ -49,6 +82,7 @@ slice_cmake_flags() {
     ios) echo "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphoneos -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$IOS_MIN" ;;
     iossim) echo "-DCMAKE_SYSTEM_NAME=iOS -DCMAKE_OSX_SYSROOT=iphonesimulator -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$IOS_MIN" ;;
     mac) echo "-DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_MIN" ;;
+    macx86) echo "-DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_OSX_DEPLOYMENT_TARGET=$MACOS_MIN" ;;
   esac
 }
 
@@ -58,6 +92,10 @@ build_jxl() {
   fi
   for slice in ${=SLICES}; do
     local build="build-jxl-$slice"
+    if [[ -f "out-jxl-$slice/libjxl_all.a" && -z "${FORCE:-}" ]]; then
+      echo "== libjxl $JXL_VERSION · $slice (reusing out-jxl-$slice; FORCE=1 rebuilds)"
+      continue
+    fi
     echo "== libjxl $JXL_VERSION · $slice"
     # Cross-compiling for iOS: try_compile cannot link an executable, so the
     # pthread probe (and any other) must build a static library instead, and
@@ -105,8 +143,8 @@ module CJXL {
 }
 MAP
   rm -rf CJXL.xcframework
-  local args=()
-  for slice in ${=SLICES}; do args+=(-library "out-jxl-$slice/libjxl_all.a" -headers include-jxl); done
+  local args=() lib
+  for lib in $(xcf_libs out-jxl libjxl_all.a); do args+=(-library "$lib" -headers include-jxl); done
   xcodebuild -create-xcframework "${args[@]}" -output CJXL.xcframework
 }
 
@@ -117,6 +155,10 @@ build_libraw() {
     tar xzf "$tar"
   fi
   for slice in ${=SLICES}; do
+    if [[ -f "out-libraw-$slice/libraw_r.a" && -z "${FORCE:-}" ]]; then
+      echo "== LibRaw $LIBRAW_VERSION · $slice (reusing out-libraw-$slice; FORCE=1 rebuilds)"
+      continue
+    fi
     echo "== LibRaw $LIBRAW_VERSION · $slice"
     local src="LibRaw-$LIBRAW_VERSION" build="build-libraw-$slice"
     rm -rf "$build" && cp -R "$src" "$build"
@@ -125,7 +167,7 @@ build_libraw() {
       cd "$build"
       CC="$(xcrun -f clang)" CXX="$(xcrun -f clang++)" \
       CFLAGS="$flags -O2" CXXFLAGS="$flags -O2 -std=c++11" LDFLAGS="$flags" \
-      ./configure --host=aarch64-apple-darwin --disable-shared --enable-static \
+      ./configure --host="$(slice_host $slice)" --disable-shared --enable-static \
         --disable-openmp --disable-jpeg --disable-zlib --disable-lcms --disable-examples --disable-jasper >/dev/null
       make -j "$JOBS" >/dev/null
     )
@@ -152,8 +194,8 @@ module CLibRaw {
 }
 MAP
   rm -rf CLibRaw.xcframework
-  local args=()
-  for slice in ${=SLICES}; do args+=(-library "out-libraw-$slice/libraw_r.a" -headers include-libraw); done
+  local args=() lib
+  for lib in $(xcf_libs out-libraw libraw_r.a); do args+=(-library "$lib" -headers include-libraw); done
   xcodebuild -create-xcframework "${args[@]}" -output CLibRaw.xcframework
 }
 
@@ -194,11 +236,17 @@ module CLibRaw {
     export *
 }
 MAP
-  local args=()
-  for slice in ${=SLICES}; do
-    mkdir -p "merge/$slice"
-    libtool -static -o "merge/$slice/libLetsLapseCodecs.a" "out-jxl-$slice/libjxl_all.a" "out-libraw-$slice/libraw_r.a"
-    args+=(-library "merge/$slice/libLetsLapseCodecs.a" -headers merge/headers)
+  # libtool -static keeps fat inputs fat, so the universal macOS pair stays
+  # universal in the merged library.
+  local jxl_libs=($(xcf_libs out-jxl libjxl_all.a))
+  local raw_libs=($(xcf_libs out-libraw libraw_r.a))
+  local args=() i key
+  for (( i = 1; i <= ${#jxl_libs[@]}; i++ )); do
+    key="${jxl_libs[$i]:h:t}"; key="${key#out-jxl-}"
+    mkdir -p "merge/$key"
+    libtool -static -o "merge/$key/libLetsLapseCodecs.a" "${jxl_libs[$i]}" "${raw_libs[$i]}"
+    lipo -info "merge/$key/libLetsLapseCodecs.a"
+    args+=(-library "merge/$key/libLetsLapseCodecs.a" -headers merge/headers)
   done
   rm -rf CLetsLapseCodecs.xcframework
   xcodebuild -create-xcframework "${args[@]}" -output CLetsLapseCodecs.xcframework

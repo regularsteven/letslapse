@@ -1,6 +1,3 @@
-// One module map for the codec archive: Xcode flattens every static
-// xcframework's headers into one include folder, so two frameworks cannot
-// each carry a root module.modulemap — the two libraries travel as one.
 module CJXL {
     header "jxl/encode.h"
     header "jxl/decode.h"
