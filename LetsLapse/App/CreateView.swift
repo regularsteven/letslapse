@@ -232,6 +232,12 @@ struct CreateView: View {
             if let hook = environment["LL_TRANSFER"], hook != "0" {
                 showDeviceImport = true
             }
+            // `LL_TRANSFER_PAIR` — the same sheet, parked on the pairing
+            // screen with its QR scanner live and no peer required. See
+            // `ProjectTransferClient.stagePairing`.
+            if environment["LL_TRANSFER_PAIR"] != nil {
+                showDeviceImport = true
+            }
             #endif
             // `LL_LADDERS=list|editor|rung` — the Interval ladders sheet on the
             // requested screen. `editor` opens the built-in; `rung` opens its

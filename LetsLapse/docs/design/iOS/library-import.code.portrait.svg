@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Import from device · pairing code · portrait</title>
-  <desc>Mirrors App/ProjectTransferImportView.swift (enteringCode / connecting phases — pair, scanner) with App/PairingQR.swift, presented as a sheet from CreateView. The phone half of macOS/library-import.code.svg. The six digits shown in Projects on the serving device (projects.sharing.portrait.svg) are typed here, and the code is never the key: it is stretched with HKDF-SHA256 into a TLS-PSK under a purpose-scoped salt, so a code minted for the camera remote cannot be replayed against the library. THE SCANNER (2026-09-06) is the other way in, under the field. It is a shortcut past TYPING, not past pairing: a scanned code goes through the same connect(to:code:) a typed one does, gets the same PSK-derived TLS, and is remembered on success the same way — which is why the next visit to that device pairs silently whichever way the first one went, and why nothing new had to be built for that. The payload is `LLXFER1:&lt;code&gt;` and carries the code ALONE: the serving device's identity is derivable from it, CaptureRemotePairing.pairingID(code:) being the same hash that device advertises in its TXT record, so a scan is checked against the device already picked BEFORE the network is touched. A QR belonging to another device, or one photographed before the code rotated, fails that check locally and says so in orange under the viewport — "That code is for a different device, or it has changed since the code was shown. Ask iPhone 17 Pro for its current one." — rather than presenting as a pairing failure ten seconds later. The viewport is 170pt, its own AVCaptureSession with one metadata output and no photo or video pipeline, configured and started on its own queue (startRunning blocks, and on the main actor it stalls the sheet's presentation), delivering at most one code per scan session. THREE STATES WITH NO PICTURE, desc-only, all drawn on the same dark plate: no camera ("No camera available on this device." — what a simulator shows, verified 2026-09-06), access refused ("LetsLapse needs camera access to scan a pairing code. Type the code instead, or turn the camera on in Settings."), and THIS device shooting, where the viewport is replaced outright by one line — "Camera scanning is off while this device is shooting — type the code instead." — because a second capture session opened under a running interval shoot is a good way to lose the shoot, and no pairing is worth that. Connecting state, desc-only: the field disables, the button reads "Pairing…" and a spinner sits beside it; a wrong code never fails the client, so the 8-second LocalNetworkTransport timeout reports "Incorrect code — try again".</desc>
+  <desc>Mirrors App/ProjectTransferImportView.swift (enteringCode / connecting phases — pair, scanner) with App/PairingQR.swift, presented as a sheet from CreateView. The phone half of macOS/library-import.code.svg. The six digits shown in Projects on the serving device (projects.sharing.portrait.svg) are typed here, and the code is never the key: it is stretched with HKDF-SHA256 into a TLS-PSK under a purpose-scoped salt, so a code minted for the camera remote cannot be replayed against the library. THE SCANNER (2026-09-06) is the other way in, under the field. It is a shortcut past TYPING, not past pairing: a scanned code goes through the same connect(to:code:) a typed one does, gets the same PSK-derived TLS, and is remembered on success the same way — which is why the next visit to that device pairs silently whichever way the first one went, and why nothing new had to be built for that. The payload is `LLXFER1:&lt;code&gt;` and carries the code ALONE: the serving device's identity is derivable from it, CaptureRemotePairing.pairingID(code:) being the same hash that device advertises in its TXT record, so a scan is checked against the device already picked BEFORE the network is touched. A QR belonging to another device, or one photographed before the code rotated, fails that check locally and says so in orange under the viewport — "That code is for a different device, or it has changed since the code was shown. Ask iPhone 17 Pro for its current one." — rather than presenting as a pairing failure ten seconds later. THE VIEWPORT IS THE SHAPE OF THE PICTURE (2026-09-06). Its aspect is the camera's own, read from activeFormat rather than assumed — 4:3 on every iPhone and iPad, the .photo preset being the widest view of the sensor there is and the easiest to land a code inside — transposed when the preview stands upright and fitted inside a 340×250 box: 187.5×250 in portrait, 333×250 in landscape, centred in the column either way. It was a full-width 170pt slot until then, which is a 4:1 letterbox on an iPad in landscape that resizeAspectFill filled by throwing most of the frame away; the preview connection was never rotated either, so an iPad resting in landscape showed the feed on its side (AVCaptureVideoPreviewLayer defaults to portrait and never follows the device on its own). It now takes its rotation from the window scene — authoritative under rotation lock, where the device is not — re-applied on window attach and on AVCaptureSessionDidStartRunning, because the connection does not exist until the session's asynchronous configuration lands and a sheet opened in landscape would otherwise keep the portrait default until the device was turned. Its own AVCaptureSession with one metadata output and no photo or video pipeline, configured and started on its own queue (startRunning blocks, and on the main actor it stalls the sheet's presentation), delivering at most one code per scan session. THE CAMERA PICKER, bottom-trailing, 32pt on black at 50%, drawn only where there is more than one camera — which on iOS is everywhere. Tap flips front↔back, and deliberately to the WIDE lens of that side, so an iPad whose front carries two does not land on its Centre Stage ultra wide; touch and hold lists every lens with a checkmark on the one in use. The choice is remembered across launches, the reason to make it rarely being a one-off. The Mac's is a plain click-to-open menu instead, a Mac having no other side. THREE STATES WITH NO PICTURE, desc-only, all drawn on the same dark plate: no camera ("No camera available on this device." — what a simulator shows, verified 2026-09-06), access refused ("LetsLapse needs camera access to scan a pairing code. Type the code instead, or turn the camera on in Settings."), and THIS device shooting, where the viewport is replaced outright by one line — "Camera scanning is off while this device is shooting — type the code instead." — because a second capture session opened under a running interval shoot is a good way to lose the shoot, and no pairing is worth that. Connecting state, desc-only: the field disables, the button reads "Pairing…" and a spinner sits beside it; a wrong code never fails the client, so the 8-second LocalNetworkTransport timeout reports "Incorrect code — try again".</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
   </defs>
@@ -67,22 +67,40 @@
                small and the brackets say "put it here" without hiding it. -->
           <text x="14" y="256" font-size="12" fill="#6D6D72">Or scan the QR code shown beside it</text>
           <g id="scanner">
-            <rect x="14" y="266" width="365" height="170" rx="10" fill="#1C1C1E"/>
-            <rect x="142" y="286" width="108" height="130" rx="10" fill="#2E2E33"/>
-            <rect x="158" y="308" width="76" height="76" rx="4" fill="#E9E9EC"/>
+            <!-- 187.5×250 — the camera's own 4:3 stood upright, inside the
+                 340×250 the sheet allows. Centred: a portrait box hugging the
+                 leading edge reads as a mistake on any sheet wider than this. -->
+            <rect x="102.75" y="266" width="187.5" height="250" rx="10" fill="#1C1C1E"/>
+            <!-- an indicative picture: a phone held up with its sharing sheet on -->
+            <rect x="142.5" y="326" width="108" height="130" rx="10" fill="#2E2E33"/>
+            <rect x="158.5" y="348" width="76" height="76" rx="4" fill="#E9E9EC"/>
             <g fill="#1C1C1E">
-              <rect x="164" y="314" width="18" height="18"/><rect x="210" y="314" width="18" height="18"/>
-              <rect x="164" y="360" width="18" height="18"/>
-              <rect x="188" y="316" width="6" height="6"/><rect x="196" y="324" width="6" height="6"/>
-              <rect x="188" y="336" width="6" height="6"/><rect x="202" y="342" width="6" height="6"/>
-              <rect x="190" y="356" width="6" height="6"/><rect x="208" y="364" width="6" height="6"/>
-              <rect x="196" y="372" width="6" height="6"/><rect x="216" y="354" width="6" height="6"/>
+              <rect x="164.5" y="354" width="18" height="18"/><rect x="210.5" y="354" width="18" height="18"/>
+              <rect x="164.5" y="400" width="18" height="18"/>
+              <rect x="188.5" y="356" width="6" height="6"/><rect x="196.5" y="364" width="6" height="6"/>
+              <rect x="188.5" y="376" width="6" height="6"/><rect x="202.5" y="382" width="6" height="6"/>
+              <rect x="190.5" y="396" width="6" height="6"/><rect x="208.5" y="404" width="6" height="6"/>
+              <rect x="196.5" y="412" width="6" height="6"/><rect x="216.5" y="394" width="6" height="6"/>
             </g>
+            <!-- reticle: 62% of the short side, arms a quarter of that -->
             <g stroke="#FFB340" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M143 351 L143 298 L168 298"/>
-              <path d="M224 298 L249 298 L249 351"/>
-              <path d="M249 351 L249 404 L224 404"/>
-              <path d="M168 404 L143 404 L143 351"/>
+              <path d="M138.4 360.8 L138.4 332.9 L166.3 332.9"/>
+              <path d="M226.7 332.9 L254.6 332.9 L254.6 360.8"/>
+              <path d="M254.6 421.2 L254.6 449.1 L226.7 449.1"/>
+              <path d="M166.3 449.1 L138.4 449.1 L138.4 421.2"/>
+            </g>
+            <!-- camera picker: 8pt in from the bottom-trailing corner. Tap
+                 flips front/back, hold lists every lens. Absent entirely on a
+                 device with one camera, which no iPhone or iPad is. -->
+            <g data-symbol="arrow.triangle.2.circlepath.camera.fill" transform="translate(266.25,492)">
+              <circle cx="0" cy="0" r="16" fill="#000" fill-opacity="0.5"/>
+              <g fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M-7.2 -4.8 A 8 8 0 0 1 7.2 -4.8"/>
+                <path d="M-9.4 -7.0 L-7.2 -4.8 L-4.9 -6.9"/>
+                <path d="M4.9 -6.9 L7.2 -4.8 L9.4 -7.0"/>
+              </g>
+              <path d="M-6 0.6 h1.9 l1.1 -1.7 h6 l1.1 1.7 h1.9 a1.6 1.6 0 0 1 1.6 1.6 v4.3 a1.6 1.6 0 0 1 -1.6 1.6 h-12 a1.6 1.6 0 0 1 -1.6 -1.6 v-4.3 a1.6 1.6 0 0 1 1.6 -1.6 z" fill="#FFFFFF"/>
+              <circle cx="0" cy="3.6" r="2.2" fill="#1C1C1E"/>
             </g>
           </g>
         </g>
@@ -95,5 +113,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Import from device · pairing code + QR scanner · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectTransferImportView.swift + App/PairingQR.swift — Pairing…, wrong-code and the three no-picture states desc-only</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectTransferImportView.swift + App/PairingQR.swift — landscape is the same sheet with a 333×250 viewport; Pairing…, wrong-code and the three no-picture states desc-only</text>
 </svg>

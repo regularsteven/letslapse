@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1228 908" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iPadOS · Import from device · pairing code · landscape</title>
+  <desc>Mirrors App/ProjectTransferImportView.swift (enteringCode / connecting phases — pair, scanner) with App/PairingQR.swift, presented as a page sheet from CreateView. THE FIRST FILE IN THIS FOLDER, and it exists because this orientation is where the screen was wrong. Reported 2026-09-06: an iPad resting in landscape on a desk — the typical pose — showed the scanner's feed rotated a quarter turn and stretched across a slot four times wider than it was tall. Two faults, both only visible here. The preview connection was never rotated: AVCaptureVideoPreviewLayer's connection defaults to portrait and does not follow the device on its own, so the picture came up on its side. And the viewport was a full-width 170pt frame, which on this sheet is 552×170 — a 4:1 letterbox that resizeAspectFill filled by cropping most of the frame away. BOTH FIXED, and this file draws the fix: the viewport is now the shape of the picture, its aspect read from the camera's activeFormat rather than assumed (4:3 on every iPad — .photo preset, the widest view of the sensor there is and the easiest to land a code inside), transposed when the preview stands upright, and fitted inside a 340×250 box. So 333×250 here and 187.5×250 in portrait, centred in the column either way, on a sheet that is the same 580×640 in both orientations. Rotation now comes from the window scene, which is authoritative under rotation lock where the device is not, re-applied on window attach and on AVCaptureSessionDidStartRunning — the connection does not exist until the session's asynchronous configuration lands, so without that a sheet OPENED in landscape kept the portrait default until the iPad was turned. Verified on an iPad Air 13-inch (M3) 2026-09-06: the connection was found at portrait and set to landscapeRight, and the camera answered 4032×3024. THE CAMERA PICKER, bottom-trailing, 32pt on black at 50%, drawn only where there is more than one camera. That iPad has three — Back Camera, Front Camera, Front Ultra Wide Camera — so a tap flips front↔back, deliberately to the WIDE lens of that side so the flip does not land on Centre Stage's ultra wide, and touch-and-hold lists all three with a checkmark on the one in use. The choice is remembered across launches, the reason to make it rarely being a one-off. THE PAIRING ITSELF is unchanged and is drawn in full in iOS/library-import.code.portrait.svg: the scanner is a shortcut past TYPING, not past pairing, the payload is `LLXFER1:&lt;code&gt;` carrying the code alone, and a QR from another device fails locally against the pairingID hash before the network is touched. The Mac draws the same screen and decodes it differently — macOS/library-import.code.svg. Three states with no picture, desc-only, all on the same dark plate: no camera ("No camera available on this device." — what a simulator shows, which is why this file's geometry was measured on one and its rotation on a device), access refused, and THIS iPad shooting, where the viewport is replaced outright by one line. Geometry measured on an iPad (A16) simulator, 820×1180 pt, staged with LL_TRANSFER_PAIR=1.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="1180" height="820" rx="18"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <rect x="18" y="18" width="1192" height="832" rx="24" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="1180" height="820" fill="#3A3A3F"/>
+    <g transform="translate(24,24)">
+
+      <!-- the Create screen behind, dimmed: a page sheet leaves the whole
+           screen showing round it, which is most of what an iPad is -->
+      <rect x="0" y="0" width="1180" height="820" fill="#F2F2F7"/>
+      <rect x="0" y="0" width="1180" height="820" fill="#000" fill-opacity="0.35"/>
+
+      <g id="status-bar" fill="#000" fill-opacity="0.55">
+        <text x="40" y="30" font-size="13" class="sb">21:25 Sun 6 Sep</text>
+        <path d="M1093 25 a8 8 0 0 1 12 0 M1096 28 a4.5 4.5 0 0 1 6 0 M1098.5 30.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-opacity="0.55" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <text x="1118" y="30" font-size="13" class="sb">100%</text>
+        <g><rect x="1150" y="21" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.35"/><rect x="1174" y="24.5" width="2" height="4" rx="1" fill-opacity="0.35"/><rect x="1152" y="23" width="19" height="7" rx="2"/></g>
+      </g>
+
+      <!-- THE SHEET: 580×640, centred. An iPad page sheet keeps its size
+           across a rotation, so everything below is identical in portrait
+           except the viewport, which transposes to 187.5×250. -->
+      <g id="sheet">
+        <rect x="300" y="90" width="580" height="640" rx="12" fill="#F2F2F7"/>
+
+        <!-- header: the peer's name, then where in the flow you are. Back
+             returns to the browse list and clears the code and the selection;
+             the sheet has no title bar, so it carries its own way out. -->
+        <g id="header">
+          <g data-symbol="arrow.down.circle" transform="translate(322.5,118)">
+            <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+            <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <text x="340" y="116" font-size="17" class="b" fill="#000">iPhone 17 Pro</text>
+          <text x="340" y="132" font-size="12" fill="#6D6D72">Enter the pairing code</text>
+          <text x="834" y="122" font-size="12" text-anchor="end" fill="#C36A00">Back</text>
+          <g data-symbol="xmark.circle.fill" transform="translate(854,118)">
+            <circle cx="0" cy="0" r="10" fill="#8A8A8E" fill-opacity="0.45"/>
+            <path d="M-3.6 -3.6 L3.6 3.6 M3.6 -3.6 L-3.6 3.6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <line x1="300" y1="146" x2="880" y2="146" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <!-- VStack(spacing: 10), 14pt inset, inside a ScrollView -->
+        <g id="pair">
+          <text x="314" y="176" font-size="17" class="b" fill="#000">Pairing code</text>
+          <text x="314" y="202" font-size="12" fill="#6D6D72">Shown in Projects on iPhone 17 Pro, while sharing is on.</text>
+
+          <!-- .roundedBorder field, 110pt; Connect is disabled until six digits are in -->
+          <rect x="314" y="216" width="110" height="34" rx="7" fill="#FFFFFF" stroke="#000" stroke-opacity="0.18"/>
+          <text x="326" y="238" font-size="17" class="mono" fill="#B4B4BA">000000</text>
+          <text x="433" y="238" font-size="16" fill="#B4B4BA">Connect</text>
+
+          <text x="314" y="269" font-size="11" fill="#6D6D72">The code grants access to every project on that device, not just one.</text>
+
+          <text x="314" y="294" font-size="12" fill="#6D6D72">Or scan the QR code shown beside it</text>
+          <g id="scanner">
+            <!-- 333×250 — the camera's own 4:3 laid on its side with the
+                 interface, inside the 340×250 the sheet allows. This is the
+                 whole of the bug: it used to be 552×170 and a quarter turn out. -->
+            <rect x="423.5" y="303.5" width="333" height="250" rx="10" fill="#1C1C1E"/>
+            <!-- an indicative picture: a phone held up with its sharing sheet on -->
+            <rect x="536" y="363.5" width="108" height="130" rx="10" fill="#2E2E33"/>
+            <rect x="552" y="385.5" width="76" height="76" rx="4" fill="#E9E9EC"/>
+            <g fill="#1C1C1E">
+              <rect x="558" y="391.5" width="18" height="18"/><rect x="604" y="391.5" width="18" height="18"/>
+              <rect x="558" y="437.5" width="18" height="18"/>
+              <rect x="582" y="393.5" width="6" height="6"/><rect x="590" y="401.5" width="6" height="6"/>
+              <rect x="582" y="413.5" width="6" height="6"/><rect x="596" y="419.5" width="6" height="6"/>
+              <rect x="584" y="433.5" width="6" height="6"/><rect x="602" y="441.5" width="6" height="6"/>
+              <rect x="590" y="449.5" width="6" height="6"/><rect x="610" y="431.5" width="6" height="6"/>
+            </g>
+            <!-- reticle: 62% of the short side, arms a quarter of that -->
+            <g stroke="#FFB340" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M512.5 388.2 L512.5 351 L549.7 351"/>
+              <path d="M630.3 351 L667.5 351 L667.5 388.2"/>
+              <path d="M667.5 468.8 L667.5 506 L630.3 506"/>
+              <path d="M549.7 506 L512.5 506 L512.5 468.8"/>
+            </g>
+            <!-- camera picker: 8pt in from the bottom-trailing corner. Tap
+                 flips front/back, hold lists all three of this iPad's lenses. -->
+            <g data-symbol="arrow.triangle.2.circlepath.camera.fill" transform="translate(732.5,529.5)">
+              <circle cx="0" cy="0" r="16" fill="#000" fill-opacity="0.5"/>
+              <g fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M-7.2 -4.8 A 8 8 0 0 1 7.2 -4.8"/>
+                <path d="M-9.4 -7.0 L-7.2 -4.8 L-4.9 -6.9"/>
+                <path d="M4.9 -6.9 L7.2 -4.8 L9.4 -7.0"/>
+              </g>
+              <path d="M-6 0.6 h1.9 l1.1 -1.7 h6 l1.1 1.7 h1.9 a1.6 1.6 0 0 1 1.6 1.6 v4.3 a1.6 1.6 0 0 1 -1.6 1.6 h-12 a1.6 1.6 0 0 1 -1.6 -1.6 v-4.3 a1.6 1.6 0 0 1 1.6 -1.6 z" fill="#FFFFFF"/>
+              <circle cx="0" cy="3.6" r="2.2" fill="#1C1C1E"/>
+            </g>
+          </g>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="485" y="806" width="210" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="614" y="874" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iPadOS · Import from device · pairing code + QR scanner · landscape · 1180×820 pt</text>
+  <text x="614" y="892" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectTransferImportView.swift + App/PairingQR.swift — portrait is this sheet unchanged with a 187.5×250 viewport; the three no-picture states are desc-only</text>
+</svg>

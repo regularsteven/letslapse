@@ -1,6 +1,6 @@
 <svg viewBox="0 0 500 590" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>macOS · Import from Device · pairing code · 460×520</title>
-  <desc>Mirrors Remote/ImportWindow.swift (enteringCode / connecting phases) over Shared/ProjectTransferClient.swift and Shared/CaptureRemotePairing.swift. The six digits shown in Projects on the serving device (iOS/projects.sharing.portrait.svg) are typed here. The code is never the key: it is stretched with HKDF-SHA256 into a TLS-PSK, under a PURPOSE-SCOPED salt ("com.regularsteven.letslapse.transfer.v1") so a code minted for the camera remote cannot be replayed against the library and vice versa — CaptureRemotePairing.derivedKey/parameters take the salt as a defaulted argument, leaving the capture link's wire behaviour bit-identical. The same call also asks for transfer-shaped TCP: keepalive 20/3/5 instead of the control link's 5/2/2, because 5/2/2 tears down a healthy forty-minute pull the moment a congested network stalls it, and Nagle is left ON since bulk chunks fill segments by themselves. THE TRAP THIS SCREEN IS BUILT AROUND: a wrong code never fails the client. It surfaces as -9846 bad MAC on the SERVER's first read and this side sits in .preparing forever — verified again for this link on 2026-08-27, and previously for the camera remote. So the client runs LocalNetworkTransport's 8-second timeout verbatim and reports "Incorrect code — try again" rather than leaving a window that does nothing. The last line is not decoration: one code opens the whole library, not the project you were looking at, and the serving side says the same thing. Connecting state (drawn as a variant of this file's own button): the field disables, the button reads "Pairing…" and a small spinner sits beside it. **2026-09-06 — THE CAMERA.** Under the field, a live viewport that reads the QR the serving device draws beside its code (App/PairingQR.swift). It is a shortcut past TYPING, not past pairing: the scanned code goes through the same connect(to:code:) a typed one does, gets the same PSK-derived TLS, and is remembered on success the same way — so the next visit to that device pairs silently whichever way the first one went. The payload is `LLXFER1:&lt;code&gt;` and carries the code ALONE, because the serving device's identity is derivable from it: CaptureRemotePairing.pairingID(code:) is the same hash that device advertises in its TXT record, so a scan is checked against the device already picked BEFORE the network is touched. A QR from another device, or one photographed before the code rotated, fails that check locally and says so ("That code is for a different device, or it has changed since the code was shown.") rather than presenting as a pairing failure ten seconds later. Three states beyond the live picture, desc-only: no camera on this machine ("No camera available on this device."), access refused ("LetsLapse needs camera access to scan a pairing code. Type the code instead, or turn the camera on in Settings."), and this device shooting, where the viewport is replaced outright by one line rather than opening a second capture session under a running shoot. The phone draws the same screen: iOS/library-import.code.portrait.svg. Verified 2026-08-27; staged with LL_TRANSFER=&lt;6-digit code&gt;, which types the real code rather than bypassing it.</desc>
+  <desc>Mirrors Remote/ImportWindow.swift (enteringCode / connecting phases) over Shared/ProjectTransferClient.swift and Shared/CaptureRemotePairing.swift. The six digits shown in Projects on the serving device (iOS/projects.sharing.portrait.svg) are typed here. The code is never the key: it is stretched with HKDF-SHA256 into a TLS-PSK, under a PURPOSE-SCOPED salt ("com.regularsteven.letslapse.transfer.v1") so a code minted for the camera remote cannot be replayed against the library and vice versa — CaptureRemotePairing.derivedKey/parameters take the salt as a defaulted argument, leaving the capture link's wire behaviour bit-identical. The same call also asks for transfer-shaped TCP: keepalive 20/3/5 instead of the control link's 5/2/2, because 5/2/2 tears down a healthy forty-minute pull the moment a congested network stalls it, and Nagle is left ON since bulk chunks fill segments by themselves. THE TRAP THIS SCREEN IS BUILT AROUND: a wrong code never fails the client. It surfaces as -9846 bad MAC on the SERVER's first read and this side sits in .preparing forever — verified again for this link on 2026-08-27, and previously for the camera remote. So the client runs LocalNetworkTransport's 8-second timeout verbatim and reports "Incorrect code — try again" rather than leaving a window that does nothing. The last line is not decoration: one code opens the whole library, not the project you were looking at, and the serving side says the same thing. Connecting state (drawn as a variant of this file's own button): the field disables, the button reads "Pairing…" and a small spinner sits beside it. **2026-09-06 — THE CAMERA.** Under the field, a live viewport that reads the QR the serving device draws beside its code (App/PairingQR.swift). It is a shortcut past TYPING, not past pairing: the scanned code goes through the same connect(to:code:) a typed one does, gets the same PSK-derived TLS, and is remembered on success the same way — so the next visit to that device pairs silently whichever way the first one went. The payload is `LLXFER1:&lt;code&gt;` and carries the code ALONE, because the serving device's identity is derivable from it: CaptureRemotePairing.pairingID(code:) is the same hash that device advertises in its TXT record, so a scan is checked against the device already picked BEFORE the network is touched. A QR from another device, or one photographed before the code rotated, fails that check locally and says so ("That code is for a different device, or it has changed since the code was shown.") rather than presenting as a pairing failure ten seconds later. **2026-09-06, AND THIS IS WHERE THE MAC USED TO STOP.** The viewport read "This camera cannot read QR codes", and it was telling the truth: AVCaptureMetadataOutput's barcode detection is an iOS/tvOS feature, and on macOS availableMetadataObjectTypes answers face, humanBody, humanFullBody, catHead, catBody, dogHead, dogBody, salientObject and nothing else — probed on this Mac 2026-09-06, on the built-in camera, a Continuity iPhone and an iPhone 12 Pro alike, so it is a platform fact rather than a camera one. The route is therefore chosen PER CAMERA rather than per platform: a camera that offers .qr keeps the cheap in-stack detection (every iPhone and iPad), and one that does not gets an AVCaptureVideoDataOutput and a VNDetectBarcodesRequest throttled to about 8 Hz — a code sits in front of a camera for seconds, and running Vision on every frame of a 30 fps stream spends a core to save a delay nobody can perceive. TWO TRAPS, both live on a Mac and neither on a phone. The data output's connection is pinned UN-mirrored: every Mac's built-in camera is front-facing, connections mirror themselves for those by default, and a mirrored QR does not decode — Vision reads the buffer, not the preview, and the preview layer keeps its own mirroring because that is what makes aiming feel the right way round. And BGRA is asked for rather than taking the camera's native format, because a Mac's roster is open-ended — a USB microscope and a capture card are as welcome as the built-in — and one conversion at eight frames a second buys away a whole class of "works on this camera, not that one". Verified headlessly 2026-09-06: Vision decoded LLXFER1:482915 out of a 1920×1080 BGRA buffer, the exact format and size this machine's camera hands it. THE CAMERA PICKER, bottom-trailing, 32pt on black at 50%, drawn only where there is more than one camera. On macOS it is a plain click-to-open menu with a checkmark on the one in use — a Mac's cameras are a list of unrelated things and there is no other side to flip to, which is what iOS's tap does instead. The roster is CameraDevices, the same list the capture side shoots through, including its transport-code filter that drops software virtual cameras ('virt' — an OBS camera has nothing to point at a QR); the SELECTION is deliberately not shared, since choosing a webcam to scan with must not change the camera the app records with. The choice is remembered across launches. Three states beyond the live picture, desc-only: no camera on this machine ("No camera available on this device."), access refused ("LetsLapse needs camera access to scan a pairing code. Type the code instead, or turn the camera on in System Settings ▸ Privacy &amp; Security."), and this device shooting, where the viewport is replaced outright by one line rather than opening a second capture session under a running shoot. The phone draws the same screen: iOS/library-import.code.portrait.svg. Verified 2026-08-27; staged with LL_TRANSFER=&lt;6-digit code&gt;, which types the real code rather than bypassing it, or with LL_TRANSFER_PAIR=1, which parks this screen with its scanner live and nothing advertising — the only way to reach it with no second device in the room.</desc>
   <defs>
     <clipPath id="win"><rect x="20" y="20" width="460" height="520" rx="11"/></clipPath>
   </defs>
@@ -51,24 +51,41 @@
            any of it. -->
       <text x="34" y="232" font-size="10.5" fill="#6D6D72">Or scan the QR code shown beside it</text>
       <g id="scanner">
-        <rect x="34" y="242" width="432" height="170" rx="10" fill="#1C1C1E"/>
+        <!-- 340×191 — the camera's own 16:9 (this Mac's built-in answers
+             1920×1080), read from activeFormat rather than assumed, fitted
+             inside the 340×250 box the window allows and centred in the
+             column. Nothing is stretched, letterboxed or cropped away. -->
+        <rect x="80" y="242" width="340" height="191" rx="10" fill="#1C1C1E"/>
         <!-- an indicative camera picture: a phone held up with the sheet on it -->
-        <rect x="196" y="262" width="108" height="130" rx="10" fill="#2E2E33"/>
-        <rect x="212" y="284" width="76" height="76" rx="4" fill="#E9E9EC"/>
+        <rect x="196" y="272" width="108" height="130" rx="10" fill="#2E2E33"/>
+        <rect x="212" y="294" width="76" height="76" rx="4" fill="#E9E9EC"/>
         <g fill="#1C1C1E">
-          <rect x="218" y="290" width="18" height="18"/><rect x="264" y="290" width="18" height="18"/>
-          <rect x="218" y="336" width="18" height="18"/>
-          <rect x="242" y="292" width="6" height="6"/><rect x="250" y="300" width="6" height="6"/>
-          <rect x="242" y="312" width="6" height="6"/><rect x="256" y="318" width="6" height="6"/>
-          <rect x="244" y="332" width="6" height="6"/><rect x="262" y="340" width="6" height="6"/>
-          <rect x="250" y="348" width="6" height="6"/><rect x="270" y="330" width="6" height="6"/>
+          <rect x="218" y="300" width="18" height="18"/><rect x="264" y="300" width="18" height="18"/>
+          <rect x="218" y="346" width="18" height="18"/>
+          <rect x="242" y="302" width="6" height="6"/><rect x="250" y="310" width="6" height="6"/>
+          <rect x="242" y="322" width="6" height="6"/><rect x="256" y="328" width="6" height="6"/>
+          <rect x="244" y="342" width="6" height="6"/><rect x="262" y="350" width="6" height="6"/>
+          <rect x="250" y="358" width="6" height="6"/><rect x="270" y="340" width="6" height="6"/>
         </g>
         <!-- reticle: 62% of the short side, arms a quarter of it -->
         <g stroke="#FFB340" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M197 327 L197 274 L222 274"/>
-          <path d="M278 274 L303 274 L303 327"/>
-          <path d="M303 327 L303 380 L278 380"/>
-          <path d="M222 380 L197 380 L197 327"/>
+          <path d="M190.8 306.7 L190.8 278.3 L219.2 278.3"/>
+          <path d="M280.8 278.3 L309.2 278.3 L309.2 306.7"/>
+          <path d="M309.2 368.3 L309.2 396.7 L280.8 396.7"/>
+          <path d="M219.2 396.7 L190.8 396.7 L190.8 368.3"/>
+        </g>
+        <!-- camera picker, 8pt in from the bottom-trailing corner: a
+             click-to-open menu of every physical camera on this Mac, ticked
+             on the one in use. Absent on a machine with only one. -->
+        <g data-symbol="arrow.triangle.2.circlepath.camera.fill" transform="translate(396,409)">
+          <circle cx="0" cy="0" r="16" fill="#000" fill-opacity="0.5"/>
+          <g fill="none" stroke="#FFFFFF" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M-7.2 -4.8 A 8 8 0 0 1 7.2 -4.8"/>
+            <path d="M-9.4 -7.0 L-7.2 -4.8 L-4.9 -6.9"/>
+            <path d="M4.9 -6.9 L7.2 -4.8 L9.4 -7.0"/>
+          </g>
+          <path d="M-6 0.6 h1.9 l1.1 -1.7 h6 l1.1 1.7 h1.9 a1.6 1.6 0 0 1 1.6 1.6 v4.3 a1.6 1.6 0 0 1 -1.6 1.6 h-12 a1.6 1.6 0 0 1 -1.6 -1.6 v-4.3 a1.6 1.6 0 0 1 1.6 -1.6 z" fill="#FFFFFF"/>
+          <circle cx="0" cy="3.6" r="2.2" fill="#1C1C1E"/>
         </g>
       </g>
 
@@ -81,5 +98,5 @@
 
   <rect x="20" y="20" width="460" height="520" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
   <text x="250" y="562" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Import from Device · pairing code · 460×520 pt window</text>
-  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift + App/PairingQR.swift — "Pairing…", the 8s wrong-code timeout and the three no-picture states are desc-only</text>
+  <text x="250" y="580" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors Remote/ImportWindow.swift + App/PairingQR.swift — the Mac decodes through Vision, not AVCaptureMetadataOutput; "Pairing…", the 8s timeout and the no-picture states are desc-only</text>
 </svg>

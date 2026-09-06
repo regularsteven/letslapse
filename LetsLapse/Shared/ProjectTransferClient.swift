@@ -70,6 +70,26 @@ final class ProjectTransferClient: ObservableObject {
     }
 
     @Published private(set) var phase: Phase = .browsing
+
+    #if DEBUG
+    /// Park the flow on the pairing screen for a device that isn't there.
+    ///
+    /// The screen is otherwise only reachable by picking a *discovered*
+    /// library, so its camera scanner — the half of pairing with no typing in
+    /// it — cannot be screenshotted, laid out against its design mirror, or
+    /// checked for rotation without a second device advertising in the room.
+    /// Nothing else is faked: the scanner is the real one, and a code decoded
+    /// off a real QR still lands in the field and still dials the endpoint
+    /// this staged device carries (which is nowhere, so it fails honestly).
+    func stagePairing(with device: DiscoveredLibrary) {
+        // Browsing first, or the next browse update drops the staged device
+        // straight back to the list: a selection whose device is not in
+        // `libraries` is exactly what that path exists to clean up. There is
+        // nothing to browse for here anyway.
+        stopBrowsing()
+        phase = .enteringCode(device)
+    }
+    #endif
     @Published private(set) var libraries: [DiscoveredLibrary] = []
     @Published private(set) var projects: [PTProjectInfo] = []
     /// Set when browsing is impossible rather than merely empty — on macOS a

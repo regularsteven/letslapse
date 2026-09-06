@@ -2,6 +2,8 @@
 // this feature.
 #if !os(watchOS)
 import SwiftUI
+// `NWEndpoint`, for the DEBUG-staged pairing device at the foot of this file.
+import Network
 #if os(macOS)
 import AppKit
 #else
@@ -378,9 +380,9 @@ struct ProjectTransferImportView: View {
     // MARK: - Phase B · pair
 
     private func pair(_ device: DiscoveredLibrary, isConnecting: Bool) -> some View {
-        // Scrolls since the scanner arrived: its viewport is 170 pt, which on a
-        // phone with the number pad up is the difference between the Connect
-        // button being reachable and not.
+        // Scrolls since the scanner arrived: its viewport is up to 250 pt
+        // tall, which on a phone with the number pad up is the difference
+        // between the Connect button being reachable and not.
         ScrollView {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Pairing code")
@@ -454,7 +456,12 @@ struct ProjectTransferImportView: View {
                 PairingQRScannerView { decoded in
                     scanned(decoded, from: device, isConnecting: isConnecting)
                 }
-                .frame(height: 170)
+                // The viewport sizes itself — it is the shape of the picture
+                // the chosen camera delivers, turned with the device — so all
+                // this column owes it is somewhere to sit. Centred rather than
+                // leading: a portrait box hugging the left of a wide iPad
+                // sheet reads as a layout mistake.
+                .frame(maxWidth: .infinity, alignment: .center)
                 if let scanMismatch {
                     Text(scanMismatch)
                         .font(.caption2)
@@ -856,6 +863,23 @@ struct ProjectTransferImportView: View {
     /// not bypass. DEBUG-only.
     private func autoRunIfRequested() {
         let environment = ProcessInfo.processInfo.environment
+        // `LL_TRANSFER_PAIR=1` — park on the pairing screen with no peer in
+        // the room, so the QR scanner can be screenshotted against its design
+        // mirror and checked for rotation on each platform. The scanner is
+        // live and real: point a phone's pairing QR at it and the six digits
+        // appear in the field, which is how the decode path itself is proven.
+        // Pairing with the staged device then fails, having nowhere to dial.
+        if environment["LL_TRANSFER_PAIR"] != nil {
+            client.stagePairing(with: DiscoveredLibrary(
+                name: environment["LL_TRANSFER_PAIR"].flatMap { $0 == "1" ? nil : $0 } ?? "Steven's iPhone",
+                model: "iPhone", projectCount: 4,
+                // Empty: the scanned-code check short-circuits on it, so any
+                // real QR is accepted here rather than being refused as
+                // belonging to another device — which it does.
+                pairingID: "", version: 1, interfaces: ["wifi"],
+                endpoint: .hostPort(host: "127.0.0.1", port: 1)))
+            return
+        }
         guard let wanted = environment["LL_TRANSFER"], wanted.count == 6 else { return }
         let pull = environment["LL_TRANSFER_PULL"].flatMap(Int.init)
         // `LL_TRANSFER_DEVICE=<name substring>` — which device to pair with.
