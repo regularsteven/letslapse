@@ -11,6 +11,28 @@ live inline.
 
 ## Open
 
+### Data model — split `library.json`, stable origin ids, append-only experiment log
+
+**Detail:** [data-model-audit-2026-09-06.md](data-model-audit-2026-09-06.md) ·
+**Raised:** 2026-09-06 (Steven, audit brief) · **AUDIT DONE 2026-09-06, no
+implementation** · phases 1–4 in the report's §7 · medium (phase 1) to large
+(phases 2–4)
+
+The audit inventoried every persisted store (about 35 file kinds, 83 defaults
+keys, no keychain or database) against the code and both real libraries (the
+Mac volume and the iPhone container). The recommendation is to keep JSON and
+fix five things: per-project `project.json` with `library.json` reduced to an
+index (it is 2.3 MB today, 92 % frame-name strings, rewritten on every grade
+tick); `originID` / `originDeviceID` / `derivedFromOriginID` so a project keeps
+one identity across devices (today every import re-mints, one hop only); the
+live-blend experiment log to NDJSON (it is a full rewrite after every output,
+14–19 GB of writes on a 5,000-frame shoot); a launch-time folder ↔ index
+reconciliation (three orphan folders and one empty-folder record exist now,
+and an undecodable manifest is overwritten by the next save); and one
+serialised manifest writer with persist-before-delete ordering. Migration is
+additive first, dual-write second, index third, each phase verified by a
+`lapse audit` tool that diffs a rebuilt index against the real one.
+
 ### DNG archive conversion — raw → lossy / resized DNG, in-app one day
 
 **Detail:** [dng-archive-spike-brief.md](dng-archive-spike-brief.md) (the
