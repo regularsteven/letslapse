@@ -12,6 +12,10 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
     case texture, sharpen, noiseReduction, colorNoiseReduction
     case sharpenMasking, noiseDetail, colorNoise
+    /// The owned white — the white itself, in mired — and its tint. Keyframed
+    /// like every other field; that is the whole point of them. `temperature`
+    /// and `tint` above are the preset offsets they replaced in the panel.
+    case whiteMired, whiteTint
     /// The fine rotation — the one geometry control, keyframed like the rest.
     case rotation
 
@@ -36,6 +40,8 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .colorNoiseReduction: return \.colorNoiseReduction
         case .colorNoise: return \.colorNoise
         case .vignetteIntensity: return \.vignetteIntensity
+        case .whiteMired: return \.whiteMired
+        case .whiteTint: return \.whiteTint
         case .rotation: return \.rotationDegrees
         }
     }
@@ -66,6 +72,8 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .colorNoiseReduction: return PhotoAdjustments.colorNoiseReductionRange
         case .colorNoise: return PhotoAdjustments.colorNoiseRange
         case .vignetteIntensity: return PhotoAdjustments.vignetteRange
+        case .whiteMired: return PhotoAdjustments.whiteMiredRange
+        case .whiteTint: return PhotoAdjustments.whiteTintRange
         case .rotation: return PhotoAdjustments.rotationRange
         }
     }
@@ -149,12 +157,14 @@ struct GradeTimeline: Codable, Equatable, Sendable {
 
     var isEmpty: Bool { keyframes.isEmpty }
 
-    /// True when nothing about the COLOUR travels: no keyframes, or keyframes
-    /// that only ever move the rotation. The Original/Edited verdict asks
-    /// this, because a level that changes over the clip is still "no filter".
-    var isColorEmpty: Bool {
-        keyframes.allSatisfy { $0.adjustments.isColorNeutral }
-            && keyframedFields.subtracting([.rotation]).isEmpty
+    /// True when no LOOK travels: no keyframes, or keyframes that only ever
+    /// move the rotation or the owned white. The Original/Edited verdict asks
+    /// this, because a level that changes over the clip is still "no filter"
+    /// — and so is a white that does: both correct the capture rather than
+    /// treat it.
+    var isLookEmpty: Bool {
+        keyframes.allSatisfy { $0.adjustments.isLookNeutral }
+            && keyframedFields.subtracting([.rotation, .whiteMired, .whiteTint]).isEmpty
     }
 
     /// The same moments with the rotation zeroed in each — for a pass that
@@ -167,13 +177,15 @@ struct GradeTimeline: Codable, Equatable, Sendable {
             baselineAnchor: baselineAnchor)
     }
 
-    /// The same moments with everything BUT the rotation neutral — what an
-    /// Original project still carries.
+    /// The same moments with everything BUT the corrections — the rotation
+    /// and the owned white — neutral: what an Original project still carries.
     var rotationOnly: GradeTimeline {
         GradeTimeline(
             keyframes: keyframes.map {
                 var neutral = PhotoAdjustments.neutral
                 neutral.rotationDegrees = $0.adjustments.rotationDegrees
+                neutral.whiteMired = $0.adjustments.whiteMired
+                neutral.whiteTint = $0.adjustments.whiteTint
                 return GradeKeyframe(id: $0.id, position: $0.position, adjustments: neutral)
             },
             baselineAnchor: baselineAnchor)

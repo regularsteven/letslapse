@@ -59,6 +59,9 @@ final class CustomPresetStore: ObservableObject {
     func save(name: String, basePreset: PhotoPreset, adjustments: PhotoAdjustments) -> CustomPreset? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
+        // A look is a way of treating light, not a claim about which light it
+        // was: the owned white stays with the shoot it was measured on.
+        let adjustments = adjustments.withoutWhite
 
         if let index = presets.firstIndex(where: {
             $0.name.caseInsensitiveCompare(trimmed) == .orderedSame

@@ -16,22 +16,22 @@ import LetsLapseKit
 struct PhotoAdjustmentsPanel: View {
     @Binding var adjustments: PhotoAdjustments
     var alwaysExpanded: Bool = false
-    /// The as-shot anchor for the temperature readout and the white-balance
-    /// quick-picks — the frame under the playhead's own reading, from the raw
-    /// converter. D65 when the file declares nothing.
-    var asShotKelvin: Double = 6500
-    /// The as-shot tint that goes with it, on the converter's ±150 axis.
-    var asShotTint: Double = 0
-    /// What the shoot's white balance is anchored to. `.asShot` — the default
-    /// — leaves the Temp and Tint sliders measuring from each frame's own
-    /// reading, which is why they cannot close a camera's mid-run white
-    /// balance step; anything else pins the anchor and makes them absolute.
+    /// The white the frame under the playhead renders at while nothing owns
+    /// one — the smoothed track's value, or the frame's own as-shot from the
+    /// raw converter. It is where the Temp and Tint sliders rest until they
+    /// are moved, and what "Match This Frame" writes. D65 / 0 for a movie or
+    /// a JPEG, which carry no reading of their own.
+    var frameWhiteKelvin: Double = 6500
+    var frameWhiteTint: Double = 0
+    /// Whether the shoot is smoothing its camera's auto white balance under
+    /// the grade. Only `.asShot` and `.smoothed` are meaningful here: an owned
+    /// white lives in the keyframes, not in a source.
     var whiteBalanceSource: WhiteBalanceSource = .asShot
-    /// Told when the white-balance anchor is changed from the menu. Unset in
-    /// the surfaces that have no project to pin it on (a preset preview), where
-    /// the anchor entries are hidden rather than inert.
+    /// Told when smoothing is switched on or off from the menu. Unset where
+    /// there is no shoot to smooth (a movie, a preset preview), and the entry
+    /// is hidden rather than inert.
     var onSetWhiteBalanceSource: ((WhiteBalanceSource) -> Void)?
-    /// Where the playhead is, 0…1 — what "Match this frame" matches.
+    /// Where the playhead is, 0…1 — the frame a smoothed curve is levelled to.
     var playheadPosition: Double = 0
     /// The highlight colour for active values, tints and reset affordances.
     /// Defaults to the app accent, which is what the light macOS rail wants; the
@@ -149,8 +149,8 @@ struct PhotoAdjustmentsPanel: View {
         switch section {
         case .whiteBalance:
             whiteBalanceMenu
-            slider("Temp", field: .temperature, readout: kelvinReadout)
-            slider("Tint", field: .tint, readout: tintReadout)
+            whiteSlider
+            whiteTintSlider
         case .light:
             slider("Exposure", field: .exposure, readout: exposureReadout)
             slider("Contrast", field: .contrast)
@@ -214,39 +214,31 @@ struct PhotoAdjustmentsPanel: View {
         .padding(.top, 2)
     }
 
-    // MARK: - White balance quick-picks
+    // MARK: - White balance
 
-    /// The white-balance anchor, and the named illuminants that pin it.
-    ///
-    /// Everything below the divider *pins the anchor* — it says what the light
-    /// was, for the whole shoot, instead of nudging each frame away from what
-    /// its own camera decided. That distinction is the reason the menu exists
-    /// in this shape: over a sequence, a nudge cannot close a step the camera
-    /// itself made, because both sides of the step get nudged equally.
-    ///
-    /// The named picks used to be slider-setters against the opening frame's
-    /// as-shot; they now pin, which is what they always meant. "Custom" is the
-    /// state where the sliders have been moved off whatever the anchor says.
+    /// The white-balance menu. Everything in it writes the *white itself* —
+    /// into the moment under the playhead, exactly as dragging the sliders
+    /// would — because that is the only model in which two keyframes mean
+    /// "from this white to that one" whatever the camera did in between. The
+    /// one project-level entry is smoothing, which is what a frame renders at
+    /// until a keyframe owns its white.
     private var whiteBalanceMenu: some View {
         HStack {
             Text("White Bal.")
                 .font(.system(size: 13.5))
                 .foregroundStyle(.secondary)
             Spacer()
-            Menu(currentQuickPickName) {
-                Button("As Shot") { setSource(.asShot) }
+            Menu(currentWhiteName) {
+                Button("As Shot") { releaseWhite() }
+                Button("Match This Frame") { ownWhite(kelvin: frameWhiteKelvin, tint: frameWhiteTint) }
                 if onSetWhiteBalanceSource != nil {
-                    Divider()
-                    Button("Match This Frame") {
-                        setSource(.fixed(kelvin: Float(asShotKelvin), tint: Float(asShotTint)))
-                    }
                     Button("Smooth Auto WB") {
-                        setSource(.smoothed(anchorPosition: playheadPosition))
+                        onSetWhiteBalanceSource?(.smoothed(anchorPosition: playheadPosition))
                     }
-                    Divider()
-                    ForEach(Self.namedIlluminants, id: \.0) { name, kelvin in
-                        Button(name) { setSource(.fixed(kelvin: Float(kelvin), tint: 0)) }
-                    }
+                }
+                Divider()
+                ForEach(Self.namedIlluminants, id: \.0) { name, kelvin in
+                    Button(name) { ownWhite(kelvin: kelvin, tint: 0) }
                 }
             }
             .font(.system(size: 13, weight: .semibold))
@@ -258,54 +250,98 @@ struct PhotoAdjustmentsPanel: View {
         ("Sunny", 5500), ("Cloudy", 6500), ("Fluorescent", 4000), ("Tungsten", 3200),
     ]
 
-    /// The illuminant the Temp and Tint sliders are measured from: the pinned
-    /// one when the shoot has pinned one, and the frame under the playhead's
-    /// own reading otherwise.
-    private var anchorKelvin: Double {
-        if case .fixed(let kelvin, _) = whiteBalanceSource { return Double(kelvin) }
-        return asShotKelvin
+    private var frameWhiteMired: Float {
+        Float(1_000_000 / min(max(frameWhiteKelvin, 1667), 25000))
     }
 
-    private var anchorTint: Double {
-        if case .fixed(_, let tint) = whiteBalanceSource { return Double(tint) }
-        return asShotTint
+    /// Owns the white at this moment. Goes through the same binding a slider
+    /// drag does, so the owner's timeline logic — keyframe write, seeding of
+    /// the other moments — is the same logic.
+    private func ownWhite(kelvin: Double, tint: Double) {
+        var values = adjustments
+        values.whiteMired = Float(1_000_000 / min(max(kelvin, 1667), 25000))
+        values.whiteTint = Float(min(max(tint, -150), 150))
+        adjustments = values
     }
 
-    private var anchorMired: Double { 1_000_000 / min(max(anchorKelvin, 1667), 25000) }
-
-    private func setSource(_ source: WhiteBalanceSource) {
-        // Pinning replaces the anchor, so an offset the sliders were carrying
-        // was measured from somewhere else. With one look over the whole clip,
-        // zeroing is the honest reset — the picked white IS the answer, not a
-        // starting point to be nudged from.
-        //
-        // With KEYFRAMES it is not: those offsets are a hand-authored curve,
-        // the binding writes only into the moment under the playhead, and
-        // zeroing there would put a notch in the curve rather than clear it.
-        // They are also the thing pinning an anchor is *for* — a white-balance
-        // curve measured from a fixed white is what "keyframe to keyframe"
-        // means — so the curve is left standing and rides the new anchor.
-        if !hasKeyframes {
-            adjustments.temperature = 0
-            adjustments.tint = 0
+    /// Back to the camera's own white here, and smoothing off. With a
+    /// timeline in play the owner decides what releasing a property at one
+    /// moment means (its neighbours' blend, or nothing at all).
+    private func releaseWhite() {
+        onSetWhiteBalanceSource?(.asShot)
+        if let onResetField {
+            onResetField(.whiteMired)
+            onResetField(.whiteTint)
+        } else {
+            adjustments.whiteMired = 0
+            adjustments.whiteTint = 0
         }
-        onSetWhiteBalanceSource?(source)
     }
 
-    private var currentQuickPickName: String {
-        let moved = adjustments.temperature != 0 || adjustments.tint != 0
-        switch whiteBalanceSource {
-        case .asShot:
-            return moved ? "Custom" : "As Shot"
-        case .smoothed:
-            return moved ? "Custom" : "Smoothed"
-        case .fixed(let kelvin, let tint):
-            guard !moved else { return "Custom" }
-            if tint == 0, let named = Self.namedIlluminants.first(
-                where: { abs($0.1 - Double(kelvin)) < 1 }) {
-                return named.0
-            }
-            return "\(Int(kelvin.rounded())) K"
+    /// The menu's closed label: the owned white by name or by Kelvin, or what
+    /// the frame is taking instead.
+    private var currentWhiteName: String {
+        guard let white = adjustments.ownedWhite else {
+            if case .smoothed = whiteBalanceSource { return "Smoothed" }
+            return "As Shot"
+        }
+        if white.tint == 0, let named = Self.namedIlluminants.first(
+            where: { abs($0.1 - Double(white.kelvin)) < 1 }) {
+            return named.0
+        }
+        return "\(Int(white.kelvin.rounded())) K"
+    }
+
+    /// Temp: the white itself, read out in Kelvin. The slider travels in
+    /// mired so equal distances look equal, and is presented negated so the
+    /// warm end is on the right, where every editor puts it. While nothing
+    /// owns the white the knob rests on the frame's own; the first move owns
+    /// it, carrying the frame's tint along so Tint does not jump to zero.
+    private var whiteSlider: some View {
+        let binding = Binding<Float>(
+            get: { -(adjustments.ownsWhite ? adjustments.whiteMired : frameWhiteMired) },
+            set: { presented in
+                var values = adjustments
+                if !values.ownsWhite { values.whiteTint = Float(frameWhiteTint) }
+                values.whiteMired = min(max(-presented, PhotoAdjustments.whiteMiredRange.lowerBound),
+                                        PhotoAdjustments.whiteMiredRange.upperBound)
+                adjustments = values
+            })
+        return sliderRow(
+            "Temp", field: .whiteMired, value: binding,
+            range: -PhotoAdjustments.whiteMiredRange.upperBound ... -PhotoAdjustments.whiteMiredRange.lowerBound,
+            isNeutral: !adjustments.ownsWhite,
+            readout: { presented in "\(Int((1_000_000 / Double(-presented)).rounded())) K" },
+            onReset: releaseWhiteFields)
+    }
+
+    /// Tint, on the converter's ±150 axis. Moving it owns the white too — a
+    /// tint is a property of some white, never of none.
+    private var whiteTintSlider: some View {
+        let binding = Binding<Float>(
+            get: { adjustments.ownsWhite ? adjustments.whiteTint : Float(frameWhiteTint) },
+            set: { tint in
+                var values = adjustments
+                if !values.ownsWhite { values.whiteMired = frameWhiteMired }
+                values.whiteTint = min(max(tint, -150), 150)
+                adjustments = values
+            })
+        return sliderRow(
+            "Tint", field: .whiteTint, value: binding,
+            range: PhotoAdjustments.whiteTintRange,
+            isNeutral: !adjustments.ownsWhite,
+            readout: { $0.rounded() == 0 ? "0" : String(format: "%+.0f", $0.rounded()) },
+            onReset: releaseWhiteFields)
+    }
+
+    /// A double-tap on either label releases both halves — they are one white.
+    private func releaseWhiteFields() {
+        if let onResetField {
+            onResetField(.whiteMired)
+            onResetField(.whiteTint)
+        } else {
+            adjustments.whiteMired = 0
+            adjustments.whiteTint = 0
         }
     }
 
@@ -322,8 +358,36 @@ struct PhotoAdjustmentsPanel: View {
         readout: ((Float) -> String)? = nil
     ) -> some View {
         let value = $adjustments[dynamicMember: field.keyPath]
-        let isKeyframed = keyframedFields.contains(field)
         let neutral = field.neutralValue
+        return sliderRow(
+            label, field: field, value: value, range: field.range,
+            isNeutral: value.wrappedValue == neutral, indented: indented,
+            readout: readout ?? defaultReadout,
+            onReset: {
+                if let onResetField {
+                    onResetField(field)
+                } else {
+                    value.wrappedValue = neutral
+                }
+            })
+    }
+
+    /// The row every control is built from: label, keyframe diamond, readout,
+    /// slider. Takes the binding and range explicitly so a control whose
+    /// presented value is not its stored one — the white, stored in mired and
+    /// shown in Kelvin, resting on the frame's own value until owned — draws
+    /// exactly like the rest.
+    private func sliderRow(
+        _ label: String,
+        field: PhotoAdjustmentField,
+        value: Binding<Float>,
+        range: ClosedRange<Float>,
+        isNeutral: Bool,
+        indented: Bool = false,
+        readout: @escaping (Float) -> String,
+        onReset: @escaping () -> Void
+    ) -> some View {
+        let isKeyframed = keyframedFields.contains(field)
         return VStack(spacing: 2) {
             HStack(spacing: 6) {
                 Text(label)
@@ -331,25 +395,18 @@ struct PhotoAdjustmentsPanel: View {
                     .foregroundStyle(.secondary)
                 if isKeyframed { keyframeDiamond }
                 Spacer()
-                Text((readout ?? defaultReadout)(value.wrappedValue))
+                Text(readout(value.wrappedValue))
                     .font(.system(size: 12.5, weight: .semibold))
                     .monospacedDigit()
-                    .foregroundStyle(readoutStyle(
-                        value.wrappedValue, neutral: neutral, isKeyframed: isKeyframed))
+                    .foregroundStyle(readoutStyle(isNeutral: isNeutral, isKeyframed: isKeyframed))
             }
             .contentShape(Rectangle())
             // Double-tap (double-click on the Mac) a label to reset just that
             // slider — the idiom every editor teaches. With a timeline in play
             // it is the owner's business: the value here belongs to a moment,
             // and taking a property out of that moment can retire it entirely.
-            .onTapGesture(count: 2) {
-                if let onResetField {
-                    onResetField(field)
-                } else {
-                    value.wrappedValue = neutral
-                }
-            }
-            Slider(value: value, in: field.range) { editing in
+            .onTapGesture(count: 2, perform: onReset)
+            Slider(value: value, in: range) { editing in
                 onFieldEditing?(field, editing)
             }
                 .tint(accent)
@@ -358,12 +415,12 @@ struct PhotoAdjustmentsPanel: View {
         .padding(.leading, indented ? 14 : 0)
     }
 
-    private func readoutStyle(_ value: Float, neutral: Float, isKeyframed: Bool) -> Color {
+    private func readoutStyle(isNeutral: Bool, isKeyframed: Bool) -> Color {
         // Accent whenever the property travels — the readout is then a value at
         // *this moment*, not a value for the clip, and that is worth saying
         // even when the number under the playhead happens to be neutral.
         if isKeyframed { return accent }
-        return value == neutral ? Color.secondary : Color.primary
+        return isNeutral ? Color.secondary : Color.primary
     }
 
     /// Treatment `1e-A`: the smallest new mark that could carry the idea, and
@@ -396,39 +453,6 @@ struct PhotoAdjustmentsPanel: View {
         value == 0 ? "0" : String(format: "%+.2f", value)
     }
 
-    /// The absolute white the Temp slider currently declares.
-    ///
-    /// It reads as a Kelvin because that is what it is: the anchor moved by
-    /// the slider's mired offset. The number is the one the renderer uses —
-    /// both are anchored on `CIRAWFilter`'s reading now, where the readout
-    /// used to solve its own from DNG tags that a camera-original raw does not
-    /// carry, and answer 6500 K for every frame of a Sony shoot.
-    ///
-    /// Note it is Apple's converter's Kelvin, not Adobe's: the same file reads
-    /// a little differently in Lightroom because the two use different camera
-    /// profiles. What it guarantees is internal consistency — the same number
-    /// on two frames is the same white.
-    private func kelvinReadout(_ value: Float) -> String {
-        guard value != 0 || !whiteBalanceSource.isAsShot else { return "As Shot" }
-        let declaredMired = min(max(anchorMired - Double(value), 40), 600)
-        return "\(Int((1_000_000 / declaredMired).rounded())) K"
-    }
-
-    /// The absolute tint, on the converter's own ±150 green–magenta axis — the
-    /// axis Adobe's Tint slider also uses, so the two are comparable. The
-    /// slider's own travel is ±1 recipe unit, which is ∓50 here; the constant
-    /// and its sign are `LinearFrameDecoder.cirawTintPerRecipeUnit`.
-    private func tintReadout(_ value: Float) -> String {
-        let declared = min(max(anchorTint + Double(value * LinearFrameDecoder.cirawTintPerRecipeUnit),
-                               -150), 150)
-        // Always a number, never "As Shot": unlike Temp, whose zero genuinely
-        // means "whatever the file said", a tint of zero still has an absolute
-        // value worth reading — and "Temp 5635 K · Tint As Shot" reads as if
-        // the two were measured differently, which they are not.
-        let rounded = declared.rounded()
-        return rounded == 0 ? "0" : String(format: "%+.0f", rounded)
-    }
-
     // MARK: - Section state
 
     private func isNeutral(_ section: PanelSection) -> Bool {
@@ -437,10 +461,9 @@ struct PhotoAdjustmentsPanel: View {
         guard keyframedFields.isDisjoint(with: Self.fields(of: section)) else { return false }
         switch section {
         case .whiteBalance:
-            // A pinned anchor is a value the section holds even with both
-            // sliders at zero — it is the setting that moved the pixels.
-            return adjustments.temperature == 0 && adjustments.tint == 0
-                && whiteBalanceSource.isAsShot
+            // Smoothing counts as a value the section holds: it moves the
+            // pixels even while nothing owns the white.
+            return !adjustments.ownsWhite && whiteBalanceSource.isAsShot
         case .light:
             return adjustments.exposure == 0 && adjustments.contrast == 0
                 && adjustments.highlights == 0 && adjustments.shadows == 0
@@ -468,7 +491,7 @@ struct PhotoAdjustmentsPanel: View {
     /// and the header's Reset work from.
     private static func fields(of section: PanelSection) -> Set<PhotoAdjustmentField> {
         switch section {
-        case .whiteBalance: return [.temperature, .tint]
+        case .whiteBalance: return [.whiteMired, .whiteTint]
         case .light: return [.exposure, .contrast, .highlights, .shadows, .whites, .blacks]
         case .color: return [.vibrance, .saturation]
         case .effects: return [.texture, .clarity, .vignetteIntensity]
@@ -481,10 +504,8 @@ struct PhotoAdjustmentsPanel: View {
     }
 
     private func reset(_ section: PanelSection) {
-        // Resetting White Balance unpins the anchor as well as zeroing the
-        // sliders: "Reset" on that section has to mean "back to what the camera
-        // said", and leaving the pin standing would reset to a different white
-        // than the one the file was shot at.
+        // Resetting White Balance switches smoothing off as well as releasing
+        // the white: "Reset" there has to mean "back to what the camera said".
         if section == .whiteBalance { onSetWhiteBalanceSource?(.asShot) }
         if let onResetField {
             for field in Self.fields(of: section) { onResetField(field) }
@@ -492,8 +513,8 @@ struct PhotoAdjustmentsPanel: View {
         }
         switch section {
         case .whiteBalance:
-            adjustments.temperature = 0
-            adjustments.tint = 0
+            adjustments.whiteMired = 0
+            adjustments.whiteTint = 0
         case .light:
             adjustments.exposure = 0
             adjustments.contrast = 0

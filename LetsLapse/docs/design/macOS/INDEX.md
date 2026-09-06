@@ -2,6 +2,18 @@
 
 Canvas: 760×680 pt default window (`LetsLapseApp.defaultSize`); capture presents as a ≥960×720 sheet. The guided builder's own files are drawn at **1000×700**, the window size its layout was signed off at — each one says what the 760×680 default does instead. Since the 2026-08-12 mac review, `LL.screenBackground` on macOS light mode is the token table's #F2F2F7 (was `underPageBackgroundColor`, a dark canvas grey) — that fix brightens EVERY mac screen, so all other mac drawings now match the app rather than being aspirational.
 
+⚠️ **2026-09-06, White Balance becomes absolute and keyframed — code first, mirrors' `desc` updated, drawn values owed:**
+supersedes yesterday's anchor model. Steven tested it and found the flaw: the readout looked absolute but the
+default stayed relative unless an anchor was picked from a menu, so two keyframes (10328 K/+60 → 2991 K/+5) still
+rode the camera's 116-mired step at 18:29→18:31 (4853 K → 3105 K on screen). Now a keyframe stores the **white
+itself** (`PhotoAdjustments.whiteMired`/`whiteTint`, interpolated in mired so the ramp looks even), the sliders
+rest on the frame's own as-shot until moved, the first move owns the white and seeds the other keyframes with the
+white they were rendering at, and `PhotoGrade.recipe(at:)` hands the interpolated white to the renderer for scrub
+and export alike. The white is a correction of the capture, not a look — like the level it renders under
+Original, survives a preset apply and never turns a named preset Edited. Existing offset grades migrate on first
+open to the whites they displayed; Vltava_ARW's step becomes 3085 K → 3082 K. **Owed:** the drawn Temp/Tint
+values in the four mirrors.
+
 ⚠️ **2026-09-05, White Balance stops being a nudge and becomes an anchor — code first, mirrors part-updated:**
 the White Bal. dropdown now sets what Temp and Tint are measured *from* rather than setting a slider
 value: **As Shot** (each frame on its own reading — the historic behaviour, right for a still or a

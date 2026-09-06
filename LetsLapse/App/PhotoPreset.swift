@@ -714,15 +714,21 @@ enum PhotoGrader {
         let baseExtent = image.extent
         var out = image
 
-        if adjustments.temperature != 0 || adjustments.tint != 0,
+        if adjustments.ownsWhite || adjustments.temperature != 0 || adjustments.tint != 0,
            let filter = CIFilter(name: "CITemperatureAndTint") {
-            // Same semantics as the engine: the sliders declare the scene's
-            // illuminant relative to as-shot; a positive mired offset warms.
+            // Same semantics as the engine: the picture is declared to have
+            // been lit by some white, and is adapted from that white to the
+            // one it was encoded against. An owned white IS that declaration;
+            // otherwise it is as-shot moved by a preset's offset, and a
+            // positive mired offset warms.
             let asShotMired = 1_000_000 / max(Double(asShotKelvin), 1667)
-            let declaredMired = min(max(asShotMired - Double(adjustments.temperature), 40), 600)
+            let anchorMired = adjustments.ownsWhite ? Double(adjustments.whiteMired) : asShotMired
+            let declaredMired = min(max(anchorMired - Double(adjustments.temperature), 40), 600)
+            let declaredTint = (adjustments.ownsWhite ? CGFloat(adjustments.whiteTint) : 0)
+                + CGFloat(adjustments.tint) * 50
             filter.setValue(out, forKey: kCIInputImageKey)
             filter.setValue(
-                CIVector(x: 1_000_000 / declaredMired, y: CGFloat(adjustments.tint) * 50),
+                CIVector(x: 1_000_000 / declaredMired, y: declaredTint),
                 forKey: "inputNeutral")
             filter.setValue(CIVector(x: asShotKelvin, y: 0), forKey: "inputTargetNeutral")
             out = filter.outputImage ?? out
@@ -944,7 +950,15 @@ enum PhotoGrader {
     /// the decode (before the accumulator, where a knock would otherwise
     /// ghost every edge of its window). Rotation is not composed here: a
     /// blend levels each OUTPUT frame once, in the stacker's frame hook.
-    static func blendSupport(grade: PhotoGrade, lock: FramingLock? = nil) throws
+    static func blendSupport(
+        grade: PhotoGrade, lock: FramingLock? = nil,
+        /// Where each source frame sits in the shoot, 0…1. A keyframed white
+        /// is a function of position, and it is applied at DECODE — per
+        /// source frame, inside the converter — so unlike the offsets, which
+        /// ride the ladder per output frame, it has to be looked up here by
+        /// the one thing the decode closure is handed: the file.
+        sourcePositions: [URL: Double] = [:]
+    ) throws
         -> (decode: (URL) throws -> MTLTexture,
             hook: (MTLTexture, MTLCommandBuffer, Double) throws -> MTLTexture) {
         guard let decoder = linearDecoder, let engine = gradeEngine else {
@@ -984,9 +998,14 @@ enum PhotoGrader {
             // for this file. A fixed white answers the same for every frame; a
             // smoothed one walks its corrected curve.
             var recipe = grade.recipe
-            if let declared = grade.whiteBalance.declared(forFile: url.lastPathComponent) {
+            let declared = sourcePositions[url].flatMap(grade.declaredWhite(at:))
+                ?? grade.whiteBalance.declared(forFile: url.lastPathComponent)
+            if let declared {
                 recipe.declaredKelvin = declared.kelvin
                 recipe.declaredTint = declared.tint
+            } else {
+                recipe.declaredKelvin = nil
+                recipe.declaredTint = nil
             }
             let frame = try decoder.decode(
                 url: url, path: path, recipe: recipe,

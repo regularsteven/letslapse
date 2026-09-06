@@ -80,11 +80,14 @@ struct PresetSnapshot: Codable, Equatable, Sendable {
     /// Exact match, field for field: anything else is a divergence, and the
     /// project is Edited from that instant.
     ///
-    /// Rotation-blind on both sides: a level is geometry the project carries
-    /// whatever look is on it, so it neither belongs in a snapshot nor makes
-    /// a project diverge from one.
+    /// Blind to the level and to the owned white on both sides: both are
+    /// corrections of the capture the project carries whatever look is on
+    /// it, so neither belongs in a snapshot nor makes a project diverge from
+    /// one.
     func matches(preset: PhotoPreset, adjustments: PhotoAdjustments) -> Bool {
-        basePreset == preset && self.adjustments.withoutRotation == adjustments.withoutRotation
+        basePreset == preset
+            && self.adjustments.withoutRotation.withoutWhite
+                == adjustments.withoutRotation.withoutWhite
     }
 }
 
@@ -154,12 +157,14 @@ enum PresetStateResolver {
         // neutral would report Original and have its whole timeline discarded
         // as "no filter" on the next render.
         //
-        // A level that travels is the exception: rotation is geometry, not a
-        // look, so keyframes that only move the rotation change nothing here.
-        if !timeline.isColorEmpty { return .edited }
+        // A level that travels is the exception, and so is a white: neither
+        // is a look, so keyframes that only move those change nothing here.
+        if !timeline.isLookEmpty { return .edited }
         // Original is "no filter": no preset, no sliders, nothing to bake.
-        // The level is not a filter — a levelled Original stays Original.
-        let adjustments = adjustments.withoutRotation
+        // The level is not a filter — a levelled Original stays Original —
+        // and nor is the owned white: telling a shoot which light it was is a
+        // correction, not a treatment.
+        let adjustments = adjustments.withoutRotation.withoutWhite
         if preset == .original, adjustments.isNeutral { return .original }
         // Still exactly what the applied preset gave us — including when that
         // preset has been reworked or deleted since.
@@ -175,7 +180,7 @@ enum PresetStateResolver {
         }
         // A saved preset the values happen to match exactly.
         if let custom = customPresets.first(where: {
-            $0.basePreset == preset && $0.adjustments.withoutRotation == adjustments
+            $0.basePreset == preset && $0.adjustments.withoutRotation.withoutWhite == adjustments
         }) {
             return .named(id: custom.id, snapshot: custom.snapshot)
         }

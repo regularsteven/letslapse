@@ -4965,7 +4965,8 @@ final class AppModel: ObservableObject {
             if linear {
                 // The engine path, exactly as the sequence render stages it:
                 // reuse `blendSupport`, never rebuild its closures (§10).
-                let support = try PhotoGrader.blendSupport(grade: grade, lock: lock)
+                let support = try PhotoGrader.blendSupport(
+                    grade: grade, lock: lock, sourcePositions: Self.sourcePositions(of: urls))
                 decode = .linear(decode: support.decode, grade: support.hook)
             } else {
                 let loader = PhotoGrader.stabilisedLoader(lock, base: Self.gradedFrameLoader(grade, over: urls))
@@ -6198,7 +6199,8 @@ final class AppModel: ObservableObject {
             // The engine path: linear half-float decode straight to the
             // accumulator, the grade applied once per OUTPUT frame after the
             // average — the order Lightroom would grade the blended still in.
-            let support = try PhotoGrader.blendSupport(grade: grade, lock: lock)
+            let support = try PhotoGrader.blendSupport(
+                grade: grade, lock: lock, sourcePositions: Self.sourcePositions(of: urls))
             return try stacker.stackSequenceLinear(
                 imageURLs: urls,
                 ramp: ramp,
@@ -6260,6 +6262,18 @@ final class AppModel: ObservableObject {
             + " → \(RotationSlider.readout(grade.rotationDegrees(at: 1)))"
     }
 
+    /// Where each source frame sits in the shoot, 0…1 — the axis keyframes are
+    /// on. Keyed by URL rather than by a running counter because the decode
+    /// closures are called once per frame with no promise about the order.
+    nonisolated static func sourcePositions(of urls: [URL]) -> [URL: Double] {
+        guard urls.count > 1 else { return urls.first.map { [$0: 0] } ?? [:] }
+        var positions: [URL: Double] = [:]
+        for (index, url) in urls.enumerated() {
+            positions[url] = Double(index) / Double(urls.count - 1)
+        }
+        return positions
+    }
+
     /// A loader that grades every frame on its way into a blend, or nil for an
     /// untouched grade so the stacker keeps its own decode path.
     ///
@@ -6279,10 +6293,7 @@ final class AppModel: ObservableObject {
         // frame's own position in the sequence. Keyed by URL rather than by a
         // running counter: the loader is called once per frame, but nothing in
         // its contract promises the order.
-        var positions: [URL: Double] = [:]
-        for (index, url) in urls.enumerated() {
-            positions[url] = Double(index) / Double(urls.count - 1)
-        }
+        let positions = sourcePositions(of: urls)
         return { url in
             try PhotoGrader.renderForBlend(
                 url: url, grade: grade.frozen(at: positions[url] ?? 0))
@@ -8778,11 +8789,13 @@ final class AppModel: ObservableObject {
     /// plus the snapshot that pins what "this preset" meant at this moment.
     func applyCustomPreset(_ preset: CustomPreset, for capture: CaptureProject) {
         guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
-        // The preset's look over the project's own level, which the preset
-        // never carried (see `PresetSnapshot.matches`).
+        // The preset's look over the project's own level and its own white,
+        // which the preset never carried (see `PresetSnapshot.matches`).
         let current = photoGrade(for: captures[index]).rotationOnly
-        var adjustments = preset.adjustments.withoutRotation
+        var adjustments = preset.adjustments.withoutRotation.withoutWhite
         adjustments.rotationDegrees = current.adjustments.rotationDegrees
+        adjustments.whiteMired = current.adjustments.whiteMired
+        adjustments.whiteTint = current.adjustments.whiteTint
         write(
             preset: preset.basePreset, adjustments: adjustments,
             state: .named(id: preset.id, snapshot: preset.snapshot),

@@ -25,11 +25,29 @@ struct PhotoAdjustments: Codable, Equatable {
     var whites: Float
     /// Moves the black point: negative crushes, positive lifts to matte. −1…+1.
     var blacks: Float
-    /// White balance as a mired offset from the as-shot illuminant; positive
-    /// renders warmer. An offset, not an absolute Kelvin, so a saved preset
-    /// carries "warm it a little" across photos with different as-shot values.
+    /// The white this moment is declared at, in mired (reciprocal megakelvin)
+    /// — **the white itself, not a nudge.** 0 means the frame's own as-shot;
+    /// anything else is owned, and owned means the camera's decision no longer
+    /// reaches the picture: two frames a camera balanced 116 mired apart
+    /// render at the same white when both own the same value.
+    ///
+    /// Stored in mired rather than Kelvin because keyframes interpolate this
+    /// field like any other, and mired is the axis on which equal steps look
+    /// equal — a ramp lerped in Kelvin is front-loaded to the eye. The
+    /// readout converts. Range 40…600 (25000 K … 1667 K, the converter's
+    /// travel); 0 is a sentinel outside it, never a value.
+    var whiteMired: Float
+    /// The owned white's tint, on the raw converter's ±150 green–magenta
+    /// axis (the axis Adobe's Tint also uses). Meaningful only while
+    /// `whiteMired` is owned.
+    var whiteTint: Float
+    /// A mired *offset* layered under the owned white; positive renders
+    /// warmer. This is a preset's "warm it a little" — the one legitimately
+    /// relative thing, because a look has to travel across shoots with
+    /// different whites. No control writes it any more; it survives for
+    /// presets and for decoding grades saved before the white was owned.
     var temperature: Float
-    /// Green (−) to magenta (+). −1…+1.
+    /// The preset's tint offset, −1…+1. Same standing as `temperature`.
     var tint: Float
     /// Raises muted colours more than already-saturated ones. −1…1.
     var vibrance: Float
@@ -76,7 +94,8 @@ struct PhotoAdjustments: Codable, Equatable {
     /// `PhotoAdjustmentField.neutralValue` rather than writing a zero.
     static var neutral: PhotoAdjustments {
         .init(exposure: 0, contrast: 0, highlights: 0, shadows: 0, whites: 0,
-              blacks: 0, temperature: 0, tint: 0, vibrance: 0, saturation: 0,
+              blacks: 0, whiteMired: 0, whiteTint: 0,
+              temperature: 0, tint: 0, vibrance: 0, saturation: 0,
               clarity: 0, texture: 0, sharpen: 0, sharpenMasking: 0,
               noiseReduction: 0, noiseDetail: neutralNoiseDetail,
               colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0,
@@ -95,8 +114,35 @@ struct PhotoAdjustments: Codable, Equatable {
         return copy
     }
 
-    /// True when no COLOUR control has moved, whatever the rotation says.
+    /// True when no COLOUR control has moved, whatever the rotation says. An
+    /// owned white counts: it moves pixels, so a render cannot be skipped.
     var isColorNeutral: Bool { withoutRotation == .neutral }
+
+    /// True when no LOOK has been applied — rotation and the owned white set
+    /// aside, both being corrections of the capture rather than treatments of
+    /// it. The Original/Edited verdict asks this.
+    var isLookNeutral: Bool { withoutRotation.withoutWhite == .neutral }
+
+    /// True when this moment owns its white rather than taking the camera's.
+    var ownsWhite: Bool { whiteMired > 0 }
+
+    /// The owned white as the converter wants it, or nil for as-shot.
+    var ownedWhite: (kelvin: Float, tint: Float)? {
+        guard ownsWhite else { return nil }
+        return (1e6 / min(max(whiteMired, Self.whiteMiredRange.lowerBound),
+                          Self.whiteMiredRange.upperBound), whiteTint)
+    }
+
+    /// These values with the owned white released — what a preset stores. A
+    /// look is a way of treating light, not a claim about which light it was:
+    /// a preset that pinned one shoot's 5200 K would wreck the next shoot it
+    /// was applied to.
+    var withoutWhite: PhotoAdjustments {
+        var copy = self
+        copy.whiteMired = 0
+        copy.whiteTint = 0
+        return copy
+    }
 
     /// The middle of the Detail sub-slider's travel — the gate width the
     /// engine used before the control existed.
@@ -117,6 +163,9 @@ struct PhotoAdjustments: Codable, Equatable {
     static let shadowsRange: ClosedRange<Float> = -1...1
     static let whitesRange: ClosedRange<Float> = -1...1
     static let blacksRange: ClosedRange<Float> = -1...1
+    /// The converter's own travel, 25000 K down to 1667 K.
+    static let whiteMiredRange: ClosedRange<Float> = 40...600
+    static let whiteTintRange: ClosedRange<Float> = -150...150
     static let temperatureRange: ClosedRange<Float> = -150...150
     static let tintRange: ClosedRange<Float> = -1...1
     static let vibranceRange: ClosedRange<Float> = -1...1
@@ -145,6 +194,13 @@ struct PhotoAdjustments: Codable, Equatable {
         recipe.blacks = min(max(base.blacks + blacks, -1), 1)
         recipe.temperatureMired = min(max(base.temperatureMired + temperature, -150), 150)
         recipe.tint = min(max(base.tint + tint, -1), 1)
+        // The owned white is absolute, so it is not layered — it replaces the
+        // anchor the offsets above are measured from. A preset's own offset
+        // still rides on it, which is what lets a look stay a look.
+        if let white = ownedWhite {
+            recipe.declaredKelvin = white.kelvin
+            recipe.declaredTint = white.tint
+        }
         recipe.vibrance = min(max(base.vibrance + vibrance, -1), 1)
         recipe.saturation = min(max(base.saturation + saturation, -1), 1)
         recipe.clarity = min(max(base.clarity + clarity, -1), 1)
@@ -173,6 +229,7 @@ struct PhotoAdjustments: Codable, Equatable {
             texture, sharpen, sharpenMasking, noiseReduction, noiseDetail,
             colorNoiseReduction, colorNoise)
             + (hasRotation ? String(format: ",r%.2f", rotationDegrees) : "")
+            + (ownsWhite ? String(format: ",w%.2f,%.1f", whiteMired, whiteTint) : "")
     }
 
     // MARK: - Codable
@@ -183,7 +240,8 @@ struct PhotoAdjustments: Codable, Equatable {
     // one migration function below.
 
     init(exposure: Float, contrast: Float, highlights: Float, shadows: Float,
-         whites: Float, blacks: Float, temperature: Float, tint: Float,
+         whites: Float, blacks: Float, whiteMired: Float = 0, whiteTint: Float = 0,
+         temperature: Float, tint: Float,
          vibrance: Float, saturation: Float, clarity: Float, texture: Float = 0,
          sharpen: Float = 0, sharpenMasking: Float = 0,
          noiseReduction: Float = 0,
@@ -196,6 +254,8 @@ struct PhotoAdjustments: Codable, Equatable {
         self.shadows = shadows
         self.whites = whites
         self.blacks = blacks
+        self.whiteMired = whiteMired
+        self.whiteTint = whiteTint
         self.temperature = temperature
         self.tint = tint
         self.vibrance = vibrance
@@ -218,6 +278,7 @@ struct PhotoAdjustments: Codable, Equatable {
         case temperature, tint, vibrance, saturation, clarity, vignetteIntensity
         case texture, sharpen, noiseReduction, colorNoiseReduction, colorNoise
         case sharpenMasking, noiseDetail
+        case whiteMired, whiteTint
         case rotationDegrees = "rotation"
         case whiteBalance  // v1 only; never written by v2
     }
@@ -258,6 +319,7 @@ struct PhotoAdjustments: Codable, Equatable {
                 exposure: field(.exposure), contrast: field(.contrast),
                 highlights: field(.highlights), shadows: field(.shadows),
                 whites: field(.whites), blacks: field(.blacks),
+                whiteMired: field(.whiteMired), whiteTint: field(.whiteTint),
                 temperature: field(.temperature), tint: field(.tint),
                 vibrance: field(.vibrance), saturation: field(.saturation),
                 clarity: field(.clarity), texture: field(.texture),
@@ -323,6 +385,12 @@ struct PhotoAdjustments: Codable, Equatable {
         if hasRotation {
             try container.encode(rotationDegrees, forKey: .rotationDegrees)
         }
+        // Same rule for the white: a project that never owned one keeps its
+        // payload byte for byte.
+        if ownsWhite {
+            try container.encode(whiteMired, forKey: .whiteMired)
+            try container.encode(whiteTint, forKey: .whiteTint)
+        }
     }
 }
 
@@ -364,8 +432,13 @@ struct PhotoGrade: Equatable, Sendable {
 
     /// True when the colour chain alone is a no-op, whatever the geometry.
     var isColorIdentity: Bool {
-        preset == .original && adjustments.isColorNeutral && timeline.isColorEmpty
-            && !hasDeclaredWhiteBalance
+        preset == .original && adjustments.isColorNeutral && timeline.isLookEmpty
+            && !ownsWhite && !hasDeclaredWhiteBalance
+    }
+
+    /// True when any moment of the grade owns its white.
+    var ownsWhite: Bool {
+        adjustments.ownsWhite || timeline.keyframes.contains { $0.adjustments.ownsWhite }
     }
 
     // MARK: Rotation
@@ -402,11 +475,16 @@ struct PhotoGrade: Equatable, Sendable {
             timeline: timeline.withoutRotation, whiteBalance: whiteBalance)
     }
 
-    /// Only the rotation of this grade: Original colour, the level kept at
-    /// every moment. What an Original project renders through.
+    /// Only the corrections of this grade — the level and the owned white —
+    /// with Original colour, kept at every moment. What an Original project
+    /// renders through: neither is a filter, and a shoot whose camera would
+    /// not hold its white is still Original once somebody has told it which
+    /// white it was.
     var rotationOnly: PhotoGrade {
         var neutral = PhotoAdjustments.neutral
         neutral.rotationDegrees = adjustments.rotationDegrees
+        neutral.whiteMired = adjustments.whiteMired
+        neutral.whiteTint = adjustments.whiteTint
         return PhotoGrade(preset: .original, adjustments: neutral, timeline: timeline.rotationOnly)
     }
 
@@ -441,14 +519,24 @@ struct PhotoGrade: Equatable, Sendable {
     /// moment's manual adjustments layered on top.
     func recipe(at position: Double) -> GradeRecipe {
         var recipe = adjustments(at: position).recipe(over: preset.recipe)
-        // The anchor is resolved here, at the one place a moment becomes a
-        // recipe, so every render path — preview, blend, export, thumbnail —
-        // gets the white for the frame it is actually drawing.
-        if let declared = whiteBalance.declared(atPosition: position) {
+        // Resolved here, at the one place a moment becomes a recipe, so every
+        // render path — preview, blend, export, thumbnail — gets the white for
+        // the frame it is actually drawing. An owned white (already on the
+        // recipe, from the keyframes) outranks the smoothed track: the track
+        // is what a frame renders at until somebody says otherwise.
+        if !recipe.hasDeclaredWhiteBalance,
+           let declared = whiteBalance.declared(atPosition: position) {
             recipe.declaredKelvin = declared.kelvin
             recipe.declaredTint = declared.tint
         }
         return recipe
+    }
+
+    /// The white one moment of the source is declared at — owned, or the
+    /// smoothed track's, or nil for the frame's own as-shot. What the blend
+    /// path asks per SOURCE frame, since the balance is applied at decode.
+    func declaredWhite(at position: Double) -> (kelvin: Float, tint: Float)? {
+        adjustments(at: position).ownedWhite ?? whiteBalance.declared(atPosition: position)
     }
 
     /// The engine recipe for this grade. A keyframed grade answers for its

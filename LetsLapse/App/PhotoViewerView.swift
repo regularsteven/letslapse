@@ -348,8 +348,109 @@ struct PhotoViewerView: View {
         capture.map(model.whiteBalanceSource(for:)) ?? .asShot
     }
 
-    /// Pins (or unpins) the anchor, and — for the smoothed source — makes sure
-    /// the shoot has been measured first.
+    /// The white the frame under the playhead renders at while nothing owns
+    /// one: the smoothed track's value, else the frame's own as-shot. Where
+    /// the Temp and Tint knobs rest, and what "Match This Frame" writes.
+    private var frameWhite: (kelvin: Double, tint: Double) {
+        let track = capture.map(model.whiteBalanceTrack(for:)) ?? .asShot
+        if let declared = track.declared(atPosition: renderedPosition) {
+            return (Double(declared.kelvin), Double(declared.tint))
+        }
+        return (asShotKelvin, asShotTint)
+    }
+
+    /// The frame's own as-shot white at one moment of the source — a cached
+    /// converter read of that frame.
+    private func asShotWhite(at position: Double) -> (kelvin: Float, tint: Float) {
+        let frame = hasTimeline ? frames[frameIndex(at: position)] : url
+        let read = PhotoGrader.asShotNeutral(url: frame)
+        return (Float(read.kelvin), Float(read.tint))
+    }
+
+    /// What one moment renders at with nothing owned: the smoothed track's
+    /// white, else the frame's own.
+    private func unownedWhite(at position: Double) -> (kelvin: Float, tint: Float) {
+        let track = capture.map(model.whiteBalanceTrack(for:)) ?? .asShot
+        return track.declared(atPosition: position) ?? asShotWhite(at: position)
+    }
+
+    /// Gives every moment that does not yet own its white the white it is
+    /// currently rendering at.
+    ///
+    /// The invariant this keeps: **once any moment owns a white, every moment
+    /// does.** Keyframes are whole panels interpolated field by field, and a
+    /// white is stored in mired with 0 meaning "not owned" — so a moment left
+    /// at 0 beside one that owns 200 would blend toward infinite Kelvin. Seeding
+    /// the others with their own current white means the user's one edit
+    /// changes exactly the moment they touched, and the transition to the next
+    /// keyframe runs from that white to a real one. The camera's decision at
+    /// each seeded moment is thereby *owned* rather than merely inherited, which
+    /// is what lets the next edit at that moment move away from it smoothly.
+    private func seedUnownedWhites(in timeline: inout GradeTimeline) {
+        for keyframe in timeline.keyframes where !keyframe.adjustments.ownsWhite {
+            let white = unownedWhite(at: keyframe.position)
+            var values = keyframe.adjustments
+            values.whiteMired = 1e6 / min(max(white.kelvin, 1667), 25000)
+            values.whiteTint = white.tint
+            timeline.update(keyframe.id, to: values)
+        }
+    }
+
+    /// Re-expresses a grade authored when Temp/Tint were offsets from each
+    /// frame's own as-shot as the whites those offsets *displayed* — once,
+    /// on first open, so a keyframe that read 10328 K / +60 when it was set
+    /// still reads 10328 K / +60, and the transition to the next keyframe
+    /// is now between those two whites rather than between two nudges riding
+    /// a camera that would not sit still.
+    ///
+    /// Only fires on a grade that carries offsets and owns no white; an
+    /// untouched project and an already-migrated one both pass straight
+    /// through. Reads the converter for each keyframe's frame, off the main
+    /// actor.
+    private func migrateRelativeWhiteIfNeeded() async {
+        guard !adjustments.ownsWhite,
+              !timeline.keyframes.contains(where: { $0.adjustments.ownsWhite }) else { return }
+        let carriesOffsets = { (a: PhotoAdjustments) in a.temperature != 0 || a.tint != 0 }
+        guard carriesOffsets(adjustments) || timeline.keyframes.contains(where: { carriesOffsets($0.adjustments) })
+        else { return }
+
+        let moments: [(id: UUID?, position: Double)] = timeline.keyframes.isEmpty
+            ? [(nil, timeline.baselineAnchor ?? 0)]
+            : timeline.keyframes.map { ($0.id, $0.position) }
+        let frameURLs = moments.map { hasTimeline ? frames[frameIndex(at: $0.position)] : url }
+        let asShots = await Task.detached(priority: .utility) {
+            frameURLs.map { PhotoGrader.asShotNeutral(url: $0) }
+        }.value
+
+        func owned(_ a: PhotoAdjustments, asShot: (kelvin: CGFloat, tint: CGFloat)) -> PhotoAdjustments {
+            var out = a
+            let asShotMired = 1e6 / Double(min(max(asShot.kelvin, 1667), 25000))
+            out.whiteMired = Float(min(max(asShotMired - Double(a.temperature), 40), 600))
+            out.whiteTint = Float(min(max(Double(asShot.tint)
+                + Double(a.tint * LinearFrameDecoder.cirawTintPerRecipeUnit), -150), 150))
+            out.temperature = 0
+            out.tint = 0
+            return out
+        }
+
+        var updated = timeline
+        if updated.keyframes.isEmpty {
+            adjustments = owned(adjustments, asShot: asShots[0])
+        } else {
+            for (moment, asShot) in zip(moments, asShots) {
+                guard let id = moment.id,
+                      let keyframe = updated.keyframes.first(where: { $0.id == id }) else { continue }
+                updated.update(id, to: owned(keyframe.adjustments, asShot: asShot))
+            }
+            adjustments = updated.adjustments(at: 0, baseline: adjustments)
+        }
+        timeline = updated
+        refreshState()
+        persist()
+    }
+
+    /// Switches smoothing on or off for the shoot, and — for the smoothed
+    /// source — makes sure it has been measured first.
     ///
     /// The measure is a whole pass over every raw in the shoot, so it happens
     /// once, in the background, with the source written straight away: the
@@ -810,6 +911,7 @@ struct PhotoViewerView: View {
                 sourcePixels = size
             }
             await refreshAsShotAnchor(for: viewedURL)
+            await migrateRelativeWhiteIfNeeded()
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 // The handle dragged all the way up — the state the "expanded"
@@ -2122,8 +2224,8 @@ struct PhotoViewerView: View {
         PhotoAdjustmentsPanel(
             adjustments: editedAdjustments,
             alwaysExpanded: expanded,
-            asShotKelvin: asShotKelvin,
-            asShotTint: asShotTint,
+            frameWhiteKelvin: frameWhite.kelvin,
+            frameWhiteTint: frameWhite.tint,
             whiteBalanceSource: whiteBalanceSource,
             onSetWhiteBalanceSource: capture == nil ? nil : setWhiteBalanceSource,
             playheadPosition: renderedPosition,
@@ -2262,6 +2364,13 @@ struct PhotoViewerView: View {
                 var baseline = adjustments
                 var updated = timeline
                 let outcome = updated.write(values, at: position, baseline: &baseline)
+                if values.ownsWhite {
+                    // After the write, so the moment it may have just
+                    // materialised from the old baseline is seeded too; then
+                    // the baseline re-mirrors the opening moment.
+                    seedUnownedWhites(in: &updated)
+                    baseline = updated.adjustments(at: 0, baseline: baseline)
+                }
                 adjustments = baseline
                 if case .created = outcome {
                     // The dots arriving IS the announcement that this shoot now

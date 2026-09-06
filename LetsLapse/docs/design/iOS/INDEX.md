@@ -2,6 +2,18 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
+⚠️ **2026-09-06, White Balance becomes absolute and keyframed — code first, mirrors' `desc` updated, drawn values owed:**
+supersedes yesterday's anchor model. Steven tested it and found the flaw: the readout looked absolute but the
+default stayed relative unless an anchor was picked from a menu, so two keyframes (10328 K/+60 → 2991 K/+5) still
+rode the camera's 116-mired step at 18:29→18:31 (4853 K → 3105 K on screen). Now a keyframe stores the **white
+itself** (`PhotoAdjustments.whiteMired`/`whiteTint`, interpolated in mired so the ramp looks even), the sliders
+rest on the frame's own as-shot until moved, the first move owns the white and seeds the other keyframes with the
+white they were rendering at, and `PhotoGrade.recipe(at:)` hands the interpolated white to the renderer for scrub
+and export alike. The white is a correction of the capture, not a look — like the level it renders under
+Original, survives a preset apply and never turns a named preset Edited. Existing offset grades migrate on first
+open to the whites they displayed; Vltava_ARW's step becomes 3085 K → 3082 K. **Owed:** the drawn Temp/Tint
+values in the four mirrors.
+
 ⚠️ **2026-09-05, White Balance stops being a nudge and becomes an anchor — code first, mirrors part-updated:**
 the White Bal. dropdown now sets what Temp and Tint are measured *from* rather than setting a slider
 value: **As Shot** (each frame on its own reading — the historic behaviour, right for a still or a
