@@ -59,7 +59,6 @@ struct CreateView: View {
     @Binding var showCapture: Bool
     @Binding var captureIntent: CaptureIntent
     @State private var isImporting = false
-    @State private var importingProject = false
     /// "Import a LetsLapse project…" asks where from before it does anything —
     /// a `.lapse` file, or straight off another device over the network. Both
     /// answers are "import a project", so they belong behind one row rather
@@ -82,20 +81,25 @@ struct CreateView: View {
     #if os(iOS)
     @State private var videoItem: PhotosPickerItem?
     @State private var photoItems: [PhotosPickerItem] = []
-    /// "Import photos to stack" asks where from on iOS, for the same reason
+    /// "Import photos" asks where from on iOS, for the same reason
     /// the project row does: the Photos library and the Files app are two
     /// genuinely different answers, and only one of them can hand over a
     /// camera's raw files under their own names.
     @State private var choosingPhotoSource = false
     @State private var pickingLibraryPhotos = false
     #else
-    @State private var importingVideo = false
     @State private var isDropTargeted = false
     #endif
+    /// What the Files/Finder picker is currently being opened for. Held apart
+    /// from `isPickingFiles` and never cleared on dismissal, so the picker's
+    /// content types, its multi-select and its completion all read the same
+    /// answer for the whole presentation.
+    @State private var filePick: FilePick = .stills
     /// The Files/Finder picker, on every platform — the path that reaches a
     /// card, a drive or an iCloud folder, and the only one that preserves the
-    /// camera's own file names.
-    @State private var importingPhotos = false
+    /// camera's own file names. ONE importer for all three jobs; see
+    /// `pickFiles(for:)` for why it is not three.
+    @State private var isPickingFiles = false
 
     private static let projectArchiveTypes: [UTType] = [.lapseProject]
 
@@ -106,6 +110,31 @@ struct CreateView: View {
     /// as raw is still selectable, and `.folder` is what lets a whole shoot be
     /// chosen in one gesture instead of 306 clicks.
     private static let stillContentTypes: [UTType] = [.image, .rawImage, .folder]
+
+    /// The three jobs the one Files/Finder picker does. `video` is macOS only
+    /// — iOS imports a video through `PhotosPicker` — but the case exists on
+    /// both so the routing has no platform branches in it.
+    private enum FilePick {
+        case project
+        case stills
+        case video
+
+        var contentTypes: [UTType] {
+            switch self {
+            case .project: return CreateView.projectArchiveTypes
+            case .stills: return CreateView.stillContentTypes
+            #if os(iOS)
+            case .video: return [.movie]
+            #else
+            case .video: return CreateView.videoContentTypes
+            #endif
+            }
+        }
+
+        /// Only a stack takes more than one answer: a project archive and a
+        /// video are each one file.
+        var allowsMultipleSelection: Bool { self == .stills }
+    }
 
     private let effectColumns = [
         GridItem(.flexible(), spacing: 12),
@@ -244,30 +273,11 @@ struct CreateView: View {
             maxSelectionCount: 500,
             matching: .images
         )
-        .fileImporter(
-            isPresented: $importingProject,
-            allowedContentTypes: Self.projectArchiveTypes
-        ) { result in
-            if case .success(let url) = result {
-                model.openArchive(at: url)
-            }
-        }
         .sheet(isPresented: $showDeviceImport) {
             ProjectTransferImportView()
                 .environmentObject(model)
         }
         #else
-        .fileImporter(isPresented: $importingVideo, allowedContentTypes: Self.videoContentTypes) { result in
-            handleVideoImport(result)
-        }
-        .fileImporter(
-            isPresented: $importingProject,
-            allowedContentTypes: Self.projectArchiveTypes
-        ) { result in
-            if case .success(let url) = result {
-                model.openArchive(at: url)
-            }
-        }
         .dropDestination(for: URL.self) { urls, _ in
             handleDroppedURLs(urls)
         } isTargeted: { isTargeted in
@@ -282,12 +292,14 @@ struct CreateView: View {
             }
         }
         #endif
+        // ONE picker for the archive, the stack and (on the Mac) the video.
+        // See `pickFiles(for:)`.
         .fileImporter(
-            isPresented: $importingPhotos,
-            allowedContentTypes: Self.stillContentTypes,
-            allowsMultipleSelection: true
+            isPresented: $isPickingFiles,
+            allowedContentTypes: filePick.contentTypes,
+            allowsMultipleSelection: filePick.allowsMultipleSelection
         ) { result in
-            handleStillsImport(result)
+            handleFilePick(result)
         }
     }
 
@@ -365,7 +377,7 @@ struct CreateView: View {
             isPresented: $choosingImportSource,
             titleVisibility: .visible
         ) {
-            Button("From a file…") { importingProject = true }
+            Button("From a file…") { pickFiles(for: .project) }
             Button("From another device…") { startDeviceImport() }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -393,7 +405,7 @@ struct CreateView: View {
         .buttonStyle(.plain)
         #else
         Button {
-            importingVideo = true
+            pickFiles(for: .video)
         } label: {
             SourceRow(icon: "film", iconColor: Color(red: 0.35, green: 0.5, blue: 0.66), title: "Import a video…")
         }
@@ -407,22 +419,22 @@ struct CreateView: View {
             #if os(iOS)
             choosingPhotoSource = true
             #else
-            importingPhotos = true
+            pickFiles(for: .stills)
             #endif
         } label: {
             SourceRow(
                 icon: "photo.stack",
                 iconColor: Color(red: 0.48, green: 0.42, blue: 0.61),
-                title: "Import photos to stack…")
+                title: "Import photos…")
         }
         .buttonStyle(.plain)
         #if os(iOS)
         .confirmationDialog(
-            "Import photos to stack",
+            "Import photos",
             isPresented: $choosingPhotoSource,
             titleVisibility: .visible
         ) {
-            Button("From Files…") { importingPhotos = true }
+            Button("From Files…") { pickFiles(for: .stills) }
             Button("From Photos…") { pickingLibraryPhotos = true }
             Button("Cancel", role: .cancel) {}
         } message: {
@@ -451,7 +463,53 @@ struct CreateView: View {
 
     // MARK: - Import plumbing
 
-    /// The Files/Finder answer for "Import photos to stack", on every
+    /// Opens the one Files/Finder picker for `pick`.
+    ///
+    /// Two mechanics here, both of them regressions we have already had:
+    ///
+    /// - **One importer, not three.** `.fileImporter` modifiers stacked on a
+    ///   single view fight over the presentation; the picker's content types
+    ///   and multi-select come from `filePick` instead, and only the flag
+    ///   below says whether it is up.
+    /// - **Presented a turn late.** Two of the three callers are confirmation
+    ///   dialog buttons, and a picker presented while the dialog is still
+    ///   dismissing is dropped with no error and no log line — which is
+    ///   exactly how "Import a LetsLapse project ▸ From a file…" stopped
+    ///   opening anything when that dialog arrived (b9befa1). Setting the
+    ///   target first and presenting on the next turn also guarantees the
+    ///   modifier already carries the right content types when it opens.
+    private func pickFiles(for pick: FilePick) {
+        filePick = pick
+        DispatchQueue.main.async { isPickingFiles = true }
+    }
+
+    /// The one picker's answer, routed by what it was opened for. `filePick`
+    /// survives the dismissal, so this is always reading the job that was
+    /// actually asked for.
+    private func handleFilePick(_ result: Result<[URL], Error>) {
+        // A stack takes the whole selection; the other two are one file each,
+        // so they share the unwrap.
+        if filePick == .stills {
+            handleStillsImport(result)
+            return
+        }
+        switch result {
+        case .success(let urls):
+            guard let url = urls.first else { return }
+            switch filePick {
+            case .project: model.openArchive(at: url)
+            case .video:
+                #if os(macOS)
+                importVideoURL(url)
+                #endif
+            case .stills: break
+            }
+        case .failure(let error):
+            model.errorMessage = error.localizedDescription
+        }
+    }
+
+    /// The Files/Finder answer for "Import photos", on every
     /// platform. Files, folders or both — `AppModel.importStills` resolves the
     /// selection into the shoot and takes it from there.
     ///
@@ -552,15 +610,6 @@ struct CreateView: View {
         .quickTimeMovie,
         UTType(filenameExtension: "m4v") ?? .movie,
     ]
-
-    private func handleVideoImport(_ result: Result<URL, Error>) {
-        switch result {
-        case .success(let url):
-            importVideoURL(url)
-        case .failure(let error):
-            model.errorMessage = error.localizedDescription
-        }
-    }
 
 
 

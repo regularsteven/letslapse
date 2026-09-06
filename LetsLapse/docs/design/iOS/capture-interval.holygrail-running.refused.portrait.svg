@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (running, Holy Grail ramp refused by the camera, Info off) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (runExposureText, the not-driving branch; rampRefusedNote behind the Info toggle; shutterClusterLayer). Dynamic (Holy Grail) or Ladder mid-run whose custom-exposure writes the camera is REFUSING, so the sensor is on its own AE — the 2026-09-04 iPhone 12 Pro case (docs/fieldtests/2026-09-04-ladder-readout-runaway.md). The one amber line prints what the sensor is DELIVERING (the last window's own EXIF pair and the AE's scene EV) and says 'ramp not driving'; it never prints the engine's target (1/71429 s that evening) and never goes red for a limit the camera is not near. Info OFF: the refusal reason ('ramp refused · this camera does not accept a custom exposure right now · frames are on the camera's AE') is one tap away on the cluster's Info toggle. Everything else is the ramped running screen. Staged by LL_HOLYGRAIL=refused. Code first, 2026-09-05; mirror drawn the same day.</desc>
+  <desc>Mirrors App/CaptureView.swift (runExposureText, the not-driving branch; rampRefusedNote behind the Info toggle; shutterClusterLayer). Dynamic (Holy Grail) or Ladder mid-run whose custom-exposure writes the camera is REFUSING, so the sensor is on its own AE — the 2026-09-04 iPhone 12 Pro case (docs/fieldtests/2026-09-04-ladder-readout-runaway.md). The one amber line prints what the sensor is DELIVERING (the last window's own EXIF pair and the AE's scene EV) and says 'ramp not driving'; it never prints the engine's target (1/71429 s that evening) and never goes red for a limit the camera is not near. Info OFF: the refusal reason ('ramp refused · this camera does not accept a custom exposure right now · frames are on the camera's AE') is one tap away on the cluster's Info toggle. Everything else is the ramped running screen, the burst pill above the amber line included (2026-09-06) — a refused ramp still delivers frames, and the count is how you see that. Staged by LL_HOLYGRAIL=refused. Code first, 2026-09-05; mirror drawn the same day.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -56,6 +56,41 @@
            Never the engine's target, never red: the limit flag describes a target the camera is not on.
            The refusal reason lives behind the cluster's Info toggle (slot 2), on one line under the
            diagnostics panel: 'ramp refused · <reason> · frames are on the camera's AE'. -->
+      <!-- BURST PILL — BurstStatusIndicator in the Interval slot (24 outputs, open-ended:
+           an interval run has no total, so the bar is the decay zebra rather than a fill).
+           249×26 r13 #000@50% · bar 170×5 r2.5 on #FFF@16% · stripes pitch min(13, 170/n),
+           55% duty, 0.9 pt floor · opacity 30% oldest → 100% newest · SF Mono 12 count,
+           amber, in a 46 pt trailing column. -->
+      <g id="burst-pill">
+        <rect x="72" y="629" width="249" height="26" rx="13" fill="#000" opacity="0.5"/>
+        <rect x="84" y="639.5" width="170" height="5" rx="2.5" fill="#FFF" opacity="0.16"/>
+        <rect x="84.00" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.30"/>
+        <rect x="91.08" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.33"/>
+        <rect x="98.17" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.36"/>
+        <rect x="105.25" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.39"/>
+        <rect x="112.33" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.42"/>
+        <rect x="119.42" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.45"/>
+        <rect x="126.50" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.48"/>
+        <rect x="133.58" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.51"/>
+        <rect x="140.67" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.54"/>
+        <rect x="147.75" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.57"/>
+        <rect x="154.83" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.60"/>
+        <rect x="161.92" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.63"/>
+        <rect x="169.00" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.67"/>
+        <rect x="176.08" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.70"/>
+        <rect x="183.17" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.73"/>
+        <rect x="190.25" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.76"/>
+        <rect x="197.33" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.79"/>
+        <rect x="204.42" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.82"/>
+        <rect x="211.50" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.85"/>
+        <rect x="218.58" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.88"/>
+        <rect x="225.67" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.91"/>
+        <rect x="232.75" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.94"/>
+        <rect x="239.83" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.97"/>
+        <rect x="246.92" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="1.00"/>
+        <text x="310" y="646.5" font-size="12" class="m" text-anchor="end" fill="#FFB340">24</text>
+      </g>
+
       <g id="run-readout">
         <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1/121 · ISO 71 · EV 8.8 · ramp not driving</text>
         <g id="ev-slider" data-symbol="plusminus.circle">

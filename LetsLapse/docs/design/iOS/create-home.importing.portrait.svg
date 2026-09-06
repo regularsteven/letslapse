@@ -117,7 +117,7 @@
         <g id="row-import-photos">
           <rect x="32" y="613" width="30" height="30" rx="8" fill="#7A6B9C"/>
           <g data-symbol="photo.stack" stroke="#FFF" stroke-width="1.6" fill="none"><rect x="40" y="622" width="13" height="10" rx="2"/><path d="M42 619.5 h11.5 a2 2 0 0 1 2 2 V629"/></g>
-          <text x="74" y="633" font-size="16" fill="#000">Import photos to stack…</text>
+          <text x="74" y="633" font-size="16" fill="#000">Import photos…</text>
           <path d="M363 621 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         </g>
         <line x1="74" y1="653" x2="377" y2="653" stroke="#000" stroke-opacity="0.08"/>

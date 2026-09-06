@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (running, DNG blend, Info on) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch with the cluster's Info toggle ON; blendDiagnosticsReadout). The same run as capture-interval.running.portrait.svg after a tap on Info (slot 2, amber): ONE panel joins the readout — frames in the window · last, the output cadence against the request, and blend cost · format · health · thermal state (green healthy / amber starved / red thermal). Nothing else is added: the ramp readout panel is gone for good. Off by default, per run.</desc>
+  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch with the cluster's Info toggle ON; blendDiagnosticsReadout). The same run as capture-interval.running.portrait.svg after a tap on Info (slot 2, amber): ONE panel joins the readout — frames in the window · last, the output cadence against the request, and blend cost · format · health · thermal state (green healthy / amber starved / red thermal). Nothing else is added: the ramp readout panel is gone for good. The panel sits ABOVE the burst pill (the stack is panel · pill · amber line · bias slider), so turning Info on raises it by the pill's 26 pt plus the stack's 8 pt rather than displacing anything. Off by default, per run.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -59,11 +59,46 @@
       <!-- INFO PANEL — the cluster's Info toggle on: the one diagnostics panel (blendDiagnosticsReadout),
            frames in the window · last · output cadence · blend cost, format, health and thermal state. -->
       <g id="info-panel">
-        <rect x="72" y="590" width="249" height="63" rx="8" fill="#000" opacity="0.5"/>
-        <text x="82" y="606" font-size="10.5" class="m" fill="#FFF" opacity="0.75">frames 10/10 · last 10</text>
-        <text x="82" y="622" font-size="10.5" class="m" fill="#FFF" opacity="0.75">out 2.05 s (req 2.0 s)</text>
-        <text x="82" y="638" font-size="10.5" class="m" fill="#FFF" opacity="0.75">blend 312 ms · DNG · <tspan fill="#34C759">healthy</tspan> · nominal</text>
+        <rect x="72" y="558" width="249" height="63" rx="8" fill="#000" opacity="0.5"/>
+        <text x="82" y="574" font-size="10.5" class="m" fill="#FFF" opacity="0.75">frames 10/10 · last 10</text>
+        <text x="82" y="590" font-size="10.5" class="m" fill="#FFF" opacity="0.75">out 2.05 s (req 2.0 s)</text>
+        <text x="82" y="606" font-size="10.5" class="m" fill="#FFF" opacity="0.75">blend 312 ms · DNG · <tspan fill="#34C759">healthy</tspan> · nominal</text>
       </g>
+      <!-- BURST PILL — BurstStatusIndicator in the Interval slot (24 outputs, open-ended:
+           an interval run has no total, so the bar is the decay zebra rather than a fill).
+           249×26 r13 #000@50% · bar 170×5 r2.5 on #FFF@16% · stripes pitch min(13, 170/n),
+           55% duty, 0.9 pt floor · opacity 30% oldest → 100% newest · SF Mono 12 count,
+           amber, in a 46 pt trailing column. -->
+      <g id="burst-pill">
+        <rect x="72" y="629" width="249" height="26" rx="13" fill="#000" opacity="0.5"/>
+        <rect x="84" y="639.5" width="170" height="5" rx="2.5" fill="#FFF" opacity="0.16"/>
+        <rect x="84.00" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.30"/>
+        <rect x="91.08" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.33"/>
+        <rect x="98.17" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.36"/>
+        <rect x="105.25" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.39"/>
+        <rect x="112.33" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.42"/>
+        <rect x="119.42" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.45"/>
+        <rect x="126.50" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.48"/>
+        <rect x="133.58" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.51"/>
+        <rect x="140.67" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.54"/>
+        <rect x="147.75" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.57"/>
+        <rect x="154.83" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.60"/>
+        <rect x="161.92" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.63"/>
+        <rect x="169.00" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.67"/>
+        <rect x="176.08" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.70"/>
+        <rect x="183.17" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.73"/>
+        <rect x="190.25" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.76"/>
+        <rect x="197.33" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.79"/>
+        <rect x="204.42" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.82"/>
+        <rect x="211.50" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.85"/>
+        <rect x="218.58" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.88"/>
+        <rect x="225.67" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.91"/>
+        <rect x="232.75" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.94"/>
+        <rect x="239.83" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.97"/>
+        <rect x="246.92" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="1.00"/>
+        <text x="310" y="646.5" font-size="12" class="m" text-anchor="end" fill="#FFB340">24</text>
+      </g>
+
       <g id="run-readout">
         <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1/120 · ISO 200 · EV 9.1</text>
         <g id="ev-slider" data-symbol="plusminus.circle">

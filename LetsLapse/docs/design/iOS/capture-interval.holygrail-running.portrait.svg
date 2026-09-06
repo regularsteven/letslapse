@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (running, Holy Grail ramp, Info off) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch → run readout + ±EV slider; shutterClusterLayer). Dynamic (Holy Grail) ramp mid-run, Info OFF — the 2026-09-04 (third pass) default: one amber line carries the ramp's exposure pair, the scene EV it is tracking and, when true, its status — 'ISO ramping' (shutter at max) in amber, 'past the sensor's limit' in red — above the ±EV bias slider the ramp is nudged with. The ramp readout panel and the pills row are gone; frames, cadence, blend health and thermal state are one tap away on the cluster's Info toggle. Dim engaged (amber moon). Design ahead of code.</desc>
+  <desc>Mirrors App/CaptureView.swift (intervalStatusRow running branch → run readout + ±EV slider; shutterClusterLayer). Dynamic (Holy Grail) ramp mid-run, Info OFF — the 2026-09-04 (third pass) default: one amber line carries the ramp's exposure pair, the scene EV it is tracking and, when true, its status — 'ISO ramping' (shutter at max) in amber, 'past the sensor's limit' in red — above the ±EV bias slider the ramp is nudged with. The frame count rides the burst pill above that line (2026-09-06); cadence, blend health and thermal state stay one tap away on the cluster's Info toggle, and the ramp readout panel is still gone. Dim engaged (amber moon).</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -55,6 +55,41 @@
            and ONE amber line — current shutter · ISO · scene EV (+ the ramp's status: 'ISO ramping' in amber, 'past the sensor's limit' in red) — above the cluster. The output
            count, elapsed clock and the diagnostics panel sit behind the cluster's Info toggle (slot 2);
            the ramp readout panel that used to duplicate them is gone. -->
+      <!-- BURST PILL — BurstStatusIndicator in the Interval slot (24 outputs, open-ended:
+           an interval run has no total, so the bar is the decay zebra rather than a fill).
+           249×26 r13 #000@50% · bar 170×5 r2.5 on #FFF@16% · stripes pitch min(13, 170/n),
+           55% duty, 0.9 pt floor · opacity 30% oldest → 100% newest · SF Mono 12 count,
+           amber, in a 46 pt trailing column. -->
+      <g id="burst-pill">
+        <rect x="72" y="629" width="249" height="26" rx="13" fill="#000" opacity="0.5"/>
+        <rect x="84" y="639.5" width="170" height="5" rx="2.5" fill="#FFF" opacity="0.16"/>
+        <rect x="84.00" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.30"/>
+        <rect x="91.08" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.33"/>
+        <rect x="98.17" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.36"/>
+        <rect x="105.25" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.39"/>
+        <rect x="112.33" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.42"/>
+        <rect x="119.42" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.45"/>
+        <rect x="126.50" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.48"/>
+        <rect x="133.58" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.51"/>
+        <rect x="140.67" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.54"/>
+        <rect x="147.75" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.57"/>
+        <rect x="154.83" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.60"/>
+        <rect x="161.92" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.63"/>
+        <rect x="169.00" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.67"/>
+        <rect x="176.08" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.70"/>
+        <rect x="183.17" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.73"/>
+        <rect x="190.25" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.76"/>
+        <rect x="197.33" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.79"/>
+        <rect x="204.42" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.82"/>
+        <rect x="211.50" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.85"/>
+        <rect x="218.58" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.88"/>
+        <rect x="225.67" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.91"/>
+        <rect x="232.75" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.94"/>
+        <rect x="239.83" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="0.97"/>
+        <rect x="246.92" y="639.5" width="3.90" height="5" rx="1" fill="#FFB340" opacity="1.00"/>
+        <text x="310" y="646.5" font-size="12" class="m" text-anchor="end" fill="#FFB340">24</text>
+      </g>
+
       <g id="run-readout">
         <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1.0s · ISO 1250 · EV 1.4 · ISO ramping</text>
         <g id="ev-slider" data-symbol="plusminus.circle">

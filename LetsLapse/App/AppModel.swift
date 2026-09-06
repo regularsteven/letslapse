@@ -8262,6 +8262,19 @@ final class AppModel: ObservableObject {
         captures.first { $0.id == originID || $0.importedFromID == originID }
     }
 
+    /// Whether this library already holds the project another device is
+    /// offering as `originID` — the transfer picker's "Hide imported" answer.
+    ///
+    /// Same test the archive door uses, and it catches both directions: a
+    /// project pulled from that device (matched on `importedFromID`) and one
+    /// that started here and was copied TO it (matched on `id`). Projects
+    /// imported before `importedFromID` was recorded have no thread back and
+    /// read as not-imported — the honest answer, since nothing on either side
+    /// can still prove they are the same shoot.
+    func hasImported(originID: UUID) -> Bool {
+        existingImport(of: originID) != nil
+    }
+
     /// Answers the "you already have this" question. `importAgain` true makes a
     /// second, independent project; false leaves the library alone. Either way
     /// a project opens — the new one or the one already here.

@@ -2636,6 +2636,15 @@ struct CaptureView: View {
                     if showRunInfo {
                         runInfoPanel
                     }
+                    // How many frames are in the bag. The pill has always been
+                    // mounted for an Interval run (at run start, count 0) and
+                    // fed every tick — it was only ever drawn in Photo's slot,
+                    // so the number existed and nobody could see it. It sits
+                    // ABOVE the exposure line so the line stays next to the
+                    // bias slider `exposurePanel` draws directly under it.
+                    if burstPillPhase != .hidden, burstPillMode == .interval {
+                        burstStatusPill
+                    }
                     runExposureLine
                         .padding(.horizontal, 16)
                     ladderRunningRungDial
@@ -2669,6 +2678,11 @@ struct CaptureView: View {
                 } else {
                     if showRunInfo {
                         runInfoPanel
+                    }
+                    // Portrait's frame count, in the corner stack (see
+                    // `intervalStatusRow`).
+                    if burstPillPhase != .hidden, burstPillMode == .interval {
+                        burstStatusPill
                     }
                     runReadoutCapsule
                     ladderRunningRungDial

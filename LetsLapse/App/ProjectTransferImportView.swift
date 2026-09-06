@@ -24,6 +24,10 @@ struct ProjectTransferImportView: View {
     /// Tap order, because the pulls run in it — the first project picked is
     /// the first one home.
     @State private var selectedProjects: [PTProjectInfo] = []
+    /// "Hide imported", ON by default — see `hideImportedRow`. Deliberately
+    /// not remembered between sessions: the default answer is the useful one
+    /// every time, and a box left unticked weeks ago is a puzzle.
+    @State private var hidesImported = true
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
@@ -426,20 +430,34 @@ struct ProjectTransferImportView: View {
                     detail: "Nothing to import yet.",
                     spinner: false)
             } else {
-                ScrollView {
-                    LazyVStack(spacing: 6) {
-                        ForEach(client.projects) { project in
-                            projectRow(project)
-                                // The row asks for its own tile as it appears.
-                                // A LazyVStack only builds what is on screen,
-                                // so a 300-project library costs the handful
-                                // of decodes somebody actually looked at.
-                                .onAppear {
-                                    client.requestThumbnailIfNeeded(for: project.captureID)
-                                }
+                hideImportedRow
+                Divider()
+                if visibleProjects.isEmpty {
+                    // Everything on that device is already here. Saying so is
+                    // the whole point of the filter — an empty list under a
+                    // ticked box would read as a broken link.
+                    centred(
+                        icon: "checkmark.circle", tint: LL.accent,
+                        title: "Already in your library",
+                        detail: "All \(client.projects.count) projects on that device have been imported. Untick “Hide imported” to see them.",
+                        spinner: false)
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 6) {
+                            ForEach(visibleProjects) { project in
+                                projectRow(project)
+                                    // The row asks for its own tile as it
+                                    // appears. A LazyVStack only builds what is
+                                    // on screen, so a 300-project library costs
+                                    // the handful of decodes somebody actually
+                                    // looked at.
+                                    .onAppear {
+                                        client.requestThumbnailIfNeeded(for: project.captureID)
+                                    }
+                            }
                         }
+                        .padding(14)
                     }
-                    .padding(14)
                 }
                 Divider()
                 HStack {
@@ -464,6 +482,55 @@ struct ProjectTransferImportView: View {
                 .padding(.vertical, 10)
             }
         }
+    }
+
+    /// The list's one filter, ON by default: a device you pull from regularly
+    /// answers with its whole library every time, and after the first session
+    /// most of it is already here. The count is named rather than left to be
+    /// worked out from a shorter list.
+    private var hideImportedRow: some View {
+        Button {
+            hidesImported.toggle()
+            // A hidden row cannot be deselected by tapping it, so re-ticking
+            // the box takes its selection with it — otherwise the footer would
+            // count bytes for projects nobody can see.
+            if hidesImported {
+                selectedProjects.removeAll { model.hasImported(originID: $0.captureID) }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: hidesImported ? "checkmark.square.fill" : "square")
+                    .font(.system(size: 13))
+                    .foregroundStyle(hidesImported ? LL.accent : .secondary)
+                Text("Hide imported")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if importedCount > 0 {
+                    Text(hidesImported
+                        ? "\(importedCount) hidden"
+                        : "\(importedCount) already here")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(hidesImported ? [.isButton, .isSelected] : .isButton)
+    }
+
+    /// What the list draws: everything, or only what this device has never
+    /// pulled (or sent) before.
+    private var visibleProjects: [PTProjectInfo] {
+        guard hidesImported else { return client.projects }
+        return client.projects.filter { !model.hasImported(originID: $0.captureID) }
+    }
+
+    private var importedCount: Int {
+        client.projects.filter { model.hasImported(originID: $0.captureID) }.count
     }
 
     private func projectRow(_ project: PTProjectInfo) -> some View {
@@ -492,6 +559,14 @@ struct ProjectTransferImportView: View {
                         Text("Not enough space on this device")
                             .font(.caption2)
                             .foregroundStyle(.orange)
+                    }
+                    // Only ever seen with the box unticked — and then it is
+                    // the reason the row was hidden, which is the one thing
+                    // unticking has to explain.
+                    if model.hasImported(originID: project.captureID) {
+                        Text("Already in your library")
+                            .font(.caption2)
+                            .foregroundStyle(LL.accent)
                     }
                 }
                 Spacer()

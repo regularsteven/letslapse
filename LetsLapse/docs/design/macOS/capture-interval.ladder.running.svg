@@ -4,8 +4,13 @@
 
 WHAT DIFFERS FROM THE PHONE'S RUNNING STATE (../iOS/capture-interval.ladder-running.portrait.svg): (1) THE READOUT'S THIRD LINE STANDS ALONE. The phone's readout leads with the ramp's exposure pair ("1/8 · ISO 1250", "scene EV 5.2 · 823 frames") and puts the ladder line under them; a Mac run has no ramp and so no HolyGrailState, and holyGrailReadout's ladder-only branch draws "Dusk · every 2 s · blend 3" by itself — the rung's pacing as asked, no governor note (there is no processing governor on the JPEG path). (2) A RUNG DIAL UNDER THE READOUT (ladderRunningRungDial): the same captioned pull-down the armed row carries — "RUNG · Dusk", menu Daylight · Fading · Dusk ✓ · Night — is how the operator steps the running ladder. Picking a rung calls CameraController.setLadderRung, which hands the rung's interval and blend depth to the live blend controller for the NEXT window (never the one in flight — the rule the phone's boundary step keeps), republishes LadderState, appends a line to Logs/ladder-&lt;run&gt;.jsonl (sceneEV null, changed true, no yieldedBy) and so moves the rail and fires the "Stepped down to Night" toast. It sits in the dial-row slot, outside the viewfinder's swipe and pinch gestures, because a menu placed on the rail — inside them — did not reliably open from a click. (3) THE RAIL IS PICTURE on every platform: one bar per rung with heights proportional to the ladder's EV spans (Daylight 3 · Fading 5 · Dusk 4 · Night 6 of the 16 … −2 drawing window → 30 · 50 · 40 · 60 pt of 180), the active rung widened to 22 pt and ringed in amber, its name in a chip beside it; allowsHitTesting(false). The Mac's LadderState carries no smoothedEV, so the rail's thresholds are the table's, not a meter's.
 
-Unchanged from the phone: the run pills (the burst indicator's bar and count, the elapsed clock), the toast (3 s, "Stepped down to Night"), and the rest of the sheet's chrome (see capture-interval.ladder.svg). The RUNG menu itself is a system menu and is mirrored as a note in INDEX.md.</desc>
+Unchanged from the phone: the burst pill at the top of the corner stack (the indicator's bar and count — the elapsed pill beside it went with the 2026-09-04 pass and did not come back), the toast (3 s, "Stepped down to Night"), and the rest of the sheet's chrome (see capture-interval.ladder.svg). The RUNG menu itself is a system menu and is mirrored as a note in INDEX.md.</desc>
   <defs>
+    <linearGradient id="burstwash" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFB340" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#FFB340" stop-opacity="1"/>
+    </linearGradient>
+
     <clipPath id="capsheet"><rect x="20" y="20" width="960" height="720" rx="11"/></clipPath>
     <linearGradient id="thumb" x1="0" y1="0" x2="0" y2="1">
       <stop offset="0" stop-color="#6E7F98"/><stop offset="0.55" stop-color="#5B6472"/><stop offset="1" stop-color="#3A3530"/>
@@ -67,9 +72,20 @@ Unchanged from the phone: the run pills (the burst indicator's bar and count, th
       <rect x="823" y="417" width="14" height="60" rx="7" fill="#1C1C1E" fill-opacity="0.6" stroke="#FFFFFF" stroke-opacity="0.15" stroke-width="1"/>
     </g>
 
-    <!-- ============ The running row: readout · RUNG dial (2026-09-04 third pass: the pills row is gone;
-         the Mac has no exposure pair, so the rung's line is its amber line; frames/elapsed sit behind Info) ============ -->
+    <!-- ============ The running row: burst pill · readout · RUNG dial (2026-09-04 third pass: the pills ROW is
+         gone; the Mac has no exposure pair, so the rung's line is its amber line, and elapsed sits behind
+         Info — but the frame count came back on its own pill above the readout, 2026-09-06) ============ -->
     <g id="running-row">
+      <!-- BURST PILL — BurstStatusIndicator, the frame count, at the top of the corner stack
+           (landscapeIntervalRow). 823 outputs, open-ended: 823 stripes at 170/823 = 0.21 pt pitch,
+           each floored at 0.9 pt wide, so the zebra reads as a textured wash — drawn here as its
+           30% → 100% ramp. 249×26 r13 #000@50% · SF Mono 12 count, amber, 46 pt trailing column. -->
+      <g id="burst-pill">
+        <rect x="138" y="643" width="249" height="26" rx="13" fill="#000000" fill-opacity="0.5"/>
+        <rect x="150" y="653.5" width="170" height="5" rx="2.5" fill="#FFFFFF" fill-opacity="0.16"/>
+        <rect x="150" y="653.5" width="170" height="5" rx="2.5" fill="url(#burstwash)"/>
+        <text x="376" y="660.5" font-size="12" class="mono" text-anchor="end" fill="#FFB340">823</text>
+      </g>
       <!-- holyGrailReadout, ladder-only branch: no ramp, so no exposure pair above it -->
       <rect x="142" y="675" width="196" height="22" rx="8" fill="#000000" fill-opacity="0.5"/>
       <text x="152" y="690" font-size="10.5" class="mono" fill="#FFB340">Dusk · every 2 s · blend 3</text>

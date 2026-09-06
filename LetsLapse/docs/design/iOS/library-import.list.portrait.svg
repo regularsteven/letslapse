@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Import from device · project list · portrait</title>
+  <desc>Mirrors App/ProjectTransferImportView.swift (selectingProject phase — projectList, hideImportedRow, projectRow) over Shared/ProjectTransferProtocol.swift (PTListReply / PTProjectInfo), presented as a sheet from CreateView's "Import a LetsLapse project…" row. The phone half of macOS/library-import.list.svg: ONE view serves every platform, so the list, the filter and the footer are the same; the sheet carries its own ✕ where the Mac has a title bar, and Import is a tinted text button rather than a filled default one. One row per project on the paired device, newest first as the serving side ordered them, each row name · date · frame count · true uncompressed bytes (the payload path has no compression, so the figure is exactly what will cross the wire). Thumbnails do not travel with the list — each row asks for its own as it appears (requestThumbnail), and a project with no drawable source keeps the placeholder. Tapping a row toggles it into the selection in tap order, because the pulls run in that order. HIDE IMPORTED heads the list, ticked by default (2026-09-06): a device you pull from regularly answers with its whole library every time, and after the first session most of it is already here. What it hides is AppModel.hasImported(originID:) — the same test the .lapse door uses, matching a remote captureID against both the ids in this library and the origins recorded on projects imported earlier, so it catches a project pulled FROM that device AND one that started here and was sent TO it; projects imported before importedFromID was recorded have no thread back and read as not-imported, which is the honest answer. The header still counts the WHOLE library the device offered (4) while the list draws what survived the filter (3). Unticking brings the hidden rows back, each marked "Already in your library" in accent under its caption — the one thing unticking has to explain — and re-ticking drops them from the selection, so the footer can never cost bytes for a row nobody can see. ALL HIDDEN (desc-only): the list is replaced outright by a centred checkmark.circle in accent, "Already in your library", "All N projects on that device have been imported. Untick “Hide imported” to see them." — an empty list under a ticked box would read as a broken link. EMPTY LIBRARY (desc-only): "No projects on that device / Nothing to import yet." The filter is @State, not persisted: the default answer is the useful one every time, and a box left unticked weeks ago is a puzzle.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#3A3A3F"/>
+    <g transform="translate(24,24)">
+
+      <!-- the Create screen behind, dimmed: a page sheet leaves a sliver -->
+      <rect x="0" y="0" width="393" height="852" fill="#F2F2F7"/>
+      <rect x="0" y="0" width="393" height="852" fill="#000" fill-opacity="0.35"/>
+
+      <!-- the sheet itself: full-height page sheet, 10pt corner, inset 10 -->
+      <g id="sheet">
+        <path d="M0 862 L0 20 a10 10 0 0 1 10 -10 L383 10 a10 10 0 0 1 10 10 L393 862 Z" fill="#F2F2F7"/>
+
+        <g id="status-bar" fill="#000">
+          <text x="56" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+          <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+          <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+          <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+        </g>
+
+        <!-- header: the peer's name, then how much it is offering. Back returns
+             to the browse list and clears the code and the selection. -->
+        <g id="header">
+          <g data-symbol="arrow.down.circle" transform="translate(29,80)">
+            <circle cx="0" cy="0" r="8" fill="none" stroke="#C36A00" stroke-width="1.6"/>
+            <path d="M0 -4.5 L0 4 M-3.4 0.6 L0 4 L3.4 0.6" fill="none" stroke="#C36A00" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <text x="44" y="78" font-size="17" class="b" fill="#000">iPhone 17 Pro</text>
+          <text x="44" y="93" font-size="12" fill="#6D6D72">4 projects</text>
+          <text x="343" y="84" font-size="12" text-anchor="end" fill="#C36A00">Back</text>
+          <g data-symbol="xmark.circle.fill" transform="translate(369,80)">
+            <circle cx="0" cy="0" r="10" fill="#8A8A8E" fill-opacity="0.45"/>
+            <path d="M-3.6 -3.6 L3.6 3.6 M3.6 -3.6 L-3.6 3.6" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round"/>
+          </g>
+          <line x1="0" y1="104" x2="393" y2="104" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <!-- HIDE IMPORTED — 14pt horizontal, 8pt vertical, then its own divider.
+             The count is named rather than left to be worked out from a shorter
+             list; tapping the row anywhere toggles it (contentShape). -->
+        <g id="hide-imported">
+          <g data-symbol="checkmark.square.fill">
+            <rect x="14" y="113.5" width="14" height="14" rx="3" fill="#C36A00"/>
+            <path d="M17.4 120.4 L20 123 L24.6 118" fill="none" stroke="#FFF" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+          </g>
+          <text x="36" y="125" font-size="12" fill="#6D6D72">Hide imported</text>
+          <text x="126" y="125" font-size="11" fill="#8A8A90">1 hidden</text>
+          <line x1="0" y1="135" x2="393" y2="135" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <!-- LazyVStack, 6pt gaps, 14pt inset; each row 8pt padding, 8pt corner.
+             Selected rows carry a 1.5pt accent border and checkmark.circle.fill. -->
+        <g id="rows">
+          <g id="row-1">
+            <rect x="14" y="149" width="365" height="56" rx="8" fill="#FFFFFF"/>
+            <rect x="14.75" y="149.75" width="363.5" height="54.5" rx="7.25" fill="none" stroke="#C36A00" stroke-width="1.5"/>
+            <rect x="22" y="157" width="54" height="40" rx="5" fill="#7C8B99"/>
+            <path d="M22 185 l14 -12 12 10 10 -8 18 14 v3 a5 5 0 0 1 -5 5 h-44 a5 5 0 0 1 -5 -5 z" fill="#5C6B79"/>
+            <circle cx="42" cy="168" r="5" fill="#E4C68A"/>
+            <text x="86" y="173" font-size="15" fill="#000">Sunset over harbour</text>
+            <text x="86" y="188" font-size="11" fill="#6D6D72">26 Aug 2026 at 19:04 · 1,184 frames · 12,4 GB</text>
+            <g data-symbol="checkmark.circle.fill" transform="translate(363,177)">
+              <circle cx="0" cy="0" r="8" fill="#C36A00"/>
+              <path d="M-3.6 0.2 L-1 2.8 L3.8 -2.8" fill="none" stroke="#FFF" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"/>
+            </g>
+          </g>
+
+          <g id="row-2">
+            <rect x="14" y="211" width="365" height="56" rx="8" fill="#FFFFFF"/>
+            <rect x="22" y="219" width="54" height="40" rx="5" fill="#6E6E74"/>
+            <rect x="22" y="243" width="54" height="16" fill="#57575D"/>
+            <text x="86" y="235" font-size="15" fill="#000">Tram morning</text>
+            <text x="86" y="250" font-size="11" fill="#6D6D72">25 Aug 2026 at 07:12 · 3 frames · 2,05 GB</text>
+          </g>
+
+          <!-- no cached tile on the serving device, and no drawable source to
+               make one from: the placeholder is the honest answer -->
+          <g id="row-3">
+            <rect x="14" y="273" width="365" height="56" rx="8" fill="#FFFFFF"/>
+            <rect x="22" y="281" width="54" height="40" rx="5" fill="#000" fill-opacity="0.08"/>
+            <g data-symbol="photo" transform="translate(49,301)" fill="none" stroke="#B4B4BA" stroke-width="1.4">
+              <rect x="-7" y="-5.5" width="14" height="11" rx="2"/>
+              <path d="M-5 3 l4 -4 3 3 3 -3 4 4" stroke-linejoin="round"/>
+            </g>
+            <text x="86" y="297" font-size="15" fill="#000">Overheat 1</text>
+            <text x="86" y="312" font-size="11" fill="#6D6D72">24 Aug 2026 at 16:41 · 612 frames · 5,9 GB</text>
+          </g>
+        </g>
+
+        <!-- footer: what this pull will cost, then the action. The byte figure
+             only appears once something is selected; Import is disabled until
+             then. Multiple selections title it "Import 2". -->
+        <g id="footer">
+          <line x1="0" y1="796" x2="393" y2="796" stroke="#000" stroke-opacity="0.10"/>
+          <text x="14" y="822" font-size="11" fill="#6D6D72">12,4 GB to copy</text>
+          <text x="379" y="822" font-size="15" text-anchor="end" fill="#C36A00">Import</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Import from device · project list (Hide imported on) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectTransferImportView.swift — all-hidden and empty-library states desc-only</text>
+</svg>

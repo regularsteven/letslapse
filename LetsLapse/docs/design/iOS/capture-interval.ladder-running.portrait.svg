@@ -1,7 +1,12 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Capture — Interval (running, Ladder, Info off) · portrait</title>
-  <desc>Mirrors App/LightLadderViews.swift (LadderRail, LadderToast) + App/CaptureView.swift (run readout + ±EV slider; shutterClusterLayer). Ladder mid-run, Info OFF — the 2026-09-04 (third pass) default: the rail names the rung over the viewfinder, the toast announces a step, and above the cluster only the amber exposure line (shutter · ISO · scene EV) and the ±EV bias slider. The governor's note (blend 3 → 2, thermal) lives on the Info panel's health row now, not in a second panel. Dim engaged. Staged by LL_LADDER=running. Design ahead of code.</desc>
+  <desc>Mirrors App/LightLadderViews.swift (LadderRail, LadderToast) + App/CaptureView.swift (run readout + ±EV slider; shutterClusterLayer). Ladder mid-run, Info OFF — the 2026-09-04 (third pass) default: the rail names the rung over the viewfinder, the toast announces a step, and above the cluster only the amber exposure line (shutter · ISO · scene EV) and the ±EV bias slider. The burst pill above the line carries the count — 823 outputs, so its zebra has compressed to a wash (2026-09-06). The governor's note (blend 3 → 2, thermal) lives on the Info panel's health row now, not in a second panel. Dim engaged. Staged by LL_LADDER=running.</desc>
   <defs>
+    <linearGradient id="burstwash" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFB340" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#FFB340" stop-opacity="1"/>
+    </linearGradient>
+
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
     <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
@@ -86,6 +91,20 @@
            and ONE amber line — current shutter · ISO · scene EV — above the cluster. The output
            count, elapsed clock and the diagnostics panel sit behind the cluster's Info toggle (slot 2);
            the ramp readout panel that used to duplicate them is gone. -->
+      <!-- BURST PILL — BurstStatusIndicator in the Interval slot (823 outputs, open-ended:
+           an interval run has no total, so the bar is the decay zebra rather than a fill).
+           249×26 r13 #000@50% · bar 170×5 r2.5 on #FFF@16% · stripes pitch min(13, 170/n),
+           55% duty, 0.9 pt floor · opacity 30% oldest → 100% newest · SF Mono 12 count,
+           amber, in a 46 pt trailing column. -->
+      <g id="burst-pill">
+        <rect x="72" y="629" width="249" height="26" rx="13" fill="#000" opacity="0.5"/>
+        <rect x="84" y="639.5" width="170" height="5" rx="2.5" fill="#FFF" opacity="0.16"/>
+        <!-- 823 stripes at 170/823 = 0.21 pt pitch, each floored at 0.9 pt wide: past a few
+             hundred the zebra reads as a textured wash, drawn here as its ramp. -->
+        <rect x="84" y="639.5" width="170" height="5" rx="2.5" fill="url(#burstwash)"/>
+        <text x="310" y="646.5" font-size="12" class="m" text-anchor="end" fill="#FFB340">823</text>
+      </g>
+
       <g id="run-readout">
         <text x="16" y="675" font-size="12" class="m" fill="#FFB340">1/8 · ISO 1250 · EV 5.2</text>
         <g id="ev-slider" data-symbol="plusminus.circle">
