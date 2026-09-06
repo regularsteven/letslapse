@@ -43,6 +43,19 @@ USAGE:
       --fps N               Frame rate (default 30)
       --pattern NAME        ramp | box (default ramp)
 
+      (grade --recipe also takes declaredkelvin / declaredtint — the absolute
+       anchor that replaces "as shot", in Kelvin and on the converter's ±150
+       tint axis. Absent means as shot, which is not the same as zero.)
+
+  lapse whitebalance <project-or-source-dir> [options]   Measure a shoot's as-shot
+                            white balance frame by frame, write
+                            frames.whitebalance beside the stills, and report the
+                            steps the camera made. Prints WHITEBALANCE PASS/FAIL.
+      --report              Report the existing series without re-measuring
+      --force               Re-measure even when a series exists
+      --anchor P            Level the corrected curve to the frame at P (0…1)
+      --json PATH           Also write measured + corrected series here
+
   lapse info <video>                            Print duration / fps / frame estimate
 
   lapse craft [options]                         Drive the Crafted Text path headless
@@ -500,6 +513,16 @@ do {
         try runFraming(
             path: args[0], apply: apply, withdraw: withdraw, force: force, jsonPath: jsonPath,
             scale: scale, workers: workers, range: range)
+
+    case "whitebalance", "wb":
+        let report = takeFlag(["--report"])
+        let force = takeFlag(["--force"])
+        let jsonPath = takeOption(["--json"])
+        let anchor = Double(takeOption(["--anchor"]) ?? "0") ?? 0
+        guard anchor >= 0, anchor <= 1 else { fail("--anchor needs a value in [0, 1]") }
+        guard args.count == 1 else { fail("whitebalance needs one project or source directory") }
+        try runWhiteBalance(
+            path: args[0], report: report, force: force, anchor: anchor, jsonPath: jsonPath)
 
     case "stackseq":
         guard let outputPath = takeOption(["-o", "--output"]) else { fail("stackseq needs -o <output>") }

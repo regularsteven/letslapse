@@ -98,7 +98,16 @@ struct PhotoViewerView: View {
     /// exactly when the drag lets go.
     @State private var renderedPosition: Double = 0
 
+    /// The white balance the frame under the playhead was shot at — the anchor
+    /// the Temp and Tint readouts are measured from. Re-read as the playhead
+    /// moves, because on an interval shoot every frame has its own, and a
+    /// camera left on auto white balance can put a hundred mired between two
+    /// of them.
     @State private var asShotKelvin: Double = 6500
+    @State private var asShotTint: Double = 0
+    /// The file `asShotKelvin`/`asShotTint` were read from, so a scrub that
+    /// lands back on the same frame does not re-open the converter.
+    @State private var asShotSourcePath: String?
     @State private var isNamingPreset = false
     @State private var newPresetName = ""
     @State private var presetPendingDelete: CustomPreset?
@@ -332,6 +341,30 @@ struct PhotoViewerView: View {
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
+    }
+
+    /// What this shoot's white balance is anchored to.
+    private var whiteBalanceSource: WhiteBalanceSource {
+        capture.map(model.whiteBalanceSource(for:)) ?? .asShot
+    }
+
+    /// Pins (or unpins) the anchor, and — for the smoothed source — makes sure
+    /// the shoot has been measured first.
+    ///
+    /// The measure is a whole pass over every raw in the shoot, so it happens
+    /// once, in the background, with the source written straight away: the
+    /// picture stays as-shot until the series lands, then re-renders itself.
+    /// Declaring nothing beats guessing while the numbers are still coming in.
+    private func setWhiteBalanceSource(_ source: WhiteBalanceSource) {
+        guard let capture else { return }
+        model.setWhiteBalanceSource(source, for: capture)
+        renderToken += 1
+        guard case .smoothed = source else { return }
+        Task {
+            await model.measureWhiteBalance(for: capture)
+            AppModel.forgetWhiteBalanceTrack(capture.id)
+            renderToken += 1
+        }
     }
 
     // MARK: - Hidden frames
@@ -776,11 +809,7 @@ struct PhotoViewerView: View {
                 // what 1:1 and every detail patch are measured against.
                 sourcePixels = size
             }
-            // The as-shot anchor for the temperature readout — a cached
-            // metadata parse, off the render path.
-            asShotKelvin = await Task.detached(priority: .utility) {
-                Double(PhotoGrader.asShotKelvin(url: viewedURL))
-            }.value
+            await refreshAsShotAnchor(for: viewedURL)
             #if DEBUG
             if ProcessInfo.processInfo.environment["LL_VIEWER"] == "expanded" {
                 // The handle dragged all the way up — the state the "expanded"
@@ -2094,6 +2123,10 @@ struct PhotoViewerView: View {
             adjustments: editedAdjustments,
             alwaysExpanded: expanded,
             asShotKelvin: asShotKelvin,
+            asShotTint: asShotTint,
+            whiteBalanceSource: whiteBalanceSource,
+            onSetWhiteBalanceSource: capture == nil ? nil : setWhiteBalanceSource,
+            playheadPosition: renderedPosition,
             accent: accentColor,
             keyframedFields: timeline.keyframedFields,
             hasKeyframes: !timeline.isEmpty,
@@ -2153,6 +2186,34 @@ struct PhotoViewerView: View {
         let frame = sourcePixelSize
         return FrameRotation.lengthScale(
             width: frame.width, height: frame.height, from: openingRotation, to: displayedRotation)
+    }
+
+    /// This shoot's white balance resolved for one moment and pinned there, so
+    /// it can cross onto the render queue as a constant.
+    private func frozenWhiteBalance(at position: Double) -> WhiteBalanceTrack {
+        let track = capture.map(model.whiteBalanceTrack(for:)) ?? .asShot
+        guard let declared = track.declared(atPosition: position) else { return .asShot }
+        return WhiteBalanceTrack(source: .fixed(kelvin: declared.kelvin, tint: declared.tint))
+    }
+
+    /// Re-reads the anchor for one frame — a cached converter open, off the
+    /// render path.
+    ///
+    /// This runs per *frame*, not once per editor: the anchor used to be taken
+    /// from whichever frame the editor opened on and never updated, so
+    /// scrubbing a shoot showed one file's Kelvin over every other file's
+    /// pixels. On a run whose camera re-decided mid-shoot that is the
+    /// difference between a readout that explains what is on screen and one
+    /// that contradicts it.
+    private func refreshAsShotAnchor(for url: URL) async {
+        guard asShotSourcePath != url.path else { return }
+        let neutral = await Task.detached(priority: .utility) {
+            let read = PhotoGrader.asShotNeutral(url: url)
+            return (Double(read.kelvin), Double(read.tint))
+        }.value
+        asShotKelvin = neutral.0
+        asShotTint = neutral.1
+        asShotSourcePath = url.path
     }
 
     /// A control grabbed or let go. The five that work on pixels bring the
@@ -2611,6 +2672,12 @@ struct PhotoViewerView: View {
         // those are only the same thing at the head of the clip.
         let adjustments = timeline.adjustments(at: renderedPosition, baseline: adjustments)
         let url = hasTimeline ? frames[frameIndex(at: renderedPosition)] : url
+        // This frame's own declared white. Frozen to a fixed one before the
+        // hop: the render is off the main actor, and a smoothed track's answer
+        // depends on where the playhead is now, not where it is when the
+        // render lands.
+        let whiteBalance = frozenWhiteBalance(at: renderedPosition)
+        await refreshAsShotAnchor(for: url)
         // A sweep renders smaller: a 2000px still per step is a render the
         // machine can't finish before the next one cancels it.
         let longEdge: CGFloat = isScrubbing || isPlaying ? 1100 : previewLongEdge
@@ -2636,7 +2703,8 @@ struct PhotoViewerView: View {
             // moment's angle); the compositor is told so its source-space
             // masks turn to match.
             guard let graded = PhotoGrader.render(
-                url: url, preset: preset, adjustments: adjustments, maxDimension: longEdge)
+                url: url, preset: preset, adjustments: adjustments,
+                whiteBalance: whiteBalance, maxDimension: longEdge)
             else { return nil }
             return SceneAwareCompositor.compositedPreview(
                 base: graded, overlays: overlays, suppressing: suppressed,

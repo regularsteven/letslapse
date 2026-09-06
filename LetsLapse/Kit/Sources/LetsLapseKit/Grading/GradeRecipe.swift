@@ -27,6 +27,29 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     public var temperatureMired: Float = 0
     /// Green (−) to magenta (+). −1…+1.
     public var tint: Float = 0
+    /// An absolute declared illuminant in Kelvin, replacing "as shot" as the
+    /// anchor `temperatureMired` is measured from. Nil — the default — keeps
+    /// the historic behaviour exactly: every frame is anchored on its own
+    /// as-shot reading, so the offset is a relative nudge.
+    ///
+    /// Set, it *pins* the anchor, which is the whole point: a shoot whose
+    /// camera moved its own white balance mid-run (an auto-WB step, or the
+    /// coarse plateaus a body walks through at dusk) renders every frame at
+    /// the same declared white, and the camera's decisions stop reaching the
+    /// picture. The offset still applies on top, so a preset's "warm it a
+    /// little" survives.
+    ///
+    /// This is a *project* choice, never a preset's — see
+    /// `PhotoAdjustments.withoutRotation` for the same treatment of the other
+    /// field that must not travel between shoots.
+    public var declaredKelvin: Float?
+    /// The declared illuminant's tint, in the raw converter's own
+    /// green–magenta units (±150, the axis `CIRAWFilter.neutralTint` and
+    /// Adobe's Tint slider share) rather than the recipe's ±1. It is stored
+    /// in converter units because that is the space the reading came from and
+    /// the space it is written back into; only the Bradford fallback has to
+    /// convert, through `LinearFrameDecoder.cirawTintPerRecipeUnit`.
+    public var declaredTint: Float?
     /// Raises muted colours more than saturated ones. −1…+1.
     public var vibrance: Float = 0
     /// Uniform chroma gain. −1…+1.
@@ -71,6 +94,12 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
 
     public var isNeutral: Bool { self == .neutral }
 
+    /// True when the recipe pins its own white-balance anchor instead of
+    /// taking each frame's as-shot reading. Callers key decode caches on this
+    /// (a declared balance is applied inside the converter, so it changes
+    /// pixels at decode time) and the matrix path branches on it.
+    public var hasDeclaredWhiteBalance: Bool { declaredKelvin != nil || declaredTint != nil }
+
     /// Bumped whenever the engine's math changes so render caches keyed on
     /// recipes self-invalidate across engine revisions.
     ///
@@ -91,6 +120,13 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     ///    as its own pixels at Original instead of through a second rendering.
     public static let engineVersion = 6
 
+    /// The declared-anchor half of the cache token. Empty — and so free of
+    /// any effect on existing keys — while the anchor is as-shot.
+    public var declaredToken: String {
+        guard hasDeclaredWhiteBalance else { return "" }
+        return String(format: "|d%.1f,%.2f", declaredKelvin ?? 0, declaredTint ?? 0)
+    }
+
     /// A short, stable string identifying this grade for cache keys.
     public var cacheToken: String {
         guard !isNeutral else { return "e\(Self.engineVersion)|n" }
@@ -101,7 +137,7 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
             colorNoiseReduction, colorNoise,
         ]
         let joined = values.map { String(format: "%.4f", $0) }.joined(separator: ",")
-        return "e\(Self.engineVersion)|\(joined)"
+        return "e\(Self.engineVersion)|\(joined)\(declaredToken)"
     }
 }
 

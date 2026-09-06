@@ -359,7 +359,7 @@ public final class VideoBlender: @unchecked Sendable {
         }
         writer.add(writerInput)
         guard writer.startWriting() else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start encoding")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start encoding"))
         }
         writer.startSession(atSourceTime: .zero)
 
@@ -465,7 +465,7 @@ public final class VideoBlender: @unchecked Sendable {
 
             while !writerInput.isReadyForMoreMediaData {
                 if writer.status == .failed {
-                    throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
+                    throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "encoder failed"))
                 }
                 usleep(2000)
             }
@@ -476,7 +476,7 @@ public final class VideoBlender: @unchecked Sendable {
                 VideoEncodePolicy.tagColor(outBuffer)
             }
             guard adaptor.append(outBuffer, withPresentationTime: time) else {
-                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+                throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
             }
             outputFrames += 1
             core.flushTextureCache()
@@ -496,7 +496,7 @@ public final class VideoBlender: @unchecked Sendable {
         writer.finishWriting { finished.signal() }
         finished.wait()
         guard writer.status == .completed else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
         }
         progress?(1.0)
 

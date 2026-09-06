@@ -543,6 +543,16 @@ public enum ToneMath {
         return SIMD3<Double>(xy.x / xy.y, 1, (1 - xy.x - xy.y) / xy.y)
     }
 
+    /// One converter tint unit expressed in the recipe's own tint units.
+    ///
+    /// The two axes run in opposite directions and at different scales —
+    /// `LinearFrameDecoder.cirawTintPerRecipeUnit` is the measured constant
+    /// and carries the reasoning. This is its inverse, so a reading taken from
+    /// the converter can be described as a white point here.
+    static func recipeTint(converter tint: Double) -> Double {
+        tint / Double(LinearFrameDecoder.cirawTintPerRecipeUnit)
+    }
+
     // Bradford chromatic adaptation.
     static let bradford = simd_double3x3(rows: [
         SIMD3<Double>(0.8951, 0.2664, -0.1614),
@@ -564,17 +574,37 @@ public enum ToneMath {
     /// positive mired offset (declared illuminant bluer... i.e. higher K)
     /// renders the image warmer.
     public static func whiteBalanceMatrix(recipe: GradeRecipe, reference: GradeReference) -> simd_float3x3 {
-        guard recipe.temperatureMired != 0 || recipe.tint != 0 else {
+        guard recipe.temperatureMired != 0 || recipe.tint != 0
+                || recipe.hasDeclaredWhiteBalance else {
             return matrix_identity_float3x3
         }
         let asShotK = min(max(reference.asShotTemperatureK, 1667), 25000)
-        let asShotMired = 1e6 / asShotK
+        // The anchor the offset is measured from. As-shot unless the recipe
+        // pins one — and pinning it is what makes the same slider value mean
+        // the same white on every frame of a shoot whose camera moved its own
+        // balance underneath the grade.
+        let anchorK = recipe.declaredKelvin.map { min(max(Double($0), 1667), 25000) } ?? asShotK
+        let anchorMired = 1e6 / anchorK
         // Positive offset → lower mired → higher declared Kelvin → warmer.
-        let declaredMired = min(max(asShotMired - Double(recipe.temperatureMired), 40), 600)
+        let declaredMired = min(max(anchorMired - Double(recipe.temperatureMired), 40), 600)
         let declaredK = 1e6 / declaredMired
 
-        let source = whitePointXYZ(kelvin: declaredK, tint: Double(recipe.tint))
-        let destination = whitePointXYZ(kelvin: asShotK, tint: 0)
+        // The destination is where the pixels already are: the illuminant the
+        // converter balanced them to, which is the file's own as-shot. Its
+        // *tint* is only read when an anchor is declared — with no anchor the
+        // source carries the same as-shot tint and the two would very nearly
+        // cancel, so reading it there would perturb every existing render for
+        // no gain. With an anchor declared the two ends are genuinely
+        // different whites, and dropping the as-shot tint would leave the
+        // green–magenta half of a camera's white-balance step uncorrected.
+        let asShotTint = recipe.hasDeclaredWhiteBalance ? recipeTint(converter: reference.asShotTint) : 0
+        // A declared Kelvin with no declared tint keeps the file's own tint on
+        // both ends, so the anchor moves the picture along the Kelvin axis
+        // alone rather than silently neutralising its green–magenta.
+        let anchorTint = recipe.declaredTint.map { recipeTint(converter: Double($0)) } ?? asShotTint
+
+        let source = whitePointXYZ(kelvin: declaredK, tint: anchorTint + Double(recipe.tint))
+        let destination = whitePointXYZ(kelvin: asShotK, tint: asShotTint)
 
         let sourceCone = bradford * source
         let destinationCone = bradford * destination
@@ -622,7 +652,8 @@ public enum ToneMath {
             return whiteBalanceMatrix(recipe: recipe, reference: reference)
 
         case .forwardMatrix:
-            guard recipe.temperatureMired != 0 || recipe.tint != 0 else {
+            guard recipe.temperatureMired != 0 || recipe.tint != 0
+                    || recipe.hasDeclaredWhiteBalance else {
                 return matrix_identity_float3x3
             }
             guard let url,
@@ -630,12 +661,14 @@ public enum ToneMath {
                 return whiteBalanceMatrix(recipe: recipe, reference: reference)
             }
             let asShotK = Float(min(max(reference.asShotTemperatureK, 1667), 25000))
-            let asShotMired = 1e6 / asShotK
-            let declaredMired = min(max(asShotMired - recipe.temperatureMired, 40), 600)
+            let anchorK = recipe.declaredKelvin.map { min(max($0, 1667), 25000) } ?? asShotK
+            let anchorMired = 1e6 / anchorK
+            let declaredMired = min(max(anchorMired - recipe.temperatureMired, 40), 600)
             return ForwardMatrixDecoder.whiteBalanceMatrix(
                 calibration,
                 declaredK: 1e6 / declaredMired,
-                declaredTint: recipe.tint,
+                declaredTint: Float(recipe.declaredTint.map { recipeTint(converter: Double($0)) } ?? 0)
+                    + recipe.tint,
                 asShotK: asShotK)
 
         case .cirawFilter, .dcpProfile:

@@ -2,6 +2,23 @@
 
 Canvas 393×852 pt (iPhone 16/17 class). One file per screen per orientation; variants in the filename. Status: ✅ Synced · ⚠️ Stale · 🟡 Planned (not yet drawn).
 
+⚠️ **2026-09-05, White Balance stops being a nudge and becomes an anchor — code first, mirrors part-updated:**
+the White Bal. dropdown now sets what Temp and Tint are measured *from* rather than setting a slider
+value: **As Shot** (each frame on its own reading — the historic behaviour, right for a still or a
+locked-WB run) · **Match This Frame** · **Smooth Auto WB** · the four named illuminants, which now
+**pin** their Kelvin. It exists because Temp is a mired *offset* and, over a sequence, the thing it was
+measured from moves: a camera left on auto white balance re-decides mid-run, so the same slider value
+rendered a different white either side of the decision and no keyframe pair could close it (Steven's
+Vltava_ARW, 483 Sony ARWs — a 116-mired step between `_WEX4301` and `_WEX4302` that two keyframes could
+not touch). Pinning the anchor makes the offsets absolute. Also in the pass: Temp is now anchored on the
+raw converter's own reading and re-read **per frame** as the playhead moves (it used to solve from DNG
+tags a camera-original raw does not carry, and answered 6500 K for every frame of an ARW shoot, so the
+number on screen was not the number rendering); Tint moves onto the converter's ±150 axis and stops
+reading "As Shot". `macOS/photo-viewer.svg` carries the full spec in its `desc`;
+`project-photo.viewer.keyframes*.svg` carry a summary. **Owed:** the drawn Temp/Tint *values* in those
+four files are still in the old units — they need re-measuring against the running app, which could not
+be launched in that session (a Release Mac app was already running and shares `library.json`).
+
 ✅ **2026-09-05, the blackout grows a Display section and a scheduled peek — design first, code mirrored the same day:**
 "Dim screen during shoot" leaves ADVANCED for a new top-level **DISPLAY** section between RECORDING and
 LOCATION, renamed **Blackout viewfinder** — the row floors `UIScreen.brightness` *and* covers the

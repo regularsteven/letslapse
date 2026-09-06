@@ -1874,7 +1874,8 @@ private struct ProjectHeroPane: View {
             case .still(let url):
                 return PhotoGrader.render(
                     url: url, preset: grade.preset, adjustments: grade.adjustments,
-                    rotationDegrees: grade.rotationDegrees, maxDimension: 1400)
+                    rotationDegrees: grade.rotationDegrees,
+                    whiteBalance: grade.whiteBalance, maxDimension: 1400)
             case .movie(let url):
                 return VideoGrader.gradedFrame(at: url, grade: grade, maxDimension: 1400)
             }

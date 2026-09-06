@@ -338,9 +338,24 @@ struct PhotoGrade: Equatable, Sendable {
     /// still, and for every clip graded with one look end to end — which is
     /// every clip until somebody edits at a second moment.
     var timeline: GradeTimeline = .empty
+    /// What the temperature and tint offsets are measured *from*.
+    ///
+    /// `.asShot` — the default, and every project's behaviour before this
+    /// existed — anchors each frame on its own as-shot reading, which is right
+    /// for a still and for a run shot on a locked white balance. Over a
+    /// sequence whose camera re-decided mid-run it is the reason the same
+    /// slider value renders a different white either side of the decision:
+    /// the anchor moves under the offset. Pinning it here makes the offsets
+    /// absolute. See `WhiteBalanceSource`.
+    var whiteBalance: WhiteBalanceTrack = .asShot
 
     /// The grade that changes nothing: the file exactly as captured.
     static let identity = PhotoGrade(preset: .original, adjustments: .neutral)
+
+    /// True when the white balance is anchored on something other than each
+    /// frame's own as-shot reading — which makes it a pixel-moving choice even
+    /// with every slider at zero.
+    var hasDeclaredWhiteBalance: Bool { !whiteBalance.source.isAsShot }
 
     /// True when nothing here would move a pixel — no filter in the chain and
     /// no rotation at any moment — so every render can be skipped and every
@@ -350,6 +365,7 @@ struct PhotoGrade: Equatable, Sendable {
     /// True when the colour chain alone is a no-op, whatever the geometry.
     var isColorIdentity: Bool {
         preset == .original && adjustments.isColorNeutral && timeline.isColorEmpty
+            && !hasDeclaredWhiteBalance
     }
 
     // MARK: Rotation
@@ -383,7 +399,7 @@ struct PhotoGrade: Equatable, Sendable {
     var withoutRotation: PhotoGrade {
         PhotoGrade(
             preset: preset, adjustments: adjustments.withoutRotation,
-            timeline: timeline.withoutRotation)
+            timeline: timeline.withoutRotation, whiteBalance: whiteBalance)
     }
 
     /// Only the rotation of this grade: Original colour, the level kept at
@@ -408,14 +424,31 @@ struct PhotoGrade: Equatable, Sendable {
     /// This grade frozen at one moment — a plain, timeless `PhotoGrade` for the
     /// paths that render a single frame.
     func frozen(at position: Double) -> PhotoGrade {
-        guard isKeyframed else { return self }
-        return PhotoGrade(preset: preset, adjustments: adjustments(at: position))
+        // A declared anchor is a function of position too — a smoothed track
+        // walks a different white every frame — so freezing has to pin the
+        // white as well as the sliders, and a non-keyframed grade with a
+        // moving anchor is no longer a constant.
+        guard isKeyframed || whiteBalance.variesOverTime else { return self }
+        var frozen = PhotoGrade(preset: preset, adjustments: adjustments(at: position))
+        if let declared = whiteBalance.declared(atPosition: position) {
+            frozen.whiteBalance = WhiteBalanceTrack(
+                source: .fixed(kelvin: declared.kelvin, tint: declared.tint))
+        }
+        return frozen
     }
 
     /// The engine recipe at one moment: the preset's base recipe with that
     /// moment's manual adjustments layered on top.
     func recipe(at position: Double) -> GradeRecipe {
-        adjustments(at: position).recipe(over: preset.recipe)
+        var recipe = adjustments(at: position).recipe(over: preset.recipe)
+        // The anchor is resolved here, at the one place a moment becomes a
+        // recipe, so every render path — preview, blend, export, thumbnail —
+        // gets the white for the frame it is actually drawing.
+        if let declared = whiteBalance.declared(atPosition: position) {
+            recipe.declaredKelvin = declared.kelvin
+            recipe.declaredTint = declared.tint
+        }
+        return recipe
     }
 
     /// The engine recipe for this grade. A keyframed grade answers for its
@@ -430,5 +463,6 @@ struct PhotoGrade: Equatable, Sendable {
     var cacheToken: String {
         "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)"
             + (timeline.isEmpty ? "" : "|kf\(timeline.cacheToken)")
+            + whiteBalance.cacheToken
     }
 }

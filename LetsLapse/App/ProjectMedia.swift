@@ -185,7 +185,8 @@ struct ProjectPreviewImage: View {
                 let rendered = await MediaWorkQueue.shared.run {
                     PhotoGrader.render(
                         url: url, preset: grade.preset, adjustments: grade.adjustments,
-                        rotationDegrees: grade.rotationDegrees, maxDimension: 2560)
+                        rotationDegrees: grade.rotationDegrees,
+                        whiteBalance: grade.whiteBalance, maxDimension: 2560)
                 }
                 // Falls back to the plain decode if the grade couldn't render,
                 // so a frame still appears.

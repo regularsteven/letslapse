@@ -867,10 +867,28 @@ struct ContentView: View {
             model.constantWindow = speed
         }
         if environment["LL_AUTO"] == "process" {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
-                if model.stage == .configure {
-                    model.startProcessing()
+            // Wait for the flow to reach `.configure` rather than guessing at
+            // it. The single 1.5 s shot this replaces silently did nothing on
+            // any project big enough to take longer to open — a 483-still
+            // import needs several seconds just to walk its files — so the
+            // headless render hook no-opped on exactly the shoots worth
+            // rendering headlessly, and looked like a hung app rather than a
+            // missed window.
+            func pressWhenReady(attemptsLeft: Int) {
+                guard model.stage == .configure else {
+                    guard attemptsLeft > 0 else {
+                        LLog("LL_AUTO=process: gave up waiting for the configure stage")
+                        return
+                    }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        pressWhenReady(attemptsLeft: attemptsLeft - 1)
+                    }
+                    return
                 }
+                model.startProcessing()
+            }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+                pressWhenReady(attemptsLeft: 240)   // up to two minutes
             }
         }
         // LL_ADJUST=latest|demo|stills — open a capture on the Adjust screen:

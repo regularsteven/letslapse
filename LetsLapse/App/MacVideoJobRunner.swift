@@ -711,7 +711,7 @@ enum MacVideoJobRunner {
         }
         writer.add(input)
         guard writer.startWriting() else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start encoding")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start encoding"))
         }
         writer.startSession(atSourceTime: .zero)
 
@@ -737,7 +737,7 @@ enum MacVideoJobRunner {
             let time = CMTime(value: Int64((Double(index) / fps * 60000).rounded()), timescale: 60000)
             VideoEncodePolicy.tagColor(pixelBuffer)
             guard adaptor.append(pixelBuffer, withPresentationTime: time) else {
-                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+                throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
             }
 
             if index == 0 || (index + 1) % 10 == 0 || index + 1 == frames.count {
@@ -762,7 +762,7 @@ enum MacVideoJobRunner {
         writer.finishWriting { finished.signal() }
         finished.wait()
         guard writer.status == .completed else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
         }
         return (first.width, first.height)
     }

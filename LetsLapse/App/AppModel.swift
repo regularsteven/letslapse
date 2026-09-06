@@ -146,6 +146,15 @@ final class AppModel: ObservableObject {
         /// `adjustments` grade every frame of the shoot equally.
         /// Read it through `AppModel.gradeTimeline(for:)`.
         var gradeTimeline: GradeTimeline?
+        /// What this shoot's temperature and tint are measured *from*.
+        ///
+        /// Optional and normally absent — nil is `.asShot`, which anchors every
+        /// frame on its own as-shot reading and is what every project did
+        /// before this field existed. A shoot whose camera moved its own white
+        /// balance mid-run pins it instead, which is what makes the sliders
+        /// absolute rather than a nudge riding the camera's decisions.
+        /// Read it through `AppModel.whiteBalanceSource(for:)`.
+        var whiteBalanceSource: WhiteBalanceSource?
         /// How long this project's burst clips ease into and out of slow
         /// motion, in seconds. Optional in both directions: nil means "follow
         /// the app default" (resolved at render time), 0 means "this project
@@ -4888,7 +4897,8 @@ final class AppModel: ObservableObject {
                 // On the console as well as the banner: a headless bench run
                 // has no banner to read, and the banner does not say which
                 // stage threw.
-                LLog("render failed: \(description) — \(error)")
+                LLog("render failed: \(description) — \(error)"
+                     + " · source \(self?.currentCaptureID?.uuidString.prefix(8) ?? "?")")
                 self?.errorMessage = description
                 self?.stage = .configure
             }
@@ -6015,7 +6025,8 @@ final class AppModel: ObservableObject {
             } catch is CancellationError {
                 throw LapseError.cancelled
             } catch {
-                throw LapseError.writerFailed(error.localizedDescription)
+                throw LapseError.writerFailed(
+                    writerFailureDescription(error, fallback: "export failed"))
             }
             let size = outputSize ?? .zero
             return (
@@ -6258,7 +6269,9 @@ final class AppModel: ObservableObject {
         _ grade: PhotoGrade, over urls: [URL]
     ) -> ((URL) throws -> CGImage)? {
         guard !grade.isIdentity else { return nil }
-        guard grade.isKeyframed, urls.count > 1 else {
+        // A smoothed white balance declares a different white on every frame,
+        // so it needs the per-frame path for the same reason keyframes do.
+        guard grade.isKeyframed || grade.whiteBalance.variesOverTime, urls.count > 1 else {
             return { url in try PhotoGrader.renderForBlend(url: url, grade: grade) }
         }
         // This path grades each INPUT frame on its way in (the gamma-domain
@@ -7456,7 +7469,8 @@ final class AppModel: ObservableObject {
     }
 
     /// Where a project's stills and their sidecars live — `frames.timestamps`,
-    /// `frames.exposure`, `capture_log.json` and the framing review.
+    /// `frames.exposure`, `frames.whitebalance`, `capture_log.json` and the
+    /// framing review.
     func sourceFolderURL(for capture: CaptureProject) -> URL {
         captureFolderURL(for: capture.id).appendingPathComponent("source", isDirectory: true)
     }
@@ -8640,11 +8654,64 @@ final class AppModel: ObservableObject {
         let grade = PhotoGrade(
             preset: photoPreset(for: capture),
             adjustments: photoAdjustments(for: capture),
-            timeline: gradeTimeline(for: capture))
+            timeline: gradeTimeline(for: capture),
+            whiteBalance: whiteBalanceTrack(for: capture))
         // The rotation is geometry, not a filter: Original means "no filter",
         // and a levelled Original project is still levelled — at every moment.
-        guard !presetState(for: capture).isOriginal else { return grade.rotationOnly }
+        // A pinned white is not geometry, but it is not a *filter* either: it
+        // says what the camera should have said, so an Original project keeps
+        // it for the same reason it keeps its level.
+        guard !presetState(for: capture).isOriginal else {
+            var original = grade.rotationOnly
+            original.whiteBalance = grade.whiteBalance
+            return original
+        }
         return grade
+    }
+
+    /// What this shoot's white balance is anchored to. Nil on the record means
+    /// as-shot, which is what every project said before the field existed.
+    func whiteBalanceSource(for capture: CaptureProject) -> WhiteBalanceSource {
+        capture.whiteBalanceSource ?? .asShot
+    }
+
+    /// The source resolved against the shoot's measured series — the thing the
+    /// renderer asks "what white is this frame declared at?".
+    ///
+    /// Only `.smoothed` needs the series, and only `.smoothed` pays for
+    /// reading it; the answer is cached per project because the correction
+    /// runs over every frame of the shoot and a scrub must not re-run it.
+    func whiteBalanceTrack(for capture: CaptureProject) -> WhiteBalanceTrack {
+        let source = whiteBalanceSource(for: capture)
+        guard case .smoothed = source else {
+            return WhiteBalanceTrack.resolve(source: source, series: nil)
+        }
+        let key = "\(capture.id.uuidString)|\(source)"
+        if let cached = Self.whiteBalanceTrackCache[key] { return cached }
+        let series = whiteBalanceSeries(for: capture)
+        let track = WhiteBalanceTrack.resolve(source: source, series: series)
+        Self.whiteBalanceTrackCache[key] = track
+        return track
+    }
+
+    private static var whiteBalanceTrackCache: [String: WhiteBalanceTrack] = [:]
+
+    /// Forgets the resolved track for one project — after a re-measure, or
+    /// after the source changes.
+    static func forgetWhiteBalanceTrack(_ id: UUID) {
+        whiteBalanceTrackCache = whiteBalanceTrackCache.filter { !$0.key.hasPrefix(id.uuidString) }
+    }
+
+    /// The measured as-shot series beside a shoot's frames, if it has been
+    /// measured. Nil is not an error: it means the pass has not run, and a
+    /// smoothed track declares nothing until it has.
+    func whiteBalanceSeries(for capture: CaptureProject) -> WhiteBalanceSeries? {
+        let url = sourceFolderURL(for: capture)
+            .appendingPathComponent(WhiteBalanceSeries.fileName)
+        guard let series = try? WhiteBalanceSeries.load(from: url), !series.isEmpty else {
+            return nil
+        }
+        return series
     }
 
     /// The manual slider grade layered on the preset. Projects saved before the
@@ -8763,6 +8830,76 @@ final class AppModel: ObservableObject {
         // gesture cadence, so the manifest encode cannot run on the main
         // thread (editor-performance-plan.md, stage 2).
         persistLibraryOffMain()
+    }
+
+    /// Pins (or unpins) what this shoot's white balance is measured from.
+    ///
+    /// Stored as nil for `.asShot`, so a project that never touched it reads
+    /// and writes exactly the record it always did. The resolved track is
+    /// forgotten here rather than at read time: a smoothed source's correction
+    /// runs over every frame of the shoot, and the answer is only stale when
+    /// the source changes or the series is re-measured.
+    func setWhiteBalanceSource(_ source: WhiteBalanceSource, for capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        let stored: WhiteBalanceSource? = source.isAsShot ? nil : source
+        guard captures[index].whiteBalanceSource != stored else { return }
+        captures[index].whiteBalanceSource = stored
+        Self.forgetWhiteBalanceTrack(capture.id)
+        persistLibraryOffMain()
+    }
+
+    /// Measures every still's as-shot white balance and writes the sidecar the
+    /// smoothed source reads. Off the main thread — it opens every raw in the
+    /// shoot — and idempotent unless `force` is set.
+    ///
+    /// Returns the series, or nil when nothing in the shoot reported a usable
+    /// as-shot neutral (a JPEG import, or a raw format the converter does not
+    /// know).
+    @discardableResult
+    func measureWhiteBalance(
+        for capture: CaptureProject, force: Bool = false
+    ) async -> WhiteBalanceSeries? {
+        let folder = sourceFolderURL(for: capture)
+        let urls = capture.sourceFileNames.map { captureFolderURL(for: capture.id).appendingPathComponent($0) }
+        guard !urls.isEmpty else { return nil }
+        if !force, let existing = whiteBalanceSeries(for: capture),
+           existing.samples.count == urls.count {
+            return existing
+        }
+        let seconds = frameCaptureSeconds(for: capture, count: urls.count)
+        let series = await Task.detached(priority: .utility) {
+            var samples: [WhiteBalanceSample] = []
+            samples.reserveCapacity(urls.count)
+            for (index, url) in urls.enumerated() {
+                guard ImportedStills.isRaw(url),
+                      let raw = LossyLinearDNG.rawFilter(for: url) else { continue }
+                let kelvin = raw.neutralTemperature
+                let tint = raw.neutralTint
+                guard LinearFrameDecoder.isUsableNeutral(
+                    temperatureK: Double(kelvin), tint: Double(tint)) else { continue }
+                samples.append(WhiteBalanceSample(
+                    frame: index, file: url.lastPathComponent,
+                    kelvin: kelvin, tint: tint, seconds: seconds[index]))
+            }
+            return WhiteBalanceSeries(samples: samples)
+        }.value
+        guard !series.isEmpty else { return nil }
+        try? series.write(to: folder)
+        Self.forgetWhiteBalanceTrack(capture.id)
+        return series
+    }
+
+    /// Seconds from the first frame for each still, from the shoot's own
+    /// timing sidecar when it wrote one. Without it the white-balance
+    /// correction works in per-frame steps rather than per-second ones.
+    private func frameCaptureSeconds(for capture: CaptureProject, count: Int) -> [Double] {
+        let url = sourceFolderURL(for: capture)
+            .appendingPathComponent(FrameTimestamps.fileName)
+        guard let timestamps = try? FrameTimestamps.load(from: url),
+              timestamps.entries.count == count,
+              let first = timestamps.entries.first?.captureTime
+        else { return Array(repeating: 0, count: count) }
+        return timestamps.entries.map { $0.captureTime.timeIntervalSince(first) }
     }
 
     /// The manifest write for value-only changes, off the main thread.

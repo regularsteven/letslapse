@@ -26,7 +26,7 @@ func parseRecipe(json: String) throws -> GradeRecipe {
         "exposure", "contrast", "highlights", "shadows", "whites", "blacks",
         "temperature", "tint", "vibrance", "saturation", "clarity", "vignette",
         "texture", "sharpen", "masking", "noise", "noisedetail", "colornoise",
-        "chromanoise",
+        "chromanoise", "declaredkelvin", "declaredtint",
     ]
     for key in values.keys where !knownKeys.contains(key) {
         fail("unknown recipe key '\(key)' — choose from: \(knownKeys.joined(separator: ", "))")
@@ -56,6 +56,10 @@ func parseRecipe(json: String) throws -> GradeRecipe {
     // command line means.
     recipe.colorNoise = scaled("chromanoise")
     recipe.vignette = scaled("vignette")
+    // The declared anchor is absolute, so it is NOT scaled and NOT defaulted:
+    // absent means "as shot", which is a different thing from zero.
+    recipe.declaredKelvin = values["declaredkelvin"].map(Float.init)
+    recipe.declaredTint = values["declaredtint"].map(Float.init)
     return recipe
 }
 

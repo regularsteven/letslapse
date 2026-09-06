@@ -2,6 +2,23 @@
 
 Canvas: 760×680 pt default window (`LetsLapseApp.defaultSize`); capture presents as a ≥960×720 sheet. The guided builder's own files are drawn at **1000×700**, the window size its layout was signed off at — each one says what the 760×680 default does instead. Since the 2026-08-12 mac review, `LL.screenBackground` on macOS light mode is the token table's #F2F2F7 (was `underPageBackgroundColor`, a dark canvas grey) — that fix brightens EVERY mac screen, so all other mac drawings now match the app rather than being aspirational.
 
+⚠️ **2026-09-05, White Balance stops being a nudge and becomes an anchor — code first, mirrors part-updated:**
+the White Bal. dropdown now sets what Temp and Tint are measured *from* rather than setting a slider
+value: **As Shot** (each frame on its own reading — the historic behaviour, right for a still or a
+locked-WB run) · **Match This Frame** · **Smooth Auto WB** · the four named illuminants, which now
+**pin** their Kelvin. It exists because Temp is a mired *offset* and, over a sequence, the thing it was
+measured from moves: a camera left on auto white balance re-decides mid-run, so the same slider value
+rendered a different white either side of the decision and no keyframe pair could close it (Steven's
+Vltava_ARW, 483 Sony ARWs — a 116-mired step between `_WEX4301` and `_WEX4302` that two keyframes could
+not touch). Pinning the anchor makes the offsets absolute. Also in the pass: Temp is now anchored on the
+raw converter's own reading and re-read **per frame** as the playhead moves (it used to solve from DNG
+tags a camera-original raw does not carry, and answered 6500 K for every frame of an ARW shoot, so the
+number on screen was not the number rendering); Tint moves onto the converter's ±150 axis and stops
+reading "As Shot". `macOS/photo-viewer.svg` carries the full spec in its `desc`;
+`project-photo.viewer.keyframes*.svg` carry a summary. **Owed:** the drawn Temp/Tint *values* in those
+four files are still in the old units — they need re-measuring against the running app, which could not
+be launched in that session (a Release Mac app was already running and shares `library.json`).
+
 🟡 **Mostly planned.** macOS shares the SwiftUI screens with iOS but differs structurally: the floating pill tab bar replaces native tabs (reselect-to-pop), the blended-clip flow lives *inside* the Create tab rather than as a full-screen overlay, capture is a sheet, and Settings adds a Camera access card. When macOS UI work happens, files land here following [../README.md](../README.md).
 
 **2026-08-25 — the Scans tab is now conditional.** `LLTab.visible(scans:)` drops it from `FloatingTabBar` unless the library holds a scan and **Settings ▸ Advanced ▸ Layout ▸ Enable Scans menu** is on; with the switch off, scanner runs are listed in Projects behind a Scans filter instead. The bar's metrics are count-derived, so it falls back to five 66pt seats on its own. Same code on every platform — see `iOS/settings.layout.portrait.svg` and `iOS/projects.scans-filter.portrait.svg` for the drawn specs.

@@ -17,8 +17,22 @@ struct PhotoAdjustmentsPanel: View {
     @Binding var adjustments: PhotoAdjustments
     var alwaysExpanded: Bool = false
     /// The as-shot anchor for the temperature readout and the white-balance
-    /// quick-picks. D65 when the file declares nothing.
+    /// quick-picks — the frame under the playhead's own reading, from the raw
+    /// converter. D65 when the file declares nothing.
     var asShotKelvin: Double = 6500
+    /// The as-shot tint that goes with it, on the converter's ±150 axis.
+    var asShotTint: Double = 0
+    /// What the shoot's white balance is anchored to. `.asShot` — the default
+    /// — leaves the Temp and Tint sliders measuring from each frame's own
+    /// reading, which is why they cannot close a camera's mid-run white
+    /// balance step; anything else pins the anchor and makes them absolute.
+    var whiteBalanceSource: WhiteBalanceSource = .asShot
+    /// Told when the white-balance anchor is changed from the menu. Unset in
+    /// the surfaces that have no project to pin it on (a preset preview), where
+    /// the anchor entries are hidden rather than inert.
+    var onSetWhiteBalanceSource: ((WhiteBalanceSource) -> Void)?
+    /// Where the playhead is, 0…1 — what "Match this frame" matches.
+    var playheadPosition: Double = 0
     /// The highlight colour for active values, tints and reset affordances.
     /// Defaults to the app accent, which is what the light macOS rail wants; the
     /// always-dark iOS editors pass `LL.amber` instead, per the design system's
@@ -136,7 +150,7 @@ struct PhotoAdjustmentsPanel: View {
         case .whiteBalance:
             whiteBalanceMenu
             slider("Temp", field: .temperature, readout: kelvinReadout)
-            slider("Tint", field: .tint)
+            slider("Tint", field: .tint, readout: tintReadout)
         case .light:
             slider("Exposure", field: .exposure, readout: exposureReadout)
             slider("Contrast", field: .contrast)
@@ -202,10 +216,17 @@ struct PhotoAdjustmentsPanel: View {
 
     // MARK: - White balance quick-picks
 
-    /// The old picker's presets, now slider-setters: each declares an
-    /// illuminant against the file's as-shot anchor, exactly like Lightroom's
-    /// WB dropdown. The menu shows "Custom" whenever the sliders don't match
-    /// any pick.
+    /// The white-balance anchor, and the named illuminants that pin it.
+    ///
+    /// Everything below the divider *pins the anchor* — it says what the light
+    /// was, for the whole shoot, instead of nudging each frame away from what
+    /// its own camera decided. That distinction is the reason the menu exists
+    /// in this shape: over a sequence, a nudge cannot close a step the camera
+    /// itself made, because both sides of the step get nudged equally.
+    ///
+    /// The named picks used to be slider-setters against the opening frame's
+    /// as-shot; they now pin, which is what they always meant. "Custom" is the
+    /// state where the sliders have been moved off whatever the anchor says.
     private var whiteBalanceMenu: some View {
         HStack {
             Text("White Bal.")
@@ -213,45 +234,79 @@ struct PhotoAdjustmentsPanel: View {
                 .foregroundStyle(.secondary)
             Spacer()
             Menu(currentQuickPickName) {
-                Button("As Shot") { setWhiteBalance(offset: 0) }
-                Button("Sunny") { setWhiteBalance(kelvin: 5500) }
-                Button("Cloudy") { setWhiteBalance(kelvin: 6500) }
-                Button("Fluorescent") { setWhiteBalance(kelvin: 4000) }
-                Button("Tungsten") { setWhiteBalance(kelvin: 3200) }
+                Button("As Shot") { setSource(.asShot) }
+                if onSetWhiteBalanceSource != nil {
+                    Divider()
+                    Button("Match This Frame") {
+                        setSource(.fixed(kelvin: Float(asShotKelvin), tint: Float(asShotTint)))
+                    }
+                    Button("Smooth Auto WB") {
+                        setSource(.smoothed(anchorPosition: playheadPosition))
+                    }
+                    Divider()
+                    ForEach(Self.namedIlluminants, id: \.0) { name, kelvin in
+                        Button(name) { setSource(.fixed(kelvin: Float(kelvin), tint: 0)) }
+                    }
+                }
             }
             .font(.system(size: 13, weight: .semibold))
             .tint(accent)
         }
     }
 
-    private var asShotMired: Double { 1_000_000 / min(max(asShotKelvin, 1667), 25000) }
+    static let namedIlluminants: [(String, Double)] = [
+        ("Sunny", 5500), ("Cloudy", 6500), ("Fluorescent", 4000), ("Tungsten", 3200),
+    ]
 
-    private func offsetDeclaring(kelvin: Double) -> Float {
-        let offset = Float(asShotMired - 1_000_000 / kelvin)
-        return min(max(offset, PhotoAdjustments.temperatureRange.lowerBound),
-                   PhotoAdjustments.temperatureRange.upperBound)
+    /// The illuminant the Temp and Tint sliders are measured from: the pinned
+    /// one when the shoot has pinned one, and the frame under the playhead's
+    /// own reading otherwise.
+    private var anchorKelvin: Double {
+        if case .fixed(let kelvin, _) = whiteBalanceSource { return Double(kelvin) }
+        return asShotKelvin
     }
 
-    private func setWhiteBalance(kelvin: Double) {
-        setWhiteBalance(offset: offsetDeclaring(kelvin: kelvin))
+    private var anchorTint: Double {
+        if case .fixed(_, let tint) = whiteBalanceSource { return Double(tint) }
+        return asShotTint
     }
 
-    private func setWhiteBalance(offset: Float) {
-        adjustments.temperature = offset
-        adjustments.tint = 0
+    private var anchorMired: Double { 1_000_000 / min(max(anchorKelvin, 1667), 25000) }
+
+    private func setSource(_ source: WhiteBalanceSource) {
+        // Pinning replaces the anchor, so an offset the sliders were carrying
+        // was measured from somewhere else. With one look over the whole clip,
+        // zeroing is the honest reset — the picked white IS the answer, not a
+        // starting point to be nudged from.
+        //
+        // With KEYFRAMES it is not: those offsets are a hand-authored curve,
+        // the binding writes only into the moment under the playhead, and
+        // zeroing there would put a notch in the curve rather than clear it.
+        // They are also the thing pinning an anchor is *for* — a white-balance
+        // curve measured from a fixed white is what "keyframe to keyframe"
+        // means — so the curve is left standing and rides the new anchor.
+        if !hasKeyframes {
+            adjustments.temperature = 0
+            adjustments.tint = 0
+        }
+        onSetWhiteBalanceSource?(source)
     }
 
     private var currentQuickPickName: String {
-        guard adjustments.tint == 0 else { return "Custom" }
-        if adjustments.temperature == 0 { return "As Shot" }
-        let picks: [(String, Double)] = [
-            ("Sunny", 5500), ("Cloudy", 6500), ("Fluorescent", 4000), ("Tungsten", 3200),
-        ]
-        for (name, kelvin) in picks
-        where abs(adjustments.temperature - offsetDeclaring(kelvin: kelvin)) < 0.5 {
-            return name
+        let moved = adjustments.temperature != 0 || adjustments.tint != 0
+        switch whiteBalanceSource {
+        case .asShot:
+            return moved ? "Custom" : "As Shot"
+        case .smoothed:
+            return moved ? "Custom" : "Smoothed"
+        case .fixed(let kelvin, let tint):
+            guard !moved else { return "Custom" }
+            if tint == 0, let named = Self.namedIlluminants.first(
+                where: { abs($0.1 - Double(kelvin)) < 1 }) {
+                return named.0
+            }
+            return "\(Int(kelvin.rounded())) K"
         }
-        return "Custom"
     }
 
     // MARK: - Sliders
@@ -341,10 +396,37 @@ struct PhotoAdjustmentsPanel: View {
         value == 0 ? "0" : String(format: "%+.2f", value)
     }
 
+    /// The absolute white the Temp slider currently declares.
+    ///
+    /// It reads as a Kelvin because that is what it is: the anchor moved by
+    /// the slider's mired offset. The number is the one the renderer uses —
+    /// both are anchored on `CIRAWFilter`'s reading now, where the readout
+    /// used to solve its own from DNG tags that a camera-original raw does not
+    /// carry, and answer 6500 K for every frame of a Sony shoot.
+    ///
+    /// Note it is Apple's converter's Kelvin, not Adobe's: the same file reads
+    /// a little differently in Lightroom because the two use different camera
+    /// profiles. What it guarantees is internal consistency — the same number
+    /// on two frames is the same white.
     private func kelvinReadout(_ value: Float) -> String {
-        guard value != 0 else { return "As Shot" }
-        let declaredMired = min(max(asShotMired - Double(value), 40), 600)
+        guard value != 0 || !whiteBalanceSource.isAsShot else { return "As Shot" }
+        let declaredMired = min(max(anchorMired - Double(value), 40), 600)
         return "\(Int((1_000_000 / declaredMired).rounded())) K"
+    }
+
+    /// The absolute tint, on the converter's own ±150 green–magenta axis — the
+    /// axis Adobe's Tint slider also uses, so the two are comparable. The
+    /// slider's own travel is ±1 recipe unit, which is ∓50 here; the constant
+    /// and its sign are `LinearFrameDecoder.cirawTintPerRecipeUnit`.
+    private func tintReadout(_ value: Float) -> String {
+        let declared = min(max(anchorTint + Double(value * LinearFrameDecoder.cirawTintPerRecipeUnit),
+                               -150), 150)
+        // Always a number, never "As Shot": unlike Temp, whose zero genuinely
+        // means "whatever the file said", a tint of zero still has an absolute
+        // value worth reading — and "Temp 5635 K · Tint As Shot" reads as if
+        // the two were measured differently, which they are not.
+        let rounded = declared.rounded()
+        return rounded == 0 ? "0" : String(format: "%+.0f", rounded)
     }
 
     // MARK: - Section state
@@ -355,7 +437,10 @@ struct PhotoAdjustmentsPanel: View {
         guard keyframedFields.isDisjoint(with: Self.fields(of: section)) else { return false }
         switch section {
         case .whiteBalance:
+            // A pinned anchor is a value the section holds even with both
+            // sliders at zero — it is the setting that moved the pixels.
             return adjustments.temperature == 0 && adjustments.tint == 0
+                && whiteBalanceSource.isAsShot
         case .light:
             return adjustments.exposure == 0 && adjustments.contrast == 0
                 && adjustments.highlights == 0 && adjustments.shadows == 0
@@ -396,6 +481,11 @@ struct PhotoAdjustmentsPanel: View {
     }
 
     private func reset(_ section: PanelSection) {
+        // Resetting White Balance unpins the anchor as well as zeroing the
+        // sliders: "Reset" on that section has to mean "back to what the camera
+        // said", and leaving the pin standing would reset to a different white
+        // than the one the file was shot at.
+        if section == .whiteBalance { onSetWhiteBalanceSource?(.asShot) }
         if let onResetField {
             for field in Self.fields(of: section) { onResetField(field) }
             return

@@ -266,15 +266,29 @@ enum PhotoGrader {
         /// Defaults to the rotation inside `adjustments`; pass a value to
         /// override it (the blend loader passes 0 — it levels per output frame).
         rotationDegrees: Double? = nil,
+        /// The white this frame is declared at, when the shoot has pinned one.
+        /// Nil — the default — anchors on the file's own as-shot reading, which
+        /// is every single-still surface's behaviour and every project's until
+        /// somebody pins a white.
+        whiteBalance: WhiteBalanceTrack = .asShot,
         maxDimension: CGFloat? = nil
     ) -> CGImage? {
         var adjustments = adjustments
         if let rotationDegrees { adjustments.rotationDegrees = Float(rotationDegrees) }
+        // Resolve the declared white for THIS file before anything else. Every
+        // single-still surface — grid tile, hero, fullscreen page, project card
+        // — renders one named frame with no idea where it sits in the shoot, so
+        // resolving by name here is what keeps them all showing the same white
+        // the editor shows for the same frame. A fixed or as-shot track answers
+        // the same whatever the file, and this is a no-op for both.
+        let resolved = whiteBalance.pinned(forFile: url.lastPathComponent)
         let key = cacheKey(
-            url: url, preset: preset, adjustments: adjustments, maxDimension: maxDimension)
+            url: url, preset: preset, adjustments: adjustments,
+            whiteBalance: resolved, maxDimension: maxDimension)
         if let cached = cache.object(forKey: key) { return cached.image }
         do {
-            let grade = PhotoGrade(preset: preset, adjustments: adjustments)
+            let grade = PhotoGrade(
+                preset: preset, adjustments: adjustments, whiteBalance: resolved)
             let cgImage = try engineRender(url: url, grade: grade, maxDimension: maxDimension)
             if maxDimension != nil {
                 cache.setObject(Box(cgImage), forKey: key, cost: cgImage.bytesPerRow * cgImage.height)
@@ -598,9 +612,14 @@ enum PhotoGrader {
     /// tint inside the raw converter rather than as a matrix afterwards. That
     /// is the price of the path: a temperature drag re-decodes instead of
     /// re-running the kernel on a cached texture.
+    ///
+    /// A recipe that *declares* its anchor pays the same price on every path,
+    /// because a declared white is always applied in the converter — see
+    /// `LinearFrameDecoder.decode`.
     private static func decodeToken(path: RawDecodePath, recipe: GradeRecipe) -> String {
-        guard path == .cirawFilter else { return path.rawValue }
-        return String(format: "%@|%.3f|%.4f", path.rawValue, recipe.temperatureMired, recipe.tint)
+        guard path == .cirawFilter || recipe.hasDeclaredWhiteBalance else { return path.rawValue }
+        return String(format: "%@|%.3f|%.4f%@", path.rawValue,
+                      recipe.temperatureMired, recipe.tint, recipe.declaredToken)
     }
 
     private static func detailFrame(
@@ -772,24 +791,52 @@ enum PhotoGrader {
 
     // MARK: - As-shot white balance
 
-    /// Derived as-shot temperatures, keyed by file. Reading and solving costs a
-    /// metadata parse plus a short iteration, and the viewer re-renders on every
-    /// slider tick.
-    private static let kelvinCache = NSCache<NSString, NSNumber>()
+    /// Derived as-shot readings, keyed by file. Opening a converter costs a
+    /// metadata parse, and the viewer re-renders on every slider tick.
+    private static let neutralCache = NSCache<NSString, NSArray>()
 
-    /// The colour temperature the camera balanced this shot at.
+    /// The white balance the camera shot this file at: colour temperature in
+    /// Kelvin, and tint on the converter's ±150 green–magenta axis.
     ///
-    /// For a DNG this is solved from the `AsShotNeutral` tag and the two
-    /// calibration matrices; for anything else (a JPEG, which has no such tag)
-    /// it falls back to D65, the sRGB white point those files are written
-    /// against. It is the anchor every other white-balance option is expressed
-    /// relative to.
-    static func asShotKelvin(url: URL) -> CGFloat {
+    /// **Read from the raw converter, which is the only source that answers for
+    /// every raw format.** The DNG `AsShotNeutral` solve below it is a
+    /// fallback, not the primary: a native Sony ARW (and every other
+    /// camera-original raw that is not a DNG) carries no DNG dictionary at all,
+    /// so the tag route silently returned D65 for all of them — which made the
+    /// editor's Kelvin readout a constant, and made it disagree with the
+    /// renderer, which has always read `CIRAWFilter.neutralTemperature`
+    /// (`LinearFrameDecoder.decode`). Anchoring both on the converter is what
+    /// makes the number on screen the number being used.
+    ///
+    /// A file the converter cannot open — a JPEG, which has no as-shot reading
+    /// of its own — falls back to D65, the sRGB white point those files are
+    /// written against.
+    static func asShotNeutral(url: URL) -> (kelvin: CGFloat, tint: CGFloat) {
         let key = url.path as NSString
-        if let cached = kelvinCache.object(forKey: key) { return CGFloat(cached.doubleValue) }
-        let kelvin = solveAsShotKelvin(url: url) ?? 6500
-        kelvinCache.setObject(NSNumber(value: Double(kelvin)), forKey: key)
-        return kelvin
+        if let cached = neutralCache.object(forKey: key) as? [NSNumber], cached.count == 2 {
+            return (CGFloat(cached[0].doubleValue), CGFloat(cached[1].doubleValue))
+        }
+        let neutral = readAsShotNeutral(url: url)
+        neutralCache.setObject(
+            [NSNumber(value: Double(neutral.kelvin)), NSNumber(value: Double(neutral.tint))] as NSArray,
+            forKey: key)
+        return neutral
+    }
+
+    /// The Kelvin half on its own, for the callers that only anchor a readout.
+    static func asShotKelvin(url: URL) -> CGFloat { asShotNeutral(url: url).kelvin }
+
+    private static func readAsShotNeutral(url: URL) -> (kelvin: CGFloat, tint: CGFloat) {
+        // Through `LossyLinearDNG`, never `CIRAWFilter(imageURL:)` directly —
+        // the same rule the decoder follows, for the same reason.
+        if ImportedStills.isRaw(url), let raw = LossyLinearDNG.rawFilter(for: url) {
+            let kelvin = Double(raw.neutralTemperature)
+            let tint = Double(raw.neutralTint)
+            if LinearFrameDecoder.isUsableNeutral(temperatureK: kelvin, tint: tint) {
+                return (CGFloat(kelvin), CGFloat(tint))
+            }
+        }
+        return (solveAsShotKelvin(url: url) ?? neutralKelvin, 0)
     }
 
     private static func solveAsShotKelvin(url: URL) -> CGFloat? {
@@ -886,7 +933,11 @@ enum PhotoGrader {
     /// HEIF, PNG — imported or captured) the first frame's reference flags
     /// it and the neutral kernel is an identity, so an Original blend is the
     /// plain linear-light mean of its stills. The renderer is anchored to the
-    /// first decoded frame's as-shot metadata, which is uniform across a shoot.
+    /// first decoded frame's as-shot metadata, which is uniform across a shoot
+    /// — and where it is NOT (a camera that moved its own white balance
+    /// mid-run), a declared anchor takes the question away from the reference
+    /// entirely: the balance happens in the converter, per source frame, and
+    /// the matrix this renderer holds is an identity.
     ///
     /// `lock` — the project's committed framing lock, when the blend applies
     /// it — moves each SOURCE frame back onto the reference framing inside
@@ -917,18 +968,31 @@ enum PhotoGrader {
         // the base recipe said. Losing the ramp is worse than losing the
         // comparison, and the single-frame editor still exercises the path.
         var path = RawDecodePath.current
-        if path == .cirawFilter, grade.isKeyframed {
+        // A declared anchor is exempt: it is resolved per source frame in the
+        // decode below, so it survives this path rather than being flattened by
+        // it — the very thing the demotion exists to prevent.
+        if path == .cirawFilter, grade.isKeyframed, !grade.hasDeclaredWhiteBalance {
             path = .bradfordAdaptation
             MediaWorkQueue.note(
                 "blend: keyframed grade — decoding via \(path.rawValue) "
                 + "(\(RawDecodePath.cirawFilter.rawValue) bakes white balance at decode time)")
         }
         let decode: (URL) throws -> MTLTexture = { url in
+            // The declared white is per SOURCE frame, not per output frame, and
+            // it is applied inside the converter — so unlike the offsets, which
+            // ride the ladder in the hook below, it has to be resolved here,
+            // for this file. A fixed white answers the same for every frame; a
+            // smoothed one walks its corrected curve.
+            var recipe = grade.recipe
+            if let declared = grade.whiteBalance.declared(forFile: url.lastPathComponent) {
+                recipe.declaredKelvin = declared.kelvin
+                recipe.declaredTint = declared.tint
+            }
             let frame = try decoder.decode(
-                url: url, path: path, recipe: grade.recipe,
+                url: url, path: path, recipe: recipe,
                 transform: lock.map { lock in { lock.levelled($0, name: url.lastPathComponent) } })
             if box.renderer == nil {
-                box.renderer = engine.makeRenderer(grade.recipe, reference: frame.reference())
+                box.renderer = engine.makeRenderer(recipe, reference: frame.reference())
                 box.step = 0
             }
             return frame.texture
@@ -1014,6 +1078,7 @@ enum PhotoGrader {
         url: URL,
         preset: PhotoPreset,
         adjustments: PhotoAdjustments,
+        whiteBalance: WhiteBalanceTrack,
         maxDimension: CGFloat?
     ) -> NSString {
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
@@ -1023,7 +1088,7 @@ enum PhotoGrader {
         // whenever the engine's math changes — and the decode path is in it for
         // the same reason: flipping the toggle changes the pixels, so a cached
         // render from the previous path must not survive the switch.
-        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)|\(size)" as NSString
+        return "e\(GradeRecipe.engineVersion)|\(RawDecodePath.current.rawValue)|\(url.path)|\(modified)|\(preset.rawValue)|\(adjustments.cacheToken)\(whiteBalance.cacheToken)|\(size)" as NSString
     }
 }
 

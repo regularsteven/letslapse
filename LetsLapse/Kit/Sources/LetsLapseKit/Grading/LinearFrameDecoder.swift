@@ -171,17 +171,31 @@ public final class LinearFrameDecoder {
             let asShotK = usableNeutral ? reportedK : Self.fallbackNeutralK
             let asShotTint = usableNeutral ? reportedTint : 0
 
+            // A *declared* anchor always balances in the converter, whatever
+            // path is selected. It is not a nudge: pinning the white of a
+            // shoot whose camera walked its own balance can be a hundred mired
+            // or more, and a move that size only stays honest in camera space,
+            // ahead of the profile — a post-profile 3×3 moves shadows and
+            // highlights by the same linear map where the real correction does
+            // not. Relative offsets keep the path's own answer.
             let balancesInConverter = effective == .cirawFilter || effective == .dcpProfile
+                || recipe.hasDeclaredWhiteBalance
             let asksForBalance = recipe.temperatureMired != 0 || recipe.tint != 0
+                || recipe.hasDeclaredWhiteBalance
             var balanced = false
             if balancesInConverter, asksForBalance, usableNeutral {
                 // Same declaration semantics as `ToneMath.whiteBalanceMatrix`:
                 // a positive mired offset lowers the declared mired, raises the
-                // declared Kelvin, and renders warmer.
-                let asShotMired = 1e6 / min(max(asShotK, 1667), 25000)
-                let declaredMired = min(max(asShotMired - Double(recipe.temperatureMired), 40), 600)
+                // declared Kelvin, and renders warmer. The anchor it is
+                // measured from is the recipe's when it pins one, and the
+                // file's own as-shot otherwise.
+                let anchorK = recipe.declaredKelvin.map { Double(min(max($0, 1667), 25000)) }
+                    ?? min(max(asShotK, 1667), 25000)
+                let anchorTint = Double(recipe.declaredTint ?? Float(asShotTint))
+                let anchorMired = 1e6 / anchorK
+                let declaredMired = min(max(anchorMired - Double(recipe.temperatureMired), 40), 600)
                 let declaredK = Float(1e6 / declaredMired)
-                let declaredTint = Float(asShotTint) + recipe.tint * Self.cirawTintPerRecipeUnit
+                let declaredTint = Float(anchorTint) + recipe.tint * Self.cirawTintPerRecipeUnit
                 raw.neutralTemperature = declaredK
                 raw.neutralTint = declaredTint
                 // Read back: the properties are plain stores on every platform
@@ -305,7 +319,11 @@ public final class LinearFrameDecoder {
     ) -> RawDecodePath {
         switch effective {
         case .bradfordAdaptation, .forwardMatrix:
-            return effective
+            // These two settle white balance downstream — unless a declared
+            // anchor sent it into the converter anyway, in which case the frame
+            // has to report that the balance is already in its pixels or
+            // `ToneMath.wbMatrix` would apply it a second time.
+            return balancedInConverter ? .cirawFilter : effective
         case .cirawFilter, .dcpProfile:
             guard balanceWasAsked, !balancedInConverter else { return effective }
             return .bradfordAdaptation

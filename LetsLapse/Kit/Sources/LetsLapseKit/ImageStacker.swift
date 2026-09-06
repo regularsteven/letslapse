@@ -286,7 +286,7 @@ public final class ImageStacker {
         }
         writer.add(writerInput)
         guard writer.startWriting() else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start encoding")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start encoding"))
         }
         writer.startSession(atSourceTime: .zero)
 
@@ -338,7 +338,7 @@ public final class ImageStacker {
             try autoreleasepool {
                 while !writerInput.isReadyForMoreMediaData {
                     if writer.status == .failed {
-                        throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
+                        throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "encoder failed"))
                     }
                     usleep(2000)
                 }
@@ -348,7 +348,7 @@ public final class ImageStacker {
                     ?? Double(outputFrames) / outputFPS
                 let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
                 guard adaptor.append(appendBuffer, withPresentationTime: time) else {
-                    throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+                    throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
                 }
                 outputFrames += 1
             }
@@ -363,7 +363,7 @@ public final class ImageStacker {
         writer.finishWriting { finished.signal() }
         finished.wait()
         guard writer.status == .completed else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
         }
         progress?(1.0)
 
@@ -438,7 +438,7 @@ public final class ImageStacker {
             }
             writer.add(input)
             guard writer.startWriting() else {
-                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start encoding")
+                throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start encoding"))
             }
             return (writer, input, adaptor)
         }
@@ -500,7 +500,7 @@ public final class ImageStacker {
             try autoreleasepool {
                 while !writerInput.isReadyForMoreMediaData {
                     if writer.status == .failed {
-                        throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
+                        throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "encoder failed"))
                     }
                     usleep(2000)
                 }
@@ -508,7 +508,7 @@ public final class ImageStacker {
                     ?? Double(outputFrames) / outputFPS
                 let time = CMTime(value: Int64((seconds * 60000).rounded()), timescale: 60000)
                 guard adaptor.append(appendBuffer, withPresentationTime: time) else {
-                    throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+                    throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
                 }
                 outputFrames += 1
             }
@@ -523,7 +523,7 @@ public final class ImageStacker {
         writer.finishWriting { finished.signal() }
         finished.wait()
         guard writer.status == .completed else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
         }
         progress?(1.0)
 

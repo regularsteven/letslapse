@@ -105,7 +105,8 @@ private struct CaptureAssetTile: View {
         let rendered = await MediaWorkQueue.shared.run {
             PhotoGrader.render(
                 url: hero.url, preset: grade.preset, adjustments: grade.adjustments,
-                rotationDegrees: grade.rotationDegrees, maxDimension: 480)
+                rotationDegrees: grade.rotationDegrees,
+                whiteBalance: grade.whiteBalance, maxDimension: 480)
         }
         // The outer nil is the work queue's "didn't run", the inner one a failed
         // render; either way fall back to the ungraded thumbnail rather than

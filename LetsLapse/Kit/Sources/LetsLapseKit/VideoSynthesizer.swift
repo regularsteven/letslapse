@@ -43,14 +43,14 @@ public enum VideoSynthesizer {
             ])
         writer.add(input)
         guard writer.startWriting() else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not start")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not start"))
         }
         writer.startSession(atSourceTime: .zero)
 
         for frame in 0..<frames {
             while !input.isReadyForMoreMediaData {
                 if writer.status == .failed {
-                    throw LapseError.writerFailed(writer.error?.localizedDescription ?? "encoder failed")
+                    throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "encoder failed"))
                 }
                 usleep(1000)
             }
@@ -66,7 +66,7 @@ public enum VideoSynthesizer {
             let time = CMTime(value: Int64((Double(frame) / fps * 60000).rounded()), timescale: 60000)
             VideoEncodePolicy.tagColor(buffer)
             guard adaptor.append(buffer, withPresentationTime: time) else {
-                throw LapseError.writerFailed(writer.error?.localizedDescription ?? "frame append failed")
+                throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "frame append failed"))
             }
         }
 
@@ -75,7 +75,7 @@ public enum VideoSynthesizer {
         writer.finishWriting { finished.signal() }
         finished.wait()
         guard writer.status == .completed else {
-            throw LapseError.writerFailed(writer.error?.localizedDescription ?? "could not finalize file")
+            throw LapseError.writerFailed(writerFailureDescription(writer.error, fallback: "could not finalize file"))
         }
     }
 
