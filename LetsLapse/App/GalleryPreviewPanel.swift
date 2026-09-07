@@ -64,6 +64,14 @@ struct GalleryPreviewPanel: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
 
+                if !blends.isEmpty {
+                    Divider()
+
+                    blendedClipsSection
+                        .padding(.horizontal, 14)
+                        .padding(.top, 16)
+                }
+
                 Color.clear.frame(height: 82) // floating tab bar clearance
             }
         }
@@ -204,13 +212,6 @@ struct GalleryPreviewPanel: View {
                         .lineLimit(1)
                 }
             }
-            if !blends.isEmpty {
-                metaRow("Variations") {
-                    Text("\(blends.count) blended clip\(blends.count == 1 ? "" : "s")")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.secondary)
-                }
-            }
             if let bytes = storageBytes {
                 metaRow("Storage") {
                     Text(LLFormat.bytes(bytes))
@@ -243,6 +244,44 @@ struct GalleryPreviewPanel: View {
             Spacer(minLength: 0)
         }
         .padding(.vertical, 6)
+    }
+
+    // MARK: Blended clips
+    //
+    // Lists this project's blends, image results and time-sliced exports —
+    // the same shared BlendedClipRow the iOS project-detail screens use
+    // (see docs/design/components/blended-clip-row.<state>.<width>.svg).
+    // Replaces the old one-line "Variations · N blended clips" meta row
+    // (2026-09-07) with the actual list, at the foot of the panel.
+
+    private var blendedClipsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LLSectionHeader("Blended clips · \(blends.count)")
+
+            VStack(spacing: 0) {
+                ForEach(Array(blends.enumerated()), id: \.element.id) { index, blend in
+                    if index > 0 {
+                        Divider().padding(.leading, 84)
+                    }
+                    BlendedClipRow(
+                        blend: blend,
+                        model: model,
+                        onPlay: { playBlend(blend) },
+                        onOpen: { model.openBlend(blend) }
+                    )
+                }
+            }
+            .llCard()
+        }
+    }
+
+    private func playBlend(_ blend: AppModel.BlendProject) {
+        previewItem = MediaPreviewItem(
+            title: capture.displayTitle,
+            subtitle: nil,
+            url: model.mediaURL(for: blend),
+            kind: model.mediaKind(for: blend)
+        )
     }
 
     // MARK: Footer

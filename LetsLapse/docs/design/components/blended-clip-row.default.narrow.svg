@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 62" width="272" height="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blended clip row · default · narrow</title>
+  <desc>Mirrors App/ProjectDetailView.swift versionRow — see blended-clip-row.default.wide.svg for the full mirror note. Narrow is the macOS Gallery preview panel's 272pt content column: same real copy as the wide row, clipped to the column the way SwiftUI's own .lineLimit(1) would truncate it on a narrower width.</desc>
+<!-- LetsLapse design component · blended clip row · default · narrow (272pt, the macOS gallery preview-panel column).
+     Same coordinate contract as the wide set (62pt tall, thumbnail at x=14, title/subtitle column at x=84),
+     just narrower — Open sits at x = width-14 = 258. See components/README.md. -->
+  <defs><clipPath id="text-col"><rect x="84" y="14" width="160" height="38"/></clipPath></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blended-clip-row" data-state="default" data-width="narrow">
+    <rect x="14" y="10" width="58" height="42" rx="7" fill="#463522"/>
+    <circle cx="43" cy="24" r="7" fill="#FFB340" opacity="0.8"/>
+    <path d="M37 24 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+    <g clip-path="url(#text-col)">
+      <text x="84" y="28" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 18 frames · 6.1 s</text>
+      <text x="84" y="45" font-size="11.5" fill="#6D6D72">24 fps · yesterday</text>
+    </g>
+    <text x="258" y="35" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+  </g>
+</svg>

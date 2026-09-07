@@ -892,43 +892,17 @@ struct ProjectDetailView: View {
     }
 
     private func versionRow(_ blend: AppModel.BlendProject, in capture: AppModel.CaptureProject) -> some View {
-        HStack(spacing: 12) {
-            // The row plays; Open still goes to the result screen, where the
-            // version's settings and its export paths live.
-            Button {
-                previewVersion(blend, in: capture)
-            } label: {
-                HStack(spacing: 12) {
-                    ProjectThumbnailView(
-                        url: model.mediaURL(for: blend), kind: model.mediaKind(for: blend))
-                        .frame(width: 58, height: 42)
-
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(versionTitle(blend))
-                            .font(.system(size: 14.5, weight: .semibold))
-                            .lineLimit(1)
-                        Text(versionSubtitle(blend))
-                            .font(.system(size: 11.5))
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-                    Spacer(minLength: 0)
-                }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel("Play blended clip \(model.versionNumber(for: blend))")
-
-            Button("Open") {
-                model.openBlend(blend)
-            }
-            .font(.system(size: 12.5, weight: .semibold))
-            .foregroundStyle(LL.accent)
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .contentShape(Rectangle())
+        // The row plays; Open still goes to the result screen, where the
+        // version's settings and its export paths live. The row itself is
+        // the shared BlendedClipRow (also used by the macOS Gallery preview
+        // panel) — this wraps it with the context menu and swipe-to-delete
+        // that only make sense inside a project's own detail screen.
+        BlendedClipRow(
+            blend: blend,
+            model: model,
+            onPlay: { previewVersion(blend, in: capture) },
+            onOpen: { model.openBlend(blend) }
+        )
         .contextMenu {
             Button {
                 model.openBlend(blend)
@@ -1251,39 +1225,6 @@ struct ProjectDetailView: View {
         if parts.isEmpty {
             parts.append(capture.kind == .photos ? "Interval" : "Video")
         }
-        return parts.joined(separator: " · ")
-    }
-
-    private func versionTitle(_ blend: AppModel.BlendProject) -> String {
-        // Sliced outputs are named by their recipe (decided 2026-08-28):
-        // timeslice-vert-left-segs_24-lag_2, the poster without the lag.
-        if let timeSlice = blend.timeSlice {
-            var parts = [blend.kind == .image
-                ? timeSlice.posterDisplayName : timeSlice.displayName]
-            if let seconds = blend.outputSeconds {
-                parts.append(SpeedMath.clipLength(seconds))
-            }
-            return parts.joined(separator: " · ")
-        }
-        var parts = ["Blended clip \(model.versionNumber(for: blend))", blend.speedLabel]
-        if let seconds = blend.outputSeconds {
-            parts.append(SpeedMath.clipLength(seconds))
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    private func versionSubtitle(_ blend: AppModel.BlendProject) -> String {
-        var parts: [String] = []
-        if blend.kind == .video, let fps = blend.outputFPS {
-            parts.append("\(fps) fps")
-        }
-        if let codecLabel = blend.sourceCodecLabel {
-            parts.append("from \(codecLabel)")
-        }
-        if blend.linearLight {
-            parts.append("true-light")
-        }
-        parts.append(blend.createdAt.formatted(.relative(presentation: .named)))
         return parts.joined(separator: " · ")
     }
 

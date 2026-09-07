@@ -66,6 +66,33 @@ hard-codes 5 columns, so the zoom slider is live but inert while Timeline is on.
 
 ---
 
+### Blended clips list — shared component done; filter/sort UI (Part 2) open
+
+**Raised:** 2026-09-07 (Steven — "Smarter Components in LetsLapse design")
+· **Part 1 DONE 2026-09-07** · Part 2 **open, design-first** · small–medium
+
+Two-part job. **Part 1** (done): the BLENDED CLIPS list — one row per
+`AppModel.BlendProject`, which can be a rendered blend, a stacked photo/interval
+image result, or a time-sliced image/video export — was drawn inline by hand in
+three iOS `project-detail.*.portrait.svg` mirrors (two of them byte-identical).
+It is now the shared `docs/design/components/blended-clip-row.<state>.<width>.svg`
+component (`default` / `from-codec` / `true-light` states × `wide` (361pt, iOS)
+/ `narrow` (272pt, macOS) widths — see `components/README.md`), referenced from
+all three iOS screens. `macOS/gallery.svg`'s preview panel also gained a real
+three-row BLENDED CLIPS section (reusing the same three rows) in place of the
+old one-line "Variations · 3 blended clips" meta row — richer, as asked, but
+still design-first: `App/GalleryPreviewPanel.swift` is not yet wired to show a
+real per-project list there. See `macOS/INDEX.md` and `iOS/INDEX.md` for the
+per-screen status.
+
+**Part 2** (open, deliberately not started): toggles to show/sort the list by
+kind — a small filter/pill control, something like All · Blends · Time slices,
+with Image / Photo / both — for projects where the list "can grow quite long"
+(Steven's framing). Design first, sign off, then wire in code, same as every
+other UI job here. Needs a decision on where the control sits relative to the
+"BLENDED CLIPS · N" header on each of the (at least) two widths above before
+any SVG is drawn.
+
 ### Data model — split `library.json`, stable origin ids, append-only experiment log
 
 **Detail:** [data-model-audit-2026-09-06.md](data-model-audit-2026-09-06.md) ·

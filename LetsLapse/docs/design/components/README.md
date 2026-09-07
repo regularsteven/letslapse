@@ -75,3 +75,32 @@ The padlock is the lock's glyph in **every** mode. Under Interval's Dynamic and 
 Once a shoot starts the four framing toggles hide in every mode (decision 2026-09-04); the slots stay reserved, so the footprint never changes. Code mirrored the same day: `clusterSlot` in `App/CaptureView.swift` keys on `isCapturing`, not only a movie recording. The run-time Dim / Info toggles (third pass) were mirrored the same day: `dimToggleCircle` / `runInfoToggleCircle`, `seedRunToggles`, the run readout (`runExposureLine`, `runInfoPanel`, `runReadoutCapsule`) in `App/CaptureView.swift`; hooks `LL_RUNINFO=1` and `LL_RUNDIM=off|wake` stage them.
 
 **Mirrors.** `App/CaptureView.swift`: `shutterClusterLayer` (the pin, over both layouts' chrome) → `shutterClusterPin` (94 pt from the home-indicator edge, via the scene's interface orientation) → `shutterCluster` → `clusterSlot` (what each slot holds per state) → `shutterButton`, `shutterBadge`, `gridToggleCircle`, `shutterDelayCircle`, `exposureLockCircle`, `steadyToggleCircle`, `liveMomentTrigger`, `rampIntervalCountBadge`, `scannerManualCaptureButton`; `landscapeClusterReadout` hangs under the landscape cluster. Verified 2026-09-04 on the iPhone 16 Pro simulator (portrait, both landscapes) and the Mac.
+
+## Blended clip row — `blended-clip-row.<state>.<width>.svg`
+
+One row of a project's **BLENDED CLIPS** list — `App/ProjectDetailView.swift`'s `versionRow`, repeated once per `AppModel.BlendProject`. Introduced 2026-09-07, migrating markup three iOS `project-detail.*` mirrors had each drawn by hand (identically, in the case of the two interval variants), and reused a third way on the macOS Gallery preview panel, which used to summarise the same data as a single "3 blended clips" text line (see macOS/INDEX.md).
+
+**Coordinate contract.** 1 unit = 1 pt, origin at the row's own top-left. Every row is 62 pt tall regardless of width — 10 pt vertical padding around the 42 pt thumbnail, matching `versionRow`'s `.padding(.vertical, 10)`:
+
+| Width | Total | Thumbnail x | Title/subtitle x | "Open" x (`text-anchor="end"`) |
+|---|---|---|---|---|
+| `wide` | 361 pt — the iOS project-detail card | 14 | 84 | 347 |
+| `narrow` | 272 pt — the macOS Gallery preview-panel column | 14 | 84 | 258 |
+
+(x values are relative to the row's own left edge; `narrow` additionally clips its title/subtitle column — see States)
+
+**Assembly.** A row file draws content only: no divider, no surrounding card — `versionRow` draws the whole tappable row, and a divider is the *container's* line, not the row's. Stack N rows with **no gap** (`y = cardTop + i × 62`); the card behind them is simply `height = N × 62`. Draw one divider `<line>` per internal boundary, from the title column to the row's right inset (`x1 = cardX+84`, `x2 = cardX+width−14`), at `y = cardTop + i × 62` for `i = 1 … N−1`. The section header ("BLENDED CLIPS · N") and the card `<rect>` itself stay with the calling screen, not the component — both are trivial and N-dependent, unlike the row.
+
+**States** — one file per representative row, both widths (six files). Between them every subtitle segment `versionSubtitle` can produce is demonstrated at least once, and the SAME three rows are reused verbatim across every screen that shows them — real content carried over from the pre-component mirrors, not invented per screen:
+
+| File | Shows | Used by |
+|---|---|---|
+| `default` | "Blended clip 1 · 18 frames · 6.1 s" / "24 fps · yesterday" — the plain case, no codec or true-light segment | `project-detail.interval.portrait`, `.interval.reviewed.portrait` (both drew this exact row before the migration) · macOS Gallery preview (row 1 of 3) |
+| `from-codec` | "Blended clip 2 · 100× · 1.2 s" / "30 fps · from ProRes · yesterday" — the `sourceCodecLabel` segment | `project-detail.video.portrait` (row 1) · macOS Gallery preview (row 2 of 3) |
+| `true-light` | "Blended clip 1 · 50× · 2.4 s" / "30 fps · true-light · 2 days ago" — the `linearLight` flag | `project-detail.video.portrait` (row 2) · macOS Gallery preview (row 3 of 3) |
+
+`narrow` rows carry the identical title/subtitle strings, clipped to a 160pt-wide column (x 84–244) rather than hand-shortened — the same simplification the searchclip in `macOS/gallery.svg` already makes for its placeholder, and the nearest static equivalent of SwiftUI's own `.lineLimit(1)` truncation on a tighter width.
+
+**Known gap, carried over rather than fixed by this migration:** every row draws a `play.fill` glyph over its thumbnail (`default` also carries an amber backing circle the two video-derived rows don't — a pre-existing inconsistency between them, also carried over unchanged). The current `App/ProjectDetailView.swift` `versionRow` does not actually overlay a play glyph on `ProjectThumbnailView` — this predates the component (all three source mirrors already drew it this way before 2026-09-07), and the three iOS files were already ⚠️ Stale for larger reasons (the `MediaPaneMetrics` rebuild) pending a "mirror after code review" pass. Noted here per the design-sync contract rather than silently fixed or dropped.
+
+**Mirrors.** `App/ProjectDetailView.swift`: `versionRow` (thumbnail → `ProjectThumbnailView`, title → `versionTitle`, subtitle → `versionSubtitle`, trailing `Open` → `model.openBlend`). The macOS Gallery preview panel's list (`App/GalleryPreviewPanel.swift`) is design-first as of 2026-09-07 — not yet wired to a real per-project list; see macOS/INDEX.md. Not yet verified against a running app screenshot on either platform. A **Part 2** (not yet designed) adds filter/sort controls — All · Blends · Time slices, Image/Photo/both — above this list once the list treatment itself is signed off; see LetsLapse/docs/TODO.md.

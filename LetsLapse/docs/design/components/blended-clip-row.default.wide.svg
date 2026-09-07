@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 62" width="361" height="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blended clip row · default · wide</title>
+  <desc>Mirrors App/ProjectDetailView.swift versionRow: thumbnail → ProjectThumbnailView (58×42), title → versionTitle, subtitle → versionSubtitle, trailing "Open" → model.openBlend, the whole row otherwise tapping to play. The plain case — no source-codec segment, no true-light flag: "Blended clip N · speed · length" / "fps · relative date". One row of the BLENDED CLIPS list; a card holds N of these stacked with no gap. See components/README.md for the full contract and the other rows (from-codec, true-light).</desc>
+<!-- LetsLapse design component · blended clip row · default · wide (361pt, the iOS project-detail card width).
+     Coordinate contract: origin (0,0) is the row's own top-left; every row is 62pt tall regardless of width
+     (10pt vertical padding around the 42pt thumbnail, matching versionRow's .padding(.vertical, 10)).
+     Place from a screen mirror with
+       <image href="../components/blended-clip-row.<state>.wide.svg" x="cardX" y="cardY + i*62" width="361" height="62"/>
+     Stack rows with NO gap — the card behind them is simply height = rows.count * 62. Divider hairlines are
+     NOT part of the row (versionRow draws the whole tappable row; a divider is the CONTAINER's line): draw
+     one <line> per internal boundary, y = cardY + i*62, from x = cardX+84 to x = cardX+347.
+     See components/README.md for the whole contract, including the narrow (macOS) width set. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blended-clip-row" data-state="default" data-width="wide">
+    <rect x="14" y="10" width="58" height="42" rx="7" fill="#463522"/>
+    <circle cx="43" cy="24" r="7" fill="#FFB340" opacity="0.8"/>
+    <path d="M37 24 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+    <text x="84" y="28" font-size="14.5" class="sb" fill="#000">Blended clip 1 · 18 frames · 6.1 s</text>
+    <text x="84" y="45" font-size="11.5" fill="#6D6D72">24 fps · yesterday</text>
+    <text x="347" y="35" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+  </g>
+</svg>
