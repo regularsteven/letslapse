@@ -4,7 +4,7 @@
 <!-- LetsLapse design component · blended clip row · default · narrow (272pt, the macOS gallery preview-panel column).
      Same coordinate contract as the wide set (62pt tall, thumbnail at x=14, title/subtitle column at x=84),
      just narrower — Open sits at x = width-14 = 258. See components/README.md. -->
-  <defs><clipPath id="text-col"><rect x="84" y="14" width="160" height="38"/></clipPath></defs>
+  <defs><clipPath id="text-col"><rect x="84" y="14" width="135" height="38"/></clipPath></defs>
   <style>text{font-family:inherit}.sb{font-weight:600}</style>
   <g id="blended-clip-row" data-state="default" data-width="narrow">
     <rect x="14" y="10" width="58" height="42" rx="7" fill="#463522"/>

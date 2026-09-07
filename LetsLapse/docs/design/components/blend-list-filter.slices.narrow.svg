@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 272 74" width="272" height="74" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blend list filter · slices · narrow</title>
+  <desc>Blends unticked, Slices/Image/Video ticked. See blend-list-filter.all.wide.svg and .all.narrow.svg for the full mirror notes.</desc>
+<!-- LetsLapse design component · blend list filter · slices · narrow (272pt). Same contract as all.narrow — see components/README.md. -->
+  <defs><filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blend-list-filter" data-state="slices" data-width="narrow">
+    <g data-chip="blends" data-ticked="false">
+      <rect x="0" y="0" width="64" height="33" rx="16.5" fill="#FFF" filter="url(#soft)"/>
+      <text x="12" y="21" font-size="13.5" class="sb" fill="#000">Blends</text>
+    </g>
+    <g data-chip="slices" data-ticked="true" transform="translate(72,0)">
+      <rect x="0" y="0" width="78" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Slices</text>
+    </g>
+    <g data-chip="image" data-ticked="true" transform="translate(0,41)">
+      <rect x="0" y="0" width="76" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Image</text>
+    </g>
+    <g data-chip="video" data-ticked="true" transform="translate(84,41)">
+      <rect x="0" y="0" width="76" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Video</text>
+    </g>
+  </g>
+</svg>

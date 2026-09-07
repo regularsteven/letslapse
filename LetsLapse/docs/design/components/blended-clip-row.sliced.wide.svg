@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 62" width="361" height="62" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blended clip row · sliced · wide</title>
+  <desc>Mirrors App/ProjectDetailView.swift versionRow — see blended-clip-row.default.wide.svg for the base mirror note. A time-sliced VIDEO export (BlendKind.video, blend.timeSlice != nil): the title comes from TimeSliceRecipe.displayName (Kit/Sources/LetsLapseKit/TimeSlice.swift:164) rather than "Blended clip N" — the real, technical form ("timeslice-‹axis›-‹edge›-segs_N-lag_N"), decided 2026-08-28. Added 2026-09-07 for the Part 2 filter mockup: the wide row also needs a title-column clip here, unlike the other three states, because this real string genuinely overflows even the 361pt card (255pt available) — the app's own .lineLimit(1) would truncate it too.</desc>
+<!-- LetsLapse design component · blended clip row · sliced · wide (361pt). Same contract as default.wide — see components/README.md. Title-column clip: x=84 width=224 (84 to 308). "Open" is text-anchor=end at x=347, so its own ~31pt-wide label runs from ~316 to 347 — the clip has to end 8pt before Open's LEFT edge (316), not before its anchor, or long clipped text overlaps it. -->
+  <defs><clipPath id="text-col"><rect x="84" y="14" width="224" height="38"/></clipPath></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blended-clip-row" data-state="sliced" data-width="wide">
+    <rect x="14" y="10" width="58" height="42" rx="7" fill="#3A4550"/>
+    <path d="M37 24 l12 7 -12 7 z" fill="#FFF" opacity="0.8" data-symbol="play.fill"/>
+    <g clip-path="url(#text-col)">
+      <text x="84" y="28" font-size="14.5" class="sb" fill="#000">timeslice-vert-left-segs_24-lag_2 · 2.4 s</text>
+      <text x="84" y="45" font-size="11.5" fill="#6D6D72">30 fps · yesterday</text>
+    </g>
+    <text x="347" y="35" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Open</text>
+  </g>
+</svg>

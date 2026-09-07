@@ -2,7 +2,7 @@
   <title>Component · Blended clip row · true-light · narrow</title>
   <desc>Mirrors App/ProjectDetailView.swift versionRow — see blended-clip-row.default.wide.svg for the full mirror note. Narrow is the macOS Gallery preview panel's 272pt content column.</desc>
 <!-- LetsLapse design component · blended clip row · true-light · narrow (272pt). Same contract as default.narrow — see components/README.md. -->
-  <defs><clipPath id="text-col"><rect x="84" y="14" width="160" height="38"/></clipPath></defs>
+  <defs><clipPath id="text-col"><rect x="84" y="14" width="135" height="38"/></clipPath></defs>
   <style>text{font-family:inherit}.sb{font-weight:600}</style>
   <g id="blended-clip-row" data-state="true-light" data-width="narrow">
     <rect x="14" y="10" width="58" height="42" rx="7" fill="#3B4653"/>

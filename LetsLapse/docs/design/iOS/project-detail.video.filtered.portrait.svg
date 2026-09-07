@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Project detail (video) · portrait</title>
-  <desc>Mirrors App/ProjectDetailView.swift (GradingCard, versionRow, sourceClipsSection, managementCard): inline nav with ⋯ menu, then the grading card — a preview frame pulled out of the movie with AVAssetImageGenerator and rendered through the project's preset + PhotoAdjustments, carrying the play button, the "Edit" pill (slider.horizontal.3, bottom-left, which opens App/VideoEditorView.swift on the movie — the same one-word label the photo and interval heroes carry, because the hero underneath it already shows what is about to be edited) and the ORIGINAL/format badges — then the preset chip strip, a Customise row, the Blended clips rows (results lead; the whole section hides while the project has none — the button below is the empty state), New blended clip, then two secondary flow entries (2026-08-11/12): Guided clip (experimental) (wand.and.stars — opens GuidedBuilderView; Back from its first step returns HERE via finishFlow(openProject:true)) and Punch-in reframe (viewfinder — Adjust with the reframe lane open), then the Source Clips card (Manage for ProRes/multi-encoding clips), management card. A video project has no fullscreen grading viewer, so Customise lives in the card: collapsed here (the chevron points right), it expands the same slider panel the viewer shows inline below the row, and once the card is 500pt wide or more it presents that panel as a sheet instead. Tapping a chip re-grades the preview and persists the choice; the grade is baked in only where a new file is written — the blended clip the blend produces, and a clip saved to Photos. Playback: the WHOLE of a source clip row and of a blended-clip row is the tap target (everything left of Save/Manage and of Open), and each thumbnail carries the play glyph to say so; all three routes — the card's play button, a clip row, a blended-clip row — open FullscreenMediaSheet (see player.portrait.svg). Source clips and the original play through the project's live grade; a blended clip plays ungraded, because the grade that made it is already in the file. Only Open still changes flow state. A blended-clip row also swipes left to reveal a 72pt red trash action (SwipeToDelete.swift) that raises the same delete-confirm alert as its context menu. With two blended clips listed the management card sits below the fold, which is what the real (scrolling) screen shows; the scroll content ends with 96pt bottom clearance so the Delete row comes to rest fully above the floating tab bar. Floating tab bar stays over pushed screens. **2026-09-07:** both blended-clip rows are now the shared `components/blended-clip-row.&lt;state&gt;.wide.svg` component (`from-codec` then `true-light`, reused verbatim on the macOS Gallery preview panel) rather than drawn inline — see components/README.md. **2026-09-07 (Part 2, design-first):** `components/blend-list-filter.all.wide.svg` sits between the header and the card — four independent tick chips, Blends/Slices/Image/Video, all ticked here (both this project's results are video-kind regular blends, so every combination but unticking Video or unticking both Blends and Slices keeps them visible — see project-detail.video.filtered.portrait.svg for a state that actually narrows the list). Revised same day from an earlier two-facet segmented-control draft to this tick-chip form (Steven: ticking all four already means "All") — see components/README.md. Pushes everything below down 42pt (on top of the two flow buttons' own 120pt push, unchanged); not yet wired to real filtering in `App/ProjectDetailView.swift`.</desc>
+  <title>iOS · Project detail (video) · filtered to Slices · portrait</title>
+  <desc>Part 2 (design-first, 2026-09-07; tick-chip revision same day) demonstration of the blended-clips filter actually narrowing the list — companion to project-detail.video.portrait.svg, same "Sunset over harbour" project, now imagined with a THIRD result: a time-sliced video export alongside its original two regular blends. With Blends unticked (Slices/Image/Video still ticked), the two regular blends drop out and the header count reads the FILTERED total, not the project's: "BLENDED CLIPS · 1". The one surviving row is components/blended-clip-row.sliced.wide.svg — a real TimeSliceRecipe.displayName string ("timeslice-vert-left-segs_24-lag_2", Kit/TimeSlice.swift:164), long enough that even this wide row clips it (see that component's own desc). Everything below the card is pushed down by 42pt (the filter row's own 33pt height plus the usual 9pt gap) less than the unfiltered ("all") variant's shift, because the card itself is ALSO 62pt shorter (1 row instead of 2) — neither offset is fixed, both track real content height, which is what the live app would do. Not yet wired to real filtering in App/ProjectDetailView.swift — this is the design half of Part 2, proving the mechanism reads correctly before any Swift is written. See also components/README.md and docs/TODO.md.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -42,8 +42,6 @@
         <path d="M190 206 l19 11 -19 11 z" fill="#FFF" data-symbol="play.fill"/>
         <rect x="28" y="124" width="118" height="22" rx="11" fill="#000" opacity="0.5"/>
         <text x="87" y="139" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">ORIGINAL · 0:36</text>
-        <!-- the edit affordance every hero carries, one label for every mode;
-             here it opens App/VideoEditorView.swift on the movie -->
         <g id="edit-pill">
           <rect x="28" y="284" width="68" height="26" rx="13" fill="#000" opacity="0.45"/>
           <g data-symbol="slider.horizontal.3" stroke="#FFF" stroke-width="1.7" stroke-linecap="round">
@@ -58,7 +56,7 @@
         <text x="304" y="303" font-size="11.5" class="sb" fill="#FFF" text-anchor="middle">1920×1080 · 30 fps</text>
       </g>
 
-      <!-- preset strip: same chips, same geometry, as the photo card -->
+      <!-- preset strip -->
       <g id="preset-strip">
         <rect x="16" y="334" width="74" height="33" rx="16.5" fill="#C36A00"/>
         <text x="53" y="355" font-size="13.5" class="sb" fill="#FFF" text-anchor="middle">Natural</text>
@@ -72,7 +70,7 @@
         <text x="356" y="355" font-size="13.5" class="sb" fill="#000" text-anchor="middle">Original</text>
       </g>
 
-      <!-- Customise disclosure, collapsed (chevron.down rotated -90°) -->
+      <!-- Customise disclosure, collapsed -->
       <g id="customise">
         <rect x="16" y="379" width="361" height="50" rx="12" fill="#FFF" filter="url(#soft)"/>
         <text x="30" y="409.5" font-size="15" class="sb" fill="#000">Customise</text>
@@ -80,75 +78,63 @@
               stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
       </g>
 
-      <!-- blended clips (results lead; section hidden entirely while empty).
-           Rows are the shared component — see components/README.md for the
-           coordinate contract (62pt per row, stacked with no gap, one
-           divider per internal boundary from the title column to the edge).
-           2026-09-07 (Part 2, design-first, tick-chip revision same day):
-           four independent tick chips — Blends, Slices, Image, Video — sit
-           between the header and the card; all ticked here (unfiltered).
-           Header count reflects the FILTERED result count, not the total. -->
-      <text x="20" y="456" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 2</text>
-      <image href="../components/blend-list-filter.all.wide.svg" x="16" y="465" width="361" height="33"/>
+      <!-- blended clips, filtered: Blends unticked, Slices/Image/Video ticked.
+           Header count is the FILTERED count (1), not this imagined
+           project's total (3). -->
+      <text x="20" y="456" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">BLENDED CLIPS · 1</text>
+      <image href="../components/blend-list-filter.slices.wide.svg" x="16" y="465" width="361" height="33"/>
       <g id="versions-card">
-        <rect x="16" y="507" width="361" height="124" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <image href="../components/blended-clip-row.from-codec.wide.svg" x="16" y="507" width="361" height="62"/>
-        <line x1="100" y1="569" x2="377" y2="569" stroke="#000" stroke-opacity="0.08"/>
-        <image href="../components/blended-clip-row.true-light.wide.svg" x="16" y="569" width="361" height="62"/>
+        <rect x="16" y="507" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <image href="../components/blended-clip-row.sliced.wide.svg" x="16" y="507" width="361" height="62"/>
       </g>
 
-      <g transform="translate(0,42)">
       <!-- new blended clip button -->
       <g id="new-version">
-        <rect x="16" y="603" width="361" height="50" rx="14" fill="#C36A00"/>
-        <path d="M128 628 v-14 M121 621 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
-        <text x="142" y="634" font-size="16" class="b" fill="#FFF">New blended clip</text>
+        <rect x="16" y="583" width="361" height="50" rx="14" fill="#C36A00"/>
+        <path d="M128 608 v-14 M121 601 h14" stroke="#FFF" stroke-width="2.4" stroke-linecap="round" data-symbol="plus"/>
+        <text x="142" y="614" font-size="16" class="b" fill="#FFF">New blended clip</text>
       </g>
 
-      <!-- guided clip (experimental) — the guided builder's entry point;
-           back from its first step returns here -->
+      <!-- guided clip (experimental) -->
       <g id="guided-clip-button">
-        <rect x="16" y="663" width="361" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="643" width="361" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
         <g stroke="#C36A00" fill="none" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" data-symbol="wand.and.stars">
-          <path d="M92 695 l8 -8 M102 685 l2 2"/>
-          <path d="M104 680 l1.2 -2.6 1.2 2.6 2.6 1.2 -2.6 1.2 -1.2 2.6 -1.2 -2.6 -2.6 -1.2 Z"/>
-          <path d="M96 677 l0.9 -2 0.9 2 2 0.9 -2 0.9 -0.9 2 -0.9 -2 -2 -0.9 Z"/>
+          <path d="M92 675 l8 -8 M102 665 l2 2"/>
+          <path d="M104 660 l1.2 -2.6 1.2 2.6 2.6 1.2 -2.6 1.2 -1.2 2.6 -1.2 -2.6 -2.6 -1.2 Z"/>
+          <path d="M96 657 l0.9 -2 0.9 2 2 0.9 -2 0.9 -0.9 2 -0.9 -2 -2 -0.9 Z"/>
         </g>
-        <text x="118" y="694" font-size="15.5" class="sb" fill="#C36A00">Guided clip (experimental)</text>
+        <text x="118" y="674" font-size="15.5" class="sb" fill="#C36A00">Guided clip (experimental)</text>
       </g>
 
-      <!-- punch-in reframe — the Adjust flow with the reframe lane open -->
+      <!-- punch-in reframe -->
       <g id="punch-in-button">
-        <rect x="16" y="723" width="361" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
-        <path d="M128 743 v-3 h3 M141 740 h3 v3 M144 753 v3 h-3 M131 756 h-3 v-3" stroke="#C36A00" fill="none" stroke-width="1.6" stroke-linecap="round" data-symbol="viewfinder"/>
-        <text x="152" y="754" font-size="15.5" class="sb" fill="#C36A00">Punch-in reframe</text>
+        <rect x="16" y="703" width="361" height="50" rx="14" fill="#FFF" filter="url(#soft)"/>
+        <path d="M128 723 v-3 h3 M141 720 h3 v3 M144 733 v3 h-3 M131 736 h-3 v-3" stroke="#C36A00" fill="none" stroke-width="1.6" stroke-linecap="round" data-symbol="viewfinder"/>
+        <text x="152" y="734" font-size="15.5" class="sb" fill="#C36A00">Punch-in reframe</text>
       </g>
 
-      <!-- source clips + management card: pushed under the fold by the two
-           flow buttons — the scrolling screen reaches them, this snapshot
-           shows their top edge under the floating tab bar -->
-      <g id="below-the-fold" transform="translate(0,120)">
-      <text x="20" y="680" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE CLIP</text>
+      <!-- source clips + management card: below the fold, same 27pt-after and
+           16pt-between rhythm as project-detail.video.portrait.svg. -->
+      <text x="20" y="780" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SOURCE CLIP</text>
       <g id="source-clips-card">
-        <rect x="16" y="689" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <rect x="30" y="699" width="58" height="42" rx="7" fill="#33415A"/>
-        <path d="M50 714 l12 7 -12 7 z" fill="#FFF" opacity="0.8"/>
-        <text x="100" y="717" font-size="14.5" class="sb" fill="#000">Clip 1</text>
-        <text x="100" y="734" font-size="11.5" fill="#6D6D72">ProRes · 2.9 GB</text>
-        <text x="363" y="724" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Manage</text>
+        <rect x="16" y="789" width="361" height="62" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <rect x="30" y="799" width="58" height="42" rx="7" fill="#33415A"/>
+        <path d="M50 814 l12 7 -12 7 z" fill="#FFF" opacity="0.8"/>
+        <text x="100" y="817" font-size="14.5" class="sb" fill="#000">Clip 1</text>
+        <text x="100" y="834" font-size="11.5" fill="#6D6D72">ProRes · 2.9 GB</text>
+        <text x="363" y="824" font-size="12.5" class="sb" fill="#C36A00" text-anchor="end">Manage</text>
       </g>
 
-      <!-- management card: below the fold at rest; the scroll ends with 96pt clearance so the Delete row clears the tab bar -->
+      <!-- management card: at rest just under the tab bar, same clearance
+           rule as every other project-detail mirror -->
       <g id="management-card">
-        <rect x="16" y="767" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
-        <text x="32" y="795" font-size="16" fill="#000">Rename</text>
-        <path d="M363 783 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
-        <line x1="32" y1="811" x2="377" y2="811" stroke="#000" stroke-opacity="0.08"/>
-        <text x="32" y="836" font-size="16" fill="#000">Storage</text>
-        <text x="32" y="851" font-size="11.5" fill="#6D6D72">original + blended clips</text>
-        <text x="361" y="840" font-size="14" fill="#6D6D72" text-anchor="end">4.6 GB</text>
-      </g>
-      </g>
+        <rect x="16" y="867" width="361" height="140" rx="16" fill="#FFF" filter="url(#soft)"/>
+        <text x="32" y="895" font-size="16" fill="#000">Rename</text>
+        <path d="M363 883 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        <line x1="32" y1="911" x2="377" y2="911" stroke="#000" stroke-opacity="0.08"/>
+        <text x="32" y="936" font-size="16" fill="#000">Storage</text>
+        <text x="32" y="951" font-size="11.5" fill="#6D6D72">original + blended clips</text>
+        <text x="361" y="940" font-size="14" fill="#6D6D72" text-anchor="end">4.6 GB</text>
       </g>
 
       <!-- floating tab bar (Projects selected) over content -->
@@ -188,6 +174,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail (video) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift — GradingCard (graded frame · presetStrip · customiseControls) · versionRow · sourceClipsSection · managementCard</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail (video) · filtered to Slices · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift + Part 2's (design-first) tick-chip blend-list-filter — versionRow filtered to timeSlice != nil</text>
 </svg>

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 33" width="361" height="33" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blend list filter · slices · wide</title>
+  <desc>Blends unticked, Slices/Image/Video ticked — only time-sliced exports show, of either kind. See blend-list-filter.all.wide.svg for the full mirror note. An unticked chip drops its checkmark and shrinks to fit the label alone (no reserved checkmark space) — the same natural intrinsic-size behaviour a SwiftUI HStack chip would have, so the row visibly narrows rather than leaving a gap where Blends was.</desc>
+<!-- LetsLapse design component · blend list filter · slices · wide (361pt). Same contract as all.wide — see components/README.md. -->
+  <defs><filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blend-list-filter" data-state="slices" data-width="wide">
+    <!-- Blends — OFF: narrower, no checkmark, white fill -->
+    <g data-chip="blends" data-ticked="false">
+      <rect x="0" y="0" width="64" height="33" rx="16.5" fill="#FFF" filter="url(#soft)"/>
+      <text x="12" y="21" font-size="13.5" class="sb" fill="#000">Blends</text>
+    </g>
+    <!-- Slices — ON -->
+    <g data-chip="slices" data-ticked="true" transform="translate(72,0)">
+      <rect x="0" y="0" width="78" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Slices</text>
+    </g>
+    <!-- Image — ON -->
+    <g data-chip="image" data-ticked="true" transform="translate(166,0)">
+      <rect x="0" y="0" width="76" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Image</text>
+    </g>
+    <!-- Video — ON -->
+    <g data-chip="video" data-ticked="true" transform="translate(250,0)">
+      <rect x="0" y="0" width="76" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Video</text>
+    </g>
+  </g>
+</svg>

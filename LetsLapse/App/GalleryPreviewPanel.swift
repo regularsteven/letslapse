@@ -24,6 +24,7 @@ struct GalleryPreviewPanel: View {
     @State private var confirmingDelete = false
     @State private var exportedArchive: ExportedArchive?
     @State private var isExporting = false
+    @State private var blendFilter = BlendListFilter()
 
     private var blends: [AppModel.BlendProject] {
         model.blends(for: capture)
@@ -252,26 +253,35 @@ struct GalleryPreviewPanel: View {
     // the same shared BlendedClipRow the iOS project-detail screens use
     // (see docs/design/components/blended-clip-row.<state>.<width>.svg).
     // Replaces the old one-line "Variations · N blended clips" meta row
-    // (2026-09-07) with the actual list, at the foot of the panel.
+    // (2026-09-07) with the actual list, at the foot of the panel. The
+    // Blends/Slices/Image/Video tick-chip filter (see BlendListFilter.swift)
+    // is the same one ProjectDetailView uses — the header count is the
+    // FILTERED count, not the project's.
 
     private var blendedClipsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            LLSectionHeader("Blended clips · \(blends.count)")
+        let visible = blends.filter(blendFilter.matches)
+        return VStack(alignment: .leading, spacing: 12) {
+            LLSectionHeader("Blended clips · \(visible.count)")
+            BlendListFilterBar(filter: $blendFilter)
 
-            VStack(spacing: 0) {
-                ForEach(Array(blends.enumerated()), id: \.element.id) { index, blend in
-                    if index > 0 {
-                        Divider().padding(.leading, 84)
+            if visible.isEmpty {
+                BlendListEmptyState()
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(Array(visible.enumerated()), id: \.element.id) { index, blend in
+                        if index > 0 {
+                            Divider().padding(.leading, 84)
+                        }
+                        BlendedClipRow(
+                            blend: blend,
+                            model: model,
+                            onPlay: { playBlend(blend) },
+                            onOpen: { model.openBlend(blend) }
+                        )
                     }
-                    BlendedClipRow(
-                        blend: blend,
-                        model: model,
-                        onPlay: { playBlend(blend) },
-                        onOpen: { model.openBlend(blend) }
-                    )
                 }
+                .llCard()
             }
-            .llCard()
         }
     }
 

@@ -66,32 +66,56 @@ hard-codes 5 columns, so the zoom slider is live but inert while Timeline is on.
 
 ---
 
-### Blended clips list — shared component done; filter/sort UI (Part 2) open
+### Blended clips list + tick-chip filter — DONE, design + code, both parts
 
-**Raised:** 2026-09-07 (Steven — "Smarter Components in LetsLapse design")
-· **Part 1 DONE 2026-09-07** · Part 2 **open, design-first** · small–medium
+**Raised:** 2026-09-07 (Steven — "Smarter Components in LetsLapse design") ·
+**Part 1 DONE** · **Part 2 DONE** (design, code, and live verification, all
+2026-09-07) · small–medium
 
-Two-part job. **Part 1** (done): the BLENDED CLIPS list — one row per
-`AppModel.BlendProject`, which can be a rendered blend, a stacked photo/interval
-image result, or a time-sliced image/video export — was drawn inline by hand in
-three iOS `project-detail.*.portrait.svg` mirrors (two of them byte-identical).
-It is now the shared `docs/design/components/blended-clip-row.<state>.<width>.svg`
-component (`default` / `from-codec` / `true-light` states × `wide` (361pt, iOS)
-/ `narrow` (272pt, macOS) widths — see `components/README.md`), referenced from
-all three iOS screens. `macOS/gallery.svg`'s preview panel also gained a real
-three-row BLENDED CLIPS section (reusing the same three rows) in place of the
-old one-line "Variations · 3 blended clips" meta row — richer, as asked, but
-still design-first: `App/GalleryPreviewPanel.swift` is not yet wired to show a
-real per-project list there. See `macOS/INDEX.md` and `iOS/INDEX.md` for the
-per-screen status.
+Two-part job, both parts shipped the same day. **Part 1:** the BLENDED CLIPS
+list — one row per `AppModel.BlendProject`, which can be a rendered blend, a
+stacked photo/interval image result, or a time-sliced image/video export —
+was drawn inline by hand in three iOS `project-detail.*.portrait.svg`
+mirrors (two of them byte-identical). It is now the shared
+`docs/design/components/blended-clip-row.<state>.<width>.svg` design
+component AND a matching `App/BlendedClipRow.swift` shared SwiftUI view, used
+by both `ProjectDetailView` and a new section in `App/GalleryPreviewPanel.swift`
+(replacing the old one-line "Variations · N blended clips" meta row with a
+real list).
 
-**Part 2** (open, deliberately not started): toggles to show/sort the list by
-kind — a small filter/pill control, something like All · Blends · Time slices,
-with Image / Photo / both — for projects where the list "can grow quite long"
-(Steven's framing). Design first, sign off, then wire in code, same as every
-other UI job here. Needs a decision on where the control sits relative to the
-"BLENDED CLIPS · N" header on each of the (at least) two widths above before
-any SVG is drawn.
+**Part 2:** a filter over that list —
+`docs/design/components/blend-list-filter.<state>.<width>.svg` and
+`App/BlendListFilter.swift` — **four independent tick chips**, Blends /
+Slices / Image / Video, styled like the existing preset strip rather than a
+segmented control (see components/README.md's "Blend list filter" section
+for why, and for the segmented-control first draft this replaced same day,
+prompted by Steven: ticking every chip already means "All", so no separate
+All control is needed). `BlendListFilter.matches` filters on
+`blend.timeSlice == nil/!= nil` and `blend.kind`; the section header shows
+the FILTERED count, not the project's total; `BlendListEmptyState` (simpler
+than the design note first proposed — a generic "try ticking another chip
+back on" rather than naming the specific excluded facet, since several chips
+can be off at once) replaces the card when a combination matches nothing.
+Wide (iOS/iPadOS project-detail, 361pt+) fits all four chips in one row;
+narrow (macOS Gallery preview, 272pt) wraps to two via `ViewThatFits` — one
+shared view, no per-platform layout code. `ProjectDetailView`'s
+`blendedClipsSection` is already used by both its narrow (phone) and wide
+(Mac/iPad ≥860pt) bodies, so this one change covers all three platforms.
+
+One new `blended-clip-row` state (`sliced`) was added along the way to give
+the design demo (`project-detail.video.filtered.portrait.svg`) something real
+to filter down to. That demo also surfaced a real bug in Part 1's row
+component, fixed in passing: a title-column clip-width bug (the clip must
+clear "Open"'s own left edge, not its `text-anchor="end"` anchor point — see
+components/README.md's "Clip-width trap").
+
+**Verified live, both platforms, 2026-09-07:** iOS Simulator — toggling a
+chip live re-filters the list and updates the header count in both
+directions, and the empty state renders correctly. macOS — built fresh and
+tested against a REAL project with a mixed blend + time-slice list (not a
+hypothetical): unticking Blends correctly dropped the regular blend and kept
+the time-sliced result, header count 2 → 1, chips re-wrapped to two rows at
+the panel's narrower width. Nothing left open on this job.
 
 ### Data model — split `library.json`, stable origin ids, append-only experiment log
 

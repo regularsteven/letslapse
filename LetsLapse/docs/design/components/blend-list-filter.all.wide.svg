@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 361 33" width="361" height="33" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Blend list filter · all · wide</title>
+  <desc>Four independent tick chips — Blends, Slices, Image, Video — replacing an earlier two-facet segmented-control draft the same day (Steven: ticks on all four, so "All" is simply every chip ticked, rather than a separate All option per facet). Ticked = included in the list; a chip's own fill/checkmark says its state, so no track or "All" segment is needed at all — this state has all four ticked, i.e. unfiltered. Visual spec matches the existing preset strip exactly (same screen, just above this row): height 33, rx 16.5, 13.5px semibold, accent fill + white text + white checkmark when ticked, white fill + #soft shadow + black text and no checkmark when not. A wider gap (16pt vs the usual 8pt) between Slices and Image is the only cue marking Blends/Slices (process) and Image/Video (media kind) as two different questions being asked in one row — there is no other grouping chrome.</desc>
+<!-- LetsLapse design component · blend list filter · all · wide (361pt, the iOS project-detail card width).
+     Coordinate contract: origin (0,0) top-left; height is fixed at 33 (one row) regardless of how many chips
+     are ticked — ticking/unticking changes a CHIP's own width (narrower when unticked, no checkmark to make
+     room for), never the row's. Place with
+       <image href="../components/blend-list-filter.<state>.wide.svg" x="cardX" y="filterY" width="361" height="33"/>
+     then the card below moves down by 33 + whatever gap the screen already used between its header and the
+     card (9pt in every current mirror). See components/README.md for the checkmark template, exact chip
+     widths, and the narrow (272pt, macOS) set, which wraps to two rows instead of widening the gap. -->
+  <defs><filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter></defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}</style>
+  <g id="blend-list-filter" data-state="all" data-width="wide">
+    <!-- Blends — ON -->
+    <g data-chip="blends" data-ticked="true">
+      <rect x="0" y="0" width="84" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Blends</text>
+    </g>
+    <!-- Slices — ON -->
+    <g data-chip="slices" data-ticked="true" transform="translate(92,0)">
+      <rect x="0" y="0" width="78" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Slices</text>
+    </g>
+    <!-- Image — ON (16pt gap from Slices, marking the facet boundary) -->
+    <g data-chip="image" data-ticked="true" transform="translate(186,0)">
+      <rect x="0" y="0" width="76" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Image</text>
+    </g>
+    <!-- Video — ON -->
+    <g data-chip="video" data-ticked="true" transform="translate(270,0)">
+      <rect x="0" y="0" width="76" height="33" rx="16.5" fill="#C36A00"/>
+      <path d="M14 20 l2.5 2.8 l5 -5.5" stroke="#FFF" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      <text x="27" y="21" font-size="13.5" class="sb" fill="#FFF">Video</text>
+    </g>
+  </g>
+</svg>

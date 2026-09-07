@@ -79,6 +79,10 @@ struct ProjectDetailView: View {
     /// True while the hero's resize handle is being dragged, so the scroll
     /// view under it holds still (see `content(for:)`).
     @State private var isResizingHero = false
+    /// The BLENDED CLIPS list's tick-chip filter — Blends/Slices/Image/Video,
+    /// all ticked by default. Session-local: resets when the screen is
+    /// re-opened, same as a search field would.
+    @State private var blendFilter = BlendListFilter()
 
     private var capture: AppModel.CaptureProject? {
         model.captures.first { $0.id == captureID }
@@ -562,24 +566,33 @@ struct ProjectDetailView: View {
                 ? { previewSequence(capture) } : nil)
     }
 
-    /// The blended clips already made. No clips yet hides the section — the
-    /// button under it is the empty state.
+    /// The blended clips already made, filtered by `blendFilter`. No clips at
+    /// all hides the section — the button under it is the empty state; a
+    /// filter that matches none of them shows `BlendListEmptyState` instead
+    /// of hiding anything, since the chips themselves are still there to
+    /// change. The header count is the FILTERED count, not the project's.
     @ViewBuilder
     private func blendedClipsSection(for capture: AppModel.CaptureProject) -> some View {
         let versions = model.blends(for: capture)
         if !versions.isEmpty {
+            let visible = versions.filter(blendFilter.matches)
             VStack(alignment: .leading, spacing: 8) {
-                LLSectionHeader("Blended clips · \(versions.count)")
+                LLSectionHeader("Blended clips · \(visible.count)")
+                BlendListFilterBar(filter: $blendFilter)
 
-                VStack(spacing: 0) {
-                    ForEach(versions) { blend in
-                        versionRow(blend, in: capture)
-                        if blend.id != versions.last?.id {
-                            Divider().padding(.leading, 84)
+                if visible.isEmpty {
+                    BlendListEmptyState()
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(visible) { blend in
+                            versionRow(blend, in: capture)
+                            if blend.id != visible.last?.id {
+                                Divider().padding(.leading, 84)
+                            }
                         }
                     }
+                    .llCard()
                 }
-                .llCard()
             }
         }
     }
