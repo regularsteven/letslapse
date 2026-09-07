@@ -11,6 +11,24 @@ live inline.
 
 ## Open
 
+### Gallery redesign — SVG design files
+
+**Raised:** 2026-09-06 · **Size:** medium
+
+GalleryView.swift was rebuilt (feature/gallery-redesign) with the 2a layout
+spec: sidebar, 4:3 grid, preview panel, timeline mode. The matching SVG design
+files have not been created yet.
+
+Per the design-sync contract (`docs/design/README.md`), the following files
+need to be authored to mirror the implementation:
+- `docs/design/macOS/gallery-grid.svg` (default + timeline modes)
+- `docs/design/macOS/gallery-preview-panel.svg`
+- `docs/design/iOS/gallery-grid.svg` (compact layout)
+- `docs/design/iOS/gallery-preview-sheet.svg`
+- Update `docs/design/macOS/INDEX.md` and `docs/design/iOS/INDEX.md`
+
+---
+
 ### Data model — split `library.json`, stable origin ids, append-only experiment log
 
 **Detail:** [data-model-audit-2026-09-06.md](data-model-audit-2026-09-06.md) ·
