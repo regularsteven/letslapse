@@ -152,7 +152,66 @@ Three things worth keeping:
 
 The remaining ~7.8 is still far from the 2–3 that would read as matched.
 
-## What the residual is made of, and what will not fix it
+## Calibration cal1 — and why it lives in the IMPORT (2026-09-07)
+
+The tone correction the bench found (−0.47 EV, shadows ×0.7) moved out of the
+render axes and into `LightroomImport.calibration`.
+
+**Why not the renderer.** It corrects one renderer against another, and the
+only place that comparison means anything is an imported Lightroom edit.
+Putting it in the engine would have darkened every LetsLapse project ever shot
+by half a stop to match a program the photographer may not own. Our native
+look is our own.
+
+**What that cost.** Variants `D`, `D1`, `E`, `F`, `F1`, `F2` were measured
+before the move and their axes would now apply the correction a *second* time.
+They are **retired**, not deleted or redefined: the definitions and their old
+numbers stand as a record, and the bench stops running them. That is what
+`RenderVariant.retired` is for — the append-only rule surviving a change made
+*underneath* a variant.
+
+## Validating cal1 on a wider corpus
+
+15 files across three batches, two cameras, mixed sidecar and embedded
+settings. Corpus mean with cal1 applied on import:
+
+| variant | mean ΔE |
+|---|---|
+| **G** — look curve + dehaze ×2 | **11.02** |
+| B — look curve | 11.51 |
+| A — baseline | 11.61 |
+| C — Adobe DCP | 11.83 |
+
+cal1 generalises to the batch1 files it was fitted on (they now sit at 5.1–10.5
+under plain `A`, where uncalibrated `A` had them at 9.2–16.8) and does no harm
+elsewhere. But **the wider corpus is a much harder problem than batch1**: the
+mean is 11.6, not 7.5, and it is dominated by a few files carrying edits we
+have no controls for at all.
+
+The three worst are the diagnosis, not noise:
+
+| file | A | what it asks for |
+|---|---|---|
+| `_WEB5777` | 26.56 | Dehaze 53, **17 HSL sliders**, custom tone curve, post-crop vignette −43 |
+| `_WEB5765` | 17.12 | Dehaze 89, Grain 40, post-crop vignette −32, contrast +37 |
+| `_WEB5162` | 14.05 | — |
+
+`G` takes `_WEB5777` from 26.56 to 20.05 and `_WEB5179` from 14.02 to 8.71,
+both on dehaze — but *loses* on `_WEB5765` (17.12 → 21.81) and `_WEB5782`
+(10.24 → 13.22), where dehaze at ×2 overshoots on an already heavily-pushed
+edit. **The ×2 scale fitted on one file does not generalise.** It wants to be
+a function of the sidecar's own Dehaze value, not a constant.
+
+## Reading settings that are not in a sidecar
+
+A DNG that has been through Enhance or Denoise comes back with its settings
+**inside the file** and no `.xmp` at all — three of these fifteen. They are
+read from TIFF tag 700 (`LightroomSidecar.embeddedXMP`), parsed out of the
+directory rather than by scanning for `<x:xmpmeta`, which would happily find
+the packet in an embedded preview instead of the real one. The bench discovers
+by RAW rather than by sidecar, so those files are no longer skipped in silence.
+
+## What the residual is made of## What the residual is made of, and what will not fix it
 
 Measured 2026-09-07 on variant E, decomposing ΔE2000 into its three parts:
 

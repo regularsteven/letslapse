@@ -154,13 +154,25 @@ public struct RenderVariant: Identifiable, Equatable, Sendable {
     /// nobody can act on.
     public let hypothesis: String
     public let axes: RenderAxes
+    /// Why this variant is no longer run, or nil while it is.
+    ///
+    /// Retiring is how the append-only rule survives a change UNDER a variant.
+    /// The definition is never edited or deleted — the ledger still names it —
+    /// but a variant whose numbers can no longer be reproduced, because the
+    /// import mapping moved beneath it, must not be quietly re-benched into a
+    /// row that means something different.
+    public let retired: String?
 
-    public init(id: String, title: String, hypothesis: String, axes: RenderAxes) {
+    public init(id: String, title: String, hypothesis: String, axes: RenderAxes,
+                retired: String? = nil) {
         self.id = id
         self.title = title
         self.hypothesis = hypothesis
         self.axes = axes
+        self.retired = retired
     }
+
+    public var isRetired: Bool { retired != nil }
 }
 
 /// Every render variant that has ever been defined.
@@ -178,6 +190,11 @@ public enum RenderVariantRegistry {
     /// unchanged. Its numbers are the line every other variant is judged
     /// against, so it must stay a true no-op.
     public static let baselineID = "A"
+
+    /// Why the pre-calibration tone variants stopped being run.
+    static let supersededByCal1 = """
+        Measured before calibration cal1 moved the tone correction into         LightroomImport (2026-09-07). Its axes would now apply that correction         a second time, so its old numbers stand as a record and it is no         longer benched.
+        """
 
     public static let all: [RenderVariant] = [
         RenderVariant(
@@ -225,7 +242,8 @@ public enum RenderVariantRegistry {
                 dark. A one-file fit put shadows at ×0.7 and left highlights \
                 alone. This is that fit, frozen, to see whether it generalises.
                 """,
-            axes: RenderAxes(shadowsScale: 0.7)),
+            axes: RenderAxes(shadowsScale: 0.7),
+            retired: Self.supersededByCal1),
 
         RenderVariant(
             id: "D1",
@@ -235,7 +253,8 @@ public enum RenderVariantRegistry {
                 on different parts of the range, so the question is whether \
                 they add or interfere.
                 """,
-            axes: RenderAxes(toneCurves: .imageAndLook, shadowsScale: 0.7)),
+            axes: RenderAxes(toneCurves: .imageAndLook, shadowsScale: 0.7),
+            retired: Self.supersededByCal1),
 
         RenderVariant(
             id: "E",
@@ -244,7 +263,8 @@ public enum RenderVariantRegistry {
                 The first corpus run (2026-09-07, batch1) found every variant                 landing BRIGHT against Lightroom by +0.27 to +0.87 stops — on                 all five files and all five variants, so it is a property of                 the two baselines rather than of any slider. D1's mean offset                 was +0.47 EV. This is D1 with that nulled, to find out whether                 the brightness IS the error or merely correlates with it.
                 """,
             axes: RenderAxes(
-                toneCurves: .imageAndLook, shadowsScale: 0.7, exposureOffset: -0.47)),
+                toneCurves: .imageAndLook, shadowsScale: 0.7, exposureOffset: -0.47),
+            retired: Self.supersededByCal1),
 
         RenderVariant(
             id: "F",
@@ -254,7 +274,8 @@ public enum RenderVariantRegistry {
                 """,
             axes: RenderAxes(
                 toneCurves: .imageAndLook, shadowsScale: 0.7,
-                exposureOffset: -0.47, dehazeScale: 1.0)),
+                exposureOffset: -0.47, dehazeScale: 1.0),
+            retired: Self.supersededByCal1),
 
         RenderVariant(
             id: "F1",
@@ -264,7 +285,8 @@ public enum RenderVariantRegistry {
                 """,
             axes: RenderAxes(
                 toneCurves: .imageAndLook, shadowsScale: 0.7,
-                exposureOffset: -0.47, dehazeScale: 0.5)),
+                exposureOffset: -0.47, dehazeScale: 0.5),
+            retired: Self.supersededByCal1),
 
         RenderVariant(
             id: "F2",
@@ -274,7 +296,16 @@ public enum RenderVariantRegistry {
                 """,
             axes: RenderAxes(
                 toneCurves: .imageAndLook, shadowsScale: 0.7,
-                exposureOffset: -0.47, dehazeScale: 2.0)),
+                exposureOffset: -0.47, dehazeScale: 2.0),
+            retired: Self.supersededByCal1),
+
+        RenderVariant(
+            id: "G",
+            title: "Look curve and dehaze, over the calibrated import",
+            hypothesis: """
+                The tone correction now happens on the way IN (calibration                 cal1), so the engine axes start neutral again. What is left to                 test is the two things a project cannot carry: the profile's                 look curve, and dehaze at the ×2 the strength sweep found. If                 cal1 is equivalent to what was measured, this should land                 where F2 did.
+                """,
+            axes: RenderAxes(toneCurves: .imageAndLook, dehazeScale: 2.0)),
     ]
 
     public static func variant(id: String) -> RenderVariant? {
@@ -292,7 +323,11 @@ public enum RenderVariantRegistry {
         RawDecodePathRegistry.isAvailable(variant.axes.decodePath)
     }
 
-    public static var available: [RenderVariant] { all.filter(isAvailable) }
+    /// The variants worth running: available on this machine, and not
+    /// retired. The bench walks this; the registry keeps the rest.
+    public static var available: [RenderVariant] {
+        all.filter { isAvailable($0) && !$0.isRetired }
+    }
 
     /// The variants the APP can run in full. A curve-honouring variant needs a
     /// sidecar the app does not have, so it is bench-only until a project can

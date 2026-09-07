@@ -406,3 +406,110 @@ public struct LightroomSidecar: Equatable, Sendable {
         }
     }
 }
+
+// MARK: - XMP embedded in the raw file
+
+extension LightroomSidecar {
+
+    /// The XMP a raw file carries INSIDE it, rather than beside it.
+    ///
+    /// Lightroom writes a `.xmp` next to a proprietary raw (ARW, CR3, NEF)
+    /// because it will not rewrite the manufacturer's file. A DNG is Adobe's
+    /// own container, so the settings go in the file — and anything that has
+    /// been through Enhance / Denoise comes back as a DNG with no sidecar at
+    /// all. Reading only sidecars silently skips those, which on the first
+    /// mixed corpus was two files in five.
+    ///
+    /// Parsed out of the TIFF directory (DNG is TIFF) at tag 700, the XMP
+    /// packet, rather than by scanning the file for `<x:xmpmeta`. Scanning an
+    /// 80 MB DNG works but reads the whole thing to find 8 KB, and would
+    /// happily find a packet inside an embedded preview instead of the real
+    /// one.
+    public static let xmpTag: UInt16 = 700
+
+    public static func embeddedXMP(in url: URL) throws -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        guard let header = try handle.read(upToCount: 8), header.count == 8 else { return nil }
+
+        let little: Bool
+        switch (header[0], header[1]) {
+        case (0x49, 0x49): little = true          // "II"
+        case (0x4D, 0x4D): little = false         // "MM"
+        default: return nil                        // not TIFF, so not a DNG
+        }
+        func u16(_ d: Data, _ i: Int) -> UInt16 {
+            let a = UInt16(d[d.startIndex + i]), b = UInt16(d[d.startIndex + i + 1])
+            return little ? (b << 8 | a) : (a << 8 | b)
+        }
+        func u32(_ d: Data, _ i: Int) -> UInt32 {
+            let bytes = (0..<4).map { UInt32(d[d.startIndex + i + $0]) }
+            return little
+                ? (bytes[3] << 24 | bytes[2] << 16 | bytes[1] << 8 | bytes[0])
+                : (bytes[0] << 24 | bytes[1] << 16 | bytes[2] << 8 | bytes[3])
+        }
+        guard u16(header, 2) == 42 else { return nil }
+
+        // IFD0 only. A DNG puts its XMP there; the SubIFDs hold the image
+        // data and previews, which is exactly where a byte scan goes wrong.
+        try handle.seek(toOffset: UInt64(u32(header, 4)))
+        guard let countData = try handle.read(upToCount: 2), countData.count == 2 else { return nil }
+        let entries = Int(u16(countData, 0))
+        guard entries > 0, entries < 4096 else { return nil }
+        guard let table = try handle.read(upToCount: entries * 12),
+              table.count == entries * 12 else { return nil }
+
+        for index in 0..<entries {
+            let base = index * 12
+            guard u16(table, base) == xmpTag else { continue }
+            let count = Int(u32(table, base + 4))
+            guard count > 0, count < 64 * 1024 * 1024 else { return nil }
+            // A value of four bytes or fewer is stored inline; XMP never is,
+            // but the check is what makes this a TIFF reader rather than a
+            // guess that happens to work.
+            if count <= 4 {
+                return table.subdata(in: (base + 8)..<(base + 8 + count))
+            }
+            try handle.seek(toOffset: UInt64(u32(table, base + 8)))
+            return try handle.read(upToCount: count)
+        }
+        return nil
+    }
+
+    /// The settings for a raw file, wherever they live: the sidecar beside it
+    /// if there is one, otherwise the XMP inside it.
+    ///
+    /// Sidecar first, deliberately. When both exist the sidecar is the newer
+    /// of the two — Lightroom writes it on every edit and only rewrites a
+    /// DNG's own XMP on demand — so preferring the file would quietly render
+    /// an older version of somebody's work.
+    public static func read(forRawFile url: URL) throws -> LightroomSidecar? {
+        if let sidecar = sidecarURL(forRawFile: url) {
+            return try read(contentsOf: sidecar)
+        }
+        guard let data = try embeddedXMP(in: url) else { return nil }
+        return try parse(data)
+    }
+
+    /// Where a raw file's settings came from — for a report that has to be
+    /// honest about which of two possible sources it read.
+    public enum Source: Equatable, Sendable {
+        case sidecar(URL)
+        case embedded
+        case none
+
+        public var describedBriefly: String {
+            switch self {
+            case .sidecar(let url): return "sidecar \(url.lastPathComponent)"
+            case .embedded: return "embedded in the raw"
+            case .none: return "no Lightroom settings"
+            }
+        }
+    }
+
+    public static func source(forRawFile url: URL) -> Source {
+        if let sidecar = sidecarURL(forRawFile: url) { return .sidecar(sidecar) }
+        if let data = try? embeddedXMP(in: url), data != nil { return .embedded }
+        return .none
+    }
+}

@@ -437,7 +437,7 @@ do {
         let variantID = takeOption(["--variant"])
         let renderScale = Float(takeOption(["--scale"]) ?? "1") ?? 1
         let axesOverride = takeOption(["--axes"])
-        guard args.count == 1 else { fail("lightroom needs exactly one .xmp sidecar") }
+        guard args.count == 1 else { fail("lightroom needs exactly one .xmp sidecar or raw file") }
         let variant: RenderVariant
         if let variantID {
             guard let found = RenderVariantRegistry.variant(id: variantID) else {
@@ -479,7 +479,8 @@ do {
                 [
                     "id": v.id, "title": v.title, "hypothesis": v.hypothesis,
                     "axes": v.axes.summary,
-                    "available": RenderVariantRegistry.isAvailable(v),
+                    "available": RenderVariantRegistry.isAvailable(v) && !v.isRetired,
+                    "retired": v.retired ?? "",
                 ]
             }
             let data = try JSONSerialization.data(
@@ -491,10 +492,12 @@ do {
         print("The registry is APPEND-ONLY: a measured variant is never redefined.")
         print("Results: docs/render-variants/ledger.md\n")
         for v in RenderVariantRegistry.all {
-            let mark = RenderVariantRegistry.isAvailable(v) ? " " : "!"
+            let mark = v.isRetired ? "×" : (RenderVariantRegistry.isAvailable(v) ? " " : "!")
             print("\(mark) \(v.id.padding(toLength: 6, withPad: " ", startingAt: 0)) \(v.title)")
             print("         \(v.axes.summary)")
-            if !RenderVariantRegistry.isAvailable(v) {
+            if let retired = v.retired {
+                print("         RETIRED — \(retired.replacingOccurrences(of: "\n", with: " "))")
+            } else if !RenderVariantRegistry.isAvailable(v) {
                 print("         UNAVAILABLE on this machine")
             }
         }
@@ -629,7 +632,7 @@ do {
 /// happens to THIS picture before importing it, and a measurement run wants
 /// the same answer without launching an editor.
 func runLightroomReport(url: URL, asJSON: Bool) throws {
-    let sidecar = try LightroomSidecar.read(contentsOf: url)
+    let (sidecar, _) = try resolveLightroomInput(url)
     let map = LightroomImport.map(sidecar)
 
     if asJSON {
@@ -714,20 +717,8 @@ func runLightroomReport(url: URL, asJSON: Bool) throws {
 func runLightroomRender(
     sidecar: URL, variant: RenderVariant, outPath: String, scale: Float
 ) throws {
-    let parsed = try LightroomSidecar.read(contentsOf: sidecar)
+    let (parsed, raw) = try resolveLightroomInput(sidecar)
     let mapped = LightroomImport.map(parsed)
-
-    // The raw beside the sidecar. Named by the file itself where it says so,
-    // since a renamed sidecar should still find its picture.
-    let folder = sidecar.deletingLastPathComponent()
-    let named = parsed.rawFileName.map { folder.appendingPathComponent($0) }
-    let guessed = ["ARW", "arw", "DNG", "dng", "NEF", "nef", "CR3", "cr3"]
-        .map { folder.appendingPathComponent(sidecar.deletingPathExtension().lastPathComponent)
-            .appendingPathExtension($0) }
-    guard let raw = ([named].compactMap { $0 } + guessed)
-        .first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
-        fail("no raw file found beside \(sidecar.lastPathComponent)")
-    }
 
     // The whole-picture grade, with the variant's tone-response calibration
     // applied to the two sliders it scales.
@@ -834,4 +825,34 @@ func parseAxes(_ text: String, from base: RenderAxes) throws -> RenderAxes {
         }
     }
     return axes
+}
+
+
+/// Resolves whatever the user pointed at — a `.xmp`, or a raw whose settings
+/// live inside it — into (settings, raw file).
+///
+/// A DNG that has been through Enhance or Denoise comes back with no sidecar
+/// at all: Adobe writes into its own container. Accepting only sidecars skips
+/// those silently, which on the first mixed corpus was two files in five.
+func resolveLightroomInput(_ input: URL) throws -> (LightroomSidecar, URL) {
+    let isSidecar = input.pathExtension.lowercased() == "xmp"
+    if !isSidecar {
+        guard let parsed = try LightroomSidecar.read(forRawFile: input) else {
+            fail("\(input.lastPathComponent) carries no Lightroom settings, and has no .xmp beside it")
+        }
+        return (parsed, input)
+    }
+    let parsed = try LightroomSidecar.read(contentsOf: input)
+    let folder = input.deletingLastPathComponent()
+    // Named by the file itself where it says so, since a renamed sidecar
+    // should still find its picture.
+    let named = parsed.rawFileName.map { folder.appendingPathComponent($0) }
+    let stem = input.deletingPathExtension().lastPathComponent
+    let guessed = ["ARW", "arw", "DNG", "dng", "NEF", "nef", "CR3", "cr3", "RAF", "raf"]
+        .map { folder.appendingPathComponent(stem).appendingPathExtension($0) }
+    guard let raw = ([named].compactMap { $0 } + guessed)
+        .first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+        fail("no raw file found beside \(input.lastPathComponent)")
+    }
+    return (parsed, raw)
 }

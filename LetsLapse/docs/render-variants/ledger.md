@@ -4,10 +4,10 @@
 Regenerate with:
 
 ```bash
-./tools/.venv/bin/python tools/render_bench.py --corpus <dir> --scale 0.5
+./tools/.venv/bin/python tools/render_bench.py --corpus <dir> --scale 0.4
 ```
 
-Corpus `batch1` · 5 files · render scale 0.5 · commit `52722c8` · 2026-09-07
+Corpus `allbatches` · 15 files · render scale 0.4 · commit `6557056` · 2026-09-07
 
 Scores are mean CIEDE2000 against Lightroom's own export of the same edit —
 **lower is better**. ~1 is just noticeable, 2–3 visible side by side, >5 obvious.
@@ -20,39 +20,39 @@ the app's compositor, which the CLI cannot reach; see `docs/TODO.md`.
 
 | variant | mean ΔE | median | best file | worst file | what it is |
 |---|---|---|---|---|---|
-| **F2** | 7.46 | 6.39 | _DSC6507 4.48 | _DSC6512 9.61 | F with dehaze at double strength |
-| **F** | 7.61 | 6.78 | _DSC6507 4.49 | _DSC6372 9.86 | E, plus dark-channel dehaze |
-| **F1** | 7.70 | 6.90 | _DSC6507 4.49 | _DSC6372 10.31 | F at half dehaze strength |
-| **E** | 7.78 | 6.99 | _DSC6507 4.49 | _DSC6372 10.69 | D1, plus the systematic exposure offset nulled |
-| **D1** | 9.65 | 9.16 | _DSC6507 5.70 | _DSC6512 12.22 | Calibrated tone response, plus the look curve |
-| **D** | 9.77 | 9.39 | _DSC6507 6.47 | _DSC6512 12.16 | Calibrated tone response |
-| **A** | 12.76 | 12.69 | _DSC6507 9.22 | _DSC6512 16.83 | Baseline — the shipping renderer |
-| **B** | 12.78 | 12.67 | _DSC6507 8.60 | _DSC6512 17.07 | Honour the profile's look curve |
-| **C** | 13.28 | 13.26 | _DSC6507 9.83 | _DSC6512 17.32 | Adobe's own camera profile |
+| **G** | 11.02 | 10.21 | _DSC6507 4.76 | _WEB5765 21.81 | Look curve and dehaze, over the calibrated import |
+| **B** | 11.51 | 11.01 | _DSC6507 4.77 | _WEB5777 26.69 | Honour the profile's look curve |
+| **A** | 11.61 | 11.09 | _DSC6507 5.13 | _WEB5777 26.56 | Baseline — the shipping renderer |
+| **C** | 11.83 | 11.40 | _DSC6507 5.83 | _WEB5777 27.42 | Adobe's own camera profile |
 
 ## Against the baseline
 
 | variant | mean ΔE | vs A |
 |---|---|---|
-| F2 | 7.46 | **-5.30** better |
-| F | 7.61 | **-5.15** better |
-| F1 | 7.70 | **-5.06** better |
-| E | 7.78 | **-4.99** better |
-| D1 | 9.65 | **-3.11** better |
-| D | 9.77 | **-2.99** better |
-| A | 12.76 | — |
-| B | 12.78 | +0.02 no change |
-| C | 13.28 | +0.52 worse |
+| G | 11.02 | **-0.59** better |
+| B | 11.51 | **-0.10** better |
+| A | 11.61 | — |
+| C | 11.83 | +0.22 worse |
 
 ## Per file
 
-| file | F2 | F | F1 | E | D1 | D | A | B | C |
-|---|---|---|---|---|---|---|---|---|---|
-| _DSC6372 | 9.13 | 9.86 | 10.31 | 10.69 | 11.74 | 11.43 | 11.91 | 12.23 | 11.96 |
-| _DSC6498 | 8.88 | 8.85 | 8.85 | 8.85 | 11.01 | 11.00 | 13.17 | 13.21 | 13.59 |
-| _DSC6507 | 4.48 | 4.49 | 4.49 | 4.49 | 5.70 | 6.47 | 9.22 | 8.60 | 9.83 |
-| _DSC6509 | 5.23 | 5.23 | 5.23 | 5.23 | 7.60 | 7.78 | 12.67 | 12.77 | 13.72 |
-| _DSC6512 | 9.61 | 9.61 | 9.61 | 9.61 | 12.22 | 12.16 | 16.83 | 17.07 | 17.32 |
+| file | G | B | A | C |
+|---|---|---|---|---|
+| 20240918_191653 | 12.24 | 12.39 | 12.17 | 11.62 |
+| _DSC6372 | 9.23 | 10.70 | 10.49 | 10.50 |
+| _DSC6498 | 8.89 | 8.85 | 8.82 | 8.95 |
+| _DSC6507 | 4.76 | 4.77 | 5.13 | 5.83 |
+| _DSC6509 | 5.43 | 5.43 | 5.55 | 6.36 |
+| _DSC6512 | 9.68 | 9.68 | 9.73 | 10.15 |
+| _WEB5162 | 12.61 | 13.69 | 14.05 | 14.43 |
+| _WEB5167-Enhanced-NR | 8.90 | 8.46 | 8.97 | 9.04 |
+| _WEB5179-Enhanced-NR | 8.71 | 13.57 | 14.02 | 14.08 |
+| _WEB5182 | 11.41 | 11.17 | 11.30 | 11.31 |
+| _WEB5320 | 9.81 | 10.23 | 10.63 | 10.87 |
+| _WEB5765 | 21.81 | 16.93 | 17.12 | 17.27 |
+| _WEB5777 | 20.05 | 26.69 | 26.56 | 27.42 |
+| _WEB5782 | 13.22 | 11.02 | 10.24 | 10.19 |
+| _WEB5929 | 8.49 | 9.09 | 9.32 | 9.36 |
 
 ---
 

@@ -183,17 +183,36 @@ final class LightroomSidecarTests: XCTestCase {
 
     // MARK: - Mapping
 
-    func testExposureTransfersExactly() throws {
+    func testExposureTransfersExactlyThenTakesTheCalibration() throws {
         let map = LightroomImport.map(try fixture())
-        // Both sides are EV. This one number should need no interpretation.
-        XCTAssertEqual(try XCTUnwrap(map.adjustments["exposure"]), 0.29, accuracy: 1e-9)
+        // Both sides are EV, so the sidecar's +0.29 transfers unchanged — and
+        // then the calibration's trim goes on, because our renderer's baseline
+        // sits brighter than Lightroom's on every file measured.
+        let expected = 0.29 + LightroomImport.calibration.exposureOffsetEV
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["exposure"]), expected, accuracy: 1e-9)
         XCTAssertTrue(map.applied.contains { $0.contains("exposure") && $0.contains("exact") })
+        XCTAssertTrue(map.applied.contains { $0.contains("Calibration") })
+        XCTAssertEqual(map.calibrationID, LightroomImport.calibration.id)
+    }
+
+    func testTheCalibrationIsAppliedEvenWhenTheSidecarMovedNothing() throws {
+        // It corrects one renderer against another, which is as true at
+        // +0.00 EV as at +0.29 — so it must not be conditional on the file
+        // having touched exposure.
+        var sidecar = LightroomSidecar()
+        sidecar.settings["Exposure2012"] = "0"
+        let map = LightroomImport.map(sidecar)
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["exposure"]),
+                       LightroomImport.calibration.exposureOffsetEV, accuracy: 1e-9)
     }
 
     func testHundredScaleSlidersLandOnTheEngineScale() throws {
         let map = LightroomImport.map(try fixture())
         XCTAssertEqual(try XCTUnwrap(map.adjustments["highlights"]), -0.78, accuracy: 1e-9)
-        XCTAssertEqual(try XCTUnwrap(map.adjustments["shadows"]), 0.60, accuracy: 1e-9)
+        // Shadows takes the calibration's scale: ours lift further than
+        // Lightroom's for the same number.
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["shadows"]),
+                       0.60 * LightroomImport.calibration.shadowsScale, accuracy: 1e-9)
         XCTAssertEqual(try XCTUnwrap(map.adjustments["whites"]), 0.16, accuracy: 1e-9)
         XCTAssertEqual(try XCTUnwrap(map.adjustments["blacks"]), -0.17, accuracy: 1e-9)
         XCTAssertEqual(try XCTUnwrap(map.adjustments["vibrance"]), 0.15, accuracy: 1e-9)

@@ -38,6 +38,9 @@ public struct LightroomImport: Equatable, Sendable {
     /// something a person would notice if they compared the two pictures.
     public var unsupported: [String] = []
 
+    /// The calibration applied on the way in — see `LightroomImport.calibration`.
+    public var calibrationID: String = ""
+
     /// What DID survive, for the same reason — an import that says only what
     /// it lost reads like a failure even when it carried nine tenths.
     public var applied: [String] = []
@@ -92,6 +95,15 @@ public struct LightroomImport: Equatable, Sendable {
     public static let skySubstitutionNote =
         "the boundary is this app's own sky segmentation, not Adobe's"
 
+    /// Lightroom's named white-balance presets and the Kelvin they
+    /// conventionally mean. Approximate by construction: Lightroom resolves a
+    /// preset against the camera's own profile, so "Cloudy" is not exactly
+    /// 6500 K on every body. Closer than nothing, and reported as approximate.
+    static let namedIlluminants: [String: Double] = [
+        "Daylight": 5500, "Cloudy": 6500, "Shade": 7500,
+        "Tungsten": 2850, "Fluorescent": 3800, "Flash": 5500,
+    ]
+
     // MARK: - The global map
 
     /// Lightroom's key, our field name, and the divisor that turns one into
@@ -134,19 +146,73 @@ public struct LightroomImport: Equatable, Sendable {
         ("Tint", "tint", 1),
     ]
 
+    /// The correction that makes an imported grade land where Lightroom put
+    /// it, rather than where our engine would put the same numbers.
+    ///
+    /// **WHY THIS IS IN THE IMPORT AND NOT IN THE RENDERER.** The bench found
+    /// it as a render axis, because that was the quick way to measure it: our
+    /// renders came out +0.27 to +0.87 stops bright on every file and every
+    /// variant, and our shadows lifted further than Lightroom's. But it is a
+    /// correction of ONE RENDERER AGAINST ANOTHER, and the only place that
+    /// comparison means anything is an imported Lightroom edit.
+    ///
+    /// Putting it in the engine instead would darken every LetsLapse project
+    /// ever shot by half a stop to match a program the photographer may not
+    /// own. Our native look is our own. So it lives here, on the way in, and
+    /// touches nothing else.
+    ///
+    /// Versioned because it is fitted, not derived: `docs/render-variants/`
+    /// records which corpus produced it, and a future fit gets the next id
+    /// rather than silently replacing this one.
+    public struct Calibration: Equatable, Sendable {
+        public let id: String
+        /// Added to the sidecar's exposure, in EV.
+        public let exposureOffsetEV: Double
+        /// Multiplies the sidecar's Shadows.
+        public let shadowsScale: Double
+        public let note: String
+    }
+
+    /// Fitted on `batch1` (five Sony A7 IV frames, Lightroom 17.5),
+    /// 2026-09-07. Took the corpus from mean ΔE2000 12.76 to 7.46.
+    public static let calibration = Calibration(
+        id: "cal1",
+        exposureOffsetEV: -0.47,
+        shadowsScale: 0.7,
+        note: """
+            fitted on batch1, 5 frames, Sony ILCE-7M4, Lightroom 17.5. \
+            Dehaze is NOT here: the measurement says ours is about half \
+            Adobe's strength, but there is no dehaze control on \
+            PhotoAdjustments to import one into yet, so it stays a render \
+            axis (see docs/TODO.md).
+            """)
+
     /// Map a parsed sidecar.
     public static func map(_ sidecar: LightroomSidecar) -> LightroomImport {
         var out = LightroomImport()
         out.unsupported = sidecar.unsupported
+        out.calibrationID = calibration.id
 
         for entry in globals {
             guard let value = sidecar.double(entry.crs), value != 0 else { continue }
             out.adjustments[entry.field] = value / entry.divisor
+            if entry.field == "shadows" {
+                out.adjustments[entry.field] = value / entry.divisor * calibration.shadowsScale
+            }
             out.applied.append(
                 entry.divisor == 1
                     ? "\(entry.crs) \(signed(value)) → \(entry.field) (exact)"
                     : "\(entry.crs) \(signed(value)) → \(entry.field) \(trimmed(value / entry.divisor))")
         }
+
+        // The exposure trim. Applied whether or not the sidecar moved
+        // exposure: it corrects a difference between two renderers' baselines,
+        // which is there at +0.00 EV as much as at +0.29.
+        let exposure = (out.adjustments["exposure"] ?? 0) + calibration.exposureOffsetEV
+        out.adjustments["exposure"] = exposure
+        out.applied.append(String(
+            format: "Calibration %@ — exposure %+.2f EV, shadows ×%.2f",
+            calibration.id, calibration.exposureOffsetEV, calibration.shadowsScale))
 
         // White balance. "As Shot" is our default and needs saying only when
         // it is NOT that: a custom white in the sidecar is a Kelvin/Tint pair,
@@ -158,6 +224,16 @@ public struct LightroomImport: Equatable, Sendable {
                 out.adjustments["whiteMired"] = 1_000_000 / kelvin
                 out.adjustments["whiteTint"] = sidecar.double("Tint") ?? 0
                 out.applied.append("White balance \(Int(kelvin)) K → owned white")
+            } else if let kelvin = namedIlluminants[balance] {
+                // A named preset carries no Kelvin: Lightroom resolves it per
+                // camera from the profile's calibration, which we cannot
+                // reproduce. These are the conventional values, and they are
+                // much closer than dropping the white entirely.
+                out.adjustments["whiteMired"] = 1_000_000 / kelvin
+                out.adjustments["whiteTint"] = sidecar.double("Tint") ?? 0
+                out.applied.append(
+                    "White balance \u{201C}\(balance)\u{201D} → \(Int(kelvin)) K "
+                    + "(conventional value; Lightroom resolves it per camera)")
             } else {
                 out.unsupported.append("White balance \u{201C}\(balance)\u{201D} — not carried")
             }
