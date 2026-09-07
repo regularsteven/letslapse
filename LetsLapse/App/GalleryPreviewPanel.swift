@@ -1,0 +1,314 @@
+import SwiftUI
+
+// MARK: - Gallery preview panel
+
+/// The 300pt right-hand panel that slides in when a tile is selected.
+///
+/// Contains:
+/// - Thumbnail (150pt height)
+/// - Title, date, size
+/// - 2×2 action grid: Open / Edit / Text / New blended clip
+/// - Metadata rows: Tags, In frame, Variations, Storage, Field notes
+/// - Footer: Rename, Share, Show in Finder, Delete…
+struct GalleryPreviewPanel: View {
+    @EnvironmentObject var model: AppModel
+    var capture: AppModel.CaptureProject
+    var onOpen: () -> Void
+    var onDelete: () -> Void
+
+    // Async loads
+    @State private var storageBytes: Int64?
+    @State private var isRenaming = false
+    @State private var renameText = ""
+    @State private var previewItem: MediaPreviewItem?
+    @State private var confirmingDelete = false
+    @State private var exportedArchive: ExportedArchive?
+    @State private var isExporting = false
+
+    private var blends: [AppModel.BlendProject] {
+        model.blends(for: capture)
+    }
+
+    private var fieldNotes: [FieldNote] {
+        model.fieldNotes(for: capture)
+    }
+
+    private var thumbnailURL: URL? { model.thumbnailURL(for: capture) }
+    private var mediaKind: AppModel.MediaKind { model.mediaKind(for: capture) }
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) {
+                thumbnail
+                    .padding(.top, 22)
+                    .padding(.horizontal, 14)
+
+                titleSection
+                    .padding(.top, 12)
+                    .padding(.horizontal, 14)
+
+                actionGrid
+                    .padding(.top, 16)
+                    .padding(.horizontal, 14)
+
+                Divider()
+                    .padding(.top, 16)
+
+                metadataSection
+                    .padding(.horizontal, 14)
+
+                Divider()
+                    .padding(.top, 4)
+
+                footerRow
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+
+                Color.clear.frame(height: 82) // floating tab bar clearance
+            }
+        }
+        .scrollContentBackground(.hidden)
+        .background(LL.cardBackground)
+        .task(id: capture.id) {
+            if let bytes = await model.storageBytes(for: capture) {
+                storageBytes = bytes
+            }
+        }
+        .sheet(item: $previewItem) { item in
+            ProjectMediaPreviewSheet(item: item)
+        }
+        .exportedArchiveSheet($exportedArchive)
+        .confirmationDialog(
+            "Delete this project?",
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button("Delete \u{201C}\(capture.displayTitle)\u{201D}", role: .destructive) {
+                onDelete()
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+        .alert("Rename", isPresented: $isRenaming) {
+            TextField("Title", text: $renameText)
+            Button("Rename") {
+                let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !name.isEmpty { model.renameProject(capture, to: name) }
+            }
+            Button("Cancel", role: .cancel) {}
+        }
+    }
+
+    // MARK: Thumbnail
+
+    private var thumbnail: some View {
+        ProjectThumbnailView(url: thumbnailURL, kind: mediaKind, cornerRadius: 10)
+            .frame(height: 150)
+            .frame(maxWidth: .infinity)
+            .onTapGesture {
+                let url = capture.isPhotoCapture
+                    ? model.heroImageURL(for: capture)
+                    : model.mediaURL(for: capture)
+                guard let url else { return }
+                previewItem = MediaPreviewItem(
+                    title: capture.displayTitle,
+                    subtitle: model.formatLine(for: capture),
+                    url: url,
+                    kind: model.mediaKind(for: capture)
+                )
+            }
+    }
+
+    // MARK: Title + date + size
+
+    private var titleSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(capture.displayTitle)
+                .font(.system(size: 16, weight: .bold))
+                .lineLimit(2)
+            HStack(spacing: 6) {
+                Text(capture.createdAt.formatted(.dateTime.month(.abbreviated).day().year()))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                if let bytes = storageBytes {
+                    Text("·").foregroundStyle(.tertiary)
+                    Text(LLFormat.bytes(bytes))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: 2×2 action grid
+
+    private var actionGrid: some View {
+        let cols = [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)]
+        return LazyVGrid(columns: cols, spacing: 8) {
+            actionButton("Open", icon: "arrow.up.forward.square", filled: true) {
+                onOpen()
+            }
+            actionButton("Edit", icon: "pencil") {
+                model.openCapture(capture)
+            }
+            actionButton("Text", icon: "textformat") {
+                // Opens to the editor's Text rail — same entry point for now;
+                // the editor shows the Text tab by default when opened for a
+                // finished project.
+                model.openCapture(capture)
+            }
+            actionButton("New clip", icon: "plus.circle") {
+                model.openCapture(capture)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func actionButton(
+        _ label: String,
+        icon: String,
+        filled: Bool = false,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 5) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .medium))
+                Text(label)
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .background(
+                filled ? LL.accent : Color.primary.opacity(0.07),
+                in: RoundedRectangle(cornerRadius: 9, style: .continuous)
+            )
+            .foregroundStyle(filled ? .white : .primary)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Metadata rows
+
+    private var metadataSection: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            if let tags = capture.sceneTags, !tags.isEmpty {
+                metaRow("Tags") {
+                    SceneTagLine(tags: tags)
+                }
+            }
+            if let elements = capture.sceneElements, !elements.isEmpty {
+                metaRow("In frame") {
+                    Text(elements.prefix(4).joined(separator: ", "))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+            }
+            if !blends.isEmpty {
+                metaRow("Variations") {
+                    Text("\(blends.count) blended clip\(blends.count == 1 ? "" : "s")")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let bytes = storageBytes {
+                metaRow("Storage") {
+                    Text(LLFormat.bytes(bytes))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if !fieldNotes.isEmpty {
+                metaRow("Field notes") {
+                    Text("\(fieldNotes.count) note\(fieldNotes.count == 1 ? "" : "s")")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .padding(.top, 12)
+    }
+
+    @ViewBuilder
+    private func metaRow<V: View>(
+        _ label: String,
+        @ViewBuilder content: () -> V
+    ) -> some View {
+        HStack(alignment: .top, spacing: 10) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 72, alignment: .leading)
+            content()
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 6)
+    }
+
+    // MARK: Footer
+
+    private var footerRow: some View {
+        HStack(spacing: 0) {
+            footerButton("Rename", icon: "pencil.line") {
+                renameText = capture.displayTitle
+                isRenaming = true
+            }
+            Divider().frame(height: 20)
+            footerButton("Share", icon: "square.and.arrow.up") {
+                exportShare()
+            }
+            #if os(macOS)
+            Divider().frame(height: 20)
+            footerButton("Finder", icon: "folder") {
+                if let url = model.heroImageURL(for: capture) {
+                    NSWorkspace.shared.selectFile(url.path, inFileViewerRootedAtPath: "")
+                }
+            }
+            #endif
+            Divider().frame(height: 20)
+            footerButton("Delete\u{2026}", icon: "trash", tint: .red) {
+                confirmingDelete = true
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func footerButton(
+        _ label: String,
+        icon: String,
+        tint: Color = .primary,
+        action: @escaping () -> Void
+    ) -> some View {
+        Button(action: action) {
+            VStack(spacing: 4) {
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                Text(label)
+                    .font(.system(size: 10, weight: .medium))
+            }
+            .foregroundStyle(tint)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: Share / export
+
+    private func exportShare() {
+        guard !isExporting else { return }
+        isExporting = true
+        Task {
+            do {
+                let url = try await model.exportProject(capture)
+                await MainActor.run {
+                    exportedArchive = ExportedArchive(url: url)
+                    isExporting = false
+                }
+            } catch {
+                await MainActor.run { isExporting = false }
+            }
+        }
+    }
+}
