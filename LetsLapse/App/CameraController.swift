@@ -835,6 +835,16 @@ final class CameraController: NSObject, ObservableObject {
     @Published var lockedShutterSeconds: Double = 0
     @Published var lockedLensPosition: Float = 0.5
     @Published var isoRange: ClosedRange<Float> = 25...3200
+    /// Whether Photo's M is achievable at the current stop — not merely
+    /// whether the CURRENT device reports `.custom` support, since the
+    /// virtual multi-cam device refuses `.custom` outright on every iPhone
+    /// tested (the same refusal `holyGrailDeviceFacts()` documents for the
+    /// ramp) while its physical constituents accept it. Published (rather
+    /// than a live computed property) because deciding this needs
+    /// `currentStop`/`opticsDevice`, which are sessionQueue-confined —
+    /// recomputed in `deriveStops()`, not safe to read fresh from the
+    /// main-thread body that shows the M button.
+    @Published private(set) var supportsManualExposure: Bool = false
     // Live Blend engine — Interval mode's blend/DNG pipeline.
     @Published var isLiveBlendRunning = false {
         didSet { publishCaptureBusy() }
@@ -1829,8 +1839,12 @@ final class CameraController: NSObject, ObservableObject {
     }
 
     /// sessionQueue-confined: put the optics device back as the session's
-    /// video input after DNG work ran on a physical constituent.
+    /// video input after DNG work ran on a physical constituent — unless
+    /// Photo's M still needs the physical device, which the virtual one
+    /// refuses outright; disarming DNG must not silently break a manual
+    /// exposure the user is actively dialling in.
     private func restoreOpticsInputIfNeeded() {
+        guard !manualExposureWantsPhysicalDevice else { return }
         guard let optics = opticsDevice, videoDevice !== optics,
               let input = try? AVCaptureDeviceInput(device: optics) else { return }
         session.beginConfiguration()
@@ -2085,6 +2099,7 @@ final class CameraController: NSObject, ObservableObject {
                 self.availableStops = []
                 self.selectedStop = nil
             }
+            publishManualExposureSupport()
             return
         }
         #if os(iOS)
@@ -2111,7 +2126,13 @@ final class CameraController: NSObject, ObservableObject {
         #endif
 
         var stops = fullStops
-        if !CaptureOpticsStore.enhancedLensesEnabled || dngWorldActive {
+        // Manual exposure joins DNG here for the same reason: once a
+        // physical device is in the session, `selectPhysicalStop` refuses
+        // any non-optical stop outright (a digital crop lives on
+        // `videoZoomFactor` within one physical device, not on switching
+        // devices), so the picker must not offer one it would silently
+        // refuse while M has the physical device pinned.
+        if !CaptureOpticsStore.enhancedLensesEnabled || dngWorldActive || manualExposureWantsPhysicalDevice {
             stops = stops.filter { $0.kind == .optical }
         }
         let target = preferredStopFactor ?? currentStop?.displayFactor ?? 1.0
@@ -2127,6 +2148,7 @@ final class CameraController: NSObject, ObservableObject {
         if let selected, !physicalWorldActive {
             applyZoom(selected, animated: false)
         }
+        publishManualExposureSupport()
     }
 
     /// The physical constituent backing a stop — the DNG world's discrete-
@@ -4054,15 +4076,92 @@ final class CameraController: NSObject, ObservableObject {
 
     // MARK: - Photo manual exposure (M)
 
-    /// Whether the active camera accepts `.custom` exposure right now —
-    /// checked live per lens/format, the same trust level the Holy Grail
-    /// ramp gives this call (`applyHolyGrailExposure`) rather than assuming
-    /// it from the platform: macOS cameras never report it in this app's
-    /// experience, but an unusual lens could disagree with a sibling lens on
-    /// the same iPhone too.
-    var supportsManualExposure: Bool {
-        videoDevice?.isExposureModeSupported(.custom) ?? false
+    /// True while M currently owns the physical-device swap below — set by
+    /// `setManualExposureDeviceNeeded`, read by `restoreOpticsInputIfNeeded`
+    /// so DNG's own disarm doesn't hand the lens back to the virtual device
+    /// out from under an exposure the user is actively dialling in.
+    /// sessionQueue-confined.
+    private var manualExposureWantsPhysicalDevice = false
+
+    /// sessionQueue-confined. Recomputes `supportsManualExposure` from
+    /// whatever `deriveStops()` just settled on: true if the active device
+    /// already takes `.custom`, or — the common case, an idle virtual
+    /// multi-cam device — if its physical constituent for this stop would.
+    /// Photo's M must not depend on the output format being DNG just
+    /// because DNG happens to already run on that same physical device.
+    private func publishManualExposureSupport() {
+        let supported: Bool
+        if let device = videoDevice, device.isExposureModeSupported(.custom) {
+            supported = true
+        } else if let stop = currentStop, let physical = physicalDevice(for: stop) {
+            supported = physical.isExposureModeSupported(.custom)
+        } else {
+            supported = false
+        }
+        DispatchQueue.main.async {
+            if self.supportsManualExposure != supported { self.supportsManualExposure = supported }
+        }
     }
+
+    /// Called whenever Photo's M toggles. Unlike `armPhotoAspectPreview`,
+    /// this never touches the session preset or requires Bayer RAW support
+    /// — a JPEG shoot keeps its normal framing; only the underlying device
+    /// (and with it, the smooth cross-lens zoom the virtual device gives)
+    /// changes while M is on.
+    func setManualExposureDeviceNeeded(_ needed: Bool) {
+        #if os(iOS)
+        sessionQueue.async {
+            self.manualExposureWantsPhysicalDevice = needed
+            if needed {
+                self.armPhysicalDeviceForManualExposure()
+            } else {
+                self.restoreOpticsInputIfNeeded()
+                self.deriveStops()
+            }
+        }
+        #endif
+    }
+
+    #if os(iOS)
+    /// sessionQueue-confined: swap the session input to the nearest optical
+    /// stop's physical constituent, the same swap `armPhotoAspectPreview`
+    /// makes for DNG — but alone, since M needs none of DNG's other side
+    /// effects. A no-op if the device is already physical (DNG got there
+    /// first, or single-camera hardware never left it).
+    private func armPhysicalDeviceForManualExposure() {
+        guard let optics = opticsDevice, videoDevice === optics, optics.isVirtualDevice else {
+            publishManualExposureSupport()
+            return
+        }
+        // Same optical-only snap DNG makes, and for a related reason: once
+        // `physicalWorldActive`, `selectPhysicalStop` refuses any non-
+        // optical stop outright (digital zoom lives on `videoZoomFactor`
+        // within ONE physical device, and switching devices for a crop
+        // makes no sense) — `deriveStops()` mirrors this by filtering the
+        // offered stops to optical-only while `manualExposureWantsPhysicalDevice`
+        // is set, so the picker never offers a stop that would silently
+        // refuse. Snapping here keeps the arm and the offered list honest
+        // with each other from the first frame.
+        guard let target = nearestOpticalStop(to: currentStop),
+              let device = physicalDevice(for: target),
+              let input = try? AVCaptureDeviceInput(device: device) else {
+            publishManualExposureSupport()
+            return
+        }
+        beginLensCover()
+        session.beginConfiguration()
+        if let videoInput { session.removeInput(videoInput) }
+        if session.canAddInput(input) {
+            session.addInput(input)
+            videoInput = input
+            videoDevice = device
+        }
+        session.commitConfiguration()
+        currentStop = target
+        deriveStops()
+        endLensCoverAfterSettle()
+    }
+    #endif
 
     /// The active format's real shutter-duration envelope, in seconds — the
     /// SHUTTER wheel's detents are clamped to this, since a device's real

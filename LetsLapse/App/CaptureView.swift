@@ -578,11 +578,13 @@ struct CaptureView: View {
             // on/off and indices stay put, so returning to Photo re-arms
             // exactly where it left off, per the handoff's own rule.
             if newMode == .photo, photoManualExposure {
+                camera.setManualExposureDeviceNeeded(true)
                 camera.setPhotoManualExposure(
                     shutterSeconds: photoShutterIndex >= 0 ? ManualExposureDetents.shutterSeconds[photoShutterIndex] : nil,
                     iso: photoISOIndex >= 0 ? ManualExposureDetents.iso[photoISOIndex] : nil)
             } else if newMode != .photo, photoManualExposure {
                 camera.exitPhotoManualExposure()
+                camera.setManualExposureDeviceNeeded(false)
             }
             guard RecordingSettingsStore.isEnabled else { return }
             if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
@@ -1446,6 +1448,7 @@ struct CaptureView: View {
         if photoManualExposure {
             photoManualExposure = false
             camera.exitPhotoManualExposure()
+            camera.setManualExposureDeviceNeeded(false)
         }
         #if os(iOS)
         // The framing tap is an extra session output; leaving it attached
@@ -5300,12 +5303,21 @@ struct CaptureView: View {
         if photoManualExposure {
             photoManualExposure = false
             camera.exitPhotoManualExposure()
+            camera.setManualExposureDeviceNeeded(false)
         } else {
             let ae = camera.currentAutoExposure() ?? photoManualAEReference
             photoManualAEReference = ae
             photoShutterIndex = ManualExposureDetents.nearestShutterIndex(to: ae.shutter)
             photoISOIndex = ManualExposureDetents.nearestISOIndex(to: ae.iso)
             photoManualExposure = true
+            // Ahead of the exposure write itself: on a JPEG shoot the
+            // session is usually still on the virtual multi-cam device,
+            // which refuses `.custom` outright — this swaps to the
+            // physical constituent DNG already knows how to reach, without
+            // DNG's other side effects (session preset, RAW requirement).
+            // Both dispatch to the same serial sessionQueue, so the swap
+            // is guaranteed to land before the write below runs.
+            camera.setManualExposureDeviceNeeded(true)
             camera.setPhotoManualExposure(
                 shutterSeconds: ManualExposureDetents.shutterSeconds[photoShutterIndex],
                 iso: ManualExposureDetents.iso[photoISOIndex])
