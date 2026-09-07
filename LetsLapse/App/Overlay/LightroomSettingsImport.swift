@@ -61,8 +61,22 @@ enum LightroomSettingsImport {
         var shapeMasks: [ShapeMask] = []
         var maskGrades: [MaskGrade] = []
         for mask in imported.masks {
-            let shape = ShapeMask(name: mask.name, shape: mask.shape)
-            shapeMasks.append(shape)
+            // A drawn shape becomes a project mask of its own; a semantic one
+            // names a region the project already has, so there is nothing to
+            // create — `MaskRef.sky` IS the mask.
+            let ref: MaskRef
+            switch mask.target {
+            case .shape(let shape):
+                let created = ShapeMask(name: mask.name, shape: shape)
+                shapeMasks.append(created)
+                ref = .shape(created.id)
+            case .semantic(let region):
+                guard region == "sky" || region == "land" else {
+                    unsupported.append("Mask \u{201C}\(mask.name)\u{201D} names a region this app has no equivalent for")
+                    continue
+                }
+                ref = region == "sky" ? .sky : .land
+            }
             var values = PhotoAdjustments.neutral
             for (name, value) in mask.adjustments {
                 guard let field = PhotoAdjustmentField(rawValue: name) else { continue }
@@ -79,7 +93,7 @@ enum LightroomSettingsImport {
                 values[keyPath: field.keyPath] = clamped
             }
             maskGrades.append(MaskGrade(
-                mask: .shape(shape.id), inverted: mask.inverted, adjustments: values))
+                mask: ref, inverted: mask.inverted, adjustments: values))
         }
 
         return Result(

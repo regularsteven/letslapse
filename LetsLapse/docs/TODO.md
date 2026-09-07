@@ -77,12 +77,31 @@ does.
 - **A tone curve is still worth having, but it is not the gap.** Measured at
   ~0.25 ΔE on this file (see above), so build it because a curve is a control
   people want, not because it closes the distance to Lightroom.
-- **The AI mask's bitmap is in the sidecar and undecoded.** Adobe writes it as
-  `crs:Table_<MaskDigest>` — 223 KB for this file's Sky mask, in their own
-  encoding. It travels with the frame on import and is parsed into
-  `LightroomSidecar.maskTables`, so a decoder has the payload waiting. The
-  alternative — substituting our own sky segmenter — works today but will not
-  match Adobe's boundary.
+- **AI masks: sky is SUBSTITUTED (done 2026-09-07), the rest are still lost.**
+  A `Mask/Image` whose `MaskSubType` is 2 (or whose name starts "Sky") is now
+  routed onto this app's own `MaskRef.sky`, so the correction transfers and
+  only the boundary differs. Subject, background and object masks have no
+  region here and are still reported as lost.
+
+  **What the `crs:Table_<MaskDigest>` payload actually is, measured
+  2026-09-07** — so nobody repeats the analysis:
+  - 229,183 characters, exactly **85 distinct**, from an XML-safe alphabet:
+    standard Ascii85 (`!`…`u`) with the 8 characters unsafe in an attribute
+    (`"` `&` `,` `;` `<` `>` `\` `_`) replaced by `v`…`}`.
+  - It is **NOT Ascii85-of-bytes.** Under every alphabet order, digit
+    direction and offset tried, ~3.3% of 5-character groups exceed 2³²−1 —
+    which is precisely the fraction expected of *uniformly random* base-85
+    digits (85⁵ − 2³²)/85⁵ = 3.2%. A real Ascii85 encoder emits none.
+  - Entropy is **6.408 bits/char against a 6.409 maximum**, flat across the
+    whole payload. The underlying data is already compressed before encoding,
+    so there is no structure to grab onto from the outside.
+  - Conclusion: it is a whole-block or large-chunk base-85 radix conversion of
+    a compressed stream, and cracking it means identifying Adobe's container
+    as well as their base-85 variant. Open-ended, and brittle even if it
+    lands — an undocumented format they are free to change. The payload is
+    kept in `LightroomSidecar.maskTables` should anybody want to try.
+  - **The substitution is arguably the better answer anyway for this app**: a
+    bitmap is one frame's sky, and a timelapse re-segments per seam.
 - **The camera profile is available and unused.** `Sony ILCE-7M4 Adobe
   Standard.dcp` is installed on the bench Mac, and `RawDecodePath.dcpProfile`
   can read it. An import that names a profile should probably select that

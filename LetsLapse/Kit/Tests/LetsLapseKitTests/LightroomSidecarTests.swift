@@ -125,11 +125,49 @@ final class LightroomSidecarTests: XCTestCase {
             "the profile's own curve is a real part of the render and must be reported; got \(sidecar.unsupported)")
     }
 
-    func testTheAIMaskIsReportedAsUnsupported() throws {
+    func testASkyIsNotReportedAsLostBecauseItIsSubstituted() throws {
         let sidecar = try fixture()
-        XCTAssertTrue(
-            sidecar.unsupported.contains { $0.contains("Sky 1") && $0.contains("AI mask") },
+        // Adobe's sky bitmap is undecodable, but "the sky" is a fact about the
+        // photograph rather than an Adobe idea — so it is routed onto our own
+        // segmentation and reported as carried, with the caveat.
+        XCTAssertFalse(
+            sidecar.unsupported.contains { $0.contains("Sky 1") },
             "got \(sidecar.unsupported)")
+    }
+
+    func testANonSkyAIMaskIsStillReportedAsUnsupported() throws {
+        var mask = LightroomSidecar.Mask()
+        mask.kind = "Image"
+        mask.name = "Subject 1"
+        mask.attributes = ["MaskSubType": "1", "MaskDigest": "ABC"]
+        var correction = LightroomSidecar.Correction()
+        correction.locals = ["Exposure2012": "0.5"]
+        correction.masks = [mask]
+        var sidecar = LightroomSidecar()
+        sidecar.settings["Exposure2012"] = "0"
+        sidecar.corrections = [correction]
+        // We have no "subject" region, so there is nowhere for it to go.
+        XCTAssertFalse(LightroomImport.isSky(mask))
+        XCTAssertTrue(LightroomImport.map(sidecar).masks.isEmpty)
+    }
+
+    func testSkyIsRecognisedBySubtypeAndByName() throws {
+        var bySubtype = LightroomSidecar.Mask()
+        bySubtype.kind = "Image"
+        bySubtype.name = "Renamed by the photographer"
+        bySubtype.attributes = ["MaskSubType": "2"]
+        XCTAssertTrue(LightroomImport.isSky(bySubtype))
+
+        var byName = LightroomSidecar.Mask()
+        byName.kind = "Image"
+        byName.name = "sky 3"
+        XCTAssertTrue(LightroomImport.isSky(byName))
+
+        // A gradient is never an AI mask, whatever it is called.
+        var gradient = LightroomSidecar.Mask()
+        gradient.kind = "CircularGradient"
+        gradient.name = "Sky glow"
+        XCTAssertFalse(LightroomImport.isSky(gradient))
     }
 
     func testAnUntouchedPanelIsNotReportedAsLost() throws {
@@ -181,25 +219,43 @@ final class LightroomSidecarTests: XCTestCase {
 
     // MARK: - The radial mask's geometry
 
+    /// The radial, which is the one with a rebuildable shape.
+    private func radial(_ map: LightroomImport) throws -> LightroomImport.MaskedGrade {
+        try XCTUnwrap(map.masks.first { $0.shape != nil })
+    }
+
+    func testBothMasksArriveNowThatSkyIsSubstituted() throws {
+        let map = LightroomImport.map(try fixture())
+        XCTAssertEqual(map.masks.count, 2)
+        let sky = try XCTUnwrap(map.masks.first { $0.shape == nil })
+        XCTAssertEqual(sky.target, .semantic("sky"))
+        XCTAssertEqual(sky.name, "Sky 1")
+        // Its correction's values come with it — the whole point of the
+        // substitution is that the EDIT survives even though the boundary
+        // is ours.
+        XCTAssertEqual(try XCTUnwrap(sky.adjustments["clarity"]), 0.947978, accuracy: 1e-6)
+        XCTAssertNotNil(sky.adjustments["temperature"])
+    }
+
     func testTheRadialMaskBecomesAMaskShape() throws {
         let map = LightroomImport.map(try fixture())
-        XCTAssertEqual(map.masks.count, 1, "only the radial has a shape we can rebuild")
-        let imported = try XCTUnwrap(map.masks.first)
-        XCTAssertEqual(imported.shape.kind, .radial)
+        let imported = try radial(map)
+        XCTAssertEqual(try XCTUnwrap(imported.shape).kind, .radial)
         // Top -0.025958 Left -0.30958 Bottom 0.644092 Right 0.786439.
-        XCTAssertEqual(Double(imported.shape.center.x), 0.2384295, accuracy: 1e-6)
-        XCTAssertEqual(Double(imported.shape.center.y), 0.309067, accuracy: 1e-6)
-        XCTAssertEqual(imported.shape.radiusX, 0.5480095, accuracy: 1e-6)
-        XCTAssertEqual(imported.shape.radiusY, 0.335025, accuracy: 1e-6)
-        XCTAssertEqual(imported.shape.rotationDegrees, 0, accuracy: 1e-9)
-        XCTAssertEqual(imported.shape.feather, 0.5, accuracy: 1e-9)
+        let shape = try XCTUnwrap(imported.shape)
+        XCTAssertEqual(Double(shape.center.x), 0.2384295, accuracy: 1e-6)
+        XCTAssertEqual(Double(shape.center.y), 0.309067, accuracy: 1e-6)
+        XCTAssertEqual(shape.radiusX, 0.5480095, accuracy: 1e-6)
+        XCTAssertEqual(shape.radiusY, 0.335025, accuracy: 1e-6)
+        XCTAssertEqual(shape.rotationDegrees, 0, accuracy: 1e-9)
+        XCTAssertEqual(shape.feather, 0.5, accuracy: 1e-9)
     }
 
     func testTheBoundingBoxRoundTripsBackToLightroomsOwnEdges() throws {
         // The mapping is only right if the ellipse it builds has the same
         // edges Adobe named — centre ± radius, in each axis.
         let map = LightroomImport.map(try fixture())
-        let shape = try XCTUnwrap(map.masks.first).shape
+        let shape = try XCTUnwrap(try radial(map).shape)
         XCTAssertEqual(Double(shape.center.x) - shape.radiusX, -0.30958, accuracy: 1e-6)
         XCTAssertEqual(Double(shape.center.x) + shape.radiusX, 0.786439, accuracy: 1e-6)
         XCTAssertEqual(Double(shape.center.y) - shape.radiusY, -0.025958, accuracy: 1e-6)
@@ -208,7 +264,7 @@ final class LightroomSidecarTests: XCTestCase {
 
     func testTheRadialsLocalValuesLandOnTheMaskedGrade() throws {
         let map = LightroomImport.map(try fixture())
-        let imported = try XCTUnwrap(map.masks.first)
+        let imported = try radial(map)
         // LocalClarity2012 0.225905 -> clarity 0.2259 (both ±1).
         XCTAssertEqual(try XCTUnwrap(imported.adjustments["clarity"]), 0.225905, accuracy: 1e-6)
         // LocalTemperature 1 -> the full ±25 mired our masked Temp travels.
@@ -238,12 +294,14 @@ final class LightroomSidecarTests: XCTestCase {
         XCTAssertTrue(LightroomImport.appliesOutside(mask))
     }
 
-    func testTheSkyCorrectionIsDroppedButSaidOutLoud() throws {
+    func testTheSkySubstitutionIsSaidOutLoud() throws {
         let map = LightroomImport.map(try fixture())
-        // Its only mask is an AI bitmap, so there is nowhere for its Clarity
-        // and Temp to go — and the report has to carry that.
-        XCTAssertEqual(map.masks.count, 1)
-        XCTAssertTrue(map.unsupported.contains { $0.contains("Sky 1") })
+        // Carried, but with the caveat: the edit is Adobe's, the boundary is
+        // ours, and a photographer comparing the two should hear that from us.
+        XCTAssertTrue(
+            map.applied.contains { $0.contains("Sky 1") && $0.contains("Sky region") },
+            "got \(map.applied)")
+        XCTAssertTrue(map.applied.contains { $0.contains(LightroomImport.skySubstitutionNote) })
     }
 
     func testAnInactiveCorrectionIsIgnored() throws {

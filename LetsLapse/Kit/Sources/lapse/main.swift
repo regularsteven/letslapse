@@ -577,17 +577,25 @@ func runLightroomReport(url: URL, asJSON: Bool) throws {
             "applied": map.applied,
             "unsupported": map.unsupported,
         ]
-        payload["masks"] = map.masks.map { mask in
-            [
+        payload["masks"] = map.masks.map { mask -> [String: Any] in
+            var entry: [String: Any] = [
                 "name": mask.name,
-                "kind": mask.shape.kind.rawValue,
                 "inverted": mask.inverted,
-                "centerX": mask.shape.center.x, "centerY": mask.shape.center.y,
-                "radiusX": mask.shape.radiusX, "radiusY": mask.shape.radiusY,
-                "rotationDegrees": mask.shape.rotationDegrees,
-                "feather": mask.shape.feather,
                 "adjustments": mask.adjustments,
-            ] as [String: Any]
+            ]
+            if let shape = mask.shape {
+                entry["kind"] = shape.kind.rawValue
+                entry["centerX"] = shape.center.x
+                entry["centerY"] = shape.center.y
+                entry["radiusX"] = shape.radiusX
+                entry["radiusY"] = shape.radiusY
+                entry["rotationDegrees"] = shape.rotationDegrees
+                entry["feather"] = shape.feather
+            } else if case .semantic(let region) = mask.target {
+                entry["kind"] = "semantic"
+                entry["region"] = region
+            }
+            return entry
         }
         let data = try JSONSerialization.data(
             withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
@@ -609,12 +617,17 @@ func runLightroomReport(url: URL, asJSON: Bool) throws {
         print("\nMASKS REBUILT (\(map.masks.count))")
         for mask in map.masks {
             let where_ = mask.inverted ? "outside" : "inside"
-            print(String(
-                format: "  ✓ %@ — %@, centre %.3f/%.3f, r %.3f×%.3f, feather %.0f%%, grade %@",
-                mask.name, mask.shape.kind.displayName,
-                mask.shape.center.x, mask.shape.center.y,
-                mask.shape.radiusX, mask.shape.radiusY,
-                mask.shape.feather * 100, where_))
+            if let shape = mask.shape {
+                print(String(
+                    format: "  ✓ %@ — %@, centre %.3f/%.3f, r %.3f×%.3f, feather %.0f%%, grade %@",
+                    mask.name, shape.kind.displayName,
+                    shape.center.x, shape.center.y,
+                    shape.radiusX, shape.radiusY,
+                    shape.feather * 100, where_))
+            } else if case .semantic(let region) = mask.target {
+                print("  ✓ \(mask.name) — this app's own \(region.capitalized) region, grade \(where_)")
+                print("      (\(LightroomImport.skySubstitutionNote))")
+            }
             for (field, value) in mask.adjustments.sorted(by: { $0.key < $1.key }) {
                 print(String(format: "      %@ %+.4f", field, value))
             }

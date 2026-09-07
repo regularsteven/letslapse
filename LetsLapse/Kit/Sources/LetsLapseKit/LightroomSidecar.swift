@@ -250,6 +250,11 @@ public struct LightroomSidecar: Equatable, Sendable {
         for correction in corrections where correction.isActive {
             for mask in correction.masks where mask.isActive {
                 if mask.isImage {
+                    // A sky is substituted rather than lost — `LightroomImport`
+                    // routes it onto this app's own segmentation — so it is
+                    // reported there, as something CARRIED with a caveat,
+                    // rather than here as a loss.
+                    guard !LightroomImport.isSky(mask) else { continue }
                     let size = mask.digest.flatMap { maskTables[$0]?.count }
                     unsupported.append(
                         "Mask \u{201C}\(mask.name)\u{201D} is an AI mask; its bitmap is in the sidecar"

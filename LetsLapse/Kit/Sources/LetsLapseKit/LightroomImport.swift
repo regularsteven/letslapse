@@ -44,23 +44,53 @@ public struct LightroomImport: Equatable, Sendable {
 
     public init() {}
 
-    /// One imported mask: its shape, whether the grade lands inside or out,
-    /// and the grade itself.
+    /// One imported mask: what it selects, whether the grade lands inside or
+    /// out, and the grade itself.
     public struct MaskedGrade: Equatable, Sendable {
+
+        /// What the grade is applied through.
+        public enum Target: Equatable, Sendable {
+            /// A shape rebuilt from Adobe's own parameters — the same
+            /// ellipse or gradient, to the pixel.
+            case shape(MaskShape)
+            /// One of OUR semantic regions, named as `MaskRef` spells it.
+            ///
+            /// This is the substitution that lets an AI mask arrive at all.
+            /// Adobe stores its sky as a bitmap we cannot read (see
+            /// `skySubstitutionNote`), but "the sky" is not Adobe's idea —
+            /// it is a fact about the photograph, and this app segments it
+            /// too. So the CORRECTION transfers exactly and the BOUNDARY is
+            /// ours. For a timelapse that is arguably the better of the two:
+            /// a bitmap is one frame's answer, and ours re-segments per seam.
+            case semantic(String)
+        }
+
         public var name: String
-        public var shape: MaskShape
-        /// True when the grade applies OUTSIDE the shape.
+        public var target: Target
+        /// True when the grade applies OUTSIDE the mask.
         public var inverted: Bool
         public var adjustments: [String: Double]
 
-        public init(name: String, shape: MaskShape, inverted: Bool,
+        /// The rebuilt shape, for the parametric masks.
+        public var shape: MaskShape? {
+            if case .shape(let shape) = target { return shape }
+            return nil
+        }
+
+        public init(name: String, target: Target, inverted: Bool,
                     adjustments: [String: Double]) {
             self.name = name
-            self.shape = shape
+            self.target = target
             self.inverted = inverted
             self.adjustments = adjustments
         }
     }
+
+    /// Said in the import report wherever a sky is substituted, because the
+    /// difference is real and the photographer should hear it from us rather
+    /// than notice it later.
+    public static let skySubstitutionNote =
+        "the boundary is this app's own sky segmentation, not Adobe's"
 
     // MARK: - The global map
 
@@ -141,11 +171,12 @@ public struct LightroomImport: Equatable, Sendable {
 
     private static func map(_ correction: LightroomSidecar.Correction,
                             into out: inout LightroomImport) {
-        // Only the masks whose SHAPE we can rebuild. An AI mask's geometry is
-        // a bitmap in Adobe's own encoding, and a correction whose only mask
-        // is one of those has nowhere to land — `unsupported` already says so.
+        // The masks we can land somewhere: the parametric ones, whose shape we
+        // rebuild exactly, and a SKY, which we substitute our own
+        // segmentation for. Everything else — subject, background, object,
+        // brush, range — has no geometry we can reconstruct.
         let usable = correction.masks.filter {
-            $0.isActive && ($0.isRadialGradient || $0.isLinearGradient)
+            $0.isActive && ($0.isRadialGradient || $0.isLinearGradient || isSky($0))
         }
         guard !usable.isEmpty else { return }
 
@@ -165,6 +196,16 @@ public struct LightroomImport: Equatable, Sendable {
         }
 
         for mask in usable {
+            if isSky(mask) {
+                out.masks.append(MaskedGrade(
+                    name: mask.name.isEmpty ? "Sky" : mask.name,
+                    target: .semantic("sky"), inverted: mask.isInverted,
+                    adjustments: values))
+                out.applied.append(
+                    "Mask \u{201C}\(mask.name)\u{201D} (AI sky) → this app\u{2019}s Sky region — "
+                    + skySubstitutionNote)
+                continue
+            }
             guard let shape = shape(from: mask) else { continue }
             // Roundness morphs the ellipse toward a rounded rectangle. At 0 it
             // IS an ellipse, which is the only case a MaskShape can draw.
@@ -174,12 +215,27 @@ public struct LightroomImport: Equatable, Sendable {
             }
             out.masks.append(MaskedGrade(
                 name: mask.name.isEmpty ? correction.name : mask.name,
-                shape: shape,
+                target: .shape(shape),
                 inverted: appliesOutside(mask),
                 adjustments: values))
             out.applied.append(
                 "Mask \u{201C}\(mask.name)\u{201D} (\(mask.kind)) → \(shape.kind.displayName)")
         }
+    }
+
+    /// Whether an AI mask is a SKY — the one semantic region this app also
+    /// knows, and therefore the one that can be substituted rather than
+    /// dropped.
+    ///
+    /// Adobe's `MaskSubType` 2 is the sky in every file seen so far, and
+    /// Lightroom names them "Sky 1", "Sky 2"… The subtype is the stronger
+    /// signal so it decides on its own; the name is a fallback for a file that
+    /// omits it, checked case-insensitively because a photographer may rename
+    /// a mask.
+    public static func isSky(_ mask: LightroomSidecar.Mask) -> Bool {
+        guard mask.isImage else { return false }
+        if mask.attributes["MaskSubType"] == "2" { return true }
+        return mask.name.lowercased().hasPrefix("sky")
     }
 
     // MARK: - Geometry
