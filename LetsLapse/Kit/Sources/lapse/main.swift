@@ -58,6 +58,7 @@ USAGE:
 
   lapse info <video>                            Print duration / fps / frame estimate
 
+  lapse lightroom <file.xmp> [--json]           Read a Lightroom sidecar and report the import
   lapse craft [options]                         Drive the Crafted Text path headless
                             The Text tab's "Add Crafted Text" without the app: a
                             brief (or a model's raw answer) in, the laid-out
@@ -140,6 +141,7 @@ EXAMPLES:
   lapse synth -o test.mov --frames 240 --pattern box
   lapse blend test.mov -o blended.mp4 --ramp 1:40 --curve ease-in-out
   lapse stack shots/*.jpg -o stacked.png
+  lapse lightroom "/path/_WEX3825.xmp"
   lapse craft --brief "A little sand between your toes helps wash away the woes"
   lapse craft --response reply.json --json --expect-lines 2
 """
@@ -426,6 +428,12 @@ do {
                 quality: min(max(quality, 1), 100) / 100)
         }
 
+    case "lightroom":
+        let asJSON = takeFlag(["--json"])
+        guard args.count == 1 else { fail("lightroom needs exactly one .xmp sidecar") }
+        try runLightroomReport(
+            url: URL(fileURLWithPath: args[0]), asJSON: asJSON)
+
     case "craft":
         let brief = takeOption(["--brief"])
         let responsePath = takeOption(["--response"])
@@ -543,4 +551,77 @@ do {
 } catch {
     let description = (error as? LapseError)?.errorDescription ?? error.localizedDescription
     fail(description)
+}
+
+
+// MARK: - Lightroom sidecar
+
+/// Reads a Lightroom `.xmp` and prints what an import would carry, what it
+/// would approximate, and what it would lose.
+///
+/// The point of a subcommand rather than a test: the losses are the whole
+/// question, and they change per FILE. A photographer wants to know what
+/// happens to THIS picture before importing it, and a measurement run wants
+/// the same answer without launching an editor.
+func runLightroomReport(url: URL, asJSON: Bool) throws {
+    let sidecar = try LightroomSidecar.read(contentsOf: url)
+    let map = LightroomImport.map(sidecar)
+
+    if asJSON {
+        var payload: [String: Any] = [
+            "rawFileName": sidecar.rawFileName ?? "",
+            "cameraProfile": sidecar.cameraProfile ?? "",
+            "processVersion": sidecar.processVersion ?? "",
+            "whiteBalance": sidecar.whiteBalance ?? "",
+            "adjustments": map.adjustments,
+            "applied": map.applied,
+            "unsupported": map.unsupported,
+        ]
+        payload["masks"] = map.masks.map { mask in
+            [
+                "name": mask.name,
+                "kind": mask.shape.kind.rawValue,
+                "inverted": mask.inverted,
+                "centerX": mask.shape.center.x, "centerY": mask.shape.center.y,
+                "radiusX": mask.shape.radiusX, "radiusY": mask.shape.radiusY,
+                "rotationDegrees": mask.shape.rotationDegrees,
+                "feather": mask.shape.feather,
+                "adjustments": mask.adjustments,
+            ] as [String: Any]
+        }
+        let data = try JSONSerialization.data(
+            withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+        print(String(data: data, encoding: .utf8) ?? "{}")
+        return
+    }
+
+    print("Lightroom sidecar: \(url.lastPathComponent)")
+    print("  raw file       \(sidecar.rawFileName ?? "—")")
+    print("  camera profile \(sidecar.cameraProfile ?? "—")")
+    print("  process        \(sidecar.processVersion ?? "—")")
+    print("  white balance  \(sidecar.whiteBalance ?? "—")")
+    print("  corrections    \(sidecar.corrections.count)   mask bitmaps \(sidecar.maskTables.count)")
+
+    print("\nCARRIED (\(map.applied.count))")
+    for line in map.applied { print("  ✓ \(line)") }
+
+    if !map.masks.isEmpty {
+        print("\nMASKS REBUILT (\(map.masks.count))")
+        for mask in map.masks {
+            let where_ = mask.inverted ? "outside" : "inside"
+            print(String(
+                format: "  ✓ %@ — %@, centre %.3f/%.3f, r %.3f×%.3f, feather %.0f%%, grade %@",
+                mask.name, mask.shape.kind.displayName,
+                mask.shape.center.x, mask.shape.center.y,
+                mask.shape.radiusX, mask.shape.radiusY,
+                mask.shape.feather * 100, where_))
+            for (field, value) in mask.adjustments.sorted(by: { $0.key < $1.key }) {
+                print(String(format: "      %@ %+.4f", field, value))
+            }
+        }
+    }
+
+    print("\nNOT CARRIED (\(map.unsupported.count))")
+    for line in map.unsupported { print("  ✗ \(line)") }
+    if map.unsupported.isEmpty { print("  (nothing — this file imports whole)") }
 }

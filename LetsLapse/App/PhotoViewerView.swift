@@ -273,6 +273,20 @@ struct PhotoViewerView: View {
     /// and `BoxResizeBase` set for the text layers.
     @State private var armedDragBase: Float?
 
+    // MARK: Lightroom settings
+    //
+    // A raw file that has been through Lightroom carries its edits in an
+    // `.xmp` beside it. Where one exists, the editor offers to read it —
+    // rather than importing silently, because an import is lossy and the
+    // photographer should see what did not come across.
+
+    /// The sidecar beside the frame on screen, if there is one.
+    @State private var lightroomSidecar: URL?
+    /// The report, once read.
+    @State private var lightroomReport: LightroomSettingsImport.Result?
+    @State private var showsLightroomReport = false
+    @State private var lightroomError: String?
+
     private struct OverlayDragState {
         let id: UUID
         /// The committed centre when the drag began — translation is applied
@@ -945,6 +959,7 @@ struct PhotoViewerView: View {
                 }.value
             }
             refreshFrameWindow()
+            refreshLightroomSidecar()
             loaded = true
             let viewedURL = url
             // First, because it sizes the layout: a metadata-only read, well
@@ -970,6 +985,7 @@ struct PhotoViewerView: View {
             applyPerfWiggleHook()
             applyTextHook()
             applyMaskHook()
+            applyLightroomHook()
             #endif
             renderToken += 1
         }
@@ -1053,6 +1069,7 @@ struct PhotoViewerView: View {
             // resolution is now a patch of the wrong frame.
             detailPatch = nil
             loupePatch = nil
+            refreshLightroomSidecar()
         }
         .onChange(of: isPeeping) { _, peeping in
             guard !peeping else { return }
@@ -1089,6 +1106,20 @@ struct PhotoViewerView: View {
                 message: Text(request.confirmationMessage),
                 primaryButton: .destructive(Text(request.confirmationButton)) { apply(request) },
                 secondaryButton: .cancel())
+        }
+        .sheet(isPresented: $showsLightroomReport) {
+            if let lightroomReport {
+                LightroomReportSheet(
+                    report: lightroomReport,
+                    fileName: lightroomSidecar?.lastPathComponent ?? "",
+                    accent: accentColor) { showsLightroomReport = false }
+            }
+        }
+        .alert("Could not read that sidecar", isPresented: Binding(
+            get: { lightroomError != nil }, set: { if !$0 { lightroomError = nil } })) {
+            Button("OK", role: .cancel) { lightroomError = nil }
+        } message: {
+            Text(lightroomError ?? "")
         }
         .alert(item: $presetPendingDelete) { target in
             Alert(
@@ -2058,6 +2089,7 @@ struct PhotoViewerView: View {
     private func editorTab(isWide: Bool) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             stateRow
+            lightroomCard
             presetStrip
 
             // Masks sit between the chips and the whole-picture panel: a
@@ -2272,6 +2304,87 @@ struct PhotoViewerView: View {
         railTab = .editor
     }
     #endif
+
+    #if DEBUG
+    /// `LL_LIGHTROOM=import` runs the import on load, and `=report` also
+    /// leaves the report sheet open.
+    ///
+    /// Same reason as the staging hooks around it: the import is behind a
+    /// button in a card that only exists for a project whose frames came from
+    /// Lightroom, so neither the applied grade nor the report sheet can be
+    /// screenshotted — or checked against a reference render — without a tap.
+    private func applyLightroomHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_LIGHTROOM"],
+              lightroomSidecar != nil else { return }
+        readLightroomSidecar()
+        if hook != "report" { showsLightroomReport = false }
+    }
+    #endif
+
+    /// Offered only when Lightroom actually left a sidecar beside this frame.
+    /// A row that is always there, greyed out, would advertise a feature most
+    /// projects can never use.
+    @ViewBuilder private var lightroomCard: some View {
+        if lightroomSidecar != nil {
+            Button {
+                readLightroomSidecar()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "square.and.arrow.down.on.square")
+                        .font(.system(size: 15))
+                        .foregroundStyle(accentColor)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text("Lightroom settings found")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text(lightroomReport.map(\.summary) ?? "Read the .xmp beside this frame")
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                    Text(lightroomReport == nil ? "Import" : "Review")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(accentColor)
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(LL.cardBackground,
+                            in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    /// Reads the sidecar and applies it, then shows the report. Applying
+    /// first and reporting after is deliberate: the picture changing IS the
+    /// answer to "what did that do", and the sheet explains the difference
+    /// while it is on screen behind it.
+    private func readLightroomSidecar() {
+        guard let url = lightroomSidecar else { return }
+        do {
+            let result = try LightroomSettingsImport.read(url)
+            adjustments = result.adjustments
+            preset = .original
+            // Lightroom's masks are ADDED to whatever the project already has
+            // rather than replacing them — an import must not throw away work
+            // done here.
+            overlayDocument.shapeMasks.append(contentsOf: result.shapeMasks)
+            overlayDocument.maskGrades.append(contentsOf: result.maskGrades)
+            lightroomReport = result
+            refreshState()
+            persist()
+            overlayEdited(commit: true)
+            scheduleUpdate()
+            showsLightroomReport = true
+        } catch {
+            lightroomError = error.localizedDescription
+        }
+    }
+
+    private func refreshLightroomSidecar() {
+        lightroomSidecar = LightroomSettingsImport.sidecarURL(besideFrame: displayedURL)
+    }
 
     /// The Editor tab's Masks card — a mask's grade, as against the Masks
     /// tab's shape.

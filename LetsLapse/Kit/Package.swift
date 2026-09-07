@@ -41,7 +41,13 @@ let package = Package(
         ),
         .testTarget(
             name: "LetsLapseKitTests",
-            dependencies: ["LetsLapseKit"]
+            dependencies: ["LetsLapseKit"],
+            resources: [
+                // A real Lightroom sidecar, with the AI mask's 229 KB payload
+                // trimmed to a stand-in — the parser has to find the table and
+                // key it by digest, not carry a quarter megabyte into the repo.
+                .copy("Fixtures/lightroom-_WEX3825.xmp")
+            ]
         ),
     ]
 )

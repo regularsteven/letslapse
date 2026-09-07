@@ -7023,8 +7023,19 @@ final class AppModel: ObservableObject {
             for (index, frame) in frames.enumerated() {
                 try Task.checkCancellation()
                 let name = Self.uniqueImportName(for: frame.url, taken: &used)
-                try FileManager.default.copyItem(
-                    at: frame.url, to: sourceFolder.appendingPathComponent(name))
+                let destination = sourceFolder.appendingPathComponent(name)
+                try FileManager.default.copyItem(at: frame.url, to: destination)
+                // A raw that has been through Lightroom keeps its edits in an
+                // `.xmp` beside it. It travels with the frame — under the
+                // frame's IMPORTED name, since a collision may have renamed
+                // it — so the editor can offer the import later. Best effort:
+                // a sidecar that will not copy must not fail the import of
+                // the picture it describes.
+                if let sidecar = LightroomSidecar.sidecarURL(forRawFile: frame.url) {
+                    try? FileManager.default.copyItem(
+                        at: sidecar,
+                        to: destination.deletingPathExtension().appendingPathExtension("xmp"))
+                }
                 relativeNames.append("source/\(name)")
                 copiedBytes += Int64(frame.byteCount ?? 0)
                 let done = index + 1

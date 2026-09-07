@@ -11,6 +11,52 @@ live inline.
 
 ## Open
 
+### Lightroom import — measure the gap, then decide what to close
+
+**Raised:** 2026-09-07 · **Size:** the measurement is small; what it implies
+may not be
+
+Reading a Lightroom `.xmp` shipped 2026-09-07: `LightroomSidecar` parses it,
+`LightroomImport` maps it, the editor offers it where a sidecar sits beside a
+frame, and `lapse lightroom <file.xmp>` prints the whole report headless.
+Verified end to end on `_WEX3825.ARW` (Sony A7 IV, Lightroom 17.5) — ten
+settings and a radial mask carried, three things named as lost.
+
+**The blocker on everything below: there is no reference render.** Nothing
+here can be scored until Lightroom exports the same file as a TIFF/JPEG and
+`tools/` compares it to ours. Build that comparison first; it is what decides
+whether any of the rest is worth doing.
+
+**Open, in the order the measurement would rank them:**
+
+- **The `Flipped` / `MaskInverted` composition is INFERRED, not documented.**
+  `LightroomImport.appliesOutside` assumes a radial's grade lands inside when
+  exactly one of the two flags says so. Get it backwards and the grade is on
+  precisely the wrong pixels. One reference render settles it, and it is one
+  line to correct.
+- **No tone curve, anywhere.** This file's own curve is Linear, but the
+  "Adobe Color" profile look carries a real S-curve (22→16, 40→35, 224→230)
+  that is part of what the profile means. Probably the single largest
+  contributor to any residual difference, and a new engine control rather
+  than a mapping.
+- **The AI mask's bitmap is in the sidecar and undecoded.** Adobe writes it as
+  `crs:Table_<MaskDigest>` — 223 KB for this file's Sky mask, in their own
+  encoding. It travels with the frame on import and is parsed into
+  `LightroomSidecar.maskTables`, so a decoder has the payload waiting. The
+  alternative — substituting our own sky segmenter — works today but will not
+  match Adobe's boundary.
+- **The camera profile is available and unused.** `Sony ILCE-7M4 Adobe
+  Standard.dcp` is installed on the bench Mac, and `RawDecodePath.dcpProfile`
+  can read it. An import that names a profile should probably select that
+  decode path rather than leaving the user on Bradford.
+- **Local coverage is 8 fields of Lightroom's ~20.** This file only used two
+  (Clarity, Temperature) and both carried. Dehaze, Texture, Sharpness, Moire,
+  Defringe and the toning pair have no local equivalent.
+- **Design mirror owed.** The "Lightroom settings found" card and the report
+  sheet are new UI in the Editor tab and are not in `docs/design/macOS/`.
+
+---
+
 ### Masks as adjustment layers — iOS design pass, and a device check
 
 **Raised:** 2026-09-07 · **Size:** small–medium (one design decision, then two
@@ -679,6 +725,21 @@ Still open:
   UIDocumentPicker rather than NSOpenPanel, and the Photos-library path's
   `PHAssetResource.originalFilename` lookup needs a real library. Hooks:
   `LL_IMPORT_STILLS=<path>[:<path>…]`, `LL_IMPORT_VIDEO=<path>`.
+  *Partly answered 2026-09-07*: single-file imports of an ARW, a DNG and a JPG
+  ran end to end on the iOS 18.6 simulator through `LL_IMPORT_STILLS` and each
+  registered, rendered its hero and read its EXIF date correctly. The two
+  gestures either side of that code — the UIDocumentPicker itself and the
+  Photos-library path — are still unrun on iOS, and so is a MULTI-frame raw
+  set, which is where the embedded-preview question actually bites.
+- **Dropping photos on the Mac's Create screen is still refused.**
+  `CreateView.handleDroppedURLs` takes a `.lapse` archive or a movie and
+  answers anything else with *"Drop an MP4, MOV, or M4V video, or a LetsLapse
+  project (.lapse)."* — so the one gesture a Mac makes obvious for a folder of
+  frames is the one that doesn't work, while the row beside it imports them
+  happily. `AppModel.expandStillSelection` already resolves files, folders or
+  both, so the fix is to route a drop that resolves to stills into
+  `importStills(from:)` and widen the refusal copy. Wants the drop overlay's
+  own design mirror (macOS Create is otherwise undrawn).
 - **Nothing surfaces the session log.** `capture_log.json` now travels with
   every imported shoot carrying the camera, the lens, the pixel size, the
   measured interval and per-frame ISO/shutter/aperture/EV — and the app reads
