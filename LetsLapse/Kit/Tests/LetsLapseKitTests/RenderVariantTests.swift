@@ -48,6 +48,9 @@ final class RenderVariantTests: XCTestCase {
             "D": "decode=bradford curves=ignore shadows×0.70",
             "D1": "decode=bradford curves=imageAndLook shadows×0.70",
             "E": "decode=bradford curves=imageAndLook shadows×0.70 exposure-0.47EV",
+            "F": "decode=bradford curves=imageAndLook shadows×0.70 exposure-0.47EV dehaze×1.00",
+            "F1": "decode=bradford curves=imageAndLook shadows×0.70 exposure-0.47EV dehaze×0.50",
+            "F2": "decode=bradford curves=imageAndLook shadows×0.70 exposure-0.47EV dehaze×2.00",
         ]
         for (id, summary) in frozen {
             guard let variant = RenderVariantRegistry.variant(id: id) else {

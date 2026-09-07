@@ -765,10 +765,13 @@ func runLightroomRender(
     // in Lightroom's own pipeline, and because it keeps the engine's math out
     // of an experiment's way.
     let curve = curveFor(variant: variant, sidecar: parsed)
+    // Adobe's Dehaze is ±100; ours is ±1, scaled by the variant's own axis.
+    let dehaze = (parsed.double("Dehaze") ?? 0) / 100 * variant.axes.dehazeScale
     let data = try decoder.jpegData(
         from: output, quality: 0.98,
         colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3,
-        toneCurve: curve.isIdentity ? nil : curve.byteTable())
+        toneCurve: curve.isIdentity ? nil : curve.byteTable(),
+        dehaze: dehaze)
     try data.write(to: URL(fileURLWithPath: outPath))
     print("\(variant.id)\t\(raw.lastPathComponent)\t\(frame.texture.width)x\(frame.texture.height)"
         + "\t\(variant.axes.summary)\tcurve=\(curve.isIdentity ? "none" : "\(curve.points.count)pt")")
@@ -814,6 +817,7 @@ func parseAxes(_ text: String, from base: RenderAxes) throws -> RenderAxes {
         case "highlights": axes.highlightsScale = Double(raw) ?? 1
         case "shadows": axes.shadowsScale = Double(raw) ?? 1
         case "exposure": axes.exposureOffset = Double(raw) ?? 0
+        case "dehaze": axes.dehazeScale = Double(raw) ?? 0
         case "curves":
             guard let mode = RenderAxes.ToneCurveHandling(rawValue: raw) else {
                 fail("--axes curves= must be ignore | image | imageAndLook")

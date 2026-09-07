@@ -76,6 +76,14 @@ public struct RenderAxes: Equatable, Sendable, Codable {
     /// this is the axis that lets it be measured rather than argued about.
     public var exposureOffset: Double
 
+    /// How much of a sidecar's Dehaze to honour, 0…1.
+    ///
+    /// A scale rather than a flag so the strength can be calibrated the way
+    /// the tone sliders were — our dehaze and Adobe's are two different
+    /// algorithms reaching for the same effect, and there is no reason to
+    /// assume 45 means the same thing to both.
+    public var dehazeScale: Double
+
     /// Whether a sidecar's own white balance is honoured or left as shot.
     public var honoursWhiteBalance: Bool
 
@@ -85,6 +93,7 @@ public struct RenderAxes: Equatable, Sendable, Codable {
         highlightsScale: Double = 1,
         shadowsScale: Double = 1,
         exposureOffset: Double = 0,
+        dehazeScale: Double = 0,
         honoursWhiteBalance: Bool = true
     ) {
         self.decodePath = decodePath
@@ -92,6 +101,7 @@ public struct RenderAxes: Equatable, Sendable, Codable {
         self.highlightsScale = highlightsScale
         self.shadowsScale = shadowsScale
         self.exposureOffset = exposureOffset
+        self.dehazeScale = dehazeScale
         self.honoursWhiteBalance = honoursWhiteBalance
     }
 
@@ -115,7 +125,7 @@ public struct RenderAxes: Equatable, Sendable, Codable {
     /// cannot be run there. Marking it is what stops somebody selecting a
     /// variant in the editor and getting something the ledger does not
     /// describe — the exact confusion this whole system exists to prevent.
-    public var needsSidecar: Bool { toneCurves != .ignore }
+    public var needsSidecar: Bool { toneCurves != .ignore || dehazeScale != 0 }
 
     /// A one-line spelling of every axis, for the ledger. Stable and
     /// exhaustive on purpose: a row in the ledger has to be readable years
@@ -125,6 +135,7 @@ public struct RenderAxes: Equatable, Sendable, Codable {
         if highlightsScale != 1 { parts.append(String(format: "highlights×%.2f", highlightsScale)) }
         if shadowsScale != 1 { parts.append(String(format: "shadows×%.2f", shadowsScale)) }
         if exposureOffset != 0 { parts.append(String(format: "exposure%+.2fEV", exposureOffset)) }
+        if dehazeScale != 0 { parts.append(String(format: "dehaze×%.2f", dehazeScale)) }
         if !honoursWhiteBalance { parts.append("wb=asShot") }
         return parts.joined(separator: " ")
     }
@@ -234,6 +245,36 @@ public enum RenderVariantRegistry {
                 """,
             axes: RenderAxes(
                 toneCurves: .imageAndLook, shadowsScale: 0.7, exposureOffset: -0.47)),
+
+        RenderVariant(
+            id: "F",
+            title: "E, plus dark-channel dehaze",
+            hypothesis: """
+                The corpus said the residual is per-REGION, not global: on the                 heaviest-dehaze file our chroma is 2.5× under Lightroom's, and                 a global saturation boost recovers only 0.41 of its 10.69.                 Haze is a spatially varying veil, so this is the first                 spatially varying operation to be tried — dark-channel prior,                 honouring the sidecar's own Dehaze at full strength.
+                """,
+            axes: RenderAxes(
+                toneCurves: .imageAndLook, shadowsScale: 0.7,
+                exposureOffset: -0.47, dehazeScale: 1.0)),
+
+        RenderVariant(
+            id: "F1",
+            title: "F at half dehaze strength",
+            hypothesis: """
+                Our dehaze and Adobe's are different algorithms reaching for                 the same effect, so there is no reason 45 means the same to                 both. If F overshoots, the fault is the scale rather than the                 idea, and this is what tells the two apart.
+                """,
+            axes: RenderAxes(
+                toneCurves: .imageAndLook, shadowsScale: 0.7,
+                exposureOffset: -0.47, dehazeScale: 0.5)),
+
+        RenderVariant(
+            id: "F2",
+            title: "F with dehaze at double strength",
+            hypothesis: """
+                A strength sweep on the heavy-dehaze file (2026-09-07) put the                 optimum at ×2.0, not ×1.0: our chroma climbed 5.19 → 11.27                 against Lightroom's 13.31 and ΔE bottomed at 9.12, while ×3.0                 overshot to C* 18.62 and ΔE 13.91. So our dark-channel dehaze                 is roughly HALF the strength of Adobe's at the same nominal                 value — which is the calibration this axis exists to carry.
+                """,
+            axes: RenderAxes(
+                toneCurves: .imageAndLook, shadowsScale: 0.7,
+                exposureOffset: -0.47, dehazeScale: 2.0)),
     ]
 
     public static func variant(id: String) -> RenderVariant? {

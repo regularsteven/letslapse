@@ -7,7 +7,7 @@ Regenerate with:
 ./tools/.venv/bin/python tools/render_bench.py --corpus <dir> --scale 0.5
 ```
 
-Corpus `batch1` · 5 files · render scale 0.5 · commit `ad5f502` · 2026-09-07
+Corpus `batch1` · 5 files · render scale 0.5 · commit `52722c8` · 2026-09-07
 
 Scores are mean CIEDE2000 against Lightroom's own export of the same edit —
 **lower is better**. ~1 is just noticeable, 2–3 visible side by side, >5 obvious.
@@ -20,6 +20,9 @@ the app's compositor, which the CLI cannot reach; see `docs/TODO.md`.
 
 | variant | mean ΔE | median | best file | worst file | what it is |
 |---|---|---|---|---|---|
+| **F2** | 7.46 | 6.39 | _DSC6507 4.48 | _DSC6512 9.61 | F with dehaze at double strength |
+| **F** | 7.61 | 6.78 | _DSC6507 4.49 | _DSC6372 9.86 | E, plus dark-channel dehaze |
+| **F1** | 7.70 | 6.90 | _DSC6507 4.49 | _DSC6372 10.31 | F at half dehaze strength |
 | **E** | 7.78 | 6.99 | _DSC6507 4.49 | _DSC6372 10.69 | D1, plus the systematic exposure offset nulled |
 | **D1** | 9.65 | 9.16 | _DSC6507 5.70 | _DSC6512 12.22 | Calibrated tone response, plus the look curve |
 | **D** | 9.77 | 9.39 | _DSC6507 6.47 | _DSC6512 12.16 | Calibrated tone response |
@@ -31,6 +34,9 @@ the app's compositor, which the CLI cannot reach; see `docs/TODO.md`.
 
 | variant | mean ΔE | vs A |
 |---|---|---|
+| F2 | 7.46 | **-5.30** better |
+| F | 7.61 | **-5.15** better |
+| F1 | 7.70 | **-5.06** better |
 | E | 7.78 | **-4.99** better |
 | D1 | 9.65 | **-3.11** better |
 | D | 9.77 | **-2.99** better |
@@ -40,13 +46,13 @@ the app's compositor, which the CLI cannot reach; see `docs/TODO.md`.
 
 ## Per file
 
-| file | E | D1 | D | A | B | C |
-|---|---|---|---|---|---|---|
-| _DSC6372 | 10.69 | 11.74 | 11.43 | 11.91 | 12.23 | 11.96 |
-| _DSC6498 | 8.85 | 11.01 | 11.00 | 13.17 | 13.21 | 13.59 |
-| _DSC6507 | 4.49 | 5.70 | 6.47 | 9.22 | 8.60 | 9.83 |
-| _DSC6509 | 5.23 | 7.60 | 7.78 | 12.67 | 12.77 | 13.72 |
-| _DSC6512 | 9.61 | 12.22 | 12.16 | 16.83 | 17.07 | 17.32 |
+| file | F2 | F | F1 | E | D1 | D | A | B | C |
+|---|---|---|---|---|---|---|---|---|---|
+| _DSC6372 | 9.13 | 9.86 | 10.31 | 10.69 | 11.74 | 11.43 | 11.91 | 12.23 | 11.96 |
+| _DSC6498 | 8.88 | 8.85 | 8.85 | 8.85 | 11.01 | 11.00 | 13.17 | 13.21 | 13.59 |
+| _DSC6507 | 4.48 | 4.49 | 4.49 | 4.49 | 5.70 | 6.47 | 9.22 | 8.60 | 9.83 |
+| _DSC6509 | 5.23 | 5.23 | 5.23 | 5.23 | 7.60 | 7.78 | 12.67 | 12.77 | 13.72 |
+| _DSC6512 | 9.61 | 9.61 | 9.61 | 9.61 | 12.22 | 12.16 | 16.83 | 17.07 | 17.32 |
 
 ---
 

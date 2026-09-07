@@ -185,6 +185,37 @@ have no equivalent at all. That a global chroma boost recovers only 0.41 of
 its 10.69 is the tell: the deficit is localised, exactly as a haze operation
 would be.
 
-So the next real gains are in operations that vary WITHIN the image — dehaze
-first, since three of five files use it — not in more global scalars. The
-axes in `RenderAxes` today are global by construction, and they are spent.
+So the next real gains are in operations that vary WITHIN the image — not in
+more global scalars.
+
+## Dehaze — the first spatially varying operation (2026-09-07)
+
+Built as a dark-channel prior (`Kit/Sources/LetsLapseKit/Dehaze.swift`) and
+benched before it goes anywhere near the Metal kernel, which is the order this
+system exists to make possible.
+
+It did exactly what the hypothesis said it would, and nothing else:
+
+| file | sidecar Dehaze | E | F (dehaze ×1) | F2 (dehaze ×2) |
+|---|---|---|---|---|
+| `_DSC6372` | **45** | 10.69 | 9.86 | **9.12** |
+| `_DSC6498` | 7 | 8.85 | 8.85 | 8.85 |
+| `_DSC6507` | 4 | 4.49 | 4.49 | 4.49 |
+| `_DSC6509` | 0 | 5.23 | 5.23 | 5.23 |
+| `_DSC6512` | 0 | 9.61 | 9.61 | 9.61 |
+| **corpus** | | 7.78 | 7.61 | **7.46** |
+
+The files that ask for no dehaze are bit-identical, which is the check that
+matters most: an operation that "improves" a picture nobody asked to change is
+a bug, not a win.
+
+**Our dehaze is about half Adobe's strength at the same nominal value.** A
+sweep on the heavy file put the optimum at ×2.0: chroma climbed 5.19 → 11.27
+against Lightroom's 13.31 and ΔE bottomed at 9.12, while ×3.0 overshot to
+C* 18.62 and ΔE 13.91. That is precisely why `dehazeScale` is a scale and not
+a flag — two different algorithms reaching for the same effect have no reason
+to agree on what 45 means.
+
+Corpus mean 12.76 → **7.46**, a 42% reduction. Most of that is the tone work;
+dehaze adds 0.32 across the corpus but **1.57 on the one file that needed it**,
+which is the honest way to read a per-region operation on a five-file corpus.

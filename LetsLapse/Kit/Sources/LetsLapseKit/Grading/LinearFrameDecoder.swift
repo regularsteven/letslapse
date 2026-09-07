@@ -524,12 +524,18 @@ public final class LinearFrameDecoder {
         /// way a point curve sits at the end of Lightroom's pipeline. Only
         /// the render-variant bench passes one today; nil is every other
         /// caller and costs nothing.
-        toneCurve: [UInt8]? = nil
+        toneCurve: [UInt8]? = nil,
+        /// Dehaze amount, −1…1, applied BEFORE the curve — which is the order
+        /// Lightroom's own pipeline uses.
+        dehaze: Double = 0
     ) throws -> Data {
         guard let space = CGColorSpace(name: name) else {
             throw LapseError.gpuSetupFailed("colour space \(name) unavailable")
         }
         var image = try image(from: texture)
+        if abs(dehaze) > 1e-6, let hazed = Dehaze.apply(image, amount: dehaze, context: context) {
+            image = hazed
+        }
         if let toneCurve, toneCurve.count == 256, let curved = ToneCurve.apply(toneCurve, to: image) {
             image = curved
         }
