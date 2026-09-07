@@ -22,10 +22,50 @@ frame, and `lapse lightroom <file.xmp>` prints the whole report headless.
 Verified end to end on `_WEX3825.ARW` (Sony A7 IV, Lightroom 17.5) — ten
 settings and a radial mask carried, three things named as lost.
 
-**The blocker on everything below: there is no reference render.** Nothing
-here can be scored until Lightroom exports the same file as a TIFF/JPEG and
-`tools/` compares it to ours. Build that comparison first; it is what decides
-whether any of the rest is worth doing.
+**MEASURED 2026-09-07** against Lightroom's own full-resolution sRGB export of
+the same file, with `tools/lightroom_compare.py` (mean-luminance offset in
+stops, CIEDE2000 distribution, an eleven-band tone table and a region grid).
+
+The headline: **mean ΔE2000 9.1, median 7.8, and only 2.5% of pixels under
+ΔE 1.** Visually the two are plainly the same photograph and the same edit,
+but ours is flatter and cooler — Lightroom's sky keeps its drama and its
+orange; ours washes out. Exposure is close (+0.14 stops); colour is not.
+
+What the attribution runs showed, in the order they were tried — **none of
+them is the answer**:
+
+| tried | ΔE2000 |
+|---|---|
+| as imported | 9.13 |
+| + Adobe Color's own look curve | 8.89 |
+| decode path `ciraw` | 9.13 (identical — with no WB offset the two paths coincide) |
+| decode path `dcp`, the real *Sony ILCE-7M4 Adobe Standard.dcp* | 9.27 (worse) |
+| best-fit Highlights/Shadows calibration (shadows ×0.7) | 7.83 |
+| + a perfect per-channel white-balance gain | 7.82 |
+
+So the tone curve is worth ~0.25, the camera profile nothing, slider
+calibration ~1.3, and a global colour correction ~0. **The residual is
+structural** — it varies with tone and with position, which is what a
+profile's tone-dependent hue map does and what no global scalar can imitate.
+That is the same conclusion the DCP work reached from the other direction.
+
+Two honest limits on the measurement:
+
+- **It excludes the masks.** `lapse grade` renders the whole-picture grade
+  only, and the radial covers the sky. The clean number is therefore the 57%
+  of pixels OUTSIDE the mask: **mean ΔE 6.5**, and that one no omission can
+  bias. Inside the mask reads 12.6 and is not attributable until an
+  app-rendered export exists.
+- **Getting one is now the first job.** The app applies masked grades in
+  `SceneAwareCompositor`; the CLI cannot. Either give `lapse` the masked
+  stage (it is pure Core Image and has no app dependencies) or add a headless
+  full-resolution export, then re-run the comparison.
+
+What this means for the feature: the importer carries the *intent* faithfully
+and the numbers exactly. It does not, and on this evidence will not without
+new machinery, reproduce Lightroom's render. That is worth saying in the
+product rather than implying otherwise — the report sheet's footnote already
+does.
 
 **Open, in the order the measurement would rank them:**
 
@@ -34,11 +74,9 @@ whether any of the rest is worth doing.
   exactly one of the two flags says so. Get it backwards and the grade is on
   precisely the wrong pixels. One reference render settles it, and it is one
   line to correct.
-- **No tone curve, anywhere.** This file's own curve is Linear, but the
-  "Adobe Color" profile look carries a real S-curve (22→16, 40→35, 224→230)
-  that is part of what the profile means. Probably the single largest
-  contributor to any residual difference, and a new engine control rather
-  than a mapping.
+- **A tone curve is still worth having, but it is not the gap.** Measured at
+  ~0.25 ΔE on this file (see above), so build it because a curve is a control
+  people want, not because it closes the distance to Lightroom.
 - **The AI mask's bitmap is in the sidecar and undecoded.** Adobe writes it as
   `crs:Table_<MaskDigest>` — 223 KB for this file's Sky mask, in their own
   encoding. It travels with the frame on import and is parsed into
