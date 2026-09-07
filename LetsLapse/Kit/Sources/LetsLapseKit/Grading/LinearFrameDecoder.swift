@@ -519,12 +519,20 @@ public final class LinearFrameDecoder {
     /// default; see `cgImage(from:colorSpace:)`).
     public func jpegData(
         from texture: MTLTexture, quality: Double = 0.95,
-        colorSpace name: CFString = CGColorSpace.displayP3
+        colorSpace name: CFString = CGColorSpace.displayP3,
+        /// An optional 256-entry point curve applied AFTER the engine, the
+        /// way a point curve sits at the end of Lightroom's pipeline. Only
+        /// the render-variant bench passes one today; nil is every other
+        /// caller and costs nothing.
+        toneCurve: [UInt8]? = nil
     ) throws -> Data {
         guard let space = CGColorSpace(name: name) else {
             throw LapseError.gpuSetupFailed("colour space \(name) unavailable")
         }
-        let image = try image(from: texture)
+        var image = try image(from: texture)
+        if let toneCurve, toneCurve.count == 256, let curved = ToneCurve.apply(toneCurve, to: image) {
+            image = curved
+        }
         guard let data = context.jpegRepresentation(
             of: image, colorSpace: space,
             options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: quality]) else {

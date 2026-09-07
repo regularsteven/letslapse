@@ -11,6 +11,42 @@ live inline.
 
 ## Open
 
+### Render variants — wire the app to the switch, and get masks into the bench
+
+**Raised:** 2026-09-07 · **Size:** medium
+
+The apparatus shipped 2026-09-07: `RenderVariant` / `RenderAxes` /
+`RenderVariantRegistry` in the Kit, `lapse variants`, `lapse lightroom
+--render --variant`, `tools/render_bench.py`, and a ledger in
+`docs/render-variants/`. The contract — append-only registry, results in git,
+one command to regenerate — is `docs/render-variants/README.md`. First run on
+`batch1` took the baseline from ΔE 12.76 to 7.78.
+
+**Open:**
+
+- **The app does not honour the selected variant.** `RenderVariantRegistry.current`
+  exists and round-trips through `UserDefaults`, but only the CLI reads it.
+  `PhotoGrader` needs to consult it for decode path, exposure trim, slider
+  scales and the tone curve, plus a Settings picker and an `LL_VARIANT` hook —
+  the way `RawDecodePath` already does all four. Until then "test A against E
+  inside one build" is true of the bench and not of the editor, which is the
+  weaker half of what was asked for.
+- **The bench cannot see masked grades.** `lapse` renders the whole-picture
+  grade; the masked stage lives in `SceneAwareCompositor`. Giving the Kit that
+  stage (it is pure Core Image with no app dependencies) would let the bench
+  score a whole render AND would put preview, export and bench on one
+  implementation.
+- **The remaining ~7.8 ΔE is structural.** It varies with tone and position,
+  which is a profile's tone-dependent hue map and is not reachable by any
+  global axis now in `RenderAxes`. The next honest variant is a real profile
+  application (hue/sat map included), not another scalar.
+- **`exposureOffset −0.47 EV` is fitted to five files.** It is the single
+  largest win so far and also the one most likely to be a property of this
+  camera, this ISO range, or this corpus. It wants a second corpus before
+  anything ships depending on it.
+
+---
+
 ### Lightroom import — measure the gap, then decide what to close
 
 **Raised:** 2026-09-07 · **Size:** the measurement is small; what it implies

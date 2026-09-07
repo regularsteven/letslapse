@@ -59,6 +59,9 @@ USAGE:
   lapse info <video>                            Print duration / fps / frame estimate
 
   lapse lightroom <file.xmp> [--json]           Read a Lightroom sidecar and report the import
+  lapse lightroom <file.xmp> --render <out.jpg> [--variant ID] [--scale S]
+                                                Render the sidecar's raw through a variant
+  lapse variants                                List the render variants
   lapse craft [options]                         Drive the Crafted Text path headless
                             The Text tab's "Add Crafted Text" without the app: a
                             brief (or a model's raw answer) in, the laid-out
@@ -430,9 +433,58 @@ do {
 
     case "lightroom":
         let asJSON = takeFlag(["--json"])
+        let renderPath = takeOption(["--render"])
+        let variantID = takeOption(["--variant"])
+        let renderScale = Float(takeOption(["--scale"]) ?? "1") ?? 1
         guard args.count == 1 else { fail("lightroom needs exactly one .xmp sidecar") }
-        try runLightroomReport(
-            url: URL(fileURLWithPath: args[0]), asJSON: asJSON)
+        let variant: RenderVariant
+        if let variantID {
+            guard let found = RenderVariantRegistry.variant(id: variantID) else {
+                fail("unknown --variant \(variantID) — choose from: "
+                    + RenderVariantRegistry.all.map(\.id).joined(separator: ", "))
+            }
+            guard RenderVariantRegistry.isAvailable(found) else {
+                fail("variant \(found.id) is unavailable on this machine "
+                    + "(needs decode path \(found.axes.decodePath.rawValue))")
+            }
+            variant = found
+        } else {
+            variant = RenderVariantRegistry.baseline
+        }
+        if let renderPath {
+            try runLightroomRender(
+                sidecar: URL(fileURLWithPath: args[0]), variant: variant,
+                outPath: renderPath, scale: renderScale)
+        } else {
+            try runLightroomReport(
+                url: URL(fileURLWithPath: args[0]), asJSON: asJSON)
+        }
+
+    case "variants":
+        if takeFlag(["--json"]) {
+            let payload = RenderVariantRegistry.all.map { v -> [String: Any] in
+                [
+                    "id": v.id, "title": v.title, "hypothesis": v.hypothesis,
+                    "axes": v.axes.summary,
+                    "available": RenderVariantRegistry.isAvailable(v),
+                ]
+            }
+            let data = try JSONSerialization.data(
+                withJSONObject: payload, options: [.prettyPrinted, .sortedKeys])
+            print(String(data: data, encoding: .utf8) ?? "[]")
+            break
+        }
+        print("Render variants — one build, several methodologies.")
+        print("The registry is APPEND-ONLY: a measured variant is never redefined.")
+        print("Results: docs/render-variants/ledger.md\n")
+        for v in RenderVariantRegistry.all {
+            let mark = RenderVariantRegistry.isAvailable(v) ? " " : "!"
+            print("\(mark) \(v.id.padding(toLength: 6, withPad: " ", startingAt: 0)) \(v.title)")
+            print("         \(v.axes.summary)")
+            if !RenderVariantRegistry.isAvailable(v) {
+                print("         UNAVAILABLE on this machine")
+            }
+        }
 
     case "craft":
         let brief = takeOption(["--brief"])
@@ -637,4 +689,100 @@ func runLightroomReport(url: URL, asJSON: Bool) throws {
     print("\nNOT CARRIED (\(map.unsupported.count))")
     for line in map.unsupported { print("  ✗ \(line)") }
     if map.unsupported.isEmpty { print("  (nothing — this file imports whole)") }
+}
+
+/// Renders the raw a sidecar describes, through one render variant.
+///
+/// This is the bench's engine room: `tools/render_bench.py` calls it once per
+/// (file × variant) and scores the results against Lightroom's own export.
+/// It deliberately does the WHOLE-PICTURE grade only — the masked stage lives
+/// in the app's compositor and the CLI cannot reach it — which is stated in
+/// the ledger rather than left for somebody to discover.
+func runLightroomRender(
+    sidecar: URL, variant: RenderVariant, outPath: String, scale: Float
+) throws {
+    let parsed = try LightroomSidecar.read(contentsOf: sidecar)
+    let mapped = LightroomImport.map(parsed)
+
+    // The raw beside the sidecar. Named by the file itself where it says so,
+    // since a renamed sidecar should still find its picture.
+    let folder = sidecar.deletingLastPathComponent()
+    let named = parsed.rawFileName.map { folder.appendingPathComponent($0) }
+    let guessed = ["ARW", "arw", "DNG", "dng", "NEF", "nef", "CR3", "cr3"]
+        .map { folder.appendingPathComponent(sidecar.deletingPathExtension().lastPathComponent)
+            .appendingPathExtension($0) }
+    guard let raw = ([named].compactMap { $0 } + guessed)
+        .first(where: { FileManager.default.fileExists(atPath: $0.path) }) else {
+        fail("no raw file found beside \(sidecar.lastPathComponent)")
+    }
+
+    // The whole-picture grade, with the variant's tone-response calibration
+    // applied to the two sliders it scales.
+    var recipe = GradeRecipe()
+    func value(_ key: String) -> Float { Float(mapped.adjustments[key] ?? 0) }
+    recipe.exposure = value("exposure") + Float(variant.axes.exposureOffset)
+    recipe.contrast = value("contrast")
+    recipe.highlights = value("highlights") * Float(variant.axes.highlightsScale)
+    recipe.shadows = value("shadows") * Float(variant.axes.shadowsScale)
+    recipe.whites = value("whites")
+    recipe.blacks = value("blacks")
+    recipe.vibrance = value("vibrance")
+    recipe.saturation = value("saturation")
+    recipe.clarity = value("clarity")
+    recipe.texture = value("texture")
+    recipe.sharpen = value("sharpen")
+    recipe.sharpenMasking = value("sharpenMasking")
+    recipe.noiseReduction = value("noiseReduction")
+    recipe.colorNoiseReduction = value("colorNoiseReduction")
+    recipe.vignette = value("vignetteIntensity")
+    if variant.axes.honoursWhiteBalance, let mired = mapped.adjustments["whiteMired"], mired > 0 {
+        recipe.declaredKelvin = Float(1_000_000 / mired)
+        recipe.declaredTint = Float(mapped.adjustments["whiteTint"] ?? 0)
+    }
+
+    let decoder = try LinearFrameDecoder()
+    let frame = try decoder.decode(
+        url: raw, scale: scale, path: variant.axes.decodePath, recipe: recipe)
+    let engine = try GradeEngine(device: decoder.device)
+    let renderer = engine.makeRenderer(recipe, reference: frame.reference())
+    let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
+
+    // The curves the variant honours, as ONE table applied after the engine.
+    // Late rather than in the kernel because that is where a point curve sits
+    // in Lightroom's own pipeline, and because it keeps the engine's math out
+    // of an experiment's way.
+    let curve = curveFor(variant: variant, sidecar: parsed)
+    let data = try decoder.jpegData(
+        from: output, quality: 0.98,
+        colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3,
+        toneCurve: curve.isIdentity ? nil : curve.byteTable())
+    try data.write(to: URL(fileURLWithPath: outPath))
+    print("\(variant.id)\t\(raw.lastPathComponent)\t\(frame.texture.width)x\(frame.texture.height)"
+        + "\t\(variant.axes.summary)\tcurve=\(curve.isIdentity ? "none" : "\(curve.points.count)pt")")
+    print(outPath)
+}
+
+/// The tone curve a variant honours for this file: the image's own, then the
+/// profile look's, composed into one.
+func curveFor(variant: RenderVariant, sidecar: LightroomSidecar) -> ToneCurve {
+    func toCurve(_ points: [LightroomSidecar.ToneCurvePoint]) -> ToneCurve {
+        ToneCurve(lightroomPoints: points.map { ($0.input, $0.output) })
+    }
+    switch variant.axes.toneCurves {
+    case .ignore:
+        return .identity
+    case .image:
+        return toCurve(sidecar.toneCurve)
+    case .imageAndLook:
+        let image = toCurve(sidecar.toneCurve)
+        let look = toCurve(sidecar.lookToneCurve)
+        if image.isIdentity { return look }
+        if look.isIdentity { return image }
+        // Composed by sampling: the image's curve first, the look's over it,
+        // which is the order Lightroom applies them in.
+        return ToneCurve(points: (0...64).map { step in
+            let x = Double(step) / 64
+            return ToneCurve.Point(input: x, output: look.value(at: image.value(at: x)))
+        })
+    }
 }
