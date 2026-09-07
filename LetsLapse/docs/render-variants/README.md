@@ -72,6 +72,13 @@ Other entry points:
 lapse variants                       # what this build defines, and what it can run
 lapse variants --json                # the same, machine-readable
 lapse lightroom <x.xmp> --render out.jpg --variant D1 --scale 0.5
+
+# Exploration: an UNREGISTERED point in the space, for sweeps. Deliberately
+# cannot be recorded in the ledger under a name — only a registered variant
+# can, which is what keeps an id meaning one thing forever. Promote a winner
+# by adding it to RenderVariantRegistry.all.
+lapse lightroom <x.xmp> --render out.jpg --scale 0.25 \
+      --axes "curves=imageAndLook,shadows=0.7,exposure=-0.47"
 ```
 
 ## What the scores mean
@@ -127,7 +134,41 @@ Three things worth keeping:
   than everything else combined — and nobody would have looked for it without
   the per-file numbers side by side.
 
-The remaining ~7.8 is still far from the 2–3 that would read as matched, and
-the earlier attribution work says it is structural: it varies with tone *and*
-position, which is what a camera profile's tone-dependent hue map does and
-what no global axis can imitate.
+The remaining ~7.8 is still far from the 2–3 that would read as matched.
+
+## What the residual is made of, and what will not fix it
+
+Measured 2026-09-07 on variant E, decomposing ΔE2000 into its three parts:
+
+| | mean |
+|---|---|
+| lightness ΔL* | 6.07 |
+| chroma ΔC* | 6.18 |
+| hue ΔH* | **3.18** |
+
+Three negative results, each worth more than a guess:
+
+- **More slider calibration is worthless.** An 18-point sweep of every tone
+  axis we have — highlights ×{1.0, 0.85, 0.7} × shadows ×{0.7, 0.55, 0.4} ×
+  exposure {−0.47, −0.65} — found a best of ΔE 7.624 against E's 7.705. A
+  gain of 0.08 across the whole space. That seam is mined out; use `--axes`
+  to re-check it if the corpus changes, but do not expect anything.
+- **The chroma error is not a global response.** The single best global chroma
+  scale per file buys 0.32 mean, and the scales it wants are wildly
+  inconsistent — ×0.70 on one file, ×1.35 on another. Whatever is wrong is
+  per-image and, on the evidence below, per-REGION.
+- **Hue is the smallest term.** Which makes HSL controls, and the profile's
+  hue map, a poorer bet than the earlier attribution work assumed. Only one of
+  the five files touches HSL at all.
+
+**The strongest signal in the data is `_DSC6372`.** Our mean chroma is 5.25
+against Lightroom's 13.34 — we are 2.5× under-saturated — and it is the
+worst-scoring file at ΔE 10.69. It is also the file with **Dehaze 45**, by far
+the heaviest in the corpus. Dehaze adds local contrast and saturation, and we
+have no equivalent at all. That a global chroma boost recovers only 0.41 of
+its 10.69 is the tell: the deficit is localised, exactly as a haze operation
+would be.
+
+So the next real gains are in operations that vary WITHIN the image — dehaze
+first, since three of five files use it — not in more global scalars. The
+axes in `RenderAxes` today are global by construction, and they are spent.

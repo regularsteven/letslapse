@@ -436,6 +436,7 @@ do {
         let renderPath = takeOption(["--render"])
         let variantID = takeOption(["--variant"])
         let renderScale = Float(takeOption(["--scale"]) ?? "1") ?? 1
+        let axesOverride = takeOption(["--axes"])
         guard args.count == 1 else { fail("lightroom needs exactly one .xmp sidecar") }
         let variant: RenderVariant
         if let variantID {
@@ -452,8 +453,20 @@ do {
             variant = RenderVariantRegistry.baseline
         }
         if let renderPath {
+            // `--axes` is EXPLORATION: an unregistered point in the space, for
+            // sweeping. It deliberately cannot be recorded in the ledger under
+            // a name — only a variant in the registry can, which is what keeps
+            // a named id meaning one thing forever. Promote a winner by adding
+            // it to `RenderVariantRegistry.all`.
+            var explored = variant
+            if let axesOverride {
+                explored = RenderVariant(
+                    id: "ad-hoc", title: "ad-hoc axes",
+                    hypothesis: "exploration; not a registered variant",
+                    axes: try parseAxes(axesOverride, from: variant.axes))
+            }
             try runLightroomRender(
-                sidecar: URL(fileURLWithPath: args[0]), variant: variant,
+                sidecar: URL(fileURLWithPath: args[0]), variant: explored,
                 outPath: renderPath, scale: renderScale)
         } else {
             try runLightroomReport(
@@ -785,4 +798,36 @@ func curveFor(variant: RenderVariant, sidecar: LightroomSidecar) -> ToneCurve {
             return ToneCurve.Point(input: x, output: look.value(at: image.value(at: x)))
         })
     }
+}
+
+
+/// `--axes "shadows=0.7,exposure=-0.47,highlights=0.85"` — an unregistered
+/// point in the rendering space, for sweeps.
+func parseAxes(_ text: String, from base: RenderAxes) throws -> RenderAxes {
+    var axes = base
+    for clause in text.split(separator: ",") {
+        let parts = clause.split(separator: "=", maxSplits: 1)
+        guard parts.count == 2 else { fail("--axes clause '\(clause)' is not key=value") }
+        let key = parts[0].trimmingCharacters(in: .whitespaces).lowercased()
+        let raw = parts[1].trimmingCharacters(in: .whitespaces)
+        switch key {
+        case "highlights": axes.highlightsScale = Double(raw) ?? 1
+        case "shadows": axes.shadowsScale = Double(raw) ?? 1
+        case "exposure": axes.exposureOffset = Double(raw) ?? 0
+        case "curves":
+            guard let mode = RenderAxes.ToneCurveHandling(rawValue: raw) else {
+                fail("--axes curves= must be ignore | image | imageAndLook")
+            }
+            axes.toneCurves = mode
+        case "decode":
+            guard let path = RawDecodePath(rawValue: raw) else {
+                fail("--axes decode= must be one of: "
+                    + RawDecodePath.allCases.map(\.rawValue).joined(separator: ", "))
+            }
+            axes.decodePath = path
+        case "wb": axes.honoursWhiteBalance = (raw != "asShot")
+        default: fail("--axes: unknown key '\(key)'")
+        }
+    }
+    return axes
 }
