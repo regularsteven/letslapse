@@ -54,6 +54,22 @@ is not written down did not happen.
    the variant.
 4. Add its frozen summary to `testMeasuredVariantsHaveNotBeenRedefined`.
 
+## In the app
+
+Settings ▸ Render variant. The picker offers every variant this build can run
+in full; a variant PINS the decode path, so the "Raw decode path" row below it
+is disabled unless the baseline is selected — one switch cannot quietly
+override another and still leave the ledger meaning anything.
+
+`LL_VARIANT=<id>` stages one for a screenshot or a comparison run, the way
+every other DEBUG hook works. Switching variants invalidates the render caches
+(`PhotoGrade.cacheToken` carries the id), so the picture on screen is always
+the variant that is selected.
+
+The variant is applied in `PhotoGrade.recipe(at:)` — the one place a moment
+becomes an engine recipe — so every path honours it by construction: editor
+preview, thumbnails, blends and exports alike.
+
 ## Running it
 
 ```bash
@@ -100,12 +116,12 @@ to fit would score a misalignment as a colour error.
   outside any mask — but a masked file's score is not the whole story. Closing
   this means giving the Kit the masked stage, which is tracked in
   `docs/TODO.md`.
-- **The app does not yet honour the selected variant.** Today the switch is
-  read by the CLI and the bench. Wiring `PhotoGrader` to
-  `RenderVariantRegistry.current` — plus a Settings picker and an `LL_VARIANT`
-  hook, the way `RawDecodePath` already does it — is the next step, and it is
-  what makes the promise "test A against D in one build, in the app" literally
-  true rather than nearly true.
+- **Curve-honouring variants are BENCH ONLY.** The tone curves come from the
+  sidecar, and the app grades a *project*, which carries no curve — so `B`,
+  `D1` and `E` cannot be run in full in the editor. Settings lists them,
+  disabled, under "Bench only" with the reason rather than hiding them: they
+  are in the ledger and somebody will come looking. Giving `PhotoGrade` a
+  curve of its own would close it (`docs/TODO.md`).
 
 ## What the first run found
 

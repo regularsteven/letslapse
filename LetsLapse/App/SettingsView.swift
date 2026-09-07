@@ -55,6 +55,8 @@ struct SettingsView: View {
     @AppStorage(CreateCameraSetting.key) private var opensCameraOnCreate = CreateCameraSetting.defaultValue
     @AppStorage(RawDecodeSettings.storageKey)
     private var rawDecodePath = RawDecodePath.bradfordAdaptation.rawValue
+    @AppStorage(RenderVariantRegistry.defaultsKey)
+    private var renderVariant = RenderVariantRegistry.baselineID
     @State private var storage: AppModel.LibraryStorage?
     /// Room left on the volume the library lives on — the number that decides
     /// whether the next shoot fits, which the library's own total never could.
@@ -76,6 +78,16 @@ struct SettingsView: View {
     /// can't observe on its own, so the location rows re-read it.
     @State private var locationRefresh = 0
     #endif
+
+    /// The variant row's subtitle. It names the axes rather than repeating
+    /// the title, because the axes are what a reader needs to reconcile a
+    /// picture against `docs/render-variants/ledger.md`.
+    private var renderVariantSubtitle: String {
+        let variant = RenderVariantRegistry.current
+        return variant.id == RenderVariantRegistry.baselineID
+            ? "Rendering methodology. A is the shipping renderer; the others are field tests scored in docs/render-variants/ledger.md"
+            : "\(variant.axes.summary) — a field test, not the shipping renderer"
+    }
 
     var body: some View {
         ScrollView {
@@ -1020,9 +1032,50 @@ struct SettingsView: View {
             // live on a Mac that has them and greyed everywhere else. It is
             // also the only path that changes an untouched render — the other
             // three differ solely in how they realise a temperature move.
+            // Render variants — several rendering methodologies in one build.
+            // Above the decode-path row on purpose: a variant PINS the decode
+            // path, so the row below it is a subset of this one and reads as
+            // a contradiction if it comes first.
+            LLRow(
+                title: "Render variant",
+                subtitle: renderVariantSubtitle
+            ) {
+                Menu {
+                    ForEach(RenderVariantRegistry.appSelectable, id: \.id) { variant in
+                        Button {
+                            RenderVariantRegistry.current = variant
+                            renderVariant = variant.id
+                        } label: {
+                            if variant.id == renderVariant {
+                                Label("\(variant.id) · \(variant.title)", systemImage: "checkmark")
+                            } else {
+                                Text("\(variant.id) · \(variant.title)")
+                            }
+                        }
+                    }
+                    // Bench-only variants are LISTED and disabled rather than
+                    // hidden: they are in the ledger, somebody will look for
+                    // them here, and the reason is more useful than a gap.
+                    let benchOnly = RenderVariantRegistry.available
+                        .filter { $0.axes.needsSidecar }
+                    if !benchOnly.isEmpty {
+                        Divider()
+                        Section("Bench only — needs a Lightroom sidecar") {
+                            ForEach(benchOnly, id: \.id) { variant in
+                                Button("\(variant.id) · \(variant.title)") {}.disabled(true)
+                            }
+                        }
+                    }
+                } label: {
+                    menuValueLabel(RenderVariantRegistry.current.id)
+                }
+                .menuStyle(.borderlessButton)
+                .fixedSize()
+            }
+
             LLRow(
                 title: "Raw decode path",
-                subtitle: "Field test: how a DNG is rendered before grading. Changing this re-renders every preview"
+                subtitle: "Field test: how a DNG is rendered before grading. Changing this re-renders every preview. The render variant above pins this — it only applies on variant \(RenderVariantRegistry.baselineID)"
             ) {
                 Menu {
                     ForEach(RawDecodeSettings.allPaths, id: \.rawValue) { path in
@@ -1039,10 +1092,11 @@ struct SettingsView: View {
                         .disabled(!RawDecodePathRegistry.isAvailable(path))
                     }
                 } label: {
-                    menuValueLabel(RawDecodePath.current.displayName)
+                    menuValueLabel(RenderVariantRegistry.current.axes.decodePath.displayName)
                 }
                 .menuStyle(.borderlessButton)
                 .fixedSize()
+                .disabled(RenderVariantRegistry.current.id != RenderVariantRegistry.baselineID)
             }
 
             NavigationLink(value: SettingsDestination.performance) {

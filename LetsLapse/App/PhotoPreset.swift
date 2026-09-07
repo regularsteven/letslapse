@@ -625,7 +625,7 @@ enum PhotoGrader {
     private static func detailFrame(
         url: URL, decoder: LinearFrameDecoder, recipe: GradeRecipe
     ) throws -> LinearFrameDecoder.Frame {
-        let path = RawDecodePath.current
+        let path = RenderVariantRegistry.current.axes.decodePath
         let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?
             .contentModificationDate?.timeIntervalSince1970 ?? 0
         let key = "\(url.path)|\(modified)|\(decodeToken(path: path, recipe: recipe))"
@@ -643,7 +643,7 @@ enum PhotoGrader {
     private static func decodedFrame(
         url: URL, scale: Float, decoder: LinearFrameDecoder, recipe: GradeRecipe
     ) throws -> LinearFrameDecoder.Frame {
-        let path = RawDecodePath.current
+        let path = RenderVariantRegistry.current.axes.decodePath
         // Full-resolution decodes are one-shot exports; caching one would
         // evict every preview for no gain.
         guard scale < 1 else {
@@ -981,7 +981,7 @@ enum PhotoGrader {
         // a keyframed temperature ramp would be silently flattened to whatever
         // the base recipe said. Losing the ramp is worse than losing the
         // comparison, and the single-frame editor still exercises the path.
-        var path = RawDecodePath.current
+        var path = RenderVariantRegistry.current.axes.decodePath
         // A declared anchor is exempt: it is resolved per source frame in the
         // decode below, so it survives this path rather than being flattened by
         // it — the very thing the demotion exists to prevent.

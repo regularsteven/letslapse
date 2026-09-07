@@ -95,6 +95,28 @@ public struct RenderAxes: Equatable, Sendable, Codable {
         self.honoursWhiteBalance = honoursWhiteBalance
     }
 
+    /// The recipe these axes produce from the one a grade asks for.
+    ///
+    /// The single place the axes touch a render, so every path — editor
+    /// preview, export, blend, the CLI — honours a variant by construction
+    /// rather than by remembering to.
+    public func applied(to recipe: GradeRecipe) -> GradeRecipe {
+        var out = recipe
+        out.exposure = min(max(recipe.exposure + Float(exposureOffset), -5), 5)
+        out.highlights = min(max(recipe.highlights * Float(highlightsScale), -1), 1)
+        out.shadows = min(max(recipe.shadows * Float(shadowsScale), -1), 1)
+        return out
+    }
+
+    /// True when these axes need a Lightroom sidecar to mean anything.
+    ///
+    /// The tone curves come from the FILE, not from the renderer: the app
+    /// grades a project, which carries no curve, so a curve-honouring variant
+    /// cannot be run there. Marking it is what stops somebody selecting a
+    /// variant in the editor and getting something the ledger does not
+    /// describe — the exact confusion this whole system exists to prevent.
+    public var needsSidecar: Bool { toneCurves != .ignore }
+
     /// A one-line spelling of every axis, for the ledger. Stable and
     /// exhaustive on purpose: a row in the ledger has to be readable years
     /// later without the code beside it.
@@ -231,6 +253,13 @@ public enum RenderVariantRegistry {
 
     public static var available: [RenderVariant] { all.filter(isAvailable) }
 
+    /// The variants the APP can run in full. A curve-honouring variant needs a
+    /// sidecar the app does not have, so it is bench-only until a project can
+    /// carry a tone curve of its own (`docs/TODO.md`).
+    public static var appSelectable: [RenderVariant] {
+        available.filter { !$0.axes.needsSidecar }
+    }
+
     // MARK: - Selection
 
     /// `UserDefaults` key backing `current`.
@@ -246,6 +275,12 @@ public enum RenderVariantRegistry {
     /// leave somebody with an editor that cannot draw.
     public static var current: RenderVariant {
         get {
+            #if DEBUG
+            if let hook = ProcessInfo.processInfo.environment["LL_VARIANT"],
+               let staged = variant(id: hook), isAvailable(staged) {
+                return staged
+            }
+            #endif
             guard let id = UserDefaults.standard.string(forKey: defaultsKey),
                   let variant = variant(id: id), isAvailable(variant) else {
                 return baseline

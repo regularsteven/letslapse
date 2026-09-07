@@ -516,7 +516,15 @@ struct PhotoGrade: Equatable, Sendable {
     }
 
     /// The engine recipe at one moment: the preset's base recipe with that
-    /// moment's manual adjustments layered on top.
+    /// moment's manual adjustments layered on top, and the selected RENDER
+    /// VARIANT's axes applied over that.
+    ///
+    /// The variant goes on here, at the one place a moment becomes a recipe,
+    /// for the same reason the declared white does: every render path —
+    /// editor preview, thumbnail, blend, export — comes through this
+    /// function, so a variant is honoured by construction rather than by six
+    /// call sites remembering to. `cacheToken` carries the variant id so a
+    /// switch invalidates the render caches rather than showing stale pixels.
     func recipe(at position: Double) -> GradeRecipe {
         var recipe = adjustments(at: position).recipe(over: preset.recipe)
         // Resolved here, at the one place a moment becomes a recipe, so every
@@ -529,7 +537,7 @@ struct PhotoGrade: Equatable, Sendable {
             recipe.declaredKelvin = declared.kelvin
             recipe.declaredTint = declared.tint
         }
-        return recipe
+        return RenderVariantRegistry.current.axes.applied(to: recipe)
     }
 
     /// The white one moment of the source is declared at — owned, or the
@@ -549,8 +557,12 @@ struct PhotoGrade: Equatable, Sendable {
     /// Prefixed with the engine version so caches self-invalidate when the
     /// engine's math changes.
     var cacheToken: String {
-        "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)"
+        // The variant is part of the identity of the pixels: switching from A
+        // to E must re-render, not hand back what A left in the cache.
+        let variant = RenderVariantRegistry.current
+        return "e\(GradeRecipe.engineVersion)|\(preset.rawValue)|\(adjustments.cacheToken)"
             + (timeline.isEmpty ? "" : "|kf\(timeline.cacheToken)")
             + whiteBalance.cacheToken
+            + (variant.id == RenderVariantRegistry.baselineID ? "" : "|v\(variant.id)")
     }
 }
