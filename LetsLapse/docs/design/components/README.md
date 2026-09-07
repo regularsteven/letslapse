@@ -43,10 +43,10 @@ The capture screen's record/stop button with its four framing slots, drawn once 
 |---|---|---|---|---|
 | 1 | top-left | Grid | `grid.circle` / `.fill` | amber glyph |
 | 2 | top-right | 2 s delay | `timer` | amber glyph; "2s" badge on the disc |
-| 3 | bottom-left | AE/AF lock | `lock.open` / `lock.fill` | black padlock on an amber disc |
+| 3 | bottom-left | AE/AF lock (Interval, Video) · Manual exposure "M" (Photo) | `lock.open` / `lock.fill` · `m.circle` / `.fill` | black padlock on an amber disc · black M on an amber disc |
 | 4 | bottom-right | Capture when steady | `hand.raised` / `.fill` | amber glyph; hand badge on the disc |
 
-The padlock is the lock's glyph in **every** mode. Under Interval's Dynamic and Ladder modes the button locks focus only (the ramp owns exposure) but no longer changes its glyph to say so — decision 2026-09-04; the earlier mirrors drew `camera.metering.center.weighted` there.
+The padlock is the lock's glyph in every mode **except Photo**. Under Interval's Dynamic and Ladder modes the button locks focus only (the ramp owns exposure) but no longer changes its glyph to say so — decision 2026-09-04; the earlier mirrors drew `camera.metering.center.weighted` there. **Photo mode replaces the padlock with M outright** (2026-09-07, `iOS camera photo mode exploration` handoff): there is no AE/AF lock left to reach in Photo — tapping M seeds both manual-exposure wheels from whatever AE currently reads, which already reproduces the padlock's entire value (freeze the current exposure) before any dial is touched, and tap-to-focus is unaffected. `camera.supportsManualExposure` (`device.isExposureModeSupported(.custom)`, checked live per camera) gates this: on a device/lens without custom exposure — every Mac camera so far, since macOS has no `.custom` exposure mode in this app's model at all — slot 3 falls back to the ordinary padlock even in Photo mode.
 
 **Where the ring sits.** Pinned to the phone: 94 pt in from the home-indicator edge, on the screen's centreline, in every orientation.
 
@@ -65,6 +65,9 @@ The padlock is the lock's glyph in **every** mode. Under Interval's Dynamic and 
 | `idle` | red disc, four toggles off | every idle capture mirror |
 | `armed` | every toggle on plus both badges — the ON reference | no screen directly |
 | `locked` | AE/AF held, the others off | `capture-exposure-locked` |
+| `photo-idle` | Photo mode only: slot 3 is M off (graphite), no AE/AF lock drawn | `capture-photo.portrait`, `capture-photo.burst.portrait`, `capture-photo.landscape` |
+| `photo-manual` | Photo mode only: slot 3 is M on — black M on an amber disc, same on-treatment as the lock | `capture-photo.manual.portrait`, `capture-photo.manual.landscape` |
+| `photo-grid` | Photo mode only, added 2026-09-07: slot 1 is `grid.circle.fill` amber (the grid cycle on Grid or Grid+Level — both read as "on" here, per `GridOverlayState`), slot 3 stays M off — Grid/Level and manual exposure are independent, and this state exists so a grid/level screenshot doesn't also show M engaged | `capture-photo.grid-level.portrait`, `capture-photo.grid-level.landscape` |
 | `running` | stop square; slot 1 Dim (engaged), slot 2 Info (off); bottom pair empty | Interval runs, Photo bursts |
 | `running.info` | as `running` with Info on | `capture-interval.running.info` |
 | `running.mac` | landscape only: stop square, Info in slot 2, no Dim (iOS-only) | the macOS running mirror |
@@ -74,7 +77,9 @@ The padlock is the lock's glyph in **every** mode. Under Interval's Dynamic and 
 
 Once a shoot starts the four framing toggles hide in every mode (decision 2026-09-04); the slots stay reserved, so the footprint never changes. Code mirrored the same day: `clusterSlot` in `App/CaptureView.swift` keys on `isCapturing`, not only a movie recording. The run-time Dim / Info toggles (third pass) were mirrored the same day: `dimToggleCircle` / `runInfoToggleCircle`, `seedRunToggles`, the run readout (`runExposureLine`, `runInfoPanel`, `runReadoutCapsule`) in `App/CaptureView.swift`; hooks `LL_RUNINFO=1` and `LL_RUNDIM=off|wake` stage them.
 
-**Mirrors.** `App/CaptureView.swift`: `shutterClusterLayer` (the pin, over both layouts' chrome) → `shutterClusterPin` (94 pt from the home-indicator edge, via the scene's interface orientation) → `shutterCluster` → `clusterSlot` (what each slot holds per state) → `shutterButton`, `shutterBadge`, `gridToggleCircle`, `shutterDelayCircle`, `exposureLockCircle`, `steadyToggleCircle`, `liveMomentTrigger`, `rampIntervalCountBadge`, `scannerManualCaptureButton`; `landscapeClusterReadout` hangs under the landscape cluster. Verified 2026-09-04 on the iPhone 16 Pro simulator (portrait, both landscapes) and the Mac.
+**Mirrors.** `App/CaptureView.swift`: `shutterClusterLayer` (the pin, over both layouts' chrome) → `shutterClusterPin` (94 pt from the home-indicator edge, via the scene's interface orientation) → `shutterCluster` → `clusterSlot` (what each slot holds per state) → `shutterButton`, `shutterBadge`, `gridToggleCircle`, `shutterDelayCircle`, `exposureLockCircle`, `manualExposureCircle` (slot 3, Photo mode only), `steadyToggleCircle`, `liveMomentTrigger`, `rampIntervalCountBadge`, `scannerManualCaptureButton`; `landscapeClusterReadout` hangs under the landscape cluster and, in Photo manual exposure, carries `PhotoExposureWheels` (`App/CaptureDials.swift`) instead of a plain text readout — the one case where that overlay needs real drag room rather than the cluster's own narrow box, so `landscapeClusterReadoutWidth` widens it to 240 pt. Verified 2026-09-04 on the iPhone 16 Pro simulator (portrait, both landscapes) and the Mac; the Photo-only M states verified 2026-09-07 (iOS Simulator build).
+
+**Landscape M states + `photo-grid`, added 2026-09-07 (design-sync pass, Grid+Level).** `shutter-cluster.photo-idle.landscape.svg`, `shutter-cluster.photo-manual.landscape.svg` (both landscape twins of the portrait M states above, same glyphs at the landscape slot offsets) and `shutter-cluster.photo-grid.{portrait,landscape}.svg` (the new state, for the Grid+Level screens). These four are design-only: built by reading `shutterClusterLayer`/`landscapeChromeRail`/`landscapeModeRail`/`photoControlsRow`/`gridToggleCircle` directly and rendered with Quick Look for a static-correctness check, not verified against a running simulator or device build — landscape sign-off is still owed, same as the screens that reference them (see iOS/INDEX.md).
 
 ## Blended clip row — `blended-clip-row.<state>.<width>.svg`
 

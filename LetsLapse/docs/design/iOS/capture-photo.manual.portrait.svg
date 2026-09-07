@@ -1,0 +1,188 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Capture — Photo (manual exposure open, JPEG) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (photoControlsRow · exposurePanel, Photo branch) + App/CaptureDials.swift (PhotoBlendDial · PhotoExposureWheels). Photo mode with manual exposure engaged from cluster slot 3 (M, amber). The panel — amber monospaced readout, ±3 EV offset meter, SHUTTER and ISO film-scroll wheels — sits between the mode row and the shutter row exactly where the locked-exposure panel does, pushing BLEND and the mode row up by its height (122 pt + 13 pt gap); the shutter row stays put. Wheels are third-stop detents, 1/8000–1.0s and ISO 32–6400, full stops labelled, selected detent amber under the fixed centre indicator; each wheel's left end is an A detent that hands that parameter back to AE — while it's on, CameraController runs a light live servo (gain-limited like the Holy Grail ramp engine) so that side keeps tracking the scene rather than freezing at whatever it was when A was reached. Shown at the AE values the wheels open on (ISO 200 · 1/60, offset 0). Simple capture is unchanged: the shutter fires with whatever the wheels say. There is no AE/AF lock in Photo mode any more — M's own seed-on-entry already freezes the current exposure, and tap-to-focus is separate.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
+    <clipPath id="shutter-wheel-clip"><rect x="80" y="611" width="297" height="44" rx="10"/></clipPath>
+    <clipPath id="iso-wheel-clip"><rect x="80" y="663" width="297" height="44" rx="10"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#232B3B"/><stop offset="0.62" stop-color="#3A3628"/><stop offset="1" stop-color="#4A3A22"/>
+    </linearGradient>
+    <linearGradient id="fadeL" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2B2B2E"/><stop offset="1" stop-color="#2B2B2E" stop-opacity="0"/></linearGradient>
+    <linearGradient id="fadeR" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2B2B2E" stop-opacity="0"/><stop offset="1" stop-color="#2B2B2E"/></linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-family:ui-monospace,'SF Mono',Menlo,monospace}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <g id="viewfinder">
+        <rect x="0" y="89" width="393" height="699" fill="url(#sky)"/>
+        <circle cx="132" cy="360" r="30" fill="#FFB340" opacity="0.9"/>
+        <circle cx="132" cy="360" r="52" fill="#FFB340" opacity="0.15"/>
+        <polygon points="0,552 70,500 150,544 235,472 310,534 393,490 393,788 0,788" fill="#141A24"/>
+        <polygon points="0,638 85,594 185,646 268,608 393,640 393,788 0,788" fill="#0B0E14"/>
+        <rect x="0" y="700" width="393" height="88" fill="#080A0E"/>
+      </g>
+
+      <g id="top-bar">
+        <g id="close" data-symbol="xmark">
+          <circle cx="35" cy="88" r="19" fill="#2B2B2E" opacity="0.9"/>
+          <path d="M29.5 82.5 L40.5 93.5 M40.5 82.5 L29.5 93.5" stroke="#FFF" stroke-width="2.2" stroke-linecap="round"/>
+        </g>
+        <g id="format-pill">
+          <rect x="217" y="70" width="160" height="35" rx="17.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="231" y="92" font-size="13" class="sb" fill="#FFF">1920×1080</text>
+          <text x="306" y="92" font-size="13" class="sb" fill="#FFF">· JPEG</text>
+          <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+        </g>
+        <g id="headroom-chip">
+          <rect x="62" y="72" width="147" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
+          <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
+            <rect x="73" y="82.5" width="12" height="10" rx="2.5"/>
+            <path d="M75.5 89.5 h7 M75.5 91.5 h7" stroke-linecap="round"/>
+          </g>
+          <text x="90" y="92.0" font-size="12.5" class="sb" fill="#FFF">≈62.5k</text>
+          <text x="140" y="92.0" font-size="12.5" fill="#FFF" opacity="0.45">· 32.4 GB</text>
+        </g>
+      </g>
+
+      <g id="photo-controls">
+          <text x="147" y="520" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
+          <rect x="193" y="502" width="53" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
+          <text x="205" y="520" font-size="12.5" class="sb" fill="#FFF">10</text>
+          <path d="M226 513 l4 4.5 l4 -4.5" stroke="#FFF" stroke-opacity="0.4" stroke-width="1.8" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
+      </g>
+
+      <g id="mode-row" font-size="13" class="sb">
+        <text x="44" y="562" fill="#FFB340" letter-spacing="0.3">PHOTO</text>
+        <text x="105" y="562" fill="#FFF" opacity="0.5" letter-spacing="0.3">INTERVAL</text>
+        <text x="185" y="562" fill="#FFF" opacity="0.5" letter-spacing="0.3">VIDEO</text>
+        <g id="zoom-chips" data-symbol="lens buttons">
+          <circle cx="256" cy="557" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="256" y="561" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">.5×</text>
+          <circle cx="294" cy="557" r="15" fill="none" stroke="#FFB340" stroke-opacity="0.8"/>
+          <text x="294" y="561" font-size="12" class="sb" fill="#FFB340" text-anchor="middle">1×</text>
+          <circle cx="332" cy="557" r="15" fill="none" stroke="#FFF" stroke-opacity="0.25"/>
+          <text x="332" y="561" font-size="12" class="sb" fill="#FFF" opacity="0.6" text-anchor="middle">3×</text>
+        </g>
+      </g>
+
+      <!-- PhotoExposureWheels: readout + EV meter + SHUTTER/ISO DetentWheels.
+           Panel geometry from the handoff spec (VStack spacing 10: readout 16,
+           SHUTTER 44, gap 8, ISO 44 = 122pt total). -->
+      <g id="manual-exposure-panel">
+        <text x="16" y="597" font-size="12" class="m" fill="#FFB340">ISO 200 · 1/60</text>
+
+        <g id="ev-meter">
+          <rect x="285" y="591" width="92" height="1" fill="#FFF" opacity="0.3"/>
+          <rect x="286" y="589" width="1" height="5" fill="#FFF" opacity="0.45"/>
+          <rect x="301" y="589" width="1" height="5" fill="#FFF" opacity="0.45"/>
+          <rect x="316" y="589" width="1" height="5" fill="#FFF" opacity="0.45"/>
+          <rect x="331" y="587" width="1" height="9" fill="#FFF" opacity="0.45"/>
+          <rect x="346" y="589" width="1" height="5" fill="#FFF" opacity="0.45"/>
+          <rect x="361" y="589" width="1" height="5" fill="#FFF" opacity="0.45"/>
+          <rect x="376" y="589" width="1" height="5" fill="#FFF" opacity="0.45"/>
+          <rect x="330" y="585" width="2" height="14" fill="#FFB340"/>
+        </g>
+
+        <text x="16" y="636" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">SHUTTER</text>
+        <g id="shutter-wheel">
+          <rect x="80" y="611" width="297" height="44" rx="10" fill="#2B2B2E" opacity="0.9"/>
+          <g clip-path="url(#shutter-wheel-clip)">
+            <rect x="73.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="87.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="101.75" y="617" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="102.50" y="645" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1/500</text>
+            <rect x="115.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="129.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="143.75" y="617" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="144.50" y="645" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1/250</text>
+            <rect x="157.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="171.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="185.75" y="617" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="186.50" y="645" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1/125</text>
+            <rect x="199.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="213.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="227.75" y="617" width="1.5" height="14" fill="#FFB340" opacity="1"/>
+            <text x="228.50" y="645" font-size="9.5" class="m sb" fill="#FFB340" opacity="1" text-anchor="middle">1/60</text>
+            <rect x="241.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="255.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="269.75" y="617" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="270.50" y="645" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1/30</text>
+            <rect x="283.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="297.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="311.75" y="617" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="312.50" y="645" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1/15</text>
+            <rect x="325.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="339.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="353.75" y="617" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="354.50" y="645" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1/8</text>
+            <rect x="367.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="381.75" y="617" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+          </g>
+          <rect x="80" y="611" width="53" height="44" rx="10" fill="url(#fadeL)"/><rect x="324" y="611" width="53" height="44" rx="10" fill="url(#fadeR)"/>
+          <rect x="227.5" y="613" width="2" height="20" rx="1" fill="#FFB340"/>
+        </g>
+
+        <text x="16" y="688" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">ISO</text>
+        <g id="iso-wheel">
+          <rect x="80" y="663" width="297" height="44" rx="10" fill="#2B2B2E" opacity="0.9"/>
+          <g clip-path="url(#iso-wheel-clip)">
+            <rect x="101.75" y="669" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="102.50" y="697" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">A</text>
+            <rect x="115.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="129.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="143.75" y="669" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="144.50" y="697" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">50</text>
+            <rect x="157.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="171.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="185.75" y="669" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="186.50" y="697" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">100</text>
+            <rect x="199.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="213.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="227.75" y="669" width="1.5" height="14" fill="#FFB340" opacity="1"/>
+            <text x="228.50" y="697" font-size="9.5" class="m sb" fill="#FFB340" opacity="1" text-anchor="middle">200</text>
+            <rect x="241.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="255.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="269.75" y="669" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="270.50" y="697" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">400</text>
+            <rect x="283.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="297.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="311.75" y="669" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="312.50" y="697" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">800</text>
+            <rect x="325.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="339.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="353.75" y="669" width="1.5" height="14" fill="#FFF" opacity="0.85"/>
+            <text x="354.50" y="697" font-size="9.5" class="m sb" fill="#FFF" opacity="0.85" text-anchor="middle">1600</text>
+            <rect x="367.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+            <rect x="381.75" y="669" width="1.5" height="8" fill="#FFF" opacity="0.4"/>
+          </g>
+          <rect x="80" y="663" width="53" height="44" rx="10" fill="url(#fadeL)"/><rect x="324" y="663" width="53" height="44" rx="10" fill="url(#fadeR)"/>
+          <rect x="227.5" y="665" width="2" height="20" rx="1" fill="#FFB340"/>
+        </g>
+      </g>
+
+      <g id="shutter-row">
+        <g id="recent-tile">
+          <g clip-path="url(#tile)">
+            <rect x="16" y="728" width="60" height="60" fill="#3A3123"/>
+            <polygon points="16,772 40,750 62,768 76,758 76,788 16,788" fill="#241E15"/>
+          </g>
+          <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
+        </g>
+        <!-- Shutter cluster: shared component. Edit ../components/shutter-cluster.photo-manual.portrait.svg, not this file. -->
+        <image id="shutter-cluster" href="../components/shutter-cluster.photo-manual.portrait.svg" x="106.5" y="708" width="180" height="100"/>
+      </g>
+
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000" stroke="#2A2A2E" stroke-width="1"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#FFF" opacity="0.4"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Photo (manual exposure) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — photoControlsRow · exposurePanel (photo) · cluster slot 3 = M</text>
+</svg>

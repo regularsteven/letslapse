@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 -50 180 100" width="180" height="100" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · Photo manual (M on) · portrait</title>
+  <desc>Photo mode with manual exposure engaged (slot 3 tapped): a black M on an amber disc, the same on-treatment the AE/AF lock uses. Used by capture-photo.manual.</desc>
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+
+  <g id="shutter-cluster" data-state="photo-manual" data-orientation="portrait">
+    <g id="shutter" data-symbol="record button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><circle r="30" fill="#FF3B30"/></g>
+    <g id="grid-toggle" data-symbol="grid.circle" transform="translate(-66,-26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle r="10" fill="none" stroke="#FFF" stroke-width="1.6"/><path d="M-6.5 -3.3 h13 M-6.5 3.3 h13 M-3.3 -6.5 v13 M3.3 -6.5 v13" stroke="#FFF" stroke-width="1.2"/></g>
+    <g id="delay-toggle" data-symbol="timer" transform="translate(66,-26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle cy="1" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/><path d="M0 1 v-6 M-3 -9 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/></g>
+    <g id="manual-toggle" data-symbol="m.circle.fill" transform="translate(-66,26)"><circle cx="0" cy="0" r="22" fill="#FFB340"/><text x="0" y="0.5" text-anchor="middle" dominant-baseline="central" font-size="15" class="b" fill="#000">M</text></g>
+    <g id="steady-toggle" data-symbol="hand.raised" transform="translate(66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><path d="M-5 5 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g>
+  </g>
+</svg>

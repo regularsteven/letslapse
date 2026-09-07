@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="-90 -50 180 100" width="180" height="100" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Shutter cluster · Photo, Grid/Level on · portrait</title>
+  <desc>Mirrors App/CaptureView.swift gridToggleCircle · shutterDelayCircle · manualExposureCircle · steadyToggleCircle. Photo mode with the grid cycle on Grid or Grid+Level (GridOverlayState.grid/.level both read as "on" here — the button's own tint is binary, per gridToggleCircle's doc comment; the three-way state and the graduated level colour live only in the viewfinder overlay, not this glyph): slot 1 draws grid.circle.fill with an amber glyph on the same graphite disc, same on-treatment shutter-cluster.armed uses for its own grid slot. Slot 3 stays Photo's M, off (graphite) — Grid/Level and manual exposure are independent, and this state exists for screenshots that show grid/level alone. Added 2026-09-07 for capture-photo.grid-level.*.svg; no other screen needs it yet.</desc>
+<!-- LetsLapse design component · shutter cluster · portrait.
+     Coordinate contract: origin (0,0) is the CENTRE of the shutter ring; viewBox -90 -50 180 100, 1 unit = 1 pt.
+     Place from a screen mirror with
+       <image href="../components/shutter-cluster.photo-grid.portrait.svg" x="cx-90" y="cy-50" width="180" height="100"/>
+     where (cx,cy) is the ring centre on that screen. Slots (portrait offsets, ≈9 pt clear of the ring):
+     1 grid, ON (-66,-26) · 2 delay (+66,-26) · 3 manual "M", off (-66,+26) · 4 steady (+66,+26).
+     See components/README.md for the whole contract. -->
+  <style>text{font-family:inherit}.b{font-weight:700}</style>
+  <g id="shutter-cluster" data-state="photo-grid" data-orientation="portrait">
+    <g id="shutter" data-symbol="record button"><circle r="38" fill="none" stroke="#FFF" stroke-width="4"/><circle r="30" fill="#FF3B30"/></g>
+    <g id="grid-toggle" data-symbol="grid.circle.fill" transform="translate(-66,-26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle r="10" fill="none" stroke="#FFB340" stroke-width="1.6"/><path d="M-6.5 -3.3 h13 M-6.5 3.3 h13 M-3.3 -6.5 v13 M3.3 -6.5 v13" stroke="#FFB340" stroke-width="1.2"/></g>
+    <g id="delay-toggle" data-symbol="timer" transform="translate(66,-26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><circle cy="1" r="9" fill="none" stroke="#FFF" stroke-width="1.7"/><path d="M0 1 v-6 M-3 -9 h6" stroke="#FFF" stroke-width="1.7" stroke-linecap="round"/></g>
+    <g id="manual-toggle" data-symbol="m.circle" transform="translate(-66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><text x="0" y="0.5" text-anchor="middle" dominant-baseline="central" font-size="15" class="b" fill="#FFF">M</text></g>
+    <g id="steady-toggle" data-symbol="hand.raised" transform="translate(66,26)"><circle cx="0" cy="0" r="22" fill="#2B2B2E" opacity="0.9"/><path d="M-5 5 v-9 m3 9 v-11 m3 11 v-11 m3 11 v-9 m-9 9 a6 6 0 0 0 9 0 v-3" fill="none" stroke="#FFF" stroke-width="1.6" stroke-linecap="round"/></g>
+  </g>
+</svg>

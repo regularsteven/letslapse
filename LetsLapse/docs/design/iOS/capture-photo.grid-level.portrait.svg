@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
-  <title>iOS · Capture — Photo (idle, JPEG) · portrait</title>
-  <desc>Mirrors App/CaptureView.swift (photoControlsRow) + App/CaptureDials.swift (PhotoBlendDial) + App/CaptureHeadroom.swift (CaptureHeadroomChip). Photo mode, JPEG output: still label in the format pill with the storage-headroom chip ahead of it, 16:9 preview. The single BLEND dial reads a bare count; its menu is Bulb · 20 Frames · 10 Frames · 5 Frames · 3 Frames · Off, the same list Interval uses. Same shutter row as the other modes, except slot 3: in Photo mode it is M (manual exposure, off here) rather than the AE/AF lock — see capture-photo.manual. The steady toggle arms the capture-when-steady gate.</desc>
+  <title>iOS · Capture — Photo (Grid + Level, JPEG) · portrait</title>
+  <desc>Mirrors App/CaptureView.swift (photoControlsRow · gridToggleCircle · RuleOfThirdsGrid · LevelIndicatorOverlay). Net-new mirror, 2026-09-07, built on capture-photo.portrait.svg (M stays off here — Grid+Level and manual exposure are independent, and showing both live in one screenshot would muddy which feature is which). Cluster slot 1 (grid) cycles Off → Grid → Grid+Level on iOS/iPadOS (`GridOverlayState`); this file draws the third state, `.level`, which layers BOTH the rule-of-thirds lines and the horizon-level bar over the fitted 16:9 viewfinder frame (x 0–393, y 89–788, centre 196.5, 438.5) — the same fitted frame `RuleOfThirdsGrid` and `LevelIndicatorOverlay` both measure against. The grid BUTTON's own 44pt glyph stays plain binary amber-when-on (`gridToggleCircle`'s own doc comment) — only the in-viewfinder bar carries the graduated colour, which is why the cluster reference below is the new `photo-grid` state (grid glyph amber, M still off) rather than a third glyph treatment.
+
+Horizon bar staged at roll = +2.5°, deliberately off level rather than at rest, so the graduated ramp actually shows a non-green colour in this static file: `LevelIndicatorOverlay.tint(forDegreesOffLevel:)` bands at &lt;1° `LL.levelGood` #34C759, &lt;4° `LL.levelNear` #FFB340 (`= LL.amber`), &lt;8° `LL.levelOff` #FF9500, else `LL.levelFar` #FF3B30 — 2.5° falls in the second band, so the two fixed reference ticks, the rotating bar and the "+2.5°" readout are all drawn in `LL.levelNear`. The bar is a `Capsule` 88×2pt centred on the viewfinder's own centre, rotated `-roll` degrees (rotated -2.5° here) so it reads level once it lines up with the two fixed ticks (38×2pt capsules, ±73pt either side of centre, same tint); the degree label sits 20pt below centre, monospaced, sign always shown (`rollLabel`). A compact on-canvas legend (bottom-right corner of the top area, clear of every other control) restates the four thresholds since a single staged angle can only show one band directly — full explanation here in the desc as well, per the design-sync contract. `LL_GRID=level LL_LEVEL=2.5` stages exactly this. iOS/iPadOS only: `GridOverlayState.levelAvailable` is false on macOS (no CoreMotion there at all), so the Mac's own cycle never reaches this state — see macOS/INDEX.md.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <clipPath id="tile"><rect x="16" y="728" width="60" height="60" rx="12"/></clipPath>
@@ -25,6 +27,37 @@
         <rect x="0" y="700" width="393" height="88" fill="#080A0E"/>
       </g>
 
+      <!-- Rule-of-thirds grid: RuleOfThirdsGrid, over the fitted 16:9 frame (0,89)-(393,788) -->
+      <g id="thirds-grid" stroke="#FFF" stroke-opacity="0.9" stroke-width="1">
+        <line x1="131" y1="89" x2="131" y2="788"/>
+        <line x1="262" y1="89" x2="262" y2="788"/>
+        <line x1="0" y1="322" x2="393" y2="322"/>
+        <line x1="0" y1="555" x2="393" y2="555"/>
+      </g>
+
+      <!-- Horizon level: LevelIndicatorOverlay, centred on the same fitted frame (196.5, 438.5).
+           Staged at roll = +2.5° (LL_LEVEL=2.5), the "near" band — LL.levelNear / #FFB340. -->
+      <g id="level-indicator" fill="#FFB340">
+        <rect x="104.5" y="437.5" width="38" height="2" rx="1"/>
+        <rect x="250.5" y="437.5" width="38" height="2" rx="1"/>
+        <rect x="152.5" y="437.5" width="88" height="2" rx="1" transform="rotate(-2.5 196.5 438.5)"/>
+        <text x="196.5" y="458.5" text-anchor="middle" font-size="10" font-weight="600" class="m" fill="#FFB340">+2.5°</text>
+      </g>
+
+      <!-- Legend: not part of the app UI, restates the four LevelIndicatorOverlay bands for this static file -->
+      <g id="level-legend">
+        <rect x="240" y="112" width="137" height="96" rx="12" fill="#000" opacity="0.5"/>
+        <text x="252" y="128" font-size="10" class="b" fill="#FFF" opacity="0.6" letter-spacing="0.8">LEVEL</text>
+        <circle cx="252" cy="142" r="4" fill="#34C759"/>
+        <text x="264" y="146" font-size="11" fill="#FFF" opacity="0.85">&lt; 1°</text>
+        <circle cx="252" cy="160" r="4" fill="#FFB340"/>
+        <text x="264" y="164" font-size="11" fill="#FFF" opacity="0.85">1–4°</text>
+        <circle cx="252" cy="178" r="4" fill="#FF9500"/>
+        <text x="264" y="182" font-size="11" fill="#FFF" opacity="0.85">4–8°</text>
+        <circle cx="252" cy="196" r="4" fill="#FF3B30"/>
+        <text x="264" y="200" font-size="11" fill="#FFF" opacity="0.85">≥ 8°</text>
+      </g>
+
       <!-- top bar -->
       <g id="top-bar">
         <g id="close" data-symbol="xmark">
@@ -37,7 +70,6 @@
           <text x="306" y="92" font-size="13" class="sb" fill="#FFF">· JPEG</text>
           <path d="M356 85 l4.5 5 l4.5 -5" stroke="#FFFFFF" stroke-opacity="0.4" stroke-width="2" fill="none" stroke-linecap="round" data-symbol="chevron.down"/>
         </g>
-        <!-- storage headroom: what is left of the disk in the armed format -->
         <g id="headroom-chip">
           <rect x="62" y="72" width="147" height="31" rx="15.5" fill="#2B2B2E" opacity="0.9"/>
           <g data-symbol="internaldrive" stroke="#FFF" stroke-width="1.2" fill="none">
@@ -49,9 +81,7 @@
         </g>
       </g>
 
-      <!-- photo controls: single BLEND dial. Menu top-to-bottom
-           Bulb · 20 Frames · 10 Frames · 5 Frames · 3 Frames · Off — the same
-           list, order and wording Interval's dial uses -->
+      <!-- photo controls: single BLEND dial -->
       <g id="photo-controls">
           <text x="147" y="657" font-size="10" class="b" fill="#FFF" opacity="0.45" letter-spacing="0.8">BLEND</text>
           <rect x="193" y="639" width="53" height="27" rx="13.5" fill="#2B2B2E" opacity="0.9"/>
@@ -83,10 +113,10 @@
           </g>
           <rect x="16" y="728" width="60" height="60" rx="12" fill="none" stroke="#FFF" stroke-opacity="0.35"/>
         </g>
-        <!-- Shutter cluster: shared component (ring + four framing slots). Edit ../components/shutter-cluster.photo-idle.portrait.svg,
+        <!-- Shutter cluster: shared component. Edit ../components/shutter-cluster.photo-grid.portrait.svg,
              not this file; placement = ring centre (196.5, 758) minus (90, 50). Contract: components/README.md.
-             Photo mode only: slot 3 is M (manualExposureCircle), not the AE/AF lock. -->
-        <image id="shutter-cluster" href="../components/shutter-cluster.photo-idle.portrait.svg" x="106.5" y="708" width="180" height="100"/>
+             Photo mode, Grid+Level on: slot 1 amber, slot 3 still M off. -->
+        <image id="shutter-cluster" href="../components/shutter-cluster.photo-grid.portrait.svg" x="106.5" y="708" width="180" height="100"/>
       </g>
 
       <!-- hardware -->
@@ -95,6 +125,6 @@
     </g>
   </g>
 
-  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Photo (idle, JPEG) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — photoControlsRow · steadyToggleCircle · cluster slot 3 = M</text>
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Capture — Photo (Grid + Level) · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CaptureView.swift — RuleOfThirdsGrid · LevelIndicatorOverlay · cluster slot 1 = grid on</text>
 </svg>
