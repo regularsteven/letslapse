@@ -79,14 +79,14 @@ struct GalleryPreviewPanel: View {
         }
         .exportedArchiveSheet($exportedArchive)
         .confirmationDialog(
-            "Delete "\(capture.displayTitle)"?",
+            "Delete this project?",
             isPresented: $confirmingDelete,
             titleVisibility: .visible
         ) {
-            Button("Delete", role: .destructive) { onDelete() }
+            Button("Delete \u{201C}\(capture.displayTitle)\u{201D}", role: .destructive) {
+                onDelete()
+            }
             Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This cannot be undone.")
         }
         .alert("Rename", isPresented: $isRenaming) {
             TextField("Title", text: $renameText)
