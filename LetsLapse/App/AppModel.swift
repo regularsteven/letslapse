@@ -6361,6 +6361,12 @@ final class AppModel: ObservableObject {
                 ? " · text baked in"
                 : " · text baked in (scene-placed)"
         }
+        if let overlayBake {
+            let graded = overlayBake.maskGrades.filter(\.isActive).count
+            if graded > 0 {
+                summary += " · \(graded) masked grade\(graded == 1 ? "" : "s") baked in"
+            }
+        }
         if grade.hasRotation {
             summary += Self.levelSummary(grade)
         }
@@ -6446,6 +6452,7 @@ final class AppModel: ObservableObject {
             guard let overlayBake else { return image }
             return SceneAwareCompositor.bakeStill(
                 image, overlays: overlayBake.overlays(at: 1),
+                maskGrades: overlayBake.maskGrades,
                 masks: overlayBake.masks, settings: overlayBake.settings,
                 rotationDegrees: overlayBake.rotation(at: 1)) ?? image
         }

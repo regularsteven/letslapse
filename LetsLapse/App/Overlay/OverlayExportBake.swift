@@ -13,6 +13,10 @@ import LetsLapseKit
 /// is immutable and Sendable.
 struct OverlayExportBake: Sendable {
     let overlays: [SceneOverlay]
+    /// The grades applied inside a mask, in list order. Part of the picture
+    /// rather than something drawn on it, so a project can need this bake for
+    /// its grades alone with no text anywhere.
+    var maskGrades: [MaskGrade] = []
     let masks: SceneAwareCompositor.MaskSet
     let settings: SegmentationSettings
     /// The project's grade, for its fine rotation — levelled into each OUTPUT
@@ -26,6 +30,12 @@ struct OverlayExportBake: Sendable {
     /// True when the frames have overlays to carry — as opposed to a bake
     /// that only levels them.
     var hasOverlays: Bool { !overlays.isEmpty }
+
+    /// True when the bake changes any pixel at all: text, a masked grade, or
+    /// the project's level.
+    var hasWork: Bool {
+        !overlays.isEmpty || maskGrades.contains(where: \.isActive) || grade.hasRotation
+    }
 
     /// The level at one moment of the source.
     func rotation(at position: Double) -> Double {
@@ -53,7 +63,8 @@ struct OverlayExportBake: Sendable {
         { buffer, position, pool in
             try SceneAwareCompositor.bakeExportFrame(
                 buffer, position: position, pool: pool,
-                overlays: overlays(at: position), masks: masks, settings: settings,
+                overlays: overlays(at: position), maskGrades: maskGrades,
+                masks: masks, settings: settings,
                 rotationDegrees: rotation(at: position))
         }
     }
@@ -84,7 +95,10 @@ extension AppModel {
         // Hidden layers are not part of the piece; onion skin is an editor
         // affordance and never reaches an export.
         let overlays = document.overlays.filter { !$0.text.isEmpty && $0.isVisible }
-        guard !overlays.isEmpty else {
+        // A grade with nothing set moves no pixel and is not worth a mask
+        // fetch, let alone a composite pass.
+        let maskGrades = document.maskGrades.filter(\.isActive)
+        guard !overlays.isEmpty || !maskGrades.isEmpty else {
             // Nothing to draw — but a levelled project still needs the hook,
             // which is where the level is baked.
             guard grade.hasRotation else { return nil }
@@ -94,21 +108,32 @@ extension AppModel {
         }
 
         var masks = SceneAwareCompositor.MaskSet()
+        // Every region something on the project names — a layer placed in it
+        // or a grade applied through it. Both halves ask for masks the same
+        // way, so they are gathered once.
+        let named: [OverlayPlacement] =
+            overlays.map(\.placement) + maskGrades.map(\.placement)
 
         // Custom masks first — cheap, and they may be all the project needs.
         for mask in document.customMasks
-        where overlays.contains(where: { $0.placement.customMaskID == mask.id }) {
+        where named.contains(where: { $0.customMaskID == mask.id }) {
             if let loaded = CustomMaskLoader.mask(at: customMaskURL(mask, for: capture)) {
                 masks.custom[mask.id] = loaded
             } else {
                 LLog("overlay bake: custom mask \(mask.displayName) unreadable — baking that layer without occlusion")
             }
         }
+        // Drawn shapes cost nothing to carry: parameters, resolved to a
+        // gradient at whatever size each output frame turns out to be.
+        for mask in document.shapeMasks
+        where named.contains(where: { $0.shapeMaskID == mask.id }) {
+            masks.shapes[mask.id] = mask.shape
+        }
 
-        let needsModel = overlays.contains { placement in
-            switch placement.placement {
+        let needsModel = named.contains { placement in
+            switch placement {
             case .sky, .land: return true
-            case .none, .custom, .customInverted: return false
+            case .none, .custom, .customInverted, .shape, .shapeInverted: return false
             }
         }
         if needsModel, let source = CoreMLSceneSegmenter.locate() {
@@ -134,7 +159,7 @@ extension AppModel {
             }
         }
         return OverlayExportBake(
-            overlays: overlays, masks: masks, settings: document.maskSettings,
-            grade: grade, frameAspect: aspect)
+            overlays: overlays, maskGrades: maskGrades, masks: masks,
+            settings: document.maskSettings, grade: grade, frameAspect: aspect)
     }
 }

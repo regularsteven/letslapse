@@ -225,6 +225,54 @@ struct PhotoViewerView: View {
     /// The mask readout in the Text tab — provenance, progress, or an error.
     @State private var maskStatus: String?
 
+    // MARK: Masks as adjustment layers
+    //
+    // A mask has two homes: the Masks tab owns its SHAPE, the Editor tab owns
+    // its GRADE. The state below is what makes the two halves one thing — an
+    // expanded grade puts its mask's handles on the picture, and "Grade this
+    // in Editor" jumps back with it open.
+
+    /// Which `MaskGrade` the Editor tab's Masks card has expanded, or nil for
+    /// the collapsed strip.
+    ///
+    /// `LL_MASKGRADE=first|empty` stages it: `first` expands the first grade
+    /// (seeding one on Sky if the project has none), `empty` forces the
+    /// no-grades state. Neither is reachable by automation — making one for
+    /// real means drawing a mask and dragging sliders inside it — and the
+    /// design mirrors are measured from them.
+    @State private var expandedGradeID: UUID?
+    /// The Masks tab's creation tool. Armed by a toolbar button or the Add
+    /// menu's "New … mask…", and disarmed by the drag that draws one.
+    @State private var maskTool: MaskShapeKind? = {
+        #if DEBUG
+        switch ProcessInfo.processInfo.environment["LL_MASKTOOL"] {
+        case "linear": return .linear
+        case "radial": return .radial
+        default: return nil
+        }
+        #else
+        return nil
+        #endif
+    }()
+    /// Which half of the Masks tab's detail card is showing.
+    @State private var maskDetailSegment: MaskDetailSegment = .shape
+    /// The slider label armed for the drag-on-the-picture gesture, and which
+    /// grade it belongs to. Only masked grades arm — the whole-picture panel
+    /// is a shared component and keeps its own behaviour.
+    @State private var armedMaskField: PhotoAdjustmentField?
+    /// The live caption over the picture while a mask gesture runs.
+    @State private var maskHUD: String?
+    /// A shape being drawn right now: its id and whether the drag has moved
+    /// far enough to keep. Committed (or discarded) on release.
+    @State private var drawingShapeID: UUID?
+    /// True while a handle drag owns the picture, so the pan gesture stands
+    /// down for its duration.
+    @State private var maskGestureActive = false
+    /// The armed field's value when its drag began. Absolute against a frozen
+    /// base, never accumulated — the same discipline `OverlayDragState.base`
+    /// and `BoxResizeBase` set for the text layers.
+    @State private var armedDragBase: Float?
+
     private struct OverlayDragState {
         let id: UUID
         /// The committed centre when the drag began — translation is applied
@@ -921,6 +969,7 @@ struct PhotoViewerView: View {
             applyKeyframeHook()
             applyPerfWiggleHook()
             applyTextHook()
+            applyMaskHook()
             #endif
             renderToken += 1
         }
@@ -982,6 +1031,21 @@ struct PhotoViewerView: View {
                     renderToken += 1
                 }
             }
+        }
+        // Escape releases whatever the picture is currently armed for. The
+        // gesture is modal for as long as it is armed, so there has to be one
+        // key that always gets out of it.
+        #if os(macOS)
+        .onExitCommand {
+            maskTool = nil
+            armedMaskField = nil
+        }
+        #endif
+        .onChange(of: railTab) { _, _ in
+            // A tool or an armed label belongs to the tab it was armed in.
+            maskTool = nil
+            armedMaskField = nil
+            maskHUD = nil
         }
         .onChange(of: frameWindowKey) { _, _ in refreshFrameWindow() }
         .onChange(of: displayedURL) { _, _ in
@@ -1170,16 +1234,35 @@ struct PhotoViewerView: View {
                         .transition(.opacity)
                 }
                 zoomControls(in: geometry)
+                if let maskHUD {
+                    MaskHUDPill(text: maskHUD)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                        .padding(.top, 12)
+                }
+                if let hint = maskModeHint {
+                    MaskModeHint(text: hint)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
+                        .padding(.bottom, 12)
+                }
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
             .clipped()
             .contentShape(Rectangle())
             .onTapGesture(count: 2) { toggleActualPixels(in: geometry) }
             .gesture(magnifyGesture(in: geometry))
+            // Ahead of pan, and only while something is armed: with no tool
+            // and no armed label the picture behaves exactly as it always
+            // has. A handle inside the overlay takes the drag before either,
+            // being deeper in the hierarchy — which is what lets a mask be
+            // nudged in the middle of grading it.
+            .highPriorityGesture(maskPictureGesture(in: geometry),
+                                 including: maskGestureWantsDrag ? .all : .subviews)
             // Only claimed once there is something to pan: at fit scale a drag
             // over the picture still belongs to whatever is presenting it —
             // the fullscreen sheet pages between photos with one.
-            .gesture(panGesture(in: geometry), including: zoom.isFitted ? .subviews : .all)
+            .gesture(panGesture(in: geometry),
+                     including: zoom.isFitted || maskGestureActive || maskGestureWantsDrag
+                         ? .subviews : .all)
             .onAppear { paneSize = proxy.size }
             .onChange(of: proxy.size) { _, size in
                 paneSize = size
@@ -1240,9 +1323,180 @@ struct PhotoViewerView: View {
                 }
                 overlaySnapGuides(drawn: drawn)
             }
+            // The mask chrome: the handles of whichever shape is active —
+            // the Masks tab's selection, or the mask of the grade the Editor
+            // tab has expanded, so it can be nudged mid-grade without leaving
+            // the sliders.
+            if let index = activeShapeIndex {
+                MaskShapeOverlay(
+                    shape: $overlayDocument.shapeMasks[index].shape,
+                    drawn: drawn,
+                    accent: LL.amber,
+                    onEditing: { editing in
+                        maskGestureActive = editing
+                        if editing {
+                            scheduleUpdate()
+                        } else {
+                            overlayEdited(commit: true)
+                        }
+                    },
+                    onHUD: { maskHUD = $0 })
+            }
         }
         .frame(width: drawn.width, height: drawn.height)
+        .coordinateSpace(name: MaskShapeOverlay.space)
         .offset(zoom.offset)
+    }
+
+    // MARK: Mask gestures
+
+    /// The shape whose handles are on the picture right now, as an index into
+    /// the document so the overlay can bind straight into it.
+    ///
+    /// Masks tab: the deck's selection. Editor tab: the expanded grade's
+    /// mask. Nothing anywhere else — the chrome is for the tab doing the work.
+    private var activeShapeID: UUID? {
+        switch railTab {
+        case .masks: return inspectedRegion?.shapeMaskID
+        case .editor:
+            guard let id = expandedGradeID,
+                  let grade = overlayDocument.maskGrade(id: id) else { return nil }
+            return grade.mask.shapeMaskID
+        case .text, .frames: return nil
+        }
+    }
+
+    private var activeShapeIndex: Int? {
+        guard let id = activeShapeID else { return nil }
+        return overlayDocument.shapeMasks.firstIndex { $0.id == id }
+    }
+
+    /// What a drag on the picture will do right now, or nil when it will do
+    /// what it always did. On screen only while something is armed, so the
+    /// mode is never a thing to remember.
+    private var maskModeHint: String? {
+        if railTab == .masks, let tool = maskTool {
+            return "Drag to draw a \(tool.displayName.lowercased()) mask · esc to cancel"
+        }
+        if railTab == .editor, let field = armedMaskField, supportsDragToAdjust {
+            let name = expandedGradeID
+                .flatMap { overlayDocument.maskGrade(id: $0) }
+                .flatMap { grade in
+                    overlayDocument.projectMask(grade.mask)?.name(inverted: grade.inverted)
+                } ?? "this mask"
+            return "Drag ↕ to set \(MaskGradeSection.label(for: field)) in \(name) · esc to release"
+        }
+        return nil
+    }
+
+    /// The picture's drawn size at the current zoom — the space every mask
+    /// coordinate is resolved against.
+    private var drawnPictureSize: CGSize {
+        guard paneSize != .zero else { return .zero }
+        return zoomGeometry(in: paneSize).drawnSize(scale: zoom.scale)
+    }
+
+    /// A drag on the picture that is NOT on a handle: it draws a new mask
+    /// while a tool is armed, or sets an armed slider. Both are the same
+    /// gesture object because they are the same finger, and only one of them
+    /// can be live at a time.
+    private func maskPictureGesture(in geometry: PhotoZoomGeometry) -> some Gesture {
+        let drawn = geometry.drawnSize(scale: zoom.scale)
+        return DragGesture(minimumDistance: 0, coordinateSpace: .named(MaskShapeOverlay.space))
+            .onChanged { value in
+                if railTab == .masks, let kind = maskTool {
+                    continueDrawing(kind, from: value.startLocation,
+                                    to: value.location, in: drawn)
+                } else if let field = armedMaskField {
+                    continueArmedDrag(field, translation: value.translation)
+                }
+            }
+            .onEnded { _ in finishMaskGesture() }
+    }
+
+    /// Whether that gesture should claim the drag at all — with nothing armed
+    /// the picture belongs to pan and zoom, as it always has.
+    private var maskGestureWantsDrag: Bool {
+        (railTab == .masks && maskTool != nil)
+            || (railTab == .editor && armedMaskField != nil && supportsDragToAdjust)
+    }
+
+    /// Draws — and keeps redrawing — the shape under a create drag. The mask
+    /// is added on the first change so the handles and the mask itself are
+    /// live from the first pixel, and discarded on release if the drag never
+    /// went anywhere.
+    private func continueDrawing(
+        _ kind: MaskShapeKind, from start: CGPoint, to end: CGPoint, in drawn: CGSize
+    ) {
+        guard drawn.width > 0, drawn.height > 0 else { return }
+        let origin = CGPoint(x: start.x / drawn.width, y: start.y / drawn.height)
+        let shape: MaskShape
+        switch kind {
+        case .linear:
+            shape = .linear(
+                from: MaskShape.clamped(origin),
+                to: CGPoint(x: end.x / drawn.width, y: end.y / drawn.height))
+        case .radial:
+            // A true circle from the centre out, which is what the release
+            // commits; the cardinal handles are how it becomes an ellipse.
+            let radius = Double(hypot(end.x - start.x, end.y - start.y))
+            shape = .radial(
+                center: MaskShape.clamped(origin), radiusPoints: max(radius, 1), in: drawn)
+        }
+        if let id = drawingShapeID,
+           let index = overlayDocument.shapeMasks.firstIndex(where: { $0.id == id }) {
+            overlayDocument.shapeMasks[index].shape = shape
+        } else {
+            let mask = ShapeMask(
+                name: overlayDocument.nextShapeName(for: kind), shape: shape)
+            overlayDocument.shapeMasks.append(mask)
+            drawingShapeID = mask.id
+            inspectedRegion = .shape(mask.id)
+            maskDetailSegment = .shape
+        }
+        maskHUD = "\(kind.displayName) · \(shape.sizeCaption(in: drawn))"
+        scheduleUpdate()
+    }
+
+    /// The armed slider, moved by a vertical drag on the picture.
+    /// `Δvalue = −Δy / 220 pt × range` — a full sweep of a tall editor window
+    /// covers a little more than the whole travel, which is coarse enough to
+    /// aim and fine enough to land on.
+    private func continueArmedDrag(_ field: PhotoAdjustmentField, translation: CGSize) {
+        guard let id = expandedGradeID,
+              let index = overlayDocument.maskGrades.firstIndex(where: { $0.id == id })
+        else { return }
+        let range = MaskGrade.range(for: field)
+        let span = range.upperBound - range.lowerBound
+        let base = armedDragBase ?? overlayDocument.maskGrades[index].adjustments[keyPath: field.keyPath]
+        if armedDragBase == nil { armedDragBase = base }
+        let next = min(max(base - Float(translation.height) / 220 * span,
+                           range.lowerBound), range.upperBound)
+        overlayDocument.maskGrades[index].adjustments[keyPath: field.keyPath] = next
+        let name = overlayDocument.projectMask(overlayDocument.maskGrades[index].mask)
+            .map { $0.name(inverted: overlayDocument.maskGrades[index].inverted) } ?? "Mask"
+        maskHUD = "\(name) · \(MaskGradeSection.label(for: field))  "
+            + MaskGradeSection.readout(field, next)
+        scheduleUpdate()
+    }
+
+    /// Release: commit the drawn shape (or throw away a stray click), drop
+    /// the drag base, clear the HUD, and disarm the tool — one drag makes one
+    /// mask, so there is never a mode left running.
+    private func finishMaskGesture() {
+        if let id = drawingShapeID {
+            let drawn = drawnPictureSize
+            if let index = overlayDocument.shapeMasks.firstIndex(where: { $0.id == id }),
+               overlayDocument.shapeMasks[index].shape.isDegenerate(in: drawn) {
+                overlayDocument.shapeMasks.remove(at: index)
+                inspectedRegion = nil
+            }
+            drawingShapeID = nil
+            maskTool = nil
+        }
+        armedDragBase = nil
+        maskHUD = nil
+        overlayEdited(commit: true)
     }
 
     /// The draggable stand-in over the baked overlay. At rest it is an
@@ -1806,6 +2060,23 @@ struct PhotoViewerView: View {
             stateRow
             presetStrip
 
+            // Masks sit between the chips and the whole-picture panel: a
+            // preset is the look, a masked grade is a correction inside it,
+            // and the panel below is the frame as a whole.
+            masksCard
+
+            // While a masked grade is open the panel below needs saying out
+            // loud, or "Exposure" appears twice on one screen with nothing
+            // to tell the two apart.
+            if expandedGradeID != nil {
+                Text("Whole picture")
+                    .font(.system(size: 11, weight: .semibold))
+                    .textCase(.uppercase)
+                    .kerning(0.5)
+                    .foregroundStyle(.secondary)
+                    .padding(.bottom, -6)
+            }
+
             // No disclosure to open: with the picture pinned and the controls
             // scrolling, hiding the sliders behind an accordion only adds a tap.
             sliderPanel(expanded: isWide)
@@ -1913,18 +2184,159 @@ struct PhotoViewerView: View {
             document: $overlayDocument,
             inspectedRegion: $inspectedRegion,
             showMask: $showMask,
+            tool: $maskTool,
+            detailSegment: $maskDetailSegment,
             modelInstalled: segModelIdentity != nil,
             maskStatus: inspectedMaskStatus,
             thresholdIsLive: thresholdIsLive,
             canVoteAcrossFrames: hasTimeline,
+            frameSize: drawnPictureSize,
             accent: accentColor,
+            sources: maskThumbnailSources,
             thumbnail: { mask in
                 guard let capture else { return nil }
                 return CustomMaskThumbnails.thumbnail(
                     at: model.customMaskURL(mask, for: capture))
             },
             onEdited: overlayEdited,
-            onImportMask: importCustomMask)
+            onImportMask: importCustomMask,
+            onGradeInEditor: { ref, inverted in openGrade(for: ref, inverted: inverted) })
+    }
+
+    #if DEBUG
+    /// `LL_MASKGRADE=first|empty|shapes` stages the Masks work.
+    ///
+    /// Same reason as the other staging hooks: making a masked grade for real
+    /// means drawing a mask on the picture and dragging sliders inside it,
+    /// which no screenshot run can do — and the design mirrors are measured
+    /// from these exact values. `first` seeds a radial "Sun" over the upper
+    /// right and a linear "Quay lift", grades the first warm and open, and
+    /// leaves the second applied inverted; `shapes` seeds the two masks with
+    /// no grades at all (the Masks tab's own deck); `empty` forces the
+    /// no-grades state on a project that has some.
+    ///
+    /// **In memory only.** Every path out of here re-baselines
+    /// `persistedDocument`, so the 2 s persist safety net has nothing to
+    /// write and staged masks never reach a real project's sidecar. (The
+    /// text hook's convention is to write; masks are heavier and a stray
+    /// screenshot run should not leave two of them in somebody's shoot.) A
+    /// real edit still persists the moment it commits — that goes through
+    /// `overlayEdited(commit:)`, not through here.
+    private func applyMaskHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_MASKGRADE"] else { return }
+        // Whatever this hook does, the sidecar must not learn about it.
+        defer { persistedDocument = overlayDocument }
+        if hook == "empty" {
+            overlayDocument.maskGrades = []
+            expandedGradeID = nil
+            return
+        }
+        // Seeding is what must not tread on a project's real masks; EXPANDING
+        // one is harmless. A run against an already-staged (or genuinely
+        // masked) project therefore opens the first grade rather than
+        // silently doing nothing, which is what the collapsed card on every
+        // second run turned out to be (2026-09-07).
+        guard overlayDocument.shapeMasks.isEmpty, overlayDocument.maskGrades.isEmpty else {
+            expandedGradeID = overlayDocument.maskGrades.first?.id
+            inspectedRegion = overlayDocument.shapeMasks.first.map { .shape($0.id) }
+            railTab = hook == "shapes" ? .masks : .editor
+            return
+        }
+        let sun = ShapeMask(
+            name: "Sun",
+            shape: MaskShape(
+                kind: .radial, center: CGPoint(x: 0.8, y: 0.31),
+                radiusX: 0.188, radiusY: 0.162, rotationDegrees: -12, feather: 0.6))
+        let quay = ShapeMask(
+            name: "Quay lift",
+            shape: .linear(from: CGPoint(x: 0.5, y: 0.965),
+                           to: CGPoint(x: 0.5, y: 0.606), feather: 0.5))
+        overlayDocument.shapeMasks = [sun, quay]
+        guard hook != "shapes" else {
+            inspectedRegion = .shape(sun.id)
+            railTab = .masks
+            return
+        }
+        var warm = PhotoAdjustments.neutral
+        // The design's "+450 K", which is what this field is in mired.
+        warm.temperature = 10
+        warm.exposure = 0.35
+        var lift = PhotoAdjustments.neutral
+        lift.highlights = -0.35
+        lift.saturation = 0.12
+        overlayDocument.maskGrades = [
+            MaskGrade(mask: .shape(sun.id), adjustments: warm),
+            MaskGrade(mask: .shape(quay.id), inverted: true, adjustments: lift),
+        ]
+        expandedGradeID = overlayDocument.maskGrades.first?.id
+        railTab = .editor
+    }
+    #endif
+
+    /// The Editor tab's Masks card — a mask's grade, as against the Masks
+    /// tab's shape.
+    private var masksCard: some View {
+        MasksCard(
+            document: $overlayDocument,
+            expandedGradeID: $expandedGradeID,
+            showMask: $showMask,
+            accent: accentColor,
+            sources: maskThumbnailSources,
+            modelInstalled: segModelIdentity != nil,
+            // The drag-to-adjust gesture needs a picture that is not already
+            // carrying pan and zoom for the same finger. On the Mac and iPad
+            // it is a pointer drag on a fitted picture and unambiguous; on a
+            // phone the picture is the smaller half of a stacked layout and
+            // the gesture would fight scrolling, so the labels do not arm.
+            armedField: supportsDragToAdjust ? armedMaskField : nil,
+            onArmField: supportsDragToAdjust ? { armedMaskField = $0 } : nil,
+            onEdited: overlayEdited,
+            onManage: { ref in
+                railTab = .masks
+                if let ref { inspectedRegion = ref.placement(inverted: false) }
+                maskDetailSegment = .shape
+                armedMaskField = nil
+            },
+            onNewShape: { kind in
+                railTab = .masks
+                maskTool = kind
+                armedMaskField = nil
+            })
+    }
+
+    /// Whether a drag on the picture can set an armed slider. Wide layouts
+    /// only — see `masksCard`.
+    private var supportsDragToAdjust: Bool {
+        #if os(macOS)
+        return true
+        #else
+        return paneSize.width >= wideLayoutThreshold * 0.5
+        #endif
+    }
+
+    /// Create-or-open a grade and show it, from either side of the app.
+    private func openGrade(for ref: MaskRef, inverted: Bool) {
+        let id = overlayDocument.addMaskGrade(for: ref, inverted: inverted)
+        expandedGradeID = id
+        armedMaskField = nil
+        railTab = .editor
+        overlayEdited(commit: true)
+    }
+
+    /// What the mask tiles need to draw themselves: whatever the segmenter
+    /// has already produced, and the project's custom-mask files.
+    private var maskThumbnailSources: MaskThumbnails.Sources {
+        MaskThumbnails.Sources(
+            skyMask: skyMaskKey.flatMap {
+                SceneMaskService.shared.cachedSkyMask(forKey: $0)
+            },
+            customThumbnail: { id in
+                guard let capture,
+                      let mask = overlayDocument.customMasks.first(where: { $0.id == id })
+                else { return nil }
+                return CustomMaskThumbnails.thumbnail(
+                    at: model.customMaskURL(mask, for: capture))
+            })
     }
 
     /// Copies a picked or dropped image into the project and adds it to the
@@ -2574,20 +2986,43 @@ struct PhotoViewerView: View {
     // MARK: - Overlays
 
     /// True while anything on screen needs the segmentation model's mask.
-    /// Custom masks are files and never come through here.
+    /// Custom masks are files and drawn shapes are arithmetic, so neither
+    /// ever comes through here.
     private var skyMaskWanted: Bool {
-        if showMask, let inspectedRegion, inspectedRegion.customMaskID == nil,
-           inspectedRegion != .none {
+        if let tintedRegion, tintedRegion.maskRef?.ref.needsSegmentationModel == true {
             return true
         }
         return overlayDocument.needsSegmentationModel
+    }
+
+    /// The region the picture is tinting magenta right now: the Masks tab's
+    /// selection, or — while a grade is expanded in the Editor — the region
+    /// that grade applies to, so "Show mask" answers the question the user is
+    /// actually asking.
+    private var tintedRegion: OverlayPlacement? {
+        guard showMask else { return nil }
+        if railTab == .editor, let id = expandedGradeID,
+           let grade = overlayDocument.maskGrade(id: id) {
+            return grade.placement
+        }
+        return inspectedRegion
     }
 
     /// The cache key of the mask the composite should use right now, or nil
     /// when none is wanted (or no model is installed). The render path only
     /// ever LOOKS UP this key — `maskFetchTask` is what fills it.
     private var activeSkyMaskKey: String? {
-        guard skyMaskWanted, let segModelIdentity else { return nil }
+        skyMaskWanted ? skyMaskKey : nil
+    }
+
+    /// The same key, whether or not anything wants the analysis run.
+    ///
+    /// The mask TILES read it: a Sky row in the deck draws the real skyline
+    /// when one is already cached and the stand-in horizon when it is not.
+    /// Cache-only, always — running inference to fill a 48 pt thumbnail would
+    /// be absurd, and `skyMaskWanted` stays the one thing that can ask for it.
+    private var skyMaskKey: String? {
+        guard let segModelIdentity else { return nil }
         if overlayDocument.maskSettings.maskMode == .sequence, hasTimeline {
             return SceneMaskService.shared.sequenceKey(
                 modelIdentity: segModelIdentity, frames: frames,
@@ -2606,9 +3041,18 @@ struct PhotoViewerView: View {
         if let key = activeSkyMaskKey {
             masks.sky = SceneMaskService.shared.cachedSkyMask(forKey: key)
         }
+        // Drawn shapes are parameters, so every one of them travels: there
+        // is nothing to decode and nothing to infer, and the compositor only
+        // resolves the ones something names.
+        for mask in overlayDocument.shapeMasks {
+            masks.shapes[mask.id] = mask.shape
+        }
         guard let capture else { return masks }
-        // Only the masks something on screen actually names.
+        // Only the mask FILES something on screen actually names — a grade
+        // applied through one counts as much as a layer placed in it.
         var wanted = Set(overlayDocument.overlays.compactMap { $0.placement.customMaskID })
+        wanted.formUnion(
+            overlayDocument.maskGrades.filter(\.isActive).compactMap { $0.placement.customMaskID })
         if let id = inspectedRegion?.customMaskID, showMask { wanted.insert(id) }
         for mask in overlayDocument.customMasks where wanted.contains(mask.id) {
             masks.custom[mask.id] = CustomMaskLoader.mask(
@@ -2799,13 +3243,16 @@ struct PhotoViewerView: View {
         // level, carried into a travelling level per frame — the export does
         // the same in `OverlayExportBake.overlays(at:)`).
         let overlays = overlayDocument.overlays.map(displayOverlay)
+        // The grades applied inside a mask, as the composite wants them: only
+        // the ones that would move a pixel, in list order.
+        let maskGrades = overlayDocument.maskGrades.filter(\.isActive)
         // The dragged layer AND its travelling followers: all of them are
         // being carried by proxies until the gesture ends.
         let suppressed = overlayDrag.map { Set([$0.id] + $0.followers.keys) } ?? []
         let compositePosition = renderedPosition
         let maskSettings = overlayDocument.maskSettings
         let masks = previewMaskSet()
-        let debugRegion = showMask ? inspectedRegion : nil
+        let debugRegion = tintedRegion
         let rotation = Double(adjustments.rotationDegrees)
         let image = await MediaWorkQueue.grading.run { () -> CGImage? in
             // Levelled inside the grader (cached with the grade, at this
@@ -2816,7 +3263,8 @@ struct PhotoViewerView: View {
                 whiteBalance: whiteBalance, maxDimension: longEdge)
             else { return nil }
             return SceneAwareCompositor.compositedPreview(
-                base: graded, overlays: overlays, suppressing: suppressed,
+                base: graded, overlays: overlays, maskGrades: maskGrades,
+                suppressing: suppressed,
                 position: compositePosition, masks: masks,
                 settings: maskSettings, debugRegion: debugRegion,
                 rotationDegrees: rotation)

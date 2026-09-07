@@ -262,6 +262,12 @@ enum OverlayPlacement: Codable, Equatable, Sendable, Hashable {
     case custom(UUID)
     /// The overlay sits inside a custom mask's complement.
     case customInverted(UUID)
+    /// The overlay sits inside one of the project's drawn shapes — a Linear
+    /// or Radial mask. Feathered, so a layer placed here is occluded
+    /// gradually rather than at a hard boundary.
+    case shape(UUID)
+    /// The overlay sits outside a drawn shape.
+    case shapeInverted(UUID)
 
     /// The wire form. `none`/`sky`/`land` are spelled exactly as the spike's
     /// `String` raw values were, so old sidecars decode unchanged.
@@ -272,6 +278,8 @@ enum OverlayPlacement: Codable, Equatable, Sendable, Hashable {
         case .land: return "land"
         case .custom(let id): return "m:\(id.uuidString)"
         case .customInverted(let id): return "mi:\(id.uuidString)"
+        case .shape(let id): return "s:\(id.uuidString)"
+        case .shapeInverted(let id): return "si:\(id.uuidString)"
         }
     }
 
@@ -287,6 +295,8 @@ enum OverlayPlacement: Codable, Equatable, Sendable, Hashable {
             switch parts[0] {
             case "m": self = .custom(id)
             case "mi": self = .customInverted(id)
+            case "s": self = .shape(id)
+            case "si": self = .shapeInverted(id)
             default: return nil
             }
         }
@@ -309,7 +319,44 @@ enum OverlayPlacement: Codable, Equatable, Sendable, Hashable {
     var customMaskID: UUID? {
         switch self {
         case .custom(let id), .customInverted(let id): return id
-        case .none, .sky, .land: return nil
+        case .none, .sky, .land, .shape, .shapeInverted: return nil
+        }
+    }
+
+    /// The drawn shape this placement refers to, if it names one.
+    var shapeMaskID: UUID? {
+        switch self {
+        case .shape(let id), .shapeInverted(let id): return id
+        case .none, .sky, .land, .custom, .customInverted: return nil
+        }
+    }
+
+    /// This placement as the mask it names and whether it is the complement —
+    /// the bridge to `MaskGrade`, which addresses masks that way round. nil
+    /// for `.none`, which names no mask at all.
+    var maskRef: (ref: MaskRef, inverted: Bool)? {
+        switch self {
+        case .none: return nil
+        case .sky: return (.sky, false)
+        case .land: return (.land, false)
+        case .custom(let id): return (.custom(id), false)
+        case .customInverted(let id): return (.custom(id), true)
+        case .shape(let id): return (.shape(id), false)
+        case .shapeInverted(let id): return (.shape(id), true)
+        }
+    }
+
+    /// The same region read the other way round — what occludes a layer
+    /// placed here, and what an inverted grade selects.
+    var inverted: OverlayPlacement {
+        switch self {
+        case .none: return .none
+        case .sky: return .land
+        case .land: return .sky
+        case .custom(let id): return .customInverted(id)
+        case .customInverted(let id): return .custom(id)
+        case .shape(let id): return .shapeInverted(id)
+        case .shapeInverted(let id): return .shape(id)
         }
     }
 }

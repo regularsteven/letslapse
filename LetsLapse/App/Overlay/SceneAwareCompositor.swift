@@ -14,16 +14,29 @@ import Foundation
 /// Knows nothing about text: the overlay arrives as pixels with alpha.
 enum SceneAwareCompositor {
 
+    /// Where a mask's pixels come from. Two kinds, and the difference runs
+    /// all the way through: a **grid** is the segmentation model's (or a
+    /// hand-supplied file's) sampled probabilities, which want thresholding,
+    /// morphology, feathering and edge refinement before they can be trusted
+    /// as a boundary — and which describe the SOURCE frame, so they turn with
+    /// it. A **shape** is arithmetic: it resolves exactly at any size, needs
+    /// none of that post-processing, and is authored on the levelled picture
+    /// so it is already in output space.
+    enum MaskSource {
+        case grid(SceneMask)
+        case shape(MaskShape, inverted: Bool)
+    }
+
     /// The occlusion half of a composite: the mask of the region whose
     /// pixels are restored OVER the overlay. Sky placement restores non-sky;
     /// land placement restores sky. The caller picks the region; this stage
     /// just applies it.
     struct Occlusion {
-        var mask: SceneMask
+        var mask: MaskSource
         var settings: SegmentationSettings
-        /// The rotation the frame being composited has been levelled by; the
-        /// mask is a SOURCE grid and is levelled to match on its way to frame
-        /// space. 0 = the frame is the source.
+        /// The rotation the frame being composited has been levelled by; a
+        /// grid mask is levelled to match on its way to frame space (a shape
+        /// is already there). 0 = the frame is the source.
         var rotationDegrees: Double = 0
     }
 
@@ -36,40 +49,53 @@ enum SceneAwareCompositor {
     struct MaskSet: Sendable {
         var sky: SceneMask?
         var custom: [UUID: SceneMask] = [:]
+        /// The project's drawn masks, by id. Parameters rather than pixels:
+        /// a shape resolves to a gradient at whatever size the frame is, so
+        /// unlike the other two there is nothing to decode or infer up front.
+        var shapes: [UUID: MaskShape] = [:]
 
         static let empty = MaskSet()
 
-        var isEmpty: Bool { sky == nil && custom.isEmpty }
+        var isEmpty: Bool { sky == nil && custom.isEmpty && shapes.isEmpty }
 
         /// The mask of the region that composites back OVER a layer placed
         /// here — the occlusion half. Sky placement restores non-sky; land
         /// restores sky; a custom placement restores everything outside the
         /// named region. nil = nothing occludes (no placement, or the mask
         /// this placement names is missing).
-        func restorationMask(for placement: OverlayPlacement) -> SceneMask? {
+        func restorationMask(for placement: OverlayPlacement) -> MaskSource? {
             switch placement {
             case .none:
                 return nil
             case .sky:
-                return sky?.inverted()
+                return sky.map { .grid($0.inverted()) }
             case .land:
-                return sky
+                return sky.map(MaskSource.grid)
             case .custom(let id):
-                return custom[id]?.inverted()
+                return custom[id].map { .grid($0.inverted()) }
             case .customInverted(let id):
-                return custom[id]
+                return custom[id].map(MaskSource.grid)
+            case .shape(let id):
+                // What restores over a layer placed inside a shape is
+                // everything outside it — the complement, same rule as the
+                // grids above.
+                return shapes[id].map { .shape($0, inverted: true) }
+            case .shapeInverted(let id):
+                return shapes[id].map { .shape($0, inverted: false) }
             }
         }
 
         /// The mask of the region ITSELF, for the debug tint — "what the
         /// analysis calls this region", not what occludes it.
-        func regionMask(for placement: OverlayPlacement) -> SceneMask? {
+        func regionMask(for placement: OverlayPlacement) -> MaskSource? {
             switch placement {
             case .none: return nil
-            case .sky: return sky
-            case .land: return sky?.inverted()
-            case .custom(let id): return custom[id]
-            case .customInverted(let id): return custom[id]?.inverted()
+            case .sky: return sky.map(MaskSource.grid)
+            case .land: return sky.map { .grid($0.inverted()) }
+            case .custom(let id): return custom[id].map(MaskSource.grid)
+            case .customInverted(let id): return custom[id].map { .grid($0.inverted()) }
+            case .shape(let id): return shapes[id].map { .shape($0, inverted: false) }
+            case .shapeInverted(let id): return shapes[id].map { .shape($0, inverted: true) }
             }
         }
     }
@@ -211,10 +237,13 @@ enum SceneAwareCompositor {
             else { return result }
             return tinted(result, mask: restore)
         case .confidence:
-            guard let occlusion,
-                  let raw = occlusion.mask.ciImage()?.transformed(
-                    by: scaleTransform(from: occlusion.mask, to: base.extent))
-            else { return result }
+            // Only a grid has confidence to show: a shape's coverage is
+            // exactly what the mask tint already draws.
+            guard let occlusion else { return result }
+            guard case .grid(let sceneMask) = occlusion.mask,
+                  let raw = sceneMask.ciImage()?.transformed(
+                    by: scaleTransform(from: sceneMask, to: base.extent))
+            else { return composite(base: base, overlay: nil, occlusion: occlusion, debug: .mask) }
             let levelled = FrameRotation.rotated(
                 raw.cropped(to: base.extent), degrees: occlusion.rotationDegrees)
             return tinted(result, mask: levelled)
@@ -237,7 +266,15 @@ enum SceneAwareCompositor {
         _ occlusion: Occlusion, extent: CGRect, guide: CIImage?,
         applyEdgeBias: Bool = true
     ) -> CIImage? {
-        guard let grid = occlusion.mask.ciImage() else { return nil }
+        // A drawn shape short-circuits the whole chain below. There is no
+        // sampled boundary to clean up, no confidence to threshold and no
+        // 448-grid coarseness to refine against the photograph — the
+        // gradient IS the answer, at whatever size the frame happens to be.
+        if case .shape(let shape, let inverted) = occlusion.mask {
+            return MaskShapeRenderer.maskImage(shape, extent: extent, inverted: inverted)
+        }
+        guard case .grid(let sceneMask) = occlusion.mask,
+              let grid = sceneMask.ciImage() else { return nil }
         let settings = occlusion.settings
         var mask = grid
 
@@ -277,7 +314,7 @@ enum SceneAwareCompositor {
         // Scaled to the frame, then levelled the way the frame was — the
         // grid describes the source, and the frame under it has turned.
         let scaled = FrameRotation.rotated(
-            mask.transformed(by: scaleTransform(from: occlusion.mask, to: extent))
+            mask.transformed(by: scaleTransform(from: sceneMask, to: extent))
                 .cropped(to: extent),
             degrees: occlusion.rotationDegrees)
         // The refinement goes last, in FRAME space: its whole purpose is to
@@ -327,6 +364,7 @@ enum SceneAwareCompositor {
     static func compositedPreview(
         base: CGImage,
         overlays: [SceneOverlay],
+        maskGrades: [MaskGrade] = [],
         suppressing suppressed: Set<UUID>,
         position: Double,
         masks: MaskSet,
@@ -340,7 +378,8 @@ enum SceneAwareCompositor {
         guard let image = composited(
             base: CIImage(cgImage: base),
             frameSize: CGSize(width: base.width, height: base.height),
-            overlays: overlays, suppressing: suppressed, position: position,
+            overlays: overlays, maskGrades: maskGrades,
+            suppressing: suppressed, position: position,
             masks: masks, settings: settings, debugRegion: debugRegion,
             editorPreview: true, rotationDegrees: rotationDegrees)
         else { return base }
@@ -349,7 +388,23 @@ enum SceneAwareCompositor {
 
     /// The one compositing core — preview and export both come here, which
     /// is what makes "what the editor shows is what the export bakes" true
-    /// for overlays. Returns nil when there is nothing to draw (no overlays
+    /// for overlays, and now for masked grades too.
+    ///
+    /// **Masked grades run display-referred, and that is a decision.** The
+    /// whole-picture grade is the tone engine's: linear decode, Metal kernel,
+    /// display-referred out. A masked grade then runs `PhotoGrader.adjust` —
+    /// the Core Image chain — over that finished picture. It is the coarser
+    /// of the two paths, and it cannot recover a highlight the whole-picture
+    /// grade has already clipped.
+    ///
+    /// It is used anyway because it is the only stage BOTH renderers share.
+    /// A stills export blends many source frames into one output frame and
+    /// hands it here; there is no seam earlier than this where a mask drawn
+    /// on the OUTPUT frame could be applied at all. Running the engine a
+    /// second time would give a better preview and a preview that no longer
+    /// matched the export, which is the one thing this file exists to
+    /// prevent. If masked grades ever want linear light, the engine needs a
+    /// masked-recipe pass and both callers move to it together. Returns nil when there is nothing to draw (no overlays
     /// at this position, no debug tint), so callers can skip the re-encode.
     /// `editorPreview` turns on the two affordances that describe how the
     /// EDITOR draws rather than what the piece is: onion skin, and ghosting
@@ -359,6 +414,10 @@ enum SceneAwareCompositor {
         base: CIImage,
         frameSize: CGSize,
         overlays: [SceneOverlay],
+        /// The grades applied inside a mask, in list order. They go on FIRST,
+        /// before any text — they are part of the picture, and type placed in
+        /// a graded region has to sit on the graded pixels.
+        maskGrades: [MaskGrade] = [],
         /// The layers the EDITOR is carrying itself — a dragged layer and
         /// the followers travelling with it, drawn by SwiftUI proxies for the
         /// length of the gesture so they move at pointer rate. Empty for an
@@ -380,6 +439,22 @@ enum SceneAwareCompositor {
     ) -> CIImage? {
         var image = base
         var drewAnything = false
+        for grade in maskGrades where grade.isActive {
+            guard let source = masks.regionMask(for: grade.placement) else { continue }
+            let occlusion = Occlusion(
+                mask: source, settings: settings, rotationDegrees: rotationDegrees)
+            // The guide is the picture, so a grade applied inside Sky stops at
+            // the roofline the photograph actually has rather than at the 448
+            // grid's rounded version of it — the same refinement text
+            // occlusion gets, and for the same reason: a visible boundary.
+            guard let selection = restorationMask(occlusion, extent: image.extent, guide: image)
+            else { continue }
+            let adjusted = PhotoGrader
+                .adjust(image, grade.adjustments, asShotKelvin: PhotoGrader.neutralKelvin)
+                .cropped(to: image.extent)
+            image = blend(input: adjusted, background: image, mask: selection)
+            drewAnything = true
+        }
         // Layers are stored front-to-back (index 0 is frontmost), and each
         // composite paints OVER what came before — so the array is walked in
         // reverse and row 1 of the Text tab lands on top.
@@ -436,6 +511,7 @@ enum SceneAwareCompositor {
         position: Double,
         pool: CVPixelBufferPool,
         overlays: [SceneOverlay],
+        maskGrades: [MaskGrade] = [],
         masks: MaskSet,
         settings: SegmentationSettings,
         /// The project's fine rotation, levelled into the frame here — the
@@ -450,8 +526,8 @@ enum SceneAwareCompositor {
         try autoreleasepool {
             try bakeExportFrameBody(
                 buffer, position: position, pool: pool,
-                overlays: overlays, masks: masks, settings: settings,
-                rotationDegrees: rotationDegrees)
+                overlays: overlays, maskGrades: maskGrades, masks: masks,
+                settings: settings, rotationDegrees: rotationDegrees)
         }
     }
 
@@ -460,6 +536,7 @@ enum SceneAwareCompositor {
         position: Double,
         pool: CVPixelBufferPool,
         overlays: [SceneOverlay],
+        maskGrades: [MaskGrade],
         masks: MaskSet,
         settings: SegmentationSettings,
         rotationDegrees: Double
@@ -468,7 +545,8 @@ enum SceneAwareCompositor {
         let base = FrameRotation.rotated(CIImage(cvPixelBuffer: buffer), degrees: rotationDegrees)
         let composited = composited(
             base: base, frameSize: base.extent.size,
-            overlays: overlays, suppressing: [], position: position,
+            overlays: overlays, maskGrades: maskGrades,
+            suppressing: [], position: position,
             masks: masks, settings: settings, debugRegion: nil,
             editorPreview: false, rotationDegrees: rotationDegrees)
         // Nothing drawn and nothing levelled: the frame appends untouched.
@@ -498,6 +576,7 @@ enum SceneAwareCompositor {
     static func bakeStill(
         _ image: CGImage,
         overlays: [SceneOverlay],
+        maskGrades: [MaskGrade] = [],
         masks: MaskSet,
         settings: SegmentationSettings,
         rotationDegrees: Double = 0
@@ -507,7 +586,8 @@ enum SceneAwareCompositor {
         let composited = composited(
             base: base,
             frameSize: CGSize(width: image.width, height: image.height),
-            overlays: overlays, suppressing: [], position: 1,
+            overlays: overlays, maskGrades: maskGrades,
+            suppressing: [], position: 1,
             masks: masks, settings: settings, debugRegion: nil,
             editorPreview: false, rotationDegrees: rotationDegrees, settled: true)
         guard composited != nil || levelling else { return nil }

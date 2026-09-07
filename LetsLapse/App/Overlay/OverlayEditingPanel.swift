@@ -1965,11 +1965,18 @@ struct PopoverRowButtonStyle: ButtonStyle {
 /// project's custom masks, and a fixed row would push "Custom" off the rail.
 struct FlowRow: Layout {
     var spacing: CGFloat = 1
+    /// Vertical gap between wrapped rows. Defaults to `spacing`, so the
+    /// placement pills — which have always used one number for both — are
+    /// unchanged; the mask strip wants a tighter gap between lines than
+    /// between tiles.
+    var lineSpacing: CGFloat?
+
+    private var rowGap: CGFloat { lineSpacing ?? spacing }
 
     func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
         let width = proposal.width ?? .infinity
         let rows = layout(subviews: subviews, width: width)
-        let height = rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(rows.count - 1, 0))
+        let height = rows.map(\.height).reduce(0, +) + rowGap * CGFloat(max(rows.count - 1, 0))
         return CGSize(width: proposal.width ?? rows.map(\.width).max() ?? 0, height: height)
     }
 
@@ -1987,7 +1994,7 @@ struct FlowRow: Layout {
                     proposal: ProposedViewSize(size))
                 x += size.width + spacing
             }
-            y += row.height + spacing
+            y += row.height + rowGap
         }
     }
 

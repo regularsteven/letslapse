@@ -11,6 +11,49 @@ live inline.
 
 ## Open
 
+### Masks as adjustment layers — iOS design pass, and a device check
+
+**Raised:** 2026-09-07 · **Size:** small–medium (one design decision, then two
+SVGs and a touch-sizing pass)
+
+The feature shipped 2026-09-07 from the Claude Design handoff *"Masks as
+Adjustment Layers"*: Linear and Radial parametric masks, and a `MaskGrade` that
+applies any mask's own adjustments after the whole-picture grade and before the
+text overlays. It is universal — same model, same rail, same card on iPhone and
+iPad as on the Mac — and the macOS mirrors are drawn
+(`docs/design/macOS/photo-viewer.masks.svg`, `photo-viewer.mask-grade.svg`).
+
+**Open:**
+
+- **Decide how a shape is drawn and nudged on a phone, then mirror iOS.** The
+  handoff sketches only the *collapse* behaviour for a small ellipse ("small
+  mask · handles collapsed — zoom in to edit") and says nothing about creating
+  or dragging one where the picture is the smaller half of a stacked layout.
+  Drag-to-adjust is already gated off there (`supportsDragToAdjust`) for the
+  same reason, so a phone can add and grade a mask but cannot comfortably draw
+  one. Two files are owed once that is settled — the Masks tab and the Editor
+  tab's Masks card. iOS has never had a Masks mirror at all, so there is no
+  stale file to fix, only new ones to draw.
+- **Verify on a device.** Everything here was checked on the Mac. The handles
+  are a pointer-sized target (14pt drawn, 22pt hit area) and want a real finger
+  on them; the masked-grade composite adds one Core Image pass per enabled
+  grade to every preview render, which wants measuring on a phone before
+  anybody stacks four of them.
+- **Keyframing a MaskGrade is deferred, by the design's own decision.** The
+  fields are `PhotoAdjustments` and the geometry is numbers, so both can ride
+  `GradeTimeline` later; nothing in the model prevents it.
+
+**One thing to know if the render is ever revisited:** masked grades run
+**display-referred**, through `PhotoGrader.adjust` (the Core Image chain the
+video path uses), not through the Metal tone engine. That is deliberate and
+documented in `SceneAwareCompositor.composited` — it is the only stage the
+preview and a stills-blend export share, so it is what makes the two agree. The
+cost is that a masked grade cannot recover a highlight the whole-picture grade
+has already clipped. Moving it into linear light means giving the engine a
+masked-recipe pass and moving both callers together.
+
+---
+
 ### Gallery redesign — SVG design files
 
 **Raised:** 2026-09-06 · **macOS DONE 2026-09-07** · **Size:** small (what is

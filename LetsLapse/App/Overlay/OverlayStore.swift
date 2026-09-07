@@ -23,18 +23,30 @@ struct OverlayDocument: Codable, Equatable {
     /// Project-level custom masks. Masks belong to the project, not the
     /// layer — every text layer can pick any of them.
     var customMasks: [CustomMask] = []
+    /// The project's drawn masks — Linear and Radial shapes, parameters only.
+    /// Same standing as `customMasks`: they belong to the project, and both
+    /// text placement and a `MaskGrade` can name any of them.
+    var shapeMasks: [ShapeMask] = []
+    /// The grades applied through those masks, in paint order — each one is
+    /// composited after the whole-picture grade and before the text overlays.
+    /// Unique on (mask, inverted); `addMaskGrade` is what keeps it so.
+    var maskGrades: [MaskGrade] = []
 
     private enum CodingKeys: String, CodingKey {
-        case overlays = "o", maskSettings = "m", customMasks = "cm"
+        case overlays = "o", maskSettings = "m", customMasks = "cm",
+             shapeMasks = "sm", maskGrades = "mg"
     }
 
     init() {}
 
     init(overlays: [SceneOverlay], maskSettings: SegmentationSettings,
-         customMasks: [CustomMask]) {
+         customMasks: [CustomMask], shapeMasks: [ShapeMask] = [],
+         maskGrades: [MaskGrade] = []) {
         self.overlays = overlays
         self.maskSettings = maskSettings
         self.customMasks = customMasks
+        self.shapeMasks = shapeMasks
+        self.maskGrades = maskGrades
     }
 
     /// `customMasks` is younger than the file format, so its absence is
@@ -45,6 +57,12 @@ struct OverlayDocument: Codable, Equatable {
         maskSettings = try c.decodeIfPresent(
             SegmentationSettings.self, forKey: .maskSettings) ?? SegmentationSettings()
         customMasks = try c.decodeIfPresent([CustomMask].self, forKey: .customMasks) ?? []
+        shapeMasks = try c.decodeIfPresent([ShapeMask].self, forKey: .shapeMasks) ?? []
+        maskGrades = try c.decodeIfPresent([MaskGrade].self, forKey: .maskGrades) ?? []
+        // A grade whose mask went away with an older build (or a hand-edited
+        // sidecar) selects nothing and would sit in the card as a dead row.
+        let live = Set(projectMasks.map(\.ref))
+        maskGrades.removeAll { !live.contains($0.mask) }
     }
 
     /// The regions a layer can be placed into, in pill order. Sky and Land
@@ -62,18 +80,37 @@ struct OverlayDocument: Codable, Equatable {
                 out.append((.customInverted(mask.id), mask.invertedName))
             }
         }
+        // Drawn shapes are regions like any other: text placement gains them
+        // for free, both ways round. A shape has no second name of its own,
+        // so its complement is named from it.
+        for mask in shapeMasks {
+            out.append((.shape(mask.id), mask.displayName))
+            out.append((.shapeInverted(mask.id), mask.invertedName))
+        }
         return out
     }
 
     /// True when any layer asks for a region the segmentation model has to
-    /// produce. Custom masks are files, so they never need the model.
+    /// produce. Custom masks are files and drawn shapes are arithmetic, so
+    /// neither ever needs the model.
     var needsSegmentationModel: Bool {
-        overlays.contains { overlay in
+        let placed = overlays.contains { overlay in
             switch overlay.placement {
             case .sky, .land: return true
-            case .none, .custom, .customInverted: return false
+            case .none, .custom, .customInverted, .shape, .shapeInverted: return false
             }
         }
+        // A grade applied inside Sky needs the mask just as much as a text
+        // layer occluded by it does.
+        return placed || needsSegmentationForGrades
+    }
+
+    /// True when the project has nothing to persist — no layers, no masks of
+    /// either kind, and nothing graded through one. Settings alone describe
+    /// nothing, but a project can legitimately hold a mask with the grade or
+    /// the text not yet written.
+    var isEmpty: Bool {
+        overlays.isEmpty && customMasks.isEmpty && shapeMasks.isEmpty && maskGrades.isEmpty
     }
 }
 
@@ -110,7 +147,8 @@ extension AppModel {
         }
         if let legacy = try? decoder.decode([SceneOverlay].self, from: data) {
             return OverlayDocument(
-                overlays: legacy, maskSettings: SegmentationSettings(), customMasks: [])
+                overlays: legacy, maskSettings: SegmentationSettings(), customMasks: [],
+                shapeMasks: [], maskGrades: [])
         }
         return OverlayDocument()
     }
@@ -126,7 +164,7 @@ extension AppModel {
     /// text not yet written.
     func setOverlayDocument(_ document: OverlayDocument, for capture: CaptureProject) {
         let url = overlaysURL(for: capture)
-        guard !document.overlays.isEmpty || !document.customMasks.isEmpty else {
+        guard !document.isEmpty else {
             try? FileManager.default.removeItem(at: url)
             return
         }
