@@ -11,6 +11,40 @@ live inline.
 
 ## Open
 
+### Lightroom parity — handed over, not finished
+
+**Raised:** 2026-09-07 · **Detail:**
+[lightroom-parity-handover.md](lightroom-parity-handover.md) · **Size:** large
+
+Reading Lightroom's edits and rendering them like Lightroom does. Mean ΔE2000
+is **11.0 across 15 files** against a 11.6 baseline; visually matched would be
+2–3. The apparatus for measuring it is built and documented
+(`docs/render-variants/README.md`); the remaining work is controls we do not
+have.
+
+**Read the handover before touching this.** It carries the assumptions made
+(one of them — the mask inversion rule — is inferred and unverified), three
+predictions that measurement disproved, the negative result on Adobe's AI mask
+encoding, and a ranked approach.
+
+**The short version of what to do next:**
+
+1. Verify `LightroomImport.appliesOutside` against a rendered mask. Cheap, and
+   if it is backwards every masked-file score is wrong.
+2. Move the masked-grade stage out of `SceneAwareCompositor` and into the Kit,
+   so the bench can score whole renders rather than the whole-picture grade
+   only.
+3. Build the three controls the corpus actually asks for and we do not have:
+   **Dehaze** (13/15 files), **HSL** (9/15), **crop and straighten on import**
+   (9/15). The last is a correctness gap, not just a parity one — an imported
+   project is currently not even the same framing.
+
+**Do not** re-mine slider calibration (an 18-point sweep moved it 0.08) and do
+not start from the earlier "HSL is a poor bet" note — that was drawn from a
+five-file corpus where one file used it; on fifteen it is nine.
+
+---
+
 ### Render variants — wire the app to the switch, and get masks into the bench
 
 **Raised:** 2026-09-07 · **Size:** medium
