@@ -4052,6 +4052,230 @@ final class CameraController: NSObject, ObservableObject {
         #endif
     }
 
+    // MARK: - Photo manual exposure (M)
+
+    /// Whether the active camera accepts `.custom` exposure right now —
+    /// checked live per lens/format, the same trust level the Holy Grail
+    /// ramp gives this call (`applyHolyGrailExposure`) rather than assuming
+    /// it from the platform: macOS cameras never report it in this app's
+    /// experience, but an unusual lens could disagree with a sibling lens on
+    /// the same iPhone too.
+    var supportsManualExposure: Bool {
+        videoDevice?.isExposureModeSupported(.custom) ?? false
+    }
+
+    /// The active format's real shutter-duration envelope, in seconds — the
+    /// SHUTTER wheel's detents are clamped to this, since a device's real
+    /// range can be narrower than the full third-stop list. `Format`'s
+    /// exposure-duration properties don't exist in the macOS AVFoundation at
+    /// all (a compile-time unavailability, not just an unsupported mode), so
+    /// the fallback branch there isn't a "camera refused" case — there is no
+    /// API to ask.
+    var manualExposureDurationRange: ClosedRange<Double> {
+        let fallback = ManualExposureDetents.shutterSeconds.first!...ManualExposureDetents.shutterSeconds.last!
+        #if os(iOS)
+        guard let format = videoDevice?.activeFormat else { return fallback }
+        let lo = format.minExposureDuration.seconds
+        let hi = format.maxExposureDuration.seconds
+        guard lo.isFinite, hi.isFinite, lo > 0, lo < hi else { return fallback }
+        return lo...hi
+        #else
+        return fallback
+        #endif
+    }
+
+    /// The active format's real ISO envelope, mirroring the shutter range
+    /// above (kept separate from the older `isoRange`, which only refreshes
+    /// on an AE/AF lock — M needs real bounds before any lock ever happens).
+    var manualExposureISORange: ClosedRange<Float> {
+        let fallback = ManualExposureDetents.iso.first!...ManualExposureDetents.iso.last!
+        #if os(iOS)
+        guard let format = videoDevice?.activeFormat, format.minISO < format.maxISO else { return fallback }
+        return format.minISO...format.maxISO
+        #else
+        return fallback
+        #endif
+    }
+
+    /// A synchronous read of whatever AE currently reads — not the frozen
+    /// `lockedISO`/`lockedShutterSeconds` publishers, which belong to the
+    /// older AE/AF-lock feature. Used once, to seed the manual wheels the
+    /// instant M is tapped on, so the picture doesn't jump.
+    func currentAutoExposure() -> (shutter: Double, iso: Float)? {
+        #if os(iOS)
+        guard let device = videoDevice else { return nil }
+        let seconds = device.exposureDuration.seconds
+        let iso = device.iso
+        guard seconds > 0, seconds.isFinite, iso > 0 else { return nil }
+        return (seconds, iso)
+        #else
+        return nil
+        #endif
+    }
+
+    private enum ManualExposureFreeParameter { case shutter, iso }
+    private var manualExposureServoTimer: Timer?
+    private var manualExposureFreeParameter: ManualExposureFreeParameter?
+    private var manualExposurePinnedShutter: Double?
+    private var manualExposurePinnedISO: Float?
+
+    /// Photo mode's manual exposure. Either side may be `nil` to mean "hand
+    /// this parameter back to AE" — approximated by a light live servo
+    /// (below) since `.custom` mode fixes BOTH parameters and nothing
+    /// auto-tracks on its own once you're in it, regardless of which
+    /// sentinel you pass. `nil` on both sides is full auto and never enters
+    /// `.custom` at all.
+    func setPhotoManualExposure(shutterSeconds: Double?, iso: Float?) {
+        #if os(iOS)
+        guard shutterSeconds != nil || iso != nil else {
+            exitPhotoManualExposure()
+            return
+        }
+        if let shutterSeconds, let iso {
+            stopManualExposureServo()
+            sessionQueue.async {
+                guard let device = self.videoDevice, device.isExposureModeSupported(.custom) else { return }
+                self.writeManualExposure(device: device, shutterSeconds: shutterSeconds, iso: iso)
+            }
+            return
+        }
+        // Exactly one side is nil ("A"): pin the other, seed the free side
+        // from the device's own current reading so the picture doesn't
+        // jump, then let the servo carry it from there.
+        sessionQueue.async {
+            guard let device = self.videoDevice, device.isExposureModeSupported(.custom) else { return }
+            let seededShutter = shutterSeconds ?? device.exposureDuration.seconds
+            let seededISO = iso ?? device.iso
+            self.writeManualExposure(device: device, shutterSeconds: seededShutter, iso: seededISO)
+            DispatchQueue.main.async {
+                if shutterSeconds == nil {
+                    self.manualExposurePinnedISO = seededISO
+                    self.manualExposurePinnedShutter = nil
+                    self.startManualExposureServo(freeParameter: .shutter)
+                } else {
+                    self.manualExposurePinnedShutter = seededShutter
+                    self.manualExposurePinnedISO = nil
+                    self.startManualExposureServo(freeParameter: .iso)
+                }
+            }
+        }
+        #else
+        _ = shutterSeconds
+        _ = iso
+        #endif
+    }
+
+    /// Leaves Photo manual exposure: stops the servo and returns the device
+    /// to continuous AE. Safe to call whether or not manual was ever
+    /// entered (mode switch away from Photo, or the capture screen closing).
+    func exitPhotoManualExposure() {
+        stopManualExposureServo()
+        sessionQueue.async {
+            guard let device = self.videoDevice else { return }
+            do {
+                try device.lockForConfiguration()
+                defer { device.unlockForConfiguration() }
+                if device.isExposureModeSupported(.continuousAutoExposure) {
+                    device.exposureMode = .continuousAutoExposure
+                }
+            } catch {}
+        }
+    }
+
+    #if os(iOS)
+    private func startManualExposureServo(freeParameter: ManualExposureFreeParameter) {
+        manualExposureFreeParameter = freeParameter
+        manualExposureServoTimer?.invalidate()
+        let timer = Timer(timeInterval: 0.25, repeats: true) { [weak self] _ in
+            self?.tickManualExposureServo()
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        manualExposureServoTimer = timer
+    }
+    #endif
+
+    private func stopManualExposureServo() {
+        manualExposureServoTimer?.invalidate()
+        manualExposureServoTimer = nil
+        manualExposureFreeParameter = nil
+        manualExposurePinnedShutter = nil
+        manualExposurePinnedISO = nil
+    }
+
+    /// One ~4 Hz nudge of whichever parameter is on `A`, gain-limited to
+    /// ±1/3 stop per tick — the same ceiling `HolyGrailRampEngine.gatedStep`
+    /// already proved stable against oscillation, here applied to a single
+    /// already-known parameter instead of a two-parameter ramp target. A
+    /// small dead zone skips the write entirely once the offset is within
+    /// metering noise, so a settled scene doesn't chatter at 4 Hz forever.
+    private static let manualExposureServoStopsPerTick = 1.0 / 3.0
+    private static let manualExposureServoDeadZoneStops = 0.02
+
+    #if os(iOS)
+    private func tickManualExposureServo() {
+        // Read the pinned/free state here, on the same (main) thread every
+        // write to it happens on, and hand the *values* across to
+        // sessionQueue — not `self` property access from inside the closure,
+        // which would read `manualExposurePinnedISO`/`manualExposurePinnedShutter`
+        // from a queue that never writes them, the one cross-queue access
+        // this file is otherwise careful to avoid (see the "sessionQueue-
+        // confined" properties elsewhere in this class).
+        guard let free = manualExposureFreeParameter else { return }
+        let pinnedISO = manualExposurePinnedISO
+        let pinnedShutter = manualExposurePinnedShutter
+        sessionQueue.async {
+            guard let device = self.videoDevice, device.isExposureModeSupported(.custom) else { return }
+            // `exposureTargetOffset` is positive when the frame is BRIGHTER
+            // than target (HolyGrailRampEngine.sceneEV100's doc comment,
+            // proven on real shoots) — so the correction is the opposite
+            // sign: brighter-than-target needs LESS exposure, darker needs
+            // MORE. Applying the raw offset directly (the bug this replaced)
+            // pushed exposure further whichever way it already was off —
+            // positive feedback instead of negative, confirmed runaway on a
+            // real iPad (2026-09-07, pinning ISO to 32 with shutter free).
+            let rawOffset = Double(device.exposureTargetOffset)
+            guard rawOffset.isFinite else { return }
+            let correction = -rawOffset
+            let step = min(max(correction, -Self.manualExposureServoStopsPerTick), Self.manualExposureServoStopsPerTick)
+            guard abs(step) > Self.manualExposureServoDeadZoneStops else { return }
+            let gain = pow(2.0, step)
+            switch free {
+            case .shutter:
+                let iso = pinnedISO ?? device.iso
+                let seconds = device.exposureDuration.seconds * gain
+                self.writeManualExposure(device: device, shutterSeconds: seconds, iso: iso)
+            case .iso:
+                let seconds = pinnedShutter ?? device.exposureDuration.seconds
+                let iso = device.iso * Float(gain)
+                self.writeManualExposure(device: device, shutterSeconds: seconds, iso: iso)
+            }
+        }
+    }
+
+    /// The one write every manual-exposure call site shares, clamped
+    /// through the ACTIVE format every time: an out-of-range duration or
+    /// ISO makes `setExposureModeCustom` throw an uncatchable ObjC
+    /// exception, not a Swift error (the iPad bracket trap, CLAUDE.md) — the
+    /// detent tables alone are not enough of a guarantee, since a device's
+    /// real envelope can be narrower than the full list. sessionQueue.
+    private func writeManualExposure(device: AVCaptureDevice, shutterSeconds: Double, iso: Float) {
+        do {
+            try device.lockForConfiguration()
+            defer { device.unlockForConfiguration() }
+            let format = device.activeFormat
+            let clampedISO = min(max(iso, format.minISO), format.maxISO)
+            var duration = CMTimeMakeWithSeconds(shutterSeconds, preferredTimescale: 1_000_000)
+            if CMTimeCompare(duration, format.minExposureDuration) < 0 {
+                duration = format.minExposureDuration
+            }
+            if CMTimeCompare(duration, format.maxExposureDuration) > 0 {
+                duration = format.maxExposureDuration
+            }
+            device.setExposureModeCustom(duration: duration, iso: clampedISO, completionHandler: nil)
+        } catch {}
+    }
+    #endif
+
     /// Lock focus at an explicit lens position (0 = near, 1 = far).
     func setLensPosition(_ position: Float) {
         #if os(iOS)

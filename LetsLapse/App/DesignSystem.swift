@@ -43,6 +43,14 @@ enum LL {
     /// segmented control's track. UIKit's tertiary fill on a grouped screen;
     /// the design's #E9E9EB.
     static let controlFill = Color(red: 233 / 255, green: 233 / 255, blue: 235 / 255)
+
+    /// Horizon-level ramp (Photo mode's Grid+Level): green when level,
+    /// warming through amber/orange to red the further off level the phone
+    /// is. Thresholds live with `LevelIndicatorOverlay` in CaptureView.swift.
+    static let levelGood = Color(red: 52 / 255, green: 199 / 255, blue: 89 / 255)
+    static let levelNear = amber
+    static let levelOff = Color(red: 255 / 255, green: 149 / 255, blue: 0)
+    static let levelFar = Color(red: 255 / 255, green: 59 / 255, blue: 48 / 255)
 }
 
 // MARK: - Speed math

@@ -242,7 +242,15 @@ struct CaptureView: View {
     @State private var framingStartedAt = Date()
     @State private var showFormatSheet = false
     @State private var showTargetSheet = false
-    @State private var showGrid = false
+    @State private var gridOverlay: GridOverlayState = .off
+    /// Photo mode's manual exposure ("M" in cluster slot 3): whether the
+    /// panel is open, the two wheels' detent indices (−1 = A), and the AE
+    /// pair manual was entered against (the readout's EV reference — see
+    /// `PhotoExposureWheels`).
+    @State private var photoManualExposure = false
+    @State private var photoShutterIndex = 21
+    @State private var photoISOIndex = 8
+    @State private var photoManualAEReference: (shutter: Double, iso: Float) = (1.0 / 60, 200)
     @State private var activeTarget: CaptureTargetPlan?
     @State private var targetReached = false
     /// Rolling reference scale for the lens pinch — each threshold crossing
@@ -563,6 +571,19 @@ struct CaptureView: View {
             // follow the user across the switch.
             if burstPillMode != nil, burstPillMode != newMode { dismissBurstPill() }
             updateTestCardWatch()
+            // M is Photo-only chrome (`clusterSlot`, `exposurePanel` both
+            // gate on `mode == .photo`), but the exposure it set is real
+            // device state — leaving Photo must hand that back to AE even
+            // though the panel itself just disappears. The wheels' own
+            // on/off and indices stay put, so returning to Photo re-arms
+            // exactly where it left off, per the handoff's own rule.
+            if newMode == .photo, photoManualExposure {
+                camera.setPhotoManualExposure(
+                    shutterSeconds: photoShutterIndex >= 0 ? ManualExposureDetents.shutterSeconds[photoShutterIndex] : nil,
+                    iso: photoISOIndex >= 0 ? ManualExposureDetents.iso[photoISOIndex] : nil)
+            } else if newMode != .photo, photoManualExposure {
+                camera.exitPhotoManualExposure()
+            }
             guard RecordingSettingsStore.isEnabled else { return }
             if let seconds = RecordingSettingsStore.intervalSeconds(for: newMode) {
                 interval = seconds
@@ -927,6 +948,8 @@ struct CaptureView: View {
         applyBurstPreviewHook()
         applyFocusPreviewHook()
         applyRecordingPreviewHook()
+        applyManualExposurePreviewHook()
+        applyGridPreviewHook()
         #if os(macOS)
         // LL_CAMERA=<name substring> — switch to that camera once the session
         // is up, driving the exact path the Camera menu drives. Exists because
@@ -1417,6 +1440,13 @@ struct CaptureView: View {
         // close (or a Photo-mode exit) shouldn't leave motion updates running.
         steadiness.stop()
         camera.stopTestCardTap()
+        // Same reasoning as `steadiness.stop()` above: a mid-session close
+        // shouldn't leave the manual-exposure servo timer running against a
+        // screen nobody can see.
+        if photoManualExposure {
+            photoManualExposure = false
+            camera.exitPhotoManualExposure()
+        }
         #if os(iOS)
         // The framing tap is an extra session output; leaving it attached
         // past this screen would reconfigure a session the next recording is
@@ -1890,8 +1920,17 @@ struct CaptureView: View {
             )
             ZStack {
                 Color.clear
-                if showGrid {
+                if gridOverlay != .off {
                     RuleOfThirdsGrid()
+                        .frame(width: fitted.width, height: fitted.height)
+                        .frame(
+                            maxWidth: .infinity,
+                            maxHeight: .infinity,
+                            alignment: isPortrait ? .top : .center
+                        )
+                }
+                if gridOverlay == .level {
+                    LevelIndicatorOverlay()
                         .frame(width: fitted.width, height: fitted.height)
                         .frame(
                             maxWidth: .infinity,
@@ -3011,6 +3050,34 @@ struct CaptureView: View {
             ? CGPoint(x: parts[0], y: parts[1])
             : CGPoint(x: 196.5, y: 385)
         focusReticle = FocusReticle(point: point)
+    }
+
+    /// `LL_MANUAL=1` stages Photo's manual-exposure panel open at the
+    /// wheels' own defaults (ISO 200 · 1/60), for SVG-mirror screenshots —
+    /// same reason as the other hooks here: the simulator's camera never
+    /// actually reports AE, so there is no real way to land on a clean,
+    /// reviewable state by tapping M for real. Pair with `LL_CAPTURE=1
+    /// LL_MODE=photo`.
+    private func applyManualExposurePreviewHook() {
+        guard ProcessInfo.processInfo.environment["LL_MANUAL"] != nil else { return }
+        photoManualExposure = true
+    }
+
+    /// `LL_GRID=grid|level` stages Photo's grid/level cycle directly, and
+    /// `LL_LEVEL=<degrees>` (paired with `LL_GRID=level`) freezes the
+    /// horizon reading itself — the simulator has no accelerometer to
+    /// physically tilt. Pair with `LL_CAPTURE=1 LL_MODE=photo`.
+    private func applyGridPreviewHook() {
+        switch ProcessInfo.processInfo.environment["LL_GRID"] {
+        case "grid": gridOverlay = .grid
+        case "level": gridOverlay = .level
+        default: break
+        }
+        #if os(iOS)
+        if let raw = ProcessInfo.processInfo.environment["LL_LEVEL"], let degrees = Double(raw) {
+            LevelSensor.debugOverrideDegrees = degrees
+        }
+        #endif
     }
 
     /// `LL_RECORDING=1` freezes a Video shoot mid-take — the recording pill,
@@ -4777,11 +4844,21 @@ struct CaptureView: View {
     /// the rail's column used to carry it; portrait's lives in `exposurePanel`.
     private func shutterClusterLayer(in geometry: GeometryProxy) -> some View {
         let pin = shutterClusterPin(in: geometry)
+        // The plain text readouts fit centred under the cluster's own narrow
+        // box; the manual-exposure wheels need real drag room (240 pt) that
+        // the box's ~94 pt clearance from the physical edge cannot centre
+        // without running off-screen, so they anchor to whichever side of
+        // the cluster already faces the viewfinder — the one direction with
+        // room to grow — instead. Landscape's proposed home for a panel that
+        // has no existing landscape placement to match (portrait's lives in
+        // `exposurePanel`; this is `landscapeClusterReadout`'s own equivalent).
+        let manualPanel = pin.geometry.isLandscape && mode == .photo && photoManualExposure
+        let anchor: Alignment = manualPanel ? (shutterClusterLeads ? .topLeading : .topTrailing) : .top
         return shutterCluster(pin.geometry)
-            .overlay(alignment: .top) {
+            .overlay(alignment: anchor) {
                 if pin.geometry.isLandscape {
                     landscapeClusterReadout
-                        .frame(width: pin.geometry.box.width)
+                        .frame(width: manualPanel ? 240 : pin.geometry.box.width)
                         .offset(y: pin.geometry.box.height + 6)
                 }
             }
@@ -4840,7 +4917,19 @@ struct CaptureView: View {
             switch slot {
             case 1: gridToggleCircle
             case 2: shutterDelayCircle
-            case 3: exposureLockCircle
+            case 3:
+                // `|| photoManualExposure`: once manual is actually engaged,
+                // keep showing M even if `supportsManualExposure` later reads
+                // false (a lens switched mid-session, or the DEBUG hook
+                // forcing the panel open on the simulator's cameraless
+                // device) — the alternative is a padlock glyph sitting next
+                // to an open manual-exposure panel, which is worse than
+                // showing M for a control that would no-op.
+                if mode == .photo, camera.supportsManualExposure || photoManualExposure {
+                    manualExposureCircle
+                } else {
+                    exposureLockCircle
+                }
             default: steadyToggleCircle
             }
         }
@@ -4883,20 +4972,47 @@ struct CaptureView: View {
             .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
     }
 
-    /// Rule-of-thirds grid toggle — a left-side control matching the exposure
-    /// lock's circular chrome.
+    /// Slot 1's three states: off, rule-of-thirds, thirds-plus-horizon-level.
+    /// Level needs CoreMotion, which doesn't exist on macOS at all (not a
+    /// product choice — the framework isn't there to ask), so the Mac cycle
+    /// simply skips straight back to `.off` instead of offering a dead state.
+    private enum GridOverlayState {
+        case off, grid, level
+
+        static var levelAvailable: Bool {
+            #if os(iOS)
+            true
+            #else
+            false
+            #endif
+        }
+
+        func next() -> GridOverlayState {
+            switch self {
+            case .off: return .grid
+            case .grid: return Self.levelAvailable ? .level : .off
+            case .level: return .off
+            }
+        }
+    }
+
+    /// Rule-of-thirds / horizon-level toggle — a left-side control matching
+    /// the exposure lock's circular chrome. The button's own on/off tint
+    /// stays binary amber (`.grid` and `.level` both read as "on"); the
+    /// graduated level colour lives on the in-viewfinder bar
+    /// (`LevelIndicatorOverlay`), not this 44 pt glyph.
     private var gridToggleCircle: some View {
         Button {
-            showGrid.toggle()
+            gridOverlay = gridOverlay.next()
         } label: {
-            Image(systemName: showGrid ? "grid.circle.fill" : "grid.circle")
+            Image(systemName: gridOverlay != .off ? "grid.circle.fill" : "grid.circle")
                 .font(.system(size: 20))
-                .foregroundStyle(showGrid ? LL.amber : .white)
+                .foregroundStyle(gridOverlay != .off ? LL.amber : .white)
                 .frame(width: 44, height: 44)
                 .background(Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9), in: Circle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel("Toggle grid")
+        .accessibilityLabel(gridOverlay == .off ? "Show grid" : (gridOverlay == .grid ? "Show grid and level" : "Hide grid"))
     }
 
     /// Circular AE/AF lock, sized for the shutter-row slots and the
@@ -4931,6 +5047,29 @@ struct CaptureView: View {
         .accessibilityLabel(ramping
             ? (isLocked ? "Unlock focus" : "Lock focus")
             : (isLocked ? "Unlock exposure and focus" : "Lock exposure and focus"))
+    }
+
+    /// Photo mode's manual-exposure toggle — cluster slot 3, in place of the
+    /// AE/AF padlock there in every other mode. No separate lock survives in
+    /// Photo: tapping M on already seeds both wheels from whatever AE reads
+    /// right now (`toggleManualExposure`), which is the padlock's entire
+    /// value (freeze the current exposure) plus optional fine-tuning on top,
+    /// so nothing the lock did is lost. Tap-to-focus is unaffected.
+    private var manualExposureCircle: some View {
+        Button {
+            toggleManualExposure()
+        } label: {
+            Text("M")
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(photoManualExposure ? .black : .white)
+                .frame(width: 44, height: 44)
+                .background(
+                    photoManualExposure ? LL.amber : Color(red: 0.17, green: 0.17, blue: 0.18).opacity(0.9),
+                    in: Circle()
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(photoManualExposure ? "Turn off manual exposure" : "Turn on manual exposure")
     }
 
     /// 2 s self-timer toggle — its own control so the portrait shutter row and
@@ -5111,9 +5250,25 @@ struct CaptureView: View {
     /// Fine brightness/focus tuning lives in portrait or on the Watch crown.
     @ViewBuilder
     private var landscapeClusterReadout: some View {
+        // Photo manual exposure takes priority: unlike the other readouts
+        // here it's a live control, not a frozen value, and it has no other
+        // landscape home (`exposurePanel`, portrait's equivalent, is never
+        // called from `landscapeLayout`).
+        if mode == .photo, photoManualExposure {
+            PhotoExposureWheels(
+                shutterIndex: photoShutterIndex,
+                isoIndex: photoISOIndex,
+                shutterReachable: ManualExposureDetents.reachableShutterIndices(within: camera.manualExposureDurationRange),
+                isoReachable: ManualExposureDetents.reachableISOIndices(within: camera.manualExposureISORange),
+                aeShutterSeconds: photoManualAEReference.shutter,
+                aeISO: photoManualAEReference.iso,
+                onChangeShutter: updatePhotoManualShutter,
+                onChangeISO: updatePhotoManualISO
+            )
+            .equatable()
         // Idle only: mid-run the amber run line in the viewfinder's corner
         // (`runReadoutCapsule`) carries the pair.
-        if !isCapturing, holyGrailArmed, !holyGrailExposureReadout.isEmpty {
+        } else if !isCapturing, holyGrailArmed, !holyGrailExposureReadout.isEmpty {
             Text(holyGrailExposureReadout)
                 .font(.system(size: 10, design: .monospaced))
                 .foregroundStyle(LL.amber)
@@ -5137,6 +5292,40 @@ struct CaptureView: View {
         }
     }
 
+    /// M on: seed both wheels from whatever AE reads right now, snapped to
+    /// their nearest detents, so the picture doesn't jump — the AE reference
+    /// they're seeded from is also the readout's EV zero point for the rest
+    /// of this manual session. M off: hand exposure back to continuous AE.
+    private func toggleManualExposure() {
+        if photoManualExposure {
+            photoManualExposure = false
+            camera.exitPhotoManualExposure()
+        } else {
+            let ae = camera.currentAutoExposure() ?? photoManualAEReference
+            photoManualAEReference = ae
+            photoShutterIndex = ManualExposureDetents.nearestShutterIndex(to: ae.shutter)
+            photoISOIndex = ManualExposureDetents.nearestISOIndex(to: ae.iso)
+            photoManualExposure = true
+            camera.setPhotoManualExposure(
+                shutterSeconds: ManualExposureDetents.shutterSeconds[photoShutterIndex],
+                iso: ManualExposureDetents.iso[photoISOIndex])
+        }
+    }
+
+    private func updatePhotoManualShutter(_ index: Int) {
+        photoShutterIndex = index
+        camera.setPhotoManualExposure(
+            shutterSeconds: index >= 0 ? ManualExposureDetents.shutterSeconds[index] : nil,
+            iso: photoISOIndex >= 0 ? ManualExposureDetents.iso[photoISOIndex] : nil)
+    }
+
+    private func updatePhotoManualISO(_ index: Int) {
+        photoISOIndex = index
+        camera.setPhotoManualExposure(
+            shutterSeconds: photoShutterIndex >= 0 ? ManualExposureDetents.shutterSeconds[photoShutterIndex] : nil,
+            iso: index >= 0 ? ManualExposureDetents.iso[index] : nil)
+    }
+
     private var exposureReadout: String {
         var text = "ISO \(Int(camera.lockedISO.rounded())) · \(shutterText(camera.lockedShutterSeconds))"
         // Only once the brightness slider has been moved off its centre — at
@@ -5149,9 +5338,7 @@ struct CaptureView: View {
     }
 
     private func shutterText(_ seconds: Double) -> String {
-        guard seconds > 0 else { return "—" }
-        if seconds >= 1 { return String(format: "%.1fs", seconds) }
-        return "1/\(Int((1 / seconds).rounded()))"
+        ManualExposureDetents.shutterLabel(seconds)
     }
 
     /// What the ramp is doing right now — the pair it will take the next frame
@@ -5237,6 +5424,19 @@ struct CaptureView: View {
                     exposureSlider(icon: "camera.macro", value: focusBinding, range: 0...1)
                 }
             }
+            .padding(.horizontal, 16)
+        } else if mode == .photo, photoManualExposure {
+            PhotoExposureWheels(
+                shutterIndex: photoShutterIndex,
+                isoIndex: photoISOIndex,
+                shutterReachable: ManualExposureDetents.reachableShutterIndices(within: camera.manualExposureDurationRange),
+                isoReachable: ManualExposureDetents.reachableISOIndices(within: camera.manualExposureISORange),
+                aeShutterSeconds: photoManualAEReference.shutter,
+                aeISO: photoManualAEReference.iso,
+                onChangeShutter: updatePhotoManualShutter,
+                onChangeISO: updatePhotoManualISO
+            )
+            .equatable()
             .padding(.horizontal, 16)
         } else if camera.isExposureLocked {
             VStack(spacing: 10) {
@@ -5814,6 +6014,66 @@ private struct RuleOfThirdsGrid: View {
         }
         .allowsHitTesting(false)
     }
+}
+
+/// Photo mode's Grid+Level: a horizon-level indicator drawn at the
+/// viewfinder's centre, over the same fitted frame `RuleOfThirdsGrid` uses.
+/// Reads `LevelSensor.shared.rollDegrees`, which is normalised against the
+/// nearest square hold rather than portrait specifically — so this same bar
+/// and the same colour logic are correct in both portrait and landscape
+/// shooting with no orientation-specific code here at all. iOS/iPadOS only:
+/// macOS has no CoreMotion, so `GridOverlayState.levelAvailable` keeps this
+/// view from ever mounting there.
+private struct LevelIndicatorOverlay: View {
+    var body: some View {
+        #if os(iOS)
+        TimelineView(.periodic(from: .now, by: 0.1)) { _ in
+            GeometryReader { geometry in
+                let roll = LevelSensor.shared.rollDegrees ?? 0
+                let tint = Self.tint(forDegreesOffLevel: abs(roll))
+                let center = CGPoint(x: geometry.size.width / 2, y: geometry.size.height / 2)
+                ZStack {
+                    Capsule().fill(tint).frame(width: 38, height: 2).position(x: center.x - 73, y: center.y)
+                    Capsule().fill(tint).frame(width: 38, height: 2).position(x: center.x + 73, y: center.y)
+                    // Rotates with the phone; reads level when it lines up
+                    // with the two fixed reference ticks either side.
+                    Capsule()
+                        .fill(tint)
+                        .frame(width: 88, height: 2)
+                        .rotationEffect(.degrees(-roll))
+                        .position(center)
+                    Text(Self.rollLabel(roll))
+                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(tint)
+                        .position(x: center.x, y: center.y + 20)
+                }
+                .animation(.linear(duration: 0.1), value: roll)
+            }
+        }
+        .allowsHitTesting(false)
+        #else
+        EmptyView()
+        #endif
+    }
+
+    #if os(iOS)
+    /// Green within the handoff's own ±1° snap threshold, warming through
+    /// amber and orange to red the further off level the phone is. A
+    /// starting proposal (see `DesignSystem.swift`), not yet measured
+    /// against a device — cheap to retune since they're four named colours.
+    private static func tint(forDegreesOffLevel degrees: Double) -> Color {
+        switch degrees {
+        case ..<1: return LL.levelGood
+        case ..<4: return LL.levelNear
+        case ..<8: return LL.levelOff
+        default: return LL.levelFar
+        }
+    }
+
+    private static func rollLabel(_ degrees: Double) -> String {
+        abs(degrees) < 0.05 ? "0°" : String(format: "%+.1f°", degrees)
+    }
+    #endif
 }
 
 /// Chip presses repaint instantly: the default plain style's animated

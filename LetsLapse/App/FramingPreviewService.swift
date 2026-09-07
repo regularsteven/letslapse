@@ -197,6 +197,12 @@ final class LevelSensor {
 
     private init() {}
 
+    #if DEBUG
+    /// `LL_LEVEL=<degrees>` freezes `rollDegrees` for a simulator screenshot
+    /// — the simulator has no accelerometer to physically tilt.
+    static var debugOverrideDegrees: Double?
+    #endif
+
     /// Signed degrees of camera roll: negative when the phone is tilted
     /// anticlockwise. Starts the sensor on first ask and returns nil until it
     /// has a reading — an invented zero would read as "perfectly level", which
@@ -209,6 +215,9 @@ final class LevelSensor {
     /// shot means by "level" is *how far off the nearest quarter turn*, which
     /// is right for portrait, either landscape, and upside-down alike.
     var rollDegrees: Double? {
+        #if DEBUG
+        if let override = Self.debugOverrideDegrees { return override }
+        #endif
         start()
         guard let gravity = motion.deviceMotion?.gravity else { return nil }
         // `atan2` over the two axes in the screen plane stays correct through

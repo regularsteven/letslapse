@@ -693,3 +693,267 @@ struct PhotoBlendDial: View, Equatable {
         isBulb ? "Bulb" : BlendDepth.fixed(max(1, frames)).chipLabel
     }
 }
+
+/// One "film-scroll" ruler in Photo mode's manual-exposure panel — a
+/// horizontal strip of third-stop detents under a fixed centre indicator,
+/// dragged to change SHUTTER or ISO. `A`, at index −1, hands that parameter
+/// back to AE (`CameraController`'s live servo carries it from there).
+///
+/// Built to a flexible width rather than the portrait panel's nominal
+/// 297 pt: the detent **pitch** (14 pt) stays constant everywhere so the
+/// drag physics and per-detent haptic feel identical however wide the
+/// wheel actually renders — landscape's narrower placement just shows fewer
+/// ticks at once, it does not make the control harder to use.
+struct DetentWheel: View, Equatable {
+    enum Parameter: Equatable {
+        case shutter, iso
+
+        var detentCount: Int {
+            switch self {
+            case .shutter: return ManualExposureDetents.shutterSeconds.count
+            case .iso: return ManualExposureDetents.iso.count
+            }
+        }
+
+        func isFullStop(_ index: Int) -> Bool {
+            switch self {
+            case .shutter: return ManualExposureDetents.isFullStopShutter(index)
+            case .iso: return ManualExposureDetents.isFullStopISO(index)
+            }
+        }
+
+        func label(_ index: Int) -> String {
+            guard index >= 0 else { return "A" }
+            switch self {
+            case .shutter: return ManualExposureDetents.shutterLabel(ManualExposureDetents.shutterSeconds[index])
+            case .iso: return String(Int(ManualExposureDetents.iso[index]))
+            }
+        }
+    }
+
+    let parameter: Parameter
+    /// −1 = A.
+    let index: Int
+    /// The active format's real envelope, in detent indices — a drag cannot
+    /// leave this range, so the wheel never shows a value the device would
+    /// silently clamp underneath it.
+    let reachableRange: ClosedRange<Int>
+    let onChange: (Int) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.parameter == rhs.parameter && lhs.index == rhs.index && lhs.reachableRange == rhs.reachableRange
+    }
+
+    private static let pitch: CGFloat = 14
+    private static let chrome = Color(red: 0.17, green: 0.17, blue: 0.18)
+
+    @State private var dragBaseIndex: Int?
+    @State private var lastHapticIndex: Int?
+
+    var body: some View {
+        GeometryReader { geo in
+            let width = geo.size.width
+            ZStack {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(Self.chrome.opacity(0.9))
+                ticks(width: width)
+                    .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                edgeFade(width: width)
+                    .allowsHitTesting(false)
+                RoundedRectangle(cornerRadius: 1, style: .continuous)
+                    .fill(LL.amber)
+                    .frame(width: 2, height: 20)
+                    .position(x: width / 2, y: 12)
+            }
+            .contentShape(Rectangle())
+            .gesture(dragGesture(width: width))
+        }
+        .frame(height: 44)
+    }
+
+    private func xPosition(for detentIndex: Int, width: CGFloat) -> CGFloat {
+        width / 2 + CGFloat(detentIndex - index) * Self.pitch
+    }
+
+    private func ticks(width: CGFloat) -> some View {
+        ZStack {
+            ForEach(Array(-1..<parameter.detentCount), id: \.self) { i in
+                let x = xPosition(for: i, width: width)
+                let full = i < 0 || parameter.isFullStop(i)
+                let selected = i == index
+                let reachable = i < 0 || reachableRange.contains(i)
+                let height: CGFloat = full ? 14 : 8
+                let color: Color = selected ? LL.amber : .white
+                let opacity: Double = !reachable ? 0.15 : (selected ? 1 : (full ? 0.85 : 0.4))
+
+                Rectangle()
+                    .fill(color)
+                    .frame(width: 1.5, height: height)
+                    .position(x: x, y: 6 + height / 2)
+                    .opacity(opacity)
+
+                if full {
+                    Text(parameter.label(i))
+                        .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
+                        .fixedSize()
+                        .foregroundStyle(color)
+                        .opacity(opacity)
+                        .position(x: x, y: 34)
+                }
+            }
+        }
+        .frame(width: width, height: 44)
+        .animation(.linear(duration: 0.08), value: index)
+    }
+
+    /// 53 pt / 18% fade to the wheel's own chrome at both ends, over the
+    /// ticks — a detent doesn't end abruptly at the wheel's edge, it fades
+    /// into the frame around it.
+    private func edgeFade(width: CGFloat) -> some View {
+        HStack(spacing: 0) {
+            LinearGradient(colors: [Self.chrome, Self.chrome.opacity(0)], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 53)
+            Spacer(minLength: 0)
+            LinearGradient(colors: [Self.chrome.opacity(0), Self.chrome], startPoint: .leading, endPoint: .trailing)
+                .frame(width: 53)
+        }
+        .frame(width: width)
+    }
+
+    private func dragGesture(width: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0)
+            .onChanged { value in
+                if dragBaseIndex == nil {
+                    dragBaseIndex = index
+                    lastHapticIndex = index
+                }
+                let base = dragBaseIndex ?? index
+                let upperBound = min(parameter.detentCount - 1, reachableRange.upperBound)
+                let proposed = Int((CGFloat(base) - value.translation.width / Self.pitch).rounded())
+                // `A` is never a numeric value, so it is never out of the
+                // device's reachable range — only clamp non-A proposals
+                // against `reachableRange.lowerBound`. Clamping A itself to
+                // that floor (the naive `max(-1, reachableRange.lowerBound)`
+                // this replaced) would make A permanently undraggable on any
+                // device whose fastest/slowest reachable detent isn't
+                // literally index 0.
+                let clamped = proposed <= -1 ? -1 : min(max(proposed, reachableRange.lowerBound), upperBound)
+                guard clamped != index else { return }
+                onChange(clamped)
+                #if os(iOS)
+                if clamped != lastHapticIndex {
+                    UIImpactFeedbackGenerator(style: .light).impactOccurred()
+                    lastHapticIndex = clamped
+                }
+                #endif
+            }
+            .onEnded { _ in
+                dragBaseIndex = nil
+                lastHapticIndex = nil
+            }
+    }
+}
+
+/// Photo mode's manual-exposure panel: the readout + offset meter over the
+/// SHUTTER and ISO wheels. Slots into `CaptureView.exposurePanel` exactly
+/// where the AE/AF lock's sliders used to, once M (`manualExposureCircle`)
+/// is on.
+struct PhotoExposureWheels: View, Equatable {
+    let shutterIndex: Int
+    let isoIndex: Int
+    let shutterReachable: ClosedRange<Int>
+    let isoReachable: ClosedRange<Int>
+    /// The AE pair manual mode was entered against — captured once, at the
+    /// moment M turned on, so the EV readout has a stable reference rather
+    /// than one that drifts as AE itself keeps metering underneath.
+    let aeShutterSeconds: Double
+    let aeISO: Float
+    let onChangeShutter: (Int) -> Void
+    let onChangeISO: (Int) -> Void
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.shutterIndex == rhs.shutterIndex && lhs.isoIndex == rhs.isoIndex
+            && lhs.shutterReachable == rhs.shutterReachable && lhs.isoReachable == rhs.isoReachable
+            && lhs.aeShutterSeconds == rhs.aeShutterSeconds && lhs.aeISO == rhs.aeISO
+    }
+
+    private var shutterSeconds: Double? {
+        shutterIndex >= 0 ? ManualExposureDetents.shutterSeconds[shutterIndex] : nil
+    }
+    private var isoValue: Float? {
+        isoIndex >= 0 ? ManualExposureDetents.iso[isoIndex] : nil
+    }
+
+    /// `log2(shutter/aeShutter) + log2(iso/aeISO)` — the stops away from the
+    /// exposure AE would have picked, the same formula the AE/AF lock's own
+    /// brightness slider is built on.
+    private var evOffset: Double {
+        guard let shutterSeconds, let isoValue, aeShutterSeconds > 0, aeISO > 0 else { return 0 }
+        return log2(shutterSeconds / aeShutterSeconds) + log2(Double(isoValue) / Double(aeISO))
+    }
+
+    private var readoutText: String {
+        let isoText = isoValue.map { "ISO \(Int($0.rounded()))" } ?? "ISO A"
+        let shutterLabel = shutterSeconds.map { ManualExposureDetents.shutterLabel($0) } ?? "A"
+        var text = "\(isoText) · \(shutterLabel)"
+        if shutterIndex < 0, isoIndex < 0 {
+            text += " · auto"
+        } else if shutterIndex < 0 {
+            text += " · shutter auto"
+        } else if isoIndex < 0 {
+            text += " · ISO auto"
+        } else if abs(evOffset) >= 0.05 {
+            text += String(format: " · %+.1f EV", evOffset)
+        }
+        return text
+    }
+
+    var body: some View {
+        VStack(spacing: 10) {
+            HStack(alignment: .center) {
+                Text(readoutText)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundStyle(LL.amber)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                Spacer()
+                offsetMeter
+            }
+            .frame(height: 16)
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    DialCaption(text: "SHUTTER").frame(width: 56, alignment: .leading)
+                    DetentWheel(
+                        parameter: .shutter, index: shutterIndex, reachableRange: shutterReachable,
+                        onChange: onChangeShutter)
+                }
+                HStack(spacing: 8) {
+                    DialCaption(text: "ISO").frame(width: 56, alignment: .leading)
+                    DetentWheel(
+                        parameter: .iso, index: isoIndex, reachableRange: isoReachable,
+                        onChange: onChangeISO)
+                }
+            }
+        }
+    }
+
+    /// ±3-stop needle over the AE reference, per the handoff's meter geometry.
+    private var offsetMeter: some View {
+        let clamped = max(-3, min(3, evOffset))
+        return ZStack(alignment: .leading) {
+            Rectangle().fill(Color.white.opacity(0.3)).frame(height: 1)
+            ForEach([-3, -2, -1, 0, 1, 2, 3], id: \.self) { stop in
+                Rectangle()
+                    .fill(Color.white.opacity(0.45))
+                    .frame(width: 1, height: stop == 0 ? 9 : 5)
+                    .offset(x: CGFloat(46 + stop * 15))
+            }
+            Rectangle()
+                .fill(LL.amber)
+                .frame(width: 2, height: 14)
+                .offset(x: CGFloat(46) + CGFloat(clamped) * 15 - 1)
+                .animation(.easeOut(duration: 0.12), value: clamped)
+        }
+        .frame(width: 92, height: 14)
+    }
+}
