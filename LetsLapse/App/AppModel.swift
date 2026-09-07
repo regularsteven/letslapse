@@ -322,14 +322,23 @@ final class AppModel: ObservableObject {
             }
         }
 
-        /// A one-tap Photo-mode capture: a single photo. With Blend Off the
-        /// captured frame is the photo itself; with blend on, the burst was
-        /// auto-blended into one image at capture time. Either way the
-        /// project reads as ONE asset — no versions, no photo counts, no
-        /// source-clip list, no re-processing (burst frames stay on disk as
-        /// stacking material, not user-facing media).
+        /// A project that IS one photo — a one-tap Photo-mode capture, or a
+        /// single photo imported from Files or the library.
+        ///
+        /// For a capture: with Blend Off the captured frame is the photo
+        /// itself; with blend on, the burst was auto-blended into one image at
+        /// capture time. Either way the project reads as ONE asset — no
+        /// versions, no photo counts, no source-clip list, no re-processing
+        /// (burst frames stay on disk as stacking material, not user-facing
+        /// media).
+        ///
+        /// An import of one file lands here rather than in a one-frame
+        /// interval shoot for the same reason: nothing about it was paced by a
+        /// timer, there is no sequence to blend or play, and "Interval · 1
+        /// photos" is not what somebody who picked one picture asked for.
         var isPhotoCapture: Bool {
-            kind == .photos && mode == AppModel.photoCaptureMode
+            kind == .photos
+                && (mode == AppModel.photoCaptureMode || mode == AppModel.importedPhotoMode)
         }
 
         /// A project title people can recognize: the custom name, an imported
@@ -341,11 +350,13 @@ final class AppModel: ObservableObject {
                 if !base.isEmpty { return base }
             }
             // An imported still sequence names itself after the folder it came
-            // out of — see `AppModel.importedStillsName`. Gated on the import
-            // mode rather than on `kind`, so photo projects registered through
-            // the old generic "Import" path (whose `originalName` is the
-            // count, not a name) keep their dated titles.
-            if kind == .photos, mode == AppModel.importedStillsMode {
+            // out of, and a single imported photo after the file itself — see
+            // `AppModel.importedStillsName`. Gated on the import modes rather
+            // than on `kind`, so photo projects registered through the old
+            // generic "Import" path (whose `originalName` is the count, not a
+            // name) keep their dated titles.
+            if kind == .photos,
+               mode == AppModel.importedStillsMode || mode == AppModel.importedPhotoMode {
                 let base = (originalName as NSString).deletingPathExtension
                 if !base.isEmpty { return base }
             }
@@ -6858,6 +6869,7 @@ final class AppModel: ObservableObject {
             switch phase {
             case .reading:
                 if let name { return "Reading \(name)…" }
+                if totalFrames == 1 { return "Reading 1 frame…" }
                 return "Reading \(totalFrames > 0 ? "\(totalFrames) " : "")frames…"
             case .copying:
                 if let name { return "Copying \(name)…" }
@@ -6880,12 +6892,18 @@ final class AppModel: ObservableObject {
     /// app can't claim — that it watched the shutter.
     static let importedStillsMode = "Interval · Imported"
 
+    /// The `mode` line a SINGLE imported photo registers with — the same
+    /// naming for the same reason, and the string `isPhotoCapture` reads to
+    /// treat it as one asset everywhere. An import is not required to be a
+    /// sequence: one photo is a photo, and this is what it registers as.
+    static let importedPhotoMode = "Photo · Imported"
+
     /// The `mode` line an imported video registers with. Long-standing value,
     /// named here so the two import paths are readable side by side.
     static let importedVideoMode = "Import"
 
-    /// Brings a set of stills shot on another camera in as an interval
-    /// project.
+    /// Brings stills shot on another camera in: a set of them as an interval
+    /// project, a single one as a photo project.
     ///
     /// `selection` is what the picker handed back: files, folders, or both.
     /// **Whatever it resolves to IS the shoot** — the frames are not
@@ -6914,10 +6932,11 @@ final class AppModel: ObservableObject {
         }
 
         let urls = Self.expandStillSelection(selection)
-        guard urls.count >= 2 else {
-            errorMessage = urls.isEmpty
-                ? "No photos there. Choose image files, or a folder holding them."
-                : "Pick at least two photos to stack."
+        // One photo is a photo. There used to be a two-frame minimum here,
+        // which rejected the single frame somebody had deliberately picked —
+        // the only real failure is a selection with no images in it at all.
+        guard !urls.isEmpty else {
+            errorMessage = "No photos there. Choose image files, or a folder holding them."
             return
         }
         mediaImport?.totalFrames = urls.count
@@ -6943,7 +6962,15 @@ final class AppModel: ObservableObject {
             mediaImport?.phase = .finishing
             let capture = try registerImportedStills(
                 sequence, id: id, relativeNames: relativeNames, selection: selection)
-            openCapture(capture)
+            // A sequence goes straight into the blend flow — turning a shoot
+            // into a clip is what importing one is for. A single photo has no
+            // sequence to blend ("1 photos → one still" is not an offer), so it
+            // lands on its own project screen, where a Photo-mode capture does.
+            if capture.isPhotoCapture {
+                show(capture)
+            } else {
+                openCapture(capture)
+            }
         } catch {
             // A half-copied project folder is not a project. Nothing has been
             // written to the manifest yet, so removing the tree leaves the
@@ -7104,7 +7131,10 @@ final class AppModel: ObservableObject {
             // every "when was this" the app shows reads this field.
             createdAt: sequence.startedAt ?? Date(),
             originalName: Self.importedStillsName(selection: selection, sequence: sequence),
-            mode: Self.importedStillsMode,
+            // One frame is a photo project (`isPhotoCapture`), so the whole app
+            // presents it as the single asset it is; two or more are the
+            // interval shoot they were taken as.
+            mode: sequence.count == 1 ? Self.importedPhotoMode : Self.importedStillsMode,
             sourceFileNames: relativeNames,
             sourceFPS: nil,
             // Stamped here from the probe rather than left to the background
@@ -7124,15 +7154,20 @@ final class AppModel: ObservableObject {
         return capture
     }
 
-    /// What the project calls itself: the folder the frames came out of when
-    /// they all came out of one, otherwise the camera that took them,
-    /// otherwise the frame count.
+    /// What the project calls itself: its own file name when it is one photo,
+    /// otherwise the folder the frames came out of when they all came out of
+    /// one, otherwise the camera that took them, otherwise the frame count.
     ///
     /// The folder wins because it is the name the operator gave this shoot —
-    /// "Charles_ARW" is a title; "306 photos" is a measurement.
+    /// "Charles_ARW" is a title; "306 photos" is a measurement. A single photo
+    /// is not a shoot, though: it is that file, and the enclosing folder would
+    /// be "Downloads", or the staging folder a library pick was written to.
     nonisolated static func importedStillsName(
         selection: [URL], sequence: ImportedStills.Sequence
     ) -> String {
+        if sequence.count == 1, let only = sequence.frames.first {
+            return only.url.lastPathComponent
+        }
         let folders = Set(sequence.frames.map { $0.url.deletingLastPathComponent().path })
         if folders.count == 1,
            let folder = sequence.frames.first?.url.deletingLastPathComponent()
@@ -7147,13 +7182,20 @@ final class AppModel: ObservableObject {
 
     // MARK: - Duplicating a project as a DNG archive
 
-    /// The projects the DNG archive can take: an interval shoot (captured or
-    /// imported) whose frames are raw files. A Photo-mode capture is one frame
-    /// and a video has none.
+    /// The projects the DNG archive can take: anything made of raw stills —
+    /// an interval shoot (captured or imported), or a single raw photo
+    /// (imported, or captured in Photo mode with Blend Off). A video has no
+    /// frames at all.
+    ///
+    /// The one photo project held back is a BLENDED Photo capture: its frames
+    /// are the burst behind its one picture, so archiving them would clone the
+    /// stacking material rather than the photo anybody can see.
     func canArchiveAsDNG(_ capture: CaptureProject) -> Bool {
-        guard capture.kind == .photos, !capture.isPhotoCapture else { return false }
+        guard capture.kind == .photos else { return false }
         let frames = sourceFrameURLs(for: capture)
-        return frames.count >= 2 && frames.allSatisfy { ImportedStills.isRaw($0) }
+        guard !frames.isEmpty, frames.allSatisfy({ ImportedStills.isRaw($0) }) else { return false }
+        if capture.isPhotoCapture, frames.count > 1 { return false }
+        return true
     }
 
     /// Creates a new project beside `capture` whose frames are DNG archives of

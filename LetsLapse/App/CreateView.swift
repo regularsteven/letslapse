@@ -581,8 +581,14 @@ struct CreateView: View {
             }
             photoItems = []
             isImporting = false
-            guard urls.count >= 2 else {
-                model.errorMessage = "Pick at least two photos to stack."
+            // Whatever the picker handed over IS the import, one photo
+            // included — a single photo registers as a photo project rather
+            // than a one-frame shoot (`AppModel.importedPhotoMode`). The only
+            // failure left is nothing staging at all.
+            guard !urls.isEmpty else {
+                model.errorMessage = items.count == 1
+                    ? "Couldn't load that photo."
+                    : "Couldn't load those photos."
                 return
             }
             model.importStills(from: urls)
