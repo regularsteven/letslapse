@@ -1,0 +1,403 @@
+<svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · grid mode, all three panes · 1280×800</title>
+  <desc>Mirrors App/GalleryView.swift (macOS/regular-width branch) + App/GallerySidebar.swift + App/GalleryGridContent.swift (standardGrid) + App/GalleryTile.swift + App/GalleryPreviewPanel.swift, as shipped in 394e48e (2026-09-07). THE THREE-PANE LAYOUT: GalleryView.isWide is hard-coded true on macOS, so the Mac always takes the HStack(spacing: 0) branch — GallerySidebar at a fixed 200pt, hairline Divider, then a VStack of galleryHeader / Divider / GalleryGridContent, and — only while a tile is selected — a second Divider and GalleryPreviewPanel at a fixed 300pt. Both side panels are fixed width, so resizing the window grows the grid alone. WINDOW SIZE, and why this file is drawn at 1280×800 rather than the 760×680 default: galleryHeader is one HStack(spacing: 10) of eight children with no compact form and nothing that collapses — the 32pt sidebar button, the 20pt bold "Gallery" title, a 190pt SceneSearchField, the sort menu + direction button (116pt), the 112pt zoom cluster and the ~89pt Timeline toggle, inside .padding(.horizontal, 16). Its intrinsic width is about 691pt. The centre column is the window minus 201pt of sidebar and 301pt of preview panel, so the header fits only when the WINDOW is about 1193pt wide or more; at the 760×680 default it has 259pt to work in and overflows by roughly 430pt, and with the preview closed it still overflows by about 130pt because gallery.showSidebar defaults to TRUE. In other words the shipped default window cannot draw its own header — see gallery.default-window notes in INDEX.md. 1280×800 is the smallest round size at which the shipped layout renders as designed, and it is what this file specifies; the guided-builder files set the precedent for drawing a Mac screen at the size its layout works at and stating what the default does instead. MEASURED HERE: sidebar 200 (x 20–220); centre column 778 (x 221–999); preview 300 (x 1000–1300). Header band 52pt tall (y 48–100), its children laid out left-to-right at 237 / 313.5-spacer / 323.5 title / 436-spacer / 446 search / 646 sort / 772 zoom / 894 Timeline, ending flush at 983. Grid: .padding(.horizontal, 14) and .padding(.vertical, 14) inside the ScrollView, LazyVGrid of columnCount flexible columns at spacing 12 — at the drawn columnCount of 3 that is a 750pt content width and 242×181.5pt tiles, drawn 4:3 by GalleryTile's .aspectRatio(4/3, contentMode: .fit). Column origins 235 / 489 / 743; row origins 115 / 308.5 / 502 / 695.5. TILE: ProjectThumbnailView at cornerRadius 8; a MediaBadge naming the shoot type pinned bottom-leading with 6pt padding (always shown, black at 50% with white 11.5pt semibold text); an amber MediaBadge reading "N clips" pinned top-trailing with the same padding, drawn only where model.blends(for:).count is 2 or more; and, when selected, a 2.5pt LL.accent strokeBorder on the same 8pt radius. Single click selects (which is what raises the preview panel), double click calls onOpen and pushes ProjectDetailView onto the NavigationStack; right-click raises the context menu (Open · New blended clip · Edit · Show in Finder · Delete…, the Finder entry macOS-only), not drawn. PREVIEW PANEL (300pt, LL.cardBackground, its own ScrollView): 150pt thumbnail at cornerRadius 10 inset 14pt and 22pt from the top (click it to raise ProjectMediaPreviewSheet); title 16pt bold over a 12pt secondary date · size line; a 2×2 LazyVGrid of 132pt action buttons at spacing 8 and cornerRadius 9 — Open is filled LL.accent with white content, Edit / Text / New clip sit on primary at 7%; a full-bleed Divider; five metaRows on a 72pt label column (Tags, In frame, Variations, Storage, Field notes — each rendered only when it has a value, so a freshly imported project shows two); a second full-bleed Divider; and a footer of four equal-width buttons split by 20pt dividers (Rename · Share · Finder · Delete…, Finder macOS-only, Delete tinted red). Tags render through SceneTagLine: up to three LL.accent@13% capsules with LL.accentDeep 10.5pt text, then a secondary "+N". TAB BAR: FloatingTabBar is a sibling of the whole three-pane Group inside ContentView's ZStack(alignment: .bottom), so it floats over sidebar, grid and preview alike, centred on the WINDOW rather than on the grid — 358pt at five 66pt seats, 12pt clear of the bottom edge. BOTTOM CLEARANCE IS DOUBLE-COUNTED, drawn as shipped: ContentView already applies .safeAreaInset(edge: .bottom) { Color.clear.frame(height: 58) } to the tab Group, and all three of the Gallery's scroll views then append their own Color.clear.frame(height: 82) — so the last grid row, the sidebar's Collections row and the preview footer all stop 140pt above the window edge instead of 58pt. TWO MAC-SPECIFIC MISMATCHES ALSO DRAWN AS SHIPPED: the window title reads "Gallery" (GalleryView sets .navigationTitle on the macOS branch, which retitles Window("LetsLapse", id: "main")) while the header repeats the same word 26pt below it; and the zoom Slider is never tinted, so its filled track is system blue and is the one accent-coloured control on the screen that is not LL.accent. STATES NOT DRAWN (desc-only): sidebar collapsed (showSidebar false — the toggle animates the pane out over 0.22s easeInOut and the centre column takes its 201pt, which does NOT fix the header at the default window size); no selection, where the preview panel and its divider are simply absent and the grid takes the 301pt (drawn two-pane in gallery.timeline.svg); the empty state (photo.on.rectangle.angled over "No projects" / "Adjust the filter or search to see your library.", centred in the grid area and shown whenever the filtered set is empty, which on macOS replaces the grid but leaves the header standing); a tag selected in the sidebar, with its "Clear tags" link (drawn in gallery.timeline.svg); the rename alert, the delete confirmationDialog, the export/share sheet and the "Couldn't delete" alert. HOOKS: LL_TAB=gallery brings this tab front; there is no hook for selection, sidebar state, column count or timeline mode — all four are @AppStorage (gallery.showSidebar, gallery.columnCount, gallery.sortKey/sortAscending, gallery.timelineMode) and are set by seeding defaults before launch. NOT YET VERIFIED against the running Mac app: authored from the source in 394e48e on 2026-09-07: measurements here are computed from the Swift layout, not read off a screenshot, and the header-overflow arithmetic in particular is owed a check against a real window. A Release Mac app was running and holds library.json, which has no serialised writer, so a second instance could not be launched safely.</desc>
+
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
+    <clipPath id="grid"><rect x="221" y="101" width="778" height="719"/></clipPath>
+    <clipPath id="searchclip"><rect x="457" y="57" width="168" height="34"/></clipPath>
+    <clipPath id="t1"><rect x="235" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t2"><rect x="489" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t3"><rect x="743" y="115" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t4"><rect x="235" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t5"><rect x="489" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t6"><rect x="743" y="308.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t7"><rect x="235" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t8"><rect x="489" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t9"><rect x="743" y="502" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t10"><rect x="235" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t11"><rect x="489" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="t12"><rect x="743" y="695.5" width="242" height="181.5" rx="8"/></clipPath>
+    <clipPath id="hero"><rect x="1014" y="70" width="272" height="150" rx="10"/></clipPath>
+
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7E9AB8"/><stop offset="0.6" stop-color="#E4C39A"/><stop offset="1" stop-color="#F7E6C8"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9BB0C4"/><stop offset="1" stop-color="#D8C6AE"/>
+    </linearGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C7CFD6"/><stop offset="1" stop-color="#8E9AA4"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/>
+    </linearGradient>
+    <linearGradient id="storm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5464"/><stop offset="1" stop-color="#A9A08E"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7A272"/><stop offset="1" stop-color="#4E5A63"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1280" height="800" fill="#F2F2F7"/>
+
+    <!-- Window chrome. The title is "Gallery", not "LetsLapse": GalleryView's
+         macOS branch sets .navigationTitle, which retitles the main Window. -->
+    <g id="titlebar">
+      <rect x="20" y="20" width="1280" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="660" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
+    </g>
+
+    <!-- ================= SIDEBAR (GallerySidebar, fixed 200pt) ================= -->
+    <g id="sidebar">
+      <rect x="20" y="48" width="200" height="772" fill="#F2F2F7"/>
+
+      <text x="38" y="75" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">LIBRARY</text>
+
+      <!-- All (selected) -->
+      <rect x="24" y="81" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="square.grid.2x2">
+        <rect x="41" y="90" width="6" height="6" rx="1.4"/><rect x="49" y="90" width="6" height="6" rx="1.4"/>
+        <rect x="41" y="98" width="6" height="6" rx="1.4"/><rect x="49" y="98" width="6" height="6" rx="1.4"/>
+      </g>
+      <text x="68" y="101" font-size="14" fill="#C36A00">All</text>
+
+      <!-- Photos -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="photo">
+        <rect x="40" y="124" width="16" height="12" rx="2"/><circle cx="45" cy="128.5" r="1.6"/>
+        <path d="M41 134 l5-4 4 3 3-2 3 3"/>
+      </g>
+      <text x="68" y="134" font-size="14" fill="#000">Photos</text>
+
+      <!-- Interval -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square.stack">
+        <rect x="41" y="155" width="14" height="10" rx="2"/>
+        <path d="M42.5 168 h11 M44.5 171 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="167" font-size="14" fill="#000">Interval</text>
+
+      <!-- Video -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="film">
+        <rect x="40" y="189" width="16" height="12" rx="2"/>
+        <path d="M43.5 189 v12 M52.5 189 v12" stroke-width="1.1" opacity="0.8"/>
+      </g>
+      <text x="68" y="200" font-size="14" fill="#000">Video</text>
+
+      <line x1="32" y1="231" x2="208" y2="231" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
+
+      <circle cx="37.5" cy="288" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="293" font-size="14" fill="#000">Water</text>
+      <circle cx="37.5" cy="319" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="324" font-size="14" fill="#000">Sky &amp; weather</text>
+      <circle cx="37.5" cy="350" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="355" font-size="14" fill="#000">Urban</text>
+      <circle cx="37.5" cy="381" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="386" font-size="14" fill="#000">Landmark</text>
+
+      <line x1="32" y1="416" x2="208" y2="416" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="449" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">COLLECTIONS</text>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle.stack">
+        <rect x="41" y="463" width="14" height="10" rx="2"/>
+        <path d="M42.5 476 h11 M44.5 479 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="475" font-size="14" fill="#000">All Collections</text>
+    </g>
+
+    <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= HEADER (galleryHeader, 52pt) ================= -->
+    <g id="header">
+      <!-- sidebar toggle, accent because showSidebar is true -->
+      <rect x="237" y="58" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+        <rect x="245" y="66" width="16" height="16" rx="2.6"/>
+        <path d="M251 66 v16"/>
+      </g>
+
+      <text x="323.5" y="81" font-size="20" class="b" fill="#000">Gallery</text>
+
+      <!-- SceneSearchField, fixed 190pt. The placeholder is longer than the
+           field and clips — drawn as it renders. -->
+      <rect x="446" y="57" width="190" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.9" data-symbol="magnifyingglass">
+        <circle cx="459.5" cy="73" r="4.6"/><path d="M463 76.5 l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <g clip-path="url(#searchclip)">
+        <text x="475" y="79" font-size="15" fill="#6D6D72">Search titles, tags, in frame</text>
+      </g>
+
+      <!-- sort: menu capsule + direction button -->
+      <rect x="646" y="60" width="84" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <text x="655" y="79" font-size="13" class="m" fill="#C36A00">Capture</text>
+      <path d="M712 71 l4.5 5 4.5-5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+      <rect x="734" y="60" width="28" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <path d="M743 70 h10 l-5 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+
+      <!-- zoom cluster: 2×2 glyph, 80pt Slider, 3×3 glyph -->
+      <g fill="none" stroke="#6D6D72" stroke-width="1.3" data-symbol="square.grid.2x2">
+        <rect x="772" y="69" width="4.6" height="4.6" rx="1"/><rect x="779.4" y="69" width="4.6" height="4.6" rx="1"/>
+        <rect x="772" y="76.4" width="4.6" height="4.6" rx="1"/><rect x="779.4" y="76.4" width="4.6" height="4.6" rx="1"/>
+      </g>
+      <rect x="788" y="72" width="80" height="4" rx="2" fill="#000" fill-opacity="0.14"/>
+      <!-- Never .tint()ed, so the filled track is system blue, not LL.accent. -->
+      <rect x="788" y="72" width="20" height="4" rx="2" fill="#0A6FD8"/>
+      <circle cx="808" cy="74" r="8" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.1" data-symbol="square.grid.3x3">
+        <rect x="872" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="68" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="872" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="72.5" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="872" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="876.5" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="881" y="77" width="3.1" height="3.1" rx="0.7"/>
+      </g>
+
+      <!-- Timeline toggle, OFF: .buttonStyle(.bordered) unfilled -->
+      <rect x="894" y="62" width="89" height="24" rx="6" fill="#000" fill-opacity="0.06"/>
+      <rect x="894" y="62" width="89" height="24" rx="6" fill="none" stroke="#000" stroke-opacity="0.10"/>
+      <g fill="none" stroke="#000" stroke-width="1.4" data-symbol="calendar">
+        <rect x="902" y="68" width="12" height="11" rx="2"/><path d="M902 71.5 h12 M905.5 66.5 v3 M910.5 66.5 v3"/>
+      </g>
+      <text x="920" y="78" font-size="13" fill="#000">Timeline</text>
+    </g>
+
+    <line x1="221" y1="100.5" x2="999" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= GRID (GalleryGridContent.standardGrid) ================= -->
+    <g id="grid" clip-path="url(#grid)">
+
+      <!-- row 1 -->
+      <g clip-path="url(#t1)">
+        <rect x="235" y="115" width="242" height="181.5" fill="url(#dusk)"/>
+        <path d="M235 232 h242 v64.5 h-242 z" fill="#3B4450" opacity="0.85"/>
+        <path d="M235 226 l30-8 26 5 34-12 30 7 40-10 34 9 48-6 v22 h-242 z" fill="#2A3140"/>
+        <rect x="255" y="248" width="150" height="4" rx="2" fill="#E7B478" opacity="0.45"/>
+        <rect x="285" y="262" width="120" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+      </g>
+      <g clip-path="url(#t2)">
+        <rect x="489" y="115" width="242" height="181.5" fill="url(#dawn)"/>
+        <path d="M489 244 h242 v52.5 h-242 z" fill="#7C8698" opacity="0.8"/>
+        <path d="M540 244 v-46 h14 v-16 h10 v16 h14 v46 z" fill="#5D6675"/>
+        <path d="M489 250 h242 v6 h-242 z" fill="#4E576A"/>
+      </g>
+      <g clip-path="url(#t3)">
+        <rect x="743" y="115" width="242" height="181.5" fill="url(#roof)"/>
+        <path d="M743 210 l40-26 40 26 z" fill="#A5613F"/>
+        <path d="M803 226 l46-30 46 30 z" fill="#93553A"/>
+        <path d="M869 216 l44-28 44 28 z" fill="#AA6844"/>
+        <rect x="743" y="248" width="242" height="48.5" fill="#C8B79E"/>
+      </g>
+
+      <!-- row 2 -->
+      <g clip-path="url(#t4)">
+        <rect x="235" y="308.5" width="242" height="181.5" fill="url(#fog)"/>
+        <path d="M235 420 h242 v70 h-242 z" fill="#7A858F" opacity="0.6"/>
+        <ellipse cx="330" cy="424" rx="120" ry="16" fill="#DCE3E8" opacity="0.55"/>
+        <ellipse cx="410" cy="450" rx="140" ry="14" fill="#CBD4DB" opacity="0.5"/>
+      </g>
+      <g clip-path="url(#t5)">
+        <rect x="489" y="308.5" width="242" height="181.5" fill="url(#night)"/>
+        <rect x="489" y="424" width="242" height="66" fill="#0E1220"/>
+        <rect x="500" y="440" width="220" height="5" rx="2.5" fill="#FFD98A" opacity="0.85"/>
+        <rect x="512" y="456" width="200" height="4" rx="2" fill="#FF8A6A" opacity="0.7"/>
+        <rect x="528" y="470" width="170" height="3" rx="1.5" fill="#FFC46A" opacity="0.5"/>
+      </g>
+      <g clip-path="url(#t6)">
+        <rect x="743" y="308.5" width="242" height="181.5" fill="url(#storm)"/>
+        <ellipse cx="820" cy="352" rx="90" ry="22" fill="#39414E" opacity="0.7"/>
+        <ellipse cx="920" cy="342" rx="70" ry="18" fill="#333B47" opacity="0.6"/>
+        <rect x="743" y="440" width="242" height="50" fill="#8E8571"/>
+      </g>
+
+      <!-- row 3 -->
+      <g clip-path="url(#t7)">
+        <rect x="235" y="502" width="242" height="181.5" fill="url(#dusk)"/>
+        <ellipse cx="356" cy="580" rx="110" ry="20" fill="#F0C489" opacity="0.5"/>
+        <rect x="235" y="612" width="242" height="71.5" fill="#5A4B3E"/>
+      </g>
+      <g clip-path="url(#t8)">
+        <rect x="489" y="502" width="242" height="181.5" fill="url(#night)"/>
+        <circle cx="560" cy="546" r="3" fill="#FFF" opacity="0.7"/><circle cx="618" cy="530" r="2.2" fill="#FFF" opacity="0.6"/>
+        <circle cx="676" cy="558" r="2.6" fill="#FFF" opacity="0.5"/>
+        <rect x="489" y="614" width="242" height="69.5" fill="#0C1018"/>
+        <rect x="505" y="630" width="86" height="4" rx="2" fill="#7FD4FF" opacity="0.55"/>
+      </g>
+      <g clip-path="url(#t9)">
+        <rect x="743" y="502" width="242" height="181.5" fill="url(#water)"/>
+        <rect x="743" y="592" width="242" height="91.5" fill="#4A555E"/>
+        <rect x="765" y="606" width="180" height="5" rx="2.5" fill="#C7A874" opacity="0.5"/>
+        <rect x="785" y="624" width="140" height="4" rx="2" fill="#B79A6B" opacity="0.4"/>
+      </g>
+
+      <!-- row 4, scrolling in under the tab bar -->
+      <g clip-path="url(#t10)"><rect x="235" y="695.5" width="242" height="181.5" fill="url(#dawn)"/></g>
+      <g clip-path="url(#t11)"><rect x="489" y="695.5" width="242" height="181.5" fill="url(#roof)"/></g>
+      <g clip-path="url(#t12)"><rect x="743" y="695.5" width="242" height="181.5" fill="url(#fog)"/></g>
+
+      <!-- shoot-type badges (MediaBadge, bottom-leading, 6pt padding) -->
+      <g id="type-badges" font-size="11.5" fill="#FFFFFF" class="sb">
+        <rect x="241" y="266.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="282" text-anchor="middle">Interval</text>
+        <rect x="495" y="266.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="525" y="282" text-anchor="middle">Interval</text>
+        <rect x="749" y="266.5" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="774" y="282" text-anchor="middle">Video</text>
+
+        <rect x="241" y="460" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="475.5" text-anchor="middle">Interval</text>
+        <rect x="495" y="460" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="520" y="475.5" text-anchor="middle">Video</text>
+        <rect x="749" y="460" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="775" y="475.5" text-anchor="middle">Photo</text>
+
+        <rect x="241" y="653.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="669" text-anchor="middle">Interval</text>
+        <rect x="495" y="653.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="525" y="669" text-anchor="middle">Interval</text>
+        <rect x="749" y="653.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="775" y="669" text-anchor="middle">Photo</text>
+      </g>
+
+      <!-- "N clips" badges (amber, top-trailing, only where blends ≥ 2) -->
+      <g id="clip-badges" font-size="11.5" fill="#FFB340" class="sb">
+        <rect x="410" y="121" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="136.5" text-anchor="middle">3 clips</text>
+        <rect x="410" y="314.5" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="330" text-anchor="middle">2 clips</text>
+        <rect x="410" y="508" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="440.5" y="523.5" text-anchor="middle">4 clips</text>
+      </g>
+
+      <!-- selection: 2.5pt accent strokeBorder, inset on the tile's own radius -->
+      <rect x="236.25" y="116.25" width="239.5" height="179" rx="8" fill="none" stroke="#C36A00" stroke-width="2.5"/>
+    </g>
+
+    <!-- ================= PREVIEW PANEL (GalleryPreviewPanel, fixed 300pt) ================= -->
+    <line x1="999.5" y1="48" x2="999.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+    <g id="preview">
+      <rect x="1000" y="48" width="300" height="772" fill="#FFFFFF"/>
+
+      <g clip-path="url(#hero)">
+        <rect x="1014" y="70" width="272" height="150" fill="url(#dusk)"/>
+        <path d="M1014 166 h272 v54 h-272 z" fill="#3B4450" opacity="0.85"/>
+        <path d="M1014 160 l34-9 30 6 38-13 34 8 45-11 38 10 53-7 v16 h-272 z" fill="#2A3140"/>
+        <rect x="1036" y="182" width="170" height="5" rx="2.5" fill="#E7B478" opacity="0.45"/>
+        <rect x="1070" y="198" width="136" height="4" rx="2" fill="#D8A268" opacity="0.35"/>
+      </g>
+
+      <text x="1014" y="248" font-size="16" class="b" fill="#000">River Sunset to Dusk</text>
+      <text x="1014" y="266" font-size="12" fill="#6D6D72">Aug 20, 2026</text>
+      <text x="1090" y="266" font-size="12" fill="#000" fill-opacity="0.3">·</text>
+      <text x="1099" y="266" font-size="12" fill="#6D6D72">4,8 GB</text>
+
+      <!-- 2×2 action grid; Open is the filled one -->
+      <g id="actions">
+        <rect x="1014" y="286" width="132" height="57" rx="9" fill="#C36A00"/>
+        <g fill="none" stroke="#FFFFFF" stroke-width="1.8" data-symbol="arrow.up.forward.square">
+          <rect x="1072" y="298" width="16" height="16" rx="3.4"/><path d="M1077 309 l6-6 M1079.5 303 h3.5 v3.5" stroke-linecap="round"/>
+        </g>
+        <text x="1080" y="333" font-size="11" class="m" text-anchor="middle" fill="#FFFFFF">Open</text>
+
+        <rect x="1154" y="286" width="132" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="pencil">
+          <path d="M1213 313 l1-4.5 10.5-10.5 3.5 3.5 -10.5 10.5 z" stroke-linejoin="round"/>
+        </g>
+        <text x="1220" y="333" font-size="11" class="m" text-anchor="middle" fill="#000">Edit</text>
+
+        <rect x="1014" y="351" width="132" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="textformat">
+          <path d="M1070 375 l6-13 6 13 M1072 371 h8 M1084 375 h6" stroke-linecap="round"/>
+        </g>
+        <text x="1080" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">Text</text>
+
+        <rect x="1154" y="351" width="132" height="57" rx="9" fill="#000" fill-opacity="0.07"/>
+        <g fill="none" stroke="#000" stroke-width="1.8" data-symbol="plus.circle">
+          <circle cx="1220" cy="369" r="8"/><path d="M1216 369 h8 M1220 365 v8" stroke-linecap="round"/>
+        </g>
+        <text x="1220" y="398" font-size="11" class="m" text-anchor="middle" fill="#000">New clip</text>
+      </g>
+
+      <line x1="1000" y1="424.5" x2="1300" y2="424.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- metaRows on a 72pt label column -->
+      <g id="meta">
+        <text x="1014" y="455" font-size="12" class="sb" fill="#6D6D72">Tags</text>
+        <g font-size="10.5" class="m" fill="#8A4A00">
+          <rect x="1096" y="443" width="46" height="20" rx="10" fill="#C36A00" fill-opacity="0.13"/><text x="1119" y="457" text-anchor="middle">Water</text>
+          <rect x="1147" y="443" width="88" height="20" rx="10" fill="#C36A00" fill-opacity="0.13"/><text x="1191" y="457" text-anchor="middle">Sky &amp; weather</text>
+          <text x="1245" y="457" fill="#6D6D72">+2</text>
+        </g>
+
+        <text x="1014" y="482" font-size="12" class="sb" fill="#6D6D72">In frame</text>
+        <text x="1096" y="482" font-size="12" fill="#6D6D72">river, bridge, quay, sky</text>
+
+        <text x="1014" y="509" font-size="12" class="sb" fill="#6D6D72">Variations</text>
+        <text x="1096" y="509" font-size="12" fill="#6D6D72">3 blended clips</text>
+
+        <text x="1014" y="536" font-size="12" class="sb" fill="#6D6D72">Storage</text>
+        <text x="1096" y="536" font-size="12" fill="#6D6D72">4,8 GB</text>
+
+        <text x="1014" y="563" font-size="12" class="sb" fill="#6D6D72">Field notes</text>
+        <text x="1096" y="563" font-size="12" fill="#6D6D72">2 notes</text>
+      </g>
+
+      <line x1="1000" y1="575.5" x2="1300" y2="575.5" stroke="#000" stroke-opacity="0.10"/>
+
+      <!-- footer: four equal buttons, 20pt dividers, Delete tinted red -->
+      <g id="footer">
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="pencil.line">
+          <path d="M1043 597 l1-3.5 8-8 2.5 2.5 -8 8 z" stroke-linejoin="round"/><path d="M1040 602 h16" stroke-linecap="round"/>
+        </g>
+        <text x="1047.6" y="616" font-size="10" class="m" text-anchor="middle" fill="#000">Rename</text>
+        <line x1="1081.75" y1="600" x2="1081.75" y2="620" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="square.and.arrow.up">
+          <path d="M1110 596 v-8 M1106.5 591 l3.5-3.5 3.5 3.5" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M1104 594 v8 h12 v-8"/>
+        </g>
+        <text x="1115.9" y="616" font-size="10" class="m" text-anchor="middle" fill="#000">Share</text>
+        <line x1="1150" y1="600" x2="1150" y2="620" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#000" stroke-width="1.5" data-symbol="folder">
+          <path d="M1176 589 h6 l2 2.5 h8 v10 h-16 z" stroke-linejoin="round"/>
+        </g>
+        <text x="1184.1" y="616" font-size="10" class="m" text-anchor="middle" fill="#000">Finder</text>
+        <line x1="1218.25" y1="600" x2="1218.25" y2="620" stroke="#000" stroke-opacity="0.10"/>
+
+        <g fill="none" stroke="#FF3B30" stroke-width="1.5" data-symbol="trash">
+          <path d="M1245 591 h15 M1247 591 v11 h11 v-11 M1250.5 589 h4"/>
+        </g>
+        <text x="1252.4" y="616" font-size="10" class="m" text-anchor="middle" fill="#FF3B30">Delete…</text>
+      </g>
+    </g>
+
+    <!-- ================= FLOATING TAB BAR (over all three panes) ================= -->
+    <g id="tab-bar">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1280" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · grid mode, sidebar + preview · 1280×800 pt window</text>
+  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GalleryView.swift + GallerySidebar + GalleryGridContent + GalleryTile + GalleryPreviewPanel — the 760×680 default window cannot draw this header (see desc)</text>
+</svg>

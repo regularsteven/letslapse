@@ -1,0 +1,384 @@
+<svg viewBox="0 0 1320 880" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Gallery · timeline mode, no selection · 1280×800</title>
+  <desc>Mirrors App/GalleryView.swift (macOS branch, timelineMode true and selectedID nil) + App/GallerySidebar.swift + App/GalleryGridContent.swift (TimelineGalleryGrid, TimelineDayHeader, MonthScrubberRail) + App/GalleryTile.swift, as shipped in 394e48e (2026-09-07). Sibling of gallery.svg, which draws grid mode with all three panes; this file carries the two states that one cannot: TIMELINE MODE and NO SELECTION. Drawn at 1280×800 for the same reason gallery.svg is — galleryHeader's intrinsic width is about 691pt and the 760×680 default window cannot render it once the sidebar is showing; the arithmetic is in gallery.svg's desc. NO SELECTION: GalleryPreviewPanel and its Divider are conditional on selectedID resolving to a capture, so with nothing selected the centre column takes the whole 1079pt right of the sidebar and the header's two Spacers open to 185pt each, pushing the title left of centre and the search/sort/zoom/Timeline cluster to the trailing edge — that drift is real, not a drawing artefact, because the title sits between two Spacers rather than in a centred overlay. TIMELINE MODE: GalleryGridContent swaps standardGrid for TimelineGalleryGrid, an HStack(alignment: .top, spacing: 0) of a ScrollView and a fixed 56pt MonthScrubberRail — so the rail lives INSIDE the centre column, not at the window edge, and the preview panel would sit outboard of it. The scroll side keeps .padding(.horizontal, 14) and .padding(.top, 14) and lays out a LazyVStack(spacing: 20, pinnedViews: .sectionHeaders) of one Section per calendar day, newest first (groups sorts startOfDay descending, and each day's captures descending inside it). COLUMN COUNT IS FIXED AT 5 HERE and ignores both the header's zoom slider and the gallery.columnCount AppStorage the standard grid reads — the Array(repeating:count: 5) is hard-coded — so the slider is drawn live but changes nothing while Timeline is on, and the tiles are 191×143.25 at spacing 10 rather than the 242×181.5 grid mode gives at the same window size. Column origins 235 / 436 / 637 / 838 / 1039. TimelineDayHeader is 32pt tall (13pt semibold locale-formatted date via .dateTime.weekday(.wide).month().day().year(), then a count in a primary@7% capsule at 12pt medium), carries an opaque LL.screenBackground so pinned headers do not show rows through them, and is inset .padding(.horizontal, 2) from the grid's own padding. Section rhythm as drawn, the 20pt LazyVStack spacing falling between a header and its own grid as well as between Sections: header 115–147, grid 167–310.25; header 330.25–362.25, grid 382.25–525.5; header 545.5–577.5, grid 597.5–740.75; and a fourth header at 760.75 sliding under the floating bar. MONTH SCRUBBER (x 1244–1300): one button per unique month present, in the same newest-first order, 11pt regular secondary abbreviations at .padding(.vertical, 5); January additionally carries its year above it at 9pt semibold and renders its own abbreviation bold and primary, which is the only thing marking a year boundary — there is no divider and no sticky year. Tapping one calls scrollProxy.scrollTo(day, anchor: .top) on the FIRST day of that month, animated. The rail has no scroll indicator and no current-position highlight, so it says where you can go but never where you are. SIDEBAR: drawn with a tag selected — "Sky &amp; weather" filled LL.accent in dot and label — which is the state gallery.svg does not carry, and which raises the "Clear tags" link (12pt medium accent) under the tag rows. Tag selection is a Set and multi-select; the rows are derived from allCaptures.presentSceneTags, i.e. the library AFTER the kind filter but BEFORE the search text, in SceneMetadata.orderedTaxonomy order so the list never reshuffles as projects are analysed. THE ZOOM SLIDER IS NEVER .tint()ed, so its filled track is system blue — the one accent-coloured control on the screen that is not LL.accent. BOTTOM CLEARANCE IS DOUBLE-COUNTED, drawn as shipped: ContentView's .safeAreaInset(edge: .bottom) already reserves 58pt for the floating bar and the timeline ScrollView appends its own Color.clear.frame(height: 82) — and the month rail, being a second ScrollView in the same HStack, gets the inset but has no 82pt spacer of its own, so the two columns stop at different heights. STATES NOT DRAWN (desc-only): timeline mode WITH a selection, where the preview panel takes 300pt and the scroll side drops to 723pt, putting the five fixed columns at 131pt each; a single day holding more than five captures, which wraps to a second 10pt-spaced row inside the same Section; the empty state, which replaces the whole timeline (GalleryGridContent tests captures.isEmpty before timelineMode, so filtering everything out returns the same "No projects" panel both modes share); sidebar collapsed; the pinned-header overlap at the moment one header slides under the next. HOOKS: LL_TAB=gallery brings the tab front; timeline mode, sidebar state and tag selection have no hooks — gallery.timelineMode and gallery.showSidebar are @AppStorage and are set by seeding defaults before launch, and the tag selection is ephemeral @State that only a click can set. NOT YET VERIFIED against the running Mac app: authored from the source in 394e48e on 2026-09-07, measured off the Swift layout rather than a screenshot. A Release Mac app was running and holds library.json, which has no serialised writer, so a second instance could not be launched safely.</desc>
+
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1280" height="800" rx="11"/></clipPath>
+    <clipPath id="scroll"><rect x="221" y="101" width="1023" height="719"/></clipPath>
+    <clipPath id="rail"><rect x="1244" y="101" width="56" height="719"/></clipPath>
+    <clipPath id="searchclip"><rect x="758" y="57" width="168" height="34"/></clipPath>
+    <clipPath id="a1"><rect x="235" y="167" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="a2"><rect x="436" y="167" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="a3"><rect x="637" y="167" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="a4"><rect x="838" y="167" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="a5"><rect x="1039" y="167" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="b1"><rect x="235" y="382.25" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="b2"><rect x="436" y="382.25" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="b3"><rect x="637" y="382.25" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="b4"><rect x="838" y="382.25" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="b5"><rect x="1039" y="382.25" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="c1"><rect x="235" y="597.5" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="c2"><rect x="436" y="597.5" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="c3"><rect x="637" y="597.5" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="c4"><rect x="838" y="597.5" width="191" height="143.25" rx="8"/></clipPath>
+    <clipPath id="c5"><rect x="1039" y="597.5" width="191" height="143.25" rx="8"/></clipPath>
+
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+    <linearGradient id="dawn" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#7E9AB8"/><stop offset="0.6" stop-color="#E4C39A"/><stop offset="1" stop-color="#F7E6C8"/>
+    </linearGradient>
+    <linearGradient id="roof" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#9BB0C4"/><stop offset="1" stop-color="#D8C6AE"/>
+    </linearGradient>
+    <linearGradient id="fog" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#C7CFD6"/><stop offset="1" stop-color="#8E9AA4"/>
+    </linearGradient>
+    <linearGradient id="night" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#131A2A"/><stop offset="1" stop-color="#2E3348"/>
+    </linearGradient>
+    <linearGradient id="storm" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4A5464"/><stop offset="1" stop-color="#A9A08E"/>
+    </linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#B7A272"/><stop offset="1" stop-color="#4E5A63"/>
+    </linearGradient>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%">
+      <feDropShadow dx="0" dy="8" stdDeviation="7.5" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+  </defs>
+
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.m{font-weight:500}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1280" height="800" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="1280" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="660" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">Gallery</text>
+    </g>
+
+    <!-- ================= SIDEBAR, with a tag selected ================= -->
+    <g id="sidebar">
+      <rect x="20" y="48" width="200" height="772" fill="#F2F2F7"/>
+
+      <text x="38" y="75" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">LIBRARY</text>
+
+      <rect x="24" y="81" width="192" height="31" rx="8" fill="#C36A00" fill-opacity="0.10"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.6" data-symbol="square.grid.2x2">
+        <rect x="41" y="90" width="6" height="6" rx="1.4"/><rect x="49" y="90" width="6" height="6" rx="1.4"/>
+        <rect x="41" y="98" width="6" height="6" rx="1.4"/><rect x="49" y="98" width="6" height="6" rx="1.4"/>
+      </g>
+      <text x="68" y="101" font-size="14" fill="#C36A00">All</text>
+
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="photo">
+        <rect x="40" y="124" width="16" height="12" rx="2"/><circle cx="45" cy="128.5" r="1.6"/>
+        <path d="M41 134 l5-4 4 3 3-2 3 3"/>
+      </g>
+      <text x="68" y="134" font-size="14" fill="#000">Photos</text>
+
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="square.stack">
+        <rect x="41" y="155" width="14" height="10" rx="2"/>
+        <path d="M42.5 168 h11 M44.5 171 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="167" font-size="14" fill="#000">Interval</text>
+
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="film">
+        <rect x="40" y="189" width="16" height="12" rx="2"/>
+        <path d="M43.5 189 v12 M52.5 189 v12" stroke-width="1.1" opacity="0.8"/>
+      </g>
+      <text x="68" y="200" font-size="14" fill="#000">Video</text>
+
+      <line x1="32" y1="231" x2="208" y2="231" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="264" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">TAGS</text>
+
+      <circle cx="37.5" cy="288" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="293" font-size="14" fill="#000">Water</text>
+      <!-- selected tag: dot and label take LL.accent -->
+      <circle cx="37.5" cy="319" r="3.5" fill="#C36A00"/>
+      <text x="51" y="324" font-size="14" fill="#C36A00">Sky &amp; weather</text>
+      <circle cx="37.5" cy="350" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="355" font-size="14" fill="#000">Urban</text>
+      <circle cx="37.5" cy="381" r="3.5" fill="#000" fill-opacity="0.25"/>
+      <text x="51" y="386" font-size="14" fill="#000">Landmark</text>
+
+      <!-- raised only while tagSelection is non-empty -->
+      <text x="34" y="415" font-size="12" class="m" fill="#C36A00">Clear tags</text>
+
+      <line x1="32" y1="439" x2="208" y2="439" stroke="#000" stroke-opacity="0.10"/>
+
+      <text x="38" y="472" font-size="13" class="sb" letter-spacing="0.5" fill="#6D6D72">COLLECTIONS</text>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.6" data-symbol="rectangle.stack">
+        <rect x="41" y="486" width="14" height="10" rx="2"/>
+        <path d="M42.5 499 h11 M44.5 502 h7" stroke-linecap="round"/>
+      </g>
+      <text x="68" y="498" font-size="14" fill="#000">All Collections</text>
+    </g>
+
+    <line x1="220.5" y1="48" x2="220.5" y2="820" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= HEADER, no preview panel so the Spacers open to 185pt ================= -->
+    <g id="header">
+      <rect x="237" y="58" width="32" height="32" rx="7" fill="#000" fill-opacity="0.05"/>
+      <g fill="none" stroke="#C36A00" stroke-width="1.7" data-symbol="sidebar.left">
+        <rect x="245" y="66" width="16" height="16" rx="2.6"/>
+        <path d="M251 66 v16"/>
+      </g>
+
+      <text x="474" y="81" font-size="20" class="b" fill="#000">Gallery</text>
+
+      <rect x="747" y="57" width="190" height="34" rx="17" fill="#000" fill-opacity="0.06"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.9" data-symbol="magnifyingglass">
+        <circle cx="760.5" cy="73" r="4.6"/><path d="M764 76.5 l3.5 3.5" stroke-linecap="round"/>
+      </g>
+      <g clip-path="url(#searchclip)">
+        <text x="776" y="79" font-size="15" fill="#6D6D72">Search titles, tags, in frame</text>
+      </g>
+
+      <rect x="947" y="60" width="84" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <text x="956" y="79" font-size="13" class="m" fill="#C36A00">Capture</text>
+      <path d="M1013 71 l4.5 5 4.5-5" fill="none" stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" data-symbol="chevron.down"/>
+      <rect x="1035" y="60" width="28" height="28" rx="14" fill="#000" fill-opacity="0.06"/>
+      <path d="M1044 70 h10 l-5 8 z" fill="#C36A00" data-symbol="arrowtriangle.down.fill"/>
+
+      <g fill="none" stroke="#6D6D72" stroke-width="1.3" data-symbol="square.grid.2x2">
+        <rect x="1073" y="69" width="4.6" height="4.6" rx="1"/><rect x="1080.4" y="69" width="4.6" height="4.6" rx="1"/>
+        <rect x="1073" y="76.4" width="4.6" height="4.6" rx="1"/><rect x="1080.4" y="76.4" width="4.6" height="4.6" rx="1"/>
+      </g>
+      <!-- live but inert: TimelineGalleryGrid hard-codes five columns -->
+      <rect x="1089" y="72" width="80" height="4" rx="2" fill="#000" fill-opacity="0.14"/>
+      <rect x="1089" y="72" width="20" height="4" rx="2" fill="#0A6FD8"/>
+      <circle cx="1109" cy="74" r="8" fill="#FFFFFF" stroke="#000" stroke-opacity="0.14"/>
+      <g fill="none" stroke="#6D6D72" stroke-width="1.1" data-symbol="square.grid.3x3">
+        <rect x="1173" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="1177.5" y="68" width="3.1" height="3.1" rx="0.7"/><rect x="1182" y="68" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="1173" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="1177.5" y="72.5" width="3.1" height="3.1" rx="0.7"/><rect x="1182" y="72.5" width="3.1" height="3.1" rx="0.7"/>
+        <rect x="1173" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="1177.5" y="77" width="3.1" height="3.1" rx="0.7"/><rect x="1182" y="77" width="3.1" height="3.1" rx="0.7"/>
+      </g>
+
+      <!-- Timeline toggle, ON: a bordered button-style Toggle fills with its tint -->
+      <rect x="1195" y="62" width="89" height="24" rx="6" fill="#C36A00"/>
+      <g fill="none" stroke="#FFFFFF" stroke-width="1.4" data-symbol="calendar">
+        <rect x="1203" y="68" width="12" height="11" rx="2"/><path d="M1203 71.5 h12 M1206.5 66.5 v3 M1211.5 66.5 v3"/>
+      </g>
+      <text x="1221" y="78" font-size="13" fill="#FFFFFF">Timeline</text>
+    </g>
+
+    <line x1="221" y1="100.5" x2="1299" y2="100.5" stroke="#000" stroke-opacity="0.10"/>
+
+    <!-- ================= TIMELINE SCROLL SIDE ================= -->
+    <!-- LazyVStack(spacing: 20) over [header, grid] per Section:
+         115 / 167 / 330.25 / 382.25 / 545.5 / 597.5 / 760.75 -->
+    <g id="timeline" clip-path="url(#scroll)">
+
+      <!-- Section 1 -->
+      <g id="day-1">
+        <rect x="235" y="115" width="995" height="32" fill="#F2F2F7"/>
+        <text x="237" y="136" font-size="13" class="sb" fill="#000">Thursday, 3 September 2026</text>
+        <rect x="453" y="123" width="24" height="17" rx="8.5" fill="#000" fill-opacity="0.07"/>
+        <text x="465" y="136" font-size="12" class="m" text-anchor="middle" fill="#6D6D72">5</text>
+
+        <g clip-path="url(#a1)">
+          <rect x="235" y="167" width="191" height="143.25" fill="url(#dusk)"/>
+          <path d="M235 258 h191 v52.25 h-191 z" fill="#3B4450" opacity="0.85"/>
+          <path d="M235 254 l26-7 22 4 28-10 26 6 32-8 28 7 30-5 v13 h-191 z" fill="#2A3140"/>
+          <rect x="252" y="272" width="118" height="4" rx="2" fill="#E7B478" opacity="0.45"/>
+        </g>
+        <g clip-path="url(#a2)">
+          <rect x="436" y="167" width="191" height="143.25" fill="url(#dawn)"/>
+          <path d="M436 268 h191 v42.25 h-191 z" fill="#7C8698" opacity="0.8"/>
+          <path d="M478 268 v-36 h11 v-13 h8 v13 h11 v36 z" fill="#5D6675"/>
+        </g>
+        <g clip-path="url(#a3)">
+          <rect x="637" y="167" width="191" height="143.25" fill="url(#night)"/>
+          <rect x="637" y="258" width="191" height="52.25" fill="#0E1220"/>
+          <rect x="646" y="270" width="173" height="4" rx="2" fill="#FFD98A" opacity="0.85"/>
+          <rect x="656" y="283" width="155" height="3.5" rx="1.75" fill="#FF8A6A" opacity="0.7"/>
+        </g>
+        <g clip-path="url(#a4)">
+          <rect x="838" y="167" width="191" height="143.25" fill="url(#roof)"/>
+          <path d="M838 240 l32-21 32 21 z" fill="#A5613F"/>
+          <path d="M886 252 l36-24 36 24 z" fill="#93553A"/>
+          <rect x="838" y="272" width="191" height="38.25" fill="#C8B79E"/>
+        </g>
+        <g clip-path="url(#a5)">
+          <rect x="1039" y="167" width="191" height="143.25" fill="url(#fog)"/>
+          <ellipse cx="1110" cy="256" rx="95" ry="13" fill="#DCE3E8" opacity="0.55"/>
+          <ellipse cx="1170" cy="278" rx="110" ry="11" fill="#CBD4DB" opacity="0.5"/>
+        </g>
+
+        <g font-size="11.5" fill="#FFFFFF" class="sb">
+          <rect x="241" y="280.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="295.75" text-anchor="middle">Interval</text>
+          <rect x="442" y="280.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="472" y="295.75" text-anchor="middle">Interval</text>
+          <rect x="643" y="280.25" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="668" y="295.75" text-anchor="middle">Video</text>
+          <rect x="844" y="280.25" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="870" y="295.75" text-anchor="middle">Photo</text>
+          <rect x="1045" y="280.25" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="1075" y="295.75" text-anchor="middle">Interval</text>
+        </g>
+        <g font-size="11.5" fill="#FFB340" class="sb">
+          <rect x="359" y="173" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="389.5" y="188.5" text-anchor="middle">3 clips</text>
+          <rect x="1163" y="173" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="1193.5" y="188.5" text-anchor="middle">2 clips</text>
+        </g>
+      </g>
+
+      <!-- Section 2 -->
+      <g id="day-2">
+        <rect x="235" y="330.25" width="995" height="32" fill="#F2F2F7"/>
+        <text x="237" y="351.25" font-size="13" class="sb" fill="#000">Sunday, 30 August 2026</text>
+        <rect x="420" y="338.25" width="24" height="17" rx="8.5" fill="#000" fill-opacity="0.07"/>
+        <text x="432" y="351.25" font-size="12" class="m" text-anchor="middle" fill="#6D6D72">3</text>
+
+        <g clip-path="url(#b1)">
+          <rect x="235" y="382.25" width="191" height="143.25" fill="url(#storm)"/>
+          <ellipse cx="300" cy="420" rx="72" ry="17" fill="#39414E" opacity="0.7"/>
+          <ellipse cx="380" cy="412" rx="56" ry="14" fill="#333B47" opacity="0.6"/>
+          <rect x="235" y="487" width="191" height="38.5" fill="#8E8571"/>
+        </g>
+        <g clip-path="url(#b2)">
+          <rect x="436" y="382.25" width="191" height="143.25" fill="url(#water)"/>
+          <rect x="436" y="453" width="191" height="72.5" fill="#4A555E"/>
+          <rect x="453" y="465" width="142" height="4" rx="2" fill="#C7A874" opacity="0.5"/>
+          <rect x="469" y="479" width="110" height="3.5" rx="1.75" fill="#B79A6B" opacity="0.4"/>
+        </g>
+        <g clip-path="url(#b3)">
+          <rect x="637" y="382.25" width="191" height="143.25" fill="url(#dusk)"/>
+          <ellipse cx="732" cy="444" rx="86" ry="16" fill="#F0C489" opacity="0.5"/>
+          <rect x="637" y="475" width="191" height="50.5" fill="#5A4B3E"/>
+        </g>
+
+        <g font-size="11.5" fill="#FFFFFF" class="sb">
+          <rect x="241" y="495.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="511" text-anchor="middle">Interval</text>
+          <rect x="442" y="495.5" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="468" y="511" text-anchor="middle">Photo</text>
+          <rect x="643" y="495.5" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="673" y="511" text-anchor="middle">Interval</text>
+        </g>
+        <g font-size="11.5" fill="#FFB340" class="sb">
+          <rect x="761" y="388.25" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="791.5" y="403.75" text-anchor="middle">4 clips</text>
+        </g>
+      </g>
+
+      <!-- Section 3 -->
+      <g id="day-3">
+        <rect x="235" y="545.5" width="995" height="32" fill="#F2F2F7"/>
+        <text x="237" y="566.5" font-size="13" class="sb" fill="#000">Thursday, 20 August 2026</text>
+        <rect x="436" y="553.5" width="24" height="17" rx="8.5" fill="#000" fill-opacity="0.07"/>
+        <text x="448" y="566.5" font-size="12" class="m" text-anchor="middle" fill="#6D6D72">5</text>
+
+        <g clip-path="url(#c1)">
+          <rect x="235" y="597.5" width="191" height="143.25" fill="url(#dusk)"/>
+          <ellipse cx="330" cy="662" rx="86" ry="15" fill="#F0C489" opacity="0.5"/>
+          <rect x="235" y="694" width="191" height="46.75" fill="#5A4B3E"/>
+        </g>
+        <g clip-path="url(#c2)">
+          <rect x="436" y="597.5" width="191" height="143.25" fill="url(#dawn)"/>
+          <path d="M436 690 h191 v50.75 h-191 z" fill="#7C8698" opacity="0.8"/>
+          <path d="M436 696 h191 v5 h-191 z" fill="#4E576A"/>
+        </g>
+        <g clip-path="url(#c3)">
+          <rect x="637" y="597.5" width="191" height="143.25" fill="url(#night)"/>
+          <circle cx="690" cy="628" r="2.4" fill="#FFF" opacity="0.7"/><circle cx="746" cy="616" r="1.9" fill="#FFF" opacity="0.6"/>
+          <rect x="637" y="690" width="191" height="50.75" fill="#0C1018"/>
+          <rect x="650" y="704" width="70" height="4" rx="2" fill="#7FD4FF" opacity="0.55"/>
+        </g>
+        <g clip-path="url(#c4)">
+          <rect x="838" y="597.5" width="191" height="143.25" fill="url(#roof)"/>
+          <path d="M838 668 l30-20 30 20 z" fill="#A5613F"/>
+          <path d="M884 680 l34-22 34 22 z" fill="#93553A"/>
+          <rect x="838" y="700" width="191" height="40.75" fill="#C8B79E"/>
+        </g>
+        <g clip-path="url(#c5)">
+          <rect x="1039" y="597.5" width="191" height="143.25" fill="url(#water)"/>
+          <rect x="1039" y="672" width="191" height="68.75" fill="#4A555E"/>
+          <rect x="1056" y="686" width="142" height="4" rx="2" fill="#C7A874" opacity="0.5"/>
+        </g>
+
+        <g font-size="11.5" fill="#FFFFFF" class="sb">
+          <rect x="241" y="710.75" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="271" y="726.25" text-anchor="middle">Interval</text>
+          <rect x="442" y="710.75" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="472" y="726.25" text-anchor="middle">Interval</text>
+          <rect x="643" y="710.75" width="52" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="669" y="726.25" text-anchor="middle">Photo</text>
+          <rect x="844" y="710.75" width="50" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="869" y="726.25" text-anchor="middle">Video</text>
+          <rect x="1045" y="710.75" width="60" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="1075" y="726.25" text-anchor="middle">Interval</text>
+        </g>
+        <g font-size="11.5" fill="#FFB340" class="sb">
+          <rect x="1163" y="603.5" width="61" height="24" rx="12" fill="#000" fill-opacity="0.5"/><text x="1193.5" y="619" text-anchor="middle">6 clips</text>
+        </g>
+      </g>
+
+      <!-- Section 4, sliding under the floating bar -->
+      <g id="day-4">
+        <rect x="235" y="760.75" width="995" height="32" fill="#F2F2F7"/>
+        <text x="237" y="781.75" font-size="13" class="sb" fill="#000">Monday, 17 August 2026</text>
+        <rect x="420" y="768.75" width="24" height="17" rx="8.5" fill="#000" fill-opacity="0.07"/>
+        <text x="432" y="781.75" font-size="12" class="m" text-anchor="middle" fill="#6D6D72">2</text>
+      </g>
+    </g>
+
+    <!-- ================= MONTH SCRUBBER RAIL (56pt, inside the centre column) ================= -->
+    <g id="month-rail" clip-path="url(#rail)">
+      <rect x="1244" y="101" width="56" height="719" fill="#F2F2F7"/>
+      <g text-anchor="middle" fill="#6D6D72">
+        <text x="1272" y="124" font-size="11">Sep</text>
+        <text x="1272" y="147" font-size="11">Aug</text>
+        <text x="1272" y="170" font-size="11">Jul</text>
+        <text x="1272" y="193" font-size="11">Jun</text>
+        <text x="1272" y="216" font-size="11">May</text>
+        <text x="1272" y="239" font-size="11">Apr</text>
+        <text x="1272" y="262" font-size="11">Mar</text>
+        <text x="1272" y="285" font-size="11">Feb</text>
+        <!-- January is the only year marker: its year sits above it, bold + primary -->
+        <text x="1272" y="306" font-size="9" class="sb">2026</text>
+        <text x="1272" y="320" font-size="11" class="b" fill="#000">Jan</text>
+        <text x="1272" y="343" font-size="11">Dec</text>
+        <text x="1272" y="366" font-size="11">Nov</text>
+        <text x="1272" y="389" font-size="11">Oct</text>
+        <text x="1272" y="412" font-size="11">Sep</text>
+        <text x="1272" y="435" font-size="11">Aug</text>
+        <text x="1272" y="458" font-size="11">Jul</text>
+        <text x="1272" y="481" font-size="11">Jun</text>
+        <text x="1272" y="504" font-size="11">May</text>
+        <text x="1272" y="527" font-size="11">Apr</text>
+        <text x="1272" y="550" font-size="11">Mar</text>
+        <text x="1272" y="573" font-size="11">Feb</text>
+        <text x="1272" y="594" font-size="9" class="sb">2025</text>
+        <text x="1272" y="608" font-size="11" class="b" fill="#000">Jan</text>
+        <text x="1272" y="631" font-size="11">Dec</text>
+        <text x="1272" y="654" font-size="11">Nov</text>
+        <text x="1272" y="677" font-size="11">Oct</text>
+        <text x="1272" y="700" font-size="11">Sep</text>
+        <text x="1272" y="723" font-size="11">Aug</text>
+        <text x="1272" y="746" font-size="11">Jul</text>
+      </g>
+    </g>
+
+    <!-- ================= FLOATING TAB BAR ================= -->
+    <g id="tab-bar">
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+      <rect x="481" y="751" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(520 772) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+        <text x="520" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+      </g>
+      <rect x="557" y="757" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+      <g fill="none" stroke="#C36A00">
+        <g transform="translate(590 772) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+        <text x="590" y="796" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Gallery</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(660 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="660" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Projects</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(730 772) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+        <text x="730" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+      </g>
+      <g fill="none" stroke="#8E8E93">
+        <g transform="translate(800 772) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+        <text x="800" y="796" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1280" height="800" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="660" y="842" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Gallery · timeline mode, no selection · 1280×800 pt window</text>
+  <text x="660" y="860" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/GalleryGridContent.swift (TimelineGalleryGrid · TimelineDayHeader · MonthScrubberRail) — five columns are hard-coded, so the zoom slider is inert here</text>
+</svg>

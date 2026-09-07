@@ -13,19 +13,56 @@ live inline.
 
 ### Gallery redesign — SVG design files
 
-**Raised:** 2026-09-06 · **Size:** medium
+**Raised:** 2026-09-06 · **macOS DONE 2026-09-07** · **Size:** small (what is
+left), plus one design decision
 
-GalleryView.swift was rebuilt (feature/gallery-redesign) with the 2a layout
-spec: sidebar, 4:3 grid, preview panel, timeline mode. The matching SVG design
-files have not been created yet.
+`GalleryView.swift` was rebuilt in 394e48e with the 2a layout — sidebar, 4:3
+grid, preview panel, timeline mode — and shipped with no design files.
 
-Per the design-sync contract (`docs/design/README.md`), the following files
-need to be authored to mirror the implementation:
-- `docs/design/macOS/gallery-grid.svg` (default + timeline modes)
-- `docs/design/macOS/gallery-preview-panel.svg`
-- `docs/design/iOS/gallery-grid.svg` (compact layout)
-- `docs/design/iOS/gallery-preview-sheet.svg`
-- Update `docs/design/macOS/INDEX.md` and `docs/design/iOS/INDEX.md`
+**Done 2026-09-07:** `docs/design/macOS/gallery.svg` (grid mode, all three
+panes) and `docs/design/macOS/gallery.timeline.svg` (timeline mode, no
+selection, selected-tag sidebar), both authored from the source; `macOS/INDEX.md`
+rows added; the stale `iOS` row marked ⚠️ with what changed. The panel did not
+need a file of its own — it is a pane of the Gallery screen, not a screen, so it
+is drawn in place rather than in the `gallery-preview-panel.svg` this entry
+originally imagined.
+
+**Open:**
+
+- **Verify the two macOS mirrors against the running app.** Every measurement in
+  them is computed from the SwiftUI layout, not read off a screenshot: a Release
+  Mac app was running and holds `library.json`, which has no serialised writer,
+  so a second instance could not be launched safely. Both files are ⚠️ until
+  this happens. The header-overflow arithmetic below is the part that most wants
+  a real window behind it.
+- **Decide the compact `galleryHeader`, then mirror iOS.** `iOS/gallery.portrait.svg`
+  is stale and cannot be truthfully redrawn yet: the compact branch reuses the
+  Mac header verbatim, and it is ~691pt of content in an iPhone's 361pt. Design
+  decision first, then `iOS/gallery.portrait.svg` plus the sidebar and preview
+  sheets.
+- **iPadOS** — regular width takes the same three-pane layout as the Mac; nothing
+  records that today.
+
+**Two code fixes the mirroring surfaced** (drawn as shipped, not silently
+corrected):
+
+- **The Mac's default window cannot draw its own header.** `galleryHeader` is one
+  `HStack` of eight children with no compact form and nothing that collapses
+  (~691pt intrinsic). The centre column is the window less 201pt of sidebar and
+  301pt of preview, so it needs a ~1193pt window; at the 760×680 default it
+  overflows by ~430pt with the preview open and ~130pt with only the sidebar —
+  and `gallery.showSidebar` defaults to **true**, so that is the first-run state.
+  The same header is what blocks the iPhone mirror.
+- **Bottom clearance is double-counted, 140pt instead of 58.** `ContentView`
+  already applies `.safeAreaInset(edge: .bottom) { Color.clear.frame(height: 58) }`
+  to the tab `Group`, and all three of the Gallery's scroll views then append
+  their own `Color.clear.frame(height: 82)`.
+
+Smaller things noted while drawing: the Mac window title repeats the header's own
+"Gallery" (`.navigationTitle` retitles `Window("LetsLapse")`); the zoom `Slider`
+is never `.tint()`ed, so its fill is system blue — the one accent-coloured
+control on the screen that is not `LL.accent`; and `TimelineGalleryGrid`
+hard-codes 5 columns, so the zoom slider is live but inert while Timeline is on.
 
 ---
 
