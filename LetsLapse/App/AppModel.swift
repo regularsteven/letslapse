@@ -209,6 +209,26 @@ final class AppModel: ObservableObject {
         /// through `AppModel.existingImport(of:)`, which is what catches a
         /// second double-click on an archive already in the library.
         var importedFromID: UUID?
+        /// When this project arrived in THIS library — shot here, imported
+        /// from a file, or received from another device.
+        ///
+        /// The twin of `createdAt` rather than a copy of it. `createdAt` is the
+        /// shoot's own date, which every import path deliberately preserves (a
+        /// timelapse taken last August belongs beside last August's work) — and
+        /// that leaves "what turned up here recently" unanswerable on a library
+        /// that takes in other people's shoots. This is the field the **Added**
+        /// sort reads.
+        ///
+        /// Defaulted to `Date()` rather than left nil because every place that
+        /// *builds* a record is a registration — the moment the project lands.
+        /// The two paths that copy an existing record instead (an archive
+        /// import, a DNG-archive clone) re-stamp it by hand, or they would
+        /// inherit the date the source device recorded. Codable synthesis
+        /// ignores property defaults, so a manifest written before this field
+        /// decodes as nil and is backfilled once by `stampAddedDatesIfNeeded`;
+        /// read it through `AppModel.addedAt(_:)`, which falls back to the
+        /// capture date so the sort is total whatever happens.
+        var addedAt: Date? = Date()
         /// When a HUMAN last changed this project — the Projects list's "Edit"
         /// sort, and the freshness test behind `sizeBytes` below.
         ///
@@ -552,7 +572,8 @@ final class AppModel: ObservableObject {
         /// Optional so manifests written before Collections existed decode.
         var collections: [LapseCollection]?
         /// Bumped by one-time library migrations; nil in manifests written
-        /// before any existed. 1 = the Natural stamp (see `loadLibrary`).
+        /// before any existed. 1 = the Natural stamp, 2 = preset states,
+        /// 3 = the `addedAt` backfill (all three run from `loadLibrary`).
         var gradingSchemaVersion: Int?
     }
 
@@ -4029,7 +4050,20 @@ final class AppModel: ObservableObject {
         }
     }
 
-    // MARK: - When a project was last edited, and how big it is
+    // MARK: - When a project arrived and was last edited, and how big it is
+
+    /// The date the **Added** sort reads: when this project turned up in this
+    /// library.
+    ///
+    /// The stored stamp, and the capture date for anything that somehow has
+    /// none — a project registered while a write failed, or one restored from a
+    /// manifest the backfill never saw. That fallback is exactly right for
+    /// everything shot on this device (where arriving and being shot are the
+    /// same event) and only wrong by the age of the shoot for an old import,
+    /// which is the same answer the library gave before this field existed.
+    func addedAt(_ capture: CaptureProject) -> Date {
+        capture.addedAt ?? capture.createdAt
+    }
 
     /// The date the Projects list's **Edit** sort reads.
     ///
@@ -7310,6 +7344,10 @@ final class AppModel: ObservableObject {
             clone.sourceFileNames = inputs.map { "source/\($0.deletingPathExtension().lastPathComponent).dng" }
             clone.clipEncodings = nil
             clone.importedFromID = nil
+            // A clone is a new arrival even though its source has been here for
+            // months; without this it would inherit the original's date and
+            // hide at the far end of an Added sort.
+            clone.addedAt = Date()
             if let first = result.reports.first, first.width > 0, first.height > 0 {
                 clone.sourceWidth = first.width
                 clone.sourceHeight = first.height
@@ -7538,6 +7576,7 @@ final class AppModel: ObservableObject {
             gradingSchemaVersion = manifest.gradingSchemaVersion ?? 0
             stampLegacyDefaultPresetsIfNeeded()
             stampPresetStatesIfNeeded()
+            stampAddedDatesIfNeeded()
             for capture in captures
             where capture.kind == .video
                 && (capture.sourceFPS == nil || capture.sourceDurationSeconds == nil
@@ -7594,6 +7633,28 @@ final class AppModel: ObservableObject {
                 adjustments: captures[index].adjustments ?? .neutral,
                 anchor: .edited,
                 customPresets: customPresets)
+        }
+        try? persistLibrary()
+    }
+
+    /// One-time stamp for the **Added** axis: every project that predates the
+    /// field learns when it arrived here from its own folder's creation date.
+    ///
+    /// The filesystem has been recording this all along — a project folder is
+    /// created at the instant the project is registered, whether it was shot
+    /// here, imported from a file or received off the wire — so the answer for
+    /// an existing library is already on disk and does not have to be guessed.
+    /// A folder that can't be read falls back to the capture date, which is the
+    /// right answer for anything captured on this device anyway.
+    ///
+    /// One `stat` per project, once, on the launch that migrates.
+    private func stampAddedDatesIfNeeded() {
+        guard gradingSchemaVersion < 3 else { return }
+        gradingSchemaVersion = 3
+        for index in captures.indices where captures[index].addedAt == nil {
+            let folder = captureFolderURL(for: captures[index].id)
+            let created = (try? folder.resourceValues(forKeys: [.creationDateKey]))?.creationDate
+            captures[index].addedAt = created ?? captures[index].createdAt
         }
         try? persistLibrary()
     }
@@ -8636,6 +8697,11 @@ final class AppModel: ObservableObject {
         let newID = UUID()
         capture.id = newID
         capture.importedFromID = originID
+        // The record came off another device, so its own stamp says when the
+        // project landed THERE. `createdAt` is left alone on purpose — that is
+        // the shoot's date and it travels — but "added" is a fact about this
+        // library, and this is the moment it becomes true.
+        capture.addedAt = Date()
         let destination = captureFolderURL(for: newID)
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
         // Anything not named here is silently dropped at import — a new

@@ -292,6 +292,10 @@ struct GalleryView: View {
         switch sortKey {
         case .capture:
             ascending = filtered.sorted { $0.createdAt < $1.createdAt }
+        case .added:
+            ascending = filtered.sorted {
+                (model.addedAt($0), $0.createdAt) < (model.addedAt($1), $1.createdAt)
+            }
         case .edit:
             ascending = filtered.sorted { model.lastEdited($0) < model.lastEdited($1) }
         case .size:

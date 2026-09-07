@@ -31,6 +31,24 @@ reading "As Shot". `macOS/photo-viewer.svg` carries the full spec in its `desc`;
 four files are still in the old units — they need re-measuring against the running app, which could not
 be launched in that session (a Release Mac app was already running and shares `library.json`).
 
+✅ **2026-09-07, Gallery and Projects gain an ADDED sort — code first (real library, real simulator), mirrors updated
+the same day:** the sort menu goes from three axes to four — `Capture · Added · Edit · Size` — in both lists, which share
+one `ProjectSort`. **Added** is `CaptureProject.addedAt`: when the project arrived in THIS library, which is not the
+question Capture answers. Every import path deliberately preserves the shoot's own date (a timelapse taken last August
+belongs beside last August's work), so until now "what turned up here recently" was unanswerable on a library that takes
+in other people's shoots — an ARW imported today, shot five days ago, sat under a DNG shot in July. The field is stamped
+at registration; re-stamped by hand on the two paths that copy an existing record rather than build one (an archive
+import inherits the source device's stamp, a DNG-archive clone the original's); and backfilled once, at library schema
+version 3, from each project folder's own creation date — the filesystem has been recording the arrival all along, so an
+existing library gets real dates rather than a flat migration stamp. Verified on the 11-project iOS 18.6 simulator
+library: schema 2 → 3, all 11 backfilled to their folder dates, and both menus re-order to a visibly different sequence
+(the card dates read 5 days / 5 days / 2 months / 3 weeks under an Added sort). **Nothing drawn changes** — all three
+`projects.*.svg` mirrors show the capsule on its Capture default — so this is a `desc`/comment update in
+`projects.portrait.svg` (full axis prose), `projects.sharing.portrait.svg`, `projects.scans-filter.portrait.svg` and
+`macOS/gallery.svg`. **Owed:** the card and the Gallery preview panel still print the CAPTURE date whatever the sort,
+which is the same gap Edit has always had; showing the sorted-on date when the axis is Added is a design decision,
+not drawn here.
+
 ✅ **2026-09-07, Gallery tab — code first (394e48e), macOS mirrors authored the same day:** the Gallery was rebuilt on the
 spec 2a layout — sidebar / 4:3 grid / preview panel, plus a timeline mode — and shipped with no design files at all. The two
 macOS mirrors above were authored from the source. **Owed:** verification against the running Mac app. A Release Mac app was

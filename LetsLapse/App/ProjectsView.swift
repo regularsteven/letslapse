@@ -1,14 +1,19 @@
 import SwiftUI
 
-/// What the Projects list can be ordered by.
+/// What the Projects list and the Gallery can be ordered by.
 ///
-/// Three axes because three questions get asked of a library: when was this
-/// shot, when did I last work on it, and what is it costing me. Each has its
-/// own direction words — "oldest" and "smallest" are the same gesture but not
-/// the same sentence — so the triangle's accessibility label comes from here
-/// rather than from a generic ascending/descending.
+/// Four axes because four questions get asked of a library: when was this
+/// shot, when did it turn up here, when did I last work on it, and what is it
+/// costing me. The first two are only the same question on a device that
+/// shoots everything it holds — every import path deliberately keeps the
+/// shoot's own date, so a timelapse shot last August lands under last August
+/// however recently it arrived, and Added is the axis that finds it again.
+/// Each has its own direction words — "oldest" and "smallest" are the same
+/// gesture but not the same sentence — so the triangle's accessibility label
+/// comes from here rather than from a generic ascending/descending.
 enum ProjectSort: String, CaseIterable, Identifiable {
     case capture
+    case added
     case edit
     case size
 
@@ -17,6 +22,7 @@ enum ProjectSort: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .capture: return "Capture"
+        case .added: return "Added"
         case .edit: return "Edit"
         case .size: return "Size"
         }
@@ -25,6 +31,7 @@ enum ProjectSort: String, CaseIterable, Identifiable {
     var ascendingLabel: String {
         switch self {
         case .capture: return "Oldest capture first"
+        case .added: return "Longest in the library first"
         case .edit: return "Least recently edited first"
         case .size: return "Smallest first"
         }
@@ -33,6 +40,7 @@ enum ProjectSort: String, CaseIterable, Identifiable {
     var descendingLabel: String {
         switch self {
         case .capture: return "Newest capture first"
+        case .added: return "Most recently added first"
         case .edit: return "Most recently edited first"
         case .size: return "Biggest first"
         }
@@ -337,6 +345,13 @@ struct ProjectsView: View {
         switch sortKey {
         case .capture:
             ascending = captures.sorted { $0.createdAt < $1.createdAt }
+        case .added:
+            // Ties broken on the capture date rather than left to `sorted`,
+            // which isn't stable: a library whose Added dates were backfilled
+            // from folder stamps can hold several projects to the same second.
+            ascending = captures.sorted {
+                (model.addedAt($0), $0.createdAt) < (model.addedAt($1), $1.createdAt)
+            }
         case .edit:
             ascending = captures.sorted { model.lastEdited($0) < model.lastEdited($1) }
         case .size:
