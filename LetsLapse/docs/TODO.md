@@ -11,6 +11,46 @@ live inline.
 
 ## Open
 
+### Presets — the photo × preset matrix's remaining doors
+
+**Raised:** 2026-09-08 · **Detail:**
+[presets-lut-spike.md](presets-lut-spike.md) · **Size:** medium (staged)
+
+The spike, the design pass and the code landed the same day: a *Manage
+presets* row under *Interval ladders* opens the **Presets** sheet
+(`App/ManagePresetsView.swift`) — a preview frame every row is rendered on,
+LetsLapse / Your presets / LUTs, import of `.cube` LUTs and Lightroom preset
+`.xmp`s, a preset's screen with a draggable before/after, rename, what it
+changes, duplicate and delete, a LUT's screen with strength and file facts.
+The Kit renders a `.cube` as the last colour operation (`CubeLUT`,
+`GradeRecipe.lut`, 11 tests); a LUT preset is a `CustomPreset` at Original so
+it is a chip everywhere; a graded project carries its own copy of the cube.
+Verified on the iOS simulator through `LL_PRESETS=list|preset|lut|import`.
+
+**Open, in order:**
+
+1. **The Edit screen's LUT row** — strength per project (the LUT detail's
+   footer promises it). Design first: an Effects-section row with the
+   preset's name and a strength slider; `PhotoAdjustments.lut.strength`
+   already renders and keyframes as a value.
+2. **Use case 1 across projects** — multi-select in Projects/Gallery and a
+   batch *Apply as starting point* with a progressive before/after sheet
+   (spike §3, product shape 3). The state model needs nothing new.
+3. **A real `.cube` through the Files picker on a physical device**, and the
+   Mac app against the real library (`/Volumes/letslapse`, seven saved
+   presets). The picker path is verified on the simulator (Steven's
+   Teal_and_Orange.cube through Files → On My iPhone, 2026-09-08); a device
+   adds iCloud Drive and third-party providers, and the share sheet's
+   "Open in LetsLapse" is a separate door not built yet (a document type for
+   the cube plus an `onOpenURL` branch).
+4. **A Lightroom preset `.xmp` fixture** for the import (none on this Mac;
+   Lightroom CC exports one from a preset's context menu) — the parser is the
+   sidecar's, the mapping drops masks and says so.
+5. **Used on → the filtered Projects list**, and thumbnails in the preview
+   picker; both are plain counts / plain rows today.
+6. **Log-input LUTs**: the amber note is there; a Capture Flat clip as the
+   preview frame would let such a LUT be judged honestly.
+
 ### Lightroom parity — second pass done, controls need their sliders
 
 **Raised:** 2026-09-07 · **Detail:**

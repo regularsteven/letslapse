@@ -28,7 +28,11 @@ import LetsLapseKit
 enum VideoGrader {
     /// GPU-backed and thread-safe; the composition handler runs on AVFoundation's
     /// own queues and the frame grab off the media work queue.
-    private static let context = CIContext(options: [.useSoftwareRenderer: false])
+    private static let context: CIContext = {
+        // As `PhotoGrader`: a graded movie may carry a LUT.
+        LUTStore.installResolver()
+        return CIContext(options: [.useSoftwareRenderer: false])
+    }()
 
     /// A graded still from `url` for a preview, or nil when no frame could be
     /// read. `seconds` picks how far in to sample — a fraction of a second,

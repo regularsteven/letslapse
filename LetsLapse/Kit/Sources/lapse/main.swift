@@ -130,6 +130,8 @@ USAGE:
       --recipe JSON         Slider values, Lightroom-style ±100 numbers, e.g.
                             '{"highlights":-100,"shadows":49,"vibrance":53}'
                             (exposure is EV; temperature is a mired offset)
+      --lut FILE.cube       A 3D LUT applied last, as an imported LUT preset is;
+                            --lut-strength 0…1 mixes it back toward the input
       --out PATH            Write the graded JPEG here (Display P3 for raw,
                             sRGB for a JPEG/HEIF/PNG source)
       --scale N             Decode scale, 1 = full resolution (default 1)
@@ -406,6 +408,12 @@ do {
         let outPath = takeOption(["--out", "-o"])
         let scale = Float(takeOption(["--scale"]) ?? "1") ?? 1
         let quality = Double(takeOption(["--quality"]) ?? "95") ?? 95
+        // `--lut <file.cube> [--lut-strength 0…1]`: the cube rides the recipe
+        // as the last colour operation, exactly as the app applies an
+        // imported LUT (`EnginePostPasses`). Registered here because the Kit
+        // has no store to look it up in.
+        let lutPath = takeOption(["--lut"])
+        let lutStrength = Float(takeOption(["--lut-strength"]) ?? "1") ?? 1
         if let decodePath = takeOption(["--decode-path"]) {
             guard let path = RawDecodePath(rawValue: decodePath.lowercased()) else {
                 fail("--decode-path is one of: "
@@ -426,9 +434,21 @@ do {
             guard let recipeJSON, let outPath else {
                 fail("grade needs --recipe '<json>' and --out <path> (or --probe)")
             }
+            var lut: LUTLayer?
+            if let lutPath {
+                let cube = try CubeLUT.parse(contentsOf: URL(fileURLWithPath: lutPath))
+                LUTRegistry.shared.register(cube)
+                lut = LUTLayer(id: cube.contentHash, strength: lutStrength)
+                if cube.isLikelyLogInput {
+                    FileHandle.standardError.write(Data(
+                        ("note: \(URL(fileURLWithPath: lutPath).lastPathComponent) looks like a log-input LUT "
+                         + "(50 % grey → \(String(format: "%.2f", cube.luma(ofGrey: 0.5)))); "
+                         + "expect a crushed picture on a display-referred frame\n").utf8))
+                }
+            }
             try runGradeRender(
                 url: inputURL, recipeJSON: recipeJSON, outPath: outPath, scale: scale,
-                quality: min(max(quality, 1), 100) / 100)
+                quality: min(max(quality, 1), 100) / 100, lut: lut)
         }
 
     case "lightroom":

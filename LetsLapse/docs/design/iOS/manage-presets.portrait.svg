@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Presets · portrait</title>
+  <desc>Mirrors App/ManagePresetsView.swift (2026-09-08, design first, code mirrored the same day) over App/CustomPreset.swift (CustomPresetStore) and a planned LUTStore. A sheet from the Create tab's "Manage presets" row (create-home.portrait.svg), owning its own NavigationStack the way Interval ladders does, so a later door from the Edit screen presents it the same way. Large title "Presets", Done trailing. First a PREVIEW FRAME card: one row — a 56×42 thumbnail, the project's name, its file — for the frame every preset below is rendered on; the row is a chevron row and tapping it opens a project picker (PresetPreviewPickerView, not drawn: a plain list of projects, newest edit first, check on the chosen one); the footer says so. Defaults to the most recently edited project's hero frame; a library with nothing in it shows the built-in sample. Then list sections of identical rows — a 44-pt thumbnail of THAT frame through the preset (PhotoGrader.render at ~240 px, the preview cache), name 16, subtitle 11.5 secondary, chevron to the preset's screen: LETSLAPSE — the four built-in looks (Original is a state, not a look, so it is not a row), each subtitled with what it does in a phrase; footer "Built in, never edited in place. Open one to see what it does, or duplicate it into your own." YOUR PRESETS — the store's presets in saved order, subtitled with the base preset, the count of moved sliders and, when any, the projects on it (a .named state count over the library), swipe to delete; continues below the fold (manage-presets.scrolled.portrait.svg) with LUTS and the import row. Thumbnails are flat tints here; the app renders the real grade. Staged by LL_PRESETS=list, which seeds the four saved presets and two LUTs drawn when the stores are empty.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <clipPath id="sheet"><rect x="0" y="56" width="393" height="796" rx="10"/></clipPath>
+    <clipPath id="thumb44"><rect width="44" height="44" rx="8"/></clipPath>
+    <clipPath id="thumb56"><rect width="56" height="42" rx="7"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2C4F86"/><stop offset="0.55" stop-color="#6D8FBF"/><stop offset="1" stop-color="#F0B27A"/></linearGradient>
+    <linearGradient id="water" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5A6F94"/><stop offset="1" stop-color="#1B2A44"/></linearGradient>
+    <!-- the preview frame: a dusk over the river, the sample every preset is shown on -->
+    <symbol id="scene" viewBox="0 0 160 120" preserveAspectRatio="xMidYMid slice">
+      <rect width="160" height="120" fill="url(#sky)"/>
+      <rect y="64" width="160" height="56" fill="url(#water)"/>
+      <ellipse cx="118" cy="63" rx="9" ry="6" fill="#FFD27A"/>
+      <rect y="62" width="160" height="4" fill="#FFB05A" opacity="0.55"/>
+      <path d="M0 66 L28 56 L58 61 L92 50 L128 58 L160 52 V70 H0 Z" fill="#2B2A33"/>
+      <path d="M0 70 h160 v6 H0 Z" fill="#26364F" opacity="0.6"/>
+      <path d="M0 92 h160 v8 H0 Z" fill="#FFB05A" opacity="0.12"/>
+    </symbol>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#000"/>
+    <g transform="translate(24,24)">
+
+      <!-- status bar over the shrunken Create tab behind the sheet -->
+      <g id="status-bar" fill="#FFF">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g id="signal"><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path id="wifi" d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#FFF" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g id="battery"><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#FFF" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#FFF" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <!-- the parent's top edge, scaled back behind the sheet -->
+      <rect x="16" y="44" width="361" height="30" rx="10" fill="#C7C7CC"/>
+
+      <!-- the sheet -->
+      <g id="presets-sheet" clip-path="url(#sheet)">
+        <rect x="0" y="56" width="393" height="796" fill="#F2F2F7"/>
+        <text x="373" y="80" font-size="17" class="sb" fill="#C36A00" text-anchor="end">Done</text>
+        <text x="16" y="144" font-size="34" class="b" fill="#000">Presets</text>
+
+        <g id="section-preview-frame">
+          <text x="36" y="184" font-size="13" class="sec" letter-spacing="0.3">PREVIEW FRAME</text>
+          <rect x="20" y="198" width="353" height="64" rx="10" fill="#FFF"/>
+          <g id="row-preview-frame">
+            <g transform="translate(36,209)" clip-path="url(#thumb56)"><use href="#scene" width="56" height="42"/></g>
+            <text x="104" y="227" font-size="16" fill="#000">Vltava dusk</text>
+            <text x="104" y="244" font-size="11.5" class="sec">_WEX3825.ARW · your newest edit</text>
+            <path d="M345 223 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <text x="36" y="280" font-size="13" class="sec">Every preset below is shown on this frame. Tap to</text>
+          <text x="36" y="296" font-size="13" class="sec">pick another project.</text>
+        </g>
+
+        <g id="section-letslapse">
+          <text x="36" y="336" font-size="13" class="sec" letter-spacing="0.3">LETSLAPSE</text>
+          <rect x="20" y="350" width="353" height="240" rx="10" fill="#FFF"/>
+          <g id="row-natural">
+            <g transform="translate(36,358)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#FFB340" opacity="0.14"/></g>
+            <text x="96" y="376" font-size="16" fill="#000">Natural</text>
+            <text x="96" y="393" font-size="11.5" class="sec">Pulled highlights, lifted shadows, warmer</text>
+            <path d="M345 373 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="96" y1="410" x2="373" y2="410" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-cinema">
+            <g transform="translate(36,418)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#24406E" opacity="0.34"/><rect width="44" height="44" fill="#8E8E93" opacity="0.18"/></g>
+            <text x="96" y="436" font-size="16" fill="#000">Cinema</text>
+            <text x="96" y="453" font-size="11.5" class="sec">Deep shadow lift, cooler, desaturated</text>
+            <path d="M345 433 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="96" y1="470" x2="373" y2="470" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-matte">
+            <g transform="translate(36,478)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#FFFFFF" opacity="0.22"/></g>
+            <text x="96" y="496" font-size="16" fill="#000">Matte</text>
+            <text x="96" y="513" font-size="11.5" class="sec">Lifted blacks, low contrast, faded</text>
+            <path d="M345 493 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="96" y1="530" x2="373" y2="530" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-vivid">
+            <g transform="translate(36,538)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#FF7A00" opacity="0.16"/><rect width="44" height="44" fill="#000000" opacity="0.1"/></g>
+            <text x="96" y="556" font-size="16" fill="#000">Vivid</text>
+            <text x="96" y="573" font-size="11.5" class="sec">Punchy colour and contrast</text>
+            <path d="M345 553 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <text x="36" y="608" font-size="13" class="sec">Built in, never edited in place. Open one to see</text>
+          <text x="36" y="624" font-size="13" class="sec">what it does, or duplicate it into your own.</text>
+        </g>
+
+        <g id="section-your-presets">
+          <text x="36" y="664" font-size="13" class="sec" letter-spacing="0.3">YOUR PRESETS</text>
+          <rect x="20" y="678" width="353" height="240" rx="10" fill="#FFF"/>
+          <g id="row-punchy">
+            <g transform="translate(36,686)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#000000" opacity="0.16"/><rect width="44" height="44" fill="#FF9500" opacity="0.1"/></g>
+            <text x="96" y="704" font-size="16" fill="#000">Punchy</text>
+            <text x="96" y="721" font-size="11.5" class="sec">Original + 11 adjustments · on 4 projects</text>
+            <path d="M345 701 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="96" y1="738" x2="373" y2="738" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-sunny">
+            <g transform="translate(36,746)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#FFC260" opacity="0.24"/></g>
+            <text x="96" y="764" font-size="16" fill="#000">Sunny Nature</text>
+            <text x="96" y="781" font-size="11.5" class="sec">Natural + 6 adjustments · on 2 projects</text>
+            <path d="M345 761 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="96" y1="798" x2="373" y2="798" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-flatday">
+            <g transform="translate(36,806)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#FFFFFF" opacity="0.1"/><rect width="44" height="44" fill="#FFB340" opacity="0.1"/></g>
+            <text x="96" y="824" font-size="16" fill="#000">Flat Day</text>
+            <text x="96" y="841" font-size="11.5" class="sec">Original + 13 adjustments</text>
+            <path d="M345 821 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+          <line x1="96" y1="858" x2="373" y2="858" stroke="#000" stroke-opacity="0.1"/>
+          <g id="row-daydng">
+            <g transform="translate(36,866)" clip-path="url(#thumb44)"><use href="#scene" width="44" height="44"/><rect width="44" height="44" fill="#FFB340" opacity="0.08"/></g>
+            <text x="96" y="884" font-size="16" fill="#000">Day DNG</text>
+            <text x="96" y="901" font-size="11.5" class="sec">Original + 12 adjustments · on 1 project</text>
+            <path d="M345 881 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+          </g>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.35"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Presets · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors ManagePresetsView  — PREVIEW FRAME · LETSLAPSE · YOUR PRESETS · scrolls to LUTS + Import · LL_PRESETS=list</text>
+</svg>

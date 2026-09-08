@@ -95,6 +95,30 @@
 			</dict>
 		</dict>
 	</array>
+	<!-- A .cube LUT, imported on the Presets sheet (2026-09-08). An IMPORTED
+	     declaration, not an exported one: the format is Adobe's and Resolve's,
+	     not ours — and without any declaration the Files picker on iOS has no
+	     type to offer the files under (`UTType.cubeLUT`). -->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.regularsteven.letslapse.cube-lut</string>
+			<key>UTTypeDescription</key>
+			<string>Cube LUT</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.plain-text</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>cube</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>

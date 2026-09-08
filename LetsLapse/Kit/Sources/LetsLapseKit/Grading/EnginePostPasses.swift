@@ -4,7 +4,7 @@ import Foundation
 /// The controls that render AFTER the tone engine, over its display-referred
 /// output, rather than inside the Metal kernel.
 ///
-/// Today that is Dehaze and the HSL panel. The dark-channel prior estimates the haze's colour
+/// Today that is Dehaze, the HSL panel and the LUT. The dark-channel prior estimates the haze's colour
 /// from the brightest of the picture's darkest patches, which needs the whole
 /// frame in one place; and it acts on the rendered picture, the way it does
 /// in Lightroom's own pipeline. So it runs here, once, on the image the
@@ -18,7 +18,7 @@ public enum EnginePostPasses {
     /// True when `recipe` asks for anything rendered here — the cheap check
     /// a caller makes before bothering to wrap a texture as a `CIImage`.
     public static func isNeeded(_ recipe: GradeRecipe) -> Bool {
-        abs(recipe.dehaze) > 1e-6 || recipe.hasHSL
+        abs(recipe.dehaze) > 1e-6 || recipe.hasHSL || recipe.hasLUT
     }
 
     /// `image` with the recipe's post-engine controls applied.
@@ -35,6 +35,13 @@ public enum EnginePostPasses {
         // them, and dehaze has just changed what it shows.
         if let hsl = recipe.hsl, !hsl.isNeutral, let shifted = HSLAdjustments.apply(hsl, to: out) {
             out = shifted
+        }
+        // The LUT last: a look somebody else made, applied to the finished
+        // picture the way its author applied it. A cube the registry cannot
+        // find renders as no LUT rather than as nothing — the id is logged
+        // by the app when it imports, so a miss here is a store problem.
+        if let layer = recipe.lut, layer.isActive, let cube = LUTRegistry.shared.cube(for: layer.id) {
+            out = cube.apply(to: out, strength: layer.strength)
         }
         return out
     }

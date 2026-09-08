@@ -376,6 +376,7 @@ struct GradeTimeline: Codable, Equatable, Sendable {
         let saysNothing = PhotoAdjustmentField.allCases.allSatisfy {
             abs(values[keyPath: $0.keyPath] - without[keyPath: $0.keyPath]) <= $0.epsilon
         } && values.hsl == without.hsl   // the mixer is not a field, but it is a value
+          && values.lut == without.lut   // nor is the LUT
         // A moment that no longer says anything retires — including the last
         // one, which by the reference above has been reset to neutral, so what
         // it leaves behind is an ungraded clip rather than a discarded grade.

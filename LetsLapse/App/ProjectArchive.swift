@@ -38,7 +38,10 @@ enum ProjectArchive {
     /// network path it is worse — a subfolder that misses the list would be
     /// sent over the wire, for however many minutes that takes, and then
     /// deleted on arrival. A new project subfolder must be added here.
-    static let transferableSubfolders = ["source", "blends", "notes", "masks", "fonts"]
+    // `luts` (2026-09-08): a project graded with a LUT preset carries its own
+    // copy of the cube, so the far side can render it without the sender's
+    // LUT store — see `LUTStore.ensureCopy` and docs/presets-lut-spike.md §4.4.
+    static let transferableSubfolders = ["source", "blends", "notes", "masks", "fonts", "luts"]
 
     /// The project's top-level FILES that travel, on the same terms as the
     /// subfolders above and read by the same two places.

@@ -96,11 +96,18 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     /// The HSL panel, when the grade moves any of its sliders. Nil is
     /// neutral. Rendered after the engine by `EnginePostPasses`, like dehaze.
     public var hsl: HSLAdjustments?
+    /// A 3D LUT, when the grade carries one — the LAST colour operation,
+    /// after dehaze and HSL, on the display-referred picture (`CubeLUT`).
+    /// Nil is neutral. The cube is found through `LUTRegistry` by the id.
+    public var lut: LUTLayer?
 
     public init() {}
 
     /// True when the HSL panel would change a pixel.
     public var hasHSL: Bool { hsl.map { !$0.isNeutral } ?? false }
+
+    /// True when a LUT is carried at a strength that would change a pixel.
+    public var hasLUT: Bool { lut?.isActive ?? false }
 
     public static let neutral = GradeRecipe()
 
@@ -153,6 +160,7 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
         // existed reads exactly as it did.
         let post = (dehaze != 0 ? String(format: "|dh%.4f", dehaze) : "")
             + (hasHSL ? "|hsl" + (hsl?.cacheToken ?? "") : "")
+            + (hasLUT ? "|lut" + (lut?.cacheToken ?? "") : "")
         return "e\(Self.engineVersion)|\(joined)\(declaredToken)\(post)"
     }
 }

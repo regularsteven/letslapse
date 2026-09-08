@@ -36,6 +36,8 @@ enum StorageRoot {
         "Projects", "Collections", "Thumbnails", "SceneMasks", "CaptureLogs", "Logs",
         "Incoming",
         "blend-profiles.json", "custom_presets.json", "light_ladders.json",
+        // Imported LUTs (`LUTStore`): the cubes and their index.
+        "luts", "luts.json",
     ]
 
     /// True when a nominated location could not be reached at launch (drive

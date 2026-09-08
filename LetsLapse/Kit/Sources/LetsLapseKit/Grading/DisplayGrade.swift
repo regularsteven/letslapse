@@ -63,6 +63,9 @@ public struct DisplayGrade: Equatable, Sendable {
     /// The HSL panel, nil when untouched. Here for the video path, whose
     /// whole-picture grade runs this chain; a masked grade never sets it.
     public var hsl: HSLAdjustments?
+    /// The LUT, nil when none — the video path's copy of `GradeRecipe.lut`,
+    /// applied last as the still path applies it. A masked grade never sets it.
+    public var lut: LUTLayer?
 
     public init() {}
 
@@ -188,6 +191,10 @@ public struct DisplayGrade: Equatable, Sendable {
             out = shifted
         }
 
+        if let layer = grade.lut, layer.isActive, let cube = LUTRegistry.shared.cube(for: layer.id) {
+            out = cube.apply(to: out.cropped(to: baseExtent), strength: layer.strength)
+        }
+
         // Positive only on this path: the engine's clarity is ±detail gain
         // over its guided-filter base, which an unsharp mask cannot mimic
         // for the smoothing direction.
@@ -256,6 +263,7 @@ public enum MaskedGradeStage {
         out.vignette = clamp(grade.vignette, 0...1)
         out.dehaze = clamp(grade.dehaze, unitRange)
         out.hsl = grade.hsl?.clamped
+        out.lut = grade.lut
         return out
     }
 

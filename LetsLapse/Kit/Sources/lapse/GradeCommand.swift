@@ -68,9 +68,11 @@ func parseRecipe(json: String) throws -> GradeRecipe {
 /// to end on one frame: linear decode → tone kernel → Display P3 JPEG. This
 /// is the permanent regression rig for the engine's look.
 func runGradeRender(
-    url: URL, recipeJSON: String, outPath: String, scale: Float, quality: Double = 0.95
+    url: URL, recipeJSON: String, outPath: String, scale: Float, quality: Double = 0.95,
+    lut: LUTLayer? = nil
 ) throws {
-    let recipe = try parseRecipe(json: recipeJSON)
+    var recipe = try parseRecipe(json: recipeJSON)
+    recipe.lut = lut
     let path = RawDecodePath.current
     let decoder = try LinearFrameDecoder()
     let started = Date()
@@ -85,10 +87,18 @@ func runGradeRender(
     let gradeSeconds = Date().timeIntervalSince(gradeStarted)
 
     // The app's export rule: a display-referred source leaves in sRGB, the
-    // space it arrived in; raw keeps Display P3's gamut.
-    let data = try decoder.jpegData(
-        from: output, quality: quality,
-        colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3)
+    // space it arrived in; raw keeps Display P3's gamut. The post-engine
+    // controls (dehaze, HSL, a LUT) run over the engine's picture first,
+    // exactly as `PhotoGrader.cgImage(from:)` runs them in the app.
+    let space = frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3
+    let data: Data
+    if EnginePostPasses.isNeeded(recipe) {
+        let picture = EnginePostPasses.apply(
+            try decoder.image(from: output), recipe: recipe, context: decoder.ciContext)
+        data = try decoder.jpegData(from: picture, quality: quality, colorSpace: space)
+    } else {
+        data = try decoder.jpegData(from: output, quality: quality, colorSpace: space)
+    }
     let outputURL = URL(fileURLWithPath: outPath)
     try data.write(to: outputURL)
     print("graded \(frame.texture.width)x\(frame.texture.height) "

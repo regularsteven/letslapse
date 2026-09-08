@@ -230,6 +230,10 @@ enum PhotoGrader {
     private static let linearDecoder = try? LinearFrameDecoder()
     private static let gradeEngine: GradeEngine? = {
         guard let decoder = linearDecoder else { return nil }
+        // A grade may carry a LUT before the Presets sheet has ever been
+        // opened; the registry's lookup has to be there before the first
+        // render, not after the first visit to the store.
+        LUTStore.installResolver()
         return try? GradeEngine(device: decoder.device)
     }()
 

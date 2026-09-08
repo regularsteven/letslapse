@@ -1,4 +1,5 @@
 import Foundation
+import LetsLapseKit
 import SwiftUI
 
 /// A grade the user named and kept: a built-in preset plus the slider values
@@ -16,6 +17,14 @@ struct CustomPreset: Identifiable, Codable, Equatable {
         self.basePreset = basePreset
         self.adjustments = adjustments
     }
+
+    /// True for a preset that IS an imported LUT: Original plus a cube, at a
+    /// strength. The Presets sheet lists these under LUTS; everywhere else —
+    /// the chip strips, the state model, the apply paths — they are presets
+    /// like any other, which is the point of storing them this way.
+    var isLUT: Bool { adjustments.lut != nil }
+
+    var lut: LUTLayer? { adjustments.lut }
 }
 
 /// The app-wide store of saved grades, backed by one JSON file in Application
@@ -76,6 +85,27 @@ final class CustomPresetStore: ObservableObject {
         presets.append(preset)
         persist()
         return preset
+    }
+
+    /// The saved looks that are sliders — what YOUR PRESETS lists.
+    var parametricPresets: [CustomPreset] { presets.filter { !$0.isLUT } }
+
+    /// The saved looks that are cubes — what LUTS lists.
+    var lutPresets: [CustomPreset] { presets.filter(\.isLUT) }
+
+    /// Adds a preset as it is, under a name that may collide: an import
+    /// under the same file name twice is two presets, not one overwritten.
+    func add(_ preset: CustomPreset) {
+        presets.append(preset)
+        persist()
+    }
+
+    /// Replaces a preset's values wholesale — the LUT screen's strength, a
+    /// duplicate's rename. Nothing for an id the store no longer holds.
+    func update(_ preset: CustomPreset) {
+        guard let index = presets.firstIndex(where: { $0.id == preset.id }) else { return }
+        presets[index] = preset
+        persist()
     }
 
     func delete(_ preset: CustomPreset) {

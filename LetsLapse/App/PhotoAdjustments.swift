@@ -95,6 +95,16 @@ struct PhotoAdjustments: Codable, Equatable {
         // whichever way a caller writes it.
         didSet { if let panel = hsl, panel.isNeutral { hsl = nil } }
     }
+    /// A 3D LUT — an imported `.cube` — and its strength, or nil. A LUT
+    /// preset is a `CustomPreset` at Original carrying this and nothing
+    /// else, which is what lets it be a chip, a snapshot and a keyframe
+    /// value without a second kind of preset. Rendered last of all, after
+    /// dehaze and HSL, by the Kit's `EnginePostPasses` (`CubeLUT`), and on
+    /// the video path by `DisplayGrade`. Not keyframed: like `hsl`, carried
+    /// as it is from the earlier keyframe. A look, so it travels in presets
+    /// and turns a project Edited when moved. The cube is found through
+    /// `LUTRegistry` by the layer's id; `LUTStore` installs the lookup.
+    var lut: LUTLayer?
     /// The Edit screen's fine rotation in degrees, positive clockwise —
     /// `FrameRotation` owns the geometry. The one field here that is not a
     /// colour: it lives in this struct so the grade timeline carries it per
@@ -115,7 +125,7 @@ struct PhotoAdjustments: Codable, Equatable {
               clarity: 0, texture: 0, sharpen: 0, sharpenMasking: 0,
               noiseReduction: 0, noiseDetail: neutralNoiseDetail,
               colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0,
-              dehaze: 0, hsl: nil, rotationDegrees: 0)
+              dehaze: 0, hsl: nil, lut: nil, rotationDegrees: 0)
     }
 
     /// True when the rotation would change a pixel.
@@ -236,6 +246,8 @@ struct PhotoAdjustments: Codable, Equatable {
         // A panel replaces a preset's rather than adding to it: twenty-four
         // sliders summed would land past their travel with no way to say so.
         if let hsl, !hsl.isNeutral { recipe.hsl = hsl }
+        // As does a LUT: one cube per grade, the last thing rendered.
+        if let lut { recipe.lut = lut }
         return recipe
     }
 
@@ -253,6 +265,7 @@ struct PhotoAdjustments: Codable, Equatable {
             + (ownsWhite ? String(format: ",w%.2f,%.1f", whiteMired, whiteTint) : "")
             + (dehaze != 0 ? String(format: ",dh%.3f", dehaze) : "")
             + (hsl.map { $0.isNeutral ? "" : ",hsl" + $0.cacheToken } ?? "")
+            + (lut.map { ",lut" + $0.cacheToken } ?? "")
     }
 
     // MARK: - Codable
@@ -271,7 +284,7 @@ struct PhotoAdjustments: Codable, Equatable {
          noiseDetail: Float = PhotoAdjustments.neutralNoiseDetail,
          colorNoiseReduction: Float = 0, colorNoise: Float = 0,
          vignetteIntensity: Float, dehaze: Float = 0, hsl: HSLAdjustments? = nil,
-         rotationDegrees: Float = 0) {
+         lut: LUTLayer? = nil, rotationDegrees: Float = 0) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -295,6 +308,7 @@ struct PhotoAdjustments: Codable, Equatable {
         self.vignetteIntensity = vignetteIntensity
         self.dehaze = dehaze
         self.hsl = hsl.flatMap { $0.isNeutral ? nil : $0 }
+        self.lut = lut
         self.rotationDegrees = rotationDegrees
     }
 
@@ -305,7 +319,7 @@ struct PhotoAdjustments: Codable, Equatable {
         case texture, sharpen, noiseReduction, colorNoiseReduction, colorNoise
         case sharpenMasking, noiseDetail
         case whiteMired, whiteTint
-        case dehaze, hsl
+        case dehaze, hsl, lut
         case rotationDegrees = "rotation"
         case whiteBalance  // v1 only; never written by v2
     }
@@ -360,6 +374,7 @@ struct PhotoAdjustments: Codable, Equatable {
                 vignetteIntensity: field(.vignetteIntensity),
                 dehaze: field(.dehaze),
                 hsl: try? container.decodeIfPresent(HSLAdjustments.self, forKey: .hsl),
+                lut: try? container.decodeIfPresent(LUTLayer.self, forKey: .lut),
                 rotationDegrees: field(.rotationDegrees))
             return
         }
@@ -417,6 +432,9 @@ struct PhotoAdjustments: Codable, Equatable {
         if let hsl, !hsl.isNeutral {
             try container.encode(hsl, forKey: .hsl)
         }
+        if let lut {
+            try container.encode(lut, forKey: .lut)
+        }
         // Only when set: an unlevelled project reads and writes exactly the
         // payload it always did.
         if hasRotation {
@@ -454,6 +472,7 @@ extension PhotoAdjustments {
         grade.vignette = vignetteIntensity
         grade.dehaze = dehaze
         grade.hsl = hsl
+        grade.lut = lut
         return grade
     }
 }

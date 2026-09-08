@@ -73,6 +73,12 @@ struct CreateView: View {
     /// Where the ladders sheet opens — empty for the list; the `LL_LADDERS`
     /// hook pushes an editor or a rung (DEBUG only, set on appear).
     @State private var laddersInitialPath: [LadderRoute] = []
+    /// The Presets sheet — LetsLapse's looks, the saved ones, imported LUTs
+    /// and the import door — managed from here, one row under the ladders.
+    /// `LL_PRESETS` opens it pushed to a preset, a LUT, or onto the chooser.
+    @State private var showPresets = false
+    @State private var presetsInitialPath: [PresetRoute] = []
+    @State private var presetsInitialImport = false
     #if os(iOS)
     @State private var showDeviceImport = false
     #else
@@ -261,6 +267,26 @@ struct CreateView: View {
                 }
                 showLadders = true
             }
+            // `LL_PRESETS=list|preset|lut|import` — the Presets sheet on the
+            // requested screen. Every value seeds the four saved presets and
+            // two LUTs the design draws when the stores are empty (simulator
+            // data, written to the same files a real save or import writes);
+            // `preset` opens Sunny Nature, `lut` opens Teal and Orange,
+            // `import` drops the chooser.
+            if let screen = environment["LL_PRESETS"] {
+                ManagePresetsView.debugSeed()
+                switch screen {
+                case "preset":
+                    presetsInitialPath = ManagePresetsView.debugRoute(named: "Sunny Nature").map { [$0] } ?? []
+                case "lut":
+                    presetsInitialPath = ManagePresetsView.debugRoute(named: "Teal and Orange").map { [$0] } ?? []
+                case "import":
+                    presetsInitialImport = true
+                default:
+                    break
+                }
+                showPresets = true
+            }
         }
         #endif
         .capturePresentation(isPresented: $showCapture, intent: captureIntent)
@@ -341,8 +367,32 @@ struct CreateView: View {
             Divider().padding(.leading, 58)
 
             laddersRow
+
+            Divider().padding(.leading, 58)
+
+            presetsRow
         }
         .llCard(cornerRadius: 18)
+    }
+
+    /// The Presets sheet (`ManagePresetsView`). A sheet on every platform,
+    /// as the ladders are: the list owns its own navigation, so a later door
+    /// from the Edit screen presents it the same way.
+    private var presetsRow: some View {
+        Button {
+            showPresets = true
+        } label: {
+            SourceRow(
+                icon: "camera.filters",
+                iconColor: Color(red: 0x3F / 255, green: 0x7D / 255, blue: 0x6E / 255),
+                title: "Manage presets"
+            )
+        }
+        .buttonStyle(.plain)
+        .sheet(isPresented: $showPresets) {
+            ManagePresetsView(initialPath: presetsInitialPath, initialImport: presetsInitialImport)
+                .environmentObject(model)
+        }
     }
 
     /// Interval's Ladder MODE tables. A sheet here as on the capture screen:

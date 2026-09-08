@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
   <title>iOS · Create (tab home) · portrait</title>
-  <desc>Mirrors App/CreateView.swift (effect cards grid, source rows) + App/DesignSystem.swift (FloatingTabBar). On iOS selecting the Create tab opens the camera immediately; this screen is the tab's home behind the camera, revealed on close. Both import rows now build real projects rather than staging a blend: "Import a video" registers a video project keeping the file's own name and the date it was SHOT, and "Import photos…" registers an interval project whose frames.timestamps, frames.exposure and capture_log.json are rebuilt from the frames' own EXIF — see create-home.photo-source.portrait.svg for the chooser it opens and create-home.importing.portrait.svg for the progress card. 2026-09-03: a fifth source row, "Interval ladders" (CreateView.laddersRow, sunset.fill on LL.accentDeep, iOS only), opens the Interval ladders sheet (interval-ladders.portrait.svg) — Ladder MODE's tables, managed here as well as from the capture screen's ladder chip. The card is now 256 pt and its last row runs under the floating tab bar at rest; the page scrolls it clear. Screenshot via LL_TAB=create.</desc>
+  <desc>Mirrors App/CreateView.swift (effect cards grid, source rows) + App/DesignSystem.swift (FloatingTabBar). On iOS selecting the Create tab opens the camera immediately; this screen is the tab's home behind the camera, revealed on close. Both import rows now build real projects rather than staging a blend: "Import a video" registers a video project keeping the file's own name and the date it was SHOT, and "Import photos…" registers an interval project whose frames.timestamps, frames.exposure and capture_log.json are rebuilt from the frames' own EXIF — see create-home.photo-source.portrait.svg for the chooser it opens and create-home.importing.portrait.svg for the progress card. 2026-09-03: a fifth source row, "Interval ladders" (CreateView.laddersRow, sunset.fill on LL.accentDeep, iOS only), opens the Interval ladders sheet (interval-ladders.portrait.svg) — Ladder MODE's tables, managed here as well as from the capture screen's ladder chip. The card is now 256 pt and its last row runs under the floating tab bar at rest; the page scrolls it clear. 2026-09-08 (design first, code owed): a sixth row, "Manage presets" (camera.filters on #3F7D6E), opens the Presets sheet (manage-presets.portrait.svg) — LetsLapse's built-in looks, the presets saved from the Edit screen, imported LUTs, and the import door. The card is now 307 pt; the fifth and sixth rows run under the floating bar at rest and scroll clear. Screenshot via LL_TAB=create.</desc>
   <defs>
     <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
     <filter id="soft" x="-40%" y="-40%" width="180%" height="180%"><feDropShadow dx="0" dy="8" stdDeviation="7" flood-color="#000" flood-opacity="0.14"/></filter>
@@ -71,7 +71,7 @@
 
       <!-- source rows card -->
       <g id="source-rows">
-        <rect x="16" y="500" width="361" height="256" rx="18" fill="#FFF" filter="url(#soft)"/>
+        <rect x="16" y="500" width="361" height="307" rx="18" fill="#FFF" filter="url(#soft)"/>
         <g id="row-record-now">
           <rect x="32" y="511" width="30" height="30" rx="8" fill="#C36A00"/>
           <circle cx="47" cy="526" r="8" fill="none" stroke="#FFF" stroke-width="1.8" data-symbol="record.circle"/><circle cx="47" cy="526" r="3.4" fill="#FFF"/>
@@ -111,6 +111,21 @@
           <text x="74" y="735" font-size="16" fill="#000">Interval ladders</text>
           <path d="M363 723 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
         </g>
+        <line x1="74" y1="755" x2="377" y2="755" stroke="#000" stroke-opacity="0.08"/>
+        <!-- sixth row (2026-09-08, design first): opens the Presets sheet
+             (manage-presets.portrait.svg) — LetsLapse's looks, your saved
+             ones, imported LUTs, and the import door. Same sheet on the Mac.
+             Runs under the floating bar at rest with the fifth; scrolls clear -->
+        <g id="row-manage-presets">
+          <rect x="32" y="766" width="30" height="30" rx="8" fill="#3F7D6E"/>
+          <g data-symbol="camera.filters" fill="none" stroke="#FFF" stroke-width="1.6">
+            <circle cx="47" cy="777.5" r="5"/>
+            <circle cx="43" cy="784" r="5"/>
+            <circle cx="51" cy="784" r="5"/>
+          </g>
+          <text x="74" y="786" font-size="16" fill="#000">Manage presets</text>
+          <path d="M363 774 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round"/>
+        </g>
       </g>
 
       <!-- floating tab bar (Create selected) -->
@@ -147,5 +162,5 @@
   </g>
 
   <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Create (tab home) · portrait · 393×852 pt</text>
-  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — EffectCard grid · SourceRow card (5 rows) · FloatingTabBar</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/CreateView.swift — EffectCard grid · SourceRow card (6 rows) · FloatingTabBar</text>
 </svg>

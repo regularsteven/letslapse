@@ -9145,6 +9145,17 @@ final class AppModel: ObservableObject {
         captures[index].adjustments = adjustments
         captures[index].presetState = state
         captures[index].gradeTimeline = stored
+        // A LUT renders from a cube the project must be able to find on any
+        // device it travels to: copy it into the project's own `luts/` (a
+        // transferable subfolder) the first time a grade carries it. Cheap
+        // once copied — one `fileExists` per write. docs/presets-lut-spike.md §4.4.
+        var lutIDs = Set<String>()
+        if let id = adjustments.lut?.id { lutIDs.insert(id) }
+        for keyframe in timeline.keyframes { if let id = keyframe.adjustments.lut?.id { lutIDs.insert(id) } }
+        if !lutIDs.isEmpty {
+            let folder = captureFolderURL(for: captures[index].id)
+            for id in lutIDs { LUTStore.shared.ensureCopy(of: id, inProjectFolder: folder) }
+        }
         // A person changed this project — see CaptureProject.modifiedAt. A
         // grade moves no bytes, so this DOES cost the project's stored size a
         // needless re-measure on the next size sort; carrying a second

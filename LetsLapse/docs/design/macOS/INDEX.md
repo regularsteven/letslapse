@@ -62,6 +62,14 @@ needs a design decision before it can be mirrored (the same 691pt header is reus
 
 **2026-08-25 — the Scans tab is now conditional.** `LLTab.visible(scans:)` drops it from `FloatingTabBar` unless the library holds a scan and **Settings ▸ Advanced ▸ Layout ▸ Enable Scans menu** is on; with the switch off, scanner runs are listed in Projects behind a Scans filter instead. The bar's metrics are count-derived, so it falls back to five 66pt seats on its own. Same code on every platform — see `iOS/settings.layout.portrait.svg` and `iOS/projects.scans-filter.portrait.svg` for the drawn specs.
 
+🟡 **2026-09-08, Presets — design first, code mirrored the same day, Mac run owed:** `CreateView` is shared, so the Mac's Create tab gets the same sixth
+row, *Manage presets*, and the same Presets sheet the iOS specs draw (`../iOS/manage-presets*.portrait.svg`) — the Mac's
+saved presets (`/Volumes/letslapse/custom_presets.json` on Steven's, seven of them) are what the list was designed around.
+No Mac-specific file yet: the sheet is a plain grouped list with a compare card, as the ladders sheet is (560×680
+minimum, as the ladders'), and the import chooser's two choices open the Finder panel. The code builds for macOS; a run
+against the real library — and a `macOS/presets.svg` if the sheet's width or the compare card's proportions differ from
+the phone's — is owed.
+
 ✅ **2026-09-04 (third pass), running screen — code mirrored the same day:** the Ladder running mirror drops the
 pills row (output count + elapsed) and keeps the rung's amber line and the RUNG dial;
 the cluster carries the Info toggle alone in slot 2 (`running.mac` — the screen dimmer

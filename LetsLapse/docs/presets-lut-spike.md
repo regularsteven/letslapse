@@ -1,0 +1,280 @@
+# Presets: the Manage screen, LUT import, and the photo × preset matrix — spike
+
+**Date:** 2026-09-08 · **Status:** spike done in the morning; design pass
+signed off and code mirrored the same day (§4 items 1–5 and 8 shipped, 6–7
+in TODO.md) · **Tool:** `tools/lut-spike/` · **Sheets:**
+`docs/presets-lut-spike/*.jpg` · **Design:** `docs/design/iOS/manage-presets*.svg`
+
+Steven's ask, in his words: a "Manage Presets" entry under *Interval ladders*
+on the Create tab; a screen that shows app presets, the user's own, and
+imports external presets as LUTs; and — before any of that is drawn — a spike
+into what is ready and what is not, plus an exploration of the two mindsets
+the feature has to serve:
+
+- **Use case 1** — one preset, many photos: a gallery, apply one look to a
+  group, see how they sit together, set it as the starting point for small
+  edits later.
+- **Use case 2** — one photo, many presets: which look suits *this* frame.
+
+## 1. What exists today
+
+**Built-in presets.** `PhotoPreset` (`App/PhotoPreset.swift`) — Natural,
+Cinema, Matte, Vivid, Original — an enum whose `recipe` is a `GradeRecipe`
+for the tone engine (and a legacy Core Image `apply(to:)` chain for the video
+path). Fixed UUIDs (`PresetState.swift`, `presetID`) so projects can name
+them.
+
+**User presets.** `CustomPreset` = `{id, name, basePreset, adjustments}`
+(`App/CustomPreset.swift`), stored app-wide in `custom_presets.json` at the
+storage root — on this Mac `/Volumes/letslapse/custom_presets.json`, seven of
+them: Funky, Lightroom Edit Clone, Punchy, Sunny Nature, Flat Day, Day DNG,
+Flat Night. The store has `save` (a name collision **overwrites**), `delete`,
+and `rename` — but nothing in the app calls `rename`; the only management UI
+is the chip's context menu (Delete) and the "Save as preset?" offer on the
+way out of an Edited grade. The white balance and the level are stripped on
+save (`withoutWhite`, `withoutRotation`): a look, not a correction.
+
+**State model.** `PresetState` = `.original | .named(id, snapshot) | .edited`.
+The **snapshot** (name + values at apply time) travels with the project, so a
+preset renamed, reworked or deleted afterwards still labels the projects it
+was applied to. `PresetStateResolver` re-derives the state on every slider
+tick and chip tap. This model is sound and should not change for LUTs — it
+just needs the snapshot to carry enough to *render* a LUT on another device
+(§4).
+
+**Applying.** `AppModel.applyPreset` / `applyCustomPreset` — one project at a
+time; the editors write at the playhead. There is **no batch apply** and no
+multi-select in Projects or Gallery (`selectedID: UUID?`, single).
+
+**Where a grade lives.** `CaptureProject.selectedPreset` (a `PhotoPreset`
+raw-value string), `adjustments`, `presetState`, `gradeTimeline` — in
+`library.json`. A `.lapse` archive and a device transfer carry the
+`CaptureProject` record in the manifest plus the subfolders in
+`ProjectArchive.transferableSubfolders` (`source, blends, notes, masks,
+fonts`) and `overlays.json`. Anything else is **silently dropped at install**.
+
+**Chips.** Text-only capsules in three strips (photo editor, video editor,
+project detail). No thumbnails, no before/after anywhere in the editors.
+
+**Render paths — where a LUT stage would go.** There is already a
+"post-engine Core Image stage", in two implementations:
+
+| Path | Engine | Post stage (dehaze, HSL) |
+|---|---|---|
+| Stills: editor preview, hero, grid, fullscreen, JPEG export | Metal `GradeEngine` | `EnginePostPasses.apply` on the engine's `CIImage` (`PhotoGrader.cgImage(from:)`) |
+| Stills blend → timelapse | Metal, per output frame | `OverlayExportBake` → `SceneAwareCompositor` runs `EnginePostPasses` when `needsPostPasses` |
+| Video (imported / recorded clips) | legacy Core Image chain | `DisplayGrade.apply` carries dehaze + HSL itself |
+| CLI `lapse grade` / `lapse lightroom` | Metal | `EnginePostPasses` |
+
+A 3D LUT is a Core Image filter, so it drops into both stages with the same
+`GradeRecipe` field driving them — the pattern HSL followed on 2026-09-07.
+
+**Lightroom.** `LightroomSidecar` (the `crs:` parser) and `LightroomImport`
+(the mapping) exist and are bench-tested, surfaced only per frame in the
+photo editor when an `.xmp` sits beside a raw. A Lightroom *preset* `.xmp`
+uses the same `crs:` vocabulary, so it is a second external format that is
+most of the way there (§5).
+
+**The Create tab.** `CreateView.sourceRows` is a card of five `SourceRow`s;
+*Interval ladders* opens `LightLaddersView` as a sheet that owns its own
+navigation — the exact pattern for a *Manage presets* row beneath it.
+
+## 2. The `.cube` spike — what was verified
+
+Eight files from `~/Desktop/Lightroom Exports/LUTS`:
+
+| File | Size | Title | Range | black → | 18 % → | 50 % → | white → |
+|---|---|---|---|---|---|---|---|
+| CAPEA_LUT (VEGAS) | 33³ | "CAPEA LUT" | −0.053…1.007 | .006/.066/.045 | .021/.088/.066 | .493/.399/.283 | .879/.830/.790 |
+| LUT-G2 (Resolve) | 33³ | "Generated by Resolve" | 0.026…0.998 | .032/.051/.048 | .049/.069/.072 | .348/.361/.395 | .967/.957/.951 |
+| PictureFX-NTFLX-DRK-BL-25 | 25³ | "lutCreatorJs_25" | 0…1 | .000/.004/.063 | .077/.099/.091 | .369/.400/.443 | .949/.984/1.0 |
+| PictureFX-Villefranche-sur-Mer | 25³ | own name | 0…1 | .043/0/0 | .156/.118/.085 | .459/.420/.396 | 1.0/.965/.937 |
+| red_is_love_1.A003… (Resolve) | 33³ | "Generated by Resolve" | 0…1 | ≈0 | .175/.174/.176 | .495/.492/.516 | .978/.993/1.0 |
+| Teal_and_Orange (Resolve) | 33³ | "Generated by Resolve" | 0…1 | .042 grey | .046/.059/.061 | .503/.528/.531 | .964 grey |
+| Terra_4.1 (Resolve) | 33³ | "Generated by Resolve" | 0.043…0.953 | .044/.074/.081 | .066/.102/.106 | .403/.411/.398 | .920/.903/.863 |
+| the_Bubble_50.Noe-15_PR | 33³ | "Generated by Resolve" | 0.059…1 | .066 grey | .329/.266/.367 | .621/.614/.687 | 1.0 |
+
+Read the grey columns as the LUT's character: Bubble lifts blacks to a
+purple matte, LUT-G2 and NTFLX crush and cool, CAPEA warms the mids and
+caps white at 0.88. **None is a log-input LUT** — a Log→709 LUT sends 18 %
+grey toward black because it expects log-encoded input; that is the one
+class of file that will look broken on our display-referred output, and the
+heuristic (50 % grey → below ~0.25) is cheap enough to warn on at import.
+
+**Parser.** ~60 lines: `TITLE`, `LUT_3D_SIZE`, `DOMAIN_MIN/MAX`, comments,
+data rows with red varying fastest. 18 ms (25³) – 60 ms (33³, 1 MB of text).
+Two things bit:
+
+- **CRLF.** Swift's `Character` treats `"\r\n"` as one grapheme; a split on
+  `"\n"` or `"\r"` matches nothing, and the file parses as zero rows. Split
+  on `isNewline`. Four of the eight files are Windows-ended.
+- **`TITLE` is useless as a name** (five say "Generated by Resolve"). A LUT
+  is named after its file, with the title kept as a note.
+
+**Renderer.** `CIColorCubeWithColorSpace` is built into Core Image on every
+platform we ship (iOS 7+). It takes the `.cube` data as RGBA float32 in the
+`.cube` order — no reshuffle — and a colour space to look up in; handed
+**sRGB**, it converts the working pixels (the engine's extended linear P3)
+into sRGB, samples, and converts back. That is the right contract for what
+Lightroom and Resolve export: a display-referred Rec.709/sRGB cube. P3
+colours outside sRGB are clipped into the cube's domain on the way in —
+accepted, a LUT is defined on that cube anyway. Dimension limit 2…128
+(checked), so the common 17/25/33/64/65 all load. An identity cube
+round-trips with a max channel difference of 1/255.
+
+**Strength and masks come free.** A strength slider is a lerp between input
+and output — but NOT a Core Image blend: that mixes in linear light, so
+50 % reads as 60 % to the eye (measured in the Kit test). Production bakes
+the strength into the cube data instead, every entry mixed toward the
+identity lattice in the LUT's own encoded space, which is what "50 %" means
+in Resolve or Lightroom. `CIColorCubesMixedWithMask` exists too — a LUT inside a mask
+region, which is what the masked-grade card would want.
+
+**Cost** (M4 Max, so read the ratios, not the numbers):
+
+| Step | Time |
+|---|---|
+| Parse one 33³ file | 40–60 ms (once; cache the float blob) |
+| LUT pass, 1000 px preview | 1–1.5 ms |
+| LUT pass, 33 MP (7008×4672) | ≈ 30 ms (99 ms decode+LUT+readback vs 71 ms decode+readback) |
+| Engine decode, cold CLI, reduced scale | ARW 0.42–0.63 s · DNG 0.9–1.1 s · JPEG 0.15 s |
+
+The LUT is never the expensive part. **Decoding a raw is**, and that is what
+shapes the two use cases (§3).
+
+**Visual check.** The sheets under `docs/presets-lut-spike/`: eleven library
+frames — five ARW (dusk, night ×2, a bridge underpass, a 2800 K
+ColorChecker), three iPhone DNG, three JPEG — each rendered through the app's
+engine at neutral *first* (`lapse grade --recipe '{}'`), then through every
+LUT. The matrix is the picture of the whole feature: **a row is use case 2,
+a column is use case 1.**
+
+## 3. The matrix: two mindsets, one structure
+
+Rows are photos, columns are presets. Every cell is "this photo through this
+preset", and the cost model is asymmetric:
+
+- **Along a row (use case 2)** each cell re-runs the kernel on a decoded
+  texture the editor already holds (`PhotoGrader.decodedCache`, three
+  textures) — milliseconds per preset, dozens of presets before it is worth
+  thinking about. The Original render is already cached per file too, so a
+  before/after (hold to compare, or a wipe — the web blend machine's compare
+  mode is the precedent) costs nothing extra. **This can be live.**
+- **Down a column (use case 1)** each cell is a *decode*: cold, half a second
+  to a second per raw at thumbnail scale, 150 ms for a JPEG. Thirty projects
+  is tens of seconds on a phone. **This has to be progressive** — render into
+  the grid as they land, cache the thumbnails (the two-tier
+  `ProjectThumbnailCache` is the place), and never block an Apply on the
+  preview finishing.
+
+What "a photo" is differs by project kind: a Photo project is one asset; an
+Interval or Video project's row is its hero frame (or the playhead in the
+editor), and a preset applies to the whole shoot — which is what
+`applyCustomPreset` already does. Use case 1 *within* a timelapse is
+therefore already true; use case 1 *across projects* is the new thing, and it
+needs multi-select plus a batch apply with the same "replace your edits?"
+honesty the single apply has (count the Edited projects in the selection and
+say so).
+
+The "starting point for minor adjustments later" semantics already exist in
+the state model: a batch apply writes `.named(id, snapshot)` to each project,
+and the first slider tick on any of them turns *that* project Edited while
+the rest stay on the preset. Nothing new to design there.
+
+Three product shapes fall out, for the design pass to choose between (not a
+decision):
+
+1. **Manage Presets** is the library of looks: sections *LetsLapse* / *Yours*
+   / *Imported LUTs*, one sample frame (the last edited project's hero, or
+   a chosen one), and a thumbnail per preset — use case 2 in miniature, and
+   the natural home for import, rename, delete, duplicate-a-built-in.
+2. **Try presets** from a project: the photo full size, the strip below,
+   tap to preview, press-and-hold for the original; the row of the matrix.
+3. **Apply to selection** from Projects/Gallery multi-select: a sheet that
+   renders the selected projects through the chosen preset as before/after
+   pairs, progressively, with *Apply as starting point*; the column.
+
+## 4. Ready vs. to build
+
+**Ready — no new code**
+
+- `CIColorCubeWithColorSpace` (+ `…MixedWithMask`) on iOS/macOS.
+- The post-engine Core Image stage on every render path (`EnginePostPasses`,
+  `DisplayGrade.apply`), with `GradeRecipe` → `cacheToken` invalidation.
+- The preset state model and snapshot semantics.
+- `CustomPresetStore` save/delete/rename, `custom_presets.json` in the
+  relocatable storage root.
+- `LightroomSidecar` / `LightroomImport` for the `.xmp` route.
+- `PhotoGrader.render(maxDimension:)` with its 24-entry preview cache — the
+  thumbnail renderer for any preset grid.
+- The sheet-from-a-Create-row pattern (`laddersRow` → `LightLaddersView`).
+
+**To build, in dependency order**
+
+1. **Kit: `CubeLUT`** — parser (CRLF, `DOMAIN_*`, out-of-range values,
+   reject `LUT_1D_SIZE` with a message for now), a content hash, a binary
+   float cache, `apply(to:strength:)`, and the log-input warning. Tests:
+   sizes 17/25/33/64/65, CRLF vs LF, identity round-trip, the eight Desktop
+   files as fixtures at reduced size. `lapse grade --lut <file>` so the
+   bench can render it.
+2. **Recipe: `GradeRecipe.lut: LUTLayer?`** (`{hash, strength}`) → both post
+   stages, `cacheToken`, `isNeutral`, `EnginePostPasses.isNeeded`. Order:
+   **after** dehaze and HSL, the last colour operation. That puts the
+   parametric sliders on the LUT's *input*, which is Lightroom's
+   profile-then-sliders order and the only order the architecture allows
+   without moving the LUT into the Metal kernel (a 3D-texture sample at the
+   end of `gradeTone` is a later optimisation if 30 ms/33 MP ever matters).
+3. **App model: `PhotoAdjustments.lut`** mirroring `hsl` — carried by the
+   grade timeline (not interpolated; strength could be, later), included in
+   `withoutRotation.withoutWhite` comparisons so the resolver and snapshot
+   matching work unchanged. A LUT preset is then just
+   `CustomPreset(basePreset: .original, adjustments: {lut})` and
+   `selectedPreset` stays a `PhotoPreset`. This is the least invasive shape:
+   the whole state machine, the apply paths, the confirmation copy and the
+   timeline keep working.
+4. **`LUTStore`** — app-wide, beside `custom_presets.json`: import copies the
+   file to `luts/<sha256>.cube` and its float blob beside it, lists, deletes.
+   Two rules from the storage work: add `luts` to
+   `StorageLocation.libraryItemNames` or a storage-location move leaves it
+   behind; and on apply, copy the cube into the project folder's `luts/`
+   (add to `ProjectArchive.transferableSubfolders`) so an archive or a
+   device transfer can still render — the snapshot references the hash, the
+   project carries the bytes. Never delete a store file while any project
+   references it; the project copy makes that a nicety rather than a
+   correctness rule.
+5. **Manage Presets screen** — the Create-tab row + sheet; lists; import via
+   `fileImporter` (a `.cube` `UTType` has to be declared as an imported type
+   in Info.plist for the Files picker to offer it on iOS); rename (store
+   already has it); delete; duplicate-a-built-in; sample frame + thumbnails.
+   Design first, per the design-sync contract: `create-home.portrait.svg`
+   grows a sixth row, plus new `manage-presets.*` mirrors per platform.
+6. **Edit screen** — a LUT row in Effects (name, strength) so a LUT preset
+   is inspectable and adjustable like any other control.
+7. **Use-case-1 surface** — multi-select in Projects/Gallery + batch apply +
+   the progressive before/after sheet.
+8. **Video path** — the LUT filter in `DisplayGrade.apply`, one `if`.
+
+## 5. Lightroom preset `.xmp` — the second import format
+
+A preset exported from Lightroom (CC: right-click a preset → *Export*) is an
+`.xmp` with the same `crs:` attributes the sidecar parser reads, plus
+`crs:PresetType`, `crs:Name` (an `rdf:Alt`), `crs:Group`. Mapping it through
+`LightroomImport` yields a parametric `CustomPreset` directly — with the same
+EXACT/SCALED/LOST honesty the per-frame import reports. Needs one real
+preset file as a fixture (none on this Mac: Lightroom CC keeps presets in its
+catalog, `~/Library/Application Support/Adobe/CameraRaw/Settings` holds only
+index files). Worth listing on the import sheet from day one; it is the
+format a Lightroom user actually has.
+
+## 6. Open questions for the design pass
+
+- Does a LUT preset also carry sliders (a LUT *plus* a warm-up), or is a LUT
+  always applied at Original + strength? (§4.3 allows both.)
+- Strength: a slider on the LUT row only, or keyframeable like HSL is not?
+- Delete semantics on screen: a preset in use by N projects — say so, keep
+  the snapshot (already true), and never break their render (true once the
+  project carries the cube).
+- Are LetsLapse's own presets editable? Proposal: no; *Duplicate to Yours*.
+- Which frame is the sample in Manage Presets, and can the user swap it?
+- Where does *Try presets* live: a mode of the photo editor, or a door on the
+  project item screen beside the strip?
