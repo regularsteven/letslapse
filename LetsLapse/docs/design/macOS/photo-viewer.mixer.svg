@@ -1,0 +1,235 @@
+<svg viewBox="0 0 1040 790" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Photo viewer / grading editor · Editor tab · Color Mixer + Dehaze · 1000×700</title>
+  <desc>Mirrors App/PhotoViewerView.swift (editorTab) + App/PhotoAdjustmentsPanel.swift — the SAME window and rail as photo-viewer.svg, scrolled to the two sections added on 2026-09-08 for the Lightroom-parity work: the COLOR MIXER section (new) and Dehaze in EFFECTS (new row). Everything above — state row, preset chips, Masks card, White Balance, Light, Color — is above the fold in this state and unchanged. COLOR MIXER: Lightroom&#8217;s HSL panel — eight hue bands (Red · Orange · Yellow · Green · Aqua · Blue · Purple · Magenta, LetsLapseKit.HSLAdjustments), each with a hue turn, a saturation change and a luminance change, ±100 in the readouts (±1 in the model). ONE AXIS AT A TIME: a native segmented picker (Hue | Saturation | Luminance, defaulting to Saturation — on the corpus that drove the panel saturation sliders outnumber hue sliders two to one) chooses which of the three the eight rows show, so the section is eight rows rather than twenty-four. Each row: a 9pt swatch of the band&#8217;s own hue centre (red 0°, orange 30°, yellow 60°, green 120°, aqua 180°, blue 240°, purple 275°, magenta 315° at S 0.82 / B 0.95), the band&#8217;s name, the readout (primary when non-neutral, secondary at 0), a full-width slider. A band moved on ANOTHER axis than the one showing carries a 4pt accent dot after its name — on the Hue axis of the staged state Orange, Aqua and Blue wear it — so a colour that is being moved says so whichever slider moved it. Double-click a band&#8217;s label to zero that band on that axis; the header&#8217;s Reset clears the whole panel. The mixer is NOT a PhotoAdjustmentField: the timeline carries the panel whole with the earlier keyframe (never blended, never a ◆), and its section Reset writes through the binding into the moment under the playhead rather than through the field reset. Rendered after the Metal engine by EnginePostPasses (gamma-2.2 HSV, triangular band weights) on the still path, the blend export hook and the video chain alike. EFFECTS gains DEHAZE between Clarity and Vignette — a proper PhotoAdjustmentField (keyframed, ◆, double-click reset, ±100 readout for ±1), the dark-channel prior in LetsLapseKit.Dehaze run in the same post-engine pass; here it reads +35 with the ◆ because the staged project is keyframed and the hook wrote into the moment under the playhead. The masked-grade card (photo-viewer.mask-grade.svg) gained the same Dehaze row under Clarity, since Lightroom&#8217;s LocalDehaze imports into a mask. LAYOUT, in points, same idiom as the base file: rows 48pt apart, label baseline then a 4pt track 12pt below, 276pt wide from x=712; the section header 15/700 with its 3.5pt accent dot and a trailing Reset; the picker 22pt tall at y=128. In a 700pt window the fold falls under the Dehaze row; Vignette (+29 on this project), Detail, Rotation, Reset adjustments and the preset offer follow in scroll order (desc-only here, drawn in photo-viewer.svg&#8217;s desc). STAGED by LL_EDITOR=latest LL_MIXER=demo LL_SECTIONS=mixer:saturation — LL_MIXER=demo puts a warm-sky treatment on the grade IN MEMORY (Blue sat −62 / lum −25, Aqua sat −40, Green hue +18 / sat −15 / lum −20, Orange sat +30 / lum +12, Dehaze +35, Clarity +20) and switches persist() off for the editor&#8217;s life, so a screenshot run cannot write a design&#8217;s numbers into a real shoot; LL_SECTIONS on the wide layout now SCROLLS the rail to the named section (the Mac has no cards to open), and its mixer:&lt;axis&gt; suffix picks the axis on both layouts. Values drawn are that staged state on the Saturation axis. Drawn 2026-09-08 from the running Mac app (Debug build, 1800×1125 window, light appearance) — awaiting Steven&#8217;s macOS review; the iOS stacked layout gets the same section as a collapsible card between Color and Effects (not yet drawn, see ../iOS/INDEX.md).</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="1000" height="700" rx="11"/></clipPath>
+    <clipPath id="photo"><rect x="20" y="110" width="660" height="495"/></clipPath>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8FA3B8"/>
+      <stop offset="0.45" stop-color="#E8B98C"/>
+      <stop offset="1" stop-color="#F6DFB2"/>
+    </linearGradient>
+    <linearGradient id="river" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#D9A45E"/>
+      <stop offset="1" stop-color="#5C666E"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.mono{font-variant-numeric:tabular-nums}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="1000" height="700" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="1000" height="28" fill="#F6F6F8"/>
+      <circle cx="34" cy="34" r="6" fill="#FF736A"/><circle cx="54" cy="34" r="6" fill="#FEBC2E"/><circle cx="74" cy="34" r="6" fill="#19C332"/>
+      <text x="520" y="38" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+    </g>
+
+    <!-- Media column: black pane, 4:3 picture fitted and centred, zoom
+         control bottom-trailing. The picture is a flat approximation of the
+         staged frame: sunset sky, the overlay text, then skyline / bridge /
+         river / quay — the skyline is drawn AFTER the text on purpose, so
+         the drawing occludes the descenders the way the composite does. -->
+    <g id="media">
+      <rect x="20" y="48" width="660" height="618" fill="#000000"/>
+      <g clip-path="url(#photo)">
+        <rect x="20" y="110" width="660" height="495" fill="url(#sky)"/>
+        <ellipse cx="200" cy="180" rx="160" ry="24" fill="#7E93A9" opacity="0.35"/>
+        <ellipse cx="480" cy="150" rx="190" ry="22" fill="#8A9DB1" opacity="0.3"/>
+        <ellipse cx="360" cy="240" rx="230" ry="22" fill="#EACBA0" opacity="0.45"/>
+        <ellipse cx="150" cy="300" rx="170" ry="16" fill="#F2D9AE" opacity="0.5"/>
+        <!-- The project's text overlay at its resting layout (Text tab owns
+             editing it; it is baked into the preview on every tab). -->
+        <text x="345" y="360" font-size="96" class="b" text-anchor="middle" fill="#FFFFFF">LetsLapse</text>
+        <!-- Skyline band drawn AFTER the text — only the baseline bottoms and
+             descenders sink behind the rooftops, the way the composite cuts. -->
+        <path d="M20 380 L20 356 L60 356 L60 350 L118 350 L118 358 L175 358 L175 352 L240 352 L240 360 L300 360 L300 350 L332 344 L385 340 L448 344 L470 352 L520 349 L520 356 L575 356 L575 347 L620 347 L620 355 L680 355 L680 380 Z" fill="#5D5346"/>
+        <!-- Bridge deck with piers at the river head. -->
+        <rect x="20" y="380" width="660" height="8" fill="#8C7B5F"/>
+        <rect x="20" y="388" width="660" height="6" fill="#6E6152"/>
+        <g fill="#524A40">
+          <rect x="252" y="394" width="10" height="12"/><rect x="316" y="394" width="10" height="12"/>
+          <rect x="380" y="394" width="10" height="12"/><rect x="444" y="394" width="10" height="12"/>
+        </g>
+        <!-- River with the sunset's reflection. -->
+        <rect x="20" y="394" width="660" height="146" fill="url(#river)"/>
+        <rect x="120" y="410" width="260" height="6" rx="3" fill="#EBC27E" opacity="0.5"/>
+        <rect x="90" y="430" width="330" height="6" rx="3" fill="#E0B26B" opacity="0.4"/>
+        <rect x="140" y="452" width="240" height="6" rx="3" fill="#D2A45F" opacity="0.3"/>
+        <!-- Quay diagonal, crowd, railing — the right embankment. -->
+        <path d="M330 540 L680 436 L680 605 L240 605 Z" fill="#8A7A55"/>
+        <path d="M500 605 L680 470 L680 605 Z" fill="#3F4438"/>
+        <g fill="#221F1C">
+          <circle cx="380" cy="560" r="4"/><circle cx="416" cy="550" r="4"/><circle cx="452" cy="540" r="4"/>
+          <circle cx="492" cy="528" r="4"/><circle cx="352" cy="576" r="4"/><circle cx="530" cy="516" r="4"/>
+        </g>
+      </g>
+      <text x="653" y="652" font-size="14" fill="#FFFFFF" data-symbol="arrow.up.left.and.arrow.down.right">⤢</text>
+    </g>
+
+    <!-- Timeline strip: play · track with playhead + keyframes · frame steps. -->
+    <g id="strip">
+      <circle cx="51.5" cy="688" r="13" fill="#FFFFFF"/>
+      <path d="M48 682 L58 688 L48 694 Z" fill="#C36A00" data-symbol="play.fill"/>
+      <rect x="76" y="686.5" width="522" height="3" rx="1.5" fill="#000000" fill-opacity="0.18"/>
+      <rect x="74.5" y="678" width="3" height="20" rx="1.5" fill="#1C1C1E"/>
+      <circle cx="222.7" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="458.6" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <circle cx="596.9" cy="688" r="5.5" fill="#C36A00" stroke="#C36A00" stroke-width="2"/>
+      <rect x="90" y="666" width="45" height="15" rx="7.5" fill="#2B2B2E" fill-opacity="0.9"/>
+      <text x="112.5" y="677" font-size="10" class="sb mono" text-anchor="middle" fill="#FFFFFF">0:00</text>
+      <text x="76" y="712" font-size="10" class="mono" fill="#6D6D72">0:00</text>
+      <text x="598" y="712" font-size="10" class="mono" text-anchor="end" fill="#6D6D72">55:13</text>
+      <circle cx="617" cy="688" r="13" fill="#FFFFFF"/>
+      <text x="617" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#B5B5BA" data-symbol="chevron.left">‹</text>
+      <circle cx="649" cy="688" r="13" fill="#FFFFFF"/>
+      <text x="649" y="692.5" font-size="12.5" class="sb" text-anchor="middle" fill="#C36A00" data-symbol="chevron.right">›</text>
+    </g>
+
+    <line x1="680" y1="48" x2="680" y2="720" stroke="#000" stroke-opacity="0.1"/>
+
+    <!-- Control rail · Editor tab. Tab bar pinned above the scroll. -->
+    <g id="rail">
+      <g id="railtabs">
+        <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
+        <rect x="699" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
+        <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+        <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+        <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
+        <text x="964" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+      </g>
+
+      <!-- PhotoAdjustmentsPanel, alwaysExpanded — the SAME card as photo-viewer.svg,
+           the rail scrolled so the Color Mixer section sits at the top of the
+           ScrollView (LL_SECTIONS=mixer). Its top edge is above the fold; the
+           visible part starts under the tab bar. Rows are 48pt apart, as in the
+           base file. ◆ = keyframed field; the accent dot = non-neutral section. -->
+      <g id="sliderpanel">
+        <rect x="696" y="60" width="308" height="700" rx="12" fill="#FFFFFF"/>
+        <rect x="680" y="60" width="340" height="40" fill="#F2F2F7"/>
+        <g id="railtabs-over">
+          <rect x="696" y="60" width="308" height="36" rx="18" fill="#FFFFFF"/>
+          <rect x="699" y="63" width="74" height="30" rx="15" fill="#C36A00"/>
+          <text x="736" y="83" font-size="13" class="sb" text-anchor="middle" fill="#FFFFFF">Editor</text>
+          <text x="812" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Text</text>
+          <text x="888" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Frames</text>
+          <text x="964" y="83" font-size="13" class="sb" text-anchor="middle" fill="#C36A00">Masks</text>
+        </g>
+
+        <g id="section-mixer">
+          <text x="712" y="110" font-size="15" class="b" fill="#000">Color Mixer</text>
+          <circle cx="808" cy="105" r="3.5" fill="#C36A00"/>
+          <text x="988" y="110" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+          <!-- Segmented axis picker (native, .segmented): Hue · Saturation · Luminance -->
+          <g id="mixer-axis" data-symbol="segmented picker">
+            <rect x="712" y="128" width="276" height="22" rx="6" fill="#000" fill-opacity="0.06"/>
+            <rect x="805" y="130" width="90" height="18" rx="5" fill="#FFFFFF" stroke="#000" stroke-opacity="0.10"/>
+            <text x="758" y="143" font-size="12.5" text-anchor="middle" fill="#000">Hue</text>
+            <text x="850" y="143" font-size="12.5" class="sb" text-anchor="middle" fill="#000">Saturation</text>
+            <text x="942" y="143" font-size="12.5" text-anchor="middle" fill="#000">Luminance</text>
+            <rect x="897" y="133" width="1" height="12" fill="#000" fill-opacity="0.12"/>
+          </g>
+        <g id="row-red">
+          <circle cx="716.5" cy="163.5" r="4.5" fill="#F23C3C" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="168" font-size="14" fill="#000">Red</text>
+          <text x="988" y="168" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="712" y="180" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="180" width="138" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="850" cy="182" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-orange">
+          <circle cx="716.5" cy="211.5" r="4.5" fill="#F29A3C" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="216" font-size="14" fill="#000">Orange</text>
+          <text x="988" y="216" font-size="14" class="sb mono" text-anchor="end" fill="#000">+30</text>
+          <rect x="712" y="228" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="228" width="179" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="891" cy="230" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-yellow">
+          <circle cx="716.5" cy="259.5" r="4.5" fill="#F2F23C" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="264" font-size="14" fill="#000">Yellow</text>
+          <text x="988" y="264" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="712" y="276" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="276" width="138" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="850" cy="278" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-green">
+          <circle cx="716.5" cy="307.5" r="4.5" fill="#3CF23C" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="312" font-size="14" fill="#000">Green</text>
+          <text x="988" y="312" font-size="14" class="sb mono" text-anchor="end" fill="#000">-15</text>
+          <rect x="712" y="324" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="324" width="117" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="829" cy="326" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-aqua">
+          <circle cx="716.5" cy="355.5" r="4.5" fill="#3CF2F2" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="360" font-size="14" fill="#000">Aqua</text>
+          <text x="988" y="360" font-size="14" class="sb mono" text-anchor="end" fill="#000">-40</text>
+          <rect x="712" y="372" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="372" width="83" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="795" cy="374" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-blue">
+          <circle cx="716.5" cy="403.5" r="4.5" fill="#3C3CF2" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="408" font-size="14" fill="#000">Blue</text>
+          <text x="988" y="408" font-size="14" class="sb mono" text-anchor="end" fill="#000">-62</text>
+          <rect x="712" y="420" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="420" width="52" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="764" cy="422" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-purple">
+          <circle cx="716.5" cy="451.5" r="4.5" fill="#B23CF2" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="456" font-size="14" fill="#000">Purple</text>
+          <text x="988" y="456" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="712" y="468" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="468" width="138" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="850" cy="470" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-magenta">
+          <circle cx="716.5" cy="499.5" r="4.5" fill="#F23CC5" stroke="#000" stroke-opacity="0.12" stroke-width="0.5"/>
+          <text x="727" y="504" font-size="14" fill="#000">Magenta</text>
+          <text x="988" y="504" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="712" y="516" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="516" width="138" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="850" cy="518" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        </g>
+
+        <g id="section-effects">
+          <text x="712" y="556" font-size="15" class="b" fill="#000">Effects</text>
+          <circle cx="774" cy="551" r="3.5" fill="#C36A00"/>
+          <text x="988" y="556" font-size="14" class="sb" text-anchor="end" fill="#C36A00">Reset</text>
+        <g id="row-texture">
+          <text x="712" y="582" font-size="14" fill="#000">Texture</text>
+          <text x="988" y="582" font-size="14" class="mono" text-anchor="end" fill="#6D6D72">0</text>
+          <rect x="712" y="594" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="594" width="138" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="850" cy="596" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-clarity">
+          <text x="712" y="630" font-size="14" fill="#000">Clarity</text>
+          <path d="M773 623 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
+          <text x="988" y="630" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+20</text>
+          <rect x="712" y="642" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="642" width="166" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="878" cy="644" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+        <g id="row-dehaze">
+          <text x="712" y="678" font-size="14" fill="#000">Dehaze</text>
+          <path d="M766 671 l5 5 -5 5 -5 -5 Z" fill="#FFB340" data-symbol="diamond.fill"/>
+          <text x="988" y="678" font-size="14" class="sb mono" text-anchor="end" fill="#C36A00">+35</text>
+          <rect x="712" y="690" width="276" height="4" rx="2" fill="#C36A00" fill-opacity="0.35"/>
+          <rect x="712" y="690" width="186" height="4" rx="2" fill="#C36A00"/>
+          <circle cx="898" cy="692" r="9" fill="#FFFFFF" stroke="#000" stroke-opacity="0.12"/>
+        </g>
+          <!-- Vignette +29 follows at y=726, under the fold; then Detail, Rotation,
+               Reset adjustments, the preset offer and Save as Preset (desc). -->
+        </g>
+      </g>
+    </g>
+  </g>
+
+  <rect x="20" y="20" width="1000" height="700" rx="11" fill="none" stroke="#000" stroke-opacity="0.16"/>
+  <text x="520" y="742" font-size="13" class="sb" text-anchor="middle" fill="#000">macOS · Photo viewer / grading editor · Editor tab · rail scrolled to Color Mixer + Dehaze · 1000×700 pt window</text>
+  <text x="520" y="760" font-size="11" text-anchor="middle" fill="#6D6D72">mirrors App/PhotoViewerView.swift (editorTab) + App/PhotoAdjustmentsPanel.swift (mixer + effects sections) — the rail scrolled to top is photo-viewer.svg</text>
+</svg>

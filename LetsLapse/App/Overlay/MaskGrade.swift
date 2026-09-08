@@ -182,21 +182,24 @@ struct MaskGrade: Identifiable, Codable, Equatable {
     static let fields: [PhotoAdjustmentField] = [
         .temperature, .tint,
         .exposure, .contrast, .highlights, .shadows,
-        .saturation, .clarity,
+        .saturation, .clarity, .dehaze,
     ]
 
     /// The masked grade's sections, in panel order, with the fields each holds.
+    /// Dehaze joined Effects on 2026-09-08: Lightroom's local Dehaze imports
+    /// into a mask, and a value the card cannot show cannot be reset either.
     static let sections: [(title: String, fields: [PhotoAdjustmentField])] = [
         ("White Balance", [.temperature, .tint]),
         ("Light", [.exposure, .contrast, .highlights, .shadows]),
         ("Color", [.saturation]),
-        ("Effects", [.clarity]),
+        ("Effects", [.clarity, .dehaze]),
     ]
 
     /// Exposure inside a mask travels ±2 EV rather than the whole picture's
     /// ±5: a local lift beyond a couple of stops is a different photograph,
     /// not a correction, and the extra travel only makes the slider coarse.
-    static let exposureRange: ClosedRange<Float> = -2...2
+    /// The Kit owns the number so an import clamps to it in the CLI too.
+    static let exposureRange: ClosedRange<Float> = MaskedGradeStage.exposureRange
 
     /// Temp inside a mask is a RELATIVE warmth — a mired offset from
     /// whatever white the whole-picture grade landed on, not a white of its
@@ -208,7 +211,7 @@ struct MaskGrade: Identifiable, Codable, Equatable {
     /// about +1270 K / −920 K, which is the design's ±1000 K; the full
     /// travel reads +2687 K a third of the way along and is unusable for the
     /// nudge this control is.
-    static let temperatureRange: ClosedRange<Float> = -25...25
+    static let temperatureRange: ClosedRange<Float> = MaskedGradeStage.temperatureRange
 
     static func range(for field: PhotoAdjustmentField) -> ClosedRange<Float> {
         switch field {
@@ -242,6 +245,7 @@ struct MaskGrade: Identifiable, Codable, Equatable {
         if values.saturation != 0 { parts.append("Sat \(signed(values.saturation))") }
         if values.contrast != 0 { parts.append("Contrast \(signed(values.contrast))") }
         if values.clarity != 0 { parts.append("Clarity \(signed(values.clarity))") }
+        if values.dehaze != 0 { parts.append("Dehaze \(signed(values.dehaze))") }
         if values.tint != 0 { parts.append("Tint \(signed(values.tint))") }
         guard !parts.isEmpty else { return "no adjustments yet" }
         return parts.prefix(3).joined(separator: " · ")

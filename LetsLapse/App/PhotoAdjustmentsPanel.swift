@@ -2,7 +2,8 @@ import SwiftUI
 import LetsLapseKit
 
 /// The manual grade's controls — Lightroom-basic-panel parity, grouped the way
-/// Lightroom groups them: White Balance, Light, Color, Effects.
+/// Lightroom groups them: White Balance, Light, Color, Color Mixer, Effects,
+/// Detail, Rotation.
 ///
 /// Shared by both editors — `PhotoViewerView` (photo and interval captures) and
 /// `VideoEditorView` — so the surfaces can't drift apart. It owns no render
@@ -64,13 +65,45 @@ struct PhotoAdjustmentsPanel: View {
         case whiteBalance = "White Balance"
         case light = "Light"
         case color = "Color"
+        /// The HSL panel — eight hue bands, each with a hue turn, a
+        /// saturation change and a luminance change. One axis shows at a
+        /// time, picked by a segmented control, so the section is eight rows
+        /// rather than twenty-four; the header dot and Reset cover all three.
+        case mixer = "Color Mixer"
         case effects = "Effects"
         case detail = "Detail"
         case rotation = "Rotation"
         var id: String { rawValue }
     }
 
+    /// The three things the Color Mixer can move about a band.
+    enum MixerAxis: String, CaseIterable, Identifiable {
+        case hue = "Hue"
+        case saturation = "Saturation"
+        case luminance = "Luminance"
+        var id: String { rawValue }
+
+        func value(of band: HSLAdjustments.Band, in panel: HSLAdjustments) -> Float {
+            switch self {
+            case .hue: return panel[hue: band]
+            case .saturation: return panel[saturation: band]
+            case .luminance: return panel[luminance: band]
+            }
+        }
+
+        func set(_ value: Float, of band: HSLAdjustments.Band, in panel: inout HSLAdjustments) {
+            switch self {
+            case .hue: panel[hue: band] = value
+            case .saturation: panel[saturation: band] = value
+            case .luminance: panel[luminance: band] = value
+            }
+        }
+    }
+
     @State private var openSections: Set<PanelSection> = [.light]
+    /// Saturation first: on the twenty-file Lightroom corpus that drove this
+    /// panel, saturation sliders outnumber hue sliders two to one.
+    @State private var mixerAxis: MixerAxis = .saturation
 
     private var sections: [PanelSection] { PanelSection.allCases }
 
@@ -83,6 +116,9 @@ struct PhotoAdjustmentsPanel: View {
                             header(for: section, collapsible: false)
                             content(for: section)
                         }
+                        // The owner's rail scrolls to a section by this id
+                        // (`LL_SECTIONS` on the wide layout).
+                        .id(section)
                     }
                     resetAllButton
                 }
@@ -103,9 +139,9 @@ struct PhotoAdjustmentsPanel: View {
                     resetAllButton
                         .padding(.horizontal, 2)
                 }
-                .onAppear(perform: applySectionHook)
             }
         }
+        .onAppear(perform: applySectionHook)
     }
 
     // MARK: - Sections
@@ -161,9 +197,15 @@ struct PhotoAdjustmentsPanel: View {
         case .color:
             slider("Vibrance", field: .vibrance)
             slider("Saturation", field: .saturation)
+        case .mixer:
+            mixerAxisPicker
+            ForEach(HSLAdjustments.Band.allCases, id: \.self) { band in
+                mixerRow(band)
+            }
         case .effects:
             slider("Texture", field: .texture)
             slider("Clarity", field: .clarity)
+            slider("Dehaze", field: .dehaze)
             slider("Vignette", field: .vignetteIntensity)
         case .detail:
             slider("Sharpen", field: .sharpen)
@@ -345,6 +387,81 @@ struct PhotoAdjustmentsPanel: View {
         }
     }
 
+    // MARK: - Color Mixer
+
+    private var mixerAxisPicker: some View {
+        Picker("Axis", selection: $mixerAxis) {
+            ForEach(MixerAxis.allCases) { axis in
+                Text(axis.rawValue).tag(axis)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+        .accessibilityLabel("Color Mixer axis")
+    }
+
+    /// The panel as stored, or neutral while the grade holds none.
+    private var mixerPanel: HSLAdjustments { adjustments.hsl ?? .neutral }
+
+    /// One band on the current axis. Writes go through the same binding a
+    /// slider does, so the owner's timeline logic — which moment the value
+    /// belongs to — is the same logic; a panel that ends up neutral is stored
+    /// as no panel at all.
+    private func mixerBinding(_ band: HSLAdjustments.Band) -> Binding<Float> {
+        Binding(
+            get: { mixerAxis.value(of: band, in: mixerPanel) },
+            set: { value in
+                var values = adjustments
+                var panel = values.hsl ?? .neutral
+                mixerAxis.set(min(max(value, -1), 1), of: band, in: &panel)
+                values.hsl = panel.isNeutral ? nil : panel
+                adjustments = values
+            })
+    }
+
+    private func mixerRow(_ band: HSLAdjustments.Band) -> some View {
+        let value = mixerBinding(band)
+        let isNeutral = value.wrappedValue == 0
+        // The band's other two axes count too: a swatch reads "this colour
+        // is being moved", whichever slider moved it.
+        let bandMoved = MixerAxis.allCases.contains { $0.value(of: band, in: mixerPanel) != 0 }
+        return VStack(spacing: 2) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(Self.swatch(for: band))
+                    .frame(width: 9, height: 9)
+                    .overlay(Circle().strokeBorder(Color.black.opacity(0.12), lineWidth: 0.5))
+                    .accessibilityHidden(true)
+                Text(band.lightroomName)
+                    .font(.system(size: 13.5))
+                    .foregroundStyle(.secondary)
+                if bandMoved && isNeutral {
+                    // Moved on another axis: the smallest mark that says so.
+                    Circle().fill(accent).frame(width: 4, height: 4)
+                        .accessibilityHidden(true)
+                }
+                Spacer()
+                Text(defaultReadout(value.wrappedValue))
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .monospacedDigit()
+                    .foregroundStyle(isNeutral ? Color.secondary : Color.primary)
+            }
+            .contentShape(Rectangle())
+            // Double-tap resets this band on this axis only; the header's
+            // Reset clears the whole panel.
+            .onTapGesture(count: 2) { value.wrappedValue = 0 }
+            Slider(value: value, in: -1...1)
+                .tint(accent)
+                .accessibilityLabel("\(band.lightroomName) \(mixerAxis.rawValue.lowercased())")
+        }
+    }
+
+    /// The band's colour, for its swatch: the panel's own hue centre at a
+    /// saturation and brightness that read on a light card and a dark one.
+    static func swatch(for band: HSLAdjustments.Band) -> Color {
+        Color(hue: Double(band.centreDegrees) / 360, saturation: 0.82, brightness: 0.95)
+    }
+
     // MARK: - Sliders
 
     /// One control. `indented` marks a sub-slider — a control that qualifies
@@ -470,9 +587,11 @@ struct PhotoAdjustmentsPanel: View {
                 && adjustments.whites == 0 && adjustments.blacks == 0
         case .color:
             return adjustments.vibrance == 0 && adjustments.saturation == 0
+        case .mixer:
+            return adjustments.hsl?.isNeutral ?? true
         case .effects:
             return adjustments.texture == 0 && adjustments.clarity == 0
-                && adjustments.vignetteIntensity == 0
+                && adjustments.dehaze == 0 && adjustments.vignetteIntensity == 0
         case .detail:
             // The sub-sliders count too: the dot means "this section holds a
             // value", and a moved Masking is a value even while the Sharpen
@@ -494,7 +613,11 @@ struct PhotoAdjustmentsPanel: View {
         case .whiteBalance: return [.whiteMired, .whiteTint]
         case .light: return [.exposure, .contrast, .highlights, .shadows, .whites, .blacks]
         case .color: return [.vibrance, .saturation]
-        case .effects: return [.texture, .clarity, .vignetteIntensity]
+        // The mixer's twenty-four values are not `PhotoAdjustmentField`s: the
+        // timeline carries the panel whole (held from the earlier keyframe,
+        // never blended), so no diamond marks it and its reset is its own.
+        case .mixer: return []
+        case .effects: return [.texture, .clarity, .dehaze, .vignetteIntensity]
         case .detail:
             return [.sharpen, .sharpenMasking, .noiseReduction, .noiseDetail,
                     .colorNoiseReduction, .colorNoise]
@@ -507,6 +630,15 @@ struct PhotoAdjustmentsPanel: View {
         // Resetting White Balance switches smoothing off as well as releasing
         // the white: "Reset" there has to mean "back to what the camera said".
         if section == .whiteBalance { onSetWhiteBalanceSource?(.asShot) }
+        if section == .mixer {
+            // Not a field, so not a timeline reset: the panel is taken out
+            // of the moment under the playhead through the binding, which is
+            // where a slider drag would have put it.
+            var values = adjustments
+            values.hsl = nil
+            adjustments = values
+            return
+        }
         if let onResetField {
             for field in Self.fields(of: section) { onResetField(field) }
             return
@@ -525,9 +657,12 @@ struct PhotoAdjustmentsPanel: View {
         case .color:
             adjustments.vibrance = 0
             adjustments.saturation = 0
+        case .mixer:
+            adjustments.hsl = nil
         case .effects:
             adjustments.texture = 0
             adjustments.clarity = 0
+            adjustments.dehaze = 0
             adjustments.vignetteIntensity = 0
         case .detail:
             adjustments.sharpen = 0
@@ -541,11 +676,24 @@ struct PhotoAdjustmentsPanel: View {
         }
     }
 
-    /// `LL_SECTIONS=all|wb|light|color|effects|detail|rotation` forces the
-    /// stacked layout's open state for design screenshots.
+    /// `LL_SECTIONS=all|wb|light|color|mixer|effects|detail|rotation` forces
+    /// the stacked layout's open state for design screenshots. `mixer` may
+    /// carry an axis — `mixer:hue`, `mixer:luminance` — since the section
+    /// shows one at a time; the axis applies to the expanded (Mac) layout
+    /// too, which has no cards to open.
     private func applySectionHook() {
         #if DEBUG
         guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
+        if hook.hasPrefix("mixer") {
+            if let axis = hook.split(separator: ":").dropFirst().first,
+               let picked = MixerAxis.allCases.first(where: { $0.rawValue.lowercased() == axis.lowercased() }) {
+                mixerAxis = picked
+            }
+            guard !alwaysExpanded else { return }
+            openSections = [.mixer]
+            return
+        }
+        guard !alwaysExpanded else { return }
         switch hook {
         case "all": openSections = Set(PanelSection.allCases)
         case "wb": openSections = [.whiteBalance]

@@ -59,7 +59,7 @@ USAGE:
   lapse info <video>                            Print duration / fps / frame estimate
 
   lapse lightroom <file.xmp> [--json]           Read a Lightroom sidecar and report the import
-  lapse lightroom <file.xmp> --render <out.jpg> [--variant ID] [--scale S]
+  lapse lightroom <file.xmp> --render <out.jpg> [--variant ID] [--scale S] [--no-masks | --flip-masks] [--no-dehaze] [--no-hsl]
                                                 Render the sidecar's raw through a variant
   lapse variants                                List the render variants
   lapse craft [options]                         Drive the Crafted Text path headless
@@ -437,6 +437,18 @@ do {
         let variantID = takeOption(["--variant"])
         let renderScale = Float(takeOption(["--scale"]) ?? "1") ?? 1
         let axesOverride = takeOption(["--axes"])
+        // Attribution: the whole-picture grade alone, masks left off, so a
+        // masked file's residual can be split into inside and outside.
+        let noMasks = takeFlag(["--no-masks"])
+        // Verification: every parametric mask applied on the OTHER side. The
+        // importer's inside/outside rule for a radial is inferred from two
+        // undocumented flags; rendering both ways and scoring them against
+        // Lightroom's export is what settles it, and this is that render.
+        let flipMasks = takeFlag(["--flip-masks"])
+        // Attribution: the import's own dehaze left off, so its worth can be
+        // measured the way the masks' can.
+        let noDehaze = takeFlag(["--no-dehaze"])
+        let noHSL = takeFlag(["--no-hsl"])
         guard args.count == 1 else { fail("lightroom needs exactly one .xmp sidecar or raw file") }
         let variant: RenderVariant
         if let variantID {
@@ -467,7 +479,9 @@ do {
             }
             try runLightroomRender(
                 sidecar: URL(fileURLWithPath: args[0]), variant: explored,
-                outPath: renderPath, scale: renderScale)
+                outPath: renderPath, scale: renderScale, applyMasks: !noMasks,
+                flipMasks: flipMasks, applyImportedDehaze: !noDehaze,
+                applyImportedHSL: !noHSL)
         } else {
             try runLightroomReport(
                 url: URL(fileURLWithPath: args[0]), asJSON: asJSON)
@@ -711,11 +725,18 @@ func runLightroomReport(url: URL, asJSON: Bool) throws {
 ///
 /// This is the bench's engine room: `tools/render_bench.py` calls it once per
 /// (file × variant) and scores the results against Lightroom's own export.
-/// It deliberately does the WHOLE-PICTURE grade only — the masked stage lives
-/// in the app's compositor and the CLI cannot reach it — which is stated in
-/// the ledger rather than left for somebody to discover.
+///
+/// The order, after the engine: dehaze, then the masked grades, then the
+/// point curve. The masked stage is the Kit's `MaskedGradeStage` — the same
+/// code the editor's preview and a stills export run — so a masked file's
+/// score is the whole render. The one thing the CLI still cannot draw is an
+/// AI SKY mask: that needs the app's segmentation model, so a sky-masked
+/// file is rendered without it and says so on the summary line
+/// (`masks=applied/total`), which the ledger carries through.
 func runLightroomRender(
-    sidecar: URL, variant: RenderVariant, outPath: String, scale: Float
+    sidecar: URL, variant: RenderVariant, outPath: String, scale: Float,
+    applyMasks: Bool = true, flipMasks: Bool = false, applyImportedDehaze: Bool = true,
+    applyImportedHSL: Bool = true
 ) throws {
     let (parsed, raw) = try resolveLightroomInput(sidecar)
     let mapped = LightroomImport.map(parsed)
@@ -739,6 +760,11 @@ func runLightroomRender(
     recipe.noiseReduction = value("noiseReduction")
     recipe.colorNoiseReduction = value("colorNoiseReduction")
     recipe.vignette = value("vignetteIntensity")
+    // The import's dehaze, through the fitted response — a control now, not
+    // a bench axis. The axis below still adds the sidecar's raw value × scale
+    // on top, which is what `--axes dehaze=` sweeps and what retired `G`.
+    recipe.dehaze = applyImportedDehaze ? value("dehaze") : 0
+    recipe.hsl = applyImportedHSL ? mapped.hsl : nil
     if variant.axes.honoursWhiteBalance, let mired = mapped.adjustments["whiteMired"], mired > 0 {
         recipe.declaredKelvin = Float(1_000_000 / mired)
         recipe.declaredTint = Float(mapped.adjustments["whiteTint"] ?? 0)
@@ -750,22 +776,58 @@ func runLightroomRender(
     let engine = try GradeEngine(device: decoder.device)
     let renderer = engine.makeRenderer(recipe, reference: frame.reference())
     let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
+    var image = EnginePostPasses.apply(
+        try decoder.image(from: output), recipe: recipe, context: decoder.ciContext)
 
-    // The curves the variant honours, as ONE table applied after the engine.
-    // Late rather than in the kernel because that is where a point curve sits
-    // in Lightroom's own pipeline, and because it keeps the engine's math out
-    // of an experiment's way.
-    let curve = curveFor(variant: variant, sidecar: parsed)
-    // Adobe's Dehaze is ±100; ours is ±1, scaled by the variant's own axis.
+    // The bench axis: the sidecar's raw Dehaze (±100 → ±1) × the variant's
+    // scale, ON TOP of whatever the import carried. Exploration only now.
     let dehaze = (parsed.double("Dehaze") ?? 0) / 100 * variant.axes.dehazeScale
+    if abs(dehaze) > 1e-6, let hazed = Dehaze.apply(image, amount: dehaze, context: decoder.ciContext) {
+        image = hazed
+    }
+
+    // The masked grades, through the Kit's stage — the editor's own.
+    var masksApplied = 0
+    var masksSkipped: [String] = []
+    if applyMasks {
+        for mask in mapped.masks {
+            guard let shape = mask.shape else {
+                masksSkipped.append(mask.name)   // a sky: needs the segmenter
+                continue
+            }
+            guard let selection = MaskShapeRenderer.maskImage(
+                shape, extent: image.extent, inverted: mask.inverted != flipMasks) else { continue }
+            image = MaskedGradeStage.apply(mask.displayGrade, to: image, through: selection)
+            masksApplied += 1
+        }
+    }
+
+    // The curves the variant honours, as ONE table applied after everything
+    // else. Late rather than in the kernel because that is where a point
+    // curve sits in Lightroom's own pipeline, and because it keeps the
+    // engine's math out of an experiment's way.
+    let curve = curveFor(variant: variant, sidecar: parsed)
+    if !curve.isIdentity, let curved = ToneCurve.apply(curve.byteTable(), to: image) {
+        image = curved
+    }
+
     let data = try decoder.jpegData(
-        from: output, quality: 0.98,
-        colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3,
-        toneCurve: curve.isIdentity ? nil : curve.byteTable(),
-        dehaze: dehaze)
+        from: image, quality: 0.98,
+        colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3)
     try data.write(to: URL(fileURLWithPath: outPath))
+    let maskNote = applyMasks
+        ? "masks=\(masksApplied)/\(mapped.masks.count)"
+            // One token, so the bench's whitespace split keeps whole names.
+            + (masksSkipped.isEmpty ? "" : " skipped="
+                + masksSkipped.map { $0.replacingOccurrences(of: " ", with: "_") }.joined(separator: "+"))
+            + (flipMasks ? " FLIPPED" : "")
+        : "masks=off/\(mapped.masks.count)"
+    let dehazeNote = applyImportedDehaze
+        ? String(format: "dehaze=%.3f", recipe.dehaze) : "dehaze=off"
+    let hslNote = applyImportedHSL ? "hsl=\(recipe.hsl?.movedCount ?? 0)" : "hsl=off"
     print("\(variant.id)\t\(raw.lastPathComponent)\t\(frame.texture.width)x\(frame.texture.height)"
-        + "\t\(variant.axes.summary)\tcurve=\(curve.isIdentity ? "none" : "\(curve.points.count)pt")")
+        + "\t\(variant.axes.summary)\tcurve=\(curve.isIdentity ? "none" : "\(curve.points.count)pt")"
+        + "\t\(maskNote)\t\(dehazeNote)\t\(hslNote)")
     print(outPath)
 }
 

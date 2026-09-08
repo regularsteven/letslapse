@@ -398,6 +398,38 @@ public struct MaskShape: Codable, Equatable, Sendable {
         CGPoint(x: min(max(point.x, 0), 1), y: min(max(point.y, 0), 1))
     }
 
+    // MARK: - Frames
+
+    /// This shape, authored on the SENSOR frame, re-expressed on the frame
+    /// the picture is displayed in. `exifOrientation` is the EXIF value the
+    /// display applies: 1 as recorded, 3 turned 180°, 6 turned 90° clockwise,
+    /// 8 turned 90° anticlockwise. Anything else is treated as 1.
+    ///
+    /// Points map by the turn. For a quarter turn the two radii SWAP and the
+    /// rotation stays: `radiusX` is a fraction of the frame's width and after
+    /// the turn that same axis is a fraction of the new frame's height, and
+    /// an ellipse with its radii exchanged is the same ellipse turned a
+    /// quarter, so the stored angle already describes it.
+    public func fromSensorFrame(exifOrientation: Int) -> MaskShape {
+        func turned(_ p: CGPoint) -> CGPoint {
+            switch exifOrientation {
+            case 3: return CGPoint(x: 1 - p.x, y: 1 - p.y)
+            case 6: return CGPoint(x: 1 - p.y, y: p.x)
+            case 8: return CGPoint(x: p.y, y: 1 - p.x)
+            default: return p
+            }
+        }
+        var copy = self
+        copy.start = turned(start)
+        copy.end = turned(end)
+        copy.center = turned(center)
+        if exifOrientation == 6 || exifOrientation == 8 {
+            copy.radiusX = radiusY
+            copy.radiusY = radiusX
+        }
+        return copy
+    }
+
     /// A one-line description of the shape's size, for the create HUD and the
     /// detail card's footnote.
     public func sizeCaption(in size: CGSize) -> String {

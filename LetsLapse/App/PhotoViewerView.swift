@@ -155,6 +155,9 @@ struct PhotoViewerView: View {
     /// against it — so a second editor window on the same project, holding a
     /// stale empty list, can never bulldoze the sidecar another window just
     /// wrote. Deleting overlays.json requires an actual Remove Text here.
+    /// Set by `LL_MIXER`: the values on screen are staged for a screenshot and
+    /// `persist()` is a no-op for the life of the editor.
+    @State private var persistSuppressedForStaging = false
     @State private var persistedDocument = OverlayDocument()
     /// The layer the preview draws its bounding box and handles around.
     @State private var selectedOverlayID: UUID?
@@ -986,6 +989,7 @@ struct PhotoViewerView: View {
             applyTextHook()
             applyMaskHook()
             applyLightroomHook()
+            applyMixerHook()
             #endif
             renderToken += 1
         }
@@ -2042,14 +2046,44 @@ struct PhotoViewerView: View {
                 .padding(.horizontal, 16)
                 .padding(.top, 12)
                 .padding(.bottom, 6)
-            ScrollView {
-                controlStack(isWide: true)
-                    .padding(.horizontal, 16)
-                    .padding(.top, 8)
-                    .padding(.bottom, 14)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    controlStack(isWide: true)
+                        .padding(.horizontal, 16)
+                        .padding(.top, 8)
+                        .padding(.bottom, 14)
+                }
+                .scrollDismissesKeyboard(.interactively)
+                .onAppear { scrollRailForHook(proxy) }
             }
-            .scrollDismissesKeyboard(.interactively)
         }
+    }
+
+    /// `LL_SECTIONS=<section>` on the wide layout: the rail shows every
+    /// section open, so "open this card" means "scroll the rail to it" —
+    /// which is what a design screenshot of anything below the fold needs,
+    /// and what no headless run can do with a scroll wheel. The panel gives
+    /// each section its `PanelSection` as an id; a beat's delay lets the
+    /// panel lay out first. The axis suffix (`mixer:hue`) is the panel's.
+    private func scrollRailForHook(_ proxy: ScrollViewProxy) {
+        #if DEBUG
+        guard let hook = ProcessInfo.processInfo.environment["LL_SECTIONS"] else { return }
+        let name = hook.split(separator: ":").first.map(String.init) ?? hook
+        let section: PhotoAdjustmentsPanel.PanelSection? = switch name {
+        case "wb": .whiteBalance
+        case "light": .light
+        case "color": .color
+        case "mixer": .mixer
+        case "effects": .effects
+        case "detail": .detail
+        case "rotation": .rotation
+        default: nil
+        }
+        guard let section else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) {
+            withAnimation(nil) { proxy.scrollTo(section, anchor: .top) }
+        }
+        #endif
     }
 
     /// The rail's pages. Frames exists only where frames do — a single still
@@ -3277,7 +3311,8 @@ struct PhotoViewerView: View {
     /// Writes the current grade onto the project. Cheap enough after debouncing
     /// — `setPhotoGrade` no-ops when nothing changed.
     private func persist() {
-        guard let capture else { return }
+        // A staged screenshot (`LL_MIXER`) must never reach a real project.
+        guard !persistSuppressedForStaging, let capture else { return }
         model.setPhotoGrade(
             preset: preset, adjustments: adjustments, state: presetState,
             timeline: timeline, for: capture)
@@ -3692,6 +3727,35 @@ struct PhotoViewerView: View {
         railTab = .text
         position = 0.35
         renderedPosition = 0.35
+    }
+
+    /// `LL_MIXER=demo[:hue|saturation|luminance]` stages the Color Mixer and
+    /// Dehaze with values worth looking at — a warm sky pulled down, the
+    /// greens turned and dimmed, Dehaze up — WITHOUT persisting: the values
+    /// go straight onto the grade in memory and `persist()` is switched off
+    /// for the editor's life, so a screenshot run cannot leave a design's
+    /// numbers in somebody's shoot. The mirrors in `docs/design` are measured
+    /// from this. Pair with `LL_SECTIONS=mixer[:axis]` on the stacked layout.
+    private func applyMixerHook() {
+        guard let hook = ProcessInfo.processInfo.environment["LL_MIXER"],
+              hook.hasPrefix("demo") else { return }
+        persistSuppressedForStaging = true
+        var panel = HSLAdjustments()
+        panel[saturation: .blue] = -0.62
+        panel[saturation: .aqua] = -0.40
+        panel[luminance: .blue] = -0.25
+        panel[hue: .green] = 0.18
+        panel[saturation: .green] = -0.15
+        panel[luminance: .green] = -0.20
+        panel[saturation: .orange] = 0.30
+        panel[luminance: .orange] = 0.12
+        var values = displayedAdjustments
+        values.hsl = panel
+        values.dehaze = 0.35
+        values.clarity = 0.20
+        editedAdjustments.wrappedValue = values
+        refreshState()
+        scheduleUpdate()
     }
 
     private func applyKeyframeHook() {

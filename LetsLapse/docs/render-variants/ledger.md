@@ -7,52 +7,57 @@ Regenerate with:
 ./tools/.venv/bin/python tools/render_bench.py --corpus <dir> --scale 0.4
 ```
 
-Corpus `allbatches` · 15 files · render scale 0.4 · commit `6557056` · 2026-09-07
+Corpus `allbatches` · 20 files · render scale 0.4 · commit `cc42f78` · 2026-09-07
 
 Scores are mean CIEDE2000 against Lightroom's own export of the same edit —
 **lower is better**. ~1 is just noticeable, 2–3 visible side by side, >5 obvious.
 Lightroom's crop and straighten are applied to our render before scoring.
 
-**These rows measure the WHOLE-PICTURE pipeline only.** The masked grades live in
-the app's compositor, which the CLI cannot reach; see `docs/TODO.md`.
+Rows are WHOLE renders: the masked grades run through the Kit's `MaskedGradeStage`,
+the same code the editor and a stills export use. A file marked † carries an AI
+sky mask the CLI cannot draw (it needs the app's segmentation model), so its
+score is missing that one edit.
 
 ## Scoreboard
 
 | variant | mean ΔE | median | best file | worst file | what it is |
 |---|---|---|---|---|---|
-| **G** | 11.02 | 10.21 | _DSC6507 4.76 | _WEB5765 21.81 | Look curve and dehaze, over the calibrated import |
-| **B** | 11.51 | 11.01 | _DSC6507 4.77 | _WEB5777 26.69 | Honour the profile's look curve |
-| **A** | 11.61 | 11.09 | _DSC6507 5.13 | _WEB5777 26.56 | Baseline — the shipping renderer |
-| **C** | 11.83 | 11.40 | _DSC6507 5.83 | _WEB5777 27.42 | Adobe's own camera profile |
+| **B** | 9.71 | 8.93 | _DSC6509 4.75 | _WEB5777 20.36 | Honour the profile's look curve |
+| **A** | 9.86 | 9.10 | _DSC6509 4.90 | _WEB5777 20.49 | Baseline — the shipping renderer |
+| **C** | 10.11 | 9.49 | _DSC6509 5.77 | _WEB5777 20.26 | Adobe's own camera profile |
 
 ## Against the baseline
 
 | variant | mean ΔE | vs A |
 |---|---|---|
-| G | 11.02 | **-0.59** better |
-| B | 11.51 | **-0.10** better |
-| A | 11.61 | — |
-| C | 11.83 | +0.22 worse |
+| B | 9.71 | **-0.15** better |
+| A | 9.86 | — |
+| C | 10.11 | +0.25 worse |
 
 ## Per file
 
-| file | G | B | A | C |
-|---|---|---|---|---|
-| 20240918_191653 | 12.24 | 12.39 | 12.17 | 11.62 |
-| _DSC6372 | 9.23 | 10.70 | 10.49 | 10.50 |
-| _DSC6498 | 8.89 | 8.85 | 8.82 | 8.95 |
-| _DSC6507 | 4.76 | 4.77 | 5.13 | 5.83 |
-| _DSC6509 | 5.43 | 5.43 | 5.55 | 6.36 |
-| _DSC6512 | 9.68 | 9.68 | 9.73 | 10.15 |
-| _WEB5162 | 12.61 | 13.69 | 14.05 | 14.43 |
-| _WEB5167-Enhanced-NR | 8.90 | 8.46 | 8.97 | 9.04 |
-| _WEB5179-Enhanced-NR | 8.71 | 13.57 | 14.02 | 14.08 |
-| _WEB5182 | 11.41 | 11.17 | 11.30 | 11.31 |
-| _WEB5320 | 9.81 | 10.23 | 10.63 | 10.87 |
-| _WEB5765 | 21.81 | 16.93 | 17.12 | 17.27 |
-| _WEB5777 | 20.05 | 26.69 | 26.56 | 27.42 |
-| _WEB5782 | 13.22 | 11.02 | 10.24 | 10.19 |
-| _WEB5929 | 8.49 | 9.09 | 9.32 | 9.36 |
+| file | B | A | C |
+|---|---|---|---|
+| 20240918_191653 | 10.05 | 10.03 | 9.76 |
+| _DSC6372 | 9.06 | 8.84 | 8.93 |
+| _DSC6498 † | 7.88 | 7.85 | 7.94 |
+| _DSC6507 | 4.76 | 5.11 | 5.79 |
+| _DSC6509 † | 4.75 | 4.90 | 5.77 |
+| _DSC6512 † | 9.07 | 9.16 | 9.60 |
+| _WEB5162 | 12.32 | 12.76 | 13.09 |
+| _WEB5167-Enhanced-NR | 9.26 | 9.68 | 9.70 |
+| _WEB5179-Enhanced-NR | 8.87 | 9.57 | 9.81 |
+| _WEB5182 | 10.61 | 10.75 | 10.80 |
+| _WEB5196 | 9.34 | 9.38 | 9.44 |
+| _WEB5223 | 7.56 | 8.13 | 8.24 |
+| _WEB5225 | 8.13 | 8.55 | 9.71 |
+| _WEB5229 | 11.53 | 11.45 | 11.52 |
+| _WEB5253 | 7.38 | 7.43 | 8.22 |
+| _WEB5320 | 10.04 | 10.49 | 10.69 |
+| _WEB5765 | 14.97 | 15.03 | 15.22 |
+| _WEB5777 | 20.36 | 20.49 | 20.26 |
+| _WEB5782 | 10.89 | 10.04 | 9.98 |
+| _WEB5929 | 7.36 | 7.61 | 7.71 |
 
 ---
 

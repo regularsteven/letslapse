@@ -56,6 +56,17 @@ public struct LightroomSidecar: Equatable, Sendable {
     /// an importer with no dehaze must say so.
     public var unsupported: [String] = []
 
+    /// The EXIF orientation the picture is displayed through — `tiff:
+    /// Orientation` on the root description; 1 when absent. It matters
+    /// because **Lightroom's geometry is written in the SENSOR frame**: the
+    /// crop rect and every gradient mask's coordinates describe the frame as
+    /// the sensor recorded it, and a portrait shot off a landscape sensor is
+    /// turned only on display. Measured 2026-09-07 on `_WEB5253`
+    /// (orientation 8): its linear gradient correlates with Lightroom's own
+    /// render read through the sensor frame (+0.34) and not at all read
+    /// through the display frame (+0.03). `LightroomImport` turns the masks.
+    public var orientation: Int = 1
+
     public init() {}
 
     // MARK: Typed reads
@@ -211,7 +222,6 @@ public struct LightroomSidecar: Equatable, Sendable {
         // exact-zero: Lightroom writes "0" for anything untouched, so a
         // non-zero here means somebody moved it.
         let missing: [(key: String, label: String)] = [
-            ("Dehaze", "Dehaze"),
             ("GrainAmount", "Grain"),
             ("PostCropVignetteAmount", "Post-crop vignette"),
             ("ParametricShadows", "Parametric curve · shadows"),
@@ -230,13 +240,6 @@ public struct LightroomSidecar: Equatable, Sendable {
         for entry in missing where (double(entry.key) ?? 0) != 0 {
             unsupported.append("\(entry.label) — no equivalent control")
         }
-        // The HSL panel, all eight hues across three axes.
-        let hues = ["Red", "Orange", "Yellow", "Green", "Aqua", "Blue", "Purple", "Magenta"]
-        for axis in ["HueAdjustment", "SaturationAdjustment", "LuminanceAdjustment"] {
-            if hues.contains(where: { (double(axis + $0) ?? 0) != 0 }) {
-                unsupported.append("HSL · \(axis.replacingOccurrences(of: "Adjustment", with: "")) — no equivalent control")
-            }
-        }
         if !toneCurve.isEmpty, toneCurve.contains(where: { !$0.isNeutral }) {
             unsupported.append("Tone curve — no equivalent control")
         }
@@ -244,8 +247,9 @@ public struct LightroomSidecar: Equatable, Sendable {
             unsupported.append(
                 "Profile look curve (\(settings["LookName"] ?? "profile")) — no equivalent control")
         }
-        if hasCrop {
-            unsupported.append("Crop / straighten — not carried by an import")
+        if bool("HasCrop") == true {
+            // The angle IS carried (as the level); the rect is what is lost.
+            unsupported.append("Crop rect — not carried by an import (the straighten angle is)")
         }
         for correction in corrections where correction.isActive {
             for mask in correction.masks where mask.isActive {
@@ -373,6 +377,9 @@ public struct LightroomSidecar: Equatable, Sendable {
                 return
             }
 
+            if !insideLook, let raw = attributes["tiff:Orientation"], let value = Int(raw) {
+                sidecar.orientation = value
+            }
             for (key, value) in attributes where key.hasPrefix("crs:") {
                 let name = String(key.dropFirst(4))
                 if insideLook {

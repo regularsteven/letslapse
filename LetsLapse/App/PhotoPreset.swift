@@ -181,7 +181,7 @@ enum PhotoGrader {
     /// The white point to grade against when a file declares none: D65, which is
     /// what sRGB JPEGs and every video frame are written to. Only the
     /// white-balance control cares, and only relative to this anchor.
-    static let neutralKelvin: CGFloat = 6500
+    static let neutralKelvin: CGFloat = DisplayGrade.neutralKelvin
 
     /// The whole grade as one function of an image, for callers that hold pixels
     /// rather than a file: the video composition that bakes a grade into every
@@ -334,8 +334,8 @@ enum PhotoGrader {
             // A graded copy of an sRGB JPEG leaves as sRGB — the space it
             // arrived in, and the one a colour-unmanaged sequence reader
             // (Resolve, a browser) assumes. Raw keeps Display P3's gamut.
-            return try decoder.cgImage(
-                from: output,
+            return try cgImage(
+                from: output, recipe: grade.recipe, decoder: decoder,
                 colorSpace: frame.displayReferred ? CGColorSpace.sRGB : CGColorSpace.displayP3)
         }
         return try withReusedRenderer(
@@ -345,8 +345,27 @@ enum PhotoGrader {
             let output = try renderer.apply(to: frame.texture, ditherFor8Bit: true)
             // Readback inside the lock: `apply` hands back renderer-owned
             // scratch, valid only until the renderer's next encode.
-            return try decoder.cgImage(from: output)
+            return try cgImage(from: output, recipe: grade.recipe, decoder: decoder)
         }
+    }
+
+    /// The engine's output as a CGImage, with the recipe's post-engine
+    /// controls (dehaze) run over it first when it has any. The plain
+    /// texture readback otherwise — nothing changes for a recipe without them.
+    private static func cgImage(
+        from output: MTLTexture, recipe: GradeRecipe, decoder: LinearFrameDecoder,
+        colorSpace name: CFString = CGColorSpace.displayP3
+    ) throws -> CGImage {
+        guard EnginePostPasses.isNeeded(recipe) else {
+            return try decoder.cgImage(from: output, colorSpace: name)
+        }
+        let image = EnginePostPasses.apply(
+            try decoder.image(from: output), recipe: recipe, context: decoder.ciContext)
+        guard let space = CGColorSpace(name: name),
+              let rendered = decoder.ciContext.createCGImage(
+                image, from: image.extent, format: .RGBA8, colorSpace: space)
+        else { throw GradeError.renderFailed }
+        return rendered
     }
 
     /// `image` levelled by `degrees` — `FrameRotation`'s one transform, run
@@ -675,124 +694,19 @@ enum PhotoGrader {
 
     // MARK: - Manual adjustments
 
-    /// The clarity filter's radius at this reference edge length. The radius is
-    /// scaled by the actual image size so a 1400 px preview and a 4032 px export
-    /// get the same *look* rather than the same pixel radius — without it the
-    /// preview understates the effect the export applies.
-    private static let clarityReferenceEdge: CGFloat = 1400
-    /// A large radius is what separates "clarity" (broad local contrast) from
-    /// "sharpening" (a bright outline on every edge). At 10 px the rock/sky
-    /// horizon in the calibration frame gained a visible halo; 40 px reads as
-    /// local contrast.
-    private static let clarityRadius: CGFloat = 40
-    /// Clarity 1.0 maps to this unsharp-mask intensity. Calibrated to stop
-    /// short of haloing on a high-contrast edge.
-    private static let clarityMaxIntensity: CGFloat = 0.5
-    /// Vignette 1.0 maps to this `CIVignette` intensity.
-    private static let vignetteMaxIntensity: CGFloat = 2.0
-    private static let vignetteRadius: CGFloat = 1.5
-
     /// Applies the manual grade on top of whatever the preset produced.
     ///
-    /// This is the *legacy Core Image path*, kept only for the video
-    /// composition (`VideoGrader`) until it moves onto the tone engine — a
-    /// coarse approximation of the engine's math with parametric CI filters.
-    /// Stills never come through here any more.
-    ///
-    /// Order matters: white balance first (it is a property of the light, so
-    /// everything after it grades an already-neutral image), then tone, then
-    /// colour, then the two spatial effects. The vignette goes last so it
-    /// darkens the finished picture rather than being clarity's input.
+    /// This is the *display-referred Core Image path* — `DisplayGrade` in the
+    /// Kit, where the render bench can reach it. Two callers remain: the
+    /// video composition (`VideoGrader`), until video moves onto the tone
+    /// engine, and the masked grades in `SceneAwareCompositor`, which run
+    /// over the finished picture by design. Stills never come through here.
     static func adjust(
         _ image: CIImage,
         _ adjustments: PhotoAdjustments,
         asShotKelvin: CGFloat
     ) -> CIImage {
-        // Filters like the unsharp mask grow the extent; everything downstream
-        // (and the vignette's centre in particular) has to stay keyed to the
-        // picture's own bounds.
-        let baseExtent = image.extent
-        var out = image
-
-        if adjustments.ownsWhite || adjustments.temperature != 0 || adjustments.tint != 0,
-           let filter = CIFilter(name: "CITemperatureAndTint") {
-            // Same semantics as the engine: the picture is declared to have
-            // been lit by some white, and is adapted from that white to the
-            // one it was encoded against. An owned white IS that declaration;
-            // otherwise it is as-shot moved by a preset's offset, and a
-            // positive mired offset warms.
-            let asShotMired = 1_000_000 / max(Double(asShotKelvin), 1667)
-            let anchorMired = adjustments.ownsWhite ? Double(adjustments.whiteMired) : asShotMired
-            let declaredMired = min(max(anchorMired - Double(adjustments.temperature), 40), 600)
-            let declaredTint = (adjustments.ownsWhite ? CGFloat(adjustments.whiteTint) : 0)
-                + CGFloat(adjustments.tint) * 50
-            filter.setValue(out, forKey: kCIInputImageKey)
-            filter.setValue(
-                CIVector(x: 1_000_000 / declaredMired, y: declaredTint),
-                forKey: "inputNeutral")
-            filter.setValue(CIVector(x: asShotKelvin, y: 0), forKey: "inputTargetNeutral")
-            out = filter.outputImage ?? out
-        }
-
-        if adjustments.exposure != 0, let filter = CIFilter(name: "CIExposureAdjust") {
-            filter.setValue(out, forKey: kCIInputImageKey)
-            filter.setValue(adjustments.exposure, forKey: kCIInputEVKey)
-            out = filter.outputImage ?? out
-        }
-
-        if adjustments.highlights < 0 || adjustments.shadows != 0 {
-            out = PhotoPreset.highlightShadow(
-                out,
-                highlight: 1.0 + min(adjustments.highlights, 0),
-                shadow: adjustments.shadows)
-        }
-
-        if adjustments.whites != 0 || adjustments.blacks != 0,
-           let filter = CIFilter(name: "CIColorMatrix") {
-            let gain = CGFloat(1 + 0.15 * adjustments.whites)
-            let lift = CGFloat(0.06 * adjustments.blacks)
-            filter.setValue(out, forKey: kCIInputImageKey)
-            filter.setValue(CIVector(x: gain, y: 0, z: 0, w: 0), forKey: "inputRVector")
-            filter.setValue(CIVector(x: 0, y: gain, z: 0, w: 0), forKey: "inputGVector")
-            filter.setValue(CIVector(x: 0, y: 0, z: gain, w: 0), forKey: "inputBVector")
-            filter.setValue(CIVector(x: lift, y: lift, z: lift, w: 0), forKey: "inputBiasVector")
-            out = filter.outputImage ?? out
-        }
-
-        if adjustments.contrast != 0 || adjustments.saturation != 0 {
-            out = PhotoPreset.colorControls(
-                out,
-                saturation: 1 + 0.8 * adjustments.saturation,
-                contrast: 1 + 0.2 * adjustments.contrast)
-        }
-
-        if adjustments.vibrance != 0 {
-            out = PhotoPreset.vibrance(out, amount: adjustments.vibrance)
-        }
-
-        // Positive only on this legacy path: the engine's clarity is ±detail
-        // gain over its guided-filter base, which CIUnsharpMask cannot mimic
-        // for the smoothing direction — video sees no effect below 0 until it
-        // moves onto the engine.
-        if adjustments.clarity > 0, let filter = CIFilter(name: "CIUnsharpMask") {
-            let longest = max(baseExtent.width, baseExtent.height)
-            filter.setValue(out, forKey: kCIInputImageKey)
-            filter.setValue(clarityRadius * max(longest, 1) / clarityReferenceEdge,
-                            forKey: kCIInputRadiusKey)
-            filter.setValue(CGFloat(adjustments.clarity) * clarityMaxIntensity,
-                            forKey: kCIInputIntensityKey)
-            out = (filter.outputImage ?? out).cropped(to: baseExtent)
-        }
-
-        if adjustments.vignetteIntensity != 0, let filter = CIFilter(name: "CIVignette") {
-            filter.setValue(out, forKey: kCIInputImageKey)
-            filter.setValue(CGFloat(adjustments.vignetteIntensity) * vignetteMaxIntensity,
-                            forKey: kCIInputIntensityKey)
-            filter.setValue(vignetteRadius, forKey: kCIInputRadiusKey)
-            out = filter.outputImage ?? out
-        }
-
-        return out.cropped(to: baseExtent)
+        DisplayGrade.apply(image, adjustments.displayGrade, asShotKelvin: asShotKelvin)
     }
 
     // MARK: - As-shot white balance

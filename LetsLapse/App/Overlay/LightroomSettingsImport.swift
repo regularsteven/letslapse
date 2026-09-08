@@ -57,6 +57,8 @@ enum LightroomSettingsImport {
             }
             adjustments[keyPath: field.keyPath] = clamp(Float(value), to: field.range)
         }
+        // The HSL panel travels whole; the Kit has already held it to ±1.
+        adjustments.hsl = imported.hsl?.clamped
 
         var shapeMasks: [ShapeMask] = []
         var maskGrades: [MaskGrade] = []

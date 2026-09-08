@@ -87,8 +87,20 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
     public var colorNoise: Float = 0
     /// Darkens the corners. 0…1.
     public var vignette: Float = 0
+    /// Haze removal (positive) or haze (negative), −1…+1 — Lightroom's
+    /// Dehaze ÷ 100. The one control the Metal kernel does NOT render: it is
+    /// a dark-channel prior over the finished picture (`Dehaze`), run by
+    /// `EnginePostPasses` after the engine, because its airlight estimate
+    /// needs the whole frame and its natural place is on rendered pixels.
+    public var dehaze: Float = 0
+    /// The HSL panel, when the grade moves any of its sliders. Nil is
+    /// neutral. Rendered after the engine by `EnginePostPasses`, like dehaze.
+    public var hsl: HSLAdjustments?
 
     public init() {}
+
+    /// True when the HSL panel would change a pixel.
+    public var hasHSL: Bool { hsl.map { !$0.isNeutral } ?? false }
 
     public static let neutral = GradeRecipe()
 
@@ -137,7 +149,11 @@ public struct GradeRecipe: Codable, Equatable, Sendable {
             colorNoiseReduction, colorNoise,
         ]
         let joined = values.map { String(format: "%.4f", $0) }.joined(separator: ",")
-        return "e\(Self.engineVersion)|\(joined)\(declaredToken)"
+        // Appended only when set, so every key minted before the control
+        // existed reads exactly as it did.
+        let post = (dehaze != 0 ? String(format: "|dh%.4f", dehaze) : "")
+            + (hasHSL ? "|hsl" + (hsl?.cacheToken ?? "") : "")
+        return "e\(Self.engineVersion)|\(joined)\(declaredToken)\(post)"
     }
 }
 

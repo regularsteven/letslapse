@@ -34,6 +34,11 @@ public struct LightroomImport: Equatable, Sendable {
     /// The masks worth carrying, each with the grade applied through it.
     public var masks: [MaskedGrade] = []
 
+    /// The HSL panel, nil when the file leaves it alone. Twenty-four ±100
+    /// sliders → ±1, an exact transfer of the NUMBERS; whether our bands and
+    /// travel match Adobe's is the bench's question (`HSLAdjustments`).
+    public var hsl: HSLAdjustments?
+
     /// What did not survive, in the order it was found. Every line is
     /// something a person would notice if they compared the two pictures.
     public var unsupported: [String] = []
@@ -144,7 +149,25 @@ public struct LightroomImport: Equatable, Sendable {
         // onto its ±25.
         ("Temperature", "temperature", 25),
         ("Tint", "tint", 1),
+        // LocalDehaze is ±1 in the file, like the rest; ours is ±1 too.
+        ("Dehaze", "dehaze", 1),
     ]
+
+    /// How far the app's fine rotation travels, degrees — `FrameRotation.range`.
+    static let rotationTravel = FrameRotation.range.upperBound
+
+    /// Our dehaze amount for a sidecar's Dehaze value (±100).
+    ///
+    /// Not `value ÷ 100`: our dark-channel prior and Adobe's dehaze are two
+    /// algorithms reaching for one effect, and the bench says ours is weaker
+    /// at low values and runs away at high ones — a ×2 constant fitted on one
+    /// file won `_DSC6372` (45) and `_WEB5179` (54) and lost `_WEB5765` (89)
+    /// and `_WEB5782` (33). This is the fit of the per-file optimum against
+    /// the sidecar's own value across the whole corpus; see
+    /// `docs/render-variants/README.md`, "Dehaze as a control".
+    public static func dehazeAmount(forSidecarValue value: Double) -> Double {
+        DehazeCalibration.current.amount(forSidecarValue: value)
+    }
 
     /// The correction that makes an imported grade land where Lightroom put
     /// it, rather than where our engine would put the same numbers.
@@ -205,6 +228,47 @@ public struct LightroomImport: Equatable, Sendable {
                     : "\(entry.crs) \(signed(value)) → \(entry.field) \(trimmed(value / entry.divisor))")
         }
 
+        // Straighten. Lightroom's `CropAngle` is positive for a picture turned
+        // ANTICLOCKWISE on the way out (measured 2026-09-07: the bench's
+        // scores bottom out at minus the sidecar's angle, on every straightened
+        // file); our fine rotation is positive clockwise, so the sign flips.
+        // The crop RECT is not carried — there is no crop control to put it
+        // in — and the level's own inscribed crop stands in for it, which on
+        // a straighten of a degree or so is very nearly the same framing.
+        if let angle = sidecar.double("CropAngle"), angle != 0 {
+            let rotation = -angle
+            if abs(rotation) <= rotationTravel {
+                out.adjustments["rotation"] = rotation
+                out.applied.append(String(
+                    format: "CropAngle %+.3f° → level %+.3f° (the crop rect itself is not carried; "
+                        + "the level's inscribed crop stands in)", angle, rotation))
+            } else {
+                out.unsupported.append(String(
+                    format: "CropAngle %+.2f° — beyond the ±%.0f° the level travels", angle, rotationTravel))
+            }
+        }
+
+        // The HSL panel.
+        var hsl = HSLAdjustments()
+        for band in HSLAdjustments.Band.allCases {
+            hsl[hue: band] = Float((sidecar.double("HueAdjustment" + band.lightroomName) ?? 0) / 100)
+            hsl[saturation: band] = Float((sidecar.double("SaturationAdjustment" + band.lightroomName) ?? 0) / 100)
+            hsl[luminance: band] = Float((sidecar.double("LuminanceAdjustment" + band.lightroomName) ?? 0) / 100)
+        }
+        if !hsl.isNeutral {
+            out.hsl = hsl
+            out.applied.append("HSL panel → \(hsl.movedCount) slider\(hsl.movedCount == 1 ? "" : "s") carried")
+        }
+
+        // Dehaze, through the fitted response rather than a divisor.
+        if let value = sidecar.double("Dehaze"), value != 0 {
+            let amount = dehazeAmount(forSidecarValue: value)
+            out.adjustments["dehaze"] = amount
+            out.applied.append(String(
+                format: "Dehaze %@ → dehaze %.3f (%@)",
+                signed(value), amount, DehazeCalibration.current.id))
+        }
+
         // The exposure trim. Applied whether or not the sidecar moved
         // exposure: it corrects a difference between two renderers' baselines,
         // which is there at +0.00 EV as much as at +0.29.
@@ -240,12 +304,13 @@ public struct LightroomImport: Equatable, Sendable {
         }
 
         for correction in sidecar.corrections where correction.isActive && !correction.isNeutral {
-            map(correction, into: &out)
+            map(correction, orientation: sidecar.orientation, into: &out)
         }
         return out
     }
 
     private static func map(_ correction: LightroomSidecar.Correction,
+                            orientation: Int,
                             into out: inout LightroomImport) {
         // The masks we can land somewhere: the parametric ones, whose shape we
         // rebuild exactly, and a SKY, which we substitute our own
@@ -282,7 +347,7 @@ public struct LightroomImport: Equatable, Sendable {
                     + skySubstitutionNote)
                 continue
             }
-            guard let shape = shape(from: mask) else { continue }
+            guard let shape = shape(from: mask, orientation: orientation) else { continue }
             // Roundness morphs the ellipse toward a rounded rectangle. At 0 it
             // IS an ellipse, which is the only case a MaskShape can draw.
             if let roundness = mask.double("Roundness"), roundness != 0 {
@@ -316,14 +381,24 @@ public struct LightroomImport: Equatable, Sendable {
 
     // MARK: - Geometry
 
-    /// A Lightroom gradient mask as a `MaskShape`.
+    /// A Lightroom gradient mask as a `MaskShape`, on the DISPLAYED frame.
     ///
     /// Adobe stores a radial as the BOUNDING BOX of its ellipse — Top/Left/
     /// Bottom/Right as fractions of the image, x against width and y against
     /// height, and free to fall outside 0…1 when the ellipse runs off the
     /// frame. That is the same normalisation `MaskShape` uses, so the centre
     /// and the two radii come straight out of it.
-    public static func shape(from mask: LightroomSidecar.Mask) -> MaskShape? {
+    ///
+    /// "The image" is the SENSOR's frame, not the displayed one — see
+    /// `LightroomSidecar.orientation` for the measurement — so a shape read
+    /// out of a portrait file is turned before it is handed back. Our
+    /// decoder and the editor both show the picture already turned.
+    public static func shape(from mask: LightroomSidecar.Mask, orientation: Int = 1) -> MaskShape? {
+        sensorShape(from: mask)?.fromSensorFrame(exifOrientation: orientation)
+    }
+
+    /// The shape exactly as the sidecar states it, on the sensor frame.
+    static func sensorShape(from mask: LightroomSidecar.Mask) -> MaskShape? {
         if mask.isRadialGradient {
             guard let top = mask.double("Top"), let left = mask.double("Left"),
                   let bottom = mask.double("Bottom"), let right = mask.double("Right")
@@ -380,4 +455,63 @@ public struct LightroomImport: Equatable, Sendable {
     private static func trimmed(_ value: Double) -> String {
         String(format: "%.3f", value)
     }
+}
+
+extension LightroomImport.MaskedGrade {
+
+    /// The grade as the display-referred chain renders it, held to the
+    /// travel a masked grade's own sliders have — the same clamp the app
+    /// applies on import, so the bench and the editor land on one value.
+    public var displayGrade: DisplayGrade {
+        var grade = DisplayGrade()
+        func value(_ key: String) -> Float { Float(adjustments[key] ?? 0) }
+        grade.exposure = value("exposure")
+        grade.contrast = value("contrast")
+        grade.highlights = value("highlights")
+        grade.shadows = value("shadows")
+        grade.clarity = value("clarity")
+        grade.saturation = value("saturation")
+        grade.temperatureMired = value("temperature")
+        grade.tint = value("tint")
+        grade.dehaze = value("dehaze")
+        return MaskedGradeStage.clampedToMaskTravel(grade)
+    }
+}
+
+/// The response that turns a sidecar's Dehaze into our dehaze amount.
+///
+/// Versioned like `LightroomImport.calibration`, and for the same reason: it
+/// is FITTED, on a corpus, and a future fit gets the next id rather than
+/// silently replacing this one.
+public struct DehazeCalibration: Equatable, Sendable {
+    public let id: String
+    /// Our amount per unit of Lightroom's slider ÷ 100.
+    public let slope: Double
+    /// Where the response stops: past about 1.0 the dark-channel recovery
+    /// floors its transmission and runs away (`_WEB5162` at ×4: 13 → 25 ΔE).
+    public let ceiling: Double
+    public let note: String
+
+    /// `slope · |v| ÷ 100`, held to the ceiling, odd in `v` so a negative
+    /// Dehaze (added haze) mirrors it.
+    public func amount(forSidecarValue value: Double) -> Double {
+        let magnitude = min(slope * abs(value) / 100, ceiling)
+        return value < 0 ? -magnitude : magnitude
+    }
+
+    /// **dh1** — the slider's own number. Fitted 2026-09-07 on the twenty-file
+    /// corpus, HSL and masks on, against the exposure-NULLED score (our
+    /// dehaze darkens, and the raw score rewards darkening on any file we
+    /// render bright, which is how the first pass came to "×2"). Over the
+    /// sixteen files that use Dehaze: no dehaze 8.60, ×1 8.37, the best
+    /// saturating curve 8.36, ×2 8.77 — and ×1 has the smallest worst-case
+    /// regression of anything tried (`_WEB5782` +0.54; ×2 costs `_WEB5777`
+    /// +3.6). The per-file optimum runs from 0 to 1.1 at the SAME slider
+    /// value, which no response curve can absorb: what is left is per-file
+    /// (a custom tone curve, edits we do not model), not a calibration.
+    public static let current = DehazeCalibration(
+        id: "dh1",
+        slope: 1.0, ceiling: 1.0,
+        note: "the slider's own number, capped at 1.0; fitted on 20 files, "
+            + "HSL and masks on, exposure-nulled ΔE (see docs/render-variants/README.md)")
 }

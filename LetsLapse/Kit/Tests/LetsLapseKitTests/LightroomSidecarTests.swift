@@ -348,3 +348,202 @@ final class LightroomSidecarTests: XCTestCase {
         XCTAssertEqual(LightroomSidecar.sidecarURL(forRawFile: raw), sidecar)
     }
 }
+
+// MARK: - Geometry is written in the sensor frame
+
+/// Lightroom's crop rect and its gradient masks describe the SENSOR's frame;
+/// a portrait shot off a landscape sensor is only turned on display. Measured
+/// 2026-09-07 on `_WEB5253` (orientation 8): read through the sensor frame
+/// its linear gradient correlates +0.34 with what Lightroom rendered, read
+/// through the display frame +0.03. These pin the turn.
+final class LightroomMaskOrientationTests: XCTestCase {
+
+    private func sidecar(orientation: Int, mask: LightroomSidecar.Mask) -> LightroomSidecar {
+        var correction = LightroomSidecar.Correction()
+        correction.locals = ["Exposure2012": "0.1"]
+        correction.masks = [mask]
+        var sidecar = LightroomSidecar()
+        sidecar.settings["Exposure2012"] = "0"
+        sidecar.orientation = orientation
+        sidecar.corrections = [correction]
+        return sidecar
+    }
+
+    private var portraitLinear: LightroomSidecar.Mask {
+        // _WEB5253's own gradient: full on the sensor's right, fading left.
+        var mask = LightroomSidecar.Mask()
+        mask.kind = "Gradient"
+        mask.attributes = ["ZeroX": "0.307433", "ZeroY": "0.525871",
+                           "FullX": "0.626961", "FullY": "0.525871"]
+        return mask
+    }
+
+    func testOrientationIsReadFromTheRootDescription() throws {
+        let xml = """
+        <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+        <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+          xmlns:tiff="http://ns.adobe.com/tiff/1.0/" tiff:Orientation="8" crs:Exposure2012="+0.10"/>
+        </rdf:RDF></x:xmpmeta>
+        """
+        let parsed = try LightroomSidecar.parse(Data(xml.utf8))
+        XCTAssertEqual(parsed.orientation, 8)
+        XCTAssertNil(parsed.settings["Orientation"], "a tiff: attribute is not a crs: setting")
+    }
+
+    func testAnUprightFileKeepsItsShapesAsWritten() throws {
+        let map = LightroomImport.map(sidecar(orientation: 1, mask: portraitLinear))
+        let shape = try XCTUnwrap(map.masks.first?.shape)
+        XCTAssertEqual(Double(shape.start.x), 0.626961, accuracy: 1e-6)
+        XCTAssertEqual(Double(shape.end.x), 0.307433, accuracy: 1e-6)
+        XCTAssertEqual(Double(shape.start.y), 0.525871, accuracy: 1e-6)
+    }
+
+    func testAPortraitFilesLinearGradientTurnsWithThePicture() throws {
+        // Orientation 8 turns the sensor 90° anticlockwise: sensor (x, y)
+        // lands at (y, 1 − x). The sensor's right-hand FULL end is the
+        // picture's top; ZERO, on the sensor's left, is the picture's bottom.
+        let map = LightroomImport.map(sidecar(orientation: 8, mask: portraitLinear))
+        let shape = try XCTUnwrap(map.masks.first?.shape)
+        XCTAssertEqual(shape.kind, .linear)
+        XCTAssertEqual(Double(shape.start.x), 0.525871, accuracy: 1e-6)
+        XCTAssertEqual(Double(shape.start.y), 1 - 0.626961, accuracy: 1e-6, "full end at the top")
+        XCTAssertEqual(Double(shape.end.x), 0.525871, accuracy: 1e-6)
+        XCTAssertEqual(Double(shape.end.y), 1 - 0.307433, accuracy: 1e-6, "zero end at the bottom")
+    }
+
+    func testAQuarterTurnSwapsARadialsRadiiAndKeepsItsAngle() throws {
+        var mask = LightroomSidecar.Mask()
+        mask.kind = "CircularGradient"
+        mask.attributes = ["Top": "0.1", "Left": "0.2", "Bottom": "0.5", "Right": "0.8",
+                           "Feather": "50", "Angle": "20", "Flipped": "true"]
+        let sensor = try XCTUnwrap(LightroomImport.shape(from: mask))
+        XCTAssertEqual(sensor.radiusX, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(sensor.radiusY, 0.2, accuracy: 1e-9)
+        let turned = try XCTUnwrap(LightroomImport.shape(from: mask, orientation: 6))
+        // Orientation 6 turns the sensor 90° clockwise: (x, y) → (1 − y, x).
+        XCTAssertEqual(Double(turned.center.x), 1 - 0.3, accuracy: 1e-9)
+        XCTAssertEqual(Double(turned.center.y), 0.5, accuracy: 1e-9)
+        XCTAssertEqual(turned.radiusX, 0.2, accuracy: 1e-9)
+        XCTAssertEqual(turned.radiusY, 0.3, accuracy: 1e-9)
+        XCTAssertEqual(turned.rotationDegrees, sensor.rotationDegrees, accuracy: 1e-9)
+        XCTAssertEqual(turned.feather, sensor.feather, accuracy: 1e-9)
+    }
+
+    func testAHalfTurnMirrorsBothAxes() {
+        let shape = MaskShape(kind: .radial, center: CGPoint(x: 0.2, y: 0.3),
+                              radiusX: 0.1, radiusY: 0.4)
+        let turned = shape.fromSensorFrame(exifOrientation: 3)
+        XCTAssertEqual(Double(turned.center.x), 0.8, accuracy: 1e-9)
+        XCTAssertEqual(Double(turned.center.y), 0.7, accuracy: 1e-9)
+        XCTAssertEqual(turned.radiusX, 0.1, accuracy: 1e-9)
+        XCTAssertEqual(turned.radiusY, 0.4, accuracy: 1e-9)
+    }
+
+    func testTheTurnedEllipseCoversTheSamePixels() {
+        // The whole reason the radii swap: a point inside the sensor-frame
+        // ellipse must still be inside once both the picture and the shape
+        // have been turned.
+        let shape = MaskShape(kind: .radial, center: CGPoint(x: 0.3, y: 0.6),
+                              radiusX: 0.25, radiusY: 0.1, rotationDegrees: 15, feather: 0)
+        let sensorSize = CGSize(width: 600, height: 400)
+        let displaySize = CGSize(width: 400, height: 600)
+        let turned = shape.fromSensorFrame(exifOrientation: 8)
+        for (x, y) in [(0.3, 0.6), (0.45, 0.62), (0.1, 0.55), (0.3, 0.75), (0.5, 0.5), (0.9, 0.9)] {
+            let sensorPoint = CGPoint(x: x * 600, y: y * 400)
+            let displayPoint = CGPoint(x: y * 400, y: (1 - x) * 600)
+            XCTAssertEqual(
+                shape.coverage(at: sensorPoint, in: sensorSize),
+                turned.coverage(at: displayPoint, in: displaySize), accuracy: 1e-6,
+                "at (\(x), \(y))")
+        }
+    }
+}
+
+// MARK: - Straighten, dehaze and the panel travel on the import
+
+final class LightroomImportControlsTests: XCTestCase {
+
+    private func sidecar(_ settings: [String: String]) -> LightroomSidecar {
+        var sidecar = LightroomSidecar()
+        sidecar.settings = settings
+        sidecar.settings["Exposure2012"] = sidecar.settings["Exposure2012"] ?? "0"
+        return sidecar
+    }
+
+    func testTheStraightenAngleBecomesTheLevelWithItsSignFlipped() throws {
+        // Lightroom's +0.797° turns the picture anticlockwise (the bench's
+        // sweep bottoms out at −0.64° applied on _DSC6509); ours is positive
+        // clockwise, so the level is −0.797. Parsed rather than built, so the
+        // sidecar's own "not carried" list is exercised too.
+        let xml = """
+        <x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">
+        <rdf:Description rdf:about="" xmlns:crs="http://ns.adobe.com/camera-raw-settings/1.0/"
+          crs:Exposure2012="0.00" crs:HasCrop="True" crs:CropAngle="0.797294"
+          crs:CropLeft="0.014768" crs:CropRight="0.985232" crs:CropTop="0" crs:CropBottom="1"/>
+        </rdf:RDF></x:xmpmeta>
+        """
+        let map = LightroomImport.map(try LightroomSidecar.parse(Data(xml.utf8)))
+        XCTAssertEqual(try XCTUnwrap(map.adjustments["rotation"]), -0.797294, accuracy: 1e-9)
+        XCTAssertTrue(map.applied.contains { $0.contains("CropAngle") && $0.contains("level") })
+        XCTAssertTrue(map.unsupported.contains { $0.contains("Crop rect") },
+                      "the rect is still lost, and still said")
+    }
+
+    func testAStraightenBeyondTheLevelsTravelIsReportedNotClamped() {
+        let map = LightroomImport.map(sidecar(["CropAngle": "23.5", "HasCrop": "True"]))
+        XCTAssertNil(map.adjustments["rotation"])
+        XCTAssertTrue(map.unsupported.contains { $0.contains("CropAngle") && $0.contains("beyond") })
+    }
+
+    func testNoStraightenWritesNoLevel() {
+        let map = LightroomImport.map(sidecar(["CropAngle": "0", "HasCrop": "False"]))
+        XCTAssertNil(map.adjustments["rotation"])
+        XCTAssertFalse(map.unsupported.contains { $0.contains("Crop") })
+    }
+
+    func testDehazeIsCarriedThroughTheFittedResponse() throws {
+        let map = LightroomImport.map(sidecar(["Dehaze": "+45"]))
+        let amount = try XCTUnwrap(map.adjustments["dehaze"])
+        XCTAssertEqual(amount, LightroomImport.dehazeAmount(forSidecarValue: 45), accuracy: 1e-12)
+        XCTAssertGreaterThan(amount, 0)
+        XCTAssertTrue(map.applied.contains { $0.contains("Dehaze +45") && $0.contains(DehazeCalibration.current.id) })
+        XCTAssertFalse(map.unsupported.contains { $0.contains("Dehaze") })
+    }
+
+    func testTheDehazeResponseIsOddMonotoneAndCapped() {
+        let calibration = DehazeCalibration.current
+        XCTAssertEqual(calibration.id, "dh1")
+        XCTAssertEqual(calibration.amount(forSidecarValue: 0), 0)
+        XCTAssertEqual(calibration.amount(forSidecarValue: -30), -calibration.amount(forSidecarValue: 30), accuracy: 1e-12)
+        var previous = 0.0
+        for value in stride(from: 5.0, through: 100, by: 5) {
+            let amount = calibration.amount(forSidecarValue: value)
+            XCTAssertGreaterThanOrEqual(amount, previous, "never falls")
+            XCTAssertLessThanOrEqual(amount, calibration.ceiling + 1e-9, "never past the ceiling")
+            previous = amount
+        }
+        // dh1 is the slider's own number: 45 → 0.45, 89 → 0.89.
+        XCTAssertEqual(calibration.amount(forSidecarValue: 45), 0.45, accuracy: 1e-12)
+        XCTAssertEqual(calibration.amount(forSidecarValue: 89), 0.89, accuracy: 1e-12)
+        // And a value past the slider's travel cannot run the recovery away.
+        XCTAssertEqual(calibration.amount(forSidecarValue: 250), calibration.ceiling, accuracy: 1e-12)
+    }
+
+    func testALocalDehazeRidesTheMaskedGrade() throws {
+        var correction = LightroomSidecar.Correction()
+        correction.locals = ["Dehaze": "0.276687", "Clarity2012": "0.308813"]
+        var mask = LightroomSidecar.Mask()
+        mask.kind = "Image"
+        mask.name = "Sky 1"
+        mask.attributes = ["MaskSubType": "2"]
+        correction.masks = [mask]
+        var sidecar = LightroomSidecar()
+        sidecar.settings["Exposure2012"] = "0"
+        sidecar.corrections = [correction]
+        let map = LightroomImport.map(sidecar)
+        let sky = try XCTUnwrap(map.masks.first)
+        XCTAssertEqual(try XCTUnwrap(sky.adjustments["dehaze"]), 0.276687, accuracy: 1e-6)
+        XCTAssertEqual(sky.displayGrade.dehaze, 0.276687, accuracy: 1e-6)
+        XCTAssertFalse(map.unsupported.contains { $0.contains("LocalDehaze") })
+    }
+}

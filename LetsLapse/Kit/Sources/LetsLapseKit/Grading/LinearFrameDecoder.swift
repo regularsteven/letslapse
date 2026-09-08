@@ -519,25 +519,20 @@ public final class LinearFrameDecoder {
     /// default; see `cgImage(from:colorSpace:)`).
     public func jpegData(
         from texture: MTLTexture, quality: Double = 0.95,
-        colorSpace name: CFString = CGColorSpace.displayP3,
-        /// An optional 256-entry point curve applied AFTER the engine, the
-        /// way a point curve sits at the end of Lightroom's pipeline. Only
-        /// the render-variant bench passes one today; nil is every other
-        /// caller and costs nothing.
-        toneCurve: [UInt8]? = nil,
-        /// Dehaze amount, −1…1, applied BEFORE the curve — which is the order
-        /// Lightroom's own pipeline uses.
-        dehaze: Double = 0
+        colorSpace name: CFString = CGColorSpace.displayP3
+    ) throws -> Data {
+        try jpegData(from: try image(from: texture), quality: quality, colorSpace: name)
+    }
+
+    /// Encodes a Core Image picture as JPEG bytes in `colorSpace` — the
+    /// texture overload after any display-referred passes (a masked grade,
+    /// a point curve, dehaze) have run over `image(from:)`'s output.
+    public func jpegData(
+        from image: CIImage, quality: Double = 0.95,
+        colorSpace name: CFString = CGColorSpace.displayP3
     ) throws -> Data {
         guard let space = CGColorSpace(name: name) else {
             throw LapseError.gpuSetupFailed("colour space \(name) unavailable")
-        }
-        var image = try image(from: texture)
-        if abs(dehaze) > 1e-6, let hazed = Dehaze.apply(image, amount: dehaze, context: context) {
-            image = hazed
-        }
-        if let toneCurve, toneCurve.count == 256, let curved = ToneCurve.apply(toneCurve, to: image) {
-            image = curved
         }
         guard let data = context.jpegRepresentation(
             of: image, colorSpace: space,
@@ -546,4 +541,8 @@ public final class LinearFrameDecoder {
         }
         return data
     }
+
+    /// The decoder's Core Image context, for a display-referred pass that
+    /// wants to share its caches (dehaze's one readback, for instance).
+    public var ciContext: CIContext { context }
 }

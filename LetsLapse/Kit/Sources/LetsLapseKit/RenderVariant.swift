@@ -76,12 +76,16 @@ public struct RenderAxes: Equatable, Sendable, Codable {
     /// this is the axis that lets it be measured rather than argued about.
     public var exposureOffset: Double
 
-    /// How much of a sidecar's Dehaze to honour, 0…1.
+    /// EXTRA dehaze: the sidecar's raw Dehaze (±100 → ±1) × this, applied on
+    /// top of the render. 0 for every registered variant that is still run.
     ///
-    /// A scale rather than a flag so the strength can be calibrated the way
-    /// the tone sliders were — our dehaze and Adobe's are two different
-    /// algorithms reaching for the same effect, and there is no reason to
-    /// assume 45 means the same thing to both.
+    /// It was the axis that calibrated dehaze before the import carried it:
+    /// a scale rather than a flag because our dark-channel prior and Adobe's
+    /// dehaze are two algorithms reaching for one effect, and 45 had no
+    /// reason to mean the same to both. On 2026-09-07 the fitted response
+    /// moved into the import (`LightroomImport.dehazeAmount`), so a variant
+    /// using this axis now applies dehaze twice — `G` is retired for exactly
+    /// that — and the axis stays for `--axes dehaze=` sweeps and the record.
     public var dehazeScale: Double
 
     /// Whether a sidecar's own white balance is honoured or left as shot.
@@ -196,6 +200,14 @@ public enum RenderVariantRegistry {
         Measured before calibration cal1 moved the tone correction into         LightroomImport (2026-09-07). Its axes would now apply that correction         a second time, so its old numbers stand as a record and it is no         longer benched.
         """
 
+    /// Why the dehaze-axis variant stopped being run.
+    static let supersededByImportedDehaze = """
+        Measured while dehaze was a bench axis over the sidecar's raw value. \
+        The fitted response moved into LightroomImport (2026-09-07, dh1), so \
+        this variant would now dehaze twice; its numbers stand as the record \
+        of the ×2 constant that the fit replaced.
+        """
+
     public static let all: [RenderVariant] = [
         RenderVariant(
             id: "A",
@@ -305,7 +317,8 @@ public enum RenderVariantRegistry {
             hypothesis: """
                 The tone correction now happens on the way IN (calibration                 cal1), so the engine axes start neutral again. What is left to                 test is the two things a project cannot carry: the profile's                 look curve, and dehaze at the ×2 the strength sweep found. If                 cal1 is equivalent to what was measured, this should land                 where F2 did.
                 """,
-            axes: RenderAxes(toneCurves: .imageAndLook, dehazeScale: 2.0)),
+            axes: RenderAxes(toneCurves: .imageAndLook, dehazeScale: 2.0),
+            retired: Self.supersededByImportedDehaze),
     ]
 
     public static func variant(id: String) -> RenderVariant? {

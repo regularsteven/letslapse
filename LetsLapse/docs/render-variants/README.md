@@ -110,18 +110,23 @@ to fit would score a misalignment as a colour error.
 
 ## Two limits, stated rather than buried
 
-- **The bench measures the whole-picture pipeline only.** Masked grades live in
-  the app's compositor (`SceneAwareCompositor`), which the CLI cannot reach.
-  That is where the structural gap sits anyway — measured 2026-09-07 at ΔE 6.5
-  outside any mask — but a masked file's score is not the whole story. Closing
-  this means giving the Kit the masked stage, which is tracked in
-  `docs/TODO.md`.
+- **The bench renders the masked grades, except AI skies.** Since the evening
+  of 2026-09-07 the masked stage is the Kit's `MaskedGradeStage` — the same
+  code the editor's preview and a stills export run — and `lapse lightroom
+  --render` applies every parametric mask. What it cannot draw is an AI sky
+  mask: that needs the app's segmentation model. Such a file is rendered
+  without that one edit, the CLI says so (`masks=applied/total`), and the
+  ledger marks the file †. Three of the twenty carry one.
 - **Curve-honouring variants are BENCH ONLY.** The tone curves come from the
   sidecar, and the app grades a *project*, which carries no curve — so `B`,
   `D1` and `E` cannot be run in full in the editor. Settings lists them,
   disabled, under "Bench only" with the reason rather than hiding them: they
   are in the ledger and somebody will come looking. Giving `PhotoGrade` a
   curve of its own would close it (`docs/TODO.md`).
+
+Attribution flags on the render, for splitting a residual: `--no-masks`,
+`--flip-masks` (every parametric mask on the other side — the check that
+settled the importer's inside/outside rule), `--no-dehaze`, `--no-hsl`.
 
 ## What the first run found
 
@@ -278,3 +283,169 @@ to agree on what 45 means.
 Corpus mean 12.76 → **7.46**, a 42% reduction. Most of that is the tone work;
 dehaze adds 0.32 across the corpus but **1.57 on the one file that needed it**,
 which is the honest way to read a per-region operation on a five-file corpus.
+
+## Pass two (2026-09-07, evening) — the bench had two bugs, and the masks are in
+
+Twenty files now (`batch4` added five). Everything below was measured before
+it was believed, in this order.
+
+**The straighten sign was inverted.** A positive `CropAngle` turns the
+picture anticlockwise on the way out of Lightroom; the harness rotated our
+render the other way. Nothing caught it because the scores stayed plausible —
+just 0.6 to 1.8 ΔE too high on every straightened file. Found by sweeping the
+applied angle: `_DSC6509` (+0.797°) bottoms out at −0.64° applied,
+`_WEB5223` (+0.680°) at −0.75°, and on all three files tried, NO rotation beat
+the sign as written. Ten of the twenty files are straightened, so this alone
+moves the corpus mean. The sweep is in `apply_crop`'s comment; re-run it
+before touching that line.
+
+**Lightroom's mask geometry is in the SENSOR frame**, exactly like its crop
+rect, which the first pass had already found. `_WEB5253` is a portrait shot
+(orientation 8) with one linear gradient. Read through the display frame the
+gradient runs left–right and correlates +0.03 with the lightness Lightroom
+added; read through the sensor frame it runs top–bottom and correlates +0.34,
+with the FULL end +8.3 L* and the ZERO end +1.8. The importer now turns every
+parametric mask by the file's orientation (`LightroomSidecar.orientation`,
+`MaskShape.fromSensorFrame`): a quarter turn maps the points and swaps the two
+radii, and the rotation angle stays, because an ellipse with its radii
+exchanged is that ellipse turned a quarter. Full render, `_WEB5253`: 8.93
+without the mask, 7.43 with it turned.
+
+**The inferred inside/outside rule is right.** `_DSC6372`'s radial (Flipped
+true, MaskInverted false, LocalTemperature +0.6, nothing else) is the one
+radial in the corpus. On the unmasked render, Lightroom's added warmth (Δb*)
+correlates +0.71 with the ellipse's inside coverage — +15 b* inside, −3.5
+outside. Then the full renders, through the Kit's own masked stage:
+
+| `_DSC6372` | ΔE |
+|---|---|
+| masks as imported (inside) | **9.56** |
+| no masks | 10.49 |
+| `--flip-masks` (outside) | 12.75 |
+
+**The masked stage is the Kit's now.** `DisplayGrade` is the app's legacy
+`PhotoGrader.adjust` chain moved verbatim; `MaskedGradeStage` clamps a grade
+to a mask's travel and blends it through a selection; `MaskShapeRenderer`
+moved out of the app. The editor's preview, a stills export and `lapse
+lightroom --render` run one implementation, and the ledger's rows are whole
+renders. The exception is an AI sky mask (three files): the CLI has no
+segmenter, says so on its summary line, and the ledger marks the file †.
+
+**HSL, built as the plainest reading of the panel and worth more than
+anything since cal1.** Eight bands at the panel's own hue angles (red 0°,
+orange 30°, yellow 60°, green 120°, aqua 180°, blue 240°, purple 275°,
+magenta 315°), triangular weights between neighbours, a hue turn of one band
+at ±1, chroma ×0…2, lightness toward black or white weighted by the pixel's
+own chroma — all on gamma-2.2 encoded values after the engine. Nine files use
+the panel; on the heavy ones, with everything else as it was:
+
+| file | HSL sliders | without | with HSL |
+|---|---|---|---|
+| `_WEB5777` | 17 | 26.66 | **19.86** |
+| `_WEB5179` | 10 | 13.39 | **11.42** |
+| `_WEB5782` | 11 | 11.94 | **10.37** |
+| `_WEB5929` | 13 | 8.70 | **7.80** |
+| `_WEB5182` | 23 | 11.17 | **10.51** |
+| `_WEB5320` | 6 | 9.96 | 10.29 |
+| `_DSC6498` | 2 | 7.92 | 7.87 |
+
+The first pass's "HSL is a poor bet" is now measured as well as retracted.
+The model is deliberately the first reasonable one; Adobe's band shapes and
+travel are unpublished, and the bench is what will say whether a second
+reading is worth having.
+
+**Dehaze became a control, and calibrating it took a second metric.** The
+per-file strength sweep is confounded with our per-file brightness error: our
+dehaze darkens, we land anywhere from −1.25 to +1.12 stops against Lightroom
+per file, and on a file we render bright the raw score rewards any darkening
+for the wrong reason (`_WEB5777` "wanted" ×3 dehaze at +1.1 stops bright;
+matched for exposure it wants none). So `score()` now also reports an
+**exposure-nulled ΔE** — our linear luminance scaled to the reference's mean,
+then re-encoded — which is the number to calibrate a colour or local-contrast
+control against, and never the ledger's number. Two more things fell out:
+
+- **Dehaze and HSL interact.** The three files that reject any dehaze at all
+  (`_WEB5777`, `_WEB5782`, `_WEB5929`) are the three that pull their skies'
+  saturation to −100 through HSL. Dehaze adds saturation exactly where they
+  take it away, so it was calibrated with the panel ON.
+- **The optimum is not a clean function of the slider.** Files at 41–54 want
+  an amount near 1.0; `_WEB5765` at 89 wants 0.9 and is wrecked past 1.5 (the
+  transmission floors and the recovery runs away); files at 10 want anything
+  from nothing to 0.4. A saturating response — steep from zero, flat from
+  about 30 up — is the shape the data supports, and `DehazeCalibration`
+  (`dh1`) is that fit; the numbers are in the next section. The ×2 constant
+  the first pass found is retired with variant `G`.
+
+`GradeRecipe.dehaze` and `GradeRecipe.hsl` render after the Metal engine in
+`EnginePostPasses`, through the same function on every path: the editor's
+still render, a stills blend (the export bake's frame hook), the CLI, and the
+video chain by way of `DisplayGrade`. Neither has a slider yet — the import
+writes them — and that is UI work with its design-sync question still to ask.
+
+### The numbers, and what each step bought
+
+Twenty files, variant `A` — the shipping renderer, whose axes did not change —
+with each piece added in turn (`--render-flags` on the bench turns them off
+for an attribution run; the committed ledger never carries flags):
+
+| step | mean ΔE | Δ | exposure-nulled mean |
+|---|---|---|---|
+| before this pass (commit `cc42f78`) | 11.30 | — | — |
+| the straighten sign fixed | 10.84 | −0.46 | 9.29 |
+| + the parametric masks | 10.72 | −0.12 | 9.19 |
+| + dehaze `dh1` (HSL off) | 10.38 | −0.34 | 9.02 |
+| + HSL (dehaze off) | 10.08 | −0.64 | 8.70 |
+| **+ both — the ledger's `A`** | **9.86** | **−1.44** | **8.53** |
+
+`B` (the look curve) is the best row at **9.71**; retired `G` sat at 10.85
+on these files. Per file, nineteen of twenty improved under `A`, by 0.02 to
+6.07 (`_WEB5777`, 26.56 → 20.49); one got worse.
+
+**What dehaze and HSL are each worth, per file, with the other on** (the
+files where either moved the score by more than 0.05):
+
+| file | dehaze | HSL |
+|---|---|---|
+| `_WEB5179` | −2.42 | −2.15 |
+| `_WEB5777` | +0.40 | −3.47 |
+| `20240918_191653` | −0.06 | −2.09 |
+| `_WEB5929` | −0.44 | −1.40 |
+| `_WEB5196` | +0.14 | −0.99 |
+| `_WEB5782` | +0.47 | −0.86 |
+| `_WEB5162` | −0.82 | — |
+| `_DSC6372` | −0.71 | — |
+| `_WEB5182` | +0.08 | −0.64 |
+| `_WEB5765` | −0.44 | — |
+| `_WEB5320` | −0.25 | +0.35 |
+| `_WEB5167` | −0.11 | **+0.84** |
+
+Two things to take from that table rather than the mean:
+
+- **Dehaze at the slider's number still loses on the two heavily-curved
+  files** (`_WEB5777`, `_WEB5782`, both with a custom tone curve and the
+  heaviest HSL desaturation). `dh1` was chosen as the response with the
+  smallest worst case, not the one with no worst case; there is none.
+- **`_WEB5167` is the pass's one regression, and it is the HSL panel's.**
+  Six modest sliders (Orange saturation −32, Red −11, small hue and luminance
+  moves) cost 0.84. `_WEB5320`'s six cost 0.35. Both are orange-band edits,
+  which makes the orange band's response — its centre, its width, or a chroma
+  scale that should not be linear — the first thing to calibrate about the
+  panel, by the same per-file sweep dehaze got.
+
+**What is left is mostly brightness, and it is per file.** Matched for
+exposure, `A` would score 8.53, not 9.86: 1.33 of the mean is a flat gain
+per file, and it is a different gain on every file — `_WEB5777` renders
++1.42 stops bright, `_WEB5765` −0.75 dark, and the mean absolute offset is
+0.37 stops after `cal1` has nulled the average. That is not another constant;
+it tracks the edits we do not model on each file (a custom tone curve on the
+three worst offenders, Contrast +37 on `_WEB5765`, the post-crop vignette on
+eight). The next pass's largest single target is that per-file tone
+response, and the first thing to measure is whether honouring the image's
+own point curve inside the app's grade — a control, not a bench axis —
+closes it.
+
+The dehaze fit itself, for the record (sixteen files that use it, HSL and
+masks on, exposure-nulled mean): no dehaze 8.60 · ×1 8.37 · best saturating
+curve 8.36 · ×2 8.77. The per-file optimum runs from 0 to 1.1 at the same
+slider value. Data in the session's `dehaze_sweep3.json`; the sweep script is
+three lines around `lapse lightroom --no-dehaze --axes dehaze=<k>`.

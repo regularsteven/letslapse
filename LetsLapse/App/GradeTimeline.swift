@@ -16,6 +16,9 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
     /// like every other field; that is the whole point of them. `temperature`
     /// and `tint` above are the preset offsets they replaced in the panel.
     case whiteMired, whiteTint
+    /// Haze removal — rendered after the engine (`EnginePostPasses`), keyframed
+    /// like the rest.
+    case dehaze
     /// The fine rotation — the one geometry control, keyframed like the rest.
     case rotation
 
@@ -42,6 +45,7 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .vignetteIntensity: return \.vignetteIntensity
         case .whiteMired: return \.whiteMired
         case .whiteTint: return \.whiteTint
+        case .dehaze: return \.dehaze
         case .rotation: return \.rotationDegrees
         }
     }
@@ -74,6 +78,7 @@ enum PhotoAdjustmentField: String, CaseIterable, Sendable {
         case .vignetteIntensity: return PhotoAdjustments.vignetteRange
         case .whiteMired: return PhotoAdjustments.whiteMiredRange
         case .whiteTint: return PhotoAdjustments.whiteTintRange
+        case .dehaze: return PhotoAdjustments.dehazeRange
         case .rotation: return PhotoAdjustments.rotationRange
         }
     }
@@ -370,7 +375,7 @@ struct GradeTimeline: Codable, Equatable, Sendable {
         values[keyPath: field.keyPath] = without[keyPath: field.keyPath]
         let saysNothing = PhotoAdjustmentField.allCases.allSatisfy {
             abs(values[keyPath: $0.keyPath] - without[keyPath: $0.keyPath]) <= $0.epsilon
-        }
+        } && values.hsl == without.hsl   // the mixer is not a field, but it is a value
         // A moment that no longer says anything retires — including the last
         // one, which by the reference above has been reset to neutral, so what
         // it leaves behind is an ungraded clip rather than a discarded grade.

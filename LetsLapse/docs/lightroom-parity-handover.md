@@ -4,13 +4,17 @@
 edit. We read Lightroom's settings, map them onto ours, render, and score the
 result against Lightroom's JPEG.
 
-**Where it stands (2026-09-07):** mean CIEDE2000 **11.0** across 15 files, from
-a baseline of 11.6. On the five-file corpus this started with, 12.76 → 7.46.
-Visually matched would be ΔE 2–3. We are not close, and the reason is now
-well characterised rather than mysterious.
+**Where it stands (2026-09-07, after the second pass — §11):** mean CIEDE2000
+**9.71** across 20 files (variant `B`), from 11.20 on the same files before the
+pass; the shipping renderer `A` went 11.30 → 9.86. On the five-file corpus this
+started with, 12.76 → 7.46 after the first pass. Visually matched would be
+ΔE 2–3. We are not close, and the reason is now well characterised rather than
+mysterious.
 
 This document is for whoever picks it up next. It is written to be read once,
-top to bottom, before touching anything.
+top to bottom, before touching anything. §1–§10 are the first pass as it was
+handed over; **§11 is what the second pass did with it**, including which of
+the assumptions in §5 turned out wrong.
 
 ---
 
@@ -346,3 +350,102 @@ worse, that row is as valuable as a win — leave it in.
   a project carries no curve, so the app cannot run them in full. Settings
   lists them disabled with the reason.
 - **The corpus lives outside git.** Only the ledger is committed.
+
+
+---
+
+## 11 · Second pass (2026-09-07, evening) — what was done with the list above
+
+Worked through §9 in order, on a corpus that had grown to twenty files
+(`batch4` added five more Sony A7 IV frames, none with masks worth noting
+except one linear gradient). Everything measured is in
+`docs/render-variants/README.md`, "Pass two"; this is the map.
+
+### The scoreboard
+
+| variant | 15 files, before | 20 files, before | **20 files, after** |
+|---|---|---|---|
+| **B** — look curve | 11.51 | 11.20 | **9.71** |
+| A — the shipping renderer | 11.61 | 11.30 | 9.86 |
+| C — Adobe's DCP | 11.83 | 11.57 | 10.11 |
+| G — look curve + dehaze ×2 | 11.02 | 10.85 | *retired* |
+
+The attribution of the gain — the straighten fix alone, then masks, then
+dehaze, then HSL — is in the README's pass-two section.
+
+### §5 assumptions, revisited
+
+1. **`appliesOutside` — RIGHT.** Verified two ways on the one radial in the
+   corpus (`_DSC6372`): Lightroom's added warmth correlates +0.71 with the
+   inside of the ellipse on the unmasked render, and the full renders through
+   the Kit's own stage score 9.56 inside, 10.49 without, 12.75 flipped
+   (`lapse lightroom --render --flip-masks` is the tool).
+2. **`cal1` — untouched**, still a constant. Its second-corpus question got a
+   partial answer: it did no harm on batch4 either, and there is still no
+   third camera.
+3. **Masked grades display-referred — kept**, and now the Kit's
+   (`DisplayGrade`, `MaskedGradeStage`). The reason is unchanged; the win is
+   that the bench renders them.
+4. **AI sky substitution — unchanged.** Three files carry one; the CLI cannot
+   draw it and the ledger marks them †.
+5. **Named white presets — unchanged.**
+6–7. **Curve and dehaze on display-referred pixels — unchanged**, and joined
+   by HSL, which also runs after the engine (`EnginePostPasses`).
+
+Two assumptions nobody had listed turned out to be wrong, and they were the
+biggest single changes to the numbers:
+
+- **The bench's straighten sign was inverted.** Every straightened file (ten
+  of twenty) scored 0.6–1.8 too high. Found by sweeping the applied angle.
+- **Lightroom's mask coordinates are in the sensor frame**, like its crop
+  rect. A portrait shot's gradient was being drawn across the wrong axis —
+  in the CLI and in the app. `LightroomSidecar.orientation` and
+  `MaskShape.fromSensorFrame` fix both.
+
+### §9, item by item
+
+1. *Verify the mask inversion* — done, above.
+2. *Move the masked stage into the Kit* — done. `App/Overlay/
+   MaskShapeRenderer.swift` moved to the Kit; `PhotoGrader.adjust` became
+   `DisplayGrade.apply`; `SceneAwareCompositor` calls `MaskedGradeStage`.
+   The bench parses `masks=applied/total` from the CLI.
+3. *The three controls:*
+   - **Dehaze** — `GradeRecipe.dehaze`, `PhotoAdjustments.dehaze`,
+     `PhotoAdjustmentField.dehaze`, `DisplayGrade.dehaze` (so a mask's
+     LocalDehaze imports too), rendered by `EnginePostPasses` on the still
+     path, the blend export hook and the video chain. The import maps it
+     through `DehazeCalibration` (**dh1**): the slider's own number, capped
+     at 1. The "×2" the first pass found was mostly our brightness error
+     being rewarded for darkening; matched for exposure, ×1 is the fit and
+     ×2 costs `_WEB5777` +3.6.
+   - **HSL** — `HSLAdjustments` (8 bands × H/S/L), on `GradeRecipe`,
+     `PhotoAdjustments` and `DisplayGrade`, same render paths. The largest
+     gain of the pass on the files that use it: `_WEB5777` 26.7 → 19.9.
+   - **Crop and straighten** — the angle imports as the level
+     (`rotation = −CropAngle`, the sign from the bench's sweep); the rect
+     still does not, because there is no crop control on a photo project.
+4. *Re-fit `cal1` per file* — not done; dehaze was calibrated instead, and
+   the finding there (the optimum runs 0 → 1.1 at the same slider value)
+   says a per-file fit of anything is fitting the edits we do not model.
+5. *The profile* — not touched. `C` is still the worst row.
+
+### What is owed, and why it stopped here
+
+- **Sliders.** Dehaze and HSL exist on the model and render everywhere, but
+  only the import writes them. That is UI, and UI starts with the design-sync
+  question (design files first, or app code first?) — asked in the report
+  that goes with this pass, not answered unilaterally.
+- **Sky masks in the bench** (three files partial), **the crop rect**
+  (nine files), **post-crop vignette** (eight) and **grain** (two) — in
+  `docs/TODO.md`, in that order.
+- **Two limits of the new controls, by design:** the post-engine passes do
+  not run in the pixel-peep loupe (a patch-local airlight estimate is not
+  the frame's), and HSL is held from the earlier keyframe rather than blended.
+
+### Two traps to add to §10
+
+- **The exposure-nulled score is for calibration only.** `score()` reports it
+  beside the raw ΔE; the ledger never uses it. Calibrate a colour or local
+  control against the raw score and you will fit our brightness error.
+- **Dehaze and HSL interact.** The files that reject dehaze are the files that
+  grey their skies through HSL. Calibrate one with the other on.

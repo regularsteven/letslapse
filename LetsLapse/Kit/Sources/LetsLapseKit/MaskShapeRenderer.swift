@@ -1,7 +1,6 @@
 import CoreGraphics
 import CoreImage
 import Foundation
-import LetsLapseKit
 
 /// Turns a `MaskShape`'s numbers into the grayscale image the compositor
 /// selects with — white where the mask applies, black where it does not,
@@ -23,7 +22,10 @@ import LetsLapseKit
 /// on the picture the editor shows — which is already levelled — so it lives
 /// in OUTPUT space and needs no rotation to stay registered, exactly like a
 /// text layer.
-enum MaskShapeRenderer {
+///
+/// In the Kit (moved from the app 2026-09-07) so the render bench can draw
+/// the same selection the editor draws: `MaskedGradeStage` is the other half.
+public enum MaskShapeRenderer {
 
     /// One shared context for the thumbnails. The composite path never comes
     /// through here: it keeps everything as `CIImage` until the frame is
@@ -34,7 +36,7 @@ enum MaskShapeRenderer {
     ///
     /// `inverted` swaps the two ends, which is what an inverted `MaskGrade`
     /// applies through — "outside this shape" rather than inside it.
-    static func maskImage(_ shape: MaskShape, extent: CGRect, inverted: Bool = false) -> CIImage? {
+    public static func maskImage(_ shape: MaskShape, extent: CGRect, inverted: Bool = false) -> CIImage? {
         let size = extent.size
         guard size.width > 0, size.height > 0 else { return nil }
         let selected = CIColor(red: 1, green: 1, blue: 1, alpha: 1)
@@ -137,7 +139,7 @@ enum MaskShapeRenderer {
     /// Rendered rather than drawn in SwiftUI so a shape and a segmentation
     /// mask can sit side by side in the same strip looking like the same kind
     /// of thing.
-    static func thumbnail(_ shape: MaskShape, size: CGSize, inverted: Bool = false) -> CGImage? {
+    public static func thumbnail(_ shape: MaskShape, size: CGSize, inverted: Bool = false) -> CGImage? {
         let extent = CGRect(origin: .zero, size: size)
         let ink = CIImage(color: CIColor(red: 28 / 255, green: 28 / 255, blue: 30 / 255, alpha: 1))
             .cropped(to: extent)

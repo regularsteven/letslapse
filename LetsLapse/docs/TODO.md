@@ -11,37 +11,40 @@ live inline.
 
 ## Open
 
-### Lightroom parity — handed over, not finished
+### Lightroom parity — second pass done, controls need their sliders
 
 **Raised:** 2026-09-07 · **Detail:**
-[lightroom-parity-handover.md](lightroom-parity-handover.md) · **Size:** large
+[lightroom-parity-handover.md](lightroom-parity-handover.md) · **Size:** medium
 
-Reading Lightroom's edits and rendering them like Lightroom does. Mean ΔE2000
-is **11.0 across 15 files** against a 11.6 baseline; visually matched would be
-2–3. The apparatus for measuring it is built and documented
-(`docs/render-variants/README.md`); the remaining work is controls we do not
-have.
+The handover's ranked list was worked through on the evening of 2026-09-07
+(see the handover's "Second pass" section for the numbers). Done: the mask
+inside/outside rule verified by render; the masked stage and the shape
+renderer moved into the Kit so the bench scores whole renders; Dehaze and the
+HSL panel built as real controls (model, import, every render path) and the
+straighten angle carried on import; two silent bench bugs fixed (the straighten
+sign was inverted, and Lightroom's mask geometry is in the sensor frame).
 
-**Read the handover before touching this.** It carries the assumptions made
-(one of them — the mask inversion rule — is inferred and unverified), three
-predictions that measurement disproved, the negative result on Adobe's AI mask
-encoding, and a ranked approach.
+**Open, in order:**
 
-**The short version of what to do next:**
-
-1. Verify `LightroomImport.appliesOutside` against a rendered mask. Cheap, and
-   if it is backwards every masked-file score is wrong.
-2. Move the masked-grade stage out of `SceneAwareCompositor` and into the Kit,
-   so the bench can score whole renders rather than the whole-picture grade
-   only.
-3. Build the three controls the corpus actually asks for and we do not have:
-   **Dehaze** (13/15 files), **HSL** (9/15), **crop and straighten on import**
-   (9/15). The last is a correctness gap, not just a parity one — an imported
-   project is currently not even the same framing.
-
-**Do not** re-mine slider calibration (an 18-point sweep moved it 0.08) and do
-not start from the earlier "HSL is a poor bet" note — that was drawn from a
-five-file corpus where one file used it; on fifteen it is nine.
+1. ~~**Sliders for Dehaze and HSL.**~~ Built 2026-09-08, code first at
+   Steven's call: Effects has a Dehaze slider, the panel has a **Color Mixer**
+   section (Hue | Saturation | Luminance picker over eight swatched band
+   rows), the masked-grade card has Dehaze too. macOS mirror drawn from the
+   running app (`docs/design/macOS/photo-viewer.mixer.svg`), **awaiting
+   Steven's macOS review**; the iOS stacked-card mirror is still owed (the
+   iOS viewer files were already stale from the Rotation section).
+2. **Sky masks in the bench.** Three files carry an AI sky mask the CLI
+   cannot draw (no segmenter outside the app); they are marked † in the
+   ledger. Either teach `lapse` to load the CoreML segmenter or let it take a
+   mask PNG per file.
+3. **The crop rect.** The straighten angle now imports as the level; the rect
+   does not, because there is no crop control on a photo project. Nine of
+   twenty files are cropped.
+4. **HSL is not keyframe-blended** (held from the earlier keyframe) and the
+   post-engine passes skip the pixel-peep loupe (a patch-local airlight
+   estimate would not match the frame's). Both are documented in the code.
+5. **Post-crop vignette (8/20) and grain (2/20)** — the next unbuilt controls
+   by usage.
 
 ---
 
@@ -65,11 +68,9 @@ one command to regenerate — is `docs/render-variants/README.md`. First run on
   the way `RawDecodePath` already does all four. Until then "test A against E
   inside one build" is true of the bench and not of the editor, which is the
   weaker half of what was asked for.
-- **The bench cannot see masked grades.** `lapse` renders the whole-picture
-  grade; the masked stage lives in `SceneAwareCompositor`. Giving the Kit that
-  stage (it is pure Core Image with no app dependencies) would let the bench
-  score a whole render AND would put preview, export and bench on one
-  implementation.
+- ~~**The bench cannot see masked grades.**~~ Done 2026-09-07: the masked
+  stage is the Kit's `MaskedGradeStage`; preview, export and bench share it.
+  AI sky masks remain app-only (see the Lightroom parity entry).
 - **The remaining ~7.8 ΔE is structural.** It varies with tone and position,
   which is a profile's tone-dependent hue map and is not reachable by any
   global axis now in `RenderAxes`. The next honest variant is a real profile

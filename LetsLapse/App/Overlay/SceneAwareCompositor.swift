@@ -392,12 +392,14 @@ enum SceneAwareCompositor {
     ///
     /// **Masked grades run display-referred, and that is a decision.** The
     /// whole-picture grade is the tone engine's: linear decode, Metal kernel,
-    /// display-referred out. A masked grade then runs `PhotoGrader.adjust` —
-    /// the Core Image chain — over that finished picture. It is the coarser
-    /// of the two paths, and it cannot recover a highlight the whole-picture
-    /// grade has already clipped.
+    /// display-referred out. A masked grade then runs the Kit's
+    /// `MaskedGradeStage` — `DisplayGrade`, the Core Image chain — over that
+    /// finished picture. It is the coarser of the two paths, and it cannot
+    /// recover a highlight the whole-picture grade has already clipped.
     ///
-    /// It is used anyway because it is the only stage BOTH renderers share.
+    /// It is used anyway because it is the only stage BOTH renderers share
+    /// — and, since 2026-09-07, the render bench: the stage lives in the Kit
+    /// so `lapse lightroom --render` draws precisely what this loop draws.
     /// A stills export blends many source frames into one output frame and
     /// hands it here; there is no seam earlier than this where a mask drawn
     /// on the OUTPUT frame could be applied at all. Running the engine a
@@ -449,10 +451,10 @@ enum SceneAwareCompositor {
             // occlusion gets, and for the same reason: a visible boundary.
             guard let selection = restorationMask(occlusion, extent: image.extent, guide: image)
             else { continue }
-            let adjusted = PhotoGrader
-                .adjust(image, grade.adjustments, asShotKelvin: PhotoGrader.neutralKelvin)
-                .cropped(to: image.extent)
-            image = blend(input: adjusted, background: image, mask: selection)
+            // The Kit's stage, so the bench renders exactly this.
+            image = MaskedGradeStage.apply(
+                grade.adjustments.displayGrade, to: image, through: selection,
+                asShotKelvin: DisplayGrade.neutralKelvin)
             drewAnything = true
         }
         // Layers are stored front-to-back (index 0 is frontmost), and each
@@ -517,7 +519,11 @@ enum SceneAwareCompositor {
         /// The project's fine rotation, levelled into the frame here — the
         /// stacker hands over the graded, colour-tagged output frame and this
         /// is the only place a stills blend turns it.
-        rotationDegrees: Double = 0
+        rotationDegrees: Double = 0,
+        /// This moment's recipe when it carries a post-engine pass (dehaze,
+        /// HSL): the stacker's Metal grade cannot render those, and this hook
+        /// is the one seam after it. Nil when the grade has none.
+        postPasses: GradeRecipe? = nil
     ) throws -> CVPixelBuffer? {
         // Self-draining: a frame's worth of Core Image temporaries is tens of
         // megabytes, and this is called from a render loop whose caller we
@@ -527,7 +533,8 @@ enum SceneAwareCompositor {
             try bakeExportFrameBody(
                 buffer, position: position, pool: pool,
                 overlays: overlays, maskGrades: maskGrades, masks: masks,
-                settings: settings, rotationDegrees: rotationDegrees)
+                settings: settings, rotationDegrees: rotationDegrees,
+                postPasses: postPasses)
         }
     }
 
@@ -539,18 +546,27 @@ enum SceneAwareCompositor {
         maskGrades: [MaskGrade],
         masks: MaskSet,
         settings: SegmentationSettings,
-        rotationDegrees: Double
+        rotationDegrees: Double,
+        postPasses: GradeRecipe?
     ) throws -> CVPixelBuffer? {
         let levelling = FrameRotation.isActive(rotationDegrees)
-        let base = FrameRotation.rotated(CIImage(cvPixelBuffer: buffer), degrees: rotationDegrees)
+        let passes = postPasses.map(EnginePostPasses.isNeeded) ?? false
+        // The post-engine passes go on the graded frame BEFORE it is levelled
+        // or masked: they are part of the whole-picture grade, and the
+        // editor's preview runs them in the same place (`PhotoGrader`).
+        var graded = CIImage(cvPixelBuffer: buffer)
+        if passes, let recipe = postPasses {
+            graded = EnginePostPasses.apply(graded, recipe: recipe, context: context)
+        }
+        let base = FrameRotation.rotated(graded, degrees: rotationDegrees)
         let composited = composited(
             base: base, frameSize: base.extent.size,
             overlays: overlays, maskGrades: maskGrades,
             suppressing: [], position: position,
             masks: masks, settings: settings, debugRegion: nil,
             editorPreview: false, rotationDegrees: rotationDegrees)
-        // Nothing drawn and nothing levelled: the frame appends untouched.
-        guard composited != nil || levelling else { return nil }
+        // Nothing drawn, nothing levelled, no pass: the frame appends untouched.
+        guard composited != nil || levelling || passes else { return nil }
         let composite = composited ?? base
         var scratch: CVPixelBuffer?
         let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &scratch)

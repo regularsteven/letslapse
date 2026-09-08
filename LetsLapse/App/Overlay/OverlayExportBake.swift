@@ -31,10 +31,11 @@ struct OverlayExportBake: Sendable {
     /// that only levels them.
     var hasOverlays: Bool { !overlays.isEmpty }
 
-    /// True when the bake changes any pixel at all: text, a masked grade, or
-    /// the project's level.
+    /// True when the bake changes any pixel at all: text, a masked grade, the
+    /// project's level, or a post-engine pass (dehaze, HSL).
     var hasWork: Bool {
         !overlays.isEmpty || maskGrades.contains(where: \.isActive) || grade.hasRotation
+            || grade.needsPostPasses
     }
 
     /// The level at one moment of the source.
@@ -65,7 +66,8 @@ struct OverlayExportBake: Sendable {
                 buffer, position: position, pool: pool,
                 overlays: overlays(at: position), maskGrades: maskGrades,
                 masks: masks, settings: settings,
-                rotationDegrees: rotation(at: position))
+                rotationDegrees: rotation(at: position),
+                postPasses: grade.needsPostPasses ? grade.recipe(at: position) : nil)
         }
     }
 }
@@ -100,8 +102,9 @@ extension AppModel {
         let maskGrades = document.maskGrades.filter(\.isActive)
         guard !overlays.isEmpty || !maskGrades.isEmpty else {
             // Nothing to draw — but a levelled project still needs the hook,
-            // which is where the level is baked.
-            guard grade.hasRotation else { return nil }
+            // which is where the level is baked; so does one with a
+            // post-engine pass (dehaze, HSL), baked in the same place.
+            guard grade.hasRotation || grade.needsPostPasses else { return nil }
             return OverlayExportBake(
                 overlays: [], masks: SceneAwareCompositor.MaskSet(),
                 settings: document.maskSettings, grade: grade, frameAspect: aspect)

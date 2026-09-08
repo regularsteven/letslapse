@@ -22,11 +22,13 @@ harness applies the same crop rect and angle before comparing. Without that
 those files cannot be scored at all, and quietly resizing to fit would score
 a misalignment as a colour error.
 
-WHAT IT DOES NOT MEASURE. The masked grades: the CLI renders the whole-picture
-grade only, because the masked stage lives in the app's compositor. Every row
-is therefore the whole-picture pipeline, which is where the structural gap
-sits anyway (measured 2026-09-07: ΔE 6.5 outside any mask). Stated in the
-ledger's own header too.
+MASKS. Since 2026-09-07 the CLI renders the masked grades too, through the
+Kit's `MaskedGradeStage` — the same code the editor's preview and a stills
+export run — so a row is the WHOLE render. The one exception is an AI sky
+mask, which needs the app's segmentation model: the CLI reports it as skipped
+(`masks=applied/total` on its summary line), this harness carries that into
+the ledger, and the file is marked as partially rendered rather than quietly
+scored as if the sky edit did not exist.
 """
 
 import argparse
@@ -123,13 +125,22 @@ def apply_crop(image, crop):
 
     The angle is a rotation of the PICTURE, so the crop rect is expressed in
     the straightened frame — rotate first, then take the rect out of it.
+
+    SIGN. A positive `CropAngle` turns the picture COUNTER-clockwise on the
+    way out of Lightroom, which is `cv2`'s positive direction too. This
+    harness shipped with the sign flipped and nothing caught it: the scores
+    still came out plausible, just 0.6–1.8 ΔE too high on every straightened
+    file. Measured 2026-09-07 by sweeping the applied angle on three files —
+    `_DSC6509` (+0.797°) bottoms out at −0.64° applied, `_WEB5223` (+0.680°)
+    at −0.75°, and NO rotation beat the as-written sign on all three. Any
+    future change to this line wants that sweep re-run, not an argument.
     """
     if crop is None:
         return image
     h, w = image.shape[:2]
     if abs(crop["angle"]) > 1e-6:
         centre = (w / 2, h / 2)
-        matrix = cv2.getRotationMatrix2D(centre, -crop["angle"], 1.0)
+        matrix = cv2.getRotationMatrix2D(centre, crop["angle"], 1.0)
         image = cv2.warpAffine(image, matrix, (w, h),
                                flags=cv2.INTER_LANCZOS4, borderMode=cv2.BORDER_REPLICATE)
     t, l, b, r = sensor_rect_for(crop, image_is_portrait=h > w)
@@ -195,15 +206,39 @@ def score(reference_path, ours_path, crop):
     a = cv2.cvtColor(reference, cv2.COLOR_BGR2RGB).astype(np.float64) / 255
     b = cv2.cvtColor(ours, cv2.COLOR_BGR2RGB).astype(np.float64) / 255
     de = lrcmp.delta_e_2000(lrcmp.to_lab(a), lrcmp.to_lab(b))
-    lum_a = lrcmp.luminance(lrcmp.linearise(a)).mean()
-    lum_b = lrcmp.luminance(lrcmp.linearise(b)).mean()
+    lin_a, lin_b = lrcmp.linearise(a), lrcmp.linearise(b)
+    lum_a = lrcmp.luminance(lin_a).mean()
+    lum_b = lrcmp.luminance(lin_b).mean()
+    stops = float(np.log2(max(lum_b, 1e-9) / max(lum_a, 1e-9)))
+    # The same score with our brightness matched to the reference's — a flat
+    # gain in linear light, then re-encoded. Not the ledger's number (the
+    # ledger scores what is rendered), but the one to CALIBRATE a control
+    # against: dehaze darkens and a chroma control can lighten, and on a file
+    # we already render half a stop bright the raw score rewards any darkening
+    # for the wrong reason. Measured against the reference's own exposure the
+    # control has to earn its keep on colour and local contrast alone.
+    matched = np.clip(lin_b * (2.0 ** -stops), 0, 1)
+    matched = np.where(matched <= 0.0031308, matched * 12.92,
+                       1.055 * np.power(matched, 1 / 2.4) - 0.055)
+    nulled = lrcmp.delta_e_2000(lrcmp.to_lab(a), lrcmp.to_lab(matched))
     return {
         "mean": float(de.mean()),
         "median": float(np.median(de)),
         "p90": float(np.percentile(de, 90)),
         "under2": float((de < 2).mean()) * 100,
-        "stops": float(np.log2(max(lum_b, 1e-9) / max(lum_a, 1e-9))),
+        "stops": stops,
+        "nulled": float(nulled.mean()),
     }
+
+
+def mask_status(stdout):
+    """What the CLI said about the file's masks: applied, total, skipped."""
+    match = re.search(r"masks=(\d+|off)/(\d+)(?:\s+skipped=(\S+))?", stdout)
+    if not match:
+        return None
+    applied = 0 if match.group(1) == "off" else int(match.group(1))
+    return {"applied": applied, "total": int(match.group(2)),
+            "skipped": match.group(3).split("+") if match.group(3) else []}
 
 
 def variants_available():
@@ -228,7 +263,15 @@ def main():
     parser.add_argument("--scale", default="0.5", help="render scale; 0.5 is plenty for scoring")
     parser.add_argument("--out", default=os.path.join(REPO, "docs", "render-variants"))
     parser.add_argument("--work", default="/tmp/render_bench")
+    parser.add_argument("--render-flags", default="",
+                        help="extra `lapse lightroom` flags for an ATTRIBUTION run, written "
+                             "as --render-flags='--no-hsl' (the = form: argparse reads a bare "
+                             "'--no-hsl' value as one of its own options). Never for the "
+                             "committed ledger: pair it with --out somewhere else.")
     args = parser.parse_args()
+    render_flags = args.render_flags.split()
+    if render_flags and os.path.abspath(args.out) == os.path.join(REPO, "docs", "render-variants"):
+        sys.exit("--render-flags is for attribution runs; point --out away from the committed ledger")
 
     if not os.path.exists(LAPSE):
         sys.exit(f"build the CLI first: (cd Kit && swift build --product lapse)\nmissing {LAPSE}")
@@ -274,11 +317,12 @@ def main():
             out_jpg = os.path.join(args.work, f"{name}-{variant}.jpg")
             run = subprocess.run(
                 [LAPSE, "lightroom", sidecar, "--render", out_jpg,
-                 "--variant", variant, "--scale", args.scale],
+                 "--variant", variant, "--scale", args.scale] + render_flags,
                 capture_output=True, text=True)
             if run.returncode != 0:
                 print(f"  {variant} {name}: render failed — {run.stderr.strip()[:120]}")
                 continue
+            masks = mask_status(run.stdout)
             srgb = out_jpg.replace(".jpg", "-srgb.jpg")
             subprocess.run(["sips", "--matchTo", SRGB, out_jpg, "--out", srgb],
                            capture_output=True)
@@ -296,19 +340,21 @@ def main():
             if got is None or "error" in got:
                 print(f"  {variant} {name}: {got.get('error') if got else 'unreadable'}")
                 continue
+            got["masks"] = masks
             rows.append((name, got))
+            partial = "  (sky mask not rendered)" if masks and masks["skipped"] else ""
             print(f"  {variant:5s} {name:12s} ΔE {got['mean']:6.2f}  "
-                  f"median {got['median']:6.2f}  {got['stops']:+.2f} stops")
+                  f"median {got['median']:6.2f}  {got['stops']:+.2f} stops{partial}")
         if rows:
             results[variant] = rows
             mean = sum(r[1]["mean"] for r in rows) / len(rows)
             print(f"  {variant:5s} {'CORPUS MEAN':12s} ΔE {mean:6.2f}\n")
 
     write_ledger(args.out, os.path.basename(args.corpus.rstrip("/")),
-                 triples, catalogue, results, args.scale)
+                 triples, catalogue, results, args.scale, render_flags)
 
 
-def write_ledger(out_dir, corpus, triples, catalogue, results, scale):
+def write_ledger(out_dir, corpus, triples, catalogue, results, scale, render_flags=()):
     os.makedirs(out_dir, exist_ok=True)
     commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"],
                             capture_output=True, text=True, cwd=REPO).stdout.strip()
@@ -336,14 +382,17 @@ def write_ledger(out_dir, corpus, triples, catalogue, results, scale):
         "```",
         "",
         f"Corpus `{corpus}` · {len(triples)} files · render scale {scale} · "
-        f"commit `{commit}` · {today}",
+        f"commit `{commit}` · {today}"
+        + (f" · **attribution run, render flags `{' '.join(render_flags)}`**" if render_flags else ""),
         "",
         "Scores are mean CIEDE2000 against Lightroom's own export of the same edit —",
         "**lower is better**. ~1 is just noticeable, 2–3 visible side by side, >5 obvious.",
         "Lightroom's crop and straighten are applied to our render before scoring.",
         "",
-        "**These rows measure the WHOLE-PICTURE pipeline only.** The masked grades live in",
-        "the app's compositor, which the CLI cannot reach; see `docs/TODO.md`.",
+        "Rows are WHOLE renders: the masked grades run through the Kit's `MaskedGradeStage`,",
+        "the same code the editor and a stills export use. A file marked † carries an AI",
+        "sky mask the CLI cannot draw (it needs the app's segmentation model), so its",
+        "score is missing that one edit.",
         "",
         "## Scoreboard",
         "",
@@ -379,10 +428,13 @@ def write_ledger(out_dir, corpus, triples, catalogue, results, scale):
               "|---" * (len(ranked) + 1) + "|"]
     for name, _, _ in triples:
         cells = []
+        partial = False
         for variant, rows in ranked:
             row = next((r for r in rows if r[0] == name), None)
             cells.append(f"{row[1]['mean']:.2f}" if row else "—")
-        lines.append(f"| {name} | " + " | ".join(cells) + " |")
+            if row and row[1].get("masks") and row[1]["masks"]["skipped"]:
+                partial = True
+        lines.append(f"| {name}{' †' if partial else ''} | " + " | ".join(cells) + " |")
 
     lines += ["", "---", "",
               "Variant definitions and their hypotheses live in",

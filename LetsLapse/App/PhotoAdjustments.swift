@@ -79,6 +79,22 @@ struct PhotoAdjustments: Codable, Equatable {
     var colorNoise: Float
     /// Darkens the corners. 0…1.
     var vignetteIntensity: Float
+    /// Haze removal (positive) or added haze (negative). −1…+1. Rendered
+    /// after the tone engine by the Kit's `EnginePostPasses` — a dark-channel
+    /// prior over the finished picture — so it reaches the preview, a JPEG
+    /// export and a stills blend through one function. No panel slider yet:
+    /// the Lightroom import writes it (2026-09-07); the control is owed.
+    var dehaze: Float
+    /// The HSL panel — eight bands × hue, saturation, luminance — or nil when
+    /// untouched. Rendered after the engine with `dehaze`. Not keyframed:
+    /// the timeline blends the `PhotoAdjustmentField` sliders and carries
+    /// this from the earlier keyframe as it is. No panel yet; the Lightroom
+    /// import writes it (2026-09-07).
+    var hsl: HSLAdjustments? {
+        // Neutral and nil are one state, so `==` and `.neutral` stay honest
+        // whichever way a caller writes it.
+        didSet { if let panel = hsl, panel.isNeutral { hsl = nil } }
+    }
     /// The Edit screen's fine rotation in degrees, positive clockwise —
     /// `FrameRotation` owns the geometry. The one field here that is not a
     /// colour: it lives in this struct so the grade timeline carries it per
@@ -99,7 +115,7 @@ struct PhotoAdjustments: Codable, Equatable {
               clarity: 0, texture: 0, sharpen: 0, sharpenMasking: 0,
               noiseReduction: 0, noiseDetail: neutralNoiseDetail,
               colorNoiseReduction: 0, colorNoise: 0, vignetteIntensity: 0,
-              rotationDegrees: 0)
+              dehaze: 0, hsl: nil, rotationDegrees: 0)
     }
 
     /// True when the rotation would change a pixel.
@@ -179,6 +195,7 @@ struct PhotoAdjustments: Codable, Equatable {
     static let colorNoiseReductionRange: ClosedRange<Float> = 0...1
     static let colorNoiseRange: ClosedRange<Float> = 0...1
     static let vignetteRange: ClosedRange<Float> = 0...1
+    static let dehazeRange: ClosedRange<Float> = -1...1
     static let rotationRange: ClosedRange<Float> =
         Float(FrameRotation.range.lowerBound)...Float(FrameRotation.range.upperBound)
 
@@ -215,6 +232,10 @@ struct PhotoAdjustments: Codable, Equatable {
         recipe.colorNoiseReduction = min(max(base.colorNoiseReduction + colorNoiseReduction, 0), 1)
         recipe.colorNoise = min(max(base.colorNoise + colorNoise, 0), 1)
         recipe.vignette = min(max(base.vignette + vignetteIntensity, 0), 1)
+        recipe.dehaze = min(max(base.dehaze + dehaze, -1), 1)
+        // A panel replaces a preset's rather than adding to it: twenty-four
+        // sliders summed would land past their travel with no way to say so.
+        if let hsl, !hsl.isNeutral { recipe.hsl = hsl }
         return recipe
     }
 
@@ -230,6 +251,8 @@ struct PhotoAdjustments: Codable, Equatable {
             colorNoiseReduction, colorNoise)
             + (hasRotation ? String(format: ",r%.2f", rotationDegrees) : "")
             + (ownsWhite ? String(format: ",w%.2f,%.1f", whiteMired, whiteTint) : "")
+            + (dehaze != 0 ? String(format: ",dh%.3f", dehaze) : "")
+            + (hsl.map { $0.isNeutral ? "" : ",hsl" + $0.cacheToken } ?? "")
     }
 
     // MARK: - Codable
@@ -247,7 +270,8 @@ struct PhotoAdjustments: Codable, Equatable {
          noiseReduction: Float = 0,
          noiseDetail: Float = PhotoAdjustments.neutralNoiseDetail,
          colorNoiseReduction: Float = 0, colorNoise: Float = 0,
-         vignetteIntensity: Float, rotationDegrees: Float = 0) {
+         vignetteIntensity: Float, dehaze: Float = 0, hsl: HSLAdjustments? = nil,
+         rotationDegrees: Float = 0) {
         self.exposure = exposure
         self.contrast = contrast
         self.highlights = highlights
@@ -269,6 +293,8 @@ struct PhotoAdjustments: Codable, Equatable {
         self.colorNoiseReduction = colorNoiseReduction
         self.colorNoise = colorNoise
         self.vignetteIntensity = vignetteIntensity
+        self.dehaze = dehaze
+        self.hsl = hsl.flatMap { $0.isNeutral ? nil : $0 }
         self.rotationDegrees = rotationDegrees
     }
 
@@ -279,6 +305,7 @@ struct PhotoAdjustments: Codable, Equatable {
         case texture, sharpen, noiseReduction, colorNoiseReduction, colorNoise
         case sharpenMasking, noiseDetail
         case whiteMired, whiteTint
+        case dehaze, hsl
         case rotationDegrees = "rotation"
         case whiteBalance  // v1 only; never written by v2
     }
@@ -331,6 +358,8 @@ struct PhotoAdjustments: Codable, Equatable {
                 colorNoiseReduction: field(.colorNoiseReduction),
                 colorNoise: field(.colorNoise),
                 vignetteIntensity: field(.vignetteIntensity),
+                dehaze: field(.dehaze),
+                hsl: try? container.decodeIfPresent(HSLAdjustments.self, forKey: .hsl),
                 rotationDegrees: field(.rotationDegrees))
             return
         }
@@ -380,6 +409,14 @@ struct PhotoAdjustments: Codable, Equatable {
         try container.encode(colorNoiseReduction, forKey: .colorNoiseReduction)
         try container.encode(colorNoise, forKey: .colorNoise)
         try container.encode(vignetteIntensity, forKey: .vignetteIntensity)
+        // Only when set, like the rotation and the white below: a project
+        // that never touched dehaze keeps its payload byte for byte.
+        if dehaze != 0 {
+            try container.encode(dehaze, forKey: .dehaze)
+        }
+        if let hsl, !hsl.isNeutral {
+            try container.encode(hsl, forKey: .hsl)
+        }
         // Only when set: an unlevelled project reads and writes exactly the
         // payload it always did.
         if hasRotation {
@@ -391,6 +428,33 @@ struct PhotoAdjustments: Codable, Equatable {
             try container.encode(whiteMired, forKey: .whiteMired)
             try container.encode(whiteTint, forKey: .whiteTint)
         }
+    }
+}
+
+extension PhotoAdjustments {
+    /// This grade as the Kit's display-referred chain takes it — what a
+    /// masked grade renders through, and what the legacy video path uses.
+    /// Field for field; only the names differ (`temperature` here is the
+    /// mired offset the Kit calls `temperatureMired`).
+    var displayGrade: DisplayGrade {
+        var grade = DisplayGrade()
+        grade.exposure = exposure
+        grade.contrast = contrast
+        grade.highlights = highlights
+        grade.shadows = shadows
+        grade.whites = whites
+        grade.blacks = blacks
+        grade.whiteMired = whiteMired
+        grade.whiteTint = whiteTint
+        grade.temperatureMired = temperature
+        grade.tint = tint
+        grade.vibrance = vibrance
+        grade.saturation = saturation
+        grade.clarity = clarity
+        grade.vignette = vignetteIntensity
+        grade.dehaze = dehaze
+        grade.hsl = hsl
+        return grade
     }
 }
 
@@ -439,6 +503,14 @@ struct PhotoGrade: Equatable, Sendable {
     /// True when any moment of the grade owns its white.
     var ownsWhite: Bool {
         adjustments.ownsWhite || timeline.keyframes.contains { $0.adjustments.ownsWhite }
+    }
+
+    /// True when any moment asks for a post-engine pass (dehaze, HSL) — which
+    /// a stills blend gets only through the export bake's frame hook, so the
+    /// hook has to exist for it.
+    var needsPostPasses: Bool {
+        EnginePostPasses.isNeeded(adjustments.recipe())
+            || timeline.keyframes.contains { EnginePostPasses.isNeeded($0.adjustments.recipe()) }
     }
 
     // MARK: Rotation
