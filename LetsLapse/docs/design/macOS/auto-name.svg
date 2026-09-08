@@ -1,0 +1,96 @@
+<svg viewBox="0 0 800 750" xmlns="http://www.w3.org/2000/svg" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>macOS · Auto rename &amp; tag · 760×680</title>
+  <desc>Mirrors App/AI/AutoNameSheet.swift on the Mac — the same SwiftUI view iOS presents (iOS/auto-name.portrait.svg), rendered as an attached sheet over the project it was started from: the managementCard row "Auto rename &amp; tag" in App/ProjectDetailView.swift. Identical for Photo, Interval and Video projects, which are one CaptureProject with one sceneTags field. macOS gives the NavigationStack's inline title a left-aligned header band and moves the cancellation/confirmation toolbar items into a footer, Cancel then Apply, bottom-trailing; Apply is disabled while the name is empty. SHEET WIDTH IS SPECIFIED AT 393pt, which is a decision this file makes rather than a measurement: AppKit sizes a sheet from its content and lands near 470pt, at which the card's content box is 406pt and the tag chips wrap differently from the phone's for no reason anyone can see. Pinning the sheet to 393 makes the content box 329pt on both platforms, so one component file — components/tag-field.applied.wide.svg — is literally the same picture in both places, which is the whole point of the 2026-09-08 pass. A one-line .frame(width: 393) on the sheet's root. NAME is editable and seeded with the model's title; the "Saw …" line under it is SceneAnalysisResult.elements, not editable. SUBJECT TAGS is the shared tag editor: every applied tag drops on its xmark, and "+ Add tag" raises the picker — on the Mac a popover, drawn in gallery.tags.svg. "Rooftops" is a tag typed IN THIS SHEET beside the four the model proposed; once applied there is nothing to tell them apart, on purpose. FROM THIS CAPTURE is unchanged and inert: place and light are the capture's own facts, handed TO the model. Nothing is written until Apply — the sheet edits a local copy of the proposal, so Cancel costs nothing. THE NO-TAGS CASE is iOS/auto-name.no-tags.portrait.svg and renders identically here, 41pt shorter. NOT YET IN CODE — design-first, 2026-09-08.</desc>
+  <defs>
+    <clipPath id="win"><rect x="20" y="20" width="760" height="680" rx="11"/></clipPath>
+    <filter id="sheetshadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="6" stdDeviation="10" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+    <linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#3E4C63"/><stop offset="0.5" stop-color="#C9793F"/><stop offset="1" stop-color="#F2C98A"/>
+    </linearGradient>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <g clip-path="url(#win)">
+    <rect x="20" y="20" width="760" height="680" fill="#F2F2F7"/>
+
+    <g id="titlebar">
+      <rect x="20" y="20" width="760" height="40" fill="#F6F6F8"/>
+      <line x1="20" y1="60" x2="780" y2="60" stroke="#000" stroke-opacity="0.08"/>
+      <circle cx="40" cy="40" r="6" fill="#FF736A"/><circle cx="60" cy="40" r="6" fill="#FEBC2E"/><circle cx="80" cy="40" r="6" fill="#19C332"/>
+      <text x="400" y="45" font-size="13" class="sb" text-anchor="middle" fill="#000" fill-opacity="0.85">River Sunset to Dusk</text>
+    </g>
+
+    <!-- the project detail the sheet is attached to -->
+    <g id="behind" opacity="0.6">
+      <rect x="40" y="80" width="720" height="200" rx="12" fill="url(#dusk)"/>
+      <text x="40" y="320" font-size="24" class="b" fill="#000">River Sunset to Dusk</text>
+      <text x="40" y="344" font-size="12" class="sec">Interval · 1 842 frames · Aug 20, 2026</text>
+      <rect x="40" y="600" width="720" height="88" rx="12" fill="#FFF"/>
+      <text x="60" y="632" font-size="14" fill="#000">Auto rename &amp; tag</text>
+      <text x="60" y="676" font-size="14" fill="#000">Tags</text>
+    </g>
+
+    <!-- ================= THE SHEET (393pt wide by decision — see desc) ================= -->
+    <g id="auto-name-sheet" transform="translate(203.5,64)">
+      <rect x="0" y="0" width="393" height="532" rx="10" fill="#F2F2F7" filter="url(#sheetshadow)"/>
+
+      <g id="sheet-header">
+        <path d="M0 10 a10 10 0 0 1 10-10 h373 a10 10 0 0 1 10 10 v36 h-393 z" fill="#F6F6F8"/>
+        <line x1="0" y1="46" x2="393" y2="46" stroke="#000" stroke-opacity="0.10"/>
+        <text x="20" y="29" font-size="15" class="sb" fill="#000">Auto rename &amp; tag</text>
+      </g>
+
+      <!-- NAME -->
+      <text x="20" y="66" font-size="13" class="sb sec" letter-spacing="0.5">NAME</text>
+      <rect x="16" y="78" width="361" height="49" rx="16" fill="#FFF" filter="url(#card)"/>
+      <text x="32" y="109" font-size="17" fill="#000">Dusk in Prague with river</text>
+      <rect x="209" y="92" width="2" height="22" fill="#C36A00"/>
+
+      <!-- SceneAnalysisResult.elements, not editable -->
+      <text x="20" y="144" font-size="12" class="sec">Saw river, bridge, quay, sky</text>
+
+      <!-- SUBJECT TAGS — the shared tag editor -->
+      <text x="20" y="178" font-size="13" class="sb sec" letter-spacing="0.5">SUBJECT TAGS</text>
+      <rect x="16" y="190" width="361" height="125" rx="16" fill="#FFF" filter="url(#card)"/>
+      <!-- components/tag-field.applied.wide.svg — the SAME 329pt box as iOS, which is what the
+           393pt sheet width buys. Card top-left + (16,13). Edit that file, not this markup. -->
+      <image href="../components/tag-field.applied.wide.svg" x="32" y="203" width="329" height="74"/>
+      <text x="32" y="298" font-size="11.5" class="sec">Tap a tag to drop it, or add one of your own.</text>
+
+      <!-- FROM THIS CAPTURE — inert: these are facts, not guesses -->
+      <text x="20" y="343" font-size="13" class="sb sec" letter-spacing="0.5">FROM THIS CAPTURE</text>
+      <rect x="16" y="355" width="361" height="97" rx="16" fill="#FFF" filter="url(#card)"/>
+      <g id="capture-chips">
+        <rect x="32" y="368" width="97" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+        <g stroke="#000" stroke-opacity="0.75" stroke-width="1.5" fill="none" data-symbol="mappin.and.ellipse">
+          <circle cx="47" cy="382" r="3.6"/><path d="M47 386.5 v4" stroke-linecap="round"/><ellipse cx="47" cy="392" rx="6.5" ry="2.4"/>
+        </g>
+        <text x="58" y="389.5" font-size="14" fill="#000" fill-opacity="0.75">Prague 2</text>
+
+        <rect x="137" y="368" width="76" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+        <g stroke="#000" stroke-opacity="0.75" stroke-width="1.5" fill="none" stroke-linecap="round" data-symbol="sun.horizon">
+          <path d="M148 389 h14"/><path d="M152 384 a3.5 3.5 0 0 1 7 0"/><path d="M155.5 377.5 v2.5 M149.5 380 l1.5 1.8 M161.5 380 l-1.5 1.8"/>
+        </g>
+        <text x="167" y="389.5" font-size="14" fill="#000" fill-opacity="0.75">Dusk</text>
+      </g>
+      <text x="32" y="421" font-size="11.5" class="sec">Read from the capture's location and time, not from</text>
+      <text x="32" y="435" font-size="11.5" class="sec">the image.</text>
+
+      <!-- footer: macOS moves the toolbar's cancellation/confirmation items here -->
+      <g id="sheet-footer">
+        <path d="M0 476 h393 v46 a10 10 0 0 1 -10 10 h-373 a10 10 0 0 1 -10 -10 z" fill="#F6F6F8"/>
+        <line x1="0" y1="476" x2="393" y2="476" stroke="#000" stroke-opacity="0.10"/>
+        <rect x="223" y="490" width="72" height="28" rx="7" fill="#FFF" stroke="#000" stroke-opacity="0.15"/>
+        <text x="259" y="509" font-size="13" fill="#000" text-anchor="middle">Cancel</text>
+        <rect x="305" y="490" width="72" height="28" rx="7" fill="#C36A00"/>
+        <text x="341" y="509" font-size="13" class="sb" fill="#FFF" text-anchor="middle">Apply</text>
+      </g>
+    </g>
+  </g>
+
+  <text x="400" y="726" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">macOS · Auto rename &amp; tag · 760×680 pt window · 393 pt sheet</text>
+  <text x="400" y="744" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/AI/AutoNameSheet.swift — same view as iOS, pinned to 393 pt so the tag field is literally the same file</text>
+</svg>

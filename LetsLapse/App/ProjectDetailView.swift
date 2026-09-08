@@ -21,6 +21,8 @@ struct ProjectDetailView: View {
     /// the viewer is the grading *editor*, not playback.
     @State private var gradingPhoto: GradingPhoto?
     @State private var isRenaming = false
+    /// The tag editor, raised by the management card's **Tags** row.
+    @State private var isEditingTags = false
     /// On-device naming: the run in flight and the proposal it produced.
     @StateObject private var autoName = AutoNameController()
     @ObservedObject private var models = ModelManager.shared
@@ -136,10 +138,15 @@ struct ProjectDetailView: View {
         }
         #endif
         .sheet(item: $autoName.proposal) { proposal in
-            AutoNameSheet(proposal: proposal) { metadata in
+            AutoNameSheet(proposal: proposal, libraryTags: model.libraryTags) { metadata in
                 if let capture {
                     model.applySceneMetadata(metadata, to: capture)
                 }
+            }
+        }
+        .sheet(isPresented: $isEditingTags) {
+            if let capture {
+                TagPickerSheet(tags: tagsBinding(for: capture), libraryTags: model.libraryTags)
             }
         }
         .alert(
@@ -980,15 +987,29 @@ struct ProjectDetailView: View {
             }
             .buttonStyle(.plain)
 
-            if let tags = capture.sceneTags, !tags.isEmpty {
+            // Unconditional, and a Button. It used to be inert text inside
+            // `if let tags, !tags.isEmpty`, which meant the tags an analysis
+            // wrote were readable and unchangeable — and a project that was
+            // never analysed had no tag row at all, so there was no way to
+            // reach one. With nothing applied the trailing text reads "Add".
+            Button {
+                isEditingTags = true
+            } label: {
                 LLRow(title: "Tags") {
-                    Text(tags.map { SceneMetadata.label(for: $0) }.joined(separator: ", "))
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
+                    HStack(spacing: 8) {
+                        Text(tagsSummary(for: capture))
+                            .font(.system(size: 14))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                        Image(systemName: "chevron.right")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundStyle(.tertiary)
+                    }
                 }
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
 
             // The analysis's own wording for what was in frame. Kept because it is what
             // Projects search matches on most specifically — "waterfall" finds this project
@@ -1038,6 +1059,21 @@ struct ProjectDetailView: View {
             .buttonStyle(.plain)
         }
         .llCard()
+    }
+
+    // MARK: - Tags
+
+    /// Writes straight through to the library: the editor has no Apply step, for the same reason
+    /// `renameProject` has none — every change is one tap to reverse.
+    private func tagsBinding(for capture: AppModel.CaptureProject) -> Binding<[String]> {
+        Binding(
+            get: { model.captures.first { $0.id == capture.id }?.sceneTags ?? [] },
+            set: { model.setSceneTags($0, on: capture) })
+    }
+
+    private func tagsSummary(for capture: AppModel.CaptureProject) -> String {
+        let tags = capture.sceneTags ?? []
+        return tags.isEmpty ? "Add" : tags.map { SceneMetadata.label(for: $0) }.joined(separator: ", ")
     }
 
     // MARK: - Field notes

@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 441 940" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>iOS · Project detail · management card · portrait</title>
+  <desc>Mirrors App/ProjectDetailView.swift's managementCard, scrolled to — the card at the foot of every project detail, identical for Photo, Interval and Video because all three call the same function on the same CaptureProject. It has never had a mirror of its own: iOS/INDEX.md has carried it as a row with no file since 2026-08-13, and the three project-detail screen specs all draw a stale version that predates Auto rename &amp; tag, Tags and In frame entirely. ROWS, top to bottom, all LLRow (16pt title, 11.5pt subtitle, 16/12 padding, divider inset 16): Auto rename &amp; tag with its caption — which becomes the in-flight status line while a run is going, and a deep link to Settings › AI Models when no model is installed; Rename; Tags; In frame; Storage with its own caption; each saved field note; + Field note; Delete… in red with no divider. THE 2026-09-08 CHANGE IS THE TAGS ROW, and it is small: it gains a chevron and becomes a Button, pushing the shared tag editor (project-tags.portrait.svg). Today it is inert text — the tags an AI run wrote are readable and unchangeable, which is what "once set, that's it" means — and it is wrapped in `if let tags, !tags.isEmpty`, so a project that was never analysed, or one the analysis returned nothing for, has no tag row at all and no way to reach one. Both go: the row is unconditional, and with nothing applied its trailing text is a secondary "Add" where the joined labels would be. Nothing else about the card moves. The trailing list still truncates with .tail — drawn here at its real length for the canonical five-tag project, which does not fit. The IN FRAME row above is deliberately NOT made editable: elements are the model's own wording for what was in shot, not a classification the user picks from, and Projects search matches them as free text. NOT YET IN CODE — design-first, 2026-09-08.</desc>
+  <defs>
+    <clipPath id="screen"><rect x="24" y="24" width="393" height="852" rx="54"/></clipPath>
+    <filter id="card" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#000" flood-opacity="0.05"/></filter>
+    <filter id="soft" x="-50%" y="-50%" width="200%" height="200%"><feDropShadow dx="0" dy="6" stdDeviation="6" flood-color="#000" flood-opacity="0.12"/></filter>
+    <!-- SwiftUI's own .lineLimit(1)/.truncationMode(.tail) on the two value columns and the
+         field note's text column, as a static clip — see components/README.md's clip-width
+         trap: a clip has to end clear of the glyph drawn to its right, not at its anchor. -->
+    <clipPath id="notetext"><rect x="64" y="386" width="252" height="36"/></clipPath>
+  </defs>
+  <style>text{font-family:inherit}.sb{font-weight:600}.b{font-weight:700}.sec{fill:#6D6D72}</style>
+
+  <rect x="18" y="18" width="405" height="864" rx="60" fill="none" stroke="#3A3A3F" stroke-width="3"/>
+  <g clip-path="url(#screen)">
+    <rect x="24" y="24" width="393" height="852" fill="#F2F2F7"/>
+    <g transform="translate(24,24)">
+
+      <!-- the tail of the section above, scrolled under the nav bar -->
+      <g id="above">
+        <rect x="16" y="40" width="361" height="76" rx="18" fill="#FFF" filter="url(#card)"/>
+      </g>
+
+      <!-- status bar + scrolled inline nav bar -->
+      <rect x="0" y="0" width="393" height="104" fill="#F2F2F7" fill-opacity="0.94"/>
+      <line x1="0" y1="104" x2="393" y2="104" stroke="#000" stroke-opacity="0.10"/>
+      <g id="status-bar" fill="#000">
+        <text x="80" y="43" font-size="15" class="sb" text-anchor="middle">9:41</text>
+        <g><rect x="306" y="35" width="3" height="4" rx="1"/><rect x="311" y="33" width="3" height="6" rx="1"/><rect x="316" y="31" width="3" height="8" rx="1"/><rect x="321" y="29" width="3" height="10" rx="1"/></g>
+        <path d="M334 34 a8 8 0 0 1 12 0 M337 37 a4.5 4.5 0 0 1 6 0 M339.5 39.5 l0.5 0.5 0.5 -0.5" stroke="#000" stroke-width="1.8" fill="none" stroke-linecap="round"/>
+        <g><rect x="352" y="30" width="23" height="11" rx="3.5" fill="none" stroke="#000" stroke-opacity="0.4"/><rect x="376" y="33.5" width="2" height="4" rx="1" fill="#000" fill-opacity="0.4"/><rect x="354" y="32" width="15" height="7" rx="2"/></g>
+      </g>
+      <g id="nav-bar">
+        <path d="M22 76 l-9 10 9 10" stroke="#C36A00" stroke-width="2.6" fill="none" stroke-linecap="round" data-symbol="chevron.backward"/>
+        <text x="30" y="91" font-size="17" fill="#C36A00">Projects</text>
+        <text x="196.5" y="91" font-size="17" class="sb" fill="#000" text-anchor="middle">River Sunset to Dusk</text>
+        <g data-symbol="ellipsis.circle">
+          <circle cx="367" cy="86" r="11" fill="none" stroke="#C36A00" stroke-width="1.8"/>
+          <circle cx="361.5" cy="86" r="1.6" fill="#C36A00"/><circle cx="367" cy="86" r="1.6" fill="#C36A00"/><circle cx="372.5" cy="86" r="1.6" fill="#C36A00"/>
+        </g>
+      </g>
+
+      <!-- ================= MANAGEMENT CARD ================= -->
+      <g id="management-card">
+        <rect x="16" y="132" width="361" height="387" rx="16" fill="#FFF" filter="url(#card)"/>
+
+        <text x="32" y="158" font-size="16" fill="#000">Auto rename &amp; tag</text>
+        <text x="32" y="175" font-size="11.5" class="sec">Names and tags this project from its own frames.</text>
+        <line x1="32" y1="191" x2="377" y2="191" stroke="#000" stroke-opacity="0.10"/>
+
+        <text x="32" y="217" font-size="16" fill="#000">Rename</text>
+        <path d="M357 210 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        <line x1="32" y1="234" x2="377" y2="234" stroke="#000" stroke-opacity="0.10"/>
+
+        <!-- 2026-09-08: was inert text, and was hidden outright when the project had no
+             tags. Now a Button with a chevron, pushing project-tags.portrait.svg; with
+             nothing applied the trailing text reads a secondary "Add" instead of the list. -->
+        <g id="tags-row">
+          <text x="32" y="260" font-size="16" fill="#000">Tags</text>
+          <!-- Trailing-aligned in SwiftUI, but the string is longer than the column, so it
+               takes the whole column and truncates its TAIL — drawn as it lands, not as it
+               would read if it fitted. -->
+          <text x="80" y="260" font-size="14" class="sec">Water, Sky &amp; weather, Urban, Nat…</text>
+          <path d="M357 253 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        </g>
+        <line x1="32" y1="277" x2="377" y2="277" stroke="#000" stroke-opacity="0.10"/>
+
+        <text x="32" y="303" font-size="16" fill="#000">In frame</text>
+        <text x="361" y="303" font-size="14" class="sec" text-anchor="end">river, bridge, quay, sky</text>
+        <line x1="32" y1="320" x2="377" y2="320" stroke="#000" stroke-opacity="0.10"/>
+
+        <text x="32" y="346" font-size="16" fill="#000">Storage</text>
+        <text x="32" y="363" font-size="11.5" class="sec">1 842 frames · originals kept</text>
+        <text x="361" y="352" font-size="14" class="sec" text-anchor="end">4,8 GB</text>
+        <line x1="32" y1="379" x2="377" y2="379" stroke="#000" stroke-opacity="0.10"/>
+
+        <g id="field-note">
+          <g stroke="#6D6D72" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="waveform">
+            <path d="M34 400 v6 M39 395 v16 M44 391 v24 M49 396 v14 M54 401 v4"/>
+          </g>
+          <g clip-path="url(#notetext)">
+            <text x="64" y="400" font-size="13" class="sb" fill="#000">20 Aug 2026 at 19:48</text>
+            <text x="210" y="400" font-size="12" class="sec">0:34</text>
+            <text x="64" y="416" font-size="12.5" class="sec">Wind picked up on frame 900.</text>
+          </g>
+          <circle cx="337" cy="406" r="11" fill="#C36A00"/><path d="M333 400 l9 6 -9 6 z" fill="#FFF" data-symbol="play.circle.fill"/>
+          <g stroke="#C6C6CB" stroke-width="1.6" fill="none" data-symbol="trash">
+            <path d="M356 400 h13 M358 400 v10 h9 v-10 M361 398 h3"/>
+          </g>
+          <line x1="32" y1="433" x2="377" y2="433" stroke="#000" stroke-opacity="0.10"/>
+        </g>
+
+        <text x="32" y="459" font-size="16" fill="#000">+ Field note</text>
+        <path d="M357 452 l6 7 -6 7" stroke="#C6C6CB" stroke-width="2.2" fill="none" stroke-linecap="round" data-symbol="chevron.right"/>
+        <line x1="32" y1="476" x2="377" y2="476" stroke="#000" stroke-opacity="0.10"/>
+
+        <text x="32" y="502" font-size="16" fill="#FF3B30">Delete…</text>
+      </g>
+
+      <!-- floating tab bar -->
+      <g id="tab-bar">
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="#FBFBFD" opacity="0.96" filter="url(#soft)"/>
+        <rect x="17.5" y="755" width="358" height="57" rx="28.5" fill="none" stroke="#000" stroke-opacity="0.08"/>
+        <g fill="none" stroke="#8E8E93">
+          <g transform="translate(56.5 776) scale(0.7727) translate(-11 -11)"><circle cx="11" cy="11" r="8" stroke-width="2.2" data-symbol="record.circle"/><circle cx="11" cy="11" r="3.4" fill="#8E8E93" stroke="none"/></g>
+          <text x="56.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Create</text>
+          <g transform="translate(126.5 776) scale(0.7727) translate(-11 -11)"><rect x="3" y="5.5" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(-6 10 10.5)" data-symbol="photo.on.rectangle.angled"/><rect x="6" y="8" width="14" height="10" rx="2" stroke-width="2.2" transform="rotate(4 13 13)"/></g>
+          <text x="126.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Gallery</text>
+        </g>
+        <rect x="163.5" y="761" width="66" height="45" rx="22.5" fill="#C36A00" opacity="0.12"/>
+        <g fill="none" stroke="#C36A00">
+          <g transform="translate(196.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="square.stack"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="196.5" y="800" font-size="10.5" class="sb" fill="#C36A00" stroke="none" text-anchor="middle">Projects</text>
+        </g>
+        <g fill="none" stroke="#8E8E93">
+          <g transform="translate(266.5 776) scale(0.7727) translate(-11 -11)"><rect x="4" y="3.5" width="14" height="10" rx="2" stroke-width="2.2" data-symbol="film.stack"/><path d="M7 4.5 v8 M15 4.5 v8" stroke-width="1.38" opacity="0.7"/><path d="M5.5 16 h11 M7.5 19 h7" stroke-width="2.2" stroke-linecap="round"/></g>
+          <text x="266.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Collections</text>
+        </g>
+        <g fill="none" stroke="#8E8E93">
+          <g transform="translate(336.5 776) scale(0.7727) translate(-11 -11)"><path d="M3.5 6.5 h15 M3.5 11 h15 M3.5 15.5 h15" stroke-width="2.48" stroke-linecap="round" data-symbol="line.3.horizontal"/></g>
+          <text x="336.5" y="800" font-size="10.5" class="sb" fill="#8E8E93" stroke="none" text-anchor="middle">Settings</text>
+        </g>
+      </g>
+
+      <!-- hardware -->
+      <rect x="134.5" y="11" width="124" height="36" rx="18" fill="#000"/>
+      <rect x="129.5" y="839" width="134" height="5" rx="2.5" fill="#000" opacity="0.6"/>
+    </g>
+  </g>
+
+  <text x="220.5" y="906" text-anchor="middle" font-size="13" class="sb" fill="#3A3A3F">iOS · Project detail · management card · portrait · 393×852 pt</text>
+  <text x="220.5" y="924" text-anchor="middle" font-size="11" fill="#8A8A90">mirrors App/ProjectDetailView.swift managementCard — the Tags row becomes the third door onto the tag editor</text>
+</svg>

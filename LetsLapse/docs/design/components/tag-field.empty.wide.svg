@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 329 33" width="329" height="33" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Tag field · empty · wide</title>
+  <desc>Mirrors the one tag editor shared by App/AI/AutoNameSheet.swift (its SUBJECT TAGS section), App/ProjectDetailView.swift (the managementCard Tags row and the sheet it raises) and App/GalleryPreviewPanel.swift (the TAGS block). The state that made this component necessary: a project the analysis returned NO subject tags for, or one that has never been analysed. The field is still drawn — only the "+ Add tag" chip is left — so tagging by hand is reachable without an AI run at all. Width is the 329pt content box of an iOS card at 16pt padding inside the 361pt column.</desc>
+<!-- LetsLapse design component · tag field. Chips are 33pt tall, rx 16.5, in an 8pt-gap
+     wrapping flow with 8pt between rows — blend-list-filter's own chip metrics. An applied chip is
+     LL.accent with a 14pt semibold white label 12pt in, an xmark 6pt after it and 11pt right pad
+     (width = text + 41); tapping the chip drops the tag. The dashed "+ Add tag" chip always sits
+     LAST in the flow and raises the picker (tag-suggestions.*). See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="tag-field" data-state="empty" data-width="wide">
+    <g data-chip="add" transform="translate(0,0)">
+      <rect x="0.6" y="0.6" width="90.8" height="31.8" rx="15.9" fill="#FFF" stroke="#C36A00" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <g stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" data-symbol="plus">
+        <path d="M13 16.5 h10 M18 11.5 v10"/>
+      </g>
+      <text x="29" y="21.5" font-size="14" class="m" fill="#C36A00">Add tag</text>
+    </g>
+  </g>
+</svg>

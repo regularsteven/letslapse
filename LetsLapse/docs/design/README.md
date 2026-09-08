@@ -76,7 +76,7 @@ docs/design/
 
 ## Components (shared chrome)
 
-Chrome that several screens draw identically lives once in `components/` and is **referenced** from the screen mirrors with `<image href="../components/<name>.<state>.svg" …/>` — one file per state, placed by a documented coordinate contract. Today: the capture screen's **shutter cluster** (record/stop ring plus its four framing slots), referenced by every capture mirror on iOS and macOS. The contract, the per-viewer support table and the rendering caveat (`rsvg-convert` will not follow `../`; use Quick Look, `qlmanage -t`, or a browser) are in [components/README.md](components/README.md). When a piece of chrome appears on a third screen, make it a component rather than a third copy.
+Chrome that several screens draw identically lives once in `components/` and is **referenced** from the screen mirrors with `<image href="../components/<name>.<state>.svg" …/>` — one file per state, placed by a documented coordinate contract. Today: the capture screen's **shutter cluster** (record/stop ring plus its four framing slots), referenced by every capture mirror on iOS and macOS; the **blended clip row** and **blend list filter**, shared by the iOS project-detail specs and the macOS Gallery preview panel; and the **tag editor** — `tag-field` plus `tag-suggestions` — shared by the Auto rename & tag sheet, the project Tags sheet and that same Gallery panel, on both platforms. The contract, the per-viewer support table and the rendering caveat (`rsvg-convert` will not follow `../`; use Quick Look, `qlmanage -t`, or a browser) are in [components/README.md](components/README.md). When a piece of chrome appears on a third screen, make it a component rather than a third copy.
 
 ## Canvas & device conventions
 

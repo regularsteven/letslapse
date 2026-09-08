@@ -59,14 +59,28 @@ extension Array where Element == AppModel.CaptureProject {
         query.isActive ? filter { query.matches($0) } : self
     }
 
-    /// The tags actually present in this library, in taxonomy order.
+    /// The tags actually present in this library: the taxonomy in its own order, then whatever
+    /// anyone has typed, alphabetically.
     ///
     /// Chips are drawn from what exists, not from the whole taxonomy: a chip that can only ever
     /// return nothing is a dead control, and a library with no analysed projects should show no
     /// chip row at all rather than twelve useless ones.
+    ///
+    /// This used to be `orderedTaxonomy.filter(present.contains)`, which silently dropped every
+    /// hand-typed tag — searchable, since `haystack` matches raw strings, but with no chip to
+    /// click. Custom tags come last rather than interleaved so the taxonomy's row does not
+    /// reshuffle itself as projects are tagged, which is the same reason it is ordered at all.
     var presentSceneTags: [String] {
         let present = Set(flatMap { $0.sceneTags ?? [] })
-        return SceneMetadata.orderedTaxonomy.filter(present.contains)
+        return SceneMetadata.orderedTaxonomy.filter(present.contains) + customSceneTags
+    }
+
+    /// Just the hand-typed ones, alphabetically — what the tag picker offers under YOUR TAGS, so
+    /// a word is typed once for a library and tapped from then on.
+    var customSceneTags: [String] {
+        Set(flatMap { $0.sceneTags ?? [] })
+            .filter(SceneMetadata.isCustom)
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 }
 

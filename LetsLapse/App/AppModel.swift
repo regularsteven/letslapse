@@ -3678,6 +3678,42 @@ final class AppModel: ObservableObject {
         try? persistLibrary()
     }
 
+    /// Sets a project's subject tags directly, from the tag editor.
+    ///
+    /// Separate from `applySceneMetadata` because that one is "the user accepted a proposal" — it
+    /// renames, and it writes elements too. This is the smaller thing: someone added or dropped a
+    /// tag by hand, on a project whose name and elements are none of its business.
+    ///
+    /// Writes on every change, with no Apply step, which is the same bargain `renameProject`
+    /// makes: one tap to reverse, and a confirmation would have to promise a rollback the Gallery
+    /// panel's inline field cannot offer anyway.
+    func setSceneTags(_ tags: [String], on capture: CaptureProject) {
+        guard let index = captures.firstIndex(where: { $0.id == capture.id }) else { return }
+        // Trimmed and de-duplicated case-insensitively here as well as in the editor: this is the
+        // only door onto the field, and a duplicate would filter and search as a separate thing.
+        var cleaned: [String] = []
+        for tag in tags {
+            let value = SceneMetadata.normalizedTag(tag)
+            guard !value.isEmpty else { continue }
+            let canonical = SceneMetadata.canonicalTag(for: value) ?? value
+            guard !cleaned.contains(where: { $0.caseInsensitiveCompare(canonical) == .orderedSame })
+            else { continue }
+            cleaned.append(canonical)
+        }
+        guard cleaned != (captures[index].sceneTags ?? []) else { return }
+
+        captures[index].sceneTags = cleaned.isEmpty ? nil : cleaned
+        // A person chose these now, whatever put them there first — so the "tagged automatically"
+        // marker comes off the card, exactly as accepting a proposal does.
+        captures[index].sceneTaggedAutomatically = nil
+        captures[index].modifiedAt = Date()
+        try? persistLibrary()
+    }
+
+    /// Every tag already used somewhere in this library, taxonomy first, then hand-typed ones.
+    /// The tag picker offers these under YOUR TAGS, so a word is typed once and tapped after that.
+    var libraryTags: [String] { captures.presentSceneTags }
+
     // MARK: - Automatic tagging
 
     /// Tags a freshly created project in the background, when the active model is one that costs

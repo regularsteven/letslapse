@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 329 118" width="329" height="118" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Tag suggestions · filtered</title>
+  <desc>The same picker with text in its field. Typing filters both chip groups in place; a Create row sits above whatever survives and is offered until the text matches an existing tag exactly, which is the whole answer to &quot;there is no way to add a custom tag&quot;. Drawn on the case that matters most — a word the library has never seen, so both groups are empty and creating it is the only thing left to do. A partial match simply shows the surviving chips under the Create row in the default file's own layout; no separate file, the same way blend-list-filter does not enumerate every tick combination.</desc>
+<!-- LetsLapse design component · tag suggestions. The other half of the tag editor: everything
+     NOT currently applied, so nothing is ever drawn twice between this and the tag-field above it.
+     Chip metrics are the field's (33pt, rx 16.5, 8pt gaps); an unapplied chip is the app's own
+     unselected treatment — black at 7% with a 14pt regular label at 75% — and tapping one moves it
+     up into the field. SUGGESTED is SceneMetadata.orderedTaxonomy in prompt order, minus whatever
+     is applied; YOUR TAGS is every custom tag already used elsewhere in this library, so a tag is
+     typed once and reused by tapping thereafter. See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="tag-suggestions" data-state="filtered">
+    <g data-part="search">
+      <rect x="0" y="0" width="329" height="36" rx="10" fill="#000" fill-opacity="0.07"/>
+      <g stroke="#6D6D72" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="magnifyingglass">
+        <circle cx="18" cy="17" r="5.4"/><path d="M22 21 l4 4"/>
+      </g>
+      <text x="33" y="23" font-size="14" fill="#000">Harbour</text>
+      <rect x="86" y="10" width="2" height="17" fill="#C36A00"/>
+    </g>
+    <g data-part="create">
+      <rect x="0" y="48" width="329" height="44" rx="12" fill="#000" fill-opacity="0.05"/>
+      <g stroke="#C36A00" stroke-width="1.9" stroke-linecap="round" data-symbol="plus">
+        <path d="M14 70 h11 M19.5 64.5 v11"/>
+      </g>
+      <text x="35" y="75" font-size="14.5" class="sb" fill="#C36A00">Create “Harbour”</text>
+    </g>
+    <text x="2" y="112" font-size="12" fill="#6D6D72">No existing tag matches “Harbour”.</text>
+  </g>
+</svg>

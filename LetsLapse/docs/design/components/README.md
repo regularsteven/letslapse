@@ -145,3 +145,105 @@ More combinations (single chips off, several off at once, the real all-off empty
 **Empty state — shipped as `BlendListEmptyState` (`App/BlendListFilter.swift`), simpler than first specified.** A combination with zero matches — e.g. Image unticked on an all-video project, or Blends AND Slices both unticked — replaces the card with a message in the same visual language as Gallery's own empty grid (`macOS/gallery.svg`'s "No projects" state): a secondary-color SF Symbol (`line.3.horizontal.decrease.circle` — a filter glyph, not `photo.on.rectangle`; this is "your filter has nothing to show," not "you have nothing"), 16pt semibold "No results" under it, and a 13pt secondary "Try ticking another chip back on." The first draft of this note proposed naming the specific excluded facet ("No results are Video — try ticking it back on"); shipped code uses the generic line instead, because with four independent chips there is often no single chip to name — two or three could be off at once — and a precise sentence describing every excluded combination reads worse than a generic one. The header count still reads the filtered "· 0".
 
 **Mirrors.** `App/ProjectDetailView.swift`'s `blendedClipsSection` and `App/GalleryPreviewPanel.swift`'s `blendedClipsSection` both filter through the shared `BlendListFilter.matches` and show `BlendListFilterBar` / `BlendListEmptyState` from `App/BlendListFilter.swift` — wired and verified live 2026-09-07 on both platforms, including against a real project with a mixed blend + time-slice list (unticking Blends correctly dropped the regular blend and kept the time-sliced result, header count 2 → 1). See `docs/TODO.md` for status.
+
+## Tag editor — `tag-field.<state>.<width>.svg` + `tag-suggestions.<state>.svg`
+
+A project's subject tags, wherever they can be read or changed. Introduced 2026-09-08 to answer a
+plain gap: tags could only ever be *removed*, and only during the one run of Auto rename & tag that
+proposed them. There was no way to add a tag the model never thought of, no way to type one of your
+own, and — because `AutoNameSheet`'s section is wrapped in `if !proposal.tags.isEmpty` and
+`managementCard`'s row in `if let tags, !tags.isEmpty` — no tag UI *at all* on a project the
+analysis returned nothing for. One component now serves every door, on both platforms, for Photo,
+Interval and Video alike (all three are one `CaptureProject` with one `sceneTags` field; nothing
+here reads the shoot type).
+
+**Two flat files, never nested.** A screen stacks them; neither references the other, because an
+`<image>` inside an `<image>` is not reliably followed by every viewer this repo has to render in.
+
+| Piece | What it is | Where it goes |
+|---|---|---|
+| `tag-field` | the applied tags, one accent capsule each with an xmark that drops it, then a dashed **+ Add tag** chip | anywhere tags are *shown* — the Auto rename & tag sheet's SUBJECT TAGS, the macOS Gallery preview panel's TAGS block, the top of the picker itself |
+| `tag-suggestions` | a field that both filters and creates, then **SUGGESTED** (the closed taxonomy) and **YOUR TAGS** (custom tags already in this library) | the picker — an iOS sheet, a macOS popover |
+
+**Nothing is ever drawn twice.** A tag is either applied (in the field) or offered (in the
+suggestions), never both, so there is no tick state to reconcile and no way to see the same word in
+two places. Tap a suggestion and it moves up; tap an xmark and it moves back down. That is also why
+`tag-field` has a `plain` state: inside the picker the search field is already the add affordance,
+so the **+ Add tag** chip would be a second one.
+
+**Coordinate contract.** 1 unit = 1 pt, origin at the block's own top-left. Chips are 33 pt tall at
+`rx=16.5` in a wrapping flow, 8 pt between chips and 8 pt between rows — `blend-list-filter`'s own
+metrics, which are `preset-strip`'s before that. Widths are the *content box* of whatever the block
+sits in, so a file is placed at its natural size and never scaled:
+
+| Width | Total | Container |
+|---|---|---|
+| `wide` | 329 pt | an iOS card's content box — the 361 pt column less 16 pt padding each side. Also the macOS sheet's, which is why that sheet is specified at 393 pt (see `macOS/auto-name.svg`): at AppKit's own ~470 pt the box is 406 and the chips wrap differently for no reason a reader could name |
+| `narrow` | 272 pt | the macOS Gallery preview panel's column. The tag block is promoted OUT of the 72 pt-label metaRow grid to full width — at 190 pt a single "Sky & weather" chip is nearly the whole row |
+
+`tag-suggestions` is `wide` only. A Mac popover is free to be 361 pt whatever panel raised it, so
+one file serves both platforms.
+
+**Chip treatments.** An applied chip is `fill=#C36A00` with a 14 pt semibold white label 12 pt in,
+an xmark (`stroke #FFF` at 80%, 1.7 pt, round caps) 8 pt after it and 12 pt right pad — **width =
+text + 41**, the same arithmetic a ticked `blend-list-filter` chip uses. An offered chip is the
+app's own unselected treatment, black at 7% with a 14 pt regular label at 75%, 12 pt each side —
+**width = text + 24**. The **+ Add tag** chip is white with a 1.2 pt dashed `#C36A00` border
+(`stroke-dasharray="4 3"`), a `plus` glyph and a 14 pt medium accent label: 92 pt, and it always
+sits **last** in the flow.
+
+**Why an xmark and not the tick this sheet used to draw.** A tick answers "is this one of the
+options?", which is the right question in a filter (`blend-list-filter` keeps it) and was a
+defensible one while these chips only ever existed inside a proposal you were paring back. It is
+the wrong question on a settled project, where everything drawn IS applied and the only thing you
+can do to a chip is remove it. One idiom now covers the proposal and the project, which is what
+lets `AutoNameSheet` and the Gallery panel show literally the same file.
+
+**States** — five field files, two suggestion files:
+
+| File | Shows | Used by |
+|---|---|---|
+| `tag-field.applied.wide` | the canonical five tags plus **+ Add tag**, two rows | `iOS/auto-name.portrait`, `macOS/auto-name` |
+| `tag-field.applied.narrow` | the same five, three rows at 272 pt | `macOS/gallery`, `macOS/gallery.tags` |
+| `tag-field.plain.wide` | the same five, no **+ Add tag** — the picker's own applied row | `iOS/project-tags.portrait`, `iOS/project-tags.adding.portrait` |
+| `tag-field.empty.wide` / `.narrow` | nothing applied: the **+ Add tag** chip alone | `iOS/auto-name.no-tags.portrait`; `.narrow` is drawn for the Gallery panel's own empty project, which no screen file exercises yet |
+| `tag-suggestions.default` | the field at rest, SUGGESTED + YOUR TAGS | `iOS/project-tags.portrait`, `macOS/gallery.tags` |
+| `tag-suggestions.filtered` | "Harbour" typed, nothing matching, the Create row | `iOS/project-tags.adding.portrait` |
+
+The canonical demo content is one set everywhere: **Water · Sky & weather · Urban · Nature** from
+the taxonomy, plus **Rooftops**, typed by the user. A custom tag is drawn identically to a taxonomy
+one on purpose — once applied there is no difference worth showing, and the whole point of the pass
+is that the model's guesses and your own words end up in the same field. The set is chosen to make
+the two widths genuinely different rather than coincidentally equal: "Sky & weather" is long enough
+that 272 pt takes three rows where 329 pt takes two. `YOUR TAGS` carries **Prague** and **Client
+work**, custom tags this library holds but this project does not.
+
+A partial match — text typed that some tag does contain — needs no file of its own: the Create row
+sits above whatever survives the filter, in `default`'s own layout. Same rule as
+`blend-list-filter`, which does not enumerate every tick combination either.
+
+**What this asks of the code, beyond the views.** `sceneTags` is a closed taxonomy today:
+`SceneAnalyser`'s parser drops anything outside `SceneMetadata.orderedTaxonomy`, and
+`App/SceneSearch.swift`'s `availableTags` filters the library's tags back through it before the
+Gallery sidebar draws its chip rows. A tag the user typed passes neither. Both have to widen, or a
+created tag is findable by search (which matches raw strings) and invisible as a sidebar chip —
+which is why `macOS/gallery.svg`'s sidebar grows a "Rooftops" row in this pass. The parser's filter
+should stay exactly as it is: it exists to stop a 4-bit model inventing labels, not to stop a
+person naming their own work.
+
+**Mirrors.** Implemented 2026-09-08, the same day these were drawn, in `App/TagEditor.swift`:
+`TagField`, `TagSuggestions`, `TagPickerSheet` and the `.tagPicker` modifier that presents a sheet
+on iOS and a popover on the Mac. `ChipFlowLayout` moved there from `AutoNameSheet`. The three call
+sites are `App/AI/AutoNameSheet.swift` (SUBJECT TAGS — its `if !proposal.tags.isEmpty` guard gone,
+its `Proposal.Tag` tick model replaced by a plain `[String]`), `App/ProjectDetailView.swift`
+(`managementCard`'s Tags row — unconditional, a `Button` with a chevron, "Add" when empty) and
+`App/GalleryPreviewPanel.swift` (`tagsSection`, out of the metaRow grid). Writes go through
+`AppModel.setSceneTags`, which trims, canonicalises against the taxonomy and de-duplicates
+case-insensitively, so "water", "Water" and "Sky & weather" all join the existing tag rather than
+sitting beside it as a near-duplicate.
+
+Verified live on the iPhone 16 Pro Simulator; the macOS Gallery panel and `AutoNameSheet` were signed off by Steven on
+his own Mac, 2026-09-08.
+
+`SceneTagLine` itself stays exactly as it is: it is a *summary* for a list row (`ProjectsView`, and
+the Gallery tiles), not an editor, and it is correct there.

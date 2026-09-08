@@ -1,0 +1,54 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 329 74" width="329" height="74" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Tag field · applied · wide</title>
+  <desc>Mirrors the one tag editor shared by App/AI/AutoNameSheet.swift (its SUBJECT TAGS section), App/ProjectDetailView.swift (the managementCard Tags row and the sheet it raises) and App/GalleryPreviewPanel.swift (the TAGS block). Width is the 329pt content box of an iOS card at 16pt padding inside the 361pt column. Demo content is the canonical set every screen drawing this component uses: four taxonomy tags (Water, Sky &amp; weather, Urban, Nature) plus one user-typed tag (Rooftops) — a custom tag is drawn exactly like a taxonomy one on purpose, since once applied there is no difference worth showing.</desc>
+<!-- LetsLapse design component · tag field. Chips are 33pt tall, rx 16.5, in an 8pt-gap
+     wrapping flow with 8pt between rows — blend-list-filter's own chip metrics. An applied chip is
+     LL.accent with a 14pt semibold white label 12pt in, an xmark 6pt after it and 11pt right pad
+     (width = text + 41); tapping the chip drops the tag. The dashed "+ Add tag" chip always sits
+     LAST in the flow and raises the picker (tag-suggestions.*). See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="tag-field" data-state="applied" data-width="wide">
+    <g data-tag="water" data-source="taxonomy" transform="translate(0,0)">
+      <rect x="0" y="0" width="77" height="33" rx="16.5" fill="#C36A00"/>
+      <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Water</text>
+      <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+        <path d="M56.5 12.5 l8 8 M64.5 12.5 l-8 8"/>
+      </g>
+    </g>
+    <g data-tag="skyWeather" data-source="taxonomy" transform="translate(85,0)">
+      <rect x="0" y="0" width="133" height="33" rx="16.5" fill="#C36A00"/>
+      <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Sky &amp; weather</text>
+      <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+        <path d="M112.5 12.5 l8 8 M120.5 12.5 l-8 8"/>
+      </g>
+    </g>
+    <g data-tag="urban" data-source="taxonomy" transform="translate(226,0)">
+      <rect x="0" y="0" width="79" height="33" rx="16.5" fill="#C36A00"/>
+      <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Urban</text>
+      <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+        <path d="M58.5 12.5 l8 8 M66.5 12.5 l-8 8"/>
+      </g>
+    </g>
+    <g data-tag="nature" data-source="taxonomy" transform="translate(0,41)">
+      <rect x="0" y="0" width="84" height="33" rx="16.5" fill="#C36A00"/>
+      <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Nature</text>
+      <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+        <path d="M63.5 12.5 l8 8 M71.5 12.5 l-8 8"/>
+      </g>
+    </g>
+    <g data-tag="Rooftops" data-source="custom" transform="translate(92,41)">
+      <rect x="0" y="0" width="97" height="33" rx="16.5" fill="#C36A00"/>
+      <text x="12" y="21.5" font-size="14" class="sb" fill="#FFF">Rooftops</text>
+      <g stroke="#FFF" stroke-opacity="0.8" stroke-width="1.7" stroke-linecap="round" data-symbol="xmark">
+        <path d="M76.5 12.5 l8 8 M84.5 12.5 l-8 8"/>
+      </g>
+    </g>
+    <g data-chip="add" transform="translate(197,41)">
+      <rect x="0.6" y="0.6" width="90.8" height="31.8" rx="15.9" fill="#FFF" stroke="#C36A00" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <g stroke="#C36A00" stroke-width="1.8" stroke-linecap="round" data-symbol="plus">
+        <path d="M13 16.5 h10 M18 11.5 v10"/>
+      </g>
+      <text x="29" y="21.5" font-size="14" class="m" fill="#C36A00">Add tag</text>
+    </g>
+  </g>
+</svg>

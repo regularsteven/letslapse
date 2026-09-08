@@ -8,7 +8,8 @@ import SwiftUI
 /// - Thumbnail (150pt height)
 /// - Title, date, size
 /// - 2×2 action grid: Open / Edit / Text / New blended clip
-/// - Metadata rows: Tags, In frame, Variations, Storage, Field notes
+/// - Tags: the shared tag editor (`TagField`), full width
+/// - Metadata rows: In frame, Storage, Field notes
 /// - Footer: Rename, Share, Show in Finder, Delete…
 struct GalleryPreviewPanel: View {
     @EnvironmentObject var model: AppModel
@@ -54,6 +55,9 @@ struct GalleryPreviewPanel: View {
 
                 Divider()
                     .padding(.top, 16)
+
+                tagsSection
+                    .padding(.horizontal, 14)
 
                 metadataSection
                     .padding(.horizontal, 14)
@@ -196,15 +200,39 @@ struct GalleryPreviewPanel: View {
         .buttonStyle(.plain)
     }
 
+    // MARK: Tags
+
+    /// The shared tag editor, promoted out of the metaRow grid to the panel's own column.
+    ///
+    /// Was `SceneTagLine` in a 72pt-label row: up to three tiny capsules and a "+N", read-only.
+    /// `SceneTagLine` stays exactly as it is elsewhere — it is a summary for a list row, not an
+    /// editor — but here, beside the project it describes, it was the only view of a project's
+    /// tags that a person could reach and could do nothing with.
+    ///
+    /// Full width rather than in the label grid because at the 190pt a metaRow leaves, a single
+    /// "Sky & weather" chip is nearly the whole row. This costs the panel real height when a
+    /// project carries several tags; the panel scrolls, and the blended-clips list below it moves
+    /// down accordingly — see docs/design/macOS/INDEX.md.
+    private var tagsSection: some View {
+        VStack(alignment: .leading, spacing: 9) {
+            LLSectionHeader("Tags")
+            TagField(tags: tagsBinding, libraryTags: model.libraryTags)
+        }
+        .padding(.top, 12)
+    }
+
+    /// Writes straight through to the library, with no Apply step — the same bargain the rename
+    /// alert makes, and the reason the picker sheet carries Done and no Cancel.
+    private var tagsBinding: Binding<[String]> {
+        Binding(
+            get: { model.captures.first { $0.id == capture.id }?.sceneTags ?? [] },
+            set: { model.setSceneTags($0, on: capture) })
+    }
+
     // MARK: Metadata rows
 
     private var metadataSection: some View {
         VStack(alignment: .leading, spacing: 0) {
-            if let tags = capture.sceneTags, !tags.isEmpty {
-                metaRow("Tags") {
-                    SceneTagLine(tags: tags)
-                }
-            }
             if let elements = capture.sceneElements, !elements.isEmpty {
                 metaRow("In frame") {
                     Text(elements.prefix(4).joined(separator: ", "))

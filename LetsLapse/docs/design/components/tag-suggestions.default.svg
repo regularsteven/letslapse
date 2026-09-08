@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 329 244" width="329" height="244" font-family="-apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', Arial, sans-serif">
+  <title>Component · Tag suggestions · default</title>
+  <desc>Mirrors the picker half of the shared tag editor — raised by the tag field's &quot;+ Add tag&quot; chip, and the body of the Tags sheet on iOS and the Tags popover on macOS. A search field that both filters and creates, then two chip groups: SUGGESTED, the closed scene taxonomy (SceneMetadata.orderedTaxonomy) in prompt order minus the four already applied above, and YOUR TAGS, the custom tags this library already holds, so a hand-typed tag is reusable rather than retyped per project. Nothing applied is listed here — the tag field above owns those, and removal is its xmark.</desc>
+<!-- LetsLapse design component · tag suggestions. The other half of the tag editor: everything
+     NOT currently applied, so nothing is ever drawn twice between this and the tag-field above it.
+     Chip metrics are the field's (33pt, rx 16.5, 8pt gaps); an unapplied chip is the app's own
+     unselected treatment — black at 7% with a 14pt regular label at 75% — and tapping one moves it
+     up into the field. SUGGESTED is SceneMetadata.orderedTaxonomy in prompt order, minus whatever
+     is applied; YOUR TAGS is every custom tag already used elsewhere in this library, so a tag is
+     typed once and reused by tapping thereafter. See components/README.md. -->
+  <style>text{font-family:inherit}.sb{font-weight:600}.m{font-weight:500}</style>
+  <g id="tag-suggestions" data-state="default">
+    <g data-part="search">
+      <rect x="0" y="0" width="329" height="36" rx="10" fill="#000" fill-opacity="0.07"/>
+      <g stroke="#6D6D72" stroke-width="1.6" fill="none" stroke-linecap="round" data-symbol="magnifyingglass">
+        <circle cx="18" cy="17" r="5.4"/><path d="M22 21 l4 4"/>
+      </g>
+      <text x="33" y="23" font-size="14" fill="#8A8A8E">Add or find a tag</text>
+    </g>
+    <text x="2" y="57" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">SUGGESTED</text>
+    <g data-tag="landmark" data-source="taxonomy" transform="translate(0,66)">
+      <rect x="0" y="0" width="87" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Landmark</text>
+    </g>
+    <g data-tag="people" data-source="taxonomy" transform="translate(95,66)">
+      <rect x="0" y="0" width="67" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">People</text>
+    </g>
+    <g data-tag="vehicles" data-source="taxonomy" transform="translate(170,66)">
+      <rect x="0" y="0" width="77" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Vehicles</text>
+    </g>
+    <g data-tag="lightTrails" data-source="taxonomy" transform="translate(0,107)">
+      <rect x="0" y="0" width="92" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Light trails</text>
+    </g>
+    <g data-tag="animals" data-source="taxonomy" transform="translate(100,107)">
+      <rect x="0" y="0" width="75" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Animals</text>
+    </g>
+    <g data-tag="construction" data-source="taxonomy" transform="translate(183,107)">
+      <rect x="0" y="0" width="105" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Construction</text>
+    </g>
+    <g data-tag="interior" data-source="taxonomy" transform="translate(0,148)">
+      <rect x="0" y="0" width="70" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Interior</text>
+    </g>
+    <g data-tag="event" data-source="taxonomy" transform="translate(78,148)">
+      <rect x="0" y="0" width="60" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Event</text>
+    </g>
+    <text x="2" y="202" font-size="13" class="sb" fill="#6D6D72" letter-spacing="0.5">YOUR TAGS</text>
+    <g data-tag="Prague" data-source="custom" transform="translate(0,211)">
+      <rect x="0" y="0" width="69" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Prague</text>
+    </g>
+    <g data-tag="Client work" data-source="custom" transform="translate(77,211)">
+      <rect x="0" y="0" width="97" height="33" rx="16.5" fill="#000" fill-opacity="0.07"/>
+      <text x="12" y="21.5" font-size="14" fill="#000" fill-opacity="0.75">Client work</text>
+    </g>
+  </g>
+</svg>
